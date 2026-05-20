@@ -669,6 +669,47 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     return plan
 
 
+def material_container_group_summary(plan: dict[str, object]) -> dict[str, object]:
+    container = plan["container"]
+    primary = plan["primary_pass"]
+    assert isinstance(container, dict)
+    assert isinstance(primary, dict)
+    participates = (
+        bool(container["participates"])
+        and int(container["container_id"]) > 0)
+    if not participates:
+        return {
+            "group_count": 0,
+            "multi_surface_group_count": 0,
+            "union_group_count": 0,
+            "morph_group_count": 0,
+            "interactive_group_count": 0,
+            "shared_backdrop_scope_group_count": 0,
+            "fallback_mixed_group_count": 0,
+            "max_group_size": 0,
+            "max_active_surfaces": 0,
+            "max_sampled_backdrop_surfaces": 0,
+            "max_fallback_surfaces": 0,
+        }
+    active = 1 if primary["active"] else 0
+    sampled = 1 if plan["backdrop_sampling"] else 0
+    fallback = 1 if plan["fallback"] else 0
+    return {
+        "group_count": 1,
+        "multi_surface_group_count": 0,
+        "union_group_count": 1 if container["shape_union_expected"] else 0,
+        "morph_group_count": 1 if container["morph_transitions"] else 0,
+        "interactive_group_count": 1 if container["interactive"] else 0,
+        "shared_backdrop_scope_group_count": (
+            1 if container["shared_backdrop_scope"] else 0),
+        "fallback_mixed_group_count": 0,
+        "max_group_size": 1,
+        "max_active_surfaces": active,
+        "max_sampled_backdrop_surfaces": sampled,
+        "max_fallback_surfaces": fallback,
+    }
+
+
 def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     budget = plan["resource_budget"]
     primary = plan["primary_pass"]
@@ -758,6 +799,7 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "non_deterministic_fallback": (
             0 if budget["deterministic_fallback"] else 1
         ),
+        "container_groups": material_container_group_summary(plan),
     }
 
 
@@ -860,6 +902,7 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "backdrop_descriptor_source": plan["backdrop"]["source"],
         "backdrop_luma_sampling_skipped_count": 0,
         "backdrop_luma_sampling_skip_reason": "none",
+        "container_groups": material_container_group_summary(plan),
         "cpu_decode_ns": 100,
         "cpu_material_upload_ns": 0,
         "cpu_total_ns": 200,
@@ -1858,6 +1901,83 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             0)
         self.assertEqual(
             report["semantic_tree"]["material_container_morph_transitions"],
+            1)
+
+    def test_manifest_can_require_container_group_summary(self) -> None:
+        plan = sampled_material_plan()
+        plan_container = plan["container"]
+        descriptor = plan["command_descriptor"]
+        resource_budget = plan["resource_budget"]
+        verifier_contract = plan["verifier"]
+        assert isinstance(plan_container, dict)
+        assert isinstance(descriptor, dict)
+        assert isinstance(resource_budget, dict)
+        assert isinstance(verifier_contract, dict)
+        request_container = {
+            "mode": "union",
+            "container_id": 41,
+            "union_id": 7,
+            "spacing": 12.0,
+            "interactive": True,
+            "morph_transitions": True,
+        }
+        descriptor["container"] = request_container
+        plan_container.update({
+            **request_container,
+            "participates": True,
+            "shared_backdrop_scope": True,
+            "shape_union_expected": True,
+        })
+        resource_budget["max_container_spacing"] = 12.0
+        verifier_contract["require_container_identity"] = True
+        verifier_contract["require_container_morph_contract"] = True
+        refresh_observation_contract(plan)
+
+        root = snapshot(plan)
+        material_node = root["debug"]["semantic_tree"]["children"][0]
+        assert isinstance(material_node, dict)
+        material = material_node["material"]
+        assert isinstance(material, dict)
+        material["container"] = request_container
+        manifest = {
+            "require_material_plan_summary": {
+                "container_group_count": 1,
+                "container_multi_surface_group_count": 0,
+                "container_union_group_count": 1,
+                "container_morph_group_count": 1,
+                "container_interactive_group_count": 1,
+                "container_shared_backdrop_scope_group_count": 1,
+                "container_fallback_mixed_group_count": 0,
+                "container_max_group_size": 1,
+                "container_max_active_surfaces": 1,
+                "container_max_sampled_backdrop_surfaces": 1,
+                "container_max_fallback_surfaces": 0,
+            },
+            "require_runtime_numeric_bounds": [
+                {
+                    "path": (
+                        "renderer.material_executor_summary.container_groups"
+                        ".group_count"),
+                    "equals": 1,
+                },
+                {
+                    "path": (
+                        "renderer.material_executor_summary.container_groups"
+                        ".max_sampled_backdrop_surfaces"),
+                    "equals": 1,
+                },
+            ],
+        }
+
+        code, report = self.run_verifier(root, manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(
+            report["material_plans"]["container_groups"]["group_count"],
+            1)
+        self.assertEqual(
+            report["material_plans"]["container_groups"]["union_group_count"],
             1)
 
     def test_surface_role_mismatch_points_to_material_contract(self) -> None:

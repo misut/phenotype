@@ -878,7 +878,14 @@ region contract, layer, and pass before anyone opens the frame visually.
 The same summary can pin `container_modes`, `container_ids`, `union_ids`,
 `container_participating`, `container_unioned`, `container_interactive`,
 `container_morph_transitions`, `verifier_require_container_identity`, and
-`verifier_require_container_morph_contract`.
+`verifier_require_container_morph_contract`. Container group gates can also pin
+`container_group_count`, `container_multi_surface_group_count`,
+`container_union_group_count`, `container_morph_group_count`,
+`container_interactive_group_count`,
+`container_shared_backdrop_scope_group_count`,
+`container_fallback_mixed_group_count`, `container_max_group_size`,
+`container_max_active_surfaces`, `container_max_sampled_backdrop_surfaces`, and
+`container_max_fallback_surfaces`.
 Reference-model gates can pin `reference_technologies`, `reference_variants`,
 `reference_shapes`, `reference_shape_scopes`, `reference_blending_scopes`,
 `reference_semantic_thickness`, `reference_view_bounds_anchored`,
@@ -1076,7 +1083,15 @@ it can also count
 `container_participating`, `container_unioned`, `container_interactive`,
 `container_morph_transitions`, `verifier_require_backdrop_source`,
 `verifier_require_edge_highlight`, `verifier_require_container_identity`, and
-`verifier_require_container_morph_contract`. Optical gates can additionally pin
+`verifier_require_container_morph_contract`. For Apple-style grouped glass, it
+can additionally assert pure aggregate group facts:
+`container_group_count`, `container_multi_surface_group_count`,
+`container_union_group_count`, `container_morph_group_count`,
+`container_interactive_group_count`,
+`container_shared_backdrop_scope_group_count`,
+`container_fallback_mixed_group_count`, `container_max_group_size`,
+`container_max_active_surfaces`, `container_max_sampled_backdrop_surfaces`, and
+`container_max_fallback_surfaces`. Optical gates can additionally pin
 `optical_backdrop_driven`, `optical_blur_active`, `optical_frosting_active`,
 `optical_tint_active`, `optical_saturation_active`,
 `optical_luminance_preservation_active`, `optical_edge_highlight_active`,
@@ -1184,7 +1199,11 @@ resolved plan. The runtime pass limits are aggregated from
 list, not only the pure resource budget. Backends also serialize
 `renderer.material_runtime_summary`; the verifier recomputes the same counters
 from `renderer.material_plans[]` and reports the exact summary field if the
-backend's view of executed material work drifts from the resolved plans.
+backend's view of executed material work drifts from the resolved plans. The
+same cross-check applies to
+`renderer.material_runtime_summary.container_groups.*`, so grouped, unioned,
+morphing, interactive, shared-backdrop-scope, and mixed-fallback glass groups
+must match the pure summary.
 Backends also serialize `renderer.material_executor_summary` for edge-only
 work that cannot be derived from the pure plan, including material instance
 count, fallback instance count, primary executor instance counts for sampled
@@ -1200,7 +1219,8 @@ paths. Each entry names a path under `debug.platform_runtime.details` and can
 provide `equals`, `gte`, and/or `lte`; failures report the exact path plus the
 likely `material-executor` pass when the path targets the executor summary.
 Whenever material plans are present, the verifier also cross-checks executor
-counts against `renderer.material_plans#summary`: `plan_count`,
+counts, including `material_executor_summary.container_groups.*`, against
+`renderer.material_plans#summary`: `plan_count`,
 `fallback_instance_count`, `material_instance_count`,
 `sampled_backdrop_instance_count`, `standard_fill_instance_count`,
 `deterministic_fallback_instance_count`, `material_max_sample_taps`, and

@@ -70,6 +70,17 @@
     "container_unioned": 1,
     "container_interactive": 1,
     "container_morph_transitions": 5,
+    "container_group_count": 3,
+    "container_multi_surface_group_count": 1,
+    "container_union_group_count": 1,
+    "container_morph_group_count": 2,
+    "container_interactive_group_count": 1,
+    "container_shared_backdrop_scope_group_count": 3,
+    "container_fallback_mixed_group_count": 0,
+    "container_max_group_size": 4,
+    "container_max_active_surfaces": 4,
+    "container_max_sampled_backdrop_surfaces": 4,
+    "container_max_fallback_surfaces": 0,
     "reference_technologies": {
       "liquid-glass": 7
     },
@@ -468,6 +479,50 @@
     {
       "path": "renderer.material_executor_summary.noise_dither_stage_count",
       "equals": 7
+    },
+    {
+      "path": "renderer.material_executor_summary.container_groups.group_count",
+      "equals": 3
+    },
+    {
+      "path": "renderer.material_executor_summary.container_groups.multi_surface_group_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.container_groups.union_group_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.container_groups.morph_group_count",
+      "equals": 2
+    },
+    {
+      "path": "renderer.material_executor_summary.container_groups.interactive_group_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.container_groups.shared_backdrop_scope_group_count",
+      "equals": 3
+    },
+    {
+      "path": "renderer.material_executor_summary.container_groups.fallback_mixed_group_count",
+      "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.container_groups.max_group_size",
+      "equals": 4
+    },
+    {
+      "path": "renderer.material_executor_summary.container_groups.max_active_surfaces",
+      "equals": 4
+    },
+    {
+      "path": "renderer.material_executor_summary.container_groups.max_sampled_backdrop_surfaces",
+      "equals": 4
+    },
+    {
+      "path": "renderer.material_executor_summary.container_groups.max_fallback_surfaces",
+      "equals": 0
     },
     {
       "path": "renderer.material_executor_summary.material_draw_calls",

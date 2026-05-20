@@ -738,6 +738,14 @@ keep capture/sample budgets at zero.
 Container spacing is also reported as `max_container_spacing`, so
 artifact gates can bound future container/union expansion work before a backend
 starts allocating extra backdrop passes.
+The pure helper `summarize_material_container_groups` also derives the
+aggregate container contract from immutable `MaterialRuntimeRecord` values. Both
+`renderer.material_runtime_summary.container_groups` and
+`renderer.material_executor_summary.container_groups` expose group count,
+multi-surface groups, union/morph/interactive groups, shared-backdrop-scope
+groups, mixed fallback groups, and max active/sampled/fallback surfaces per
+group. This keeps Apple-style grouped glass behavior reviewable from JSON before
+any backend introduces hidden per-container caches or extra blur passes.
 Backends use the pure `default_material_quality_policy()` and
 `sanitize_material_quality_policy()` helpers instead of owning hard-coded
 material quality limits locally, so policy changes stay visible in

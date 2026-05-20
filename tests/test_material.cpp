@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <string>
 #include <string_view>
+#include <vector>
 
 import phenotype.material;
 import phenotype.types;
@@ -510,6 +511,69 @@ void test_executor_frame_capture_policy_contract() {
     std::puts("PASS: executor frame capture policy contract");
 }
 
+void test_container_group_runtime_summary_contract() {
+    auto request = regular_request();
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 42u,
+        .union_id = 0u,
+        .spacing = 28.0f,
+        .interactive = false,
+        .morph_transitions = true,
+    };
+    auto union_request = request;
+    union_request.style.container.union_id = 1u;
+    auto fallback_request = request;
+    auto interactive_request = regular_request();
+    interactive_request.style.container = MaterialContainerDescriptor{
+        .container_id = 77u,
+        .union_id = 0u,
+        .spacing = 20.0f,
+        .interactive = true,
+        .morph_transitions = false,
+    };
+
+    auto fallback_env = sampled_environment();
+    fallback_env.capabilities.material_backdrop_blur = false;
+    fallback_env.capabilities.shader_blur = false;
+    fallback_env.backdrop.available = false;
+    fallback_env.backdrop.stable = false;
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(union_request, sampled_environment()), 2u},
+        {plan_material_surface(fallback_request, fallback_env), 3u},
+        {plan_material_surface(interactive_request, sampled_environment()), 4u},
+    };
+
+    auto groups = summarize_material_container_groups(records);
+    assert(groups.group_count == 2u);
+    assert(groups.multi_surface_group_count == 1u);
+    assert(groups.union_group_count == 1u);
+    assert(groups.morph_group_count == 1u);
+    assert(groups.interactive_group_count == 1u);
+    assert(groups.shared_backdrop_scope_group_count == 2u);
+    assert(groups.fallback_mixed_group_count == 1u);
+    assert(groups.max_group_size == 3u);
+    assert(groups.max_active_surfaces == 3u);
+    assert(groups.max_sampled_backdrop_surfaces == 2u);
+    assert(groups.max_fallback_surfaces == 1u);
+
+    MaterialRuntimeSummary runtime_summary{};
+    for (auto const& record : records)
+        accumulate_material_runtime_summary(runtime_summary, record);
+    finalize_material_runtime_summary(runtime_summary, records);
+    assert(runtime_summary.container_groups.group_count == groups.group_count);
+    assert(runtime_summary.container_groups.max_group_size == groups.max_group_size);
+
+    MaterialExecutorSummary executor_summary{};
+    for (auto const& record : records)
+        accumulate_material_executor_plan_summary(executor_summary, record.plan);
+    finalize_material_executor_summary(executor_summary, records);
+    assert(executor_summary.container_groups.group_count == groups.group_count);
+    assert(executor_summary.container_groups.fallback_mixed_group_count == 1u);
+    std::puts("PASS: container group runtime summary contract");
+}
+
 } // namespace
 
 int main() {
@@ -523,6 +587,7 @@ int main() {
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     test_executor_frame_capture_policy_contract();
+    test_container_group_runtime_summary_contract();
     std::puts("\nAll material tests passed.");
     return 0;
 }

@@ -7348,6 +7348,9 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             material_summary,
             record.plan);
     }
+    finalize_material_executor_summary(
+        material_summary,
+        g_renderer.scratch.material_records);
 
     int winw = 0;
     int winh = 0;

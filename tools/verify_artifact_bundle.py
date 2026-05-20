@@ -1920,6 +1920,37 @@ def string_string_map(
     return out
 
 
+MATERIAL_CONTAINER_GROUP_SUMMARY_FIELDS = (
+    "group_count",
+    "multi_surface_group_count",
+    "union_group_count",
+    "morph_group_count",
+    "interactive_group_count",
+    "shared_backdrop_scope_group_count",
+    "fallback_mixed_group_count",
+    "max_group_size",
+    "max_active_surfaces",
+    "max_sampled_backdrop_surfaces",
+    "max_fallback_surfaces",
+)
+
+MATERIAL_CONTAINER_GROUP_SPEC_FIELDS = {
+    "container_group_count": "group_count",
+    "container_multi_surface_group_count": "multi_surface_group_count",
+    "container_union_group_count": "union_group_count",
+    "container_morph_group_count": "morph_group_count",
+    "container_interactive_group_count": "interactive_group_count",
+    "container_shared_backdrop_scope_group_count": (
+        "shared_backdrop_scope_group_count"),
+    "container_fallback_mixed_group_count": "fallback_mixed_group_count",
+    "container_max_group_size": "max_group_size",
+    "container_max_active_surfaces": "max_active_surfaces",
+    "container_max_sampled_backdrop_surfaces": (
+        "max_sampled_backdrop_surfaces"),
+    "container_max_fallback_surfaces": "max_fallback_surfaces",
+}
+
+
 def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
     if value is None:
         return None
@@ -1942,6 +1973,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "container_unioned",
         "container_interactive",
         "container_morph_transitions",
+        *MATERIAL_CONTAINER_GROUP_SPEC_FIELDS.keys(),
         "reference_view_bounds_anchored",
         "reference_shape_matches_geometry",
         "reference_tint_applied",
@@ -2094,6 +2126,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "container_unioned",
             "container_interactive",
             "container_morph_transitions",
+            *MATERIAL_CONTAINER_GROUP_SPEC_FIELDS.keys(),
             "reference_view_bounds_anchored",
             "reference_shape_matches_geometry",
             "reference_tint_applied",
@@ -3671,6 +3704,19 @@ def summarize_material_plans(
             "morph_transitions": 0,
             "max_spacing": 0.0,
         },
+        "container_groups": {
+            "group_count": 0,
+            "multi_surface_group_count": 0,
+            "union_group_count": 0,
+            "morph_group_count": 0,
+            "interactive_group_count": 0,
+            "shared_backdrop_scope_group_count": 0,
+            "fallback_mixed_group_count": 0,
+            "max_group_size": 0,
+            "max_active_surfaces": 0,
+            "max_sampled_backdrop_surfaces": 0,
+            "max_fallback_surfaces": 0,
+        },
         "reference_model": {
             "technologies": {},
             "layers": {},
@@ -3858,6 +3904,8 @@ def summarize_material_plans(
             "max_backdrop_pixels": 0,
         },
     }
+    container_group_accumulators: dict[int, JsonObject] = {}
+
     if not isinstance(plans, list):
         report.check(
             "material plans is array",
@@ -4073,6 +4121,39 @@ def summarize_material_plans(
                     likely_layer="material-container",
                     hint="MaterialContainerDescriptor.mode should be derived from container_id and union_id.",
                     record_success=False)
+            if isinstance(container_id, (int, float)) and int(container_id) > 0:
+                cid = int(container_id)
+                group = container_group_accumulators.setdefault(cid, {
+                    "surface_count": 0,
+                    "active_surfaces": 0,
+                    "sampled_backdrop_surfaces": 0,
+                    "fallback_surfaces": 0,
+                    "union_surfaces": 0,
+                    "morph_surfaces": 0,
+                    "interactive_surfaces": 0,
+                    "shared_backdrop_scope_surfaces": 0,
+                })
+                group["surface_count"] = int(group["surface_count"]) + 1
+                primary_pass_for_group = plan.get("primary_pass")
+                if (isinstance(primary_pass_for_group, dict)
+                        and primary_pass_for_group.get("active") is True):
+                    group["active_surfaces"] = int(group["active_surfaces"]) + 1
+                if plan.get("backdrop_sampling") is True:
+                    group["sampled_backdrop_surfaces"] = (
+                        int(group["sampled_backdrop_surfaces"]) + 1)
+                if plan.get("fallback") is True:
+                    group["fallback_surfaces"] = (
+                        int(group["fallback_surfaces"]) + 1)
+                if plan_container.get("shape_union_expected") is True:
+                    group["union_surfaces"] = int(group["union_surfaces"]) + 1
+                if plan_container.get("morph_transitions") is True:
+                    group["morph_surfaces"] = int(group["morph_surfaces"]) + 1
+                if plan_container.get("interactive") is True:
+                    group["interactive_surfaces"] = (
+                        int(group["interactive_surfaces"]) + 1)
+                if plan_container.get("shared_backdrop_scope") is True:
+                    group["shared_backdrop_scope_surfaces"] = (
+                        int(group["shared_backdrop_scope_surfaces"]) + 1)
 
         reference_model = check_object_field(
             report,
@@ -7498,6 +7579,43 @@ def summarize_material_plans(
             plan,
             plan_path,
             likely_layer)
+    group_summary = summary["container_groups"]
+    group_summary["group_count"] = len(container_group_accumulators)
+    for group in container_group_accumulators.values():
+        surface_count = int(group["surface_count"])
+        active_surfaces = int(group["active_surfaces"])
+        sampled_backdrop_surfaces = int(group["sampled_backdrop_surfaces"])
+        fallback_surfaces = int(group["fallback_surfaces"])
+        group_summary["max_group_size"] = max(
+            int(group_summary["max_group_size"]),
+            surface_count)
+        group_summary["max_active_surfaces"] = max(
+            int(group_summary["max_active_surfaces"]),
+            active_surfaces)
+        group_summary["max_sampled_backdrop_surfaces"] = max(
+            int(group_summary["max_sampled_backdrop_surfaces"]),
+            sampled_backdrop_surfaces)
+        group_summary["max_fallback_surfaces"] = max(
+            int(group_summary["max_fallback_surfaces"]),
+            fallback_surfaces)
+        if surface_count > 1:
+            group_summary["multi_surface_group_count"] = (
+                int(group_summary["multi_surface_group_count"]) + 1)
+        if int(group["union_surfaces"]) > 0:
+            group_summary["union_group_count"] = (
+                int(group_summary["union_group_count"]) + 1)
+        if int(group["morph_surfaces"]) > 0:
+            group_summary["morph_group_count"] = (
+                int(group_summary["morph_group_count"]) + 1)
+        if int(group["interactive_surfaces"]) > 0:
+            group_summary["interactive_group_count"] = (
+                int(group_summary["interactive_group_count"]) + 1)
+        if int(group["shared_backdrop_scope_surfaces"]) > 0:
+            group_summary["shared_backdrop_scope_group_count"] = (
+                int(group_summary["shared_backdrop_scope_group_count"]) + 1)
+        if fallback_surfaces > 0 and active_surfaces > fallback_surfaces:
+            group_summary["fallback_mixed_group_count"] = (
+                int(group_summary["fallback_mixed_group_count"]) + 1)
     return summary
 
 
@@ -7553,6 +7671,7 @@ def check_material_plan_summary_requirements(
             "container_unioned",
             "container_interactive",
             "container_morph_transitions",
+            *MATERIAL_CONTAINER_GROUP_SPEC_FIELDS.keys(),
             "reference_view_bounds_anchored",
             "reference_shape_matches_geometry",
             "reference_tint_applied",
@@ -7649,6 +7768,13 @@ def check_material_plan_summary_requirements(
                     "verifier_require_container_morph_contract",
                     "verifier_require_edge_highlight"):
                 summary_path = f"{base_path}.{field}"
+            elif field in MATERIAL_CONTAINER_GROUP_SPEC_FIELDS:
+                group_summary = summary.get("container_groups")
+                if not isinstance(group_summary, dict):
+                    group_summary = {}
+                nested_field = MATERIAL_CONTAINER_GROUP_SPEC_FIELDS[field]
+                actual = group_summary.get(nested_field)
+                summary_path = f"{base_path}.container_groups.{nested_field}"
             elif field in (
                     "container_participating",
                     "container_unioned",
@@ -8206,6 +8332,57 @@ def check_material_resource_bounds_requirements(
             hint="MaterialResourceBudget.deterministic_fallback must stay true for every plan.")
 
 
+def check_material_container_group_summary_contract(
+        summary: JsonObject,
+        group_summary: Any,
+        base_path: str,
+        label: str,
+        report: Report,
+        likely_pass: str = "") -> None:
+    expected_summary = summary.get("container_groups")
+    if not isinstance(expected_summary, dict):
+        expected_summary = {}
+    report.check(
+        f"{label} container_groups is object",
+        isinstance(group_summary, dict),
+        path=f"{base_path}.container_groups",
+        expected="object",
+        actual=type(group_summary).__name__,
+        likely_layer="material-container",
+        likely_pass=likely_pass,
+        hint=(
+            "Container-group telemetry should be finalized from the same "
+            "MaterialRuntimeRecord list used to serialize material_plans."))
+    if not isinstance(group_summary, dict):
+        return
+    for field in MATERIAL_CONTAINER_GROUP_SUMMARY_FIELDS:
+        expected = expected_summary.get(field)
+        actual = group_summary.get(field)
+        report.check(
+            f"{label} container_groups.{field} is non-negative",
+            isinstance(actual, (int, float)) and not isinstance(actual, bool)
+            and float(actual) >= 0.0,
+            path=f"{base_path}.container_groups.{field}",
+            expected={">=": 0},
+            actual=actual,
+            likely_layer="material-container",
+            likely_pass=likely_pass,
+            hint=(
+                "Container-group summary fields must be numeric so CI logs can "
+                "explain grouped Liquid Glass behavior without visual guessing."))
+        report.check(
+            f"{label} container_groups.{field} matches plans",
+            actual == expected,
+            path=f"{base_path}.container_groups.{field}",
+            expected=expected,
+            actual=actual,
+            likely_layer="material-container",
+            likely_pass=likely_pass,
+            hint=(
+                "Compare MaterialPlan.container fields, fallback state, and "
+                "backend finalization of material runtime records."))
+
+
 def check_material_runtime_summary_contract(
         summary: JsonObject,
         runtime_summary: Any,
@@ -8320,6 +8497,12 @@ def check_material_runtime_summary_contract(
             hint=(
                 "Compare renderer.material_runtime_summary with the derived "
                 "summary from renderer.material_plans[]."))
+    check_material_container_group_summary_contract(
+        summary,
+        runtime_summary.get("container_groups"),
+        base_path,
+        "material runtime summary",
+        report)
 
 
 def check_material_executor_summary_contract(
@@ -8411,6 +8594,13 @@ def check_material_executor_summary_contract(
             hint=(
                 "Compare renderer.material_executor_summary with "
                 "renderer.material_plans#summary before changing backend policy."))
+    check_material_container_group_summary_contract(
+        summary,
+        executor_summary.get("container_groups"),
+        base_path,
+        "material executor summary",
+        report,
+        likely_pass="material-executor")
 
     numeric_fields = (
         "plan_count",
