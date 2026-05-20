@@ -1482,6 +1482,12 @@ namespace detail {
         foreground.emplace("scheme", json::Value{plan.foreground.scheme});
         foreground.emplace("source", json::Value{plan.foreground.source});
         foreground.emplace(
+            "contrast_policy",
+            json::Value{plan.foreground.contrast_policy});
+        foreground.emplace(
+            "remap_policy",
+            json::Value{plan.foreground.remap_policy});
+        foreground.emplace(
             "background_luma",
             json::Value{plan.foreground.background_luma});
         foreground.emplace(
@@ -1496,6 +1502,15 @@ namespace detail {
         foreground.emplace(
             "minimum_contrast_ratio",
             json::Value{plan.foreground.minimum_contrast_ratio});
+        foreground.emplace(
+            "primary_contrast_margin",
+            json::Value{plan.foreground.primary_contrast_margin});
+        foreground.emplace(
+            "secondary_contrast_margin",
+            json::Value{plan.foreground.secondary_contrast_margin});
+        foreground.emplace(
+            "accent_contrast_margin",
+            json::Value{plan.foreground.accent_contrast_margin});
         foreground.emplace(
             "backdrop_driven",
             json::Value{plan.foreground.backdrop_driven});

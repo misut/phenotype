@@ -12,7 +12,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 26;
+inline constexpr std::uint32_t material_plan_contract_version = 27;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
 inline constexpr unsigned int material_max_sample_taps = 25;
@@ -343,11 +343,16 @@ struct MaterialForegroundRecommendation {
     Color accent = {0, 0, 0, 255};
     char const* scheme = "standard";
     char const* source = "theme";
+    char const* contrast_policy = "standard-contrast";
+    char const* remap_policy = "theme-role-remap-if-needed";
     float background_luma = 1.0f;
     float primary_contrast_ratio = 1.0f;
     float secondary_contrast_ratio = 1.0f;
     float accent_contrast_ratio = 1.0f;
     float minimum_contrast_ratio = 4.5f;
+    float primary_contrast_margin = 0.0f;
+    float secondary_contrast_margin = 0.0f;
+    float accent_contrast_margin = 0.0f;
     bool backdrop_driven = false;
     bool high_contrast = false;
     bool uses_vibrancy = false;
@@ -1662,12 +1667,21 @@ inline MaterialForegroundRecommendation material_resolve_foreground(
         MaterialCapabilityInput capabilities) noexcept {
     MaterialForegroundRecommendation foreground{};
     foreground.background_luma = material_estimated_surface_luma(plan);
-    foreground.minimum_contrast_ratio = 4.5f;
+    foreground.minimum_contrast_ratio =
+        capabilities.increase_contrast ? 7.0f : 4.5f;
     foreground.scheme = material_foreground_scheme_name(
         plan,
         foreground.background_luma,
         capabilities);
     foreground.source = material_foreground_source_name(plan, capabilities);
+    foreground.contrast_policy = capabilities.increase_contrast
+        ? "enhanced-contrast"
+        : "standard-contrast";
+    foreground.remap_policy = plan.kind == MaterialKind::None
+        ? "none"
+        : capabilities.increase_contrast
+            ? "strict-theme-role-remap"
+            : "theme-role-remap-if-needed";
     foreground.backdrop_driven = plan.backdrop_sampling;
     foreground.high_contrast = capabilities.increase_contrast;
     foreground.uses_vibrancy = plan.backdrop_sampling
@@ -1711,6 +1725,12 @@ inline MaterialForegroundRecommendation material_resolve_foreground(
         material_contrast_ratio(foreground.secondary, foreground.background_luma);
     foreground.accent_contrast_ratio =
         material_contrast_ratio(foreground.accent, foreground.background_luma);
+    foreground.primary_contrast_margin =
+        foreground.primary_contrast_ratio - foreground.minimum_contrast_ratio;
+    foreground.secondary_contrast_margin =
+        foreground.secondary_contrast_ratio - foreground.minimum_contrast_ratio;
+    foreground.accent_contrast_margin =
+        foreground.accent_contrast_ratio - foreground.minimum_contrast_ratio;
     return foreground;
 }
 

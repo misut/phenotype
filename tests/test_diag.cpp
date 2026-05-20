@@ -1036,6 +1036,10 @@ void test_material_runtime_record_json_contract() {
     auto const& foreground = obj.at("foreground").as_object();
     assert(foreground.at("scheme").as_string() == "solid-fallback");
     assert(foreground.at("source").as_string() == "fallback-material");
+    assert(foreground.at("contrast_policy").as_string()
+           == "standard-contrast");
+    assert(foreground.at("remap_policy").as_string()
+           == "theme-role-remap-if-needed");
     assert(foreground.at("backdrop_driven").as_bool() == false);
     assert(foreground.at("high_contrast").as_bool() == false);
     assert(foreground.at("uses_vibrancy").as_bool() == false);
@@ -1047,6 +1051,18 @@ void test_material_runtime_record_json_contract() {
            >= foreground.at("minimum_contrast_ratio").as_float());
     assert(foreground.at("accent_contrast_ratio").as_float()
            >= foreground.at("minimum_contrast_ratio").as_float());
+    assert(std::fabs(
+        foreground.at("primary_contrast_margin").as_float()
+        - (foreground.at("primary_contrast_ratio").as_float()
+           - foreground.at("minimum_contrast_ratio").as_float())) < 0.0001f);
+    assert(std::fabs(
+        foreground.at("secondary_contrast_margin").as_float()
+        - (foreground.at("secondary_contrast_ratio").as_float()
+           - foreground.at("minimum_contrast_ratio").as_float())) < 0.0001f);
+    assert(std::fabs(
+        foreground.at("accent_contrast_margin").as_float()
+        - (foreground.at("accent_contrast_ratio").as_float()
+           - foreground.at("minimum_contrast_ratio").as_float())) < 0.0001f);
     auto const& optical_response = obj.at("optical_response").as_object();
     assert(optical_response.at("response_model").as_string()
            == "deterministic-fallback");

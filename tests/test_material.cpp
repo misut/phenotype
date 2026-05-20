@@ -58,7 +58,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 26);
+    assert(material_plan_contract_version == 27);
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(!plan.shape.capsule);
     assert(plan.theme.default_glass_tokens);
@@ -411,6 +411,49 @@ void test_foreground_contrast_gap_uses_absolute_contrast_candidate() {
     std::puts("PASS: foreground contrast gap uses absolute contrast candidate");
 }
 
+void test_increase_contrast_raises_foreground_readability_contract() {
+    auto env = sampled_environment();
+    env.capabilities.increase_contrast = true;
+    env.backdrop.luma_min = 0.42f;
+    env.backdrop.luma_max = 0.64f;
+    env.backdrop.luma_mean = 0.54f;
+
+    auto plan = plan_material_surface(regular_request(), env);
+
+    assert(plan.backdrop_sampling);
+    assert(plan.decision_trace.increase_contrast);
+    assert(plan.foreground.high_contrast);
+    assert(std::string_view(plan.foreground.scheme) == "high-contrast");
+    assert(std::string_view(plan.foreground.source) == "accessibility");
+    assert(std::string_view(plan.foreground.contrast_policy)
+        == "enhanced-contrast");
+    assert(std::string_view(plan.foreground.remap_policy)
+        == "strict-theme-role-remap");
+    assert(plan.foreground.minimum_contrast_ratio >= 7.0f);
+    assert(plan.foreground.primary_contrast_ratio
+           >= plan.foreground.minimum_contrast_ratio);
+    assert(plan.foreground.secondary_contrast_ratio
+           >= plan.foreground.minimum_contrast_ratio);
+    assert(plan.foreground.accent_contrast_ratio
+           >= plan.foreground.minimum_contrast_ratio);
+    assert(std::fabs(
+        plan.foreground.primary_contrast_margin
+        - (plan.foreground.primary_contrast_ratio
+           - plan.foreground.minimum_contrast_ratio)) < 0.0001f);
+    assert(std::fabs(
+        plan.foreground.secondary_contrast_margin
+        - (plan.foreground.secondary_contrast_ratio
+           - plan.foreground.minimum_contrast_ratio)) < 0.0001f);
+    assert(std::fabs(
+        plan.foreground.accent_contrast_margin
+        - (plan.foreground.accent_contrast_ratio
+           - plan.foreground.minimum_contrast_ratio)) < 0.0001f);
+    assert(plan.reference_model.legibility_preserved);
+    assert(std::string_view(plan.reference_model.accessibility_response)
+        == "increased-contrast");
+    std::puts("PASS: increase contrast raises foreground readability contract");
+}
+
 void test_warmup_backdrop_access_contract() {
     auto env = sampled_environment();
     env.capabilities.frame_history = false;
@@ -637,6 +680,7 @@ int main() {
     test_custom_theme_snapshot_contract();
     test_command_material_preserves_theme_snapshot_contract();
     test_foreground_contrast_gap_uses_absolute_contrast_candidate();
+    test_increase_contrast_raises_foreground_readability_contract();
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     test_executor_frame_capture_policy_contract();

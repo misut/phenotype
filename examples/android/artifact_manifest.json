@@ -32,7 +32,7 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "26": 1
+      "27": 1
     },
     "theme_foreground_matches_theme": 1,
     "theme_accent_matches_theme": 1,
@@ -47,6 +47,12 @@
     },
     "theme_token_policies": {
       "explicit-material-style-tokens": 1
+    },
+    "foreground_contrast_policies": {
+      "standard-contrast": 1
+    },
+    "foreground_remap_policies": {
+      "theme-role-remap-if-needed": 1
     },
     "roles": {
       "surface": 1

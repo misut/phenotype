@@ -285,11 +285,16 @@ def material_plan(
             "accent": {"r": 8, "g": 128, "b": 124, "a": 255},
             "scheme": "solid-fallback",
             "source": "fallback-material",
+            "contrast_policy": "standard-contrast",
+            "remap_policy": "theme-role-remap-if-needed",
             "background_luma": 0.72,
             "primary_contrast_ratio": 12.0,
             "secondary_contrast_ratio": 6.0,
             "accent_contrast_ratio": 4.5,
             "minimum_contrast_ratio": 4.5,
+            "primary_contrast_margin": 7.5,
+            "secondary_contrast_margin": 1.5,
+            "accent_contrast_margin": 0.0,
             "backdrop_driven": False,
             "high_contrast": False,
             "uses_vibrancy": False,
@@ -1521,6 +1526,50 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
             0)
+
+    def test_material_foreground_margin_mismatch_is_llm_actionable(self) -> None:
+        plan = material_plan()
+        foreground = plan["foreground"]
+        assert isinstance(foreground, dict)
+        foreground["primary_contrast_margin"] = 0.25
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"]
+            == "material foreground primary_contrast_margin matches ratio")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".foreground.primary_contrast_margin")
+        self.assertEqual(failure["expected"], 7.5)
+        self.assertEqual(failure["actual"], 0.25)
+        self.assertEqual(failure["likely_layer"], "material-foreground")
+        self.assertIn("contrast_ratio - minimum_contrast_ratio", failure["hint"])
+
+    def test_material_high_contrast_minimum_is_llm_actionable(self) -> None:
+        plan = material_plan()
+        foreground = plan["foreground"]
+        assert isinstance(foreground, dict)
+        foreground["high_contrast"] = True
+        foreground["contrast_policy"] = "standard-contrast"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"]
+            == "material high contrast raises foreground minimum")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".foreground.minimum_contrast_ratio")
+        self.assertEqual(failure["expected"], {">=": 7.0})
+        self.assertEqual(failure["actual"], 4.5)
+        self.assertEqual(failure["likely_layer"], "material-foreground")
 
     def test_material_quality_policy_over_engine_cap_is_llm_actionable(self) -> None:
         plan = material_plan()

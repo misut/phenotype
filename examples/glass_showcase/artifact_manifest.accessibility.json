@@ -36,7 +36,7 @@
       "reduced transparency disables backdrop sampling": 7
     },
     "contract_versions": {
-      "26": 7
+      "27": 7
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -182,12 +182,18 @@
     "foreground_sources": {
       "accessibility": 7
     },
+    "foreground_contrast_policies": {
+      "enhanced-contrast": 7
+    },
+    "foreground_remap_policies": {
+      "strict-theme-role-remap": 7
+    },
     "foreground_backdrop_driven": 0,
     "foreground_high_contrast": 7,
     "foreground_vibrant": 0,
     "foreground_deterministic": 7,
-    "foreground_min_primary_contrast_gte": 4.5,
-    "foreground_minimum_contrast_gte": 4.5,
+    "foreground_min_primary_contrast_gte": 7.0,
+    "foreground_minimum_contrast_gte": 7.0,
     "optical_response_models": {
       "deterministic-fallback": 7
     },

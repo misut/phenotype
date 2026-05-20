@@ -732,7 +732,8 @@ the actual `material_plans` executed for the frame. Each plan includes:
   `profile_name: custom`, so a verifier failure can distinguish theme drift
   from backend drawing before looking at pixels;
 - `foreground`, including primary/secondary/accent recommendations, scheme,
-  source, estimated background luminance, contrast ratios, accessibility flags,
+  source, estimated background luminance, contrast ratios, contrast margins,
+  minimum contrast target, named contrast/remap policies, accessibility flags,
   and whether the recommendation was backdrop-driven or vibrancy-enabled;
 - `sampling_kernel`, including the pure kernel name, radius, tap count, blur
   step scale, weight profile, backdrop dependency, and boundedness flag;
@@ -836,10 +837,14 @@ the plan used deterministic neutral luminance for that frame.
 `foreground` is the material text/icon legibility contract. Active sampled glass
 must report `backdrop_driven: true` and `uses_vibrancy: true`; deterministic
 fallback reports a fallback or accessibility source. The verifier checks that
-`primary_contrast_ratio` meets `minimum_contrast_ratio` and that scheme/source
-values are known, so foreground failures point at pure material policy before
-backend drawing. Native backends then apply this plan to primary, secondary,
-and accent text tokens whose draw origins fall inside a prior material command.
+every foreground contrast ratio meets `minimum_contrast_ratio`, each
+`*_margin` equals `*_contrast_ratio - minimum_contrast_ratio`, and
+`high_contrast: true` raises the minimum to at least `7.0` with
+`contrast_policy: enhanced-contrast`. Scheme, source, contrast-policy, and
+remap-policy values are known vocabulary, so foreground failures point at pure
+material policy before backend drawing. Native backends then apply this plan to
+primary, secondary, and accent text tokens whose draw origins fall inside a
+prior material command.
 Use `renderer.material_executor_summary.foreground_text_candidate_count` and
 `foreground_text_remap_count` to confirm that this execution step happened in
 the artifact; custom colors should count as candidates but remain unremapped.
@@ -904,10 +909,14 @@ Reference-model gates can pin `reference_technologies`, `reference_variants`,
 `reference_legibility_preserved`, `reference_vibrancy_expected`, and
 `reference_deterministic_degradation`.
 Foreground gates can pin `foreground_schemes`, `foreground_sources`,
+`foreground_contrast_policies`, `foreground_remap_policies`,
 `foreground_backdrop_driven`, `foreground_high_contrast`,
 `foreground_vibrant`, `foreground_deterministic`,
 `foreground_min_primary_contrast_gte`, and
-`foreground_minimum_contrast_gte`.
+`foreground_minimum_contrast_gte`. Per-plan verifier failures now also report
+exact foreground margin paths such as
+`renderer.material_plans[n].foreground.primary_contrast_margin` when a
+serializer or planner drifts from the derived readability contract.
 `backdrop.luminance_response` is `not-sampled` for fallback plans and one of
 `neutral`, `dark`, `bright`, `flat`, `dark-flat`, or `bright-flat` for sampled
 plans. Sampled plans also report `frosting_response`, `tint_response`,

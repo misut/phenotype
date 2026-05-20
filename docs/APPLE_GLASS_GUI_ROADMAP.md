@@ -258,12 +258,15 @@ status strings, so an artifact can distinguish `uploaded`/`drawn` from stable
 helper.
 `MaterialPlan.foreground` resolves primary, secondary, and accent foreground
 recommendations with a named scheme, source, estimated background luminance,
-contrast ratios, accessibility flags, and deterministic/vibrancy booleans. This
-keeps text and icon legibility policy in the pure material layer instead of
-letting each backend invent foreground colors for glass surfaces. Native
-backends now execute that recommendation for default text tokens inside
-material surfaces and publish foreground candidate/remap counters in the
-artifact executor summary.
+contrast ratios, minimum contrast target, derived contrast margins, named
+contrast/remap policies, accessibility flags, and deterministic/vibrancy
+booleans. Standard glass uses a 4.5 foreground target, while Increase Contrast
+raises that pure target to 7.0 and marks the plan with `enhanced-contrast` and
+`strict-theme-role-remap`. This keeps text and icon legibility policy in the
+pure material layer instead of letting each backend invent foreground colors for
+glass surfaces. Native backends now execute that recommendation for default
+text tokens inside material surfaces and publish foreground candidate/remap
+counters in the artifact executor summary.
 `MaterialPlan.theme` records the explicit material-style token snapshot that
 drives that foreground recommendation and material tint. It names the token
 source, profile, token policy, foreground/secondary/accent/strong-accent/tint/

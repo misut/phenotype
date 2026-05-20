@@ -194,6 +194,17 @@ ALLOWED_MATERIAL_FOREGROUND_SOURCES = {
     "theme",
 }
 
+ALLOWED_MATERIAL_FOREGROUND_CONTRAST_POLICIES = {
+    "enhanced-contrast",
+    "standard-contrast",
+}
+
+ALLOWED_MATERIAL_FOREGROUND_REMAP_POLICIES = {
+    "none",
+    "strict-theme-role-remap",
+    "theme-role-remap-if-needed",
+}
+
 ALLOWED_MATERIAL_REFERENCE_TECHNOLOGIES = {
     "liquid-glass",
     "standard-material",
@@ -276,7 +287,7 @@ ALLOWED_MATERIAL_OPTICAL_DEPTH_STRATEGIES = {
     "standard-content-edge",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 26
+MATERIAL_PLAN_CONTRACT_VERSION = 27
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -2109,6 +2120,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "backdrop_optical_adapted",
         "foreground_schemes",
         "foreground_sources",
+        "foreground_contrast_policies",
+        "foreground_remap_policies",
         "foreground_backdrop_driven",
         "foreground_high_contrast",
         "foreground_vibrant",
@@ -2289,6 +2302,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "depth_responses": ALLOWED_MATERIAL_DEPTH_RESPONSES,
         "foreground_schemes": ALLOWED_MATERIAL_FOREGROUND_SCHEMES,
         "foreground_sources": ALLOWED_MATERIAL_FOREGROUND_SOURCES,
+        "foreground_contrast_policies": (
+            ALLOWED_MATERIAL_FOREGROUND_CONTRAST_POLICIES),
+        "foreground_remap_policies": (
+            ALLOWED_MATERIAL_FOREGROUND_REMAP_POLICIES),
         "optical_response_models": ALLOWED_MATERIAL_OPTICAL_RESPONSE_MODELS,
         "optical_blur_strategies": ALLOWED_MATERIAL_OPTICAL_BLUR_STRATEGIES,
         "optical_color_strategies": ALLOWED_MATERIAL_OPTICAL_COLOR_STRATEGIES,
@@ -3221,6 +3238,9 @@ MATERIAL_FOREGROUND_NUMERIC_FIELDS = (
     "secondary_contrast_ratio",
     "accent_contrast_ratio",
     "minimum_contrast_ratio",
+    "primary_contrast_margin",
+    "secondary_contrast_margin",
+    "accent_contrast_margin",
 )
 MATERIAL_FOREGROUND_BOOL_FIELDS = (
     "backdrop_driven",
@@ -3938,6 +3958,8 @@ def summarize_material_plans(
         "foreground": {
             "schemes": {},
             "sources": {},
+            "contrast_policies": {},
+            "remap_policies": {},
             "backdrop_driven": 0,
             "high_contrast": 0,
             "vibrant": 0,
@@ -5018,6 +5040,57 @@ def summarize_material_plans(
                     likely_layer="material-foreground",
                     hint="Update foreground source vocabulary with the pure planner.",
                     record_success=False)
+            contrast_policy = check_string_field(
+                report,
+                foreground,
+                "contrast_policy",
+                f"{plan_path}.foreground",
+                likely_layer="material-foreground",
+                hint=(
+                    "Foreground contrast policy must name the pure readability "
+                    "threshold used by MaterialPlan.foreground."))
+            if isinstance(contrast_policy, str):
+                contrast_policies = foreground_summary["contrast_policies"]
+                contrast_policies[contrast_policy] = (
+                    contrast_policies.get(contrast_policy, 0) + 1)
+                report.check(
+                    "material foreground contrast_policy is known",
+                    contrast_policy
+                    in ALLOWED_MATERIAL_FOREGROUND_CONTRAST_POLICIES,
+                    path=f"{plan_path}.foreground.contrast_policy",
+                    expected=sorted(
+                        ALLOWED_MATERIAL_FOREGROUND_CONTRAST_POLICIES),
+                    actual=contrast_policy,
+                    likely_layer="material-foreground",
+                    hint=(
+                        "Update foreground contrast policy vocabulary with "
+                        "the pure planner."),
+                    record_success=False)
+            remap_policy = check_string_field(
+                report,
+                foreground,
+                "remap_policy",
+                f"{plan_path}.foreground",
+                likely_layer="material-foreground",
+                hint=(
+                    "Foreground remap policy must explain how text roles are "
+                    "mapped after MaterialPlan.foreground resolves contrast."))
+            if isinstance(remap_policy, str):
+                remap_policies = foreground_summary["remap_policies"]
+                remap_policies[remap_policy] = (
+                    remap_policies.get(remap_policy, 0) + 1)
+                report.check(
+                    "material foreground remap_policy is known",
+                    remap_policy in ALLOWED_MATERIAL_FOREGROUND_REMAP_POLICIES,
+                    path=f"{plan_path}.foreground.remap_policy",
+                    expected=sorted(
+                        ALLOWED_MATERIAL_FOREGROUND_REMAP_POLICIES),
+                    actual=remap_policy,
+                    likely_layer="material-foreground",
+                    hint=(
+                        "Update foreground remap policy vocabulary with "
+                        "the pure planner."),
+                    record_success=False)
             foreground_numbers: dict[str, int | float] = {}
             for key in MATERIAL_FOREGROUND_NUMERIC_FIELDS:
                 number = check_number_field(
@@ -5095,6 +5168,54 @@ def summarize_material_plans(
                             "Adjust MaterialPlan.foreground color selection before "
                             "weakening contrast thresholds."),
                         record_success=False)
+                margin_fields = {
+                    "primary_contrast_ratio": "primary_contrast_margin",
+                    "secondary_contrast_ratio": "secondary_contrast_margin",
+                    "accent_contrast_ratio": "accent_contrast_margin",
+                }
+                for ratio_key, margin_key in margin_fields.items():
+                    contrast = foreground_numbers.get(ratio_key)
+                    margin = foreground_numbers.get(margin_key)
+                    if not isinstance(contrast, (int, float)) or not isinstance(
+                            margin, (int, float)):
+                        continue
+                    expected_margin = float(contrast) - float(minimum_contrast)
+                    report.check(
+                        f"material foreground {margin_key} matches ratio",
+                        abs(float(margin) - expected_margin) <= 0.0001,
+                        path=f"{plan_path}.foreground.{margin_key}",
+                        expected=expected_margin,
+                        actual=margin,
+                        likely_layer="material-foreground",
+                        hint=(
+                            "Keep foreground contrast margins derived from "
+                            "contrast_ratio - minimum_contrast_ratio."),
+                        record_success=False)
+            high_contrast = foreground.get("high_contrast")
+            if high_contrast is True:
+                report.check(
+                    "material high contrast raises foreground minimum",
+                    isinstance(minimum_contrast, (int, float))
+                    and float(minimum_contrast) >= 7.0,
+                    path=f"{plan_path}.foreground.minimum_contrast_ratio",
+                    expected={">=": 7.0},
+                    actual=minimum_contrast,
+                    likely_layer="material-foreground",
+                    hint=(
+                        "Increase Contrast should select the enhanced "
+                        "foreground readability threshold in pure planning."),
+                    record_success=False)
+                report.check(
+                    "material high contrast uses enhanced contrast policy",
+                    contrast_policy == "enhanced-contrast",
+                    path=f"{plan_path}.foreground.contrast_policy",
+                    expected="enhanced-contrast",
+                    actual=contrast_policy,
+                    likely_layer="material-foreground",
+                    hint=(
+                        "The foreground contrast policy should mirror "
+                        "decision_trace.increase_contrast."),
+                    record_success=False)
             if backdrop_sampling is True:
                 report.check(
                     "sampled material foreground is backdrop-driven",
@@ -8382,6 +8503,12 @@ def check_material_plan_summary_requirements(
         "foreground_sources": (
             "material-foreground",
             "Inspect MaterialPlan.foreground.source and planner inputs."),
+        "foreground_contrast_policies": (
+            "material-foreground",
+            "Inspect MaterialPlan.foreground.contrast_policy and accessibility inputs."),
+        "foreground_remap_policies": (
+            "material-foreground",
+            "Inspect MaterialPlan.foreground.remap_policy and text role mapping."),
         "optical_response_models": (
             "material-optical-response",
             "Inspect MaterialPlan.optical_response.response_model and role/sampling policy."),
@@ -8442,6 +8569,8 @@ def check_material_plan_summary_requirements(
             "verifier_region_passes",
             "foreground_schemes",
             "foreground_sources",
+            "foreground_contrast_policies",
+            "foreground_remap_policies",
             "optical_response_models",
             "optical_blur_strategies",
             "optical_color_strategies",
@@ -8533,13 +8662,19 @@ def check_material_plan_summary_requirements(
             elif field == "verifier_region_passes":
                 actual = summary.get("region_passes")
                 summary_path = f"{base_path}.region_passes"
-            elif field in ("foreground_schemes", "foreground_sources"):
+            elif field in (
+                    "foreground_schemes",
+                    "foreground_sources",
+                    "foreground_contrast_policies",
+                    "foreground_remap_policies"):
                 foreground_summary = summary.get("foreground")
                 if not isinstance(foreground_summary, dict):
                     foreground_summary = {}
                 nested = {
                     "foreground_schemes": "schemes",
                     "foreground_sources": "sources",
+                    "foreground_contrast_policies": "contrast_policies",
+                    "foreground_remap_policies": "remap_policies",
                 }[field]
                 actual = foreground_summary.get(nested)
                 summary_path = f"{base_path}.foreground.{nested}"
