@@ -345,6 +345,12 @@ their action chrome to the verifier without adding idle-frame material work.
 `ButtonStyleOptions`; icon buttons can therefore share the same audited SVG
 painting path while choosing the menu, toolbar, or selection material contract
 purely at the widget edge.
+Table/list headers use `GlassTableHeaderStyleOptions` and
+`widget::glass_table_header_button_style`. The preset defaults to a clear
+`content` material role, so sortable table chrome stays on the content-layer
+standard-material path instead of expanding sampled-backdrop work. Sorted
+columns get a stronger tint/border; disabled headers drop their material
+contract deterministically.
 
 `phenotype.svg` is a pure vector image layer. It parses a bounded SVG subset
 (`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,

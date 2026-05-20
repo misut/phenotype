@@ -220,6 +220,7 @@ auto file_explorer_desktop_default_requirements(std::string_view mode)
         append_required_label(args, "Name");
         append_required_label(args, "Kind");
         append_required_label(args, "Size");
+        append_required_material_surface_role(args, "content");
     } else if (mode == "column") {
         append_required_label(args, "Preview");
         append_required_label(args, "Demo Root");

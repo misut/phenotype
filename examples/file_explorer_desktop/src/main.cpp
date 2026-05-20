@@ -44,6 +44,7 @@ struct GoBack {};
 struct GoForward {};
 struct GoUp {};
 struct CycleSort {};
+struct SortBy { file_explorer_demo::SortMode mode; };
 struct Refresh {};
 struct ResetDemo {};
 struct Resized { int width; int height; float scale; };
@@ -70,6 +71,7 @@ using Msg = std::variant<
     GoForward,
     GoUp,
     CycleSort,
+    SortBy,
     Refresh,
     ResetDemo,
     Resized,
@@ -1695,6 +1697,11 @@ void update(State& state, Msg msg) {
             apply_desktop_input(
                 explorer,
                 pointer_input(file_explorer_demo::ExplorerInputKind::CycleSort));
+        } else if constexpr (std::same_as<T, SortBy>) {
+            state.more_actions_open = false;
+            auto input = pointer_input(file_explorer_demo::ExplorerInputKind::Sort);
+            input.sort_mode = m.mode;
+            apply_desktop_input(explorer, std::move(input));
         } else if constexpr (std::same_as<T, Refresh>) {
             state.more_actions_open = false;
             apply_desktop_pointer_focus(explorer, "toolbar_actions");
@@ -2577,13 +2584,46 @@ void finder_list(State const& state,
         [&] {
             layout::row([&] {
                 layout::sized_box(420.0f, [&] {
-                    widget::text(state.labels.name, TextSize::Small, TextColor::Muted);
+                    widget::button<Msg>(
+                        phenotype::str{state.labels.name},
+                        SortBy{file_explorer_demo::SortMode::Name},
+                        widget::glass_table_header_button_style(
+                            GlassTableHeaderStyleOptions{
+                                .sorted = snap.sort_mode
+                                    == file_explorer_demo::SortMode::Name,
+                                .width = 410.0f,
+                                .height = 28.0f,
+                                .border_radius = 8.0f,
+                                .font_size = 12.0f,
+                            }));
                 });
                 layout::sized_box(160.0f, [&] {
-                    widget::text(state.labels.kind, TextSize::Small, TextColor::Muted);
+                    widget::button<Msg>(
+                        phenotype::str{state.labels.kind},
+                        SortBy{file_explorer_demo::SortMode::Kind},
+                        widget::glass_table_header_button_style(
+                            GlassTableHeaderStyleOptions{
+                                .sorted = snap.sort_mode
+                                    == file_explorer_demo::SortMode::Kind,
+                                .width = 150.0f,
+                                .height = 28.0f,
+                                .border_radius = 8.0f,
+                                .font_size = 12.0f,
+                            }));
                 });
                 layout::sized_box(120.0f, [&] {
-                    widget::text(state.labels.size, TextSize::Small, TextColor::Muted);
+                    widget::button<Msg>(
+                        phenotype::str{state.labels.size},
+                        SortBy{file_explorer_demo::SortMode::Size},
+                        widget::glass_table_header_button_style(
+                            GlassTableHeaderStyleOptions{
+                                .sorted = snap.sort_mode
+                                    == file_explorer_demo::SortMode::Size,
+                                .width = 110.0f,
+                                .height = 28.0f,
+                                .border_radius = 8.0f,
+                                .font_size = 12.0f,
+                            }));
                 });
             }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Start);
             if (entries.empty()) {
