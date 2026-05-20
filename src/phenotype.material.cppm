@@ -12,11 +12,12 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 33;
+inline constexpr std::uint32_t material_plan_contract_version = 34;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
 inline constexpr unsigned int material_max_sample_taps = 25;
+inline constexpr std::int64_t material_default_max_backdrop_pixels = 4'000'000;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -65,6 +66,11 @@ struct MaterialCapabilityInput {
     bool reduce_transparency = false;
     bool increase_contrast = false;
     bool reduce_motion = false;
+    unsigned int max_shader_sample_taps = material_max_sample_taps;
+    std::int64_t max_texture_dimension_2d = 0;
+    std::int64_t max_backdrop_pixels = 0;
+    char const* profile = "generic";
+    char const* source = "default";
 };
 
 struct MaterialBackdropDescriptor {
@@ -89,13 +95,90 @@ struct MaterialRenderTargetMetadata {
     char const* pixel_format = "unknown";
 };
 
+struct MaterialCapabilityAnalysis {
+    bool material_surfaces = true;
+    bool material_backdrop_blur = false;
+    bool shader_blur = false;
+    bool frame_history = false;
+    bool reduce_transparency = false;
+    bool increase_contrast = false;
+    bool reduce_motion = false;
+    unsigned int max_shader_sample_taps = material_max_sample_taps;
+    std::int64_t max_texture_dimension_2d = 0;
+    std::int64_t max_backdrop_pixels = 0;
+    bool texture_limits_known = false;
+    bool backdrop_budget_known = false;
+    bool target_within_texture_limits = true;
+    bool target_within_backdrop_budget = true;
+    char const* profile = "generic";
+    char const* source = "default";
+};
+
+inline MaterialCapabilityInput sanitize_material_capability_input(
+        MaterialCapabilityInput input) noexcept {
+    input.max_shader_sample_taps =
+        std::min(input.max_shader_sample_taps, material_max_sample_taps);
+    input.max_texture_dimension_2d =
+        std::max(std::int64_t{0}, input.max_texture_dimension_2d);
+    input.max_backdrop_pixels =
+        std::max(std::int64_t{0}, input.max_backdrop_pixels);
+    if (input.profile == nullptr)
+        input.profile = "generic";
+    if (input.source == nullptr)
+        input.source = "default";
+    return input;
+}
+
+inline std::int64_t material_render_target_pixel_count(
+        MaterialRenderTargetMetadata const& target) noexcept {
+    if (target.width <= 0 || target.height <= 0)
+        return 0;
+    return static_cast<std::int64_t>(target.width)
+         * static_cast<std::int64_t>(target.height);
+}
+
+inline MaterialCapabilityAnalysis analyze_material_capabilities(
+        MaterialCapabilityInput input,
+        MaterialRenderTargetMetadata target) noexcept {
+    input = sanitize_material_capability_input(input);
+    MaterialCapabilityAnalysis analysis{};
+    analysis.material_surfaces = input.material_surfaces;
+    analysis.material_backdrop_blur = input.material_backdrop_blur;
+    analysis.shader_blur = input.shader_blur;
+    analysis.frame_history = input.frame_history;
+    analysis.reduce_transparency = input.reduce_transparency;
+    analysis.increase_contrast = input.increase_contrast;
+    analysis.reduce_motion = input.reduce_motion;
+    analysis.max_shader_sample_taps = input.max_shader_sample_taps;
+    analysis.max_texture_dimension_2d = input.max_texture_dimension_2d;
+    analysis.max_backdrop_pixels = input.max_backdrop_pixels;
+    analysis.texture_limits_known = input.max_texture_dimension_2d > 0;
+    analysis.backdrop_budget_known = input.max_backdrop_pixels > 0;
+    analysis.profile = input.profile;
+    analysis.source = input.source;
+
+    if (analysis.texture_limits_known && target.width > 0 && target.height > 0) {
+        analysis.target_within_texture_limits =
+            static_cast<std::int64_t>(target.width)
+                <= analysis.max_texture_dimension_2d
+            && static_cast<std::int64_t>(target.height)
+                <= analysis.max_texture_dimension_2d;
+    }
+    if (analysis.backdrop_budget_known) {
+        auto const pixels = material_render_target_pixel_count(target);
+        analysis.target_within_backdrop_budget =
+            pixels <= analysis.max_backdrop_pixels;
+    }
+    return analysis;
+}
+
 struct MaterialQualityPolicy {
     bool allow_backdrop_sampling = true;
     bool allow_noise = true;
     bool allow_shadow = true;
     float max_blur_radius = material_max_blur_radius;
     unsigned int max_sample_taps = material_max_sample_taps;
-    std::int64_t max_backdrop_pixels = 4'000'000;
+    std::int64_t max_backdrop_pixels = material_default_max_backdrop_pixels;
 };
 
 inline constexpr MaterialQualityPolicy default_material_quality_policy() noexcept {
@@ -115,6 +198,23 @@ inline MaterialQualityPolicy sanitize_material_quality_policy(
         material_max_sample_taps);
     policy.max_backdrop_pixels =
         std::max(std::int64_t{0}, policy.max_backdrop_pixels);
+    return policy;
+}
+
+inline MaterialQualityPolicy resolve_material_quality_policy(
+        MaterialQualityPolicy policy,
+        MaterialCapabilityAnalysis capabilities) noexcept {
+    policy = sanitize_material_quality_policy(policy);
+    if (capabilities.max_shader_sample_taps > 0) {
+        policy.max_sample_taps = std::min(
+            policy.max_sample_taps,
+            capabilities.max_shader_sample_taps);
+    }
+    if (capabilities.max_backdrop_pixels > 0) {
+        policy.max_backdrop_pixels = std::min(
+            policy.max_backdrop_pixels,
+            capabilities.max_backdrop_pixels);
+    }
     return policy;
 }
 
@@ -521,6 +621,10 @@ struct MaterialDecisionTrace {
     bool capability_material_backdrop_blur = false;
     bool capability_shader_blur = false;
     bool capability_frame_history = false;
+    bool capability_texture_limits_known = false;
+    bool capability_backdrop_budget_known = false;
+    bool capability_target_within_texture_limits = true;
+    bool capability_target_within_backdrop_budget = true;
     bool backend_supports_backdrop = false;
     bool backdrop_available = false;
     bool backdrop_stable = false;
@@ -541,6 +645,7 @@ struct MaterialPlan {
     MaterialGeometry geometry{};
     MaterialShapeAnalysis shape{};
     MaterialRenderTargetAnalysis render_target{};
+    MaterialCapabilityAnalysis capability_snapshot{};
     MaterialContainerAnalysis container{};
     MaterialReferenceModel reference_model{};
     MaterialDecisionTrace decision_trace{};
@@ -3151,8 +3256,13 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
                                           MaterialEnvironment environment) noexcept {
     MaterialPlan plan{};
     auto const& style = request.style;
+    auto const capability_snapshot = analyze_material_capabilities(
+        environment.capabilities,
+        environment.render_target);
     MaterialQualityPolicy resolved_quality =
-        sanitize_material_quality_policy(environment.quality);
+        resolve_material_quality_policy(
+            environment.quality,
+            capability_snapshot);
     auto const max_blur_radius = std::max(
         0.0f,
         resolved_quality.max_blur_radius);
@@ -3161,6 +3271,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.command_descriptor = material_command_descriptor(style);
     plan.geometry = request.geometry;
     plan.shape = analyze_material_shape(request.geometry);
+    plan.capability_snapshot = capability_snapshot;
     plan.quality_policy = resolved_quality;
     plan.render_target = analyze_material_render_target(
         environment.render_target,
@@ -3223,7 +3334,9 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         has_material && role_allows_liquid_glass;
     bool const target_ready = plan.render_target.ready;
     bool const backdrop_pixels_within_budget =
-        plan.render_target.within_backdrop_budget;
+        plan.render_target.within_backdrop_budget
+        && plan.capability_snapshot.target_within_texture_limits
+        && plan.capability_snapshot.target_within_backdrop_budget;
     bool const quality_switches_allow_backdrop =
         resolved_quality.allow_backdrop_sampling
         && max_blur_radius > 0.0f
@@ -3274,6 +3387,14 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         environment.capabilities.shader_blur;
     plan.decision_trace.capability_frame_history =
         environment.capabilities.frame_history;
+    plan.decision_trace.capability_texture_limits_known =
+        plan.capability_snapshot.texture_limits_known;
+    plan.decision_trace.capability_backdrop_budget_known =
+        plan.capability_snapshot.backdrop_budget_known;
+    plan.decision_trace.capability_target_within_texture_limits =
+        plan.capability_snapshot.target_within_texture_limits;
+    plan.decision_trace.capability_target_within_backdrop_budget =
+        plan.capability_snapshot.target_within_backdrop_budget;
     plan.decision_trace.backend_supports_backdrop = backend_supports_backdrop;
     plan.decision_trace.backdrop_available = environment.backdrop.available;
     plan.decision_trace.backdrop_stable = environment.backdrop.stable;

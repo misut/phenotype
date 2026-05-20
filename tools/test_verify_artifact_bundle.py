@@ -243,6 +243,24 @@ def material_plan(
             "ready": True,
             "within_backdrop_budget": True,
         },
+        "capability_snapshot": {
+            "material_surfaces": True,
+            "material_backdrop_blur": False,
+            "shader_blur": False,
+            "frame_history": False,
+            "reduce_transparency": False,
+            "increase_contrast": False,
+            "reduce_motion": False,
+            "max_shader_sample_taps": 25,
+            "max_texture_dimension_2d": 0,
+            "max_backdrop_pixels": 0,
+            "texture_limits_known": False,
+            "backdrop_budget_known": False,
+            "target_within_texture_limits": True,
+            "target_within_backdrop_budget": True,
+            "profile": "generic",
+            "source": "default",
+        },
         "decision_trace": {
             "has_geometry": True,
             "has_material": True,
@@ -257,6 +275,10 @@ def material_plan(
             "capability_material_backdrop_blur": False,
             "capability_shader_blur": False,
             "capability_frame_history": False,
+            "capability_texture_limits_known": False,
+            "capability_backdrop_budget_known": False,
+            "capability_target_within_texture_limits": True,
+            "capability_target_within_backdrop_budget": True,
             "backend_supports_backdrop": False,
             "backdrop_available": False,
             "backdrop_stable": False,
@@ -770,6 +792,7 @@ def refresh_observation_contract(plan: dict[str, object]) -> None:
 def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     plan = material_plan(sample_taps=sample_taps, primary_sample_taps=sample_taps)
     assert isinstance(plan["decision_trace"], dict)
+    assert isinstance(plan["capability_snapshot"], dict)
     assert isinstance(plan["backdrop"], dict)
     assert isinstance(plan["backdrop_access"], dict)
     assert isinstance(plan["primary_pass"], dict)
@@ -795,6 +818,11 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "next_frame_capture_required": True,
         "can_sample_backdrop": True,
         "first_blocker": "none",
+    })
+    plan["capability_snapshot"].update({
+        "material_backdrop_blur": True,
+        "shader_blur": True,
+        "frame_history": True,
     })
     plan["backdrop"].update({
         "available": True,
@@ -1306,6 +1334,11 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                     material_frame_history
                     if isinstance(material_frame_history, bool)
                     else False),
+                "material_max_shader_sample_taps": 25,
+                "material_max_texture_dimension_2d": 0,
+                "material_max_backdrop_pixels": 0,
+                "material_capability_profile": "generic",
+                "material_capability_source": "default",
                 "reduce_transparency": False,
                 "increase_contrast": False,
                 "reduce_motion": False,

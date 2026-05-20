@@ -5043,6 +5043,66 @@ inline bool ensure_debug_capture_texture(int width, int height) {
 
 inline void release_material_backdrop_luma_pending_command_buffer();
 
+inline constexpr std::int64_t k_macos_material_max_backdrop_pixels =
+    16'777'216;
+inline constexpr std::int64_t k_macos_material_default_texture_dimension_2d =
+    16'384;
+inline constexpr std::int64_t k_macos_material_legacy_texture_dimension_2d =
+    8'192;
+
+inline std::int64_t macos_material_max_texture_dimension_2d(
+        MTL::Device* device) noexcept {
+    if (!device)
+        return 0;
+    if (device->supportsFamily(MTL::GPUFamilyApple7)
+        || device->supportsFamily(MTL::GPUFamilyApple8)
+        || device->supportsFamily(MTL::GPUFamilyApple9)
+        || device->supportsFamily(MTL::GPUFamilyMac2)
+        || device->supportsFamily(MTL::GPUFamilyCommon3)
+        || device->supportsFamily(MTL::GPUFamilyMetal3)) {
+        return k_macos_material_default_texture_dimension_2d;
+    }
+    return k_macos_material_legacy_texture_dimension_2d;
+}
+
+inline MaterialCapabilityInput macos_material_capability_input(
+        MTL::Device* device,
+        bool material_pipeline_ready,
+        bool material_frame_history,
+        MacOSAccessibilityDisplayOptions accessibility) noexcept {
+    MaterialCapabilityInput capabilities{};
+    capabilities.material_surfaces = true;
+    capabilities.material_backdrop_blur = material_pipeline_ready;
+    capabilities.shader_blur = material_pipeline_ready;
+    capabilities.frame_history = material_frame_history;
+    capabilities.reduce_transparency = accessibility.reduce_transparency;
+    capabilities.increase_contrast = accessibility.increase_contrast;
+    capabilities.reduce_motion = accessibility.reduce_motion;
+    capabilities.max_shader_sample_taps = material_pipeline_ready
+        ? material_max_sample_taps
+        : 0u;
+    capabilities.max_texture_dimension_2d =
+        macos_material_max_texture_dimension_2d(device);
+    capabilities.max_backdrop_pixels = material_pipeline_ready
+        ? k_macos_material_max_backdrop_pixels
+        : 0;
+    capabilities.profile = material_pipeline_ready
+        ? "macos-metal-liquid-glass"
+        : "macos-metal-unavailable";
+    capabilities.source = "MTLDevice.supportsFamily";
+    return capabilities;
+}
+
+inline MaterialQualityPolicy macos_material_quality_policy(
+        MaterialCapabilityInput capabilities) noexcept {
+    auto policy = default_material_quality_policy();
+    if (capabilities.max_backdrop_pixels > 0)
+        policy.max_backdrop_pixels = capabilities.max_backdrop_pixels;
+    if (capabilities.max_shader_sample_taps > 0)
+        policy.max_sample_taps = capabilities.max_shader_sample_taps;
+    return policy;
+}
+
 inline bool ensure_material_backdrop_texture(int width, int height) {
     if (width <= 0 || height <= 0)
         return false;
@@ -7349,16 +7409,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     MaterialEnvironment material_env{};
     auto const accessibility = accessibility_display_options();
     g_renderer.accessibility_options = accessibility;
-    material_env.capabilities.material_surfaces = true;
-    material_env.capabilities.material_backdrop_blur =
-        g_renderer.material_pipeline != nullptr;
-    material_env.capabilities.shader_blur = g_renderer.material_pipeline != nullptr;
-    material_env.capabilities.frame_history = backdrop_ready;
-    material_env.capabilities.reduce_transparency =
-        accessibility.reduce_transparency;
-    material_env.capabilities.increase_contrast =
-        accessibility.increase_contrast;
-    material_env.capabilities.reduce_motion = accessibility.reduce_motion;
+    material_env.capabilities = macos_material_capability_input(
+        g_renderer.device,
+        g_renderer.material_pipeline != nullptr,
+        backdrop_ready,
+        accessibility);
     material_env.backdrop.available = backdrop_ready;
     material_env.backdrop.stable = backdrop_ready;
     material_env.backdrop.excludes_foreground_text =
@@ -7392,7 +7447,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_env.render_target.scale = frame_scale;
     material_env.render_target.pixel_format = "bgra8unorm";
     material_env.debug_seed.frame = ++g_renderer.material_frame_sequence;
-    material_env.quality = default_material_quality_policy();
+    material_env.quality =
+        macos_material_quality_policy(material_env.capabilities);
     auto decode_started = metrics::detail::now_ns();
     if (!decode_frame_commands(
             buf, len, line_height_ratio,
@@ -8656,6 +8712,19 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities(
     snapshot.reduce_motion = accessibility.reduce_motion;
     snapshot.material_shader_blur = material_pipeline_ready;
     snapshot.material_frame_history = material_frame_history;
+    auto const material_capabilities = macos_material_capability_input(
+        g_renderer.device,
+        material_pipeline_ready,
+        material_frame_history,
+        accessibility);
+    snapshot.material_max_shader_sample_taps =
+        material_capabilities.max_shader_sample_taps;
+    snapshot.material_max_texture_dimension_2d =
+        material_capabilities.max_texture_dimension_2d;
+    snapshot.material_max_backdrop_pixels =
+        material_capabilities.max_backdrop_pixels;
+    snapshot.material_capability_profile = material_capabilities.profile;
+    snapshot.material_capability_source = material_capabilities.source;
     snapshot.system_settings = macos_system_settings_snapshot();
     return snapshot;
 }
@@ -8679,6 +8748,23 @@ inline json::Object macos_metal_capabilities_json() {
     metal.emplace(
         "supports_texture_sample_count_4",
         json::Value{device != nullptr && device->supportsTextureSampleCount(4)});
+    metal.emplace(
+        "material_max_shader_sample_taps",
+        json::Value{static_cast<std::int64_t>(
+            device != nullptr ? material_max_sample_taps : 0u)});
+    metal.emplace(
+        "material_max_texture_dimension_2d",
+        json::Value{macos_material_max_texture_dimension_2d(device)});
+    metal.emplace(
+        "material_max_backdrop_pixels",
+        json::Value{device != nullptr
+            ? k_macos_material_max_backdrop_pixels
+            : std::int64_t{0}});
+    metal.emplace(
+        "material_capability_profile",
+        json::Value{device != nullptr
+            ? "macos-metal-liquid-glass"
+            : "macos-metal-unavailable"});
     metal.emplace(
         "supports_family_apple7",
         json::Value{device != nullptr && device->supportsFamily(MTL::GPUFamilyApple7)});

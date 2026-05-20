@@ -648,6 +648,11 @@ struct PlatformCapabilitiesSnapshot {
     bool reduce_motion = false;
     bool material_shader_blur = false;
     bool material_frame_history = false;
+    unsigned int material_max_shader_sample_taps = 0;
+    std::int64_t material_max_texture_dimension_2d = 0;
+    std::int64_t material_max_backdrop_pixels = 0;
+    std::string material_capability_profile = "generic";
+    std::string material_capability_source = "default";
     PlatformSystemSettingsSnapshot system_settings{};
 };
 
@@ -893,6 +898,59 @@ namespace detail {
             "within_backdrop_budget",
             json::Value{plan.render_target.within_backdrop_budget});
 
+        json::Object capability_snapshot;
+        capability_snapshot.emplace(
+            "material_surfaces",
+            json::Value{plan.capability_snapshot.material_surfaces});
+        capability_snapshot.emplace(
+            "material_backdrop_blur",
+            json::Value{plan.capability_snapshot.material_backdrop_blur});
+        capability_snapshot.emplace(
+            "shader_blur",
+            json::Value{plan.capability_snapshot.shader_blur});
+        capability_snapshot.emplace(
+            "frame_history",
+            json::Value{plan.capability_snapshot.frame_history});
+        capability_snapshot.emplace(
+            "reduce_transparency",
+            json::Value{plan.capability_snapshot.reduce_transparency});
+        capability_snapshot.emplace(
+            "increase_contrast",
+            json::Value{plan.capability_snapshot.increase_contrast});
+        capability_snapshot.emplace(
+            "reduce_motion",
+            json::Value{plan.capability_snapshot.reduce_motion});
+        capability_snapshot.emplace(
+            "max_shader_sample_taps",
+            json::Value{static_cast<std::int64_t>(
+                plan.capability_snapshot.max_shader_sample_taps)});
+        capability_snapshot.emplace(
+            "max_texture_dimension_2d",
+            json::Value{plan.capability_snapshot.max_texture_dimension_2d});
+        capability_snapshot.emplace(
+            "max_backdrop_pixels",
+            json::Value{plan.capability_snapshot.max_backdrop_pixels});
+        capability_snapshot.emplace(
+            "texture_limits_known",
+            json::Value{plan.capability_snapshot.texture_limits_known});
+        capability_snapshot.emplace(
+            "backdrop_budget_known",
+            json::Value{plan.capability_snapshot.backdrop_budget_known});
+        capability_snapshot.emplace(
+            "target_within_texture_limits",
+            json::Value{
+                plan.capability_snapshot.target_within_texture_limits});
+        capability_snapshot.emplace(
+            "target_within_backdrop_budget",
+            json::Value{
+                plan.capability_snapshot.target_within_backdrop_budget});
+        capability_snapshot.emplace(
+            "profile",
+            json::Value{plan.capability_snapshot.profile});
+        capability_snapshot.emplace(
+            "source",
+            json::Value{plan.capability_snapshot.source});
+
         json::Object decision_trace;
         decision_trace.emplace(
             "has_geometry",
@@ -938,6 +996,22 @@ namespace detail {
         decision_trace.emplace(
             "capability_frame_history",
             json::Value{plan.decision_trace.capability_frame_history});
+        decision_trace.emplace(
+            "capability_texture_limits_known",
+            json::Value{
+                plan.decision_trace.capability_texture_limits_known});
+        decision_trace.emplace(
+            "capability_backdrop_budget_known",
+            json::Value{
+                plan.decision_trace.capability_backdrop_budget_known});
+        decision_trace.emplace(
+            "capability_target_within_texture_limits",
+            json::Value{
+                plan.decision_trace.capability_target_within_texture_limits});
+        decision_trace.emplace(
+            "capability_target_within_backdrop_budget",
+            json::Value{
+                plan.decision_trace.capability_target_within_backdrop_budget});
         decision_trace.emplace(
             "backend_supports_backdrop",
             json::Value{plan.decision_trace.backend_supports_backdrop});
@@ -1920,6 +1994,9 @@ namespace detail {
         out.emplace("geometry", json::Value{std::move(geometry)});
         out.emplace("shape", json::Value{std::move(shape)});
         out.emplace("render_target", json::Value{std::move(render_target)});
+        out.emplace(
+            "capability_snapshot",
+            json::Value{std::move(capability_snapshot)});
         out.emplace("decision_trace", json::Value{std::move(decision_trace)});
         out.emplace("opacity", json::Value{plan.opacity});
         out.emplace("blur_radius", json::Value{plan.blur_radius});
@@ -3162,6 +3239,22 @@ inline json::Value platform_capabilities_to_json(
     out.emplace(
         "material_frame_history",
         json::Value{capabilities.material_frame_history});
+    out.emplace(
+        "material_max_shader_sample_taps",
+        json::Value{static_cast<std::int64_t>(
+            capabilities.material_max_shader_sample_taps)});
+    out.emplace(
+        "material_max_texture_dimension_2d",
+        json::Value{capabilities.material_max_texture_dimension_2d});
+    out.emplace(
+        "material_max_backdrop_pixels",
+        json::Value{capabilities.material_max_backdrop_pixels});
+    out.emplace(
+        "material_capability_profile",
+        json::Value{capabilities.material_capability_profile});
+    out.emplace(
+        "material_capability_source",
+        json::Value{capabilities.material_capability_source});
     out.emplace(
         "reduce_transparency",
         json::Value{capabilities.reduce_transparency});
