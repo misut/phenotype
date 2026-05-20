@@ -2699,6 +2699,83 @@ void test_material_surface_resolves_live_input_interaction() {
     std::puts("PASS: material surface resolves live input interaction");
 }
 
+void test_material_surface_interactive_option_enables_plan_response() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::Regular,
+            .role = MaterialSurfaceRole::Toolbar,
+            .interaction = MaterialInteractionDescriptor{
+                .hovered = true,
+                .pressed = true,
+                .focused = false,
+                .pointer_inside = true,
+                .pointer_x = 0.74f,
+                .pointer_y = 0.27f,
+            },
+            .fixed_height = 56.0f,
+            .border_width = 0.0f,
+            .semantic_label = "Interactive Surface",
+            .interactive = true,
+        },
+        [] {
+            widget::text("Interactive command");
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto const commands = parse_commands(CMD_BUF, CMD_LEN);
+    auto const& cmd = first_material_command(commands);
+    auto const& descriptor = cmd.material;
+    assert(descriptor.container.container_id == 0u);
+    assert(descriptor.container.mode() == MaterialContainerMode::Isolated);
+    assert(descriptor.container.interactive);
+    assert(descriptor.interaction.hovered);
+    assert(descriptor.interaction.pressed);
+    assert(!descriptor.interaction.focused);
+    assert(descriptor.interaction.pointer_inside);
+    assert(std::fabs(descriptor.interaction.pointer_x - 0.74f) < 0.0001f);
+    assert(std::fabs(descriptor.interaction.pointer_y - 0.27f) < 0.0001f);
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.render_target.width = 320;
+    env.render_target.height = 56;
+
+    auto plan = plan_material_surface(
+        material_request_for_command(
+            descriptor,
+            MaterialGeometry{cmd.x, cmd.y, cmd.w, cmd.h, cmd.radius},
+            detail::g_app.theme),
+        env);
+    assert(plan.container.interactive);
+    assert(plan.interaction.enabled);
+    assert(plan.interaction.active);
+    assert(plan.interaction.pressed);
+    assert(plan.interaction.pointer_inside);
+    assert(plan.interaction.response_strength > 0.9f);
+    assert(plan.reference_model.interactive_response);
+    assert(plan.optical_response.interaction_active);
+    assert(plan.optical_response.interaction_modulates_optics);
+
+    std::puts("PASS: material surface interactive option enables plan response");
+}
+
 void test_glass_surface_presets_emit_material_contract() {
     auto toolbar = layout::glass_surface_options(
         layout::GlassSurfacePreset::Toolbar);
@@ -2707,7 +2784,14 @@ void test_glass_surface_presets_emit_material_contract() {
     assert(toolbar.direction == FlexDirection::Row);
     assert(toolbar.cross_align == CrossAxisAlignment::Center);
     assert(toolbar.border_radius == 0.0f);
+    assert(!toolbar.interactive);
     assert(std::string_view{toolbar.semantic_label} == "Toolbar");
+    auto toolbar_group = layout::glass_surface_options(
+        layout::GlassSurfacePreset::ToolbarGroup);
+    assert(toolbar_group.interactive);
+    auto navigation = layout::glass_surface_options(
+        layout::GlassSurfacePreset::Navigation);
+    assert(navigation.interactive);
     assert(std::string_view{
         layout::glass_surface_preset_name(
             layout::GlassSurfacePreset::ToolbarGroup)}
@@ -2719,6 +2803,7 @@ void test_glass_surface_presets_emit_material_contract() {
     assert(content.kind == MaterialKind::Regular);
     assert(content.role == MaterialSurfaceRole::Content);
     assert(content.padding == SpaceToken::Xl);
+    assert(!content.interactive);
     assert(std::string_view{content.semantic_label} == "Files");
 
     detail::g_app.arena.reset();
@@ -2762,6 +2847,7 @@ void test_glass_surface_presets_emit_material_contract() {
     assert(material != nullptr);
     assert(material->material.kind == MaterialKind::Thick);
     assert(material->material.role == MaterialSurfaceRole::Toolbar);
+    assert(material->material.container.interactive);
 
     std::puts("PASS: glass surface presets emit material contract");
 }
@@ -5062,6 +5148,7 @@ int main() {
     test_material_surface_emits_material_rect_command();
     test_material_surface_shape_overrides();
     test_material_surface_resolves_live_input_interaction();
+    test_material_surface_interactive_option_enables_plan_response();
     test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();
     test_material_command_preserves_style_optics();

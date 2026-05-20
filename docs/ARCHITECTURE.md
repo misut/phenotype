@@ -318,6 +318,13 @@ pure `MaterialStyle` and `MaterialRect` command contract as
 window, toolbar, toolbar group, navigation, sidebar, content, and status bar so
 example code does not hand-roll blur thickness, semantic role, alignment, and
 chrome radius for every surface.
+`MaterialSurfaceOptions.interactive` is the surface-level opt-in for glass that
+belongs to controls. It does not create a backend policy branch: it marks the
+resolved material container descriptor as interactive before command emission,
+so `plan_material_surface` can decide the response from immutable input.
+`ToolbarGroup` and `Navigation` presets set this flag by default because they
+represent clickable chrome; passive window, content, sidebar, and status-bar
+surfaces stay noninteractive unless the app opts in explicitly.
 
 `phenotype.svg` is a pure vector image layer. It parses a bounded SVG subset
 (`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,
@@ -629,10 +636,13 @@ must observe at runtime.
 `MaterialPlan.interaction` follows the same boundary. Layout code may set
 `MaterialSurfaceOptions.interaction` with hover, press, focus, pointer-inside,
 and normalized pointer coordinates, but the core planner owns all response
-policy. `plan_material_surface` turns that immutable input into enabled/active
-state, reduced-motion policy, response strength, and per-channel optical
-deltas. Backends only decode the `MaterialRect` interaction payload and execute
-the resolved plan; they do not decide whether hover should increase opacity,
+policy. `MaterialSurfaceOptions.interactive` or an interactive
+`material_container` must also be present; otherwise the command still reports
+the raw input state, but the plan keeps `interaction.enabled=false`.
+`plan_material_surface` turns the immutable input into enabled/active state,
+reduced-motion policy, response strength, and per-channel optical deltas.
+Backends only decode the `MaterialRect` interaction payload and execute the
+resolved plan; they do not decide whether hover should increase opacity,
 whether press should tighten blur, or whether focus should lift the edge
 highlight.
 
