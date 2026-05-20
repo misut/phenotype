@@ -703,13 +703,16 @@ readback.
 `foreground` is the pure text/icon legibility recommendation for content drawn
 on top of a material surface. It records primary, secondary, and accent colors,
 the foreground scheme/source, estimated background luminance, contrast ratios,
-the minimum contrast target, and whether the recommendation is backdrop-driven,
-high-contrast, vibrancy-enabled, and deterministic. Backends consume or expose
-this recommendation; they do not choose independent foreground policy for glass
-surfaces. Native command decoders also use the same pure recommendation to
-remap default primary, secondary, and accent text tokens drawn inside a prior
-material surface. Custom text colors are left unchanged, and the original text
-alpha is preserved.
+the minimum contrast target, derived contrast margins, the named contrast and
+remap policies, and whether the recommendation is backdrop-driven,
+high-contrast, vibrancy-enabled, and deterministic. Standard material text uses
+a 4.5 contrast target; `increase_contrast` raises the pure target to 7.0 and
+switches the policy to `enhanced-contrast` plus `strict-theme-role-remap`.
+Backends consume or expose this recommendation; they do not choose independent
+foreground policy for glass surfaces. Native command decoders also use the same
+pure recommendation to remap default primary, secondary, and accent text tokens
+drawn inside a prior material surface. Custom text colors are left unchanged,
+and the original text alpha is preserved.
 `theme` is the pure snapshot of the explicit `MaterialStyle` tokens that fed
 the material surface. It records the token source, profile name, token policy,
 foreground, secondary foreground, accent, strong accent, tint, and border

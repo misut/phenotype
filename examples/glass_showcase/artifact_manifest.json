@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "26": 7
+      "27": 7
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -207,6 +207,12 @@
     },
     "foreground_sources": {
       "backdrop-analysis": 7
+    },
+    "foreground_contrast_policies": {
+      "standard-contrast": 7
+    },
+    "foreground_remap_policies": {
+      "theme-role-remap-if-needed": 7
     },
     "foreground_backdrop_driven": 7,
     "foreground_high_contrast": 0,
