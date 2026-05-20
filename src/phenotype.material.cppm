@@ -12,7 +12,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 27;
+inline constexpr std::uint32_t material_plan_contract_version = 28;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
 inline constexpr unsigned int material_max_sample_taps = 25;
@@ -359,6 +359,29 @@ struct MaterialForegroundRecommendation {
     bool deterministic = true;
 };
 
+struct MaterialInteractionResponse {
+    bool enabled = false;
+    bool active = false;
+    bool hovered = false;
+    bool pressed = false;
+    bool focused = false;
+    bool pointer_inside = false;
+    bool reduce_motion = false;
+    float pointer_x = 0.5f;
+    float pointer_y = 0.5f;
+    float response_strength = 0.0f;
+    float opacity_delta = 0.0f;
+    float blur_radius_delta = 0.0f;
+    float saturation_delta = 0.0f;
+    float edge_highlight_delta = 0.0f;
+    float shadow_alpha_delta = 0.0f;
+    float shadow_radius_delta = 0.0f;
+    char const* state = "inactive";
+    char const* response_model = "none";
+    char const* motion_policy = "static";
+    bool deterministic = true;
+};
+
 struct MaterialOpticalResponseContract {
     char const* response_model = "inactive";
     char const* blur_strategy = "none";
@@ -374,6 +397,8 @@ struct MaterialOpticalResponseContract {
     bool depth_shadow_active = false;
     bool noise_dither_active = false;
     bool foreground_vibrancy_active = false;
+    bool interaction_active = false;
+    bool interaction_modulates_optics = false;
     bool deterministic_fallback = true;
 };
 
@@ -494,6 +519,7 @@ struct MaterialPlan {
     MaterialBackdropAccess backdrop_access{};
     MaterialThemeSnapshot theme{};
     MaterialForegroundRecommendation foreground{};
+    MaterialInteractionResponse interaction{};
     MaterialOpticalResponseContract optical_response{};
     MaterialFallbackPath fallback_path = MaterialFallbackPath::None;
     char const* fallback_reason = "";
@@ -705,6 +731,9 @@ struct MaterialRuntimeSummary {
     std::uint32_t foreground_backdrop_driven_count = 0;
     std::uint32_t foreground_high_contrast_count = 0;
     std::uint32_t foreground_vibrant_count = 0;
+    std::uint32_t interaction_enabled_count = 0;
+    std::uint32_t interaction_active_count = 0;
+    std::uint32_t interaction_reduce_motion_count = 0;
     std::uint32_t theme_default_glass_token_count = 0;
     std::uint32_t theme_custom_token_count = 0;
     MaterialContainerGroupRuntimeSummary container_groups{};
@@ -718,6 +747,7 @@ struct MaterialRuntimeSummary {
     float max_noise_opacity = 0.0f;
     float max_shadow_alpha = 0.0f;
     float max_shadow_radius = 0.0f;
+    float max_interaction_response_strength = 0.0f;
     float min_foreground_contrast_ratio = 0.0f;
     std::uint32_t unbounded_texture_copy = 0;
     std::uint32_t non_deterministic_fallback = 0;
@@ -758,6 +788,9 @@ struct MaterialExecutorSummary {
     std::uint32_t material_buffer_reallocations = 0;
     std::uint32_t foreground_text_candidate_count = 0;
     std::uint32_t foreground_text_remap_count = 0;
+    std::uint32_t interaction_enabled_count = 0;
+    std::uint32_t interaction_active_count = 0;
+    float max_interaction_response_strength = 0.0f;
     bool backdrop_descriptor_luma_available = false;
     float backdrop_descriptor_luma_min = 0.0f;
     float backdrop_descriptor_luma_max = 1.0f;
@@ -1039,6 +1072,13 @@ inline void accumulate_material_executor_plan_summary(
         ++summary.backdrop_access_plan_count;
     if (plan.backdrop_access.next_frame_capture_required)
         ++summary.next_frame_capture_plan_count;
+    if (plan.interaction.enabled)
+        ++summary.interaction_enabled_count;
+    if (plan.interaction.active)
+        ++summary.interaction_active_count;
+    summary.max_interaction_response_strength = std::max(
+        summary.max_interaction_response_strength,
+        plan.interaction.response_strength);
     if (plan.backdrop_access.shared_frame_capture
         || plan.backdrop_access.next_frame_capture_required) {
         summary.planned_frame_capture_count = std::max(
@@ -1168,6 +1208,12 @@ inline void accumulate_material_runtime_summary(
         ++summary.foreground_high_contrast_count;
     if (plan.foreground.uses_vibrancy)
         ++summary.foreground_vibrant_count;
+    if (plan.interaction.enabled)
+        ++summary.interaction_enabled_count;
+    if (plan.interaction.active)
+        ++summary.interaction_active_count;
+    if (plan.interaction.reduce_motion)
+        ++summary.interaction_reduce_motion_count;
     if (plan.theme.default_glass_tokens)
         ++summary.theme_default_glass_token_count;
     else
@@ -1196,6 +1242,9 @@ inline void accumulate_material_runtime_summary(
         std::max(summary.max_shadow_alpha, plan.shadow_alpha);
     summary.max_shadow_radius =
         std::max(summary.max_shadow_radius, plan.shadow_radius);
+    summary.max_interaction_response_strength = std::max(
+        summary.max_interaction_response_strength,
+        plan.interaction.response_strength);
     if (plan.foreground.primary_contrast_ratio > 0.0f) {
         summary.min_foreground_contrast_ratio =
             summary.min_foreground_contrast_ratio == 0.0f
@@ -1360,7 +1409,8 @@ inline MaterialCommandDescriptor material_command_descriptor(
         style.edge_width,
         style.noise_opacity,
         style.shadow_alpha,
-        style.shadow_radius};
+        style.shadow_radius,
+        style.interaction};
 }
 
 inline MaterialStyle material_style_for_command(MaterialKind kind,
@@ -1428,6 +1478,7 @@ inline MaterialStyle material_style_for_command(
         theme);
     style.role = descriptor.role;
     style.container = descriptor.container;
+    style.interaction = descriptor.interaction;
     return style;
 }
 
@@ -2161,6 +2212,133 @@ inline void apply_backdrop_luminance_policy(MaterialPlan& plan) noexcept {
     }
 }
 
+inline float material_clamped_pointer_coordinate(float value) noexcept {
+    return std::isfinite(value) ? std::clamp(value, 0.0f, 1.0f) : 0.5f;
+}
+
+inline char const* material_interaction_state_name(
+        MaterialInteractionDescriptor input) noexcept {
+    if (input.pressed)
+        return "pressed";
+    if (input.hovered || input.pointer_inside)
+        return "hovered";
+    if (input.focused)
+        return "focused";
+    return "idle";
+}
+
+inline float material_interaction_strength(
+        MaterialInteractionDescriptor input) noexcept {
+    float strength = 0.0f;
+    if (input.focused)
+        strength = std::max(strength, 0.24f);
+    if (input.hovered || input.pointer_inside)
+        strength = std::max(strength, 0.48f);
+    if (input.pressed)
+        strength = std::max(strength, 1.0f);
+    return strength;
+}
+
+inline MaterialInteractionResponse material_resolve_interaction_response(
+        MaterialPlan const& plan,
+        MaterialInteractionDescriptor input,
+        bool reduce_motion) noexcept {
+    MaterialInteractionResponse response{};
+    response.enabled = plan.kind != MaterialKind::None
+        && plan.container.interactive;
+    response.hovered = input.hovered;
+    response.pressed = input.pressed;
+    response.focused = input.focused;
+    response.pointer_inside = input.pointer_inside;
+    response.reduce_motion = reduce_motion;
+    response.pointer_x =
+        material_clamped_pointer_coordinate(input.pointer_x);
+    response.pointer_y =
+        material_clamped_pointer_coordinate(input.pointer_y);
+    response.deterministic = true;
+    if (!response.enabled)
+        return response;
+
+    response.state = material_interaction_state_name(input);
+    response.response_model = "liquid-glass-interaction";
+    response.motion_policy = reduce_motion
+        ? "reduced-motion-static"
+        : "animated-optical-response";
+    auto strength = material_interaction_strength(input);
+    if (reduce_motion)
+        strength = std::min(strength, 0.36f);
+    response.response_strength = strength;
+    response.active = strength > 0.0f;
+    return response;
+}
+
+inline void apply_material_interaction_policy(MaterialPlan& plan) noexcept {
+    auto response = material_resolve_interaction_response(
+        plan,
+        plan.command_descriptor.interaction,
+        plan.decision_trace.reduce_motion);
+    if (!response.enabled || !response.active) {
+        plan.interaction = response;
+        return;
+    }
+
+    auto const before_opacity = plan.opacity;
+    auto const before_blur = plan.blur_radius;
+    auto const before_saturation = plan.saturation;
+    auto const before_edge = plan.edge_highlight;
+    auto const before_shadow_alpha = plan.shadow_alpha;
+    auto const before_shadow_radius = plan.shadow_radius;
+    auto const strength = response.response_strength;
+    auto const press = response.pressed ? strength : 0.0f;
+    auto const hover = response.pressed
+        ? 0.0f
+        : ((response.hovered || response.pointer_inside) ? strength : 0.0f);
+    auto const focus = (!response.pressed
+        && !(response.hovered || response.pointer_inside)
+        && response.focused) ? strength : 0.0f;
+    auto const motion_scale = response.reduce_motion ? 0.35f : 1.0f;
+
+    plan.opacity = std::clamp(
+        plan.opacity + 0.026f * hover + 0.050f * press,
+        0.0f,
+        1.0f);
+    if (plan.backdrop_sampling) {
+        auto const blur_delta =
+            motion_scale * (0.85f * hover - 1.15f * press);
+        plan.blur_radius = std::clamp(
+            plan.blur_radius + blur_delta,
+            0.0f,
+            plan.resource_budget.max_blur_radius);
+        plan.saturation = std::clamp(
+            plan.saturation
+                + motion_scale * (0.025f * hover + 0.035f * press),
+            0.0f,
+            1.35f);
+    }
+    plan.edge_highlight = std::clamp(
+        plan.edge_highlight
+            + 0.055f * hover + 0.090f * press + 0.050f * focus,
+        0.0f,
+        1.0f);
+    plan.shadow_alpha = std::clamp(
+        plan.shadow_alpha + 0.012f * hover + 0.022f * press,
+        0.0f,
+        0.4f);
+    plan.shadow_radius = std::clamp(
+        plan.shadow_radius
+            + motion_scale * (0.80f * hover + 1.20f * press),
+        0.0f,
+        40.0f);
+
+    response.opacity_delta = plan.opacity - before_opacity;
+    response.blur_radius_delta = plan.blur_radius - before_blur;
+    response.saturation_delta = plan.saturation - before_saturation;
+    response.edge_highlight_delta = plan.edge_highlight - before_edge;
+    response.shadow_alpha_delta = plan.shadow_alpha - before_shadow_alpha;
+    response.shadow_radius_delta = plan.shadow_radius - before_shadow_radius;
+    plan.interaction = response;
+}
+
 inline MaterialBackdropAccess material_resolve_backdrop_access(
         MaterialPlan const& plan) noexcept {
     MaterialBackdropAccess access{};
@@ -2376,7 +2554,7 @@ inline MaterialReferenceModel material_resolve_reference_model(
         && plan.shape.effective_radius <= plan.shape.radius_limit;
     model.tint_applied = plan.kind != MaterialKind::None
         && plan.tint.a > 0;
-    model.interactive_response = plan.container.interactive;
+    model.interactive_response = plan.interaction.enabled;
     model.container_grouped = plan.container.participates;
     model.container_union = plan.container.shape_union_expected;
     model.container_morphing = plan.container.morph_transitions;
@@ -2472,6 +2650,15 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
     response.noise_dither_active =
         plan.backdrop_sampling && plan.noise_opacity > 0.0f;
     response.foreground_vibrancy_active = plan.foreground.uses_vibrancy;
+    response.interaction_active = plan.interaction.active;
+    response.interaction_modulates_optics =
+        plan.interaction.active
+        && (std::fabs(plan.interaction.opacity_delta) > 0.0001f
+            || std::fabs(plan.interaction.blur_radius_delta) > 0.0001f
+            || std::fabs(plan.interaction.saturation_delta) > 0.0001f
+            || std::fabs(plan.interaction.edge_highlight_delta) > 0.0001f
+            || std::fabs(plan.interaction.shadow_alpha_delta) > 0.0001f
+            || std::fabs(plan.interaction.shadow_radius_delta) > 0.0001f);
     response.deterministic_fallback =
         plan.resource_budget.deterministic_fallback;
     return response;
@@ -2700,6 +2887,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.luminance_floor = std::clamp(plan.luminance_floor + 0.05f, 0.0f, 1.0f);
         plan.saturation = std::min(plan.saturation, 1.0f);
     }
+    apply_material_interaction_policy(plan);
     plan.luminance_curve = material_resolve_luminance_curve(
         plan.backdrop_sampling,
         plan.backdrop,

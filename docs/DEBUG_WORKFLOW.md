@@ -789,6 +789,22 @@ raw `decision_trace` preserves each flag. `performance_response` summarizes
 whether the plan is inactive, running the standard sampled path, using bounded
 effect reductions, warming up frame history for the next frame, or taking a
 deterministic fallback.
+`MaterialPlan.interaction` records the pure interaction response that feeds
+that reference model. `enabled` mirrors a non-inactive interactive material
+container, `active` is true only when hover, press, focus, or pointer presence
+produces a positive response strength, `state` uses the stable
+`inactive`/`idle`/`focused`/`hovered`/`pressed` vocabulary, and
+`response_model` is either `none` or `liquid-glass-interaction`.
+Reduced-motion plans keep the response deterministic, cap the response
+strength, and report `motion_policy: reduced-motion-static`. The delta fields
+(`opacity_delta`, `blur_radius_delta`, `saturation_delta`,
+`edge_highlight_delta`, `shadow_alpha_delta`, and `shadow_radius_delta`) explain
+exactly which optical channels changed before the backend executed a pass.
+The verifier cross-checks those deltas against
+`MaterialPlan.optical_response.interaction_active` and
+`interaction_modulates_optics`, so a failed hover/press response identifies the
+JSON path and the likely `material-interaction` layer instead of requiring a
+screenshot guess.
 `MaterialPlan.geometry` preserves the raw decoded rectangle. `MaterialPlan.shape`
 is the pure executable shape contract: validity, surface area, min/max extent,
 radius limit, effective radius, normalized radius, rounded flag, and whether the
@@ -1121,7 +1137,14 @@ can additionally assert pure aggregate group facts:
 `optical_tint_active`, `optical_saturation_active`,
 `optical_luminance_preservation_active`, `optical_edge_highlight_active`,
 `optical_depth_shadow_active`, `optical_noise_dither_active`,
-`optical_foreground_vibrancy_active`, and `optical_deterministic_fallback`.
+`optical_foreground_vibrancy_active`, `optical_interaction_active`,
+`optical_interaction_modulates_optics`, and `optical_deterministic_fallback`.
+Interaction gates can additionally pin `interaction_enabled`,
+`interaction_active`, `interaction_hovered`, `interaction_pressed`,
+`interaction_focused`, `interaction_pointer_inside`,
+`interaction_reduce_motion`, `interaction_deterministic`, and exact maps for
+`interaction_states`, `interaction_response_models`, and
+`interaction_motion_policies`.
 Theme gates can additionally pin
 `theme_foreground_matches_theme`, `theme_accent_matches_theme`,
 `theme_tint_matches_surface`, `theme_border_matches_theme`, and

@@ -984,6 +984,15 @@ void test_material_runtime_record_json_contract() {
     assert(descriptor.at("role").as_string() == "surface");
     assert(descriptor.at("container").as_object().at("mode").as_string()
            == "isolated");
+    auto const& descriptor_interaction =
+        descriptor.at("interaction").as_object();
+    assert(descriptor_interaction.at("hovered").as_bool() == false);
+    assert(descriptor_interaction.at("pressed").as_bool() == false);
+    assert(descriptor_interaction.at("focused").as_bool() == false);
+    assert(descriptor_interaction.at("pointer_inside").as_bool() == false);
+    assert(descriptor_interaction.at("active").as_bool() == false);
+    assert(descriptor_interaction.at("pointer_x").as_float() == 0.5f);
+    assert(descriptor_interaction.at("pointer_y").as_float() == 0.5f);
     assert(descriptor.at("opacity").as_float() == 0.5f);
     assert(descriptor.at("blur_radius").as_float() == 14.0f);
     auto const& descriptor_tint = descriptor.at("tint").as_object();
@@ -1063,6 +1072,22 @@ void test_material_runtime_record_json_contract() {
         foreground.at("accent_contrast_margin").as_float()
         - (foreground.at("accent_contrast_ratio").as_float()
            - foreground.at("minimum_contrast_ratio").as_float())) < 0.0001f);
+    auto const& interaction = obj.at("interaction").as_object();
+    assert(interaction.at("enabled").as_bool() == false);
+    assert(interaction.at("active").as_bool() == false);
+    assert(interaction.at("hovered").as_bool() == false);
+    assert(interaction.at("pressed").as_bool() == false);
+    assert(interaction.at("focused").as_bool() == false);
+    assert(interaction.at("pointer_inside").as_bool() == false);
+    assert(interaction.at("reduce_motion").as_bool() == false);
+    assert(interaction.at("pointer_x").as_float() == 0.5f);
+    assert(interaction.at("pointer_y").as_float() == 0.5f);
+    assert(std::fabs(interaction.at("response_strength").as_float())
+           < 0.0001f);
+    assert(interaction.at("state").as_string() == "inactive");
+    assert(interaction.at("response_model").as_string() == "none");
+    assert(interaction.at("motion_policy").as_string() == "static");
+    assert(interaction.at("deterministic").as_bool() == true);
     auto const& optical_response = obj.at("optical_response").as_object();
     assert(optical_response.at("response_model").as_string()
            == "deterministic-fallback");
@@ -1083,6 +1108,9 @@ void test_material_runtime_record_json_contract() {
     assert(optical_response.at("depth_shadow_active").as_bool() == true);
     assert(optical_response.at("noise_dither_active").as_bool() == false);
     assert(optical_response.at("foreground_vibrancy_active").as_bool()
+           == false);
+    assert(optical_response.at("interaction_active").as_bool() == false);
+    assert(optical_response.at("interaction_modulates_optics").as_bool()
            == false);
     assert(optical_response.at("deterministic_fallback").as_bool() == true);
     auto const& decision_trace = obj.at("decision_trace").as_object();

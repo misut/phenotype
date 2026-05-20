@@ -798,6 +798,19 @@ namespace detail {
         return json::Value{std::move(out)};
     }
 
+    inline json::Value material_interaction_descriptor_json(
+            MaterialInteractionDescriptor const& descriptor) {
+        json::Object out;
+        out.emplace("hovered", json::Value{descriptor.hovered});
+        out.emplace("pressed", json::Value{descriptor.pressed});
+        out.emplace("focused", json::Value{descriptor.focused});
+        out.emplace("pointer_inside", json::Value{descriptor.pointer_inside});
+        out.emplace("pointer_x", json::Value{descriptor.pointer_x});
+        out.emplace("pointer_y", json::Value{descriptor.pointer_y});
+        out.emplace("active", json::Value{descriptor.active()});
+        return json::Value{std::move(out)};
+    }
+
     inline json::Value color_to_json(Color color) {
         json::Object out;
         out.emplace(
@@ -977,6 +990,10 @@ namespace detail {
             "container",
             material_container_descriptor_json(
                 plan.command_descriptor.container));
+        command_descriptor.emplace(
+            "interaction",
+            material_interaction_descriptor_json(
+                plan.command_descriptor.interaction));
         command_descriptor.emplace(
             "opacity",
             json::Value{plan.command_descriptor.opacity});
@@ -1524,6 +1541,52 @@ namespace detail {
             "deterministic",
             json::Value{plan.foreground.deterministic});
 
+        json::Object interaction;
+        interaction.emplace("enabled", json::Value{plan.interaction.enabled});
+        interaction.emplace("active", json::Value{plan.interaction.active});
+        interaction.emplace("hovered", json::Value{plan.interaction.hovered});
+        interaction.emplace("pressed", json::Value{plan.interaction.pressed});
+        interaction.emplace("focused", json::Value{plan.interaction.focused});
+        interaction.emplace(
+            "pointer_inside",
+            json::Value{plan.interaction.pointer_inside});
+        interaction.emplace(
+            "reduce_motion",
+            json::Value{plan.interaction.reduce_motion});
+        interaction.emplace("pointer_x", json::Value{plan.interaction.pointer_x});
+        interaction.emplace("pointer_y", json::Value{plan.interaction.pointer_y});
+        interaction.emplace(
+            "response_strength",
+            json::Value{plan.interaction.response_strength});
+        interaction.emplace(
+            "opacity_delta",
+            json::Value{plan.interaction.opacity_delta});
+        interaction.emplace(
+            "blur_radius_delta",
+            json::Value{plan.interaction.blur_radius_delta});
+        interaction.emplace(
+            "saturation_delta",
+            json::Value{plan.interaction.saturation_delta});
+        interaction.emplace(
+            "edge_highlight_delta",
+            json::Value{plan.interaction.edge_highlight_delta});
+        interaction.emplace(
+            "shadow_alpha_delta",
+            json::Value{plan.interaction.shadow_alpha_delta});
+        interaction.emplace(
+            "shadow_radius_delta",
+            json::Value{plan.interaction.shadow_radius_delta});
+        interaction.emplace("state", json::Value{plan.interaction.state});
+        interaction.emplace(
+            "response_model",
+            json::Value{plan.interaction.response_model});
+        interaction.emplace(
+            "motion_policy",
+            json::Value{plan.interaction.motion_policy});
+        interaction.emplace(
+            "deterministic",
+            json::Value{plan.interaction.deterministic});
+
         json::Object optical_response;
         optical_response.emplace(
             "response_model",
@@ -1568,6 +1631,12 @@ namespace detail {
         optical_response.emplace(
             "foreground_vibrancy_active",
             json::Value{plan.optical_response.foreground_vibrancy_active});
+        optical_response.emplace(
+            "interaction_active",
+            json::Value{plan.optical_response.interaction_active});
+        optical_response.emplace(
+            "interaction_modulates_optics",
+            json::Value{plan.optical_response.interaction_modulates_optics});
         optical_response.emplace(
             "deterministic_fallback",
             json::Value{plan.optical_response.deterministic_fallback});
@@ -1770,6 +1839,7 @@ namespace detail {
             json::Value{std::move(backdrop_access)});
         out.emplace("theme", json::Value{std::move(theme)});
         out.emplace("foreground", json::Value{std::move(foreground)});
+        out.emplace("interaction", json::Value{std::move(interaction)});
         out.emplace(
             "optical_response",
             json::Value{std::move(optical_response)});
@@ -2030,6 +2100,21 @@ namespace detail {
                 static_cast<std::int64_t>(
                     summary.foreground_vibrant_count)});
         out.emplace(
+            "interaction_enabled_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.interaction_enabled_count)});
+        out.emplace(
+            "interaction_active_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.interaction_active_count)});
+        out.emplace(
+            "interaction_reduce_motion_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.interaction_reduce_motion_count)});
+        out.emplace(
             "theme_default_glass_token_count",
             json::Value{
                 static_cast<std::int64_t>(
@@ -2062,6 +2147,9 @@ namespace detail {
                     json::Value{summary.max_shadow_alpha});
         out.emplace("max_shadow_radius",
                     json::Value{summary.max_shadow_radius});
+        out.emplace(
+            "max_interaction_response_strength",
+            json::Value{summary.max_interaction_response_strength});
         out.emplace(
             "min_foreground_contrast_ratio",
             json::Value{summary.min_foreground_contrast_ratio});
@@ -2242,6 +2330,19 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.foreground_text_remap_count)});
+        out.emplace(
+            "interaction_enabled_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.interaction_enabled_count)});
+        out.emplace(
+            "interaction_active_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.interaction_active_count)});
+        out.emplace(
+            "max_interaction_response_strength",
+            json::Value{summary.max_interaction_response_strength});
         out.emplace(
             "backdrop_descriptor_luma_available",
             json::Value{summary.backdrop_descriptor_luma_available});
