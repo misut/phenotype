@@ -101,7 +101,7 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 | `scroll_view(fixed_height, builder)` | Per-node scroll viewport that catches wheel events inside its bounds |
 | `overlay(builder)` | Top-of-stack layer that paints after the main tree (foundation for dialogs, popovers, tooltips) |
 | `dialog(builder, max_width=360, top_padding=96)` | Centered modal card on top of an `overlay` |
-| `accordion(title, builder)` | Collapsible section; expand state lives in `framework_local<bool>` keyed to the call site |
+| `accordion(title, builder)` | Collapsible section with a material-backed disclosure header; expand state lives in `framework_local<bool>` keyed to the call site |
 | `list_items(builder)` + `item(str)` | Bulleted list |
 | `divider()` | 1px horizontal rule |
 | `spacer(px)` | Fixed-height vertical gap |
@@ -115,7 +115,7 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 | `link(label, href)` | Hyperlink that opens via the host shim — text colour cross-fades on hover |
 | `image(url, width, height)` | Async image; the JS shim or native backend keeps a persistent atlas |
 | `canvas(width, height, paint, on_gesture?)` | Fixed-size leaf for arbitrary 2D drawing via a `Painter` callback |
-| `button<Msg>(label, msg, variant?, disabled?)` / `ButtonStyleOptions` | Clickable button that posts `msg` on click; background and focus ring fade on hover / focus, with optional explicit chrome for app-like controls including glass control, selection, popover menu item, and table header presets |
+| `button<Msg>(label, msg, variant?, disabled?)` / `ButtonStyleOptions` | Clickable button that posts `msg` on click; background and focus ring fade on hover / focus, with optional explicit chrome for app-like controls including glass control, selection, popover menu item, table header, and disclosure presets |
 | `checkbox<Msg>(label, checked, msg)` / `radio<Msg>(label, selected, msg)` | Selection controls with a hover highlight on the row and a halo on focus |
 | `switch_<Msg>(label, on, msg)` | Labelled on/off toggle; the thumb slides and the track cross-fades on flip |
 | `tabs<Msg>(items, selected, on_select, TabsStyleOptions?)` | Material-backed segmented row with a 2 px sliding indicator under the selected tab |

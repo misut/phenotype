@@ -231,6 +231,11 @@ Finder-style table/list headers now use `GlassTableHeaderStyleOptions` and
 material for sortable header cells, keeps sorted-state tint/border decisions in
 the pure style layer, and avoids increasing sampled-backdrop work for content
 tables.
+Disclosure/outline rows now use `GlassDisclosureStyleOptions` and
+`widget::glass_disclosure_header_style`. `layout::accordion` consumes the
+helper for its header row, so expandable sections emit semantic `accordion-header`
+nodes with clear `content` material while keeping state management in
+`framework_local`.
 Pointer-driven active responses now include a pure, normalized
 `pointer-specular` highlight descriptor. The macOS Metal executor consumes that
 descriptor as shader input to add a bounded glint near the pointer anchor, while
@@ -865,14 +870,14 @@ Current seed:
 ## Next recommended PR
 
 The initial G0-G4 path is now landed, and segmented controls/popovers/search
-fields/selected rows/menu items/table headers now use the first-class material
-helper path. The next
+fields/selected rows/menu items/table headers/disclosure rows now use the
+first-class material helper path. The next
 useful PR should avoid another schema-only increment unless a real failure
 appears. Recommended directions:
 
 - expand first-class material-aware controls beyond buttons, segmented
   controls, search fields, selected rows, menu items, and table headers,
-  especially split buttons and disclosure/outline rows;
+  especially split buttons and richer outline/list rows;
 - tighten macOS material executor budgets after collecting a small sample of
   local and CI timing/copy values;
 - add Android CI emulator wiring if runner capacity and cost are acceptable;

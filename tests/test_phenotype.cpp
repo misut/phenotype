@@ -4443,6 +4443,41 @@ void test_glass_table_header_button_material_contract() {
     std::puts("PASS: glass table header button emits material contract");
 }
 
+void test_glass_disclosure_header_style_material_contract() {
+    set_theme(Theme{});
+
+    auto collapsed = widget::glass_disclosure_header_style(
+        GlassDisclosureStyleOptions{
+            .expanded = false,
+            .width = 240.0f,
+            .height = 34.0f,
+            .border_radius = 9.0f,
+            .font_size = 13.0f,
+        });
+    assert(collapsed.has_material);
+    assert(collapsed.material.kind == MaterialKind::Clear);
+    assert(collapsed.material.role == MaterialSurfaceRole::Content);
+    assert(collapsed.material.fallback);
+    assert(collapsed.material.container.interactive);
+    assert(collapsed.border_width == 1.0f);
+    assert(collapsed.border_radius == 9.0f);
+    assert(collapsed.font_size == 13.0f);
+    assert(collapsed.max_width == 240.0f);
+    assert(collapsed.fixed_height == 34.0f);
+
+    auto expanded = widget::glass_disclosure_header_style(
+        GlassDisclosureStyleOptions{.expanded = true});
+    assert(expanded.has_material);
+    assert(expanded.material.tint.a > collapsed.material.tint.a);
+
+    auto disabled = widget::glass_disclosure_header_style(
+        GlassDisclosureStyleOptions{.disabled = true});
+    assert(disabled.disabled);
+    assert(!disabled.has_material);
+
+    std::puts("PASS: glass disclosure header style emits material contract");
+}
+
 void test_symbol_button_minimum_hit_region_contract() {
     icons::SymbolButtonOptions options;
     options.role = icons::SymbolPresentationRole::Toolbar;
@@ -5463,6 +5498,7 @@ int main() {
     test_glass_selection_button_style_material_contract();
     test_glass_menu_item_symbol_button_material_contract();
     test_glass_table_header_button_material_contract();
+    test_glass_disclosure_header_style_material_contract();
     test_symbol_button_minimum_hit_region_contract();
     test_symbol_button_visual_state_token_contract();
     test_symbol_button_disabled_contract();
