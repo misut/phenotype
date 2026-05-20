@@ -1203,11 +1203,35 @@ void test_material_runtime_record_json_contract() {
     assert(obj.at("resource_budget").as_object()
                .at("max_sampling_kernel_radius").as_integer() == 0);
     assert(obj.at("resource_budget").as_object()
+               .at("max_paint_layers").as_integer() == 3);
+    assert(obj.at("resource_budget").as_object()
                .at("max_container_spacing").as_float() == 0.0f);
+    assert(obj.at("resource_budget").as_object()
+               .at("max_paint_layer_inflate").as_float() > 0.0f);
     assert(obj.at("resource_budget").as_object()
                .at("deterministic_fallback").as_bool() == true);
     assert(obj.at("execution_stage_capacity").as_integer() == 4);
     assert(obj.at("dropped_execution_stage_count").as_integer() == 0);
+    assert(obj.at("paint_layer_capacity").as_integer() == 3);
+    assert(obj.at("dropped_paint_layer_count").as_integer() == 0);
+    auto const& paint_layers = obj.at("paint_layers").as_array();
+    assert(paint_layers.size() == 3);
+    assert(paint_layers[0].as_object().at("name").as_string()
+           == "fallback-shadow");
+    assert(paint_layers[0].as_object().at("executor").as_string()
+           == "rounded-shadow");
+    assert(paint_layers[1].as_object().at("name").as_string()
+           == "translucent-rounded-rect");
+    assert(paint_layers[1].as_object().at("executor").as_string()
+           == "rounded-fill");
+    assert(paint_layers[1].as_object().at("color").as_object()
+               .at("a").as_integer() == 128);
+    assert(paint_layers[2].as_object().at("name").as_string()
+           == "fallback-edge-highlight");
+    assert(paint_layers[2].as_object().at("executor").as_string()
+           == "rounded-edge");
+    assert(paint_layers[2].as_object().at("stroke_width").as_float()
+           == obj.at("edge_width").as_float());
     assert(obj.at("verifier").as_object().at("likely_layer").as_string()
            == "material-fallback-pass");
     auto const& observation =
@@ -1238,6 +1262,11 @@ void test_material_runtime_record_json_contract() {
     assert(observation.at("primary_executor").as_string()
            == "fallback-fill");
     assert(observation.at("expected_runtime_passes").as_integer() == 1);
+    assert(observation.at("expected_paint_layers").as_integer() == 3);
+    assert(observation.at("expected_active_paint_layers").as_integer() == 3);
+    assert(observation.at("expected_shadow_paint_layers").as_integer() == 1);
+    assert(observation.at("expected_fill_paint_layers").as_integer() == 1);
+    assert(observation.at("expected_edge_paint_layers").as_integer() == 1);
     assert(observation.at("expected_active_runtime_passes").as_integer() == 1);
     assert(observation.at("expected_backdrop_runtime_passes").as_integer()
            == 0);

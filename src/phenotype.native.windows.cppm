@@ -1383,6 +1383,17 @@ float4 fs_color(ColorVsOut input) : SV_TARGET {
         float alpha = input.color.a * saturate(0.5f - d);
         return float4(input.color.rgb * alpha, alpha);
     }
+    if (draw_type == 4u && radius > 0.0f) {
+        float2 half_size = input.rect_size * 0.5f;
+        float2 p = abs(input.local_pos - half_size) - half_size + float2(radius, radius);
+        float d = length(max(p, float2(0.0f, 0.0f))) - radius;
+        clip(0.5f - d);
+        clip(d + border_w + 0.5f);
+        float outer = saturate(0.5f - d);
+        float inner = saturate(d + border_w + 0.5f);
+        float alpha = input.color.a * min(outer, inner);
+        return float4(input.color.rgb * alpha, alpha);
+    }
     if (draw_type == 1u) {
         float2 lp = input.local_pos;
         float2 sz = input.rect_size;
@@ -2490,6 +2501,54 @@ inline void append_color_instance(std::vector<float>& color_data,
     });
 }
 
+inline float material_paint_layer_alpha(
+        MaterialPaintLayer const& layer) noexcept {
+    auto const color_alpha = static_cast<float>(layer.color.a) / 255.0f;
+    if (material_paint_layer_matches(layer.executor, "rounded-fill"))
+        return (std::max)(color_alpha, layer.opacity);
+    return color_alpha * layer.opacity;
+}
+
+inline void append_material_paint_layer_instance(
+        std::vector<float>& color_data,
+        MaterialPlan const& plan,
+        MaterialPaintLayer const& layer) {
+    if (!layer.active)
+        return;
+    auto const inflate = (std::max)(layer.inflate, 0.0f);
+    auto const x = plan.geometry.x + layer.x_offset - inflate;
+    auto const y = plan.geometry.y + layer.y_offset - inflate;
+    auto const w = plan.geometry.w + inflate * 2.0f;
+    auto const h = plan.geometry.h + inflate * 2.0f;
+    if (w <= 0.0f || h <= 0.0f)
+        return;
+    auto const rounded_edge =
+        material_paint_layer_matches(layer.executor, "rounded-edge");
+    append_color_instance(
+        color_data,
+        x,
+        y,
+        w,
+        h,
+        layer.color.r / 255.0f,
+        layer.color.g / 255.0f,
+        layer.color.b / 255.0f,
+        material_paint_layer_alpha(layer),
+        (std::max)(0.0f, plan.shape.effective_radius + layer.radius_delta),
+        rounded_edge ? (std::max)(layer.stroke_width, 0.5f) : 0.0f,
+        rounded_edge ? 4.0f : 2.0f);
+}
+
+inline void append_material_paint_layer_instances(
+        std::vector<float>& color_data,
+        MaterialPlan const& plan) {
+    for (unsigned int i = 0; i < plan.paint_layer_count; ++i)
+        append_material_paint_layer_instance(
+            color_data,
+            plan,
+            plan.paint_layers[i]);
+}
+
 inline void append_stroked_segment(std::vector<float>& color_data,
                                    float x1, float y1,
                                    float x2, float y2,
@@ -3034,12 +3093,7 @@ inline bool decode_frame_commands(unsigned char const* buf,
                 material_env_for_command);
             frame.material_records.push_back(
                 MaterialRuntimeRecord{plan, current_command_index});
-            append_color_instance(
-                frame.color_data,
-                x, y, w, h,
-                plan.tint.r / 255.0f, plan.tint.g / 255.0f,
-                plan.tint.b / 255.0f, plan.tint.a / 255.0f,
-                plan.shape.effective_radius, 0.0f, 2.0f);
+            append_material_paint_layer_instances(frame.color_data, plan);
             break;
         }
         case Cmd::DrawText: {

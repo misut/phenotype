@@ -2,8 +2,8 @@
 
 // Color pipeline fragment shader — direct port of phenotype.native.macos
 // fs_color / phenotype.native.windows fs_color. Single-pipeline design:
-// params.z selects the draw path (0 = Fill, 1 = Stroke, 2 = Round, 3
-// falls through to Fill to match desktop DrawLine behavior).
+// params.z selects the draw path (0 = Fill, 1 = Stroke, 2 = Round,
+// 3 = rounded-edge material stroke).
 
 layout(location = 0) in vec4 v_color;
 layout(location = 1) in vec2 v_local_pos;
@@ -28,6 +28,20 @@ void main() {
         return;
     }
 
+    // Rounded material edge stroke. The pure MaterialPlan owns the
+    // stroke width; this shader only executes the resolved layer.
+    if (draw_type == 3u && radius > 0.0) {
+        vec2 half_size = v_rect_size * 0.5;
+        vec2 p = abs(v_local_pos - half_size) - half_size + vec2(radius);
+        float d = length(max(p, vec2(0.0))) - radius;
+        if (d > 0.5 || d < -border_w - 0.5) discard;
+        float outer = clamp(0.5 - d, 0.0, 1.0);
+        float inner = clamp(d + border_w + 0.5, 0.0, 1.0);
+        float alpha = v_color.a * min(outer, inner);
+        frag_color = vec4(v_color.rgb * alpha, alpha);
+        return;
+    }
+
     // Stroke rect — discard pixels in the interior band.
     if (draw_type == 1u) {
         vec2 lp = v_local_pos;
@@ -38,6 +52,16 @@ void main() {
         return;
     }
 
-    // Fill (and DrawLine fall-through): plain color.
+    if (draw_type == 3u) {
+        vec2 lp = v_local_pos;
+        vec2 sz = v_rect_size;
+        if (lp.x > border_w && lp.x < sz.x - border_w &&
+            lp.y > border_w && lp.y < sz.y - border_w) discard;
+        float alpha = v_color.a;
+        frag_color = vec4(v_color.rgb * alpha, alpha);
+        return;
+    }
+
+    // Fill: plain color.
     frag_color = v_color;
 }

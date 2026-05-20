@@ -265,7 +265,16 @@ groups, and max active/sampled/fallback surfaces from resolved
 `MaterialRuntimeRecord` values. Runtime and executor summaries serialize that
 same `container_groups` object, so Apple-style grouping and future
 container-level resource reuse can be verified without backend-local policy.
-Schema 31 also makes each surface's container policy explicit: spacing resolves
+Schema 32 also moves deterministic non-backdrop rendering into the pure plan.
+Every non-sampled material now exposes a bounded `paint_layers[]` recipe with
+explicit shadow, fill, and edge-highlight layers, layer executors, offsets,
+inflation, radius deltas, stroke widths, colors, opacity, and drop counts.
+Sampled backdrop glass intentionally exposes no paint layers because the
+material shader owns that path. Runtime and executor summaries count active,
+shadow, fill, edge, dropped, capacity, and maximum-inflation values so a
+fallback artifact can prove what was drawn without backend-local policy or
+visual guessing.
+Schema 32 also makes each surface's container policy explicit: spacing resolves
 to `blend_distance`, positive spacing drives `shape_blending_expected`, union ids
 select the union-proximity blend policy, Reduced Motion suppresses only morphing,
 and `performance_policy` tells backend adapters whether to use a single surface,
