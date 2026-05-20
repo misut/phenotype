@@ -64,7 +64,7 @@
     "fallback": 0,
     "backdrop_sampling": 9,
     "contract_versions": {
-      "34": 10
+      "35": 10
     },
     "theme_foreground_matches_theme": 0,
     "theme_accent_matches_theme": 0,

@@ -1338,6 +1338,112 @@ namespace detail {
             "likely_pass",
             json::Value{observation.likely_pass});
 
+        auto const& audit = plan.execution_audit;
+        json::Object execution_audit;
+        execution_audit.emplace(
+            "schema_version",
+            json::Value{static_cast<std::int64_t>(audit.schema_version)});
+        execution_audit.emplace(
+            "actual_runtime_passes",
+            json::Value{
+                static_cast<std::int64_t>(audit.actual_runtime_passes)});
+        execution_audit.emplace(
+            "actual_active_runtime_passes",
+            json::Value{static_cast<std::int64_t>(
+                audit.actual_active_runtime_passes)});
+        execution_audit.emplace(
+            "actual_backdrop_runtime_passes",
+            json::Value{static_cast<std::int64_t>(
+                audit.actual_backdrop_runtime_passes)});
+        execution_audit.emplace(
+            "actual_execution_stages",
+            json::Value{
+                static_cast<std::int64_t>(audit.actual_execution_stages)});
+        execution_audit.emplace(
+            "actual_active_execution_stages",
+            json::Value{static_cast<std::int64_t>(
+                audit.actual_active_execution_stages)});
+        execution_audit.emplace(
+            "actual_backdrop_execution_stages",
+            json::Value{static_cast<std::int64_t>(
+                audit.actual_backdrop_execution_stages)});
+        execution_audit.emplace(
+            "actual_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(audit.actual_paint_layers)});
+        execution_audit.emplace(
+            "actual_active_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(audit.actual_active_paint_layers)});
+        execution_audit.emplace(
+            "actual_shadow_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(audit.actual_shadow_paint_layers)});
+        execution_audit.emplace(
+            "actual_fill_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(audit.actual_fill_paint_layers)});
+        execution_audit.emplace(
+            "actual_edge_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(audit.actual_edge_paint_layers)});
+        execution_audit.emplace(
+            "runtime_passes_match",
+            json::Value{audit.runtime_passes_match});
+        execution_audit.emplace(
+            "active_runtime_passes_match",
+            json::Value{audit.active_runtime_passes_match});
+        execution_audit.emplace(
+            "backdrop_runtime_passes_match",
+            json::Value{audit.backdrop_runtime_passes_match});
+        execution_audit.emplace(
+            "execution_stages_match",
+            json::Value{audit.execution_stages_match});
+        execution_audit.emplace(
+            "active_execution_stages_match",
+            json::Value{audit.active_execution_stages_match});
+        execution_audit.emplace(
+            "backdrop_execution_stages_match",
+            json::Value{audit.backdrop_execution_stages_match});
+        execution_audit.emplace(
+            "paint_layers_match",
+            json::Value{audit.paint_layers_match});
+        execution_audit.emplace(
+            "active_paint_layers_match",
+            json::Value{audit.active_paint_layers_match});
+        execution_audit.emplace(
+            "shadow_paint_layers_match",
+            json::Value{audit.shadow_paint_layers_match});
+        execution_audit.emplace(
+            "fill_paint_layers_match",
+            json::Value{audit.fill_paint_layers_match});
+        execution_audit.emplace(
+            "edge_paint_layers_match",
+            json::Value{audit.edge_paint_layers_match});
+        execution_audit.emplace(
+            "bounded_texture_copy",
+            json::Value{audit.bounded_texture_copy});
+        execution_audit.emplace(
+            "deterministic_fallback",
+            json::Value{audit.deterministic_fallback});
+        execution_audit.emplace(
+            "contract_satisfied",
+            json::Value{audit.contract_satisfied});
+        execution_audit.emplace(
+            "mismatch_count",
+            json::Value{static_cast<std::int64_t>(audit.mismatch_count)});
+        execution_audit.emplace(
+            "first_mismatch",
+            json::Value{audit.first_mismatch ? audit.first_mismatch : "none"});
+        execution_audit.emplace(
+            "likely_layer",
+            json::Value{audit.likely_layer
+                            ? audit.likely_layer
+                            : "material-execution-contract"});
+        execution_audit.emplace(
+            "likely_pass",
+            json::Value{audit.likely_pass ? audit.likely_pass : "none"});
+
         json::Object primary_pass;
         primary_pass.emplace("name", json::Value{plan.primary_pass.name});
         primary_pass.emplace("active", json::Value{plan.primary_pass.active});
@@ -2063,6 +2169,9 @@ namespace detail {
         out.emplace(
             "observation_contract",
             json::Value{std::move(observation_contract)});
+        out.emplace(
+            "execution_audit",
+            json::Value{std::move(execution_audit)});
         out.emplace("passes", json::Value{std::move(passes)});
         out.emplace("execution_stages", json::Value{std::move(execution_stages)});
         out.emplace("paint_layers", json::Value{std::move(paint_layers)});
@@ -2440,6 +2549,23 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.non_deterministic_fallback)});
+        out.emplace(
+            "execution_contract_satisfied_count",
+            json::Value{static_cast<std::int64_t>(
+                summary.execution_contract_satisfied_count)});
+        out.emplace(
+            "execution_contract_mismatch_count",
+            json::Value{static_cast<std::int64_t>(
+                summary.execution_contract_mismatch_count)});
+        out.emplace(
+            "execution_contract_mismatch_total",
+            json::Value{static_cast<std::int64_t>(
+                summary.execution_contract_mismatch_total)});
+        out.emplace(
+            "first_execution_contract_mismatch",
+            json::Value{summary.first_execution_contract_mismatch
+                            ? summary.first_execution_contract_mismatch
+                            : "none"});
         return json::Value{std::move(out)};
     }
 
@@ -2629,6 +2755,23 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.material_buffer_reallocations)});
+        out.emplace(
+            "execution_contract_satisfied_count",
+            json::Value{static_cast<std::int64_t>(
+                summary.execution_contract_satisfied_count)});
+        out.emplace(
+            "execution_contract_mismatch_count",
+            json::Value{static_cast<std::int64_t>(
+                summary.execution_contract_mismatch_count)});
+        out.emplace(
+            "execution_contract_mismatch_total",
+            json::Value{static_cast<std::int64_t>(
+                summary.execution_contract_mismatch_total)});
+        out.emplace(
+            "first_execution_contract_mismatch",
+            json::Value{summary.first_execution_contract_mismatch
+                            ? summary.first_execution_contract_mismatch
+                            : "none"});
         out.emplace(
             "foreground_text_candidate_count",
             json::Value{
