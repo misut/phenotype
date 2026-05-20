@@ -3866,6 +3866,14 @@ def summarize_material_plans(
             "foreground_vibrancy_active": 0,
             "deterministic_fallback": 0,
         },
+        "optical_bounds": {
+            "max_saturation": 0.0,
+            "max_edge_highlight": 0.0,
+            "max_edge_width": 0.0,
+            "max_noise_opacity": 0.0,
+            "max_shadow_alpha": 0.0,
+            "max_shadow_radius": 0.0,
+        },
         "resource_bounds": {
             "max_plan_blur_radius": 0.0,
             "max_plan_sample_taps": 0,
@@ -4600,16 +4608,48 @@ def summarize_material_plans(
                         float(number))
             elif key == "saturation":
                 plan_saturation = number
+                if isinstance(number, (int, float)):
+                    optical_bounds = summary["optical_bounds"]
+                    optical_bounds["max_saturation"] = max(
+                        float(optical_bounds["max_saturation"]),
+                        float(number))
             elif key == "edge_highlight":
                 plan_edge_highlight = number
+                if isinstance(number, (int, float)):
+                    optical_bounds = summary["optical_bounds"]
+                    optical_bounds["max_edge_highlight"] = max(
+                        float(optical_bounds["max_edge_highlight"]),
+                        float(number))
+            elif key == "edge_width":
+                if isinstance(number, (int, float)):
+                    optical_bounds = summary["optical_bounds"]
+                    optical_bounds["max_edge_width"] = max(
+                        float(optical_bounds["max_edge_width"]),
+                        float(number))
             elif key == "luminance_floor":
                 plan_luminance_floor = number
             elif key == "luminance_gain":
                 plan_luminance_gain = number
             elif key == "noise_opacity":
                 plan_noise_opacity = number
+                if isinstance(number, (int, float)):
+                    optical_bounds = summary["optical_bounds"]
+                    optical_bounds["max_noise_opacity"] = max(
+                        float(optical_bounds["max_noise_opacity"]),
+                        float(number))
             elif key == "shadow_alpha":
                 plan_shadow_alpha = number
+                if isinstance(number, (int, float)):
+                    optical_bounds = summary["optical_bounds"]
+                    optical_bounds["max_shadow_alpha"] = max(
+                        float(optical_bounds["max_shadow_alpha"]),
+                        float(number))
+            elif key == "shadow_radius":
+                if isinstance(number, (int, float)):
+                    optical_bounds = summary["optical_bounds"]
+                    optical_bounds["max_shadow_radius"] = max(
+                        float(optical_bounds["max_shadow_radius"]),
+                        float(number))
         backdrop_sampling = check_bool_field(
             report,
             plan,
@@ -8404,6 +8444,9 @@ def check_material_runtime_summary_contract(
     bounds = summary.get("resource_bounds")
     if not isinstance(bounds, dict):
         bounds = {}
+    optical_bounds = summary.get("optical_bounds")
+    if not isinstance(optical_bounds, dict):
+        optical_bounds = {}
     expected_fields = {
         "plan_count": summary.get("count"),
         "fallback_count": summary.get("fallback"),
@@ -8479,6 +8522,12 @@ def check_material_runtime_summary_contract(
         "max_normalized_radius": summary.get("shape", {}).get(
             "max_normalized_radius")
             if isinstance(summary.get("shape"), dict) else None,
+        "max_saturation": optical_bounds.get("max_saturation"),
+        "max_edge_highlight": optical_bounds.get("max_edge_highlight"),
+        "max_edge_width": optical_bounds.get("max_edge_width"),
+        "max_noise_opacity": optical_bounds.get("max_noise_opacity"),
+        "max_shadow_alpha": optical_bounds.get("max_shadow_alpha"),
+        "max_shadow_radius": optical_bounds.get("max_shadow_radius"),
         "min_foreground_contrast_ratio": summary.get(
             "foreground", {}).get("min_primary_contrast")
             if isinstance(summary.get("foreground"), dict) else None,

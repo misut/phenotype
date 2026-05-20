@@ -2008,6 +2008,18 @@ namespace detail {
                     json::Value{summary.max_radius_limit});
         out.emplace("max_normalized_radius",
                     json::Value{summary.max_normalized_radius});
+        out.emplace("max_saturation",
+                    json::Value{summary.max_saturation});
+        out.emplace("max_edge_highlight",
+                    json::Value{summary.max_edge_highlight});
+        out.emplace("max_edge_width",
+                    json::Value{summary.max_edge_width});
+        out.emplace("max_noise_opacity",
+                    json::Value{summary.max_noise_opacity});
+        out.emplace("max_shadow_alpha",
+                    json::Value{summary.max_shadow_alpha});
+        out.emplace("max_shadow_radius",
+                    json::Value{summary.max_shadow_radius});
         out.emplace(
             "min_foreground_contrast_ratio",
             json::Value{summary.min_foreground_contrast_ratio});

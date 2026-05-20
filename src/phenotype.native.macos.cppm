@@ -4061,7 +4061,12 @@ fragment float4 fs_material(
 ) {
     float radius = in.params.x;
     float edge_width = max(in.effects.x, 0.5);
-    float signed_edge_distance = 1024.0;
+    float2 rect_edge_distance = min(
+        in.local_pos,
+        max(in.rect_size - in.local_pos, float2(0.0)));
+    float signed_edge_distance = max(
+        min(rect_edge_distance.x, rect_edge_distance.y),
+        0.0);
     float edge_alpha = 1.0;
     if (radius > 0.0) {
         float2 half_size = in.rect_size * 0.5;
@@ -4124,8 +4129,17 @@ fragment float4 fs_material(
     float edge = 1.0 - smoothstep(0.0, edge_width, signed_edge_distance);
     float edge_lift = clamp(in.luminance_curve.w, 0.0, 1.0);
     rgb += float3(edge * edge_lift);
-    float shadow = smoothstep(0.45, 1.0, in.local_pos.y / max(in.rect_size.y, 1.0))
-        * clamp(in.effects.y, 0.0, 0.4);
+    float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
+    float shadow_band = max(edge_width, shadow_radius);
+    float lower_depth = smoothstep(
+        0.35,
+        1.0,
+        in.local_pos.y / max(in.rect_size.y, 1.0));
+    float edge_depth = 1.0 - smoothstep(
+        0.0,
+        max(shadow_band, 0.5),
+        signed_edge_distance);
+    float shadow = lower_depth * edge_depth * clamp(in.effects.y, 0.0, 0.4);
     rgb *= (1.0 - shadow);
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),

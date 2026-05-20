@@ -823,7 +823,10 @@ the same artifact schema. Backends also publish
 the same records; the artifact verifier recomputes it from
 `material_plans[]` so CI can catch summary drift, unexpected executor pass
 growth, stage-capacity overflow, texture-copy budget drift, and material shape
-drift such as a clamped radius not matching the backend-executed radius.
+drift such as a clamped radius not matching the backend-executed radius. The
+same summary exposes optical maxima for saturation, edge highlight, edge width,
+noise opacity, shadow alpha, and shadow radius so a backend artifact can prove
+that the pure glass response survived serialization and execution.
 Backends separately publish `renderer.material_executor_summary` for edge-only
 execution telemetry: material instances, fallback instances, material draw
 calls, primary executor instance counts for sampled backdrop, standard fill, and

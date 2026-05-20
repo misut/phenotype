@@ -1228,6 +1228,18 @@ void test_material_runtime_record_json_contract() {
     assert(summary_obj.at("max_radius_limit").as_float() == 32.0f);
     assert(std::fabs(summary_obj.at("max_normalized_radius").as_float()
                      - (12.0f / 32.0f)) < 0.0001f);
+    assert(summary_obj.at("max_saturation").as_float()
+           == obj.at("saturation").as_float());
+    assert(summary_obj.at("max_edge_highlight").as_float()
+           == obj.at("edge_highlight").as_float());
+    assert(summary_obj.at("max_edge_width").as_float()
+           == obj.at("edge_width").as_float());
+    assert(summary_obj.at("max_noise_opacity").as_float()
+           == obj.at("noise_opacity").as_float());
+    assert(summary_obj.at("max_shadow_alpha").as_float()
+           == obj.at("shadow_alpha").as_float());
+    assert(summary_obj.at("max_shadow_radius").as_float()
+           == obj.at("shadow_radius").as_float());
     assert(summary_obj.at("max_container_spacing").as_float() == 0.0f);
 
     MaterialExecutorSummary executor_summary;
