@@ -1292,6 +1292,15 @@ struct GlassSelectionStyleOptions {
     TextAlign text_align = TextAlign::Start;
 };
 
+struct GlassMenuItemStyleOptions {
+    MaterialKind kind = MaterialKind::Clear;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Overlay;
+    bool disabled = false;
+    float width = 0.0f;
+    float height = -1.0f;
+    float border_radius = -1.0f;
+};
+
 struct TabsStyleOptions {
     MaterialKind kind = MaterialKind::Regular;
     MaterialSurfaceRole role = MaterialSurfaceRole::Navigation;

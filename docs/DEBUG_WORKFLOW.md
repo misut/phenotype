@@ -782,6 +782,13 @@ extra sampled sidebar selection plan, an isolated interactive container, and a
 bounded increase from 200 to 225 total sample taps. If that count changes,
 start with the selected sidebar row semantic material node before investigating
 the backend.
+Popover action rows follow the same semantic-material rule through
+`widget::glass_menu_item_button_style`. The desktop `more-actions-open`
+scenario requires an `overlay` material surface role while the menu is visible;
+disabled actions intentionally resolve to non-material buttons. If that
+requirement fails, inspect the `More Actions Menu` semantic subtree and the
+`New File` / `New Folder` / `Duplicate` icon-button nodes before looking at
+Metal or pixel thresholds.
 It also compares semantic material container descriptors against
 `MaterialPlan.command_descriptor.container` and compares resolved container
 identity against `MaterialPlan.container`; a container mismatch points at layout

@@ -220,6 +220,12 @@ Finder-style selected rows now use `GlassSelectionStyleOptions` and
 first-class material plan instead of ad hoc painted button chrome. Unselected
 rows stay non-material by default so the selection affordance is debuggable
 without adding frame-to-frame material work for every file row.
+Finder-style popover menu actions now use `GlassMenuItemStyleOptions` and
+`widget::glass_menu_item_button_style`, giving transient overlay action chrome
+a clear material plan while keeping disabled or hidden actions out of the
+material hot path. The desktop file explorer `more-actions-open` verifier
+scenario requires this overlay material role so menu regressions fail from the
+semantic/debug contract instead of a screenshot comparison.
 Pointer-driven active responses now include a pure, normalized
 `pointer-specular` highlight descriptor. The macOS Metal executor consumes that
 descriptor as shader input to add a bounded glint near the pointer anchor, while
@@ -852,12 +858,14 @@ Current seed:
 ## Next recommended PR
 
 The initial G0-G4 path is now landed, and segmented controls/popovers/search
-fields/selected rows now use the first-class material helper path. The next
+fields/selected rows/menu items now use the first-class material helper path.
+The next
 useful PR should avoid another schema-only increment unless a real failure
 appears. Recommended directions:
 
 - expand first-class material-aware controls beyond buttons, segmented
-  controls, search fields, and selected rows, especially menu/popup item chrome;
+  controls, search fields, selected rows, and menu items, especially table
+  headers, split buttons, and disclosure/outline rows;
 - tighten macOS material executor budgets after collecting a small sample of
   local and CI timing/copy values;
 - add Android CI emulator wiring if runner capacity and cost are acceptable;

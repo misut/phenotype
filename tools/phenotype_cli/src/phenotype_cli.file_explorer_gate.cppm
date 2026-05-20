@@ -70,6 +70,11 @@ auto append_required_role(std::vector<std::string>& args,
     append_verifier_arg(args, "--require-role", std::move(value));
 }
 
+auto append_required_material_surface_role(std::vector<std::string>& args,
+                                           std::string value) {
+    append_verifier_arg(args, "--require-material-surface-role", std::move(value));
+}
+
 auto append_required_debug_detail(std::vector<std::string>& args,
                                   std::string value) {
     append_verifier_arg(args, "--require-debug-detail", std::move(value));
@@ -162,6 +167,7 @@ auto append_file_explorer_scenario_requirements(
         append_required_label_contains(args, "Screenshot");
     } else if (scenario == "more-actions-open") {
         append_required_label(args, "More Actions Menu");
+        append_required_material_surface_role(args, "overlay");
         append_required_label(args, "New File");
         append_required_label(args, "New Folder");
         append_required_label(args, "Duplicate");

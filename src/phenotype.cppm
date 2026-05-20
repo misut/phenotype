@@ -498,6 +498,50 @@ inline ButtonStyleOptions glass_selection_button_style(
     return style;
 }
 
+inline ButtonStyleOptions glass_menu_item_button_style(
+        GlassMenuItemStyleOptions options = {}) {
+    auto const& t = detail::g_app.theme;
+    auto const kind = options.disabled ? MaterialKind::None : options.kind;
+    auto material = material_style_for_kind(kind, t);
+    material.role = options.role;
+    material.fallback = kind != MaterialKind::None;
+    material.container = MaterialContainerDescriptor{
+        0u,
+        0u,
+        8.0f,
+        !options.disabled,
+        true};
+
+    ButtonStyleOptions style;
+    style.disabled = options.disabled;
+    style.has_material = kind != MaterialKind::None;
+    style.material = material;
+    style.has_background = true;
+    style.background = kind != MaterialKind::None
+        ? material.tint
+        : t.transparent;
+    style.has_hover_background = true;
+    style.hover_background = material_with_alpha(t.surface, 150);
+    style.has_pressed_background = true;
+    style.pressed_background = material_with_alpha(t.surface, 188);
+    style.has_border_color = true;
+    style.border_color = kind != MaterialKind::None
+        ? material.border
+        : t.transparent;
+    style.has_text_color = true;
+    style.text_color = options.disabled ? t.state_disabled_fg : t.foreground;
+    style.border_width = 0.0f;
+    style.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : t.radius_md;
+    style.max_width = options.width;
+    style.fixed_height = options.height;
+    style.min_hit_width = minimum_button_activation_size;
+    style.min_hit_height = minimum_button_activation_size;
+    style.text_align = TextAlign::Center;
+    return style;
+}
+
 inline TextFieldStyleOptions glass_text_field_style(
         GlassTextFieldStyleOptions options = {}) {
     auto const& t = detail::g_app.theme;
@@ -1297,8 +1341,8 @@ template<typename Msg>
 inline void symbol_button(str label,
                           icons::Symbol symbol,
                           Msg msg,
-                          icons::SymbolButtonOptions options = {}) {
-    auto const style = icons::macos_symbol_button_style(options);
+                          icons::SymbolButtonOptions options,
+                          ButtonStyleOptions style) {
     auto const width = icons::symbol_button_width(options);
     auto const height = icons::symbol_button_height(options);
     canvas_button<Msg>(
@@ -1325,6 +1369,19 @@ inline void symbol_button(str label,
         std::move(msg),
         style,
         icons::symbol_button_paint_token(symbol, options));
+}
+
+template<typename Msg>
+inline void symbol_button(str label,
+                          icons::Symbol symbol,
+                          Msg msg,
+                          icons::SymbolButtonOptions options = {}) {
+    symbol_button<Msg>(
+        label,
+        symbol,
+        std::move(msg),
+        options,
+        icons::macos_symbol_button_style(options));
 }
 
 // progress — horizontal determinate progress bar. `value` is clamped

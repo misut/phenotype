@@ -337,6 +337,14 @@ the backend. Selection chrome follows the same boundary through
 Examples use it for Finder sidebar/list/icon rows so the selected row is a
 semantic material command with a resolved `MaterialPlan`, while unselected rows
 remain lightweight non-material buttons unless a caller explicitly opts in.
+Transient menu and popover actions use `GlassMenuItemStyleOptions` and
+`widget::glass_menu_item_button_style`. The preset defaults to a clear overlay
+material and keeps disabled actions non-material, so open menus can expose
+their action chrome to the verifier without adding idle-frame material work.
+`widget::symbol_button` also has an overload that accepts explicit
+`ButtonStyleOptions`; icon buttons can therefore share the same audited SVG
+painting path while choosing the menu, toolbar, or selection material contract
+purely at the widget edge.
 
 `phenotype.svg` is a pure vector image layer. It parses a bounded SVG subset
 (`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,
