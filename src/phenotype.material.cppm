@@ -775,6 +775,8 @@ struct MaterialExecutorSummary {
     char const* backdrop_luma_sampling_skip_reason = "none";
     char const* backdrop_copy_skip_reason = "none";
     MaterialContainerGroupRuntimeSummary container_groups{};
+    float material_shader_content_scale = 1.0f;
+    float material_max_shader_blur_step_pixels = 0.0f;
     std::int64_t cpu_decode_ns = 0;
     std::int64_t cpu_material_upload_ns = 0;
     std::int64_t cpu_total_ns = 0;

@@ -3895,7 +3895,11 @@ inline constexpr char MSL_SHADERS[] = R"(
 #include <metal_stdlib>
 using namespace metal;
 
-struct Uniforms { float2 viewport; float2 _pad; };
+struct Uniforms {
+    float2 viewport;
+    float content_scale;
+    float _pad;
+};
 
 // Triangle pipeline — raw 3-vertex triangle list with per-vertex
 // colour. Used by Cmd::FillPath after CPU ear-clipping. Hardware
@@ -4006,6 +4010,7 @@ struct MaterialVsOut {
     float2 local_pos;
     float2 rect_size;
     float2 screen_uv;
+    float content_scale;
     float4 tint;
     float4 params;
     float4 optics;
@@ -4045,6 +4050,7 @@ vertex MaterialVsOut vs_material(
     out.local_pos = c * inst.rect.zw;
     out.rect_size = inst.rect.zw;
     out.screen_uv = float2(px / u.viewport.x, py / u.viewport.y);
+    out.content_scale = u.content_scale;
     out.tint = inst.tint;
     out.params = inst.params;
     out.optics = inst.optics;
@@ -4079,11 +4085,13 @@ fragment float4 fs_material(
 
     float2 texel = 1.0 / float2(float(backdrop.get_width()),
                                 float(backdrop.get_height()));
-    float blur_px = clamp(in.params.y, 0.0, 36.0);
+    float blur_points = clamp(in.params.y, 0.0, 36.0);
     uint sample_taps = uint(clamp(round(in.params.w), 1.0, 25.0));
     float blur_step_scale = max(in.sampling.x, 0.0);
     uint kernel_radius = uint(clamp(round(in.sampling.y), 0.0, 2.0));
-    float2 step_uv = texel * max(1.0, blur_px * blur_step_scale);
+    float content_scale = max(in.content_scale, 1.0);
+    float2 step_uv =
+        texel * max(1.0, blur_points * content_scale * blur_step_scale);
     float4 acc = float4(0.0);
     float weight_sum = 0.0;
     for (int y = -2; y <= 2; ++y) {
@@ -7371,6 +7379,20 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     finalize_material_executor_summary(
         material_summary,
         g_renderer.scratch.material_records);
+    material_summary.material_shader_content_scale = frame_scale;
+    for (auto const& record : g_renderer.scratch.material_records) {
+        auto const& plan = record.plan;
+        if (!material_plan_uses_sampled_backdrop_executor(plan))
+            continue;
+        auto const step_pixels = std::max(
+            1.0f,
+            plan.blur_radius
+                * plan.sampling_kernel.blur_step_scale
+                * frame_scale);
+        material_summary.material_max_shader_blur_step_pixels = std::max(
+            material_summary.material_max_shader_blur_step_pixels,
+            step_pixels);
+    }
 
     int winw = 0;
     int winh = 0;
@@ -7378,7 +7400,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     float uniforms[4] = {
         static_cast<float>(winw),
         static_cast<float>(winh),
-        0,
+        frame_scale,
         0,
     };
     std::memcpy(g_renderer.uniform_buf->contents(), uniforms, 16);

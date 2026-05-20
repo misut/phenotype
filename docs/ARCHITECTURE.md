@@ -681,8 +681,10 @@ count, blur step scale, weight profile, and whether it requires a backdrop
 source. Deterministic fallback plans use the inactive `none` kernel so stale
 blur metadata cannot leak into fallback artifacts. macOS uploads the kernel's
 blur step scale and radius to Metal instead of hard-coding that policy in the
-shader; other backends serialize the same kernel contract before they gain an
-advanced material executor. Reduced-motion plans also disable material noise
+shader, and multiplies the logical blur radius by `render_target.scale` at the
+edge so HiDPI glass uses the same physical blur spread as the pure plan
+describes. Other backends serialize the same kernel contract before they gain
+an advanced material executor. Reduced-motion plans also disable material noise
 and cap backdrop sample taps before any backend executes the pass.
 `luminance_curve` is the pure contrast transform that the backend should apply
 after saturation and before tint. It records the curve name, resolved
@@ -843,7 +845,10 @@ luminance descriptor that fed the pure planner (`backdrop_descriptor_luma_*`)
 and any bounded sampling skip reason. It also repeats the sampled-material edge
 readiness (`material_pipeline_ready`, `material_backdrop_source_ready`) and the
 purely derived upload/draw status strings (`material_upload_status`,
-`material_draw_status`). Backends fill only the edge facts and counters; the
+`material_draw_status`). It also publishes `material_shader_content_scale` and
+`material_max_shader_blur_step_pixels`, so artifacts can prove that logical
+material blur radii were converted to physical shader sample distances without
+hiding scale policy in Metal. Backends fill only the edge facts and counters; the
 status helper derives `uploaded`, `drawn`, or a stable `skipped-*` reason from
 those facts so policy decisions remain inspectable instead of hiding in a
 renderer branch. `renderer.material_backdrop_luma_descriptor` exposes the latest

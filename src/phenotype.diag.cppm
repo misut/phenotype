@@ -2310,6 +2310,12 @@ namespace detail {
         out.emplace(
             "container_groups",
             material_container_group_summary_json(summary.container_groups));
+        out.emplace(
+            "material_shader_content_scale",
+            json::Value{summary.material_shader_content_scale});
+        out.emplace(
+            "material_max_shader_blur_step_pixels",
+            json::Value{summary.material_max_shader_blur_step_pixels});
         out.emplace("cpu_decode_ns", json::Value{summary.cpu_decode_ns});
         out.emplace(
             "cpu_material_upload_ns",
