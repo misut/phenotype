@@ -36,7 +36,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "30": 8
+      "31": 8
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -72,7 +72,7 @@
     "container_participating": 6,
     "container_unioned": 1,
     "container_interactive": 2,
-    "container_morph_transitions": 6,
+    "container_morph_transitions": 5,
     "container_group_count": 3,
     "container_multi_surface_group_count": 1,
     "container_union_group_count": 1,
@@ -126,7 +126,7 @@
     "reference_interactive_response": 2,
     "reference_container_grouped": 6,
     "reference_container_union": 1,
-    "reference_container_morphing": 6,
+    "reference_container_morphing": 5,
     "reference_legibility_preserved": 8,
     "reference_vibrancy_expected": 8,
     "reference_deterministic_degradation": 8,
@@ -296,7 +296,7 @@
     "verifier_require_backdrop_source": 8,
     "verifier_require_edge_highlight": 8,
     "verifier_require_container_identity": 6,
-    "verifier_require_container_morph_contract": 6,
+    "verifier_require_container_morph_contract": 5,
     "verifier_profiles": {
       "clear-over-rich-backdrop": 1,
       "regular-legibility-backdrop": 3,

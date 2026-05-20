@@ -12,7 +12,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 30;
+inline constexpr std::uint32_t material_plan_contract_version = 31;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
 inline constexpr unsigned int material_max_sample_taps = 25;
@@ -445,13 +445,21 @@ struct MaterialContainerAnalysis {
     std::uint32_t container_id = 0;
     std::uint32_t union_id = 0;
     float spacing = 0.0f;
+    float blend_distance = 0.0f;
     bool interactive = false;
     bool morph_transitions = false;
+    bool requested_morph_transitions = false;
     bool participates = false;
     MaterialContainerMode mode = MaterialContainerMode::Isolated;
     char const* mode_name = "isolated";
     bool shared_backdrop_scope = false;
     bool shape_union_expected = false;
+    bool shape_blending_expected = false;
+    bool reduced_motion_suppressed_morph = false;
+    bool spacing_clamped = false;
+    char const* blend_policy = "isolated";
+    char const* morph_policy = "isolated";
+    char const* performance_policy = "single-surface";
 };
 
 struct MaterialReferenceModel {
@@ -2039,22 +2047,82 @@ inline MaterialShapeAnalysis analyze_material_shape(
     return analysis;
 }
 
+inline float material_sanitize_container_spacing(float spacing) noexcept {
+    return std::isfinite(spacing) ? std::max(0.0f, spacing) : 0.0f;
+}
+
+inline char const* material_container_blend_policy_name(
+        MaterialContainerMode mode,
+        float spacing) noexcept {
+    if (mode == MaterialContainerMode::Isolated)
+        return "isolated";
+    if (spacing <= 0.0f)
+        return "touching-only";
+    if (mode == MaterialContainerMode::Union)
+        return "union-shape-proximity";
+    return "container-shape-proximity";
+}
+
+inline char const* material_container_morph_policy_name(
+        MaterialContainerMode mode,
+        bool morph_transitions,
+        bool reduced_motion_suppressed_morph) noexcept {
+    if (mode == MaterialContainerMode::Isolated)
+        return "isolated";
+    if (reduced_motion_suppressed_morph)
+        return "reduced-motion-static";
+    if (!morph_transitions)
+        return "static-container";
+    if (mode == MaterialContainerMode::Union)
+        return "union-morph";
+    return "container-morph";
+}
+
+inline char const* material_container_performance_policy_name(
+        MaterialContainerMode mode) noexcept {
+    if (mode == MaterialContainerMode::Union)
+        return "shared-union-capture";
+    if (mode == MaterialContainerMode::Container)
+        return "shared-container-capture";
+    return "single-surface";
+}
+
 inline MaterialContainerAnalysis analyze_material_container(
         MaterialContainerDescriptor descriptor,
         bool reduce_motion) noexcept {
     MaterialContainerAnalysis analysis{};
     analysis.container_id = descriptor.container_id;
     analysis.union_id = descriptor.union_id;
-    analysis.spacing = std::max(0.0f, descriptor.spacing);
+    analysis.spacing = material_sanitize_container_spacing(descriptor.spacing);
+    analysis.blend_distance = analysis.spacing;
     analysis.interactive = descriptor.interactive;
-    analysis.morph_transitions =
-        descriptor.morph_transitions && !reduce_motion;
     analysis.participates = descriptor.participates();
     analysis.mode = descriptor.mode();
     analysis.mode_name = material_container_mode_name(analysis.mode);
     analysis.shared_backdrop_scope = analysis.participates;
     analysis.shape_union_expected =
         analysis.mode == MaterialContainerMode::Union;
+    analysis.requested_morph_transitions =
+        descriptor.morph_transitions && analysis.participates;
+    analysis.reduced_motion_suppressed_morph =
+        analysis.requested_morph_transitions && reduce_motion;
+    analysis.morph_transitions =
+        analysis.requested_morph_transitions
+        && !analysis.reduced_motion_suppressed_morph;
+    analysis.shape_blending_expected =
+        analysis.participates && analysis.blend_distance > 0.0f;
+    analysis.spacing_clamped =
+        !std::isfinite(descriptor.spacing)
+        || std::fabs(analysis.spacing - descriptor.spacing) > 0.0001f;
+    analysis.blend_policy = material_container_blend_policy_name(
+        analysis.mode,
+        analysis.blend_distance);
+    analysis.morph_policy = material_container_morph_policy_name(
+        analysis.mode,
+        analysis.morph_transitions,
+        analysis.reduced_motion_suppressed_morph);
+    analysis.performance_policy =
+        material_container_performance_policy_name(analysis.mode);
     return analysis;
 }
 

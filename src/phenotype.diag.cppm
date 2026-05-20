@@ -784,7 +784,11 @@ namespace detail {
             "union_id",
             json::Value{static_cast<std::int64_t>(analysis.union_id)});
         out.emplace("spacing", json::Value{analysis.spacing});
+        out.emplace("blend_distance", json::Value{analysis.blend_distance});
         out.emplace("interactive", json::Value{analysis.interactive});
+        out.emplace(
+            "requested_morph_transitions",
+            json::Value{analysis.requested_morph_transitions});
         out.emplace(
             "morph_transitions",
             json::Value{analysis.morph_transitions});
@@ -795,6 +799,18 @@ namespace detail {
         out.emplace(
             "shape_union_expected",
             json::Value{analysis.shape_union_expected});
+        out.emplace(
+            "shape_blending_expected",
+            json::Value{analysis.shape_blending_expected});
+        out.emplace(
+            "reduced_motion_suppressed_morph",
+            json::Value{analysis.reduced_motion_suppressed_morph});
+        out.emplace("spacing_clamped", json::Value{analysis.spacing_clamped});
+        out.emplace("blend_policy", json::Value{analysis.blend_policy});
+        out.emplace("morph_policy", json::Value{analysis.morph_policy});
+        out.emplace(
+            "performance_policy",
+            json::Value{analysis.performance_policy});
         return json::Value{std::move(out)};
     }
 

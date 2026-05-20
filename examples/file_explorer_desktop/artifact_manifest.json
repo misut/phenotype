@@ -64,7 +64,7 @@
     "fallback": 0,
     "backdrop_sampling": 9,
     "contract_versions": {
-      "30": 10
+      "31": 10
     },
     "theme_foreground_matches_theme": 0,
     "theme_accent_matches_theme": 0,
@@ -96,7 +96,7 @@
     "container_participating": 9,
     "container_unioned": 0,
     "container_interactive": 6,
-    "container_morph_transitions": 10,
+    "container_morph_transitions": 9,
     "reference_interactive_response": 6,
     "interaction_enabled": 6,
     "interaction_active": 0,

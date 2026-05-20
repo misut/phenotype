@@ -63,6 +63,27 @@ ALLOWED_MATERIAL_CONTAINER_MODES = {
     "union",
 }
 
+ALLOWED_MATERIAL_CONTAINER_BLEND_POLICIES = {
+    "container-shape-proximity",
+    "isolated",
+    "touching-only",
+    "union-shape-proximity",
+}
+
+ALLOWED_MATERIAL_CONTAINER_MORPH_POLICIES = {
+    "container-morph",
+    "isolated",
+    "reduced-motion-static",
+    "static-container",
+    "union-morph",
+}
+
+ALLOWED_MATERIAL_CONTAINER_PERFORMANCE_POLICIES = {
+    "shared-container-capture",
+    "shared-union-capture",
+    "single-surface",
+}
+
 ALLOWED_MATERIAL_PASS_NAMES = {
     "backdrop-sample-blur",
     "none",
@@ -317,7 +338,7 @@ ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS = {
     "pointer-specular",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 30
+MATERIAL_PLAN_CONTRACT_VERSION = 31
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -4319,6 +4340,16 @@ def summarize_material_plans(
                 min_value=0.0,
                 likely_layer="material-container",
                 hint="Material container spacing should be an explicit non-negative value.")
+            blend_distance = check_number_field(
+                report,
+                plan_container,
+                "blend_distance",
+                f"{plan_path}.container",
+                min_value=0.0,
+                likely_layer="material-container",
+                hint=(
+                    "Material container blend_distance should mirror the pure "
+                    "spacing threshold used for Apple-style glass shape blending."))
             if isinstance(spacing, (int, float)):
                 container_summary["max_spacing"] = max(
                     float(container_summary["max_spacing"]),
@@ -4327,12 +4358,17 @@ def summarize_material_plans(
                 bounds["max_container_spacing"] = max(
                     float(bounds["max_container_spacing"]),
                     float(spacing))
+            container_bools: dict[str, bool | None] = {}
             for key in (
                     "interactive",
+                    "requested_morph_transitions",
                     "morph_transitions",
                     "participates",
                     "shared_backdrop_scope",
-                    "shape_union_expected"):
+                    "shape_union_expected",
+                    "shape_blending_expected",
+                    "reduced_motion_suppressed_morph",
+                    "spacing_clamped"):
                 value = check_bool_field(
                     report,
                     plan_container,
@@ -4340,6 +4376,7 @@ def summarize_material_plans(
                     f"{plan_path}.container",
                     likely_layer="material-container",
                     hint="Material container booleans must stay explicit.")
+                container_bools[key] = value
                 if value is True:
                     if key == "participates":
                         container_summary["participating"] += 1
@@ -4349,6 +4386,66 @@ def summarize_material_plans(
                         container_summary["interactive"] += 1
                     elif key == "morph_transitions":
                         container_summary["morph_transitions"] += 1
+            blend_policy = check_string_field(
+                report,
+                plan_container,
+                "blend_policy",
+                f"{plan_path}.container",
+                likely_layer="material-container",
+                hint=(
+                    "Material container blend_policy should describe whether "
+                    "spacing participates in container or union shape blending."))
+            if isinstance(blend_policy, str):
+                report.check(
+                    "material container blend_policy allowed",
+                    blend_policy in ALLOWED_MATERIAL_CONTAINER_BLEND_POLICIES,
+                    path=f"{plan_path}.container.blend_policy",
+                    expected=sorted(ALLOWED_MATERIAL_CONTAINER_BLEND_POLICIES),
+                    actual=blend_policy,
+                    likely_layer="material-container",
+                    hint="Use the pure container planner vocabulary for glass shape blending.",
+                    record_success=False)
+            morph_policy = check_string_field(
+                report,
+                plan_container,
+                "morph_policy",
+                f"{plan_path}.container",
+                likely_layer="material-container",
+                hint=(
+                    "Material container morph_policy should explain whether "
+                    "container morphing is active, static, or reduced-motion "
+                    "suppressed."))
+            if isinstance(morph_policy, str):
+                report.check(
+                    "material container morph_policy allowed",
+                    morph_policy in ALLOWED_MATERIAL_CONTAINER_MORPH_POLICIES,
+                    path=f"{plan_path}.container.morph_policy",
+                    expected=sorted(ALLOWED_MATERIAL_CONTAINER_MORPH_POLICIES),
+                    actual=morph_policy,
+                    likely_layer="material-container",
+                    hint="Use the pure container planner vocabulary for glass morph behavior.",
+                    record_success=False)
+            performance_policy = check_string_field(
+                report,
+                plan_container,
+                "performance_policy",
+                f"{plan_path}.container",
+                likely_layer="material-container",
+                hint=(
+                    "Material container performance_policy should expose the "
+                    "shared capture/reuse policy a backend is expected to execute."))
+            if isinstance(performance_policy, str):
+                report.check(
+                    "material container performance_policy allowed",
+                    performance_policy
+                    in ALLOWED_MATERIAL_CONTAINER_PERFORMANCE_POLICIES,
+                    path=f"{plan_path}.container.performance_policy",
+                    expected=sorted(
+                        ALLOWED_MATERIAL_CONTAINER_PERFORMANCE_POLICIES),
+                    actual=performance_policy,
+                    likely_layer="material-container",
+                    hint="Use the pure container planner vocabulary for capture reuse.",
+                    record_success=False)
             if isinstance(container_id, (int, float)):
                 cid = int(container_id)
                 if cid > 0:
@@ -4376,6 +4473,101 @@ def summarize_material_plans(
                     likely_layer="material-container",
                     hint="MaterialContainerDescriptor.mode should be derived from container_id and union_id.",
                     record_success=False)
+                if isinstance(spacing, (int, float)) and isinstance(blend_distance, (int, float)):
+                    expected_blend = float(spacing)
+                    report.check(
+                        "material container blend_distance mirrors spacing",
+                        abs(float(blend_distance) - expected_blend) <= 0.0001,
+                        path=f"{plan_path}.container.blend_distance",
+                        expected=expected_blend,
+                        actual=blend_distance,
+                        likely_layer="material-container",
+                        hint=(
+                            "Container spacing controls the glass shape "
+                            "blend threshold; keep blend_distance derived "
+                            "from spacing in the pure planner."),
+                        record_success=False)
+                if isinstance(blend_policy, str) and isinstance(spacing, (int, float)):
+                    expected_blend_policy = "isolated"
+                    if expected_mode != "isolated":
+                        expected_blend_policy = (
+                            "touching-only"
+                            if float(spacing) <= 0.0
+                            else "union-shape-proximity"
+                            if expected_mode == "union"
+                            else "container-shape-proximity")
+                    report.check(
+                        "material container blend_policy matches mode and spacing",
+                        blend_policy == expected_blend_policy,
+                        path=f"{plan_path}.container.blend_policy",
+                        expected=expected_blend_policy,
+                        actual=blend_policy,
+                        likely_layer="material-container",
+                        hint=(
+                            "Glass container spacing should deterministically "
+                            "map to isolated, touching-only, container, or "
+                            "union shape blending."),
+                        record_success=False)
+                expected_shape_blending = (
+                    expected_mode != "isolated"
+                    and isinstance(spacing, (int, float))
+                    and float(spacing) > 0.0)
+                shape_blending = container_bools.get("shape_blending_expected")
+                if shape_blending is not None:
+                    report.check(
+                        "material container shape_blending_expected matches spacing",
+                        shape_blending == expected_shape_blending,
+                        path=f"{plan_path}.container.shape_blending_expected",
+                        expected=expected_shape_blending,
+                        actual=shape_blending,
+                        likely_layer="material-container",
+                        hint=(
+                            "Shape blending should be true only for "
+                            "participating containers with a positive "
+                            "spacing/blend distance."),
+                        record_success=False)
+                expected_morph_policy = "isolated"
+                if expected_mode != "isolated":
+                    if container_bools.get("reduced_motion_suppressed_morph") is True:
+                        expected_morph_policy = "reduced-motion-static"
+                    elif container_bools.get("morph_transitions") is True:
+                        expected_morph_policy = (
+                            "union-morph"
+                            if expected_mode == "union"
+                            else "container-morph")
+                    else:
+                        expected_morph_policy = "static-container"
+                if isinstance(morph_policy, str):
+                    report.check(
+                        "material container morph_policy matches motion state",
+                        morph_policy == expected_morph_policy,
+                        path=f"{plan_path}.container.morph_policy",
+                        expected=expected_morph_policy,
+                        actual=morph_policy,
+                        likely_layer="material-container",
+                        hint=(
+                            "Container morph policy should be derived from "
+                            "container mode, effective morph_transitions, and "
+                            "reduced-motion suppression."),
+                        record_success=False)
+                expected_performance_policy = {
+                    "isolated": "single-surface",
+                    "container": "shared-container-capture",
+                    "union": "shared-union-capture",
+                }[expected_mode]
+                if isinstance(performance_policy, str):
+                    report.check(
+                        "material container performance_policy matches mode",
+                        performance_policy == expected_performance_policy,
+                        path=f"{plan_path}.container.performance_policy",
+                        expected=expected_performance_policy,
+                        actual=performance_policy,
+                        likely_layer="material-container",
+                        hint=(
+                            "Container performance policy should tell the "
+                            "backend whether a single-surface, shared "
+                            "container, or shared union capture path is expected."),
+                        record_success=False)
             if isinstance(container_id, (int, float)) and int(container_id) > 0:
                 cid = int(container_id)
                 group = container_group_accumulators.setdefault(cid, {
