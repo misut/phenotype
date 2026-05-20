@@ -309,6 +309,10 @@ The glass showcase manifests now also pin schema-33 container group geometry:
 shape-pair totals, blend/morph/separation counts, min/max gaps, blend distance,
 and group bounds. That makes the example a verifier-readable `GlassEffectContainer`
 probe instead of only a visual material ramp.
+Schema 34 extends the same probe with runtime capability limits. macOS artifacts
+now show the Metal-derived material capability profile, 2D texture limit, shader
+tap budget, and bounded 16M backdrop-copy budget, while Android and other
+unsupported backends keep deterministic fallback capability snapshots.
 
 `phenotype package bundle` is the lightweight packaging counterpart. It stages
 the package manifest, declared SVG app icon, all declared SVG image assets,

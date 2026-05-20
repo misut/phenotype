@@ -58,7 +58,17 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 33);
+    assert(material_plan_contract_version == 34);
+    assert(plan.capability_snapshot.material_surfaces);
+    assert(plan.capability_snapshot.material_backdrop_blur);
+    assert(plan.capability_snapshot.shader_blur);
+    assert(plan.capability_snapshot.frame_history);
+    assert(plan.capability_snapshot.max_shader_sample_taps
+           == material_max_sample_taps);
+    assert(plan.capability_snapshot.target_within_texture_limits);
+    assert(plan.capability_snapshot.target_within_backdrop_budget);
+    assert(plan.decision_trace.capability_target_within_texture_limits);
+    assert(plan.decision_trace.capability_target_within_backdrop_budget);
     assert(std::string_view(plan.interaction.enablement_reason)
         == "noninteractive-container");
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);

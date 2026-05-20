@@ -352,7 +352,7 @@ ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS = {
     "pointer-specular",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 33
+MATERIAL_PLAN_CONTRACT_VERSION = 34
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -387,6 +387,17 @@ PLATFORM_CAPABILITY_BOOL_FIELDS = (
     "reduce_transparency",
     "increase_contrast",
     "reduce_motion",
+)
+
+PLATFORM_CAPABILITY_NUMBER_FIELDS = (
+    "material_max_shader_sample_taps",
+    "material_max_texture_dimension_2d",
+    "material_max_backdrop_pixels",
+)
+
+PLATFORM_CAPABILITY_STRING_FIELDS = (
+    "material_capability_profile",
+    "material_capability_source",
 )
 
 PLATFORM_SYSTEM_SETTING_STRING_FIELDS = (
@@ -3179,6 +3190,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "geometry",
     "shape",
     "render_target",
+    "capability_snapshot",
     "decision_trace",
     "opacity",
     "blur_radius",
@@ -3257,6 +3269,25 @@ MATERIAL_SHAPE_NUMERIC_FIELDS = (
 )
 MATERIAL_RENDER_TARGET_INT_FIELDS = ("width", "height", "pixel_count")
 MATERIAL_RENDER_TARGET_BOOL_FIELDS = ("ready", "within_backdrop_budget")
+MATERIAL_CAPABILITY_SNAPSHOT_BOOL_FIELDS = (
+    "material_surfaces",
+    "material_backdrop_blur",
+    "shader_blur",
+    "frame_history",
+    "reduce_transparency",
+    "increase_contrast",
+    "reduce_motion",
+    "texture_limits_known",
+    "backdrop_budget_known",
+    "target_within_texture_limits",
+    "target_within_backdrop_budget",
+)
+MATERIAL_CAPABILITY_SNAPSHOT_INT_FIELDS = (
+    "max_shader_sample_taps",
+    "max_texture_dimension_2d",
+    "max_backdrop_pixels",
+)
+MATERIAL_CAPABILITY_SNAPSHOT_STRING_FIELDS = ("profile", "source")
 MATERIAL_DECISION_TRACE_BOOL_FIELDS = (
     "has_geometry",
     "has_material",
@@ -3271,6 +3302,10 @@ MATERIAL_DECISION_TRACE_BOOL_FIELDS = (
     "capability_material_backdrop_blur",
     "capability_shader_blur",
     "capability_frame_history",
+    "capability_texture_limits_known",
+    "capability_backdrop_budget_known",
+    "capability_target_within_texture_limits",
+    "capability_target_within_backdrop_budget",
     "backend_supports_backdrop",
     "backdrop_available",
     "backdrop_stable",
@@ -6498,7 +6533,11 @@ def summarize_material_plans(
                             "MaterialShapeAnalysis.capsule should be true only "
                             "when the clamped radius reaches half of the smaller extent."))
 
+        render_target_width: int | float | None = None
+        render_target_height: int | float | None = None
         render_target_pixel_count: int | None = None
+        ready: bool | None = None
+        within_budget: bool | None = None
         render_target = check_object_field(
             report,
             plan,
@@ -6529,6 +6568,8 @@ def summarize_material_plans(
             width = render_values.get("width")
             height = render_values.get("height")
             pixel_count = render_values.get("pixel_count")
+            render_target_width = width
+            render_target_height = height
             if isinstance(pixel_count, (int, float)):
                 render_target_pixel_count = int(pixel_count)
             if all(isinstance(value, (int, float))
@@ -6571,8 +6612,6 @@ def summarize_material_plans(
                             float(plan_blur_radius)
                             * float(kernel_blur_step_scale)
                             * float(render_scale)))
-            ready = None
-            within_budget = None
             for key in MATERIAL_RENDER_TARGET_BOOL_FIELDS:
                 value = check_bool_field(
                     report,
@@ -6617,6 +6656,101 @@ def summarize_material_plans(
                     actual={"ready": ready, "within_backdrop_budget": within_budget},
                     likely_layer=likely_layer,
                     hint="Sampled material plans require a render target inside the backdrop budget.",
+                    record_success=False)
+
+        capability_snapshot = check_object_field(
+            report,
+            plan,
+            "capability_snapshot",
+            plan_path,
+            likely_layer="platform-capability",
+            hint=(
+                "MaterialPlan.capability_snapshot should expose the immutable "
+                "backend limits that entered pure planning."))
+        capability_bools: dict[str, bool] = {}
+        capability_numbers: dict[str, int | float] = {}
+        if capability_snapshot is not None:
+            for key in MATERIAL_CAPABILITY_SNAPSHOT_BOOL_FIELDS:
+                value = check_bool_field(
+                    report,
+                    capability_snapshot,
+                    key,
+                    f"{plan_path}.capability_snapshot",
+                    likely_layer="platform-capability",
+                    hint="Capability snapshot gates must be explicit booleans.")
+                if isinstance(value, bool):
+                    capability_bools[key] = value
+            for key in MATERIAL_CAPABILITY_SNAPSHOT_INT_FIELDS:
+                value = check_number_field(
+                    report,
+                    capability_snapshot,
+                    key,
+                    f"{plan_path}.capability_snapshot",
+                    min_value=0.0,
+                    likely_layer="platform-capability",
+                    hint="Capability snapshot numeric limits must be non-negative.")
+                if isinstance(value, (int, float)):
+                    capability_numbers[key] = value
+            for key in MATERIAL_CAPABILITY_SNAPSHOT_STRING_FIELDS:
+                check_string_field(
+                    report,
+                    capability_snapshot,
+                    key,
+                    f"{plan_path}.capability_snapshot",
+                    likely_layer="platform-capability",
+                    hint="Capability snapshot should name profile and source.")
+            max_taps = capability_numbers.get("max_shader_sample_taps")
+            if isinstance(max_taps, (int, float)):
+                report.check(
+                    "material capability sample taps respect engine cap",
+                    int(max_taps) <= MATERIAL_MAX_SAMPLE_TAPS,
+                    path=f"{plan_path}.capability_snapshot.max_shader_sample_taps",
+                    expected={"<=": MATERIAL_MAX_SAMPLE_TAPS},
+                    actual=int(max_taps),
+                    likely_layer="platform-capability",
+                    likely_pass="material-planner-input",
+                    hint=(
+                        "Clamp backend-probed sample-tap limits before they "
+                        "enter MaterialEnvironment."),
+                    record_success=False)
+            max_dimension = capability_numbers.get("max_texture_dimension_2d")
+            if (capability_bools.get("texture_limits_known") is True
+                    and isinstance(max_dimension, (int, float))
+                    and isinstance(render_target_width, (int, float))
+                    and isinstance(render_target_height, (int, float))):
+                expected_within_texture = (
+                    int(render_target_width) <= int(max_dimension)
+                    and int(render_target_height) <= int(max_dimension))
+                report.check(
+                    "material capability texture limit matches render target",
+                    capability_bools.get("target_within_texture_limits")
+                    == expected_within_texture,
+                    path=f"{plan_path}.capability_snapshot.target_within_texture_limits",
+                    expected=expected_within_texture,
+                    actual=capability_bools.get("target_within_texture_limits"),
+                    likely_layer="platform-capability",
+                    likely_pass="material-planner-input",
+                    hint=(
+                        "The pure planner should compare render target "
+                        "dimensions with the backend texture dimension limit."),
+                    record_success=False)
+            max_pixels = capability_numbers.get("max_backdrop_pixels")
+            if (capability_bools.get("backdrop_budget_known") is True
+                    and isinstance(max_pixels, (int, float))
+                    and isinstance(render_target_pixel_count, int)):
+                expected_within_budget = int(render_target_pixel_count) <= int(max_pixels)
+                report.check(
+                    "material capability backdrop budget matches render target",
+                    capability_bools.get("target_within_backdrop_budget")
+                    == expected_within_budget,
+                    path=f"{plan_path}.capability_snapshot.target_within_backdrop_budget",
+                    expected=expected_within_budget,
+                    actual=capability_bools.get("target_within_backdrop_budget"),
+                    likely_layer="platform-capability",
+                    likely_pass="material-planner-input",
+                    hint=(
+                        "The pure planner should compare render target pixels "
+                        "with the backend-probed backdrop-copy budget."),
                     record_success=False)
 
         decision_trace = check_object_field(
@@ -6774,6 +6908,30 @@ def summarize_material_plans(
                                 "fails, inspect the platform capability provider "
                                 "and the MaterialEnvironment construction."),
                             record_success=False)
+            for trace_key, snapshot_key in (
+                    ("capability_material_surfaces", "material_surfaces"),
+                    ("capability_material_backdrop_blur", "material_backdrop_blur"),
+                    ("capability_shader_blur", "shader_blur"),
+                    ("capability_frame_history", "frame_history"),
+                    ("capability_texture_limits_known", "texture_limits_known"),
+                    ("capability_backdrop_budget_known", "backdrop_budget_known"),
+                    ("capability_target_within_texture_limits", "target_within_texture_limits"),
+                    ("capability_target_within_backdrop_budget", "target_within_backdrop_budget")):
+                trace_value = trace_values.get(trace_key)
+                snapshot_value = capability_bools.get(snapshot_key)
+                if isinstance(trace_value, bool) and isinstance(snapshot_value, bool):
+                    report.check(
+                        "material decision trace matches capability snapshot",
+                        trace_value == snapshot_value,
+                        path=f"{plan_path}.decision_trace.{trace_key}",
+                        expected={snapshot_key: snapshot_value},
+                        actual=trace_value,
+                        likely_layer="platform-capability",
+                        likely_pass="material-planner-input",
+                        hint=(
+                            "MaterialDecisionTrace should mirror the immutable "
+                            "MaterialCapabilityAnalysis values used by the pure planner."),
+                        record_success=False)
             if all(isinstance(value, bool) for value in backend_inputs):
                 expected_backend = all(backend_inputs)
                 report.check(
@@ -6808,6 +6966,27 @@ def summarize_material_plans(
             if all(key in trace_values for key in (
                     "quality_switches_allow_backdrop",
                     "backdrop_pixels_within_budget")):
+                if (within_budget is not None
+                        and "capability_target_within_texture_limits" in trace_values
+                        and "capability_target_within_backdrop_budget" in trace_values):
+                    expected_backdrop_budget = (
+                        within_budget is True
+                        and trace_values["capability_target_within_texture_limits"]
+                        and trace_values["capability_target_within_backdrop_budget"])
+                    report.check(
+                        "material decision backdrop budget includes capability limits",
+                        trace_values.get("backdrop_pixels_within_budget")
+                        == expected_backdrop_budget,
+                        path=f"{plan_path}.decision_trace.backdrop_pixels_within_budget",
+                        expected=expected_backdrop_budget,
+                        actual=trace_values.get("backdrop_pixels_within_budget"),
+                        likely_layer="material-resource-budget",
+                        likely_pass="material-planner-input",
+                        hint=(
+                            "backdrop_pixels_within_budget should combine the "
+                            "quality render-target budget with backend texture "
+                            "dimension and backdrop-copy limits."),
+                        record_success=False)
                 expected_quality = (
                     trace_values["quality_switches_allow_backdrop"]
                     and trace_values["backdrop_pixels_within_budget"])
@@ -11392,6 +11571,27 @@ def verify(args: argparse.Namespace) -> int:
                 "material/backend features explicitly so verifier output can "
                 "explain pure planner decisions."),
         )
+    for key in PLATFORM_CAPABILITY_NUMBER_FIELDS:
+        check_number_field(
+            report,
+            capabilities,
+            key,
+            "debug.platform_capabilities",
+            min_value=0.0,
+            likely_layer="platform-capability",
+            hint=(
+                "Material capability limits should come from the backend edge "
+                "probe and stay non-negative before pure planning."))
+    for key in PLATFORM_CAPABILITY_STRING_FIELDS:
+        check_string_field(
+            report,
+            capabilities,
+            key,
+            "debug.platform_capabilities",
+            likely_layer="platform-capability",
+            hint=(
+                "Material capability snapshots should name their edge probe "
+                "source so CI logs explain where runtime limits came from."))
 
     check_platform_system_settings_contract(report, capabilities)
 

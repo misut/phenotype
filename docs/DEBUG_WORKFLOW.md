@@ -963,6 +963,14 @@ candidate pairs, separated pairs, min/max shape gap, max blend distance, and max
 group bounds. A mismatch points at `layout::material_container`,
 `MaterialSurfaceOptions` inheritance, `MaterialRect` container payload encoding,
 or backend summary finalization before it points at shaders.
+For schema 34 and later, inspect each plan's `capability_snapshot` before
+debugging shader output. It names the backend capability profile/source and the
+runtime limits that entered pure planning: shader taps, 2D texture dimension,
+backdrop-copy pixel budget, and whether the render target fits those limits.
+The verifier checks that `decision_trace.capability_*` mirrors the snapshot and
+that `backdrop_pixels_within_budget` combines the quality budget with those
+backend limits. A failure here points at the platform capability provider or
+`MaterialEnvironment` construction, not at Metal fragment math.
 `renderer.material_backdrop_luma_descriptor` is the edge-side view of that same
 contract. It reports the latest observed luma min/max/mean, sample grid, sample
 frame, pending state, skipped sample count, and status such as
@@ -1419,6 +1427,11 @@ that exceed the engine caps surfaced by `phenotype.material`.
 eligibility; compare it with
 `renderer.material_executor_summary.backdrop_copy_pixels` when diagnosing how
 many pixels the backend actually copied in a frame.
+On macOS this budget is intentionally larger than the generic 4M fallback
+because the native edge adapter probes Metal support and advertises a bounded
+16M backdrop-copy budget for Retina-sized windows. The artifact still proves the
+actual copied pixels separately, so the budget increase is debuggable rather
+than hidden in backend policy.
 
 Set `require_material_semantic_runtime_match` when a gate must prove that the
 semantic material nodes and the backend runtime material plans describe the

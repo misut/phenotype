@@ -2318,6 +2318,41 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(budget_plan.execution_stages[1].name)
            == "edge-highlight");
 
+    MaterialEnvironment capability_env = glass_env;
+    capability_env.capabilities.max_shader_sample_taps = 9;
+    capability_env.capabilities.max_texture_dimension_2d = 1024;
+    capability_env.capabilities.max_backdrop_pixels = 500'000;
+    capability_env.quality.max_sample_taps = 25;
+    capability_env.quality.max_backdrop_pixels = 1'000'000;
+    auto capability_plan = plan_material_surface(request, capability_env);
+    assert(capability_plan.capability_snapshot.max_shader_sample_taps == 9);
+    assert(capability_plan.capability_snapshot.max_texture_dimension_2d == 1024);
+    assert(capability_plan.capability_snapshot.max_backdrop_pixels == 500'000);
+    assert(capability_plan.capability_snapshot.texture_limits_known);
+    assert(capability_plan.capability_snapshot.backdrop_budget_known);
+    assert(capability_plan.capability_snapshot.target_within_texture_limits);
+    assert(capability_plan.capability_snapshot.target_within_backdrop_budget);
+    assert(capability_plan.quality_policy.max_sample_taps == 9);
+    assert(capability_plan.quality_policy.max_backdrop_pixels == 500'000);
+    assert(capability_plan.sample_taps == 9);
+    assert(capability_plan.primary_pass.sample_taps == 9);
+    assert(capability_plan.resource_budget.max_sample_taps == 9);
+    assert(capability_plan.resource_budget.max_backdrop_pixels == 500'000);
+
+    MaterialEnvironment texture_limit_env = glass_env;
+    texture_limit_env.capabilities.max_texture_dimension_2d = 128;
+    texture_limit_env.capabilities.max_backdrop_pixels = 1'000'000;
+    auto texture_limit_plan = plan_material_surface(request, texture_limit_env);
+    assert(texture_limit_plan.fallback());
+    assert(texture_limit_plan.fallback_path == MaterialFallbackPath::QualityPolicy);
+    assert(texture_limit_plan.capability_snapshot.texture_limits_known);
+    assert(!texture_limit_plan.capability_snapshot.target_within_texture_limits);
+    assert(texture_limit_plan.capability_snapshot.target_within_backdrop_budget);
+    assert(!texture_limit_plan.decision_trace.backdrop_pixels_within_budget);
+    assert(!texture_limit_plan.decision_trace.quality_allows_backdrop);
+    assert(std::string(texture_limit_plan.decision_trace.first_blocker)
+           == "quality-policy");
+
     MaterialEnvironment excessive_quality_env = glass_env;
     excessive_quality_env.quality.max_blur_radius = 999.0f;
     excessive_quality_env.quality.max_sample_taps = 999;

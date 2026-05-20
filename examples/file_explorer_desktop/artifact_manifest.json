@@ -64,7 +64,7 @@
     "fallback": 0,
     "backdrop_sampling": 9,
     "contract_versions": {
-      "33": 10
+      "34": 10
     },
     "theme_foreground_matches_theme": 0,
     "theme_accent_matches_theme": 0,
@@ -2050,7 +2050,7 @@
     "max_sampling_kernel_radius_lte": 2,
     "max_sampling_kernel_radius_gte": 2,
     "max_pass_count_lte": 1,
-    "max_backdrop_pixels_lte": 4000000,
+    "max_backdrop_pixels_lte": 16777216,
     "max_container_spacing_lte": 16.0,
     "max_container_spacing_gte": 16.0,
     "max_pass_texture_copy_pixels_lte": 4000000,
@@ -2090,7 +2090,7 @@
     "require_shadow_allowed": true,
     "max_blur_radius_lte": 36.0,
     "max_sample_taps_lte": 25,
-    "max_backdrop_pixels_lte": 4000000
+    "max_backdrop_pixels_lte": 16777216
   },
   "pixel_regions": [
     {

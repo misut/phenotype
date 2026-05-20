@@ -280,6 +280,14 @@ Schema 33 makes container group geometry executable in artifacts: spacing
 resolves to a pure pairwise threshold, each pair records whether it should blend,
 morph, union, or remain separated, and the group bounds expose how large a future
 shared capture could become before a backend adds container-level caches.
+Schema 34 adds an explicit capability snapshot to each material plan. Platform
+adapters probe runtime limits at the edge, including shader tap budget, 2D
+texture dimension limit, and bounded backdrop-copy pixel budget, then pass that
+immutable snapshot into `plan_material_surface`. The pure planner clamps the
+quality policy and records whether the render target fits both the caller budget
+and backend limits before a backend sees the command. macOS derives this from
+`MTLDevice.supportsFamily` and the public Metal capability tables, then exposes
+the same numbers in debug artifacts.
 Each surface's container policy stays explicit: spacing resolves
 to `blend_distance`, positive spacing drives `shape_blending_expected`, union ids
 select the union-proximity blend policy, Reduced Motion suppresses only morphing,
@@ -297,9 +305,9 @@ scale and maximum physical shader step in `material_executor_summary` so Retina
 and non-Retina artifacts stay comparable.
 Backdrops also degrade through an explicit
 `quality-policy` fallback when the pure quality policy disables sampling or
-sets an unusable blur/tap budget, and when the render target exceeds the
-resolved `max_backdrop_pixels` budget. Backends execute the plan; they do not
-re-decide policy.
+sets an unusable blur/tap budget, when the render target exceeds the resolved
+`max_backdrop_pixels` budget, or when backend capability limits reject the target
+dimensions or copy size. Backends execute the plan; they do not re-decide policy.
 `MaterialPlan.backdrop_access` is the pure shared-capture contract for sampled
 glass. A sampled plan requires a stable previous-frame source, declares
 `capture_scope: shared-frame` with `capture_reason: sample-current-frame`, caps

@@ -799,6 +799,14 @@ within that backdrop budget. `resource_budget` records the clamped
 blur/executable sample-tap limits, max sampling kernel radius, the same allowed
 backdrop-pixel budget, max shared frame capture count/pixels, max surface sample
 pixels, and whether texture copies and fallback behavior are bounded.
+`capability_snapshot` is the second half of the same contract. It records the
+backend-probed material booleans, shader sample-tap budget, 2D texture dimension
+limit, bounded backdrop-copy pixel budget, profile name, source, and derived
+target-within-limit booleans. These values are immutable planner inputs, not
+backend decisions. Schema 34 makes `decision_trace.backdrop_pixels_within_budget`
+depend on both the caller quality policy and this capability snapshot, so an
+oversized Retina window or unsupported texture size takes a deterministic
+`quality-policy` fallback in pure code.
 `backdrop_access` mirrors the active shared frame contract per plan:
 sampled-backdrop plans require `capture_scope: shared-frame` and
 `capture_reason: sample-current-frame` with one bounded frame-history copy that
@@ -825,8 +833,9 @@ pairs, blend/union/morph candidate pairs, separated pairs, min/max shape gap,
 max blend distance, and max group bounds width/height/area. This keeps
 Apple-style grouped glass behavior reviewable from JSON before any backend
 introduces hidden per-container caches, shared captures, or extra blur passes.
-Backends use the pure `default_material_quality_policy()` and
-`sanitize_material_quality_policy()` helpers instead of owning hard-coded
+Backends use the pure `default_material_quality_policy()`,
+`sanitize_material_quality_policy()`, and capability-aware
+`resolve_material_quality_policy()` helpers instead of owning hard-coded
 material quality limits locally, so policy changes stay visible in
 `MaterialPlan` tests and artifact JSON. The same pure constants cap executable
 blur and sample work before any backend sees the plan:
@@ -888,10 +897,14 @@ signals stay deterministic false instead of being inferred in backend drawing
 code.
 Top-level debug capabilities expose the same material gates as explicit
 booleans: `material_surfaces`, `material_backdrop_blur`,
-`material_shader_blur`, and `material_frame_history`. These fields are not
-policy decisions; they are backend/runtime inputs that explain why
+`material_shader_blur`, and `material_frame_history`, plus schema-34 runtime
+limits: `material_max_shader_sample_taps`,
+`material_max_texture_dimension_2d`, `material_max_backdrop_pixels`,
+`material_capability_profile`, and `material_capability_source`. These fields
+are not policy decisions; they are backend/runtime inputs that explain why
 `MaterialDecisionTrace.backend_supports_backdrop`,
-`capability_shader_blur`, and `capability_frame_history` resolved as they did.
+`capability_shader_blur`, `capability_frame_history`, and the capability-limit
+budget gates resolved as they did.
 Runtime adapters serialize the same `MaterialRuntimeRecord` shape into
 `debug.platform_runtime.details.renderer.material_plans`: macOS records the
 sampled-backdrop pass for functional roles and the `standard-material-fill`
