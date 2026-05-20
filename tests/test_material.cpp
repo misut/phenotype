@@ -116,6 +116,9 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_response.noise_dither_active);
     assert(plan.optical_response.foreground_vibrancy_active);
     assert(plan.optical_response.deterministic_fallback);
+    assert(material_plan_uses_sampled_backdrop_executor(plan));
+    assert(!material_plan_uses_standard_fill_executor(plan));
+    assert(!material_plan_uses_deterministic_fallback_executor(plan));
     assert(plan.backdrop.luma_sample_count == 25u);
     assert(plan.backdrop.luma_sample_grid_width == 5u);
     assert(plan.backdrop.luma_sample_grid_height == 5u);
@@ -277,6 +280,9 @@ void test_content_layer_stays_standard_material_contract() {
     assert(!plan.optical_response.noise_dither_active);
     assert(!plan.optical_response.foreground_vibrancy_active);
     assert(plan.optical_response.deterministic_fallback);
+    assert(!material_plan_uses_sampled_backdrop_executor(plan));
+    assert(material_plan_uses_standard_fill_executor(plan));
+    assert(!material_plan_uses_deterministic_fallback_executor(plan));
     std::puts("PASS: content layer stays standard material contract");
 }
 
@@ -334,6 +340,9 @@ void test_fallback_backdrop_access_contract() {
     assert(!plan.optical_response.noise_dither_active);
     assert(!plan.optical_response.foreground_vibrancy_active);
     assert(plan.optical_response.deterministic_fallback);
+    assert(!material_plan_uses_sampled_backdrop_executor(plan));
+    assert(!material_plan_uses_standard_fill_executor(plan));
+    assert(material_plan_uses_deterministic_fallback_executor(plan));
     std::puts("PASS: fallback backdrop access contract");
 }
 

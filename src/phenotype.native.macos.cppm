@@ -2706,7 +2706,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     || cur.pending_text_runs) {
                     open_same_scissor_batch(scratch);
                 }
-                if (plan.backdrop_sampling && !plan.fallback()) {
+                if (material_plan_uses_sampled_backdrop_executor(plan)) {
                     append_material_instance(
                         scratch.batches.back().materials,
                         plan);

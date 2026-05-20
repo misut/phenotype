@@ -1993,6 +1993,21 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(summary.fallback_instance_count)});
         out.emplace(
+            "sampled_backdrop_instance_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.sampled_backdrop_instance_count)});
+        out.emplace(
+            "standard_fill_instance_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.standard_fill_instance_count)});
+        out.emplace(
+            "deterministic_fallback_instance_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.deterministic_fallback_instance_count)});
+        out.emplace(
             "material_draw_calls",
             json::Value{
                 static_cast<std::int64_t>(summary.material_draw_calls)});

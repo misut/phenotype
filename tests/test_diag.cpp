@@ -1233,6 +1233,7 @@ void test_material_runtime_record_json_contract() {
     MaterialExecutorSummary executor_summary;
     executor_summary.plan_count = 1;
     executor_summary.fallback_instance_count = 1;
+    executor_summary.deterministic_fallback_instance_count = 1;
     executor_summary.foreground_text_candidate_count = 2;
     executor_summary.foreground_text_remap_count = 1;
     MaterialBackdropDescriptor sampled_backdrop;
@@ -1256,6 +1257,10 @@ void test_material_runtime_record_json_contract() {
     assert(executor_obj.at("plan_count").as_integer() == 1);
     assert(executor_obj.at("material_instance_count").as_integer() == 0);
     assert(executor_obj.at("fallback_instance_count").as_integer() == 1);
+    assert(executor_obj.at("sampled_backdrop_instance_count").as_integer() == 0);
+    assert(executor_obj.at("standard_fill_instance_count").as_integer() == 0);
+    assert(executor_obj.at("deterministic_fallback_instance_count").as_integer()
+           == 1);
     assert(executor_obj.at("material_draw_calls").as_integer() == 0);
     assert(executor_obj.at("dropped_execution_stage_count").as_integer() == 0);
     assert(executor_obj.at("next_frame_capture_plan_count").as_integer() == 0);
