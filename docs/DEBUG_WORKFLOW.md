@@ -805,6 +805,15 @@ The verifier cross-checks those deltas against
 `interaction_modulates_optics`, so a failed hover/press response identifies the
 JSON path and the likely `material-interaction` layer instead of requiring a
 screenshot guess.
+
+When an interaction response is missing, inspect both
+`MaterialPlan.command_descriptor.interaction` and the input debug plane. Native
+and WASM adapters feed pointer coordinates into `AppState`; paint resolves
+pointer containment against the material rectangle and merges it with callback
+hover/press/focus state before emitting `MaterialRect`. A focused material cue
+requires keyboard-visible focus (`focus_visible=true`); pointer focus should
+leave `interaction.focused=false` while still allowing hover, press, or
+`pointer_inside` to drive glass response.
 `MaterialPlan.geometry` preserves the raw decoded rectangle. `MaterialPlan.shape`
 is the pure executable shape contract: validity, surface area, min/max extent,
 radius limit, effective radius, normalized radius, rounded flag, and whether the

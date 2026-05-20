@@ -635,6 +635,17 @@ deltas. Backends only decode the `MaterialRect` interaction payload and execute
 the resolved plan; they do not decide whether hover should increase opacity,
 whether press should tighten blur, or whether focus should lift the edge
 highlight.
+
+Live input state is lowered into that same immutable descriptor before the
+command leaves the core renderer. `AppState` keeps the latest pointer snapshot
+as canvas-local coordinates plus hover/press/focus ids. During paint,
+`MaterialRect` emission merges explicit `MaterialSurfaceOptions.interaction`
+with subtree callback state and geometric pointer containment. Focus only flows
+into the material descriptor when `focus_visible=true`, so pointer-created focus
+can activate controls without producing a keyboard focus ring or a focused glass
+response. Pointer movement invalidates cached paint for that frame because the
+same layout tree can emit different normalized pointer coordinates without a
+view rebuild.
 `reference_model` is intentionally pure. It records that the surface follows the
 Apple material model, including `technology`, `layer`, and `material_policy`.
 Functional chrome/control roles resolve to `liquid-glass` on the

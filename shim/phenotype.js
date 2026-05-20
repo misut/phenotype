@@ -1190,6 +1190,7 @@ export async function mount(wasmUrl, rootElement = document.body, extraImports =
 
   canvas.addEventListener('click', (e) => {
     hiddenInput.focus();
+    applyHoverAt(e.clientX, e.clientY);
     const hr = hitTest(e.clientX, e.clientY);
     // Update focus
     const newFocus = hr ? hr.callbackId : 0xFFFFFFFF;
@@ -1223,14 +1224,24 @@ export async function mount(wasmUrl, rootElement = document.body, extraImports =
 
   function applyHoverAt(clientX, clientY) {
     if (clientX < 0 || clientY < 0) return; // pointer not yet over canvas
+    const rect = canvas.getBoundingClientRect();
+    const pointerX = clientX - rect.left;
+    const pointerY = clientY - rect.top;
+    const pointerChanged = inst.exports.phenotype_set_pointer
+      ? inst.exports.phenotype_set_pointer(pointerX, pointerY) === 1
+      : false;
     const hr = hitTest(clientX, clientY);
     canvas.style.cursor = (hr && hr.cursorType === 1) ? 'pointer' : 'default';
     const newHoverId = hr ? hr.callbackId : 0xFFFFFFFF;
+    let hoverChanged = false;
     if (newHoverId !== currentHoverId) {
       currentHoverId = newHoverId;
+      hoverChanged = true;
       if (inst.exports.phenotype_set_hover)
         inst.exports.phenotype_set_hover(newHoverId);
     }
+    if (pointerChanged && !hoverChanged && inst.exports.phenotype_repaint)
+      inst.exports.phenotype_repaint(scrollY);
   }
 
   canvas.addEventListener('pointermove', (e) => {
@@ -1243,11 +1254,18 @@ export async function mount(wasmUrl, rootElement = document.body, extraImports =
     lastClientX = -1;
     lastClientY = -1;
     canvas.style.cursor = 'default';
+    const pointerChanged = inst.exports.phenotype_clear_pointer
+      ? inst.exports.phenotype_clear_pointer() === 1
+      : false;
+    let hoverChanged = false;
     if (currentHoverId !== 0xFFFFFFFF) {
       currentHoverId = 0xFFFFFFFF;
+      hoverChanged = true;
       if (inst.exports.phenotype_set_hover)
         inst.exports.phenotype_set_hover(0xFFFFFFFF);
     }
+    if (pointerChanged && !hoverChanged && inst.exports.phenotype_repaint)
+      inst.exports.phenotype_repaint(scrollY);
   });
 
   // Text input — push hiddenInput.value to C++ on every change.
