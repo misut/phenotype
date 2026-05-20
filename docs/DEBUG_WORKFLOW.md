@@ -812,8 +812,13 @@ quality tiers use `weighted-center` (1 tap), `weighted-cross-5` (5 taps), and
 `weighted-5x5-manhattan` descriptor. Its `radius` and `blur_step_scale` are
 part of the pure contract and are uploaded to the macOS material shader, so
 changing blur spread requires changing the plan, serializer, verifier
-vocabulary, and docs together. Reduced-motion plans disable material noise and
-cap backdrop sample taps before a backend executes the pass;
+vocabulary, and docs together. macOS also reports
+`material_executor_summary.material_shader_content_scale` and
+`material_max_shader_blur_step_pixels`; the verifier compares those values with
+`MaterialPlan.render_target.scale`, `blur_radius`, and the sampling kernel's
+`blur_step_scale` so HiDPI blur shrinkage appears as an exact JSON-path failure.
+Reduced-motion plans disable material noise and cap backdrop sample taps before
+a backend executes the pass;
 increased-contrast plans raise opacity and luminance legibility in the same
 pure layer.
 `luminance_curve` is the backend-executed contrast transform. Active sampled

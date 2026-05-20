@@ -922,6 +922,17 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
     sampled_drawn = draw_calls > 0
     upload_status = "uploaded" if sampled_required else "not-needed"
     draw_status = "drawn" if sampled_required else "not-needed"
+    sampling_kernel = plan["sampling_kernel"]
+    render_target = plan["render_target"]
+    assert isinstance(sampling_kernel, dict)
+    assert isinstance(render_target, dict)
+    shader_blur_step_pixels = 0.0
+    if sampled_required:
+        shader_blur_step_pixels = max(
+            1.0,
+            float(plan["blur_radius"])
+            * float(sampling_kernel["blur_step_scale"])
+            * float(render_target["scale"]))
     primary_stages = [
         stage for stage in stages
         if isinstance(stage, dict)
@@ -1008,6 +1019,8 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "backdrop_luma_sampling_skipped_count": 0,
         "backdrop_luma_sampling_skip_reason": "none",
         "container_groups": material_container_group_summary(plan),
+        "material_shader_content_scale": render_target["scale"],
+        "material_max_shader_blur_step_pixels": shader_blur_step_pixels,
         "cpu_decode_ns": 100,
         "cpu_material_upload_ns": 0,
         "cpu_total_ns": 200,
@@ -3123,6 +3136,62 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["actual"], 25)
         self.assertEqual(failure["likely_pass"], "material-executor")
         self.assertIn("MaterialPlan.sample_taps", failure["hint"])
+
+    def test_material_executor_shader_scale_mismatch_is_llm_actionable(
+            self) -> None:
+        plan = sampled_material_plan(sample_taps=25)
+        assert isinstance(plan["render_target"], dict)
+        plan["render_target"]["scale"] = 2.0
+        root = snapshot(plan)
+        renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+        assert isinstance(renderer, dict)
+        executor = renderer["material_executor_summary"]
+        assert isinstance(executor, dict)
+        executor["material_shader_content_scale"] = 1.0
+
+        code, report = self.run_verifier(root)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material executor summary material_shader_content_scale "
+                "matches plans"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_executor_summary"
+            ".material_shader_content_scale")
+        self.assertEqual(failure["expected"], 2.0)
+        self.assertEqual(failure["actual"], 1.0)
+        self.assertEqual(failure["likely_pass"], "material-executor")
+
+    def test_material_executor_shader_blur_step_mismatch_is_llm_actionable(
+            self) -> None:
+        plan = sampled_material_plan(sample_taps=25)
+        assert isinstance(plan["render_target"], dict)
+        plan["render_target"]["scale"] = 2.0
+        root = snapshot(plan)
+        renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+        assert isinstance(renderer, dict)
+        executor = renderer["material_executor_summary"]
+        assert isinstance(executor, dict)
+        executor["material_max_shader_blur_step_pixels"] = 7.7
+
+        code, report = self.run_verifier(root)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material executor summary "
+                "material_max_shader_blur_step_pixels matches plans"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_executor_summary"
+            ".material_max_shader_blur_step_pixels")
+        self.assertAlmostEqual(failure["expected"], 15.4)
+        self.assertEqual(failure["actual"], 7.7)
+        self.assertEqual(failure["likely_pass"], "material-executor")
 
     def test_material_executor_sampled_instance_mismatch_is_llm_actionable(
             self) -> None:

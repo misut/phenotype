@@ -3867,7 +3867,11 @@ def summarize_material_plans(
             "ready": 0,
             "within_backdrop_budget": 0,
             "max_pixel_count": 0,
+            "max_scale": 0.0,
             "pixel_formats": {},
+        },
+        "shader_sampling": {
+            "max_blur_step_pixels": 0.0,
         },
         "decision_trace": {
             "role_allows_liquid_glass": 0,
@@ -5131,14 +5135,14 @@ def summarize_material_plans(
             plan_path,
             likely_layer=likely_layer,
             hint="MaterialPlan must expose the pure backdrop sampling kernel.")
+        kernel_name = ""
+        kernel_weight_profile = ""
+        kernel_radius: int | float | None = None
+        kernel_taps: int | float | None = None
+        kernel_blur_step_scale: int | float | None = None
+        kernel_requires_backdrop: bool | None = None
+        kernel_bounded: bool | None = None
         if sampling_kernel is not None:
-            kernel_name = ""
-            kernel_weight_profile = ""
-            kernel_radius: int | float | None = None
-            kernel_taps: int | float | None = None
-            kernel_blur_step_scale: int | float | None = None
-            kernel_requires_backdrop: bool | None = None
-            kernel_bounded: bool | None = None
             for key in MATERIAL_SAMPLING_KERNEL_FIELDS:
                 if key in ("requires_backdrop", "bounded"):
                     value = check_bool_field(
@@ -5555,7 +5559,7 @@ def summarize_material_plans(
                     likely_layer=likely_layer,
                     hint="Keep MaterialRenderTargetAnalysis.pixel_count derived from width * height.",
                     record_success=False)
-            check_number_field(
+            render_scale = check_number_field(
                 report,
                 render_target,
                 "scale",
@@ -5563,6 +5567,23 @@ def summarize_material_plans(
                 min_value=0.0,
                 likely_layer=likely_layer,
                 hint="Render target scale should be sanitized before planning.")
+            if isinstance(render_scale, (int, float)):
+                render_summary["max_scale"] = max(
+                    float(render_summary["max_scale"]),
+                    float(render_scale))
+                if (
+                    backdrop_sampling is True
+                    and isinstance(plan_blur_radius, (int, float))
+                    and isinstance(kernel_blur_step_scale, (int, float))
+                ):
+                    shader_sampling = summary["shader_sampling"]
+                    shader_sampling["max_blur_step_pixels"] = max(
+                        float(shader_sampling["max_blur_step_pixels"]),
+                        max(
+                            1.0,
+                            float(plan_blur_radius)
+                            * float(kernel_blur_step_scale)
+                            * float(render_scale)))
             ready = None
             within_budget = None
             for key in MATERIAL_RENDER_TARGET_BOOL_FIELDS:
@@ -8926,11 +8947,32 @@ def check_material_executor_summary_contract(
             "total_surface_sample_pixels"),
     }
     expected_fields.update(expected_access_fields)
+    render_target = summary.get("render_target")
+    if not isinstance(render_target, dict):
+        render_target = {}
+    shader_sampling = summary.get("shader_sampling")
+    if not isinstance(shader_sampling, dict):
+        shader_sampling = {}
+    expected_shader_scale = render_target.get("max_scale")
+    if count == 0 and expected_shader_scale == 0.0:
+        expected_shader_scale = 1.0
+    expected_shader_fields = {
+        "material_shader_content_scale": expected_shader_scale,
+        "material_max_shader_blur_step_pixels": shader_sampling.get(
+            "max_blur_step_pixels"),
+    }
+    expected_fields.update(expected_shader_fields)
     for field, expected in expected_fields.items():
         actual = executor_summary.get(field)
+        matches = (
+            numbers_close(actual, expected)
+            if field in expected_shader_fields
+            and isinstance(expected, (int, float))
+            else actual == expected
+        )
         report.check(
             f"material executor summary {field} matches plans",
-            actual == expected,
+            matches,
             path=f"{base_path}.{field}",
             expected=expected,
             actual=actual,
@@ -8987,6 +9029,8 @@ def check_material_executor_summary_contract(
         "backdrop_descriptor_luma_grid_height",
         "backdrop_descriptor_luma_frame",
         "backdrop_luma_sampling_skipped_count",
+        "material_shader_content_scale",
+        "material_max_shader_blur_step_pixels",
         "cpu_decode_ns",
         "cpu_material_upload_ns",
         "cpu_total_ns",

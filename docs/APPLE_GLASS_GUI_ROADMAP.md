@@ -217,7 +217,10 @@ The current sampled-glass kernel is a pure tap-tier descriptor:
 scale, and weight profile; fallback plans serialize the inactive `none` kernel.
 This keeps blur spread and tap-shape policy in `plan_material_surface` while
 macOS Metal executes the descriptor and other backends publish deterministic
-fallback metadata.
+fallback metadata. macOS converts that logical blur spread with the current
+content scale before sampling the framebuffer, and reports both the content
+scale and maximum physical shader step in `material_executor_summary` so Retina
+and non-Retina artifacts stay comparable.
 Backdrops also degrade through an explicit
 `quality-policy` fallback when the pure quality policy disables sampling or
 sets an unusable blur/tap budget, and when the render target exceeds the

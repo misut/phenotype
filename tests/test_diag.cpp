@@ -1325,6 +1325,10 @@ void test_material_runtime_record_json_contract() {
            == "not-needed");
     assert(executor_obj.at("material_draw_status").as_string()
            == "not-needed");
+    assert(executor_obj.at("material_shader_content_scale").as_float()
+           == 1.0f);
+    assert(executor_obj.at("material_max_shader_blur_step_pixels").as_float()
+           == 0.0f);
     assert(executor_obj.at("cpu_decode_ns").as_integer() == 120);
 
     auto empty = diag::detail::empty_material_renderer_contract(
@@ -1349,6 +1353,11 @@ void test_material_runtime_record_json_contract() {
                .at("material_pipeline_ready").as_bool() == false);
     assert(empty.at("material_executor_summary").as_object()
                .at("material_upload_status").as_string() == "not-needed");
+    assert(empty.at("material_executor_summary").as_object()
+               .at("material_shader_content_scale").as_float() == 1.0f);
+    assert(empty.at("material_executor_summary").as_object()
+               .at("material_max_shader_blur_step_pixels").as_float()
+           == 0.0f);
     assert(empty.at("material_executor_summary").as_object()
                .at("dropped_execution_stage_count").as_integer() == 0);
     assert(empty.at("material_fallback_policy").as_string()
