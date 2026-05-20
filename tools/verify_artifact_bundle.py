@@ -116,6 +116,19 @@ ALLOWED_MATERIAL_STAGE_EXECUTORS = {
     "standard-fill",
 }
 
+ALLOWED_MATERIAL_PAINT_LAYER_NAMES = {
+    "fallback-edge-highlight",
+    "fallback-shadow",
+    "standard-material-fill",
+    "translucent-rounded-rect",
+}
+
+ALLOWED_MATERIAL_PAINT_LAYER_EXECUTORS = {
+    "rounded-edge",
+    "rounded-fill",
+    "rounded-shadow",
+}
+
 ALLOWED_MATERIAL_LIKELY_LAYERS = {
     "material-blur-pass",
     "material-edge-pass",
@@ -338,7 +351,7 @@ ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS = {
     "pointer-specular",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 31
+MATERIAL_PLAN_CONTRACT_VERSION = 32
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -2150,6 +2163,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "pass_executors",
         "stage_names",
         "stage_executors",
+        "paint_layer_names",
+        "paint_layer_executors",
         "sampling_kernels",
         "sampling_weight_profiles",
         "luminance_curves",
@@ -2374,6 +2389,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "pass_executors": ALLOWED_MATERIAL_PASS_EXECUTORS,
         "stage_names": ALLOWED_MATERIAL_STAGE_NAMES,
         "stage_executors": ALLOWED_MATERIAL_STAGE_EXECUTORS,
+        "paint_layer_names": ALLOWED_MATERIAL_PAINT_LAYER_NAMES,
+        "paint_layer_executors": ALLOWED_MATERIAL_PAINT_LAYER_EXECUTORS,
         "sampling_kernels": ALLOWED_MATERIAL_SAMPLING_KERNELS,
         "sampling_weight_profiles": ALLOWED_MATERIAL_SAMPLING_WEIGHT_PROFILES,
         "luminance_curves": ALLOWED_MATERIAL_LUMINANCE_CURVES,
@@ -2522,6 +2539,26 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
         "max_execution_stage_capacity_gte",
         "max_execution_stages_lte",
         "max_execution_stages_gte",
+        "total_paint_layers_lte",
+        "total_paint_layers_gte",
+        "active_paint_layers_lte",
+        "active_paint_layers_gte",
+        "dropped_paint_layers_lte",
+        "dropped_paint_layers_gte",
+        "shadow_paint_layers_lte",
+        "shadow_paint_layers_gte",
+        "fill_paint_layers_lte",
+        "fill_paint_layers_gte",
+        "edge_paint_layers_lte",
+        "edge_paint_layers_gte",
+        "max_paint_layer_count_lte",
+        "max_paint_layer_count_gte",
+        "max_paint_layers_lte",
+        "max_paint_layers_gte",
+        "max_paint_layer_capacity_lte",
+        "max_paint_layer_capacity_gte",
+        "max_paint_layer_inflate_lte",
+        "max_paint_layer_inflate_gte",
     }
     bool_fields = {
         "require_bounded_texture_copy",
@@ -3101,10 +3138,13 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "resource_budget",
     "execution_stage_capacity",
     "dropped_execution_stage_count",
+    "paint_layer_capacity",
+    "dropped_paint_layer_count",
     "verifier",
     "observation_contract",
     "passes",
     "execution_stages",
+    "paint_layers",
 )
 
 MATERIAL_PLAN_NUMERIC_FIELDS = (
@@ -3242,6 +3282,22 @@ MATERIAL_PASS_FIELDS = (
     "max_texture_copy_pixels",
 )
 MATERIAL_EXECUTION_STAGE_FIELDS = MATERIAL_PASS_FIELDS + ("bounded",)
+MATERIAL_PAINT_LAYER_STRING_FIELDS = (
+    "name",
+    "executor",
+)
+MATERIAL_PAINT_LAYER_BOOL_FIELDS = (
+    "active",
+    "bounded",
+)
+MATERIAL_PAINT_LAYER_NUMERIC_FIELDS = (
+    "x_offset",
+    "y_offset",
+    "inflate",
+    "radius_delta",
+    "stroke_width",
+    "opacity",
+)
 ALLOWED_MATERIAL_STAGE_OPTICS_CHANNELS = {
     "backdrop-filter",
     "edge-highlight",
@@ -3288,6 +3344,11 @@ MATERIAL_OBSERVATION_INT_FIELDS = (
     "expected_execution_stages",
     "expected_active_execution_stages",
     "expected_backdrop_execution_stages",
+    "expected_paint_layers",
+    "expected_active_paint_layers",
+    "expected_shadow_paint_layers",
+    "expected_fill_paint_layers",
+    "expected_edge_paint_layers",
     "max_frame_capture_count",
     "max_frame_capture_pixels",
     "max_surface_sample_pixels",
@@ -3725,6 +3786,40 @@ def check_material_observation_contract(
                 hint="Observation stage counts should mirror MaterialPlan.execution_stages.",
                 record_success=False)
 
+    paint_layers = plan.get("paint_layers")
+    if isinstance(paint_layers, list):
+        active_layers = sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict) and layer.get("active") is True)
+        shadow_layers = sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict)
+            and layer.get("executor") == "rounded-shadow")
+        fill_layers = sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict)
+            and layer.get("executor") == "rounded-fill")
+        edge_layers = sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict)
+            and layer.get("executor") == "rounded-edge")
+        for key, expected in (
+                ("expected_paint_layers", len(paint_layers)),
+                ("expected_active_paint_layers", active_layers),
+                ("expected_shadow_paint_layers", shadow_layers),
+                ("expected_fill_paint_layers", fill_layers),
+                ("expected_edge_paint_layers", edge_layers)):
+            report.check(
+                f"material observation {key} matches paint layers",
+                observation.get(key) == expected,
+                path=f"{observation_path}.{key}",
+                expected=expected,
+                actual=observation.get(key),
+                likely_layer="material-observation",
+                likely_pass=likely_pass,
+                hint="Observation paint layer counts should mirror MaterialPlan.paint_layers.",
+                record_success=False)
+
     resource_budget = plan.get("resource_budget")
     if isinstance(resource_budget, dict):
         for observation_key, budget_key in (
@@ -3993,6 +4088,19 @@ def summarize_material_plans(
         "pass_executors": {},
         "stage_names": {},
         "stage_executors": {},
+        "paint_layer_names": {},
+        "paint_layer_executors": {},
+        "paint_layers": {
+            "total": 0,
+            "active": 0,
+            "dropped": 0,
+            "shadow": 0,
+            "fill": 0,
+            "edge": 0,
+            "max_count": 0,
+            "max_capacity": 0,
+            "max_inflate": 0.0,
+        },
         "sampling_kernels": {},
         "sampling_weight_profiles": {},
         "luminance_curves": {},
@@ -4151,12 +4259,14 @@ def summarize_material_plans(
             "max_sampling_kernel_radius": 0,
             "max_pass_count": 0,
             "max_execution_stages": 0,
+            "max_paint_layers": 0,
             "max_backdrop_pixels": 0,
             "max_frame_capture_count": 0,
             "max_frame_capture_pixels": 0,
             "total_surface_sample_pixels": 0,
             "max_surface_sample_pixels": 0,
             "max_container_spacing": 0.0,
+            "max_paint_layer_inflate": 0.0,
             "total_runtime_passes": 0,
             "active_runtime_passes": 0,
             "backdrop_runtime_passes": 0,
@@ -4166,6 +4276,14 @@ def summarize_material_plans(
             "dropped_execution_stages": 0,
             "max_execution_stage_count": 0,
             "max_execution_stage_capacity": 0,
+            "total_paint_layers": 0,
+            "active_paint_layers": 0,
+            "dropped_paint_layers": 0,
+            "shadow_paint_layers": 0,
+            "fill_paint_layers": 0,
+            "edge_paint_layers": 0,
+            "max_paint_layer_count": 0,
+            "max_paint_layer_capacity": 0,
             "max_pass_texture_copy_pixels": 0,
             "total_pass_texture_copy_pixels": 0,
             "unbounded_texture_copy": 0,
@@ -7558,6 +7676,7 @@ def summarize_material_plans(
             hint="Material plans must expose bounded resource policy for CI debugging.")
         max_pass_count: int | float | None = None
         max_execution_stages: int | float | None = None
+        max_paint_layers: int | float | None = None
         if resource_budget is not None:
             bounds = summary["resource_bounds"]
             max_blur_radius = check_number_field(
@@ -7632,6 +7751,18 @@ def summarize_material_plans(
                 bounds["max_execution_stages"] = max(
                     int(bounds["max_execution_stages"]),
                     int(max_execution_stages))
+            max_paint_layers = check_number_field(
+                report,
+                resource_budget,
+                "max_paint_layers",
+                f"{plan_path}.resource_budget",
+                min_value=0.0,
+                likely_layer="material-paint-layer",
+                hint="Material paint layer count should be bounded in the pure plan.")
+            if isinstance(max_paint_layers, (int, float)):
+                bounds["max_paint_layers"] = max(
+                    int(bounds["max_paint_layers"]),
+                    int(max_paint_layers))
             max_backdrop_pixels = check_number_field(
                 report,
                 resource_budget,
@@ -7695,6 +7826,18 @@ def summarize_material_plans(
                 bounds["max_container_spacing"] = max(
                     float(bounds["max_container_spacing"]),
                     float(max_container_spacing))
+            max_paint_layer_inflate = check_number_field(
+                report,
+                resource_budget,
+                "max_paint_layer_inflate",
+                f"{plan_path}.resource_budget",
+                min_value=0.0,
+                likely_layer="material-paint-layer",
+                hint="Paint layer inflate should expose the largest bounded fallback expansion.")
+            if isinstance(max_paint_layer_inflate, (int, float)):
+                bounds["max_paint_layer_inflate"] = max(
+                    float(bounds["max_paint_layer_inflate"]),
+                    float(max_paint_layer_inflate))
             bounded_texture_copy = check_bool_field(
                 report,
                 resource_budget,
@@ -7794,6 +7937,73 @@ def summarize_material_plans(
                 hint=(
                     "Increase material_max_execution_stages and the artifact "
                     "contract, or remove duplicate stage work in "
+                    "plan_material_surface."),
+                record_success=False)
+
+        paint_layer_capacity = check_number_field(
+            report,
+            plan,
+            "paint_layer_capacity",
+            plan_path,
+            min_value=0.0,
+            likely_layer="material-paint-layer",
+            likely_pass="paint-layer-capacity",
+            hint=(
+                "MaterialPlan must expose the fixed paint layer array "
+                "capacity so fallback layer work cannot disappear silently."))
+        if isinstance(paint_layer_capacity, (int, float)):
+            bounds = summary["resource_bounds"]
+            capacity = int(paint_layer_capacity)
+            paint_summary = summary["paint_layers"]
+            paint_summary["max_capacity"] = max(
+                int(paint_summary["max_capacity"]),
+                capacity)
+            bounds["max_paint_layer_capacity"] = max(
+                int(bounds["max_paint_layer_capacity"]),
+                capacity)
+            if isinstance(max_paint_layers, (int, float)):
+                report.check(
+                    "material paint layer capacity matches resource budget",
+                    capacity == int(max_paint_layers),
+                    path=f"{plan_path}.paint_layer_capacity",
+                    expected=int(max_paint_layers),
+                    actual=capacity,
+                    likely_layer="material-paint-layer",
+                    likely_pass="paint-layer-capacity",
+                    hint=(
+                        "Keep MaterialPlan.paint_layer_capacity and "
+                        "MaterialResourceBudget.max_paint_layers aligned."),
+                    record_success=False)
+
+        dropped_paint_layer_count = check_number_field(
+            report,
+            plan,
+            "dropped_paint_layer_count",
+            plan_path,
+            min_value=0.0,
+            likely_layer="material-paint-layer",
+            likely_pass="paint-layer-capacity",
+            hint=(
+                "Dropped paint layers mean a pure MaterialPlan exceeded "
+                "its fixed paint layer capacity before backend execution."))
+        if isinstance(dropped_paint_layer_count, (int, float)):
+            dropped = int(dropped_paint_layer_count)
+            paint_summary = summary["paint_layers"]
+            paint_summary["dropped"] = int(paint_summary["dropped"]) + dropped
+            bounds = summary["resource_bounds"]
+            bounds["dropped_paint_layers"] = (
+                int(bounds["dropped_paint_layers"]) + dropped)
+            report.check(
+                "material paint layers did not overflow capacity",
+                dropped == 0,
+                path=f"{plan_path}.dropped_paint_layer_count",
+                expected=0,
+                actual=dropped,
+                likely_layer="material-paint-layer",
+                likely_pass="paint-layer-capacity",
+                hint=(
+                    "Increase material_max_paint_layers and the artifact "
+                    "contract, or remove duplicate fallback layer work in "
                     "plan_material_surface."),
                 record_success=False)
 
@@ -8687,6 +8897,303 @@ def summarize_material_plans(
                     hint="Fallback material stages must degrade without backdrop texture work.",
                     record_success=False)
 
+        paint_layers = plan.get("paint_layers")
+        report.check(
+            "material paint layers is array",
+            isinstance(paint_layers, list),
+            path=f"{plan_path}.paint_layers",
+            expected="array",
+            actual=type(paint_layers).__name__,
+            likely_layer="material-paint-layer",
+            likely_pass=primary_pass_name,
+            hint=(
+                "Non-backdrop material execution should be driven by pure "
+                "MaterialPlan.paint_layers, not hidden backend policy."),
+            record_success=False)
+        if isinstance(paint_layers, list):
+            paint_summary = summary["paint_layers"]
+            bounds = summary["resource_bounds"]
+            paint_summary["total"] = int(paint_summary["total"]) + len(paint_layers)
+            paint_summary["max_count"] = max(
+                int(paint_summary["max_count"]),
+                len(paint_layers))
+            bounds["total_paint_layers"] = int(
+                bounds["total_paint_layers"]) + len(paint_layers)
+            bounds["max_paint_layer_count"] = max(
+                int(bounds["max_paint_layer_count"]),
+                len(paint_layers))
+            if isinstance(max_paint_layers, (int, float)):
+                report.check(
+                    "material paint layer count is within budget",
+                    len(paint_layers) <= int(max_paint_layers),
+                    path=f"{plan_path}.paint_layers",
+                    expected={"length<=": int(max_paint_layers)},
+                    actual=len(paint_layers),
+                    likely_layer="material-paint-layer",
+                    likely_pass=primary_pass_name,
+                    hint="Keep paint layers within MaterialResourceBudget.max_paint_layers.",
+                    record_success=False)
+            if isinstance(paint_layer_capacity, (int, float)):
+                report.check(
+                    "material paint layer count is within serialized capacity",
+                    len(paint_layers) <= int(paint_layer_capacity),
+                    path=f"{plan_path}.paint_layers",
+                    expected={"length<=": int(paint_layer_capacity)},
+                    actual=len(paint_layers),
+                    likely_layer="material-paint-layer",
+                    likely_pass="paint-layer-capacity",
+                    hint="The serialized paint layer list must fit within MaterialPlan.paint_layer_capacity.",
+                    record_success=False)
+
+            has_shadow_layer = False
+            has_fill_layer = False
+            has_edge_layer = False
+            max_layer_inflate = 0.0
+            for layer_index, layer in enumerate(paint_layers):
+                layer_path = f"{plan_path}.paint_layers[{layer_index}]"
+                report.check(
+                    "material paint layer entry is object",
+                    isinstance(layer, dict),
+                    path=layer_path,
+                    expected="object",
+                    actual=type(layer).__name__,
+                    likely_layer="material-paint-layer",
+                    likely_pass=primary_pass_name,
+                    hint="Paint layer entries should be structured objects.",
+                    record_success=False)
+                if not isinstance(layer, dict):
+                    continue
+                layer_name = ""
+                layer_executor = ""
+                for key in MATERIAL_PAINT_LAYER_STRING_FIELDS:
+                    value = check_string_field(
+                        report,
+                        layer,
+                        key,
+                        layer_path,
+                        likely_layer="material-paint-layer",
+                        hint="Paint layers must name their deterministic draw work.")
+                    if key == "name" and isinstance(value, str):
+                        layer_name = value
+                        names = summary["paint_layer_names"]
+                        names[value] = names.get(value, 0) + 1
+                        report.check(
+                            "material paint layer name is known",
+                            value in ALLOWED_MATERIAL_PAINT_LAYER_NAMES,
+                            path=f"{layer_path}.name",
+                            expected=sorted(ALLOWED_MATERIAL_PAINT_LAYER_NAMES),
+                            actual=value,
+                            likely_layer="material-paint-layer",
+                            likely_pass=value,
+                            hint="Add intentional paint layer names to the verifier contract.",
+                            record_success=False)
+                    if key == "executor" and isinstance(value, str):
+                        layer_executor = value
+                        executors = summary["paint_layer_executors"]
+                        executors[value] = executors.get(value, 0) + 1
+                        report.check(
+                            "material paint layer executor is known",
+                            value in ALLOWED_MATERIAL_PAINT_LAYER_EXECUTORS,
+                            path=f"{layer_path}.executor",
+                            expected=sorted(ALLOWED_MATERIAL_PAINT_LAYER_EXECUTORS),
+                            actual=value,
+                            likely_layer="material-paint-layer",
+                            likely_pass=layer_name or primary_pass_name,
+                            hint="Add intentional paint layer executors to the verifier contract.",
+                            record_success=False)
+                layer_active = None
+                for key in MATERIAL_PAINT_LAYER_BOOL_FIELDS:
+                    value = check_bool_field(
+                        report,
+                        layer,
+                        key,
+                        layer_path,
+                        likely_layer="material-paint-layer",
+                        likely_pass=layer_name or primary_pass_name,
+                        hint="Paint layer booleans must be explicit.")
+                    if key == "active":
+                        layer_active = value
+                        if value is True:
+                            paint_summary["active"] = int(paint_summary["active"]) + 1
+                            bounds["active_paint_layers"] = int(
+                                bounds["active_paint_layers"]) + 1
+                    if key == "bounded" and value is False:
+                        report.check(
+                            "material paint layer is bounded",
+                            False,
+                            path=f"{layer_path}.bounded",
+                            expected=True,
+                            actual=False,
+                            likely_layer="material-paint-layer",
+                            likely_pass=layer_name or primary_pass_name,
+                            hint="Paint layers on fallback hot paths must expose bounded work.",
+                            record_success=False)
+                layer_numbers: dict[str, int | float | None] = {}
+                for key in MATERIAL_PAINT_LAYER_NUMERIC_FIELDS:
+                    max_value = 1.0 if key == "opacity" else None
+                    min_value = None if key in ("x_offset", "y_offset", "radius_delta") else 0.0
+                    layer_numbers[key] = check_number_field(
+                        report,
+                        layer,
+                        key,
+                        layer_path,
+                        min_value=min_value,
+                        max_value=max_value,
+                        likely_layer="material-paint-layer",
+                        likely_pass=layer_name or primary_pass_name,
+                        hint="Paint layer numeric values must be explicit pure-plan inputs.")
+                inflate = layer_numbers.get("inflate")
+                if isinstance(inflate, (int, float)):
+                    max_layer_inflate = max(max_layer_inflate, float(inflate))
+                color = check_object_field(
+                    report,
+                    layer,
+                    "color",
+                    layer_path,
+                    likely_layer="material-paint-layer",
+                    hint="Paint layer colors should expose RGBA channels.")
+                if color is not None:
+                    for channel in MATERIAL_COLOR_FIELDS:
+                        check_number_field(
+                            report,
+                            color,
+                            channel,
+                            f"{layer_path}.color",
+                            min_value=0.0,
+                            max_value=255.0,
+                            likely_layer="material-paint-layer",
+                            likely_pass=layer_name or primary_pass_name,
+                            hint="Paint layer color channels must be byte values.")
+
+                if layer_executor == "rounded-shadow":
+                    has_shadow_layer = True
+                    paint_summary["shadow"] = int(paint_summary["shadow"]) + 1
+                    bounds["shadow_paint_layers"] = int(
+                        bounds["shadow_paint_layers"]) + 1
+                    report.check(
+                        "material shadow paint layer has no stroke",
+                        numbers_close(layer_numbers.get("stroke_width"), 0),
+                        path=f"{layer_path}.stroke_width",
+                        expected=0,
+                        actual=layer_numbers.get("stroke_width"),
+                        likely_layer="material-paint-layer",
+                        likely_pass=layer_name or "fallback-shadow",
+                        hint="Shadow paint layers should be inflated rounded fills, not strokes.",
+                        record_success=False)
+                elif layer_executor == "rounded-fill":
+                    has_fill_layer = True
+                    paint_summary["fill"] = int(paint_summary["fill"]) + 1
+                    bounds["fill_paint_layers"] = int(
+                        bounds["fill_paint_layers"]) + 1
+                    report.check(
+                        "material fill paint layer matches primary pass",
+                        layer_name == primary_pass_name,
+                        path=f"{layer_path}.name",
+                        expected=primary_pass_name,
+                        actual=layer_name,
+                        likely_layer="material-paint-layer",
+                        likely_pass=primary_pass_name,
+                        hint="The fill paint layer should carry MaterialPlan.primary_pass.name.",
+                        record_success=False)
+                elif layer_executor == "rounded-edge":
+                    has_edge_layer = True
+                    paint_summary["edge"] = int(paint_summary["edge"]) + 1
+                    bounds["edge_paint_layers"] = int(
+                        bounds["edge_paint_layers"]) + 1
+                    report.check(
+                        "material edge paint layer has stroke width",
+                        isinstance(layer_numbers.get("stroke_width"), (int, float))
+                        and float(layer_numbers["stroke_width"]) > 0.0,
+                        path=f"{layer_path}.stroke_width",
+                        expected={">": 0},
+                        actual=layer_numbers.get("stroke_width"),
+                        likely_layer="material-paint-layer",
+                        likely_pass=layer_name or "fallback-edge-highlight",
+                        hint="Edge paint layers should expose the pure edge_width stroke.",
+                        record_success=False)
+                if layer_active is False:
+                    report.check(
+                        "material inactive paint layer has zero opacity",
+                        numbers_close(layer_numbers.get("opacity"), 0),
+                        path=f"{layer_path}.opacity",
+                        expected=0,
+                        actual=layer_numbers.get("opacity"),
+                        likely_layer="material-paint-layer",
+                        likely_pass=layer_name or primary_pass_name,
+                        hint="Inactive paint layers should not reserve visible work.",
+                        record_success=False)
+
+            paint_summary["max_inflate"] = max(
+                float(paint_summary["max_inflate"]),
+                max_layer_inflate)
+            bounds["max_paint_layer_inflate"] = max(
+                float(bounds["max_paint_layer_inflate"]),
+                max_layer_inflate)
+            if isinstance(resource_budget, dict):
+                budget_inflate = resource_budget.get("max_paint_layer_inflate")
+                if isinstance(budget_inflate, (int, float)):
+                    report.check(
+                        "material paint layer inflate matches resource budget",
+                        numbers_close(max_layer_inflate, float(budget_inflate)),
+                        path=f"{plan_path}.resource_budget.max_paint_layer_inflate",
+                        expected=max_layer_inflate,
+                        actual=budget_inflate,
+                        likely_layer="material-paint-layer",
+                        likely_pass="paint-layer-capacity",
+                        hint="Resource budget should report the largest paint layer inflate.",
+                        record_success=False)
+
+            primary_active = (
+                isinstance(primary_pass, dict)
+                and primary_pass.get("active") is True)
+            primary_requires_backdrop = (
+                isinstance(primary_pass, dict)
+                and primary_pass.get("requires_backdrop") is True)
+            if primary_active and not primary_requires_backdrop:
+                report.check(
+                    "material non-backdrop plan has fill paint layer",
+                    has_fill_layer,
+                    path=f"{plan_path}.paint_layers",
+                    expected={"executor": "rounded-fill"},
+                    actual=paint_layers,
+                    likely_layer="material-paint-layer",
+                    likely_pass=primary_pass_name,
+                    hint="Non-backdrop material rendering must be fully described by paint_layers.",
+                    record_success=False)
+            if primary_requires_backdrop:
+                report.check(
+                    "material sampled backdrop plan has no paint layers",
+                    len(paint_layers) == 0,
+                    path=f"{plan_path}.paint_layers",
+                    expected=[],
+                    actual=paint_layers,
+                    likely_layer="material-paint-layer",
+                    likely_pass=primary_pass_name,
+                    hint="Sampled backdrop plans should execute through the material shader, not fallback paint layers.",
+                    record_success=False)
+            if isinstance(plan_shadow_alpha, (int, float)):
+                report.check(
+                    "material shadow paint layer matches shadow alpha",
+                    has_shadow_layer is (float(plan_shadow_alpha) > 0.0 and primary_active and not primary_requires_backdrop),
+                    path=f"{plan_path}.paint_layers",
+                    expected={"rounded-shadow": float(plan_shadow_alpha) > 0.0},
+                    actual=paint_layers,
+                    likely_layer="material-paint-layer",
+                    likely_pass="fallback-shadow",
+                    hint="Shadow fallback paint should be planned exactly when non-backdrop shadow depth is active.",
+                    record_success=False)
+            if isinstance(plan_edge_highlight, (int, float)):
+                report.check(
+                    "material edge paint layer matches edge highlight",
+                    has_edge_layer is (float(plan_edge_highlight) > 0.0 and primary_active and not primary_requires_backdrop),
+                    path=f"{plan_path}.paint_layers",
+                    expected={"rounded-edge": float(plan_edge_highlight) > 0.0},
+                    actual=paint_layers,
+                    likely_layer="material-paint-layer",
+                    likely_pass="fallback-edge-highlight",
+                    hint="Edge fallback paint should be planned exactly when non-backdrop edge highlight is active.",
+                    record_success=False)
+
         if fallback is True:
             report.check(
                 "material fallback path is not none",
@@ -9177,6 +9684,12 @@ def check_material_plan_summary_requirements(
         "stage_executors": (
             "material-stage",
             "Inspect MaterialPlan.execution_stages[].executor and backend stage roles."),
+        "paint_layer_names": (
+            "material-paint-layer",
+            "Inspect MaterialPlan.paint_layers[].name and deterministic fallback paint planning."),
+        "paint_layer_executors": (
+            "material-paint-layer",
+            "Inspect MaterialPlan.paint_layers[].executor and backend color-layer roles."),
         "sampling_kernels": (
             "sampling-kernel",
             "Inspect MaterialPlan.sampling_kernel.name and the backend blur shader contract."),
@@ -9296,6 +9809,10 @@ def check_material_plan_summary_requirements(
             "reference_performance_responses",
             "pass_names",
             "pass_executors",
+            "stage_names",
+            "stage_executors",
+            "paint_layer_names",
+            "paint_layer_executors",
             "sampling_kernels",
             "sampling_weight_profiles",
             "luminance_curves",
@@ -9513,6 +10030,16 @@ def check_material_resource_bounds_requirements(
         "max_execution_stage_count_lte": "max_execution_stage_count",
         "max_execution_stage_capacity_lte": "max_execution_stage_capacity",
         "max_execution_stages_lte": "max_execution_stages",
+        "total_paint_layers_lte": "total_paint_layers",
+        "active_paint_layers_lte": "active_paint_layers",
+        "dropped_paint_layers_lte": "dropped_paint_layers",
+        "shadow_paint_layers_lte": "shadow_paint_layers",
+        "fill_paint_layers_lte": "fill_paint_layers",
+        "edge_paint_layers_lte": "edge_paint_layers",
+        "max_paint_layer_count_lte": "max_paint_layer_count",
+        "max_paint_layers_lte": "max_paint_layers",
+        "max_paint_layer_capacity_lte": "max_paint_layer_capacity",
+        "max_paint_layer_inflate_lte": "max_paint_layer_inflate",
     }
     for spec_field, summary_field in field_map.items():
         if spec_field not in spec:
@@ -9549,6 +10076,16 @@ def check_material_resource_bounds_requirements(
         "max_execution_stage_count_gte": "max_execution_stage_count",
         "max_execution_stage_capacity_gte": "max_execution_stage_capacity",
         "max_execution_stages_gte": "max_execution_stages",
+        "total_paint_layers_gte": "total_paint_layers",
+        "active_paint_layers_gte": "active_paint_layers",
+        "dropped_paint_layers_gte": "dropped_paint_layers",
+        "shadow_paint_layers_gte": "shadow_paint_layers",
+        "fill_paint_layers_gte": "fill_paint_layers",
+        "edge_paint_layers_gte": "edge_paint_layers",
+        "max_paint_layer_count_gte": "max_paint_layer_count",
+        "max_paint_layers_gte": "max_paint_layers",
+        "max_paint_layer_capacity_gte": "max_paint_layer_capacity",
+        "max_paint_layer_inflate_gte": "max_paint_layer_inflate",
     }
     for spec_field, summary_field in min_field_map.items():
         if spec_field not in spec:
@@ -9675,8 +10212,19 @@ def check_material_runtime_summary_contract(
         "backdrop_execution_stages": bounds.get("backdrop_execution_stages"),
         "dropped_execution_stages": bounds.get("dropped_execution_stages"),
         "max_execution_stage_count": bounds.get("max_execution_stage_count"),
+        "max_execution_stages": bounds.get("max_execution_stages"),
         "max_execution_stage_capacity": bounds.get(
             "max_execution_stage_capacity"),
+        "total_paint_layers": bounds.get("total_paint_layers"),
+        "active_paint_layers": bounds.get("active_paint_layers"),
+        "dropped_paint_layers": bounds.get("dropped_paint_layers"),
+        "shadow_paint_layers": bounds.get("shadow_paint_layers"),
+        "fill_paint_layers": bounds.get("fill_paint_layers"),
+        "edge_paint_layers": bounds.get("edge_paint_layers"),
+        "max_paint_layer_count": bounds.get("max_paint_layer_count"),
+        "max_paint_layers": bounds.get("max_paint_layers"),
+        "max_paint_layer_capacity": bounds.get("max_paint_layer_capacity"),
+        "max_paint_layer_inflate": bounds.get("max_paint_layer_inflate"),
         "max_pass_texture_copy_pixels": bounds.get(
             "max_pass_texture_copy_pixels"),
         "total_pass_texture_copy_pixels": bounds.get(
@@ -9825,6 +10373,13 @@ def check_material_executor_summary_contract(
         "primary_execution_stage_count": bounds.get("active_runtime_passes"),
         "dropped_execution_stage_count": bounds.get(
             "dropped_execution_stages"),
+        "paint_layer_count": bounds.get("total_paint_layers"),
+        "active_paint_layer_count": bounds.get("active_paint_layers"),
+        "dropped_paint_layer_count": bounds.get("dropped_paint_layers"),
+        "shadow_paint_layer_count": bounds.get("shadow_paint_layers"),
+        "fill_paint_layer_count": bounds.get("fill_paint_layers"),
+        "edge_paint_layer_count": bounds.get("edge_paint_layers"),
+        "max_paint_layer_inflate": bounds.get("max_paint_layer_inflate"),
         "backdrop_filter_stage_count": stage_executors.get(
             "backdrop-filter", 0),
         "fallback_fill_stage_count": stage_executors.get("fallback-fill", 0),
@@ -9902,6 +10457,13 @@ def check_material_executor_summary_contract(
         "backdrop_execution_stage_count",
         "primary_execution_stage_count",
         "dropped_execution_stage_count",
+        "paint_layer_count",
+        "active_paint_layer_count",
+        "dropped_paint_layer_count",
+        "shadow_paint_layer_count",
+        "fill_paint_layer_count",
+        "edge_paint_layer_count",
+        "max_paint_layer_inflate",
         "backdrop_filter_stage_count",
         "fallback_fill_stage_count",
         "shadow_stage_count",

@@ -2291,42 +2291,58 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     out.push_back(inst);
 }
 
-inline void append_material_fallback_instance(std::vector<ColorInstanceGPU>& out,
-                                              MaterialPlan const& plan) {
-    append_color_instance(
-        out,
-        plan.geometry.x,
-        plan.geometry.y,
-        plan.geometry.w,
-        plan.geometry.h,
-        plan.tint.r / 255.0f,
-        plan.tint.g / 255.0f,
-        plan.tint.b / 255.0f,
-        plan.tint.a / 255.0f,
-        plan.shape.effective_radius,
-        0.0f,
-        2.0f);
+inline float material_paint_layer_alpha(
+        MaterialPaintLayer const& layer) noexcept {
+    auto const color_alpha = layer.color.a / 255.0f;
+    if (material_paint_layer_matches(layer.executor, "rounded-fill"))
+        return std::max(color_alpha, layer.opacity);
+    return color_alpha * layer.opacity;
 }
 
-inline void material_instances_to_fallback(FrameScratch& scratch) {
-    for (auto& batch : scratch.batches) {
-        for (auto const& material : batch.materials) {
-            append_color_instance(
-                batch.colors,
-                material.rect[0],
-                material.rect[1],
-                material.rect[2],
-                material.rect[3],
-                material.tint[0],
-                material.tint[1],
-                material.tint[2],
-                material.tint[3],
-                material.params[0],
-                0.0f,
-                2.0f);
-        }
-        batch.materials.clear();
-    }
+inline void append_material_paint_layer_instance(
+        std::vector<ColorInstanceGPU>& out,
+        MaterialPlan const& plan,
+        MaterialPaintLayer const& layer) {
+    if (!layer.active)
+        return;
+    auto const inflate = std::max(layer.inflate, 0.0f);
+    auto const x = plan.geometry.x + layer.x_offset - inflate;
+    auto const y = plan.geometry.y + layer.y_offset - inflate;
+    auto const w = plan.geometry.w + inflate * 2.0f;
+    auto const h = plan.geometry.h + inflate * 2.0f;
+    if (w <= 0.0f || h <= 0.0f)
+        return;
+    auto const radius = std::max(
+        0.0f,
+        plan.shape.effective_radius + layer.radius_delta);
+    auto const draw_type =
+        material_paint_layer_matches(layer.executor, "rounded-edge")
+            ? 3.0f
+            : 2.0f;
+    auto const stroke_width =
+        material_paint_layer_matches(layer.executor, "rounded-edge")
+            ? std::max(layer.stroke_width, 0.5f)
+            : 0.0f;
+    append_color_instance(
+        out,
+        x,
+        y,
+        w,
+        h,
+        layer.color.r / 255.0f,
+        layer.color.g / 255.0f,
+        layer.color.b / 255.0f,
+        material_paint_layer_alpha(layer),
+        radius,
+        stroke_width,
+        draw_type);
+}
+
+inline void append_material_paint_layer_instances(
+        std::vector<ColorInstanceGPU>& out,
+        MaterialPlan const& plan) {
+    for (unsigned int i = 0; i < plan.paint_layer_count; ++i)
+        append_material_paint_layer_instance(out, plan, plan.paint_layers[i]);
 }
 
 // FillPath helpers. Walk a flat polygon (vertex list with an implicit
@@ -2727,7 +2743,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                         scratch.batches.back().materials,
                         plan);
                 } else {
-                    append_material_fallback_instance(
+                    append_material_paint_layer_instances(
                         scratch.batches.back().colors,
                         plan);
                 }
@@ -4011,12 +4027,30 @@ fragment float4 fs_color(ColorVsOut in [[stage_in]]) {
         float alpha = in.color.a * clamp(0.5 - d, 0.0, 1.0);
         return float4(in.color.rgb * alpha, alpha);
     }
+    if (draw_type == 3u && radius > 0.0) {
+        float2 half_size = in.rect_size * 0.5;
+        float2 p = abs(in.local_pos - half_size) - half_size + float2(radius);
+        float d = length(max(p, float2(0.0))) - radius;
+        if (d > 0.5 || d < -border_w - 0.5) discard_fragment();
+        float outer = clamp(0.5 - d, 0.0, 1.0);
+        float inner = clamp(d + border_w + 0.5, 0.0, 1.0);
+        float alpha = in.color.a * min(outer, inner);
+        return float4(in.color.rgb * alpha, alpha);
+    }
     if (draw_type == 1u) {
         float2 lp = in.local_pos;
         float2 sz = in.rect_size;
         if (lp.x > border_w && lp.x < sz.x - border_w &&
             lp.y > border_w && lp.y < sz.y - border_w) discard_fragment();
         return in.color;
+    }
+    if (draw_type == 3u) {
+        float2 lp = in.local_pos;
+        float2 sz = in.rect_size;
+        if (lp.x > border_w && lp.x < sz.x - border_w &&
+            lp.y > border_w && lp.y < sz.y - border_w) discard_fragment();
+        float alpha = in.color.a;
+        return float4(in.color.rgb * alpha, alpha);
     }
     return in.color;
 }

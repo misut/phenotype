@@ -12,8 +12,9 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 31;
+inline constexpr std::uint32_t material_plan_contract_version = 32;
 inline constexpr unsigned int material_max_execution_stages = 4;
+inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
 inline constexpr unsigned int material_max_sample_taps = 25;
 
@@ -208,6 +209,11 @@ struct MaterialObservationContract {
     std::uint32_t expected_execution_stages = 0;
     std::uint32_t expected_active_execution_stages = 0;
     std::uint32_t expected_backdrop_execution_stages = 0;
+    std::uint32_t expected_paint_layers = 0;
+    std::uint32_t expected_active_paint_layers = 0;
+    std::uint32_t expected_shadow_paint_layers = 0;
+    std::uint32_t expected_fill_paint_layers = 0;
+    std::uint32_t expected_edge_paint_layers = 0;
     std::uint32_t max_frame_capture_count = 0;
     std::int64_t max_frame_capture_pixels = 0;
     std::int64_t max_surface_sample_pixels = 0;
@@ -255,11 +261,13 @@ struct MaterialResourceBudget {
     unsigned int max_sampling_kernel_radius = 0;
     unsigned int max_pass_count = 1;
     unsigned int max_execution_stages = material_max_execution_stages;
+    unsigned int max_paint_layers = material_max_paint_layers;
     std::int64_t max_backdrop_pixels = 0;
     std::uint32_t max_frame_capture_count = 0;
     std::int64_t max_frame_capture_pixels = 0;
     std::int64_t max_surface_sample_pixels = 0;
     float max_container_spacing = 0.0f;
+    float max_paint_layer_inflate = 0.0f;
     bool bounded_texture_copy = true;
     bool deterministic_fallback = true;
 };
@@ -294,6 +302,20 @@ struct MaterialExecutionStage {
     std::int64_t max_texture_copy_pixels = 0;
     bool bounded = true;
     MaterialStageOptics optics{};
+};
+
+struct MaterialPaintLayer {
+    char const* name = "none";
+    bool active = false;
+    char const* executor = "none";
+    float x_offset = 0.0f;
+    float y_offset = 0.0f;
+    float inflate = 0.0f;
+    float radius_delta = 0.0f;
+    float stroke_width = 0.0f;
+    Color color = {0, 0, 0, 0};
+    float opacity = 0.0f;
+    bool bounded = true;
 };
 
 struct MaterialBackdropAnalysis {
@@ -556,6 +578,10 @@ struct MaterialPlan {
     unsigned int dropped_execution_stage_count = 0;
     MaterialExecutionStage
         execution_stages[material_max_execution_stages]{};
+    unsigned int paint_layer_capacity = material_max_paint_layers;
+    unsigned int paint_layer_count = 0;
+    unsigned int dropped_paint_layer_count = 0;
+    MaterialPaintLayer paint_layers[material_max_paint_layers]{};
     MaterialVerifierExpectation verifier{};
     MaterialObservationContract observation_contract{};
 
@@ -638,6 +664,32 @@ inline void append_material_execution_stage(
     plan.execution_stages[plan.execution_stage_count++] = stage;
 }
 
+inline bool material_paint_layer_matches(
+        char const* actual,
+        std::string_view expected) noexcept {
+    return actual && std::string_view{actual} == expected;
+}
+
+inline void append_material_paint_layer(
+        MaterialPlan& plan,
+        MaterialPaintLayer layer) noexcept {
+    if (!layer.active)
+        return;
+    auto const capacity =
+        std::min(plan.paint_layer_capacity, material_max_paint_layers);
+    if (plan.paint_layer_count >= capacity) {
+        ++plan.dropped_paint_layer_count;
+        return;
+    }
+    layer.inflate = std::max(0.0f, layer.inflate);
+    layer.stroke_width = std::max(0.0f, layer.stroke_width);
+    layer.opacity = std::clamp(layer.opacity, 0.0f, 1.0f);
+    plan.resource_budget.max_paint_layer_inflate = std::max(
+        plan.resource_budget.max_paint_layer_inflate,
+        layer.inflate);
+    plan.paint_layers[plan.paint_layer_count++] = layer;
+}
+
 inline MaterialObservationContract material_observation_contract(
         MaterialPlan const& plan) noexcept {
     MaterialObservationContract contract{};
@@ -670,6 +722,7 @@ inline MaterialObservationContract material_observation_contract(
     contract.expected_backdrop_runtime_passes =
         plan.primary_pass.requires_backdrop ? 1u : 0u;
     contract.expected_execution_stages = plan.execution_stage_count;
+    contract.expected_paint_layers = plan.paint_layer_count;
     contract.max_frame_capture_count =
         plan.backdrop_access.max_frame_capture_count;
     contract.max_frame_capture_pixels =
@@ -687,6 +740,17 @@ inline MaterialObservationContract material_observation_contract(
             ++contract.expected_active_execution_stages;
         if (stage.requires_backdrop)
             ++contract.expected_backdrop_execution_stages;
+    }
+    for (unsigned int i = 0; i < plan.paint_layer_count; ++i) {
+        auto const& layer = plan.paint_layers[i];
+        if (layer.active)
+            ++contract.expected_active_paint_layers;
+        if (material_paint_layer_matches(layer.executor, "rounded-shadow"))
+            ++contract.expected_shadow_paint_layers;
+        if (material_paint_layer_matches(layer.executor, "rounded-fill"))
+            ++contract.expected_fill_paint_layers;
+        if (material_paint_layer_matches(layer.executor, "rounded-edge"))
+            ++contract.expected_edge_paint_layers;
     }
     return contract;
 }
@@ -727,6 +791,16 @@ struct MaterialRuntimeSummary {
     unsigned int max_execution_stage_count = 0;
     unsigned int max_execution_stages = 0;
     unsigned int max_execution_stage_capacity = 0;
+    std::uint32_t total_paint_layers = 0;
+    std::uint32_t active_paint_layers = 0;
+    std::uint32_t dropped_paint_layers = 0;
+    std::uint32_t shadow_paint_layers = 0;
+    std::uint32_t fill_paint_layers = 0;
+    std::uint32_t edge_paint_layers = 0;
+    unsigned int max_paint_layer_count = 0;
+    unsigned int max_paint_layers = 0;
+    unsigned int max_paint_layer_capacity = 0;
+    float max_paint_layer_inflate = 0.0f;
     std::int64_t max_pass_texture_copy_pixels = 0;
     std::int64_t total_pass_texture_copy_pixels = 0;
     std::uint32_t backdrop_access_count = 0;
@@ -796,6 +870,13 @@ struct MaterialExecutorSummary {
     std::uint32_t backdrop_execution_stage_count = 0;
     std::uint32_t primary_execution_stage_count = 0;
     std::uint32_t dropped_execution_stage_count = 0;
+    std::uint32_t paint_layer_count = 0;
+    std::uint32_t active_paint_layer_count = 0;
+    std::uint32_t dropped_paint_layer_count = 0;
+    std::uint32_t shadow_paint_layer_count = 0;
+    std::uint32_t fill_paint_layer_count = 0;
+    std::uint32_t edge_paint_layer_count = 0;
+    float max_paint_layer_inflate = 0.0f;
     std::uint32_t backdrop_filter_stage_count = 0;
     std::uint32_t fallback_fill_stage_count = 0;
     std::uint32_t shadow_stage_count = 0;
@@ -961,6 +1042,86 @@ inline bool material_plan_uses_deterministic_fallback_executor(
         && material_stage_matches(plan.primary_pass.executor, "fallback-fill");
 }
 
+inline Color material_paint_layer_color_with_alpha(
+        Color color,
+        float alpha) noexcept {
+    color.a = static_cast<unsigned char>(
+        std::clamp(std::lround(std::clamp(alpha, 0.0f, 1.0f) * 255.0f),
+                   0l,
+                   255l));
+    return color;
+}
+
+inline float material_shadow_paint_inflate(
+        MaterialPlan const& plan) noexcept {
+    return std::min(std::max(plan.shadow_radius * 0.5f, 1.0f), 18.0f);
+}
+
+inline float material_shadow_paint_y_offset(
+        MaterialPlan const& plan) noexcept {
+    return std::min(std::max(plan.shadow_radius * 0.18f, 1.0f), 6.0f);
+}
+
+inline void resolve_material_paint_layers(MaterialPlan& plan) noexcept {
+    if (!plan.primary_pass.active || plan.primary_pass.requires_backdrop)
+        return;
+
+    if (plan.shadow_alpha > 0.0f) {
+        auto const inflate = material_shadow_paint_inflate(plan);
+        append_material_paint_layer(
+            plan,
+            MaterialPaintLayer{
+                "fallback-shadow",
+                true,
+                "rounded-shadow",
+                0.0f,
+                material_shadow_paint_y_offset(plan),
+                inflate,
+                inflate,
+                0.0f,
+                Color{0, 0, 0, 255},
+                plan.shadow_alpha,
+                true,
+            });
+    }
+
+    append_material_paint_layer(
+        plan,
+        MaterialPaintLayer{
+            plan.primary_pass.name,
+            true,
+            "rounded-fill",
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            plan.tint,
+            plan.opacity,
+            true,
+        });
+
+    if (plan.edge_highlight > 0.0f) {
+        append_material_paint_layer(
+            plan,
+            MaterialPaintLayer{
+                "fallback-edge-highlight",
+                true,
+                "rounded-edge",
+                0.0f,
+                0.0f,
+                0.0f,
+                0.0f,
+                plan.edge_width,
+                material_paint_layer_color_with_alpha(
+                    Color{255, 255, 255, 255},
+                    plan.edge_highlight),
+                1.0f,
+                true,
+            });
+    }
+}
+
 struct MaterialContainerGroupAccumulator {
     std::uint32_t container_id = 0;
     std::uint32_t surface_count = 0;
@@ -1099,6 +1260,22 @@ inline void accumulate_material_executor_plan_summary(
     }
     summary.dropped_execution_stage_count +=
         plan.dropped_execution_stage_count;
+    summary.paint_layer_count += plan.paint_layer_count;
+    summary.dropped_paint_layer_count += plan.dropped_paint_layer_count;
+    for (unsigned int i = 0; i < plan.paint_layer_count; ++i) {
+        auto const& layer = plan.paint_layers[i];
+        if (layer.active)
+            ++summary.active_paint_layer_count;
+        if (material_paint_layer_matches(layer.executor, "rounded-shadow"))
+            ++summary.shadow_paint_layer_count;
+        if (material_paint_layer_matches(layer.executor, "rounded-fill"))
+            ++summary.fill_paint_layer_count;
+        if (material_paint_layer_matches(layer.executor, "rounded-edge"))
+            ++summary.edge_paint_layer_count;
+        summary.max_paint_layer_inflate = std::max(
+            summary.max_paint_layer_inflate,
+            layer.inflate);
+    }
     if (plan.backdrop_access.required)
         ++summary.backdrop_access_plan_count;
     if (plan.backdrop_access.next_frame_capture_required)
@@ -1156,20 +1333,43 @@ inline void accumulate_material_runtime_summary(
     summary.total_execution_stages += plan.execution_stage_count;
     summary.dropped_execution_stages +=
         plan.dropped_execution_stage_count;
+    summary.total_paint_layers += plan.paint_layer_count;
+    summary.dropped_paint_layers += plan.dropped_paint_layer_count;
     summary.max_execution_stage_count =
         std::max(summary.max_execution_stage_count, plan.execution_stage_count);
     summary.max_execution_stages =
         std::max(summary.max_execution_stages,
                  plan.resource_budget.max_execution_stages);
+    summary.max_paint_layers =
+        std::max(summary.max_paint_layers,
+                 plan.resource_budget.max_paint_layers);
     summary.max_execution_stage_capacity =
         std::max(summary.max_execution_stage_capacity,
                  plan.execution_stage_capacity);
+    summary.max_paint_layer_count =
+        std::max(summary.max_paint_layer_count, plan.paint_layer_count);
+    summary.max_paint_layer_capacity =
+        std::max(summary.max_paint_layer_capacity, plan.paint_layer_capacity);
+    summary.max_paint_layer_inflate = std::max(
+        summary.max_paint_layer_inflate,
+        plan.resource_budget.max_paint_layer_inflate);
     for (unsigned int i = 0; i < plan.execution_stage_count; ++i) {
         auto const& stage = plan.execution_stages[i];
         if (stage.active)
             ++summary.active_execution_stages;
         if (stage.requires_backdrop)
             ++summary.backdrop_execution_stages;
+    }
+    for (unsigned int i = 0; i < plan.paint_layer_count; ++i) {
+        auto const& layer = plan.paint_layers[i];
+        if (layer.active)
+            ++summary.active_paint_layers;
+        if (material_paint_layer_matches(layer.executor, "rounded-shadow"))
+            ++summary.shadow_paint_layers;
+        if (material_paint_layer_matches(layer.executor, "rounded-fill"))
+            ++summary.fill_paint_layers;
+        if (material_paint_layer_matches(layer.executor, "rounded-edge"))
+            ++summary.edge_paint_layers;
     }
     summary.max_pass_texture_copy_pixels = std::max(
         summary.max_pass_texture_copy_pixels,
@@ -2851,12 +3051,14 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.resource_budget.max_sampling_kernel_radius = 0u;
     plan.resource_budget.max_pass_count = 1;
     plan.resource_budget.max_execution_stages = material_max_execution_stages;
+    plan.resource_budget.max_paint_layers = material_max_paint_layers;
     plan.resource_budget.max_backdrop_pixels =
         resolved_quality.max_backdrop_pixels;
     plan.resource_budget.max_frame_capture_count = 0;
     plan.resource_budget.max_frame_capture_pixels = 0;
     plan.resource_budget.max_surface_sample_pixels = 0;
     plan.resource_budget.max_container_spacing = plan.container.spacing;
+    plan.resource_budget.max_paint_layer_inflate = 0.0f;
     plan.resource_budget.bounded_texture_copy = true;
     plan.resource_budget.deterministic_fallback = true;
     plan.backdrop = analyze_material_backdrop(environment.backdrop);
@@ -3146,6 +3348,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
                 material_noise_stage_optics(plan),
             });
     }
+    resolve_material_paint_layers(plan);
     plan.verifier.require_backdrop_source = plan.backdrop_sampling;
     plan.verifier.require_edge_highlight = plan.edge_highlight > 0.0f
         && !plan.fallback();
