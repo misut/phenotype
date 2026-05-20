@@ -82,6 +82,7 @@ auto append_required_runtime_detail(std::vector<std::string>& args,
 
 auto append_file_explorer_scenario_requirements(
         std::vector<std::string>& args,
+        std::string_view profile,
         std::string_view scenario) -> std::expected<void, std::string> {
     if (scenario.empty() || scenario == "default")
         return {};
@@ -153,7 +154,9 @@ auto append_file_explorer_scenario_requirements(
             args, "application.file_explorer.sort.value=\"kind\"");
     } else if (scenario == "search-active") {
         append_required_role(args, "text_field");
-        append_required_label(args, "Search");
+        append_required_label(
+            args,
+            profile == "mobile" ? "Mobile Search Field" : "Search Field");
         append_required_label_contains(args, "Searching for Screen");
         append_required_label_contains(args, "Screen Recording");
         append_required_label_contains(args, "Screenshot");
@@ -298,7 +301,7 @@ auto file_explorer_verifier_args(fs::path const& root,
             "window.native_window_controls.artifact_drawn_window_control_count=0");
     }
     auto scenario_extra =
-        append_file_explorer_scenario_requirements(args, scenario);
+        append_file_explorer_scenario_requirements(args, profile, scenario);
     if (!scenario_extra)
         return std::unexpected{scenario_extra.error()};
     return args;

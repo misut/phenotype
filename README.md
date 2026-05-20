@@ -121,7 +121,7 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 | `tabs<Msg>(items, selected, on_select, TabsStyleOptions?)` | Material-backed segmented row with a 2 px sliding indicator under the selected tab |
 | `progress(value, max_width?)` | Determinate progress bar |
 | `progress_indeterminate(max_width?)` | Looping progress bar — a slug oscillates left↔right while the widget is on screen |
-| `text_field<Msg>(hint, current, mapper, error?, disabled?)` | Text input that maps each new value through `mapper` to a `Msg` |
+| `text_field<Msg>(hint, current, mapper, error?, disabled?)` / `TextFieldStyleOptions` | Text input that maps each new value through `mapper` to a `Msg`; glass search fields can opt into a semantic material plan |
 
 ### Application entry (`namespace phenotype`)
 

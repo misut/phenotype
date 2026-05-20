@@ -372,6 +372,16 @@ inline void apply_button_material(LayoutNode& node,
     node.material.foreground = node.text_color;
 }
 
+inline void apply_text_field_material(LayoutNode& node,
+                                      TextFieldStyleOptions const& options) {
+    if (!options.has_material || options.material.kind == MaterialKind::None)
+        return;
+    node.material = options.material;
+    node.material.tint = node.background;
+    node.material.border = node.border_color;
+    node.material.foreground = node.text_color;
+}
+
 inline ButtonStyleOptions glass_control_button_style(
         GlassControlStyleOptions options = {}) {
     auto const& t = detail::g_app.theme;
@@ -416,6 +426,39 @@ inline ButtonStyleOptions glass_control_button_style(
     style.min_hit_width = minimum_button_activation_size;
     style.min_hit_height = minimum_button_activation_size;
     style.text_align = options.text_align;
+    return style;
+}
+
+inline TextFieldStyleOptions glass_text_field_style(
+        GlassTextFieldStyleOptions options = {}) {
+    auto const& t = detail::g_app.theme;
+    auto material = material_style_for_kind(options.kind, t);
+    material.role = options.role;
+    material.fallback = options.kind != MaterialKind::None;
+    material.container = MaterialContainerDescriptor{
+        0u,
+        0u,
+        20.0f,
+        !options.disabled,
+        true};
+
+    TextFieldStyleOptions style;
+    style.error = options.error;
+    style.disabled = options.disabled;
+    style.has_material = options.kind != MaterialKind::None;
+    style.material = material;
+    style.has_background = true;
+    style.background = material.tint;
+    style.has_border_color = true;
+    style.border_color = material.border;
+    style.border_width = 0.0f;
+    style.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : t.radius_lg;
+    style.font_size = options.font_size;
+    style.max_width = options.width;
+    style.fixed_height = options.height;
+    style.semantic_label = options.semantic_label;
     return style;
 }
 
@@ -678,27 +721,56 @@ inline void radio(str label, bool selected, Msg msg) {
 template<typename Msg>
 inline void text_field(str hint, std::string const& current,
                        Msg(*mapper)(std::string),
-                       bool error = false, bool disabled = false) {
+                       TextFieldStyleOptions options) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     auto const& t = detail::g_app.theme;
     node.interaction_role = InteractionRole::TextField;
     node.placeholder = std::string(hint.data, hint.len);
     node.text = current.empty() ? node.placeholder : current;
-    node.debug_semantic_label = node.placeholder;
-    node.font_size = t.body_font_size;
-    node.border_radius = t.radius_sm;
-    node.style.padding[0] = t.space_sm;
-    node.style.padding[1] = t.space_md;
-    node.style.padding[2] = t.space_sm;
-    node.style.padding[3] = t.space_md;
+    node.debug_semantic_label =
+        options.semantic_label ? options.semantic_label : node.placeholder;
+    node.font_size = options.font_size > 0.0f
+        ? options.font_size
+        : t.body_font_size;
+    node.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : t.radius_sm;
+    float default_padding[4] = {
+        t.space_sm,
+        t.space_md,
+        t.space_sm,
+        t.space_md,
+    };
+    float option_padding[4] = {
+        options.padding_top,
+        options.padding_right,
+        options.padding_bottom,
+        options.padding_left,
+    };
+    for (int i = 0; i < 4; ++i) {
+        node.style.padding[i] = option_padding[i] >= 0.0f
+            ? option_padding[i]
+            : default_padding[i];
+    }
+    node.style.max_width = options.max_width;
+    node.style.fixed_height = options.fixed_height;
 
-    if (disabled) {
+    if (options.disabled) {
         node.is_input = false;
-        node.background = t.state_disabled_bg;
-        node.text_color = t.state_disabled_fg;
-        node.border_color = t.state_disabled_border;
-        node.border_width = 1;
+        node.background = options.has_background
+            ? options.background
+            : t.state_disabled_bg;
+        node.text_color = options.has_text_color
+            ? options.text_color
+            : t.state_disabled_fg;
+        node.border_color = options.has_border_color
+            ? options.border_color
+            : t.state_disabled_border;
+        node.border_width = options.border_width >= 0.0f
+            ? options.border_width
+            : 1.0f;
+        apply_text_field_material(node, options);
         node.cursor_type = 0;
         node.focusable = false;
         node.debug_semantic_enabled = false;
@@ -709,28 +781,34 @@ inline void text_field(str hint, std::string const& current,
 
     node.is_input = true;
     Color resting_border;
-    if (error) {
+    if (options.error) {
         node.background = t.state_error_bg;
         node.text_color = current.empty() ? t.muted : t.state_error_fg;
         resting_border = t.state_error_border;
     } else {
-        node.background = t.surface;
+        node.background = options.has_background ? options.background : t.surface;
         node.text_color = current.empty() ? t.muted : t.foreground;
-        resting_border = t.border;
+        resting_border = options.has_border_color ? options.border_color : t.border;
     }
+    if (options.has_text_color)
+        node.text_color = options.text_color;
     node.cursor_type = 1;
 
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
     bool const is_focused = detail::focus_ring_visible(id);
+    float const base_border_width = options.border_width >= 0.0f
+        ? options.border_width
+        : 1.0f;
     // View-time focus ring: width grows from 1px to
     // `state_focus_ring_width`, colour cross-fades from the resting
     // border (or `state_error_border`) to `state_focus_ring`. Pointer
     // focus still moves the caret, but only keyboard focus paints the ring.
     int const focus_ms = detail::focus_ring_transition_ms(id, 150);
     node.border_width = animate_float(
-        is_focused ? t.state_focus_ring_width : 1.0f, focus_ms);
+        is_focused ? t.state_focus_ring_width : base_border_width, focus_ms);
     node.border_color = animate_color(
         is_focused ? t.state_focus_ring : resting_border, focus_ms);
+    apply_text_field_material(node, options);
     detail::g_app.callbacks.push_back([] {});
     detail::g_app.callback_roles.push_back(InteractionRole::TextField);
     using MapperFn = Msg(*)(std::string);
@@ -754,6 +832,16 @@ inline void text_field(str hint, std::string const& current,
     detail::g_app.input_nodes.push_back({id, h});
 
     detail::attach_to_scope(h);
+}
+
+template<typename Msg>
+inline void text_field(str hint, std::string const& current,
+                       Msg(*mapper)(std::string),
+                       bool error = false, bool disabled = false) {
+    TextFieldStyleOptions options;
+    options.error = error;
+    options.disabled = disabled;
+    text_field<Msg>(hint, current, mapper, options);
 }
 
 inline void image(str url, float width, float height) {

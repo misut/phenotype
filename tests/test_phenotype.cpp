@@ -4355,11 +4355,11 @@ struct Changed { std::string text; };
 using TfMsg = std::variant<Changed>;
 inline TfMsg make_changed(std::string s) { return Changed{std::move(s)}; }
 
-inline NodeHandle build_text_field(std::string const& current,
-                                   bool error,
-                                   bool disabled,
-                                   unsigned int focused_id = 0xFFFFFFFFu,
-                                   bool focus_visible = false) {
+inline NodeHandle build_text_field_with_options(
+        std::string const& current,
+        TextFieldStyleOptions options,
+        unsigned int focused_id = 0xFFFFFFFFu,
+        bool focus_visible = false) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::g_app.input_handlers.clear();
@@ -4379,12 +4379,27 @@ inline NodeHandle build_text_field(std::string const& current,
 
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::text_field<TfMsg>("Name", current, &make_changed, error, disabled);
+    widget::text_field<TfMsg>("Name", current, &make_changed, options);
     Scope::set_current(nullptr);
 
     auto& root = detail::node_at(root_h);
     assert(root.children.size() == 1);
     return root.children[0];
+}
+
+inline NodeHandle build_text_field(std::string const& current,
+                                   bool error,
+                                   bool disabled,
+                                   unsigned int focused_id = 0xFFFFFFFFu,
+                                   bool focus_visible = false) {
+    TextFieldStyleOptions options;
+    options.error = error;
+    options.disabled = disabled;
+    return build_text_field_with_options(
+        current,
+        options,
+        focused_id,
+        focus_visible);
 }
 } // namespace text_field_test
 
@@ -4472,6 +4487,67 @@ void test_text_field_focus_ring_uses_keyboard_modality() {
     detail::g_app.focused_id = 0xFFFFFFFFu;
     detail::g_app.focus_visible = false;
     std::puts("PASS: text_field focus ring uses keyboard modality");
+}
+
+void test_glass_text_field_style_material_contract() {
+    auto style = widget::glass_text_field_style(GlassTextFieldStyleOptions{
+        .kind = MaterialKind::Regular,
+        .role = MaterialSurfaceRole::Toolbar,
+        .width = 220.0f,
+        .height = 34.0f,
+        .semantic_label = "Search Field",
+    });
+    assert(style.has_material);
+    assert(style.material.kind == MaterialKind::Regular);
+    assert(style.material.role == MaterialSurfaceRole::Toolbar);
+    assert(style.material.fallback);
+    assert(style.material.container.interactive);
+    assert(style.has_background);
+    assert(style.has_border_color);
+    assert(style.border_width == 0.0f);
+    assert(style.max_width == 220.0f);
+    assert(style.fixed_height == 34.0f);
+
+    auto h = text_field_test::build_text_field_with_options(
+        "query",
+        style,
+        /*focused_id=*/0u,
+        /*focus_visible=*/false);
+    auto& f = detail::node_at(h);
+    assert(f.callback_id == 0u);
+    assert(f.is_input);
+    assert(f.focusable);
+    assert(f.interaction_role == InteractionRole::TextField);
+    assert(f.material.kind == MaterialKind::Regular);
+    assert(f.material.role == MaterialSurfaceRole::Toolbar);
+    assert(f.material.container.interactive);
+    assert(f.material.tint == f.background);
+    assert(f.material.border == f.border_color);
+    assert(f.material.foreground == f.text_color);
+    assert(f.border_width == 0.0f);
+    assert(f.style.max_width == 220.0f);
+    assert(f.style.fixed_height == 34.0f);
+    assert(f.debug_semantic_label == "Search Field");
+
+    auto disabled_style = widget::glass_text_field_style(
+        GlassTextFieldStyleOptions{
+            .kind = MaterialKind::Thin,
+            .role = MaterialSurfaceRole::Navigation,
+            .disabled = true,
+            .semantic_label = "Disabled Search",
+        });
+    auto disabled_h = text_field_test::build_text_field_with_options(
+        "locked",
+        disabled_style);
+    auto& disabled = detail::node_at(disabled_h);
+    assert(disabled.material.kind == MaterialKind::Thin);
+    assert(disabled.material.role == MaterialSurfaceRole::Navigation);
+    assert(!disabled.material.container.interactive);
+    assert(!disabled.focusable);
+    assert(!disabled.is_input);
+    assert(disabled.debug_semantic_label == "Disabled Search");
+
+    std::puts("PASS: glass text field style emits material contract");
 }
 
 namespace text_variant_test {
@@ -5213,6 +5289,7 @@ int main() {
     test_text_field_error();
     test_text_field_disabled();
     test_text_field_focus_ring_uses_keyboard_modality();
+    test_glass_text_field_style_material_contract();
     test_text_size_variants();
     test_text_color_variants();
     test_text_inline_code_chrome();
