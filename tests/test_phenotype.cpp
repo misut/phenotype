@@ -2595,6 +2595,110 @@ void test_material_surface_shape_overrides() {
     std::puts("PASS: material surface shape overrides");
 }
 
+struct MaterialInteractionClick {};
+using MaterialInteractionMsg = std::variant<MaterialInteractionClick>;
+
+MaterialRectCmd const& first_material_command(
+        std::vector<DrawCommand> const& commands) {
+    for (auto const& cmd : commands) {
+        if (auto const* material = std::get_if<MaterialRectCmd>(&cmd))
+            return *material;
+    }
+    assert(false && "expected MaterialRect command");
+    static MaterialRectCmd fallback{};
+    return fallback;
+}
+
+void test_material_surface_resolves_live_input_interaction() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.callback_roles.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+    detail::g_app.hovered_id = 0u;
+    detail::g_app.focused_id = 0u;
+    detail::g_app.focus_visible = false;
+    detail::g_app.pressed_id = 0u;
+    detail::g_app.prev_hovered_id = 0xFFFFFFFFu;
+    detail::g_app.prev_focused_id = 0xFFFFFFFFu;
+    detail::g_app.prev_focus_visible = false;
+    detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
+    detail::g_app.prev_pointer_valid = false;
+    detail::set_pointer_position(80.0f, 18.0f);
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::material_container(
+        layout::MaterialContainerOptions{
+            .container_id = 707u,
+            .union_id = 11u,
+            .spacing = 16.0f,
+            .interactive = true,
+            .morph_transitions = true,
+        },
+        [] {
+            layout::material_surface(
+                layout::MaterialSurfaceOptions{
+                    .kind = MaterialKind::Regular,
+                    .role = MaterialSurfaceRole::Toolbar,
+                    .fixed_height = 64.0f,
+                    .border_width = 0.0f,
+                    .semantic_label = "Interactive Glass",
+                },
+                [] {
+                    widget::button<MaterialInteractionMsg>(
+                        "Action",
+                        MaterialInteractionClick{},
+                        ButtonVariant::Default,
+                        false);
+                });
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    detail::g_app.paint_invalidation_mask =
+        detail::compute_paint_invalidation_mask(detail::g_app);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto commands = parse_commands(CMD_BUF, CMD_LEN);
+    auto const& pointer_cmd = first_material_command(commands);
+    auto const& pointer = pointer_cmd.material.interaction;
+    assert(pointer_cmd.material.container.interactive);
+    assert(pointer.hovered);
+    assert(pointer.pressed);
+    assert(!pointer.focused);
+    assert(pointer.pointer_inside);
+    assert(pointer.pointer_x > 0.20f && pointer.pointer_x < 0.30f);
+    assert(pointer.pointer_y > 0.20f && pointer.pointer_y < 0.35f);
+
+    detail::persist_paint_inputs(detail::g_app);
+    detail::g_app.focus_visible = true;
+    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    CMD_LEN = 0;
+    detail::g_app.paint_invalidation_mask =
+        detail::compute_paint_invalidation_mask(detail::g_app);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+    auto focused_commands = parse_commands(CMD_BUF, CMD_LEN);
+    auto const& focused_cmd = first_material_command(focused_commands);
+    auto const& focused = focused_cmd.material.interaction;
+    assert(focused.hovered);
+    assert(!focused.pressed);
+    assert(focused.focused);
+    assert(focused.pointer_inside);
+
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = false;
+    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::clear_pointer_position();
+    std::puts("PASS: material surface resolves live input interaction");
+}
+
 void test_glass_surface_presets_emit_material_contract() {
     auto toolbar = layout::glass_surface_options(
         layout::GlassSurfacePreset::Toolbar);
@@ -4957,6 +5061,7 @@ int main() {
     test_material_text_foreground_resolution();
     test_material_surface_emits_material_rect_command();
     test_material_surface_shape_overrides();
+    test_material_surface_resolves_live_input_interaction();
     test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();
     test_material_command_preserves_style_optics();

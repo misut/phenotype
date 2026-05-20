@@ -200,6 +200,9 @@ struct AppState {
     FocusVisibilityReason focus_visibility_reason =
         FocusVisibilityReason::NoFocus;
     unsigned int pressed_id = 0xFFFFFFFF;
+    bool pointer_valid = false;
+    float pointer_x = 0.0f;
+    float pointer_y = 0.0f;
     unsigned int caret_pos = 0xFFFFFFFFu;
     unsigned int selection_anchor = 0xFFFFFFFFu;
     bool caret_visible = true;
@@ -291,6 +294,9 @@ struct AppState {
     unsigned int  prev_focused_id = 0xFFFFFFFFu;
     bool          prev_focus_visible = false;
     unsigned int  prev_pressed_id = 0xFFFFFFFFu;
+    bool          prev_pointer_valid = false;
+    float         prev_pointer_x = 0.0f;
+    float         prev_pointer_y = 0.0f;
     // Computed once per frame by the runner before paint; OR'd against
     // each node's paint_callback_mask to decide whether a blit is safe.
     // Non-zero bits correspond to callback_ids whose hover/focus/press state

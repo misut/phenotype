@@ -195,7 +195,10 @@ presence, normalized pointer coordinates, reduced-motion handling, and the
 exact opacity/blur/saturation/edge/shadow deltas before any backend runs. This
 keeps Liquid Glass response policy out of AppKit, Metal, Android, Windows, and
 artifact-writing code while still giving each adapter an executable response
-contract.
+contract. The renderer now also resolves live pointer position and subtree
+hover/press/focus ids into the descriptor before command emission, preserving
+explicit probe descriptors while allowing real controls inside an interactive
+glass container to drive the same pure response path.
 `MaterialPlan.optical_response` is the compact schema-stable summary of that
 contract. It classifies each surface as sampled backdrop glass, content-layer
 standard material, deterministic fallback, or inactive, then records the

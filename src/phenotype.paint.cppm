@@ -773,6 +773,76 @@ inline std::uint64_t callback_mask_bit(unsigned int callback_id) noexcept {
     return 1ULL << (callback_id & 63u);
 }
 
+struct SubtreeInteractionState {
+    bool hovered = false;
+    bool focused = false;
+    bool pressed = false;
+};
+
+inline void collect_subtree_interaction_state(
+        NodeHandle node_h,
+        SubtreeInteractionState& state) {
+    auto& node = node_at(node_h);
+    if (node.callback_id != 0xFFFFFFFFu) {
+        state.hovered = state.hovered || node.callback_id == g_app.hovered_id;
+        state.focused = state.focused || (
+            g_app.focus_visible
+            && node.callback_id == g_app.focused_id);
+        state.pressed = state.pressed || node.callback_id == g_app.pressed_id;
+    }
+    for (auto child_h : node.children)
+        collect_subtree_interaction_state(child_h, state);
+}
+
+inline bool point_inside_rect(float px, float py,
+                              float x, float y, float w, float h) noexcept {
+    return w > 0.0f && h > 0.0f
+        && px >= x && px <= x + w
+        && py >= y && py <= y + h;
+}
+
+inline float normalized_pointer_axis(float pointer,
+                                     float origin,
+                                     float extent) noexcept {
+    if (extent <= 0.0f)
+        return 0.5f;
+    return std::clamp((pointer - origin) / extent, 0.0f, 1.0f);
+}
+
+inline MaterialInteractionDescriptor resolve_material_interaction(
+        NodeHandle node_h,
+        LayoutNode const& node,
+        float draw_x,
+        float draw_y) {
+    auto resolved = node.material.interaction;
+    SubtreeInteractionState subtree{};
+    collect_subtree_interaction_state(node_h, subtree);
+    resolved.hovered = resolved.hovered || subtree.hovered;
+    resolved.focused = resolved.focused || subtree.focused;
+    resolved.pressed = resolved.pressed || subtree.pressed;
+
+    bool const pointer_inside = g_app.pointer_valid
+        && point_inside_rect(
+            g_app.pointer_x,
+            g_app.pointer_y,
+            draw_x,
+            draw_y,
+            node.width,
+            node.height);
+    resolved.pointer_inside = resolved.pointer_inside || pointer_inside;
+    if (pointer_inside) {
+        resolved.pointer_x = normalized_pointer_axis(
+            g_app.pointer_x,
+            draw_x,
+            node.width);
+        resolved.pointer_y = normalized_pointer_axis(
+            g_app.pointer_y,
+            draw_y,
+            node.height);
+    }
+    return resolved;
+}
+
 // After a subtree blit, descendants' paint_offset values still point
 // into prev_cmd_buf positions that reflect the *previous* layout — the
 // blit replaced their bytes wholesale without rewriting per-descendant
@@ -953,8 +1023,14 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     Color bg = (is_hovered && node.hover_background.a > 0)
         ? node.hover_background : node.background;
     if (node.material.kind != MaterialKind::None) {
+        auto material = node.material;
+        material.interaction = resolve_material_interaction(
+            node_h,
+            node,
+            draw_x,
+            draw_y);
         emit_material_rect(r, draw_x, draw_y, node.width, node.height,
-                           node.border_radius, node.material);
+                           node.border_radius, material);
     } else if (bg.a > 0) {
         if (node.border_radius > 0)
             emit_round_rect(r, draw_x, draw_y, node.width, node.height,

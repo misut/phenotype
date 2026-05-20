@@ -714,6 +714,8 @@ inline bool dispatch_gesture(::phenotype::GestureEvent ev) {
 
 inline bool dispatch_mouse_button(float mx, float my,
                                   MouseButton button, KeyAction action, int mods) {
+    bool const pointer_changed =
+        ::phenotype::detail::set_pointer_position(mx, my);
     bool focus_visibility_cleared = false;
     if (button == MouseButton::Left && action == KeyAction::Press) {
         focus_visibility_cleared =
@@ -735,7 +737,7 @@ inline bool dispatch_mouse_button(float mx, float my,
         }
         if (focus_visibility_cleared || pressed_changed)
             ::phenotype::detail::trigger_rebuild();
-        else
+        else if (pointer_changed || action == KeyAction::Press)
             repaint_current();
         ::phenotype::detail::note_input_event(
             "click", "shell", "pointer-click", "platform-consumed", invalid_callback_id);
@@ -745,7 +747,9 @@ inline bool dispatch_mouse_button(float mx, float my,
     if (button != MouseButton::Left) {
         ::phenotype::detail::note_input_event(
             "click", "shell", "pointer-click", "ignored", invalid_callback_id);
-        return false;
+        if (pointer_changed)
+            repaint_current();
+        return pointer_changed;
     }
 
     if (action == KeyAction::Release) {
@@ -762,13 +766,17 @@ inline bool dispatch_mouse_button(float mx, float my,
             ::phenotype::detail::get_focused_id());
         if (pressed_changed)
             ::phenotype::detail::trigger_rebuild();
-        return had_drag || pressed_changed;
+        else if (pointer_changed)
+            repaint_current();
+        return had_drag || pressed_changed || pointer_changed;
     }
 
     if (action != KeyAction::Press) {
         ::phenotype::detail::note_input_event(
             "click", "shell", "pointer-click", "ignored", invalid_callback_id);
-        return false;
+        if (pointer_changed)
+            repaint_current();
+        return pointer_changed;
     }
 
     if (auto hit = hit_test(mx, my, g_app_state.scroll_x, g_app_state.scroll_y)) {
@@ -807,10 +815,10 @@ inline bool dispatch_mouse_button(float mx, float my,
         if (focus_visibility_cleared || pressed_changed || focus_changed
             || activated)
             ::phenotype::detail::trigger_rebuild();
-        else if (caret_changed)
+        else if (caret_changed || pointer_changed)
             repaint_current();
         return focus_visibility_cleared || pressed_changed || focus_changed
-            || caret_changed || activated;
+            || caret_changed || activated || pointer_changed;
     }
 
     g_app_state.drag_selecting = false;
@@ -825,7 +833,10 @@ inline bool dispatch_mouse_button(float mx, float my,
         reset_caret_blink_timer();
     if (focus_visibility_cleared || cleared || pressed_cleared)
         ::phenotype::detail::trigger_rebuild();
-    return focus_visibility_cleared || cleared || pressed_cleared;
+    else if (pointer_changed)
+        repaint_current();
+    return focus_visibility_cleared || cleared || pressed_cleared
+        || pointer_changed;
 }
 
 inline bool dispatch_mouse_button(float mx, float my,
@@ -841,6 +852,8 @@ inline bool dispatch_mouse_button(float mx, float my,
 inline bool dispatch_cursor_pos(float mx, float my) {
     g_app_state.last_mouse_x = mx;
     g_app_state.last_mouse_y = my;
+    bool const pointer_changed =
+        ::phenotype::detail::set_pointer_position(mx, my);
     if (g_app_state.host && g_app_state.host->platform
         && g_app_state.host->platform->input.handle_cursor_pos
         && g_app_state.host->platform->input.handle_cursor_pos(mx, my)) {
@@ -863,6 +876,8 @@ inline bool dispatch_cursor_pos(float mx, float my) {
         bool handled = move_focused_selection_from_pointer_x(mx, true);
         if (handled)
             repaint_current();
+        else if (pointer_changed)
+            repaint_current();
         update_hover_cursor(hit.has_value());
         ::phenotype::detail::note_input_event(
             "click",
@@ -882,11 +897,13 @@ inline bool dispatch_cursor_pos(float mx, float my) {
     // widget::button etc.), so the new hovered_id has to feed back into
     // the next view rebuild — `repaint_current` alone leaves the arena
     // showing the previous frame's hover sample.
-    if (handled)
-        ::phenotype::detail::trigger_rebuild();
-    update_hover_cursor(hit.has_value());
-    return handled;
-}
+        if (handled)
+            ::phenotype::detail::trigger_rebuild();
+        else if (pointer_changed)
+            repaint_current();
+        update_hover_cursor(hit.has_value());
+        return handled || pointer_changed;
+    }
 
 // Try to route `delta_pixels` into the topmost scroll_view whose
 // painted rect contains the cursor. Walk in reverse because paint_node

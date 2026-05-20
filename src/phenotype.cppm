@@ -1734,6 +1734,64 @@ std::int64_t steady_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
 }
+
+inline std::uint64_t paint_invalidation_bit(unsigned int id) noexcept {
+    return id == 0xFFFFFFFFu ? 0ULL : (1ULL << (id & 63u));
+}
+
+inline bool pointer_snapshot_changed(AppState const& app) noexcept {
+    return app.pointer_valid != app.prev_pointer_valid
+        || (app.pointer_valid
+            && (app.pointer_x != app.prev_pointer_x
+                || app.pointer_y != app.prev_pointer_y));
+}
+
+inline std::uint64_t compute_paint_invalidation_mask(AppState const& app) noexcept {
+    std::uint64_t inv = 0;
+    if (app.hovered_id != app.prev_hovered_id) {
+        inv |= paint_invalidation_bit(app.hovered_id)
+            | paint_invalidation_bit(app.prev_hovered_id);
+    }
+    if (app.focused_id != app.prev_focused_id) {
+        inv |= paint_invalidation_bit(app.focused_id)
+            | paint_invalidation_bit(app.prev_focused_id);
+    }
+    if (app.focus_visible != app.prev_focus_visible) {
+        inv |= paint_invalidation_bit(app.focused_id)
+            | paint_invalidation_bit(app.prev_focused_id);
+    }
+    if (app.pressed_id != app.prev_pressed_id) {
+        inv |= paint_invalidation_bit(app.pressed_id)
+            | paint_invalidation_bit(app.prev_pressed_id);
+    }
+    inv |= paint_invalidation_bit(app.focused_id);
+    inv |= paint_invalidation_bit(app.pressed_id);
+    if (app.has_active_animations || pointer_snapshot_changed(app)) {
+        inv = ~static_cast<std::uint64_t>(0);
+    }
+    return inv;
+}
+
+inline void persist_paint_inputs(AppState& app) noexcept {
+    app.prev_scroll_x = app.scroll_x;
+    app.prev_scroll_y = app.scroll_y;
+    app.prev_hovered_id = app.hovered_id;
+    app.prev_focused_id = app.focused_id;
+    app.prev_focus_visible = app.focus_visible;
+    app.prev_pressed_id = app.pressed_id;
+    app.prev_pointer_valid = app.pointer_valid;
+    app.prev_pointer_x = app.pointer_x;
+    app.prev_pointer_y = app.pointer_y;
+}
+
+inline void reset_pointer_inputs(AppState& app) noexcept {
+    app.pointer_valid = false;
+    app.prev_pointer_valid = false;
+    app.pointer_x = 0.0f;
+    app.pointer_y = 0.0f;
+    app.prev_pointer_x = 0.0f;
+    app.prev_pointer_y = 0.0f;
+}
 }
 
 // ============================================================
@@ -1776,6 +1834,7 @@ void run(Host& host, View view, Update update) {
     detail::g_app.prev_focus_visible = false;
     detail::g_app.pressed_id = 0xFFFFFFFFu;
     detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
+    detail::reset_pointer_inputs(detail::g_app);
 
     detail::install_app_runner([] {
         auto& host = *saved_host;
@@ -1841,44 +1900,8 @@ void run(Host& host, View view, Update update) {
         auto t3 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t3 - t2, {{"phase", "layout"}});
 
-        // Paint-cache invalidation mask — subtrees whose callback_mask
-        // intersects this bitset must re-walk instead of blitting from
-        // prev_cmd_buf. We include both the old and new hover/focus/press
-        // ids so that the subtree that USED to be hovered/focused/pressed
-        // redraws without its transient background, and the subtree that is
-        // now hovered/focused/pressed redraws WITH it. The focused id is always
-        // included because focused inputs can receive caret/selection/
-        // text changes that alter emitted bytes without the id itself
-        // transitioning.
-        auto mask_bit = [](unsigned int id) -> std::uint64_t {
-            return id == 0xFFFFFFFFu ? 0ULL : (1ULL << (id & 63u));
-        };
-        std::uint64_t inv = 0;
-        if (app.hovered_id != app.prev_hovered_id) {
-            inv |= mask_bit(app.hovered_id) | mask_bit(app.prev_hovered_id);
-        }
-        if (app.focused_id != app.prev_focused_id) {
-            inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
-        }
-        if (app.focus_visible != app.prev_focus_visible) {
-            inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
-        }
-        if (app.pressed_id != app.prev_pressed_id) {
-            inv |= mask_bit(app.pressed_id) | mask_bit(app.prev_pressed_id);
-        }
-        inv |= mask_bit(app.focused_id);
-        inv |= mask_bit(app.pressed_id);
-        // While any view-time interpolation is still advancing, the
-        // animated `node.*` values change every frame without the
-        // owning callback_id appearing in the diff above (e.g. a
-        // widget that just lost focus is no longer in `focused_id`,
-        // but its border_width is still fading out). Force-invalidate
-        // every cached subtree until everything converges; the flag
-        // self-clears at the start of the next view.
-        if (app.has_active_animations) {
-            inv = ~static_cast<std::uint64_t>(0);
-        }
-        app.paint_invalidation_mask = inv;
+        app.paint_invalidation_mask =
+            detail::compute_paint_invalidation_mask(app);
 
         app.focusable_ids.clear();
         detail::collect_focusable_ids(root_h);
@@ -1904,12 +1927,7 @@ void run(Host& host, View view, Update update) {
         metrics::inst::phase_duration.record(t5 - t4, {{"phase", "flush"}});
 
         // Persist the ambient paint inputs for next frame's blit guard.
-        app.prev_scroll_x   = app.scroll_x;
-        app.prev_scroll_y   = app.scroll_y;
-        app.prev_hovered_id = app.hovered_id;
-        app.prev_focused_id = app.focused_id;
-        app.prev_focus_visible = app.focus_visible;
-        app.prev_pressed_id = app.pressed_id;
+        detail::persist_paint_inputs(app);
 
         auto total = t5 - t0;
         metrics::inst::frame_duration.record(total);
@@ -1939,6 +1957,7 @@ void run(View view, Update update) {
     detail::g_app.prev_focus_visible = false;
     detail::g_app.pressed_id = 0xFFFFFFFFu;
     detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
+    detail::reset_pointer_inputs(detail::g_app);
 
     detail::install_app_runner([] {
         auto t0 = metrics::detail::now_ns();
@@ -1999,35 +2018,8 @@ void run(View view, Update update) {
 
         // Paint-cache invalidation mask — see the native runner for a
         // detailed explanation; the WASI path mirrors that logic.
-        auto mask_bit = [](unsigned int id) -> std::uint64_t {
-            return id == 0xFFFFFFFFu ? 0ULL : (1ULL << (id & 63u));
-        };
-        std::uint64_t inv = 0;
-        if (app.hovered_id != app.prev_hovered_id) {
-            inv |= mask_bit(app.hovered_id) | mask_bit(app.prev_hovered_id);
-        }
-        if (app.focused_id != app.prev_focused_id) {
-            inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
-        }
-        if (app.focus_visible != app.prev_focus_visible) {
-            inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
-        }
-        if (app.pressed_id != app.prev_pressed_id) {
-            inv |= mask_bit(app.pressed_id) | mask_bit(app.prev_pressed_id);
-        }
-        inv |= mask_bit(app.focused_id);
-        inv |= mask_bit(app.pressed_id);
-        // While any view-time interpolation is still advancing, the
-        // animated `node.*` values change every frame without the
-        // owning callback_id appearing in the diff above (e.g. a
-        // widget that just lost focus is no longer in `focused_id`,
-        // but its border_width is still fading out). Force-invalidate
-        // every cached subtree until everything converges; the flag
-        // self-clears at the start of the next view.
-        if (app.has_active_animations) {
-            inv = ~static_cast<std::uint64_t>(0);
-        }
-        app.paint_invalidation_mask = inv;
+        app.paint_invalidation_mask =
+            detail::compute_paint_invalidation_mask(app);
 
         app.focusable_ids.clear();
         detail::collect_focusable_ids(root_h);
@@ -2052,12 +2044,7 @@ void run(View view, Update update) {
         metrics::inst::phase_duration.record(t5 - t4, {{"phase", "flush"}});
 
         // Persist the ambient paint inputs for next frame's blit guard.
-        app.prev_scroll_x   = app.scroll_x;
-        app.prev_scroll_y   = app.scroll_y;
-        app.prev_hovered_id = app.hovered_id;
-        app.prev_focused_id = app.focused_id;
-        app.prev_focus_visible = app.focus_visible;
-        app.prev_pressed_id = app.pressed_id;
+        detail::persist_paint_inputs(app);
 
         auto total = t5 - t0;
         metrics::inst::frame_duration.record(total);
@@ -3856,6 +3843,7 @@ void repaint(Host& host, float scroll_x, float scroll_y) {
     collect_focusable_ids(app.root);
     for (auto overlay_h : app.overlays)
         collect_focusable_ids(overlay_h);
+    app.paint_invalidation_mask = compute_paint_invalidation_mask(app);
     app.paint_scissor_depth = 0;
     emit_clear(host, app.theme.background);
     float vh = host.canvas_height();
@@ -3866,12 +3854,7 @@ void repaint(Host& host, float scroll_x, float scroll_y) {
     for (auto overlay_h : app.overlays)
         paint_node(host, host, overlay_h, 0, 0, 0.0f, 0.0f, cw, vh);
     flush_if_changed(host);
-    app.prev_scroll_x   = app.scroll_x;
-    app.prev_scroll_y   = app.scroll_y;
-    app.prev_hovered_id = app.hovered_id;
-    app.prev_focused_id = app.focused_id;
-    app.prev_focus_visible = app.focus_visible;
-    app.prev_pressed_id = app.pressed_id;
+    persist_paint_inputs(app);
 }
 #else
 inline void repaint(float scroll_x, float scroll_y) {
@@ -3891,6 +3874,7 @@ inline void repaint(float scroll_x, float scroll_y) {
     collect_focusable_ids(app.root);
     for (auto overlay_h : app.overlays)
         collect_focusable_ids(overlay_h);
+    app.paint_invalidation_mask = compute_paint_invalidation_mask(app);
     app.paint_scissor_depth = 0;
     wasi_emit_clear(app.theme.background);
     float vh = phenotype_get_canvas_height();
@@ -3901,12 +3885,7 @@ inline void repaint(float scroll_x, float scroll_y) {
     for (auto overlay_h : app.overlays)
         wasi_paint_node(overlay_h, 0, 0, 0.0f, 0.0f, cw, vh);
     wasi_flush_if_changed();
-    app.prev_scroll_x   = app.scroll_x;
-    app.prev_scroll_y   = app.scroll_y;
-    app.prev_hovered_id = app.hovered_id;
-    app.prev_focused_id = app.focused_id;
-    app.prev_focus_visible = app.focus_visible;
-    app.prev_pressed_id = app.pressed_id;
+    persist_paint_inputs(app);
 }
 #endif
 
@@ -4263,6 +4242,23 @@ inline void set_scroll_y(float scroll_y) {
     g_app.scroll_y = scroll_y;
 }
 
+inline bool set_pointer_position(float x, float y) noexcept {
+    bool const changed = !g_app.pointer_valid
+        || g_app.pointer_x != x
+        || g_app.pointer_y != y;
+    g_app.pointer_valid = true;
+    g_app.pointer_x = x;
+    g_app.pointer_y = y;
+    return changed;
+}
+
+inline bool clear_pointer_position() noexcept {
+    if (!g_app.pointer_valid)
+        return false;
+    g_app.pointer_valid = false;
+    return true;
+}
+
 inline void set_hover_id_without_event(unsigned int callback_id) {
     g_app.hovered_id = callback_id;
 }
@@ -4312,6 +4308,16 @@ extern "C" {
     void phenotype_set_hover(unsigned int callback_id) {
         if (phenotype::detail::set_hover_id(callback_id))
             phenotype_repaint(phenotype::detail::g_app.scroll_y);
+    }
+
+    __attribute__((export_name("phenotype_set_pointer")))
+    unsigned int phenotype_set_pointer(float x, float y) {
+        return phenotype::detail::set_pointer_position(x, y) ? 1u : 0u;
+    }
+
+    __attribute__((export_name("phenotype_clear_pointer")))
+    unsigned int phenotype_clear_pointer(void) {
+        return phenotype::detail::clear_pointer_position() ? 1u : 0u;
     }
 
     __attribute__((export_name("phenotype_set_focus")))
