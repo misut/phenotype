@@ -37,7 +37,10 @@ turning `main.cpp` into every subsystem at once:
   expectation checking, pure input script parsing, and local artifact gate.
 - `phenotype_cli.icons` owns `phenotype icons ...` and `phenotype svg inspect`
   command routing plus lookup/presentation/render JSON and the icon helper
-  payloads reused by file explorer debug output. `phenotype_cli.icons_common`
+  payloads reused by file explorer debug output. `phenotype_cli.icon_audit`
+  owns the aggregate `phenotype icons check` gate that combines catalog,
+  source-provenance, and file-type icon checks into one command.
+  `phenotype_cli.icons_common`
   owns shared lookup, role parsing, color/source JSON, and interaction helpers;
   `phenotype_cli.icons_render` owns standalone rendered-icon SVG wrapping;
   `phenotype_cli.icons_checks` keeps catalog checks separate from command
@@ -148,6 +151,13 @@ The initial scope is intentionally narrow:
   the stored `phenotype.bundle.json` schema, command, file count, byte total,
   relative destinations, generated app icon record, and digests without
   needing the original source package root.
+- `phenotype icons check` runs the full built-in icon gate in one command.
+  It combines the pure catalog checks, embedded source-provenance checks, and
+  Finder-style file-type icon checks, then reports aggregate counts for all
+  symbols, Lucide-backed symbols, unique Lucide SVG sources, file-type symbols,
+  reference sources, and Apple/platform/runtime-fetch boundaries. This is the
+  fastest single command to run after changing toolbar, sidebar, or file-type
+  glyphs.
 - `phenotype icons catalog` emits the built-in icon catalog contract from the
   pure `phenotype.icon_catalog` path package. JSON output reports the
   macOS/Finder/SF-Symbols-inspired reference policy, package-owned SVG asset

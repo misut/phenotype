@@ -3926,11 +3926,11 @@ void test_macos_control_button_style_contract() {
 
     auto style = icons::macos_control_button_style(options);
     assert(style.has_background);
-    assert(style.background.r == 248);
-    assert(style.background.a == 238);
+    assert(style.background.r == 236);
+    assert(style.background.a == 255);
     assert(style.has_hover_background);
-    assert(style.hover_background.r == 242);
-    assert(style.hover_background.a == 248);
+    assert(style.hover_background.r == 232);
+    assert(style.hover_background.a == 255);
     assert(style.has_pressed_background);
     assert(style.border_width == 0.0f);
     assert(style.border_radius == 8.0f);
@@ -4792,8 +4792,8 @@ void test_icon_catalog_umbrella_export() {
     auto const sidebar_chrome = phenotype::icon_catalog::macos_control_chrome(
         phenotype::icon_catalog::SymbolPresentationRole::Sidebar,
         phenotype::icon_catalog::SymbolInteractionState{true, true});
-    assert(sidebar_chrome.background_color.a == 238);
-    assert(sidebar_chrome.hover_background_color.a == 248);
+    assert(sidebar_chrome.background_color.a == 255);
+    assert(sidebar_chrome.hover_background_color.a == 255);
 
     std::puts("PASS: umbrella module exports icon catalog contract");
 }

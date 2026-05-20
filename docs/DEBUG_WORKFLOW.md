@@ -172,6 +172,23 @@ mise exec -- exon build
 root and forwards the verifier's JSON report. This keeps Python managed by
 `mise`/`uv` while moving the developer-facing entry point under the CLI.
 
+For icon-source regressions, start with the aggregate icon gate:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli icons check --json
+```
+
+`icons check` combines the pure catalog, embedded source-provenance, and
+Finder-style file-type icon checks. It reports whether every toolbar, sidebar,
+action, and file-type symbol still uses audited permissive SVG sources, whether
+the Lucide source URLs are pinned to the catalog revision, and whether any
+Apple-owned, platform-extracted, or runtime-fetched artwork has entered the
+contract. Use the narrower `icons catalog`, `icons sources`, or `icons
+file-types` commands only after the aggregate gate identifies which group
+drifted.
+
 The slow local native gates are available through the same CLI surface:
 
 ```sh

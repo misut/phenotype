@@ -15,6 +15,7 @@ import phenotype_cli.doctor;
 import phenotype_cli.file_explorer;
 import phenotype_cli.file_explorer_gate;
 import phenotype_cli.glass_showcase;
+import phenotype_cli.icon_audit;
 import phenotype_cli.icon_file_types;
 import phenotype_cli.icon_sources;
 import phenotype_cli.icons;
@@ -36,6 +37,7 @@ using namespace phenotype_cli::doctor;
 using namespace phenotype_cli::file_explorer;
 using namespace phenotype_cli::file_explorer_gate;
 using namespace phenotype_cli::glass_showcase;
+using namespace phenotype_cli::icon_audit;
 using namespace phenotype_cli::icon_file_types;
 using namespace phenotype_cli::icon_sources;
 using namespace phenotype_cli::icons;
@@ -1003,6 +1005,9 @@ int run(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "package", "verify-bundle"})
         return cli_package::run_package_verify_bundle(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "icons", "check"})
+        return run_icons_check(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "icons", "catalog"})
         return run_icons_catalog(*parsed);
