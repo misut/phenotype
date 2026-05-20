@@ -12,7 +12,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 28;
+inline constexpr std::uint32_t material_plan_contract_version = 29;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
 inline constexpr unsigned int material_max_sample_taps = 25;
@@ -377,6 +377,7 @@ struct MaterialInteractionResponse {
     float shadow_alpha_delta = 0.0f;
     float shadow_radius_delta = 0.0f;
     char const* state = "inactive";
+    char const* enablement_reason = "inactive-material";
     char const* response_model = "none";
     char const* motion_policy = "static";
     bool deterministic = true;
@@ -2239,11 +2240,22 @@ inline float material_interaction_strength(
     return strength;
 }
 
+inline char const* material_interaction_enablement_reason(
+        MaterialPlan const& plan) noexcept {
+    if (plan.kind == MaterialKind::None)
+        return "inactive-material";
+    if (!plan.container.interactive)
+        return "noninteractive-container";
+    return "interactive-container";
+}
+
 inline MaterialInteractionResponse material_resolve_interaction_response(
         MaterialPlan const& plan,
         MaterialInteractionDescriptor input,
         bool reduce_motion) noexcept {
     MaterialInteractionResponse response{};
+    response.enablement_reason =
+        material_interaction_enablement_reason(plan);
     response.enabled = plan.kind != MaterialKind::None
         && plan.container.interactive;
     response.hovered = input.hovered;

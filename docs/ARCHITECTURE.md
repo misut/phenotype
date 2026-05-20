@@ -640,7 +640,9 @@ policy. `MaterialSurfaceOptions.interactive` or an interactive
 `material_container` must also be present; otherwise the command still reports
 the raw input state, but the plan keeps `interaction.enabled=false`.
 `plan_material_surface` turns the immutable input into enabled/active state,
-reduced-motion policy, response strength, and per-channel optical deltas.
+an `enablement_reason` (`inactive-material`, `noninteractive-container`, or
+`interactive-container`), reduced-motion policy, response strength, and
+per-channel optical deltas.
 Backends only decode the `MaterialRect` interaction payload and execute the
 resolved plan; they do not decide whether hover should increase opacity,
 whether press should tighten blur, or whether focus should lift the edge
@@ -868,7 +870,10 @@ growth, stage-capacity overflow, texture-copy budget drift, and material shape
 drift such as a clamped radius not matching the backend-executed radius. The
 same summary exposes optical maxima for saturation, edge highlight, edge width,
 noise opacity, shadow alpha, and shadow radius so a backend artifact can prove
-that the pure glass response survived serialization and execution.
+that the pure glass response survived serialization and execution. Interaction
+summaries also expose `enablement_reasons`, so a missing hover response can be
+debugged from the artifact without guessing whether the surface was inactive,
+not marked interactive, or eligible for Liquid Glass interaction.
 Backends separately publish `renderer.material_executor_summary` for edge-only
 execution telemetry: material instances, fallback instances, material draw
 calls, primary executor instance counts for sampled backdrop, standard fill, and

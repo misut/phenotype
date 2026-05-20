@@ -1085,6 +1085,8 @@ void test_material_runtime_record_json_contract() {
     assert(std::fabs(interaction.at("response_strength").as_float())
            < 0.0001f);
     assert(interaction.at("state").as_string() == "inactive");
+    assert(interaction.at("enablement_reason").as_string()
+           == "noninteractive-container");
     assert(interaction.at("response_model").as_string() == "none");
     assert(interaction.at("motion_policy").as_string() == "static");
     assert(interaction.at("deterministic").as_bool() == true);

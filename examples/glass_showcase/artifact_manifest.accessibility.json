@@ -36,7 +36,7 @@
       "reduced transparency disables backdrop sampling": 7
     },
     "contract_versions": {
-      "28": 7
+      "29": 7
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -129,6 +129,10 @@
     "interaction_states": {
       "inactive": 6,
       "hovered": 1
+    },
+    "interaction_enablement_reasons": {
+      "noninteractive-container": 6,
+      "interactive-container": 1
     },
     "interaction_response_models": {
       "none": 6,
