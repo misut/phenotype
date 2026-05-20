@@ -4380,6 +4380,69 @@ void test_glass_menu_item_symbol_button_material_contract() {
     std::puts("PASS: glass menu item symbol button emits material contract");
 }
 
+void test_glass_table_header_button_material_contract() {
+    set_theme(Theme{});
+
+    auto style = widget::glass_table_header_button_style(
+        GlassTableHeaderStyleOptions{
+            .sorted = true,
+            .width = 160.0f,
+            .height = 28.0f,
+            .border_radius = 8.0f,
+            .font_size = 12.0f,
+        });
+    assert(style.has_material);
+    assert(style.material.kind == MaterialKind::Clear);
+    assert(style.material.role == MaterialSurfaceRole::Content);
+    assert(style.material.fallback);
+    assert(style.material.container.interactive);
+    assert(style.border_width == 1.0f);
+    assert(style.border_radius == 8.0f);
+    assert(style.font_size == 12.0f);
+    assert(style.max_width == 160.0f);
+    assert(style.fixed_height == 28.0f);
+    assert(style.text_align == TextAlign::Start);
+
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.callback_roles.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::button<button_test::ButtonMsg>(
+        "Name",
+        button_test::Click{},
+        style);
+    Scope::set_current(nullptr);
+
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    auto& btn = detail::node_at(root.children[0]);
+    assert(btn.interaction_role == InteractionRole::Button);
+    assert(btn.text == "Name");
+    assert(btn.material.kind == MaterialKind::Clear);
+    assert(btn.material.role == MaterialSurfaceRole::Content);
+    assert(btn.material.container.interactive);
+    assert(btn.material.tint == btn.background);
+
+    auto unsorted = widget::glass_table_header_button_style(
+        GlassTableHeaderStyleOptions{.sorted = false});
+    assert(unsorted.has_material);
+    assert(unsorted.border_width == 0.0f);
+
+    auto disabled = widget::glass_table_header_button_style(
+        GlassTableHeaderStyleOptions{.disabled = true});
+    assert(disabled.disabled);
+    assert(!disabled.has_material);
+
+    std::puts("PASS: glass table header button emits material contract");
+}
+
 void test_symbol_button_minimum_hit_region_contract() {
     icons::SymbolButtonOptions options;
     options.role = icons::SymbolPresentationRole::Toolbar;
@@ -5399,6 +5462,7 @@ int main() {
     test_glass_control_button_style_material_contract();
     test_glass_selection_button_style_material_contract();
     test_glass_menu_item_symbol_button_material_contract();
+    test_glass_table_header_button_material_contract();
     test_symbol_button_minimum_hit_region_contract();
     test_symbol_button_visual_state_token_contract();
     test_symbol_button_disabled_contract();

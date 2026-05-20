@@ -789,6 +789,12 @@ disabled actions intentionally resolve to non-material buttons. If that
 requirement fails, inspect the `More Actions Menu` semantic subtree and the
 `New File` / `New Folder` / `Duplicate` icon-button nodes before looking at
 Metal or pixel thresholds.
+Table/list headers use `widget::glass_table_header_button_style`. The desktop
+list-view gate requires the `Name`, `Kind`, and `Size` header labels and a
+resolved material plan; those headers should appear as `content` role material
+plans, which means a standard-material content-layer pass rather than another
+sampled backdrop pass. If a list header disappears from the semantic tree,
+check the sort header button before debugging the content surface itself.
 It also compares semantic material container descriptors against
 `MaterialPlan.command_descriptor.container` and compares resolved container
 identity against `MaterialPlan.container`; a container mismatch points at layout

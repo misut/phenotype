@@ -542,6 +542,62 @@ inline ButtonStyleOptions glass_menu_item_button_style(
     return style;
 }
 
+inline ButtonStyleOptions glass_table_header_button_style(
+        GlassTableHeaderStyleOptions options = {}) {
+    auto const& t = detail::g_app.theme;
+    auto const kind = options.disabled ? MaterialKind::None : options.kind;
+    auto material = material_style_for_kind(kind, t);
+    material.role = options.role;
+    material.fallback = kind != MaterialKind::None;
+    material.tint = options.sorted
+        ? material_with_alpha(t.surface, 170)
+        : material_with_alpha(t.surface, 96);
+    material.border = options.sorted
+        ? material_with_alpha(t.border, 120)
+        : t.transparent;
+    material.foreground = options.sorted ? t.foreground : t.muted;
+    material.container = MaterialContainerDescriptor{
+        0u,
+        0u,
+        6.0f,
+        !options.disabled,
+        true};
+
+    ButtonStyleOptions style;
+    style.disabled = options.disabled;
+    style.has_material = kind != MaterialKind::None;
+    style.material = material;
+    style.has_background = true;
+    style.background = kind != MaterialKind::None
+        ? material.tint
+        : t.transparent;
+    style.has_hover_background = true;
+    style.hover_background = material_with_alpha(t.surface, 140);
+    style.has_pressed_background = true;
+    style.pressed_background = material_with_alpha(t.surface, 180);
+    style.has_border_color = true;
+    style.border_color = kind != MaterialKind::None
+        ? material.border
+        : t.transparent;
+    style.has_text_color = true;
+    style.text_color = options.disabled
+        ? t.state_disabled_fg
+        : (options.sorted ? t.foreground : t.muted);
+    style.border_width = options.sorted && kind != MaterialKind::None
+        ? 1.0f
+        : 0.0f;
+    style.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : t.radius_sm;
+    style.font_size = options.font_size;
+    style.max_width = options.width;
+    style.fixed_height = options.height;
+    style.min_hit_width = minimum_button_activation_size;
+    style.min_hit_height = minimum_button_activation_size;
+    style.text_align = options.text_align;
+    return style;
+}
+
 inline TextFieldStyleOptions glass_text_field_style(
         GlassTextFieldStyleOptions options = {}) {
     auto const& t = detail::g_app.theme;

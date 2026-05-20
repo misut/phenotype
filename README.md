@@ -115,7 +115,7 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 | `link(label, href)` | Hyperlink that opens via the host shim — text colour cross-fades on hover |
 | `image(url, width, height)` | Async image; the JS shim or native backend keeps a persistent atlas |
 | `canvas(width, height, paint, on_gesture?)` | Fixed-size leaf for arbitrary 2D drawing via a `Painter` callback |
-| `button<Msg>(label, msg, variant?, disabled?)` / `ButtonStyleOptions` | Clickable button that posts `msg` on click; background and focus ring fade on hover / focus, with optional explicit chrome for app-like controls including glass control, selection, and popover menu item presets |
+| `button<Msg>(label, msg, variant?, disabled?)` / `ButtonStyleOptions` | Clickable button that posts `msg` on click; background and focus ring fade on hover / focus, with optional explicit chrome for app-like controls including glass control, selection, popover menu item, and table header presets |
 | `checkbox<Msg>(label, checked, msg)` / `radio<Msg>(label, selected, msg)` | Selection controls with a hover highlight on the row and a halo on focus |
 | `switch_<Msg>(label, on, msg)` | Labelled on/off toggle; the thumb slides and the track cross-fades on flip |
 | `tabs<Msg>(items, selected, on_select, TabsStyleOptions?)` | Material-backed segmented row with a 2 px sliding indicator under the selected tab |

@@ -226,6 +226,11 @@ a clear material plan while keeping disabled or hidden actions out of the
 material hot path. The desktop file explorer `more-actions-open` verifier
 scenario requires this overlay material role so menu regressions fail from the
 semantic/debug contract instead of a screenshot comparison.
+Finder-style table/list headers now use `GlassTableHeaderStyleOptions` and
+`widget::glass_table_header_button_style`. The preset emits clear `content`
+material for sortable header cells, keeps sorted-state tint/border decisions in
+the pure style layer, and avoids increasing sampled-backdrop work for content
+tables.
 Pointer-driven active responses now include a pure, normalized
 `pointer-specular` highlight descriptor. The macOS Metal executor consumes that
 descriptor as shader input to add a bounded glint near the pointer anchor, while
@@ -522,7 +527,9 @@ an optional `MaterialStyle`, and `widget::glass_control_button_style` /
 `widget::glass_button` attach resolved material metadata to regular and canvas
 buttons. `widget::glass_selection_button_style` extends that contract to
 Finder-like selected rows while preserving non-material unselected rows.
-Menu row chrome still needs the same first-class material-aware treatment.
+`widget::glass_menu_item_button_style` and
+`widget::glass_table_header_button_style` cover transient overlay actions and
+content-layer table headers without moving those policies into a backend.
 
 ### CLI and packaging direction
 
@@ -631,9 +638,9 @@ Apple-style glass interface while preserving platform parity:
   the glass contract into an app-like file-management workflow with toolbar,
   sidebar/location navigation, list content, preview, search, create, and
   delete actions;
-- first-class material app-chrome helpers for toolbar, navigation, sidebar, and
-  status bar surfaces so examples do not need to hand-roll every glass
-  container shape;
+- first-class material app-chrome helpers for toolbar, navigation, sidebar,
+  status bar, popover menu items, and table headers so examples do not need to
+  hand-roll every glass container shape;
 - tests that cover command encoding, parser behavior, fallback policy, and at
   least one captured-frame invariant on native backends.
 
@@ -858,14 +865,14 @@ Current seed:
 ## Next recommended PR
 
 The initial G0-G4 path is now landed, and segmented controls/popovers/search
-fields/selected rows/menu items now use the first-class material helper path.
-The next
+fields/selected rows/menu items/table headers now use the first-class material
+helper path. The next
 useful PR should avoid another schema-only increment unless a real failure
 appears. Recommended directions:
 
 - expand first-class material-aware controls beyond buttons, segmented
-  controls, search fields, selected rows, and menu items, especially table
-  headers, split buttons, and disclosure/outline rows;
+  controls, search fields, selected rows, menu items, and table headers,
+  especially split buttons and disclosure/outline rows;
 - tighten macOS material executor budgets after collecting a small sample of
   local and CI timing/copy values;
 - add Android CI emulator wiring if runner capacity and cost are acceptable;
