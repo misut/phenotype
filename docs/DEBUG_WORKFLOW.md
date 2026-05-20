@@ -773,6 +773,10 @@ pixel signatures. For example, `widget::tabs` emits a segmented-control
 material node through `TabsStyleOptions`, and Finder-style examples can require
 labels such as `Density Segmented Control` or `Mobile Mode Segmented Control`
 to prove that the pure material planner saw the control chrome.
+Search fields follow the same rule: examples label their glass text inputs as
+`Search Field` or `Mobile Search Field`, which lets verifier output explain
+that the input surface produced a real `MaterialPlan` instead of an ordinary
+painted rectangle.
 It also compares semantic material container descriptors against
 `MaterialPlan.command_descriptor.container` and compares resolved container
 identity against `MaterialPlan.container`; a container mismatch points at layout

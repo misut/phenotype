@@ -957,7 +957,12 @@ void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
         widget::text_field<Msg>(
             state.labels.search_placeholder,
             explorer.search,
-            on_search_changed);
+            on_search_changed,
+            widget::glass_text_field_style(
+                GlassTextFieldStyleOptions{
+                    .role = MaterialSurfaceRole::Navigation,
+                    .semantic_label = "Mobile Search Field",
+                }));
         layout::spacer(8);
         std::vector<phenotype::str> tabs;
         tabs.emplace_back(

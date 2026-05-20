@@ -328,7 +328,11 @@ content, sidebar, and status-bar surfaces stay noninteractive unless the app
 opts in explicitly. `widget::tabs` uses the same material contract by default
 through `TabsStyleOptions`, so text tabs, mobile mode pickers, and native
 examples show up as semantic material nodes and resolved runtime plans instead
-of only as painted pill backgrounds.
+of only as painted pill backgrounds. Text input keeps the same boundary:
+`TextFieldStyleOptions` can carry an explicit `MaterialStyle`, and
+`widget::glass_text_field_style` is the Finder-style search-field preset that
+marks the field as interactive material without moving search/input policy into
+the backend.
 
 `phenotype.svg` is a pure vector image layer. It parses a bounded SVG subset
 (`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,

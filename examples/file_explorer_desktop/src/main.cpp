@@ -2273,7 +2273,15 @@ void finder_toolbar(State const& state,
                     widget::text_field<Msg>(
                         state.labels.search_placeholder,
                         state.explorer.search,
-                        on_search_changed);
+                        on_search_changed,
+                        widget::glass_text_field_style(
+                            GlassTextFieldStyleOptions{
+                                .role = MaterialSurfaceRole::Toolbar,
+                                .width = 152.0f,
+                                .height = k_toolbar_icon_button_height,
+                                .border_radius = k_toolbar_group_radius,
+                                .semantic_label = "Search Field",
+                            }));
                 }
             });
     });

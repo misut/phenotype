@@ -1282,6 +1282,41 @@ struct TabsStyleOptions {
     char const* semantic_label = "Segmented Control";
 };
 
+struct TextFieldStyleOptions {
+    bool error = false;
+    bool disabled = false;
+    bool has_material = false;
+    MaterialStyle material = {};
+    bool has_background = false;
+    Color background = {};
+    bool has_border_color = false;
+    Color border_color = {};
+    bool has_text_color = false;
+    Color text_color = {};
+    float border_width = -1.0f;
+    float border_radius = -1.0f;
+    float font_size = 0.0f;
+    float padding_top = -1.0f;
+    float padding_right = -1.0f;
+    float padding_bottom = -1.0f;
+    float padding_left = -1.0f;
+    float max_width = 0.0f;
+    float fixed_height = -1.0f;
+    char const* semantic_label = nullptr;
+};
+
+struct GlassTextFieldStyleOptions {
+    MaterialKind kind = MaterialKind::Regular;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Navigation;
+    bool error = false;
+    bool disabled = false;
+    float width = 0.0f;
+    float height = -1.0f;
+    float border_radius = -1.0f;
+    float font_size = 0.0f;
+    char const* semantic_label = nullptr;
+};
+
 struct ButtonVisualState {
     bool hovered = false;
     bool focused = false;
