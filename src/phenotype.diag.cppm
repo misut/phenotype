@@ -1660,6 +1660,32 @@ namespace detail {
         json::Array execution_stages;
         for (unsigned int i = 0; i < plan.execution_stage_count; ++i) {
             auto const& stage = plan.execution_stages[i];
+            auto const& optics = stage.optics;
+            json::Object optics_json;
+            optics_json.emplace("channel", json::Value{optics.channel});
+            optics_json.emplace("opacity", json::Value{optics.opacity});
+            optics_json.emplace("blur_radius", json::Value{optics.blur_radius});
+            optics_json.emplace("tint_alpha", json::Value{optics.tint_alpha});
+            optics_json.emplace("saturation", json::Value{optics.saturation});
+            optics_json.emplace(
+                "luminance_floor",
+                json::Value{optics.luminance_floor});
+            optics_json.emplace(
+                "luminance_gain",
+                json::Value{optics.luminance_gain});
+            optics_json.emplace(
+                "edge_highlight",
+                json::Value{optics.edge_highlight});
+            optics_json.emplace("edge_width", json::Value{optics.edge_width});
+            optics_json.emplace(
+                "noise_opacity",
+                json::Value{optics.noise_opacity});
+            optics_json.emplace(
+                "shadow_alpha",
+                json::Value{optics.shadow_alpha});
+            optics_json.emplace(
+                "shadow_radius",
+                json::Value{optics.shadow_radius});
             json::Object out_stage;
             out_stage.emplace("name", json::Value{stage.name});
             out_stage.emplace("active", json::Value{stage.active});
@@ -1680,6 +1706,7 @@ namespace detail {
                 "max_texture_copy_pixels",
                 json::Value{stage.max_texture_copy_pixels});
             out_stage.emplace("bounded", json::Value{stage.bounded});
+            out_stage.emplace("optics", json::Value{std::move(optics_json)});
             execution_stages.push_back(json::Value{std::move(out_stage)});
         }
 

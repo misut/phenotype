@@ -1843,6 +1843,12 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(glass_plan.execution_stages[0].name)
            == "shape-shadow");
     assert(!glass_plan.execution_stages[0].requires_backdrop);
+    assert(std::string(glass_plan.execution_stages[0].optics.channel)
+           == "shape-shadow");
+    assert(glass_plan.execution_stages[0].optics.shadow_alpha
+           == glass_plan.shadow_alpha);
+    assert(glass_plan.execution_stages[0].optics.shadow_radius
+           == glass_plan.shadow_radius);
     assert(std::string(glass_plan.execution_stages[1].name)
            == "backdrop-sample-blur");
     assert(glass_plan.execution_stages[1].requires_backdrop);
@@ -1850,10 +1856,25 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == glass_plan.sample_taps);
     assert(glass_plan.execution_stages[1].max_texture_copy_pixels
            == glass_plan.render_target.pixel_count);
+    assert(std::string(glass_plan.execution_stages[1].optics.channel)
+           == "backdrop-filter");
+    assert(glass_plan.execution_stages[1].optics.blur_radius
+           == glass_plan.blur_radius);
+    assert(glass_plan.execution_stages[1].optics.saturation
+           == glass_plan.saturation);
+    assert(std::fabs(glass_plan.execution_stages[1].optics.tint_alpha
+                     - static_cast<float>(glass_plan.tint.a) / 255.0f)
+           < 0.0001f);
     assert(std::string(glass_plan.execution_stages[2].name)
            == "edge-highlight");
+    assert(glass_plan.execution_stages[2].optics.edge_highlight
+           == glass_plan.edge_highlight);
+    assert(glass_plan.execution_stages[2].optics.edge_width
+           == glass_plan.edge_width);
     assert(std::string(glass_plan.execution_stages[3].name)
            == "noise-dither");
+    assert(glass_plan.execution_stages[3].optics.noise_opacity
+           == glass_plan.noise_opacity);
     for (unsigned int i = 0; i < glass_plan.execution_stage_count; ++i) {
         assert(glass_plan.execution_stages[i].active);
         assert(glass_plan.execution_stages[i].bounded);
@@ -2191,6 +2212,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(reduced_plan.execution_stages[1].name)
            == "translucent-rounded-rect");
     assert(!reduced_plan.execution_stages[1].requires_backdrop);
+    assert(std::string(reduced_plan.execution_stages[1].optics.channel)
+           == "fallback-fill");
+    assert(reduced_plan.execution_stages[1].optics.blur_radius == 0.0f);
+    assert(reduced_plan.execution_stages[1].optics.saturation == 1.0f);
     assert(std::string(reduced_plan.reference_model.accessibility_response)
            == "reduced-transparency");
     assert(std::string(reduced_plan.reference_model.performance_response)

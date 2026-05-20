@@ -1179,7 +1179,11 @@ vocabularies. Current fallback paths are `none`, `no-material`, `invalid-geometr
 `adaptive-backdrop-luma` and `fallback-flat`. Current reference blending scopes
 are `none`, `sampled-backdrop`, and `deterministic-fallback`; current reference
 shapes are `none`, `invalid`, `rectangle`, `rounded-rectangle`, and `capsule`; current
-backdrop capture scopes are `none` and `shared-frame`. Add new
+backdrop capture scopes are `none` and `shared-frame`. Each
+`execution_stages[].optics.channel` is also vocabulary-checked (`backdrop-filter`,
+`standard-fill`, `fallback-fill`, `shape-shadow`, `edge-highlight`,
+`noise-dither`, or `none`) and its numeric fields are cross-checked against the
+surrounding `MaterialPlan` scalars. Add new
 planner/backend
 vocabulary to the verifier in the same patch that introduces it, so CI reports
 schema drift before a human has to infer it visually.
@@ -1246,7 +1250,9 @@ Executor stage counters must also match the pure
 `execution_stages` summary: total stages, active stages, backdrop-dependent
 stages, dropped stages, primary runtime stages, backdrop-filter stages,
 fallback-fill stages, shape-shadow stages, edge-highlight stages, and
-noise/dither stages. Backdrop access counters must match the pure
+noise/dither stages. Stage `optics` values must also match the pure scalar each
+stage consumes, which makes shadow-radius, edge-highlight, and noise failures
+actionable before comparing pixels. Backdrop access counters must match the pure
 `backdrop_access` aggregate, including next-frame warmup capture requests, and
 any actual framebuffer-history copy must fit the planned shared capture count
 and pixel budget. The resource-bound gate can

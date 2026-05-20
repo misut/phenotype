@@ -14,6 +14,37 @@ import unittest
 import verify_artifact_bundle as verifier
 
 
+def stage_optics(
+    channel: str,
+    *,
+    opacity: float = 0.0,
+    blur_radius: float = 0.0,
+    tint_alpha: float = 0.0,
+    saturation: float = 1.0,
+    luminance_floor: float = 0.0,
+    luminance_gain: float = 1.0,
+    edge_highlight: float = 0.0,
+    edge_width: float = 0.0,
+    noise_opacity: float = 0.0,
+    shadow_alpha: float = 0.0,
+    shadow_radius: float = 0.0,
+) -> dict[str, object]:
+    return {
+        "channel": channel,
+        "opacity": opacity,
+        "blur_radius": blur_radius,
+        "tint_alpha": tint_alpha,
+        "saturation": saturation,
+        "luminance_floor": luminance_floor,
+        "luminance_gain": luminance_gain,
+        "edge_highlight": edge_highlight,
+        "edge_width": edge_width,
+        "noise_opacity": noise_opacity,
+        "shadow_alpha": shadow_alpha,
+        "shadow_radius": shadow_radius,
+    }
+
+
 def material_pass(sample_taps: int) -> dict[str, object]:
     return {
         "name": "translucent-rounded-rect",
@@ -295,6 +326,15 @@ def material_plan(
                 "executor": "fallback-fill",
                 "max_texture_copy_pixels": 0,
                 "bounded": True,
+                "optics": stage_optics(
+                    "fallback-fill",
+                    opacity=0.58,
+                    blur_radius=0.0,
+                    tint_alpha=148 / 255,
+                    saturation=1.0,
+                    luminance_floor=0.08,
+                    luminance_gain=1.08,
+                ),
             }
         ],
     }
@@ -654,6 +694,15 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
             "executor": "backdrop-filter",
             "max_texture_copy_pixels": 320 * 240,
             "bounded": True,
+            "optics": stage_optics(
+                "backdrop-filter",
+                opacity=0.58,
+                blur_radius=22.0,
+                tint_alpha=148 / 255,
+                saturation=1.08,
+                luminance_floor=0.08,
+                luminance_gain=1.08,
+            ),
         }
     ]
     assert isinstance(plan["verifier"], dict)

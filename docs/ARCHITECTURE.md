@@ -644,7 +644,9 @@ backend should run a sampled backdrop blur pass, a standard content fill, or a
 deterministic translucent fallback. `execution_stages` then expands that
 primary pass into a bounded pure list of shadow, blur/standard/fallback, edge,
 and noise stages so artifacts can explain material work before visual
-inspection.
+inspection. Each stage also carries an `optics` object with the exact pure
+inputs it consumes, such as primary blur/opacity/tint/saturation/luminance,
+shadow alpha/radius, edge highlight/width, or noise opacity.
 `optical_response` summarizes the same pure plan as a compact verifier contract:
 the response model (`sampled-backdrop`, `standard-content`, `deterministic-fallback`,
 or `inactive`), blur strategy, color strategy, depth strategy, and explicit
@@ -782,7 +784,9 @@ shadow-depth adjustment before the plan reaches a backend. This keeps
 legibility and Liquid Glass optical policy in the deterministic layer as blur,
 tint, and fallback decisions, and lets artifacts explain why a material
 responded to dark, bright, flat, or neutral backdrop content without requiring
-a visual guess.
+a visual guess. The per-stage `optics` descriptors repeat only the values used
+by that stage, so a failure can tell whether the pure scalar was missing before
+or after backend execution.
 Artifact gates can separately bound actual plan taps and resource-budget taps,
 which lets fallback scenes require zero executed taps while preserving the
 backend's allowed quality budget in the same artifact.
