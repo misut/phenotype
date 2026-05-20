@@ -5457,6 +5457,9 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             material_summary,
             record.plan);
     }
+    finalize_material_executor_summary(
+        material_summary,
+        g_renderer.material_records);
     material_summary.foreground_text_candidate_count =
         decoded.foreground_text_candidate_count;
     material_summary.foreground_text_remap_count =

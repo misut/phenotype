@@ -1775,6 +1775,57 @@ namespace detail {
         return plans;
     }
 
+    inline json::Value material_container_group_summary_json(
+            MaterialContainerGroupRuntimeSummary const& summary) {
+        json::Object out;
+        out.emplace(
+            "group_count",
+            json::Value{static_cast<std::int64_t>(summary.group_count)});
+        out.emplace(
+            "multi_surface_group_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.multi_surface_group_count)});
+        out.emplace(
+            "union_group_count",
+            json::Value{static_cast<std::int64_t>(summary.union_group_count)});
+        out.emplace(
+            "morph_group_count",
+            json::Value{static_cast<std::int64_t>(summary.morph_group_count)});
+        out.emplace(
+            "interactive_group_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.interactive_group_count)});
+        out.emplace(
+            "shared_backdrop_scope_group_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.shared_backdrop_scope_group_count)});
+        out.emplace(
+            "fallback_mixed_group_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.fallback_mixed_group_count)});
+        out.emplace(
+            "max_group_size",
+            json::Value{static_cast<std::int64_t>(summary.max_group_size)});
+        out.emplace(
+            "max_active_surfaces",
+            json::Value{
+                static_cast<std::int64_t>(summary.max_active_surfaces)});
+        out.emplace(
+            "max_sampled_backdrop_surfaces",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.max_sampled_backdrop_surfaces)});
+        out.emplace(
+            "max_fallback_surfaces",
+            json::Value{
+                static_cast<std::int64_t>(summary.max_fallback_surfaces)});
+        return json::Value{std::move(out)};
+    }
+
     inline json::Value material_runtime_summary_json(
             MaterialRuntimeSummary const& summary) {
         json::Object out;
@@ -1946,6 +1997,9 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.theme_custom_token_count)});
+        out.emplace(
+            "container_groups",
+            material_container_group_summary_json(summary.container_groups));
         out.emplace("max_surface_area",
                     json::Value{summary.max_surface_area});
         out.emplace("max_effective_radius",
@@ -1975,6 +2029,7 @@ namespace detail {
         MaterialRuntimeSummary summary;
         for (auto const& record : records)
             accumulate_material_runtime_summary(summary, record);
+        finalize_material_runtime_summary(summary, records);
         return material_runtime_summary_json(summary);
     }
 
@@ -2185,6 +2240,9 @@ namespace detail {
             json::Value{summary.backdrop_copy_skip_reason
                             ? summary.backdrop_copy_skip_reason
                             : "none"});
+        out.emplace(
+            "container_groups",
+            material_container_group_summary_json(summary.container_groups));
         out.emplace("cpu_decode_ns", json::Value{summary.cpu_decode_ns});
         out.emplace(
             "cpu_material_upload_ns",

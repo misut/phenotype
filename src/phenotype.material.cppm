@@ -1,5 +1,6 @@
 module;
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cmath>
 #include <span>
@@ -582,6 +583,20 @@ struct MaterialForegroundTextResolution {
     bool remapped = false;
 };
 
+struct MaterialContainerGroupRuntimeSummary {
+    std::uint32_t group_count = 0;
+    std::uint32_t multi_surface_group_count = 0;
+    std::uint32_t union_group_count = 0;
+    std::uint32_t morph_group_count = 0;
+    std::uint32_t interactive_group_count = 0;
+    std::uint32_t shared_backdrop_scope_group_count = 0;
+    std::uint32_t fallback_mixed_group_count = 0;
+    std::uint32_t max_group_size = 0;
+    std::uint32_t max_active_surfaces = 0;
+    std::uint32_t max_sampled_backdrop_surfaces = 0;
+    std::uint32_t max_fallback_surfaces = 0;
+};
+
 struct MaterialRuntimeSummary {
     std::uint32_t plan_count = 0;
     std::uint32_t fallback_count = 0;
@@ -627,6 +642,7 @@ struct MaterialRuntimeSummary {
     std::uint32_t foreground_vibrant_count = 0;
     std::uint32_t theme_default_glass_token_count = 0;
     std::uint32_t theme_custom_token_count = 0;
+    MaterialContainerGroupRuntimeSummary container_groups{};
     float max_surface_area = 0.0f;
     float max_effective_radius = 0.0f;
     float max_radius_limit = 0.0f;
@@ -684,6 +700,7 @@ struct MaterialExecutorSummary {
     std::uint32_t backdrop_luma_sampling_skipped_count = 0;
     char const* backdrop_luma_sampling_skip_reason = "none";
     char const* backdrop_copy_skip_reason = "none";
+    MaterialContainerGroupRuntimeSummary container_groups{};
     std::int64_t cpu_decode_ns = 0;
     std::int64_t cpu_material_upload_ns = 0;
     std::int64_t cpu_total_ns = 0;
@@ -757,6 +774,91 @@ inline bool material_plan_uses_deterministic_fallback_executor(
         && material_stage_matches(plan.primary_pass.executor, "fallback-fill");
 }
 
+struct MaterialContainerGroupAccumulator {
+    std::uint32_t container_id = 0;
+    std::uint32_t surface_count = 0;
+    std::uint32_t active_surfaces = 0;
+    std::uint32_t sampled_backdrop_surfaces = 0;
+    std::uint32_t fallback_surfaces = 0;
+    std::uint32_t union_surfaces = 0;
+    std::uint32_t morph_surfaces = 0;
+    std::uint32_t interactive_surfaces = 0;
+    std::uint32_t shared_backdrop_scope_surfaces = 0;
+};
+
+inline MaterialContainerGroupRuntimeSummary summarize_material_container_groups(
+        std::span<MaterialRuntimeRecord const> records) {
+    MaterialContainerGroupRuntimeSummary summary{};
+    for (std::size_t index = 0; index < records.size(); ++index) {
+        auto const& plan = records[index].plan;
+        if (!plan.container.participates || plan.container.container_id == 0u)
+            continue;
+        auto const container_id = plan.container.container_id;
+        auto seen = false;
+        for (std::size_t prior = 0; prior < index; ++prior) {
+            auto const& prior_plan = records[prior].plan;
+            if (prior_plan.container.participates
+                && prior_plan.container.container_id == container_id) {
+                seen = true;
+                break;
+            }
+        }
+        if (seen)
+            continue;
+
+        MaterialContainerGroupAccumulator group{
+            .container_id = container_id,
+        };
+        for (auto const& candidate_record : records) {
+            auto const& candidate = candidate_record.plan;
+            if (!candidate.container.participates
+                || candidate.container.container_id != container_id) {
+                continue;
+            }
+            ++group.surface_count;
+            if (candidate.primary_pass.active)
+                ++group.active_surfaces;
+            if (candidate.backdrop_sampling)
+                ++group.sampled_backdrop_surfaces;
+            if (candidate.fallback())
+                ++group.fallback_surfaces;
+            if (candidate.container.shape_union_expected)
+                ++group.union_surfaces;
+            if (candidate.container.morph_transitions)
+                ++group.morph_surfaces;
+            if (candidate.container.interactive)
+                ++group.interactive_surfaces;
+            if (candidate.container.shared_backdrop_scope)
+                ++group.shared_backdrop_scope_surfaces;
+        }
+        ++summary.group_count;
+        summary.max_group_size =
+            std::max(summary.max_group_size, group.surface_count);
+        summary.max_active_surfaces =
+            std::max(summary.max_active_surfaces, group.active_surfaces);
+        summary.max_sampled_backdrop_surfaces = std::max(
+            summary.max_sampled_backdrop_surfaces,
+            group.sampled_backdrop_surfaces);
+        summary.max_fallback_surfaces =
+            std::max(summary.max_fallback_surfaces, group.fallback_surfaces);
+        if (group.surface_count > 1u)
+            ++summary.multi_surface_group_count;
+        if (group.union_surfaces > 0u)
+            ++summary.union_group_count;
+        if (group.morph_surfaces > 0u)
+            ++summary.morph_group_count;
+        if (group.interactive_surfaces > 0u)
+            ++summary.interactive_group_count;
+        if (group.shared_backdrop_scope_surfaces > 0u)
+            ++summary.shared_backdrop_scope_group_count;
+        if (group.fallback_surfaces > 0u
+            && group.active_surfaces > group.fallback_surfaces) {
+            ++summary.fallback_mixed_group_count;
+        }
+    }
+    return summary;
+}
+
 inline void accumulate_material_executor_plan_summary(
         MaterialExecutorSummary& summary,
         MaterialPlan const& plan) noexcept {
@@ -825,6 +927,12 @@ inline void accumulate_material_executor_plan_summary(
     }
     summary.planned_surface_sample_pixels +=
         plan.backdrop_access.max_surface_sample_pixels;
+}
+
+inline void finalize_material_executor_summary(
+        MaterialExecutorSummary& summary,
+        std::span<MaterialRuntimeRecord const> records) {
+    summary.container_groups = summarize_material_container_groups(records);
 }
 
 inline void accumulate_material_runtime_summary(
@@ -963,6 +1071,12 @@ inline void accumulate_material_runtime_summary(
         ++summary.unbounded_texture_copy;
     if (!plan.resource_budget.deterministic_fallback)
         ++summary.non_deterministic_fallback;
+}
+
+inline void finalize_material_runtime_summary(
+        MaterialRuntimeSummary& summary,
+        std::span<MaterialRuntimeRecord const> records) {
+    summary.container_groups = summarize_material_container_groups(records);
 }
 
 struct MaterialEnvironment {
