@@ -1756,9 +1756,10 @@ void finder_column_location_button(std::string label,
                                    float max_width,
                                    float font_size,
                                    phenotype::icons::SymbolDocumentCache const& cache) {
-    auto options = phenotype::icons::macos_control_button_style(
-        phenotype::icons::ControlButtonStyleOptions{
-            .role = phenotype::icons::SymbolPresentationRole::Sidebar,
+    auto options = phenotype::widget::glass_selection_button_style(
+        phenotype::GlassSelectionStyleOptions{
+            .chrome = phenotype::GlassSelectionChrome::SidebarPill,
+            .role = phenotype::MaterialSurfaceRole::Sidebar,
             .selected = selected,
             .width = max_width,
             .height = k_column_location_row_height,
@@ -1823,22 +1824,16 @@ void finder_icon_label_button(std::string const& label,
                               float max_width,
                               float font_size,
                               float fixed_height) {
-    auto const& t = phenotype::current_theme();
-    phenotype::ButtonStyleOptions options;
-    options.has_background = true;
-    options.background = selected ? t.accent : t.transparent;
-    options.has_hover_background = true;
-    options.hover_background = selected
-        ? t.accent_strong
-        : rgba(255, 255, 255, 110);
-    options.has_border_color = true;
-    options.border_color = t.transparent;
-    options.has_text_color = true;
-    options.text_color = selected ? t.state_active_fg : t.foreground;
-    options.border_width = 0.0f;
-    options.border_radius = 10.0f;
-    options.fixed_height = fixed_height;
-    options.max_width = max_width;
+    auto options = phenotype::widget::glass_selection_button_style(
+        phenotype::GlassSelectionStyleOptions{
+            .role = phenotype::MaterialSurfaceRole::Surface,
+            .selected = selected,
+            .width = max_width,
+            .height = fixed_height,
+            .border_radius = 10.0f,
+            .font_size = font_size,
+            .text_align = phenotype::TextAlign::Center,
+        });
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{label},
         max_width,
@@ -1882,22 +1877,15 @@ void finder_entry_row_button(file_explorer_demo::Entry const& entry,
                              float font_size,
                              float fixed_height,
                              phenotype::icons::SymbolDocumentCache const& cache) {
-    auto const& t = phenotype::current_theme();
-    phenotype::ButtonStyleOptions options;
-    options.has_background = true;
-    options.background = selected ? t.accent : t.transparent;
-    options.has_hover_background = true;
-    options.hover_background = selected
-        ? t.accent_strong
-        : rgba(255, 255, 255, 110);
-    options.has_border_color = true;
-    options.border_color = t.transparent;
-    options.has_text_color = true;
-    options.text_color = selected ? t.state_active_fg : t.foreground;
-    options.border_width = 0.0f;
-    options.border_radius = 8.0f;
-    options.fixed_height = fixed_height;
-    options.max_width = max_width;
+    auto options = phenotype::widget::glass_selection_button_style(
+        phenotype::GlassSelectionStyleOptions{
+            .role = phenotype::MaterialSurfaceRole::Surface,
+            .selected = selected,
+            .width = max_width,
+            .height = fixed_height,
+            .border_radius = 8.0f,
+            .font_size = font_size,
+        });
 
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{entry.name},
@@ -1953,9 +1941,10 @@ void sidebar_row(std::string_view label,
                  bool selected,
                  phenotype::icons::SymbolDocumentCache const& cache) {
     using namespace phenotype;
-    auto options = icons::macos_control_button_style(
-        icons::ControlButtonStyleOptions{
-            .role = icons::SymbolPresentationRole::Sidebar,
+    auto options = widget::glass_selection_button_style(
+        GlassSelectionStyleOptions{
+            .chrome = GlassSelectionChrome::SidebarPill,
+            .role = MaterialSurfaceRole::Sidebar,
             .selected = selected,
             .width = k_sidebar_row_width,
             .height = k_sidebar_row_height,

@@ -429,6 +429,75 @@ inline ButtonStyleOptions glass_control_button_style(
     return style;
 }
 
+inline ButtonStyleOptions glass_selection_button_style(
+        GlassSelectionStyleOptions options = {}) {
+    auto const& t = detail::g_app.theme;
+    auto const kind = options.selected
+        ? options.selected_kind
+        : options.unselected_kind;
+    auto material = material_style_for_kind(kind, t);
+    material.role = options.role;
+    material.fallback = kind != MaterialKind::None;
+    material.container = MaterialContainerDescriptor{
+        0u,
+        0u,
+        12.0f,
+        options.selected && !options.disabled,
+        true};
+
+    auto selected_bg = t.accent;
+    auto selected_hover = t.accent_strong;
+    auto selected_pressed = t.accent_strong;
+    auto selected_text = t.state_active_fg;
+    if (options.chrome == GlassSelectionChrome::SidebarPill) {
+        selected_bg = material_with_alpha(t.code_bg, 238);
+        selected_hover = material_with_alpha(t.code_bg, 248);
+        selected_pressed = t.code_bg;
+        selected_text = t.accent;
+    }
+    if (kind != MaterialKind::None) {
+        material.tint = selected_bg;
+        material.border = material_with_alpha(
+            t.border,
+            options.chrome == GlassSelectionChrome::SidebarPill ? 0 : 90);
+        material.foreground = selected_text;
+        material.accent_foreground = t.accent;
+        material.strong_accent_foreground = t.accent_strong;
+    }
+
+    ButtonStyleOptions style;
+    style.disabled = options.disabled;
+    style.has_material = kind != MaterialKind::None;
+    style.material = material;
+    style.has_background = true;
+    style.background = options.selected ? selected_bg : t.transparent;
+    style.has_hover_background = true;
+    style.hover_background = options.selected
+        ? selected_hover
+        : material_with_alpha(t.surface, 110);
+    style.has_pressed_background = true;
+    style.pressed_background = options.selected
+        ? selected_pressed
+        : material_with_alpha(t.surface, 140);
+    style.has_border_color = true;
+    style.border_color = options.selected && kind != MaterialKind::None
+        ? material.border
+        : t.transparent;
+    style.has_text_color = true;
+    style.text_color = options.selected ? selected_text : t.foreground;
+    style.border_width = 0.0f;
+    style.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : t.radius_md;
+    style.font_size = options.font_size;
+    style.max_width = options.width;
+    style.fixed_height = options.height;
+    style.min_hit_width = minimum_button_activation_size;
+    style.min_hit_height = minimum_button_activation_size;
+    style.text_align = options.text_align;
+    return style;
+}
+
 inline TextFieldStyleOptions glass_text_field_style(
         GlassTextFieldStyleOptions options = {}) {
     auto const& t = detail::g_app.theme;

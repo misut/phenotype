@@ -788,28 +788,23 @@ void mobile_entry_row(file_explorer_demo::Entry const& entry,
                       phenotype::icons::SymbolDocumentCache const& cache) {
     using namespace phenotype;
     auto const& theme = current_theme();
-    ButtonStyleOptions options;
-    options.has_background = true;
-    options.background = selected
-        ? theme.accent
-        : Color{255,
-                255,
-                255,
-                static_cast<unsigned char>(entry.folder ? 54 : 84)};
-    options.has_hover_background = true;
-    options.hover_background = selected
-        ? theme.accent_strong
-        : Color{255, 255, 255, 132};
-    options.has_pressed_background = true;
-    options.pressed_background = selected
-        ? theme.accent_strong
-        : Color{229, 229, 234, 180};
-    options.has_border_color = true;
-    options.border_color = Color{0, 0, 0, 0};
-    options.border_width = 0.0f;
-    options.border_radius = 14.0f;
-    options.max_width = row_width;
-    options.fixed_height = 60.0f;
+    auto options = widget::glass_selection_button_style(
+        GlassSelectionStyleOptions{
+            .role = MaterialSurfaceRole::Surface,
+            .selected = selected,
+            .width = row_width,
+            .height = 60.0f,
+            .border_radius = 14.0f,
+        });
+    if (!selected) {
+        options.background = Color{
+            255,
+            255,
+            255,
+            static_cast<unsigned char>(entry.folder ? 54 : 84)};
+        options.hover_background = Color{255, 255, 255, 132};
+        options.pressed_background = Color{229, 229, 234, 180};
+    }
 
     auto const label = file_explorer_demo::entry_label(entry);
     auto const symbol = mobile_entry_symbol(entry);
