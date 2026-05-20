@@ -411,8 +411,94 @@ def refresh_reference_model(plan: dict[str, object]) -> None:
     }
 
 
+def refresh_optical_response(plan: dict[str, object]) -> None:
+    kind = str(plan["kind"])
+    role = str(plan["role"])
+    primary = plan["primary_pass"]
+    tint = plan["tint"]
+    curve = plan["luminance_curve"]
+    foreground = plan["foreground"]
+    budget = plan["resource_budget"]
+    reference = plan["reference_model"]
+    assert isinstance(primary, dict)
+    assert isinstance(tint, dict)
+    assert isinstance(curve, dict)
+    assert isinstance(foreground, dict)
+    assert isinstance(budget, dict)
+    assert isinstance(reference, dict)
+    backdrop_sampling = bool(plan["backdrop_sampling"])
+    fallback = bool(plan["fallback"])
+    if kind == "none":
+        response_model = "inactive"
+    elif backdrop_sampling:
+        response_model = "sampled-backdrop"
+    elif role == "content":
+        response_model = "standard-content"
+    else:
+        response_model = "deterministic-fallback"
+
+    blur_strategy = "none"
+    if bool(primary["active"]):
+        if bool(primary["requires_backdrop"]):
+            blur_strategy = "backdrop-sample-blur"
+        elif primary["executor"] == "standard-fill":
+            blur_strategy = "standard-fill"
+        elif primary["executor"] == "fallback-fill":
+            blur_strategy = "fallback-fill"
+
+    if kind == "none" or int(tint["a"]) <= 0:
+        color_strategy = "none"
+    elif backdrop_sampling:
+        color_strategy = "adaptive-backdrop-color"
+    elif role == "content":
+        color_strategy = "standard-content-color"
+    else:
+        color_strategy = "fallback-solid-color"
+
+    edge = float(plan["edge_highlight"]) > 0.0
+    shadow = float(plan["shadow_alpha"]) > 0.0
+    noise = backdrop_sampling and float(plan["noise_opacity"]) > 0.0
+    if not bool(primary["active"]):
+        depth_strategy = "none"
+    elif backdrop_sampling and shadow and edge and noise:
+        depth_strategy = "layered-shadow-edge-noise"
+    elif backdrop_sampling and (shadow or edge):
+        depth_strategy = "layered-shadow-edge"
+    elif role == "content" and edge:
+        depth_strategy = "standard-content-edge"
+    elif (fallback or not backdrop_sampling) and shadow and edge:
+        depth_strategy = "fallback-shadow-edge"
+    elif (fallback or not backdrop_sampling) and edge:
+        depth_strategy = "fallback-edge"
+    else:
+        depth_strategy = "none"
+
+    plan["optical_response"] = {
+        "response_model": response_model,
+        "blur_strategy": blur_strategy,
+        "color_strategy": color_strategy,
+        "depth_strategy": depth_strategy,
+        "backdrop_driven": backdrop_sampling,
+        "blur_active": bool(primary["requires_backdrop"]),
+        "frosting_active": backdrop_sampling,
+        "tint_active": kind != "none" and int(tint["a"]) > 0,
+        "saturation_active": (
+            backdrop_sampling and abs(float(plan["saturation"]) - 1.0) > 0.0001),
+        "luminance_preservation_active": (
+            kind != "none"
+            and (bool(curve["bounded"])
+                 or bool(reference["legibility_preserved"]))),
+        "edge_highlight_active": bool(primary["active"]) and edge,
+        "depth_shadow_active": bool(primary["active"]) and shadow,
+        "noise_dither_active": noise,
+        "foreground_vibrancy_active": bool(foreground["uses_vibrancy"]),
+        "deterministic_fallback": bool(budget["deterministic_fallback"]),
+    }
+
+
 def refresh_observation_contract(plan: dict[str, object]) -> None:
     refresh_reference_model(plan)
+    refresh_optical_response(plan)
     primary = plan["primary_pass"]
     stages = plan["execution_stages"]
     budget = plan["resource_budget"]
@@ -2145,6 +2231,27 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["likely_pass"], "luminance-curve")
         self.assertIn("MaterialPlan.luminance_curve", failure["suggested_action"])
 
+    def test_optical_response_mismatch_is_llm_actionable(self) -> None:
+        plan = sampled_material_plan(sample_taps=25)
+        assert isinstance(plan["optical_response"], dict)
+        plan["optical_response"]["response_model"] = "deterministic-fallback"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material optical response model matches role and sampling"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".optical_response.response_model")
+        self.assertEqual(failure["expected"], "sampled-backdrop")
+        self.assertEqual(failure["actual"], "deterministic-fallback")
+        self.assertEqual(failure["likely_layer"], "material-optical-response")
+        self.assertIn("MaterialPlan.optical_response", failure["suggested_action"])
+
     def test_manifest_can_require_fallback_reason_summary(self) -> None:
         manifest = {
             "require_material_plan_summary": {
@@ -2180,6 +2287,21 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "luminance_curves": {"fallback-flat": 1},
                 "luminance_adapted": 0,
                 "backdrop_optical_adapted": 0,
+                "optical_response_models": {"deterministic-fallback": 1},
+                "optical_blur_strategies": {"fallback-fill": 1},
+                "optical_color_strategies": {"fallback-solid-color": 1},
+                "optical_depth_strategies": {"fallback-shadow-edge": 1},
+                "optical_backdrop_driven": 0,
+                "optical_blur_active": 0,
+                "optical_frosting_active": 0,
+                "optical_tint_active": 1,
+                "optical_saturation_active": 0,
+                "optical_luminance_preservation_active": 1,
+                "optical_edge_highlight_active": 1,
+                "optical_depth_shadow_active": 1,
+                "optical_noise_dither_active": 0,
+                "optical_foreground_vibrancy_active": 0,
+                "optical_deterministic_fallback": 1,
                 "render_target_ready": 1,
                 "render_target_within_backdrop_budget": 1,
                 "render_target_pixel_formats": {"rgba8unorm": 1},
@@ -2221,6 +2343,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["luminance_curves"],
             {"fallback-flat": 1})
+        self.assertEqual(
+            report["material_plans"]["optical_response"]["response_models"],
+            {"deterministic-fallback": 1})
+        self.assertEqual(
+            report["material_plans"]["optical_response"]["blur_strategies"],
+            {"fallback-fill": 1})
         self.assertEqual(
             report["material_plans"]["render_target"]["pixel_formats"],
             {"rgba8unorm": 1})

@@ -675,6 +675,12 @@ the actual `material_plans` executed for the frame. Each plan includes:
   accessibility response, performance response, interactive response, container
   grouping/union/morph expectations, foreground legibility preservation,
   vibrancy expectation, and deterministic degradation;
+- `optical_response`, the pure response summary that classifies the material as
+  sampled Liquid Glass, content-layer standard material, deterministic fallback,
+  or inactive, then records blur/color/depth strategies and booleans for
+  backdrop, blur, frosting, tint, saturation, luminance preservation, edge
+  highlight, shadow depth, noise/dither, foreground vibrancy, and deterministic
+  fallback;
 - raw `geometry`, derived `shape` analysis, tint, blur radius, saturation,
   luminance curve, edge highlight, noise, and shadow values for the resolved
   plan. `shape.kind` classifies the backend-executable geometry as
@@ -1046,13 +1052,20 @@ exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `sampling_weight_profiles`, `luminance_curves`, `decision_blockers`,
 `foreground_schemes`, `foreground_sources`, `verifier_profiles`,
 `verifier_region_layers`, `verifier_region_passes`, `container_modes`,
-`container_ids`, `union_ids`, `theme_profile_names`, `theme_sources`, and
-`theme_token_policies`;
+`container_ids`, `union_ids`, `theme_profile_names`, `theme_sources`,
+`theme_token_policies`, `optical_response_models`, `optical_blur_strategies`,
+`optical_color_strategies`, and `optical_depth_strategies`;
 it can also count
 `container_participating`, `container_unioned`, `container_interactive`,
 `container_morph_transitions`, `verifier_require_backdrop_source`,
 `verifier_require_edge_highlight`, `verifier_require_container_identity`, and
-`verifier_require_container_morph_contract`. Theme gates can additionally pin
+`verifier_require_container_morph_contract`. Optical gates can additionally pin
+`optical_backdrop_driven`, `optical_blur_active`, `optical_frosting_active`,
+`optical_tint_active`, `optical_saturation_active`,
+`optical_luminance_preservation_active`, `optical_edge_highlight_active`,
+`optical_depth_shadow_active`, `optical_noise_dither_active`,
+`optical_foreground_vibrancy_active`, and `optical_deterministic_fallback`.
+Theme gates can additionally pin
 `theme_foreground_matches_theme`, `theme_accent_matches_theme`,
 `theme_tint_matches_surface`, `theme_border_matches_theme`, and
 `theme_default_glass_tokens`. Platform system-settings failures now include

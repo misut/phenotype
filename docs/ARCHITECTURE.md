@@ -645,6 +645,14 @@ deterministic translucent fallback. `execution_stages` then expands that
 primary pass into a bounded pure list of shadow, blur/standard/fallback, edge,
 and noise stages so artifacts can explain material work before visual
 inspection.
+`optical_response` summarizes the same pure plan as a compact verifier contract:
+the response model (`sampled-backdrop`, `standard-content`, `deterministic-fallback`,
+or `inactive`), blur strategy, color strategy, depth strategy, and explicit
+booleans for backdrop, blur, frosting, tint, saturation, luminance preservation,
+edge highlight, shadow depth, noise/dither, foreground vibrancy, and deterministic
+fallback. This gives CI and LLM debugging one stable JSON object that says
+whether the material behaved like Apple Liquid Glass, a content-layer standard
+material, or a deterministic fallback before any pixel threshold is interpreted.
 `execution_stage_capacity` records the fixed plan storage capacity and
 `dropped_execution_stage_count` records overflow explicitly; any nonzero drop is
 treated as a verifier failure, which forces future stage additions to update the

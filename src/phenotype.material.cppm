@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 25;
+inline constexpr std::uint32_t material_plan_contract_version = 26;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
 inline constexpr unsigned int material_max_sample_taps = 25;
@@ -337,6 +337,24 @@ struct MaterialForegroundRecommendation {
     bool deterministic = true;
 };
 
+struct MaterialOpticalResponseContract {
+    char const* response_model = "inactive";
+    char const* blur_strategy = "none";
+    char const* color_strategy = "none";
+    char const* depth_strategy = "none";
+    bool backdrop_driven = false;
+    bool blur_active = false;
+    bool frosting_active = false;
+    bool tint_active = false;
+    bool saturation_active = false;
+    bool luminance_preservation_active = false;
+    bool edge_highlight_active = false;
+    bool depth_shadow_active = false;
+    bool noise_dither_active = false;
+    bool foreground_vibrancy_active = false;
+    bool deterministic_fallback = true;
+};
+
 struct MaterialThemeSnapshot {
     Color foreground = {0, 0, 0, 255};
     Color secondary_foreground = {0, 0, 0, 255};
@@ -454,6 +472,7 @@ struct MaterialPlan {
     MaterialBackdropAccess backdrop_access{};
     MaterialThemeSnapshot theme{};
     MaterialForegroundRecommendation foreground{};
+    MaterialOpticalResponseContract optical_response{};
     MaterialFallbackPath fallback_path = MaterialFallbackPath::None;
     char const* fallback_reason = "";
     char const* contrast_intent = "standard";
@@ -2049,6 +2068,90 @@ inline MaterialReferenceModel material_resolve_reference_model(
     return model;
 }
 
+inline char const* material_optical_response_model_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.kind == MaterialKind::None)
+        return "inactive";
+    if (plan.backdrop_sampling)
+        return "sampled-backdrop";
+    if (material_plan_uses_standard_content_layer(plan))
+        return "standard-content";
+    return "deterministic-fallback";
+}
+
+inline char const* material_optical_blur_strategy_name(
+        MaterialPlan const& plan) noexcept {
+    if (!plan.primary_pass.active)
+        return "none";
+    if (plan.primary_pass.requires_backdrop)
+        return "backdrop-sample-blur";
+    if (material_stage_matches(plan.primary_pass.executor, "standard-fill"))
+        return "standard-fill";
+    if (material_stage_matches(plan.primary_pass.executor, "fallback-fill"))
+        return "fallback-fill";
+    return "none";
+}
+
+inline char const* material_optical_color_strategy_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.kind == MaterialKind::None || plan.tint.a == 0)
+        return "none";
+    if (plan.backdrop_sampling)
+        return "adaptive-backdrop-color";
+    if (material_plan_uses_standard_content_layer(plan))
+        return "standard-content-color";
+    return "fallback-solid-color";
+}
+
+inline char const* material_optical_depth_strategy_name(
+        MaterialPlan const& plan) noexcept {
+    if (!plan.primary_pass.active)
+        return "none";
+    bool const edge = plan.edge_highlight > 0.0f;
+    bool const shadow = plan.shadow_alpha > 0.0f;
+    bool const noise = plan.noise_opacity > 0.0f && plan.backdrop_sampling;
+    if (plan.backdrop_sampling && shadow && edge && noise)
+        return "layered-shadow-edge-noise";
+    if (plan.backdrop_sampling && (shadow || edge))
+        return "layered-shadow-edge";
+    if (material_plan_uses_standard_content_layer(plan) && edge)
+        return "standard-content-edge";
+    if ((plan.fallback() || !plan.backdrop_sampling) && shadow && edge)
+        return "fallback-shadow-edge";
+    if ((plan.fallback() || !plan.backdrop_sampling) && edge)
+        return "fallback-edge";
+    return "none";
+}
+
+inline MaterialOpticalResponseContract material_resolve_optical_response(
+        MaterialPlan const& plan) noexcept {
+    MaterialOpticalResponseContract response{};
+    response.response_model = material_optical_response_model_name(plan);
+    response.blur_strategy = material_optical_blur_strategy_name(plan);
+    response.color_strategy = material_optical_color_strategy_name(plan);
+    response.depth_strategy = material_optical_depth_strategy_name(plan);
+    response.backdrop_driven = plan.backdrop_sampling;
+    response.blur_active = plan.primary_pass.requires_backdrop;
+    response.frosting_active = plan.backdrop_sampling;
+    response.tint_active = plan.kind != MaterialKind::None && plan.tint.a > 0;
+    response.saturation_active =
+        plan.backdrop_sampling && std::fabs(plan.saturation - 1.0f) > 0.0001f;
+    response.luminance_preservation_active =
+        plan.kind != MaterialKind::None
+        && (plan.luminance_curve.bounded
+            || plan.reference_model.legibility_preserved);
+    response.edge_highlight_active =
+        plan.primary_pass.active && plan.edge_highlight > 0.0f;
+    response.depth_shadow_active =
+        plan.primary_pass.active && plan.shadow_alpha > 0.0f;
+    response.noise_dither_active =
+        plan.backdrop_sampling && plan.noise_opacity > 0.0f;
+    response.foreground_vibrancy_active = plan.foreground.uses_vibrancy;
+    response.deterministic_fallback =
+        plan.resource_budget.deterministic_fallback;
+    return response;
+}
+
 inline MaterialPlan plan_material_surface(MaterialRequest request,
                                           MaterialEnvironment environment) noexcept {
     MaterialPlan plan{};
@@ -2403,6 +2506,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         ? "material-blur-pass"
         : non_backdrop_material_layer;
     plan.verifier.likely_pass = plan.primary_pass.name;
+    plan.optical_response = material_resolve_optical_response(plan);
     plan.observation_contract = material_observation_contract(plan);
     return plan;
 }

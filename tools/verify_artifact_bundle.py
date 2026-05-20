@@ -102,6 +102,7 @@ ALLOWED_MATERIAL_LIKELY_LAYERS = {
     "material-fallback-pass",
     "material-foreground",
     "material-noise-pass",
+    "material-optical-response",
     "material-shadow-pass",
     "material-standard-pass",
 }
@@ -238,7 +239,37 @@ ALLOWED_MATERIAL_REFERENCE_PERFORMANCE_RESPONSES = {
     "warmup-capture",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 25
+ALLOWED_MATERIAL_OPTICAL_RESPONSE_MODELS = {
+    "deterministic-fallback",
+    "inactive",
+    "sampled-backdrop",
+    "standard-content",
+}
+
+ALLOWED_MATERIAL_OPTICAL_BLUR_STRATEGIES = {
+    "backdrop-sample-blur",
+    "fallback-fill",
+    "none",
+    "standard-fill",
+}
+
+ALLOWED_MATERIAL_OPTICAL_COLOR_STRATEGIES = {
+    "adaptive-backdrop-color",
+    "fallback-solid-color",
+    "none",
+    "standard-content-color",
+}
+
+ALLOWED_MATERIAL_OPTICAL_DEPTH_STRATEGIES = {
+    "fallback-edge",
+    "fallback-shadow-edge",
+    "layered-shadow-edge",
+    "layered-shadow-edge-noise",
+    "none",
+    "standard-content-edge",
+}
+
+MATERIAL_PLAN_CONTRACT_VERSION = 26
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -426,6 +457,10 @@ def suggested_action_for_failure(
         return (
             "Inspect MaterialPlan.foreground, foreground contrast selection, "
             "and the material style theme tokens used by the pure planner.")
+    if likely_layer == "material-optical-response":
+        return (
+            "Inspect MaterialPlan.optical_response and the pure blur, tint, "
+            "luminance, edge, depth, and fallback fields it summarizes.")
     if likely_layer == "material-reference":
         return (
             "Inspect MaterialPlan.reference_model, plan_material_surface, and "
@@ -1975,6 +2010,21 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "foreground_deterministic",
         "foreground_min_primary_contrast_gte",
         "foreground_minimum_contrast_gte",
+        "optical_response_models",
+        "optical_blur_strategies",
+        "optical_color_strategies",
+        "optical_depth_strategies",
+        "optical_backdrop_driven",
+        "optical_blur_active",
+        "optical_frosting_active",
+        "optical_tint_active",
+        "optical_saturation_active",
+        "optical_luminance_preservation_active",
+        "optical_edge_highlight_active",
+        "optical_depth_shadow_active",
+        "optical_noise_dither_active",
+        "optical_foreground_vibrancy_active",
+        "optical_deterministic_fallback",
         "theme_foreground_matches_theme",
         "theme_accent_matches_theme",
         "theme_tint_matches_surface",
@@ -2062,6 +2112,17 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "foreground_high_contrast",
             "foreground_vibrant",
             "foreground_deterministic",
+            "optical_backdrop_driven",
+            "optical_blur_active",
+            "optical_frosting_active",
+            "optical_tint_active",
+            "optical_saturation_active",
+            "optical_luminance_preservation_active",
+            "optical_edge_highlight_active",
+            "optical_depth_shadow_active",
+            "optical_noise_dither_active",
+            "optical_foreground_vibrancy_active",
+            "optical_deterministic_fallback",
             "theme_foreground_matches_theme",
             "theme_accent_matches_theme",
             "theme_tint_matches_surface",
@@ -2122,6 +2183,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "depth_responses": ALLOWED_MATERIAL_DEPTH_RESPONSES,
         "foreground_schemes": ALLOWED_MATERIAL_FOREGROUND_SCHEMES,
         "foreground_sources": ALLOWED_MATERIAL_FOREGROUND_SOURCES,
+        "optical_response_models": ALLOWED_MATERIAL_OPTICAL_RESPONSE_MODELS,
+        "optical_blur_strategies": ALLOWED_MATERIAL_OPTICAL_BLUR_STRATEGIES,
+        "optical_color_strategies": ALLOWED_MATERIAL_OPTICAL_COLOR_STRATEGIES,
+        "optical_depth_strategies": ALLOWED_MATERIAL_OPTICAL_DEPTH_STRATEGIES,
     }
     for field, allowed_keys in map_vocabularies.items():
         if field in value:
@@ -2808,6 +2873,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "backdrop_access",
     "theme",
     "foreground",
+    "optical_response",
     "fallback",
     "fallback_path",
     "fallback_reason",
@@ -3033,6 +3099,25 @@ MATERIAL_FOREGROUND_BOOL_FIELDS = (
     "high_contrast",
     "uses_vibrancy",
     "deterministic",
+)
+MATERIAL_OPTICAL_RESPONSE_STRING_FIELDS = (
+    "response_model",
+    "blur_strategy",
+    "color_strategy",
+    "depth_strategy",
+)
+MATERIAL_OPTICAL_RESPONSE_BOOL_FIELDS = (
+    "backdrop_driven",
+    "blur_active",
+    "frosting_active",
+    "tint_active",
+    "saturation_active",
+    "luminance_preservation_active",
+    "edge_highlight_active",
+    "depth_shadow_active",
+    "noise_dither_active",
+    "foreground_vibrancy_active",
+    "deterministic_fallback",
 )
 MATERIAL_QUALITY_POLICY_BOOL_FIELDS = (
     "allow_backdrop_sampling",
@@ -3482,6 +3567,86 @@ def expected_reference_performance_response(
     return "standard"
 
 
+def expected_optical_response_model(
+        kind: str | None,
+        role: str | None,
+        backdrop_sampling: bool | None) -> str | None:
+    if kind is None or role is None or backdrop_sampling is None:
+        return None
+    if kind == "none":
+        return "inactive"
+    if backdrop_sampling:
+        return "sampled-backdrop"
+    if role == "content":
+        return "standard-content"
+    return "deterministic-fallback"
+
+
+def expected_optical_blur_strategy(primary_pass: JsonObject | None) -> str | None:
+    if not isinstance(primary_pass, dict):
+        return None
+    if primary_pass.get("active") is not True:
+        return "none"
+    if primary_pass.get("requires_backdrop") is True:
+        return "backdrop-sample-blur"
+    executor = string_at(primary_pass, "executor")
+    if executor == "standard-fill":
+        return "standard-fill"
+    if executor == "fallback-fill":
+        return "fallback-fill"
+    return "none"
+
+
+def expected_optical_color_strategy(
+        kind: str | None,
+        role: str | None,
+        backdrop_sampling: bool | None,
+        tint: JsonObject | None) -> str | None:
+    if kind is None or role is None or backdrop_sampling is None:
+        return None
+    tint_alpha = None
+    if isinstance(tint, dict):
+        tint_alpha = number_at(tint, "a")
+    if kind == "none" or tint_alpha is None or int(tint_alpha) <= 0:
+        return "none"
+    if backdrop_sampling:
+        return "adaptive-backdrop-color"
+    if role == "content":
+        return "standard-content-color"
+    return "fallback-solid-color"
+
+
+def expected_optical_depth_strategy(
+        fallback: bool | None,
+        role: str | None,
+        backdrop_sampling: bool | None,
+        primary_pass: JsonObject | None,
+        edge_highlight: int | float | None,
+        shadow_alpha: int | float | None,
+        noise_opacity: int | float | None) -> str | None:
+    if not isinstance(primary_pass, dict) or primary_pass.get("active") is not True:
+        return "none"
+    if fallback is None or role is None or backdrop_sampling is None:
+        return None
+    edge = isinstance(edge_highlight, (int, float)) and float(edge_highlight) > 0.0
+    shadow = isinstance(shadow_alpha, (int, float)) and float(shadow_alpha) > 0.0
+    noise = (
+        backdrop_sampling
+        and isinstance(noise_opacity, (int, float))
+        and float(noise_opacity) > 0.0)
+    if backdrop_sampling and shadow and edge and noise:
+        return "layered-shadow-edge-noise"
+    if backdrop_sampling and (shadow or edge):
+        return "layered-shadow-edge"
+    if role == "content" and edge:
+        return "standard-content-edge"
+    if (fallback or not backdrop_sampling) and shadow and edge:
+        return "fallback-shadow-edge"
+    if (fallback or not backdrop_sampling) and edge:
+        return "fallback-edge"
+    return "none"
+
+
 def summarize_material_plans(
     plans: Any,
     report: Report,
@@ -3637,6 +3802,23 @@ def summarize_material_plans(
             "min_accent_contrast": 0.0,
             "min_minimum_contrast": 0.0,
             "max_background_luma": 0.0,
+        },
+        "optical_response": {
+            "response_models": {},
+            "blur_strategies": {},
+            "color_strategies": {},
+            "depth_strategies": {},
+            "backdrop_driven": 0,
+            "blur_active": 0,
+            "frosting_active": 0,
+            "tint_active": 0,
+            "saturation_active": 0,
+            "luminance_preservation_active": 0,
+            "edge_highlight_active": 0,
+            "depth_shadow_active": 0,
+            "noise_dither_active": 0,
+            "foreground_vibrancy_active": 0,
+            "deterministic_fallback": 0,
         },
         "resource_bounds": {
             "max_plan_blur_radius": 0.0,
@@ -4316,6 +4498,9 @@ def summarize_material_plans(
         plan_edge_highlight: int | float | None = None
         plan_luminance_floor: int | float | None = None
         plan_luminance_gain: int | float | None = None
+        plan_saturation: int | float | None = None
+        plan_noise_opacity: int | float | None = None
+        plan_shadow_alpha: int | float | None = None
         for key in MATERIAL_PLAN_NUMERIC_FIELDS:
             number = check_number_field(
                 report,
@@ -4332,12 +4517,18 @@ def summarize_material_plans(
                     bounds["max_plan_blur_radius"] = max(
                         float(bounds["max_plan_blur_radius"]),
                         float(number))
+            elif key == "saturation":
+                plan_saturation = number
             elif key == "edge_highlight":
                 plan_edge_highlight = number
             elif key == "luminance_floor":
                 plan_luminance_floor = number
             elif key == "luminance_gain":
                 plan_luminance_gain = number
+            elif key == "noise_opacity":
+                plan_noise_opacity = number
+            elif key == "shadow_alpha":
+                plan_shadow_alpha = number
         backdrop_sampling = check_bool_field(
             report,
             plan,
@@ -6635,6 +6826,187 @@ def summarize_material_plans(
                             "from MaterialPlan.render_target.pixel_count."),
                         record_success=False)
 
+        optical_response = check_object_field(
+            report,
+            plan,
+            "optical_response",
+            plan_path,
+            likely_layer="material-optical-response",
+            hint=(
+                "MaterialPlan.optical_response should summarize the pure "
+                "blur, tint, luminance, edge, depth, and fallback contract."))
+        if optical_response is not None:
+            optical_summary = summary["optical_response"]
+            string_specs = {
+                "response_model": (
+                    "response_models",
+                    ALLOWED_MATERIAL_OPTICAL_RESPONSE_MODELS),
+                "blur_strategy": (
+                    "blur_strategies",
+                    ALLOWED_MATERIAL_OPTICAL_BLUR_STRATEGIES),
+                "color_strategy": (
+                    "color_strategies",
+                    ALLOWED_MATERIAL_OPTICAL_COLOR_STRATEGIES),
+                "depth_strategy": (
+                    "depth_strategies",
+                    ALLOWED_MATERIAL_OPTICAL_DEPTH_STRATEGIES),
+            }
+            optical_values: JsonObject = {}
+            for key, (summary_key, allowed) in string_specs.items():
+                value = check_string_field(
+                    report,
+                    optical_response,
+                    key,
+                    f"{plan_path}.optical_response",
+                    likely_layer="material-optical-response",
+                    hint="Optical response strings must use the stable verifier vocabulary.")
+                if isinstance(value, str):
+                    optical_values[key] = value
+                    bucket = optical_summary[summary_key]
+                    bucket[value] = bucket.get(value, 0) + 1
+                    report.check(
+                        f"material optical {key} is known",
+                        value in allowed,
+                        path=f"{plan_path}.optical_response.{key}",
+                        expected=sorted(allowed),
+                        actual=value,
+                        likely_layer="material-optical-response",
+                        hint="Add intentional optical response vocabulary to the verifier.",
+                        record_success=False)
+            for key in MATERIAL_OPTICAL_RESPONSE_BOOL_FIELDS:
+                value = check_bool_field(
+                    report,
+                    optical_response,
+                    key,
+                    f"{plan_path}.optical_response",
+                    likely_layer="material-optical-response",
+                    hint="Optical response booleans must stay explicit pure-plan facts.")
+                if value is True:
+                    optical_summary[key] = int(optical_summary[key]) + 1
+
+            expected_model = expected_optical_response_model(
+                kind if isinstance(kind, str) else None,
+                role if isinstance(role, str) else None,
+                backdrop_sampling if isinstance(backdrop_sampling, bool) else None)
+            if expected_model is not None:
+                report.check(
+                    "material optical response model matches role and sampling",
+                    optical_values.get("response_model") == expected_model,
+                    path=f"{plan_path}.optical_response.response_model",
+                    expected=expected_model,
+                    actual=optical_values.get("response_model"),
+                    likely_layer="material-optical-response",
+                    hint=(
+                        "Optical response model should classify sampled "
+                        "glass, content standard material, fallback, or inactive mode."),
+                    record_success=False)
+            expected_blur = expected_optical_blur_strategy(primary_pass)
+            if expected_blur is not None:
+                report.check(
+                    "material optical blur strategy matches primary pass",
+                    optical_values.get("blur_strategy") == expected_blur,
+                    path=f"{plan_path}.optical_response.blur_strategy",
+                    expected=expected_blur,
+                    actual=optical_values.get("blur_strategy"),
+                    likely_layer="material-optical-response",
+                    likely_pass=primary_pass_name,
+                    hint="Optical blur strategy must mirror MaterialPlan.primary_pass.",
+                    record_success=False)
+            expected_color = expected_optical_color_strategy(
+                kind if isinstance(kind, str) else None,
+                role if isinstance(role, str) else None,
+                backdrop_sampling if isinstance(backdrop_sampling, bool) else None,
+                tint)
+            if expected_color is not None:
+                report.check(
+                    "material optical color strategy matches tint and role",
+                    optical_values.get("color_strategy") == expected_color,
+                    path=f"{plan_path}.optical_response.color_strategy",
+                    expected=expected_color,
+                    actual=optical_values.get("color_strategy"),
+                    likely_layer="material-optical-response",
+                    hint="Optical color strategy should be derived from tint, role, and sampling.",
+                    record_success=False)
+            expected_depth = expected_optical_depth_strategy(
+                fallback if isinstance(fallback, bool) else None,
+                role if isinstance(role, str) else None,
+                backdrop_sampling if isinstance(backdrop_sampling, bool) else None,
+                primary_pass,
+                plan_edge_highlight,
+                plan_shadow_alpha,
+                plan_noise_opacity)
+            if expected_depth is not None:
+                report.check(
+                    "material optical depth strategy matches stages",
+                    optical_values.get("depth_strategy") == expected_depth,
+                    path=f"{plan_path}.optical_response.depth_strategy",
+                    expected=expected_depth,
+                    actual=optical_values.get("depth_strategy"),
+                    likely_layer="material-optical-response",
+                    likely_pass=primary_pass_name,
+                    hint="Optical depth strategy should describe the planned shadow, edge, and noise work.",
+                    record_success=False)
+
+            expected_bools = {
+                "backdrop_driven": backdrop_sampling,
+                "blur_active": (
+                    primary_pass.get("requires_backdrop")
+                    if isinstance(primary_pass, dict) else None),
+                "frosting_active": backdrop_sampling,
+                "tint_active": (
+                    kind != "none"
+                    and isinstance(tint, dict)
+                    and isinstance(number_at(tint, "a"), (int, float))
+                    and int(number_at(tint, "a")) > 0)
+                    if isinstance(kind, str) else None,
+                "saturation_active": (
+                    backdrop_sampling is True
+                    and isinstance(plan_saturation, (int, float))
+                    and abs(float(plan_saturation) - 1.0) > 0.0001),
+                "luminance_preservation_active": (
+                    kind != "none"
+                    and isinstance(luminance_curve, dict)
+                    and (luminance_curve.get("bounded") is True
+                         or (isinstance(reference_model, dict)
+                             and reference_model.get("legibility_preserved") is True)))
+                    if isinstance(kind, str) else None,
+                "edge_highlight_active": (
+                    isinstance(primary_pass, dict)
+                    and primary_pass.get("active") is True
+                    and isinstance(plan_edge_highlight, (int, float))
+                    and float(plan_edge_highlight) > 0.0),
+                "depth_shadow_active": (
+                    isinstance(primary_pass, dict)
+                    and primary_pass.get("active") is True
+                    and isinstance(plan_shadow_alpha, (int, float))
+                    and float(plan_shadow_alpha) > 0.0),
+                "noise_dither_active": (
+                    backdrop_sampling is True
+                    and isinstance(plan_noise_opacity, (int, float))
+                    and float(plan_noise_opacity) > 0.0),
+                "foreground_vibrancy_active": (
+                    foreground.get("uses_vibrancy")
+                    if isinstance(foreground, dict) else None),
+            }
+            resource_budget_for_optical = plan.get("resource_budget")
+            if isinstance(resource_budget_for_optical, dict):
+                expected_bools["deterministic_fallback"] = (
+                    resource_budget_for_optical.get("deterministic_fallback"))
+            for key, expected in expected_bools.items():
+                if isinstance(expected, bool):
+                    report.check(
+                        f"material optical {key} matches plan",
+                        optical_response.get(key) is expected,
+                        path=f"{plan_path}.optical_response.{key}",
+                        expected=expected,
+                        actual=optical_response.get(key),
+                        likely_layer="material-optical-response",
+                        likely_pass=primary_pass_name,
+                        hint=(
+                            "Optical response booleans should be derived from "
+                            "the surrounding MaterialPlan fields."),
+                        record_success=False)
+
         passes = plan.get("passes")
         report.check(
             "material plan passes is array",
@@ -7198,6 +7570,17 @@ def check_material_plan_summary_requirements(
             "foreground_high_contrast",
             "foreground_vibrant",
             "foreground_deterministic",
+            "optical_backdrop_driven",
+            "optical_blur_active",
+            "optical_frosting_active",
+            "optical_tint_active",
+            "optical_saturation_active",
+            "optical_luminance_preservation_active",
+            "optical_edge_highlight_active",
+            "optical_depth_shadow_active",
+            "optical_noise_dither_active",
+            "optical_foreground_vibrancy_active",
+            "optical_deterministic_fallback",
             "verifier_require_backdrop_source",
             "verifier_require_container_identity",
             "verifier_require_container_morph_contract",
@@ -7318,6 +7701,13 @@ def check_material_plan_summary_requirements(
                     nested_field = "vibrant"
                 actual = foreground_summary.get(nested_field)
                 summary_path = f"{base_path}.foreground.{nested_field}"
+            elif field.startswith("optical_"):
+                optical_summary = summary.get("optical_response")
+                if not isinstance(optical_summary, dict):
+                    optical_summary = {}
+                nested_field = field.removeprefix("optical_")
+                actual = optical_summary.get(nested_field)
+                summary_path = f"{base_path}.optical_response.{nested_field}"
             elif field.startswith("theme_"):
                 theme_summary = summary.get("theme")
                 if not isinstance(theme_summary, dict):
@@ -7509,6 +7899,18 @@ def check_material_plan_summary_requirements(
         "foreground_sources": (
             "material-foreground",
             "Inspect MaterialPlan.foreground.source and planner inputs."),
+        "optical_response_models": (
+            "material-optical-response",
+            "Inspect MaterialPlan.optical_response.response_model and role/sampling policy."),
+        "optical_blur_strategies": (
+            "material-optical-response",
+            "Inspect MaterialPlan.optical_response.blur_strategy and primary_pass."),
+        "optical_color_strategies": (
+            "material-optical-response",
+            "Inspect MaterialPlan.optical_response.color_strategy and tint/role policy."),
+        "optical_depth_strategies": (
+            "material-optical-response",
+            "Inspect MaterialPlan.optical_response.depth_strategy and shadow/edge/noise plan."),
         "theme_profile_names": (
             "theme",
             "Inspect MaterialPlan.theme.profile_name and the explicit MaterialStyle token snapshot."),
@@ -7557,6 +7959,10 @@ def check_material_plan_summary_requirements(
             "verifier_region_passes",
             "foreground_schemes",
             "foreground_sources",
+            "optical_response_models",
+            "optical_blur_strategies",
+            "optical_color_strategies",
+            "optical_depth_strategies",
             "theme_profile_names",
             "theme_sources",
             "theme_token_policies"):
@@ -7654,6 +8060,18 @@ def check_material_plan_summary_requirements(
                 }[field]
                 actual = foreground_summary.get(nested)
                 summary_path = f"{base_path}.foreground.{nested}"
+            elif field.startswith("optical_"):
+                optical_summary = summary.get("optical_response")
+                if not isinstance(optical_summary, dict):
+                    optical_summary = {}
+                nested = {
+                    "optical_response_models": "response_models",
+                    "optical_blur_strategies": "blur_strategies",
+                    "optical_color_strategies": "color_strategies",
+                    "optical_depth_strategies": "depth_strategies",
+                }[field]
+                actual = optical_summary.get(nested)
+                summary_path = f"{base_path}.optical_response.{nested}"
             elif field in (
                     "theme_profile_names",
                     "theme_sources",

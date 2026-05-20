@@ -188,6 +188,12 @@ snapshot, and verifier expectations. The plan also carries a
 `luminance_curve` contract: sampled glass uses the backdrop-driven
 `adaptive-backdrop-luma` curve, while deterministic fallback uses
 `fallback-flat`.
+`MaterialPlan.optical_response` is the compact schema-stable summary of that
+contract. It classifies each surface as sampled backdrop glass, content-layer
+standard material, deterministic fallback, or inactive, then records the
+blur/color/depth strategy and explicit booleans for blur, frosting, tint,
+saturation, luminance preservation, edge highlight, depth shadow, noise/dither,
+foreground vibrancy, and fallback behavior.
 `MaterialPlan.reference_model` maps the current Apple references into a
 backend-independent product contract: functional roles are `liquid-glass` on
 the `functional-layer`, content roles are `standard-material` on the
