@@ -56,6 +56,12 @@ void test_accordion_starts_collapsed() {
     auto& col = detail::node_at(root.children[0]);
     // Just the header — body skipped while collapsed.
     assert(col.children.size() == 1);
+    auto& header = detail::node_at(col.children[0]);
+    assert(header.debug_semantic_role.compare("accordion-header") == 0);
+    assert(header.debug_semantic_label.compare("section") == 0);
+    assert(header.material.kind == MaterialKind::Clear);
+    assert(header.material.role == MaterialSurfaceRole::Content);
+    assert(header.material.container.interactive);
     std::puts("PASS: accordion starts collapsed (no body)");
 }
 
@@ -85,6 +91,10 @@ void test_accordion_click_expands_body() {
     auto& root = detail::node_at(root_h);
     auto& col = detail::node_at(root.children[0]);
     assert(col.children.size() == 2);                  // header + body
+    auto& header = detail::node_at(col.children[0]);
+    assert(header.material.kind == MaterialKind::Clear);
+    assert(header.material.role == MaterialSurfaceRole::Content);
+    assert(header.material.container.interactive);
     auto& body = detail::node_at(col.children[1]);
     assert(body.children.size() == 1);                 // user content
     std::puts("PASS: click on accordion header expands body");

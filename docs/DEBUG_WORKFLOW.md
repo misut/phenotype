@@ -795,6 +795,12 @@ resolved material plan; those headers should appear as `content` role material
 plans, which means a standard-material content-layer pass rather than another
 sampled backdrop pass. If a list header disappears from the semantic tree,
 check the sort header button before debugging the content surface itself.
+Disclosure rows follow the same content-layer path:
+`layout::accordion` headers carry `widget::glass_disclosure_header_style`,
+the `accordion-header` semantic role, the title label, and a resolved clear
+`content` material plan. If an accordion body toggles correctly but the header
+loses its material plan, inspect the disclosure style helper before looking at
+layout state.
 It also compares semantic material container descriptors against
 `MaterialPlan.command_descriptor.container` and compares resolved container
 identity against `MaterialPlan.container`; a container mismatch points at layout

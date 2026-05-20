@@ -1313,6 +1313,18 @@ struct GlassTableHeaderStyleOptions {
     TextAlign text_align = TextAlign::Start;
 };
 
+struct GlassDisclosureStyleOptions {
+    MaterialKind kind = MaterialKind::Clear;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Content;
+    bool expanded = false;
+    bool disabled = false;
+    float width = 0.0f;
+    float height = -1.0f;
+    float border_radius = -1.0f;
+    float font_size = 0.0f;
+    TextAlign text_align = TextAlign::Start;
+};
+
 struct TabsStyleOptions {
     MaterialKind kind = MaterialKind::Regular;
     MaterialSurfaceRole role = MaterialSurfaceRole::Navigation;

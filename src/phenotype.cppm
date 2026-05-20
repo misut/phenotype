@@ -598,6 +598,58 @@ inline ButtonStyleOptions glass_table_header_button_style(
     return style;
 }
 
+inline ButtonStyleOptions glass_disclosure_header_style(
+        GlassDisclosureStyleOptions options = {}) {
+    auto const& t = detail::g_app.theme;
+    auto const kind = options.disabled ? MaterialKind::None : options.kind;
+    auto material = material_style_for_kind(kind, t);
+    material.role = options.role;
+    material.fallback = kind != MaterialKind::None;
+    material.tint = options.expanded
+        ? material_with_alpha(t.surface, 150)
+        : material_with_alpha(t.surface, 102);
+    material.border = material_with_alpha(
+        t.border,
+        static_cast<unsigned char>(options.expanded ? 128 : 92));
+    material.foreground = t.foreground;
+    material.container = MaterialContainerDescriptor{
+        0u,
+        0u,
+        8.0f,
+        !options.disabled,
+        true};
+
+    ButtonStyleOptions style;
+    style.disabled = options.disabled;
+    style.has_material = kind != MaterialKind::None;
+    style.material = material;
+    style.has_background = true;
+    style.background = kind != MaterialKind::None
+        ? material.tint
+        : t.transparent;
+    style.has_hover_background = true;
+    style.hover_background = material_with_alpha(t.surface, 150);
+    style.has_pressed_background = true;
+    style.pressed_background = material_with_alpha(t.surface, 188);
+    style.has_border_color = true;
+    style.border_color = kind != MaterialKind::None
+        ? material.border
+        : t.transparent;
+    style.has_text_color = true;
+    style.text_color = options.disabled ? t.state_disabled_fg : t.foreground;
+    style.border_width = kind != MaterialKind::None ? 1.0f : 0.0f;
+    style.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : t.radius_sm;
+    style.font_size = options.font_size;
+    style.max_width = options.width;
+    style.fixed_height = options.height;
+    style.min_hit_width = minimum_button_activation_size;
+    style.min_hit_height = minimum_button_activation_size;
+    style.text_align = options.text_align;
+    return style;
+}
+
 inline TextFieldStyleOptions glass_text_field_style(
         GlassTextFieldStyleOptions options = {}) {
     auto const& t = detail::g_app.theme;
@@ -3110,6 +3162,8 @@ void accordion(str title, F&& builder) {
         auto id = static_cast<unsigned int>(
             detail::g_app.callbacks.size());
         bool const is_focused = detail::focus_ring_visible(id);
+        auto const chrome = widget::glass_disclosure_header_style(
+            GlassDisclosureStyleOptions{.expanded = expanded});
 
         auto header_h = detail::alloc_node();
         {
@@ -3117,25 +3171,54 @@ void accordion(str title, F&& builder) {
             hd.style.flex_direction = FlexDirection::Row;
             hd.style.cross_align = CrossAxisAlignment::Center;
             hd.style.gap = t.space_sm;
-            hd.style.padding[0] = t.space_sm;
-            hd.style.padding[1] = t.space_md;
-            hd.style.padding[2] = t.space_sm;
-            hd.style.padding[3] = t.space_md;
+            hd.style.padding[0] = chrome.padding_top >= 0.0f
+                ? chrome.padding_top
+                : t.space_sm;
+            hd.style.padding[1] = chrome.padding_right >= 0.0f
+                ? chrome.padding_right
+                : t.space_md;
+            hd.style.padding[2] = chrome.padding_bottom >= 0.0f
+                ? chrome.padding_bottom
+                : t.space_sm;
+            hd.style.padding[3] = chrome.padding_left >= 0.0f
+                ? chrome.padding_left
+                : t.space_md;
             hd.cursor_type = 1;
             hd.callback_id = id;
             hd.interaction_role = InteractionRole::Button;
             hd.focusable = true;
-            hd.background = t.surface;
-            hd.hover_background = t.state_hover_bg;
+            hd.background = chrome.has_background
+                ? chrome.background
+                : t.surface;
+            hd.hover_background = chrome.has_hover_background
+                ? chrome.hover_background
+                : t.state_hover_bg;
             // Focus ring: width grows from 1px to
             // `state_focus_ring_width`, colour cross-fades from
-            // `t.border` to `state_focus_ring`.
+            // the disclosure border to `state_focus_ring`.
+            float const base_border_width = chrome.border_width >= 0.0f
+                ? chrome.border_width
+                : 1.0f;
+            Color const base_border = chrome.has_border_color
+                ? chrome.border_color
+                : t.border;
             int const focus_ms = detail::focus_ring_transition_ms(id, 150);
             hd.border_width = animate_float(
-                is_focused ? t.state_focus_ring_width : 1.0f, focus_ms);
+                is_focused ? t.state_focus_ring_width : base_border_width,
+                focus_ms);
             hd.border_color = animate_color(
-                is_focused ? t.state_focus_ring : t.border, focus_ms);
-            hd.border_radius = t.radius_sm;
+                is_focused ? t.state_focus_ring : base_border, focus_ms);
+            hd.border_radius = chrome.border_radius >= 0.0f
+                ? chrome.border_radius
+                : t.radius_sm;
+            if (chrome.has_material && chrome.material.kind != MaterialKind::None) {
+                hd.material = chrome.material;
+                hd.material.tint = hd.background;
+                hd.material.border = hd.border_color;
+                hd.material.foreground = chrome.has_text_color
+                    ? chrome.text_color
+                    : t.foreground;
+            }
             hd.debug_semantic_role = "accordion-header";
             hd.debug_semantic_label = std::string(title.data, title.len);
             hd.debug_semantic_callback_id = id;

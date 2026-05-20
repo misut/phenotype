@@ -351,6 +351,11 @@ Table/list headers use `GlassTableHeaderStyleOptions` and
 standard-material path instead of expanding sampled-backdrop work. Sorted
 columns get a stronger tint/border; disabled headers drop their material
 contract deterministically.
+Disclosure rows use `GlassDisclosureStyleOptions` and
+`widget::glass_disclosure_header_style`. `layout::accordion` consumes that
+style for its header row, preserving the existing local expand/collapse state
+while making the chevron/title row a `content` material surface with explicit
+expanded/collapsed tint differences.
 
 `phenotype.svg` is a pure vector image layer. It parses a bounded SVG subset
 (`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,
