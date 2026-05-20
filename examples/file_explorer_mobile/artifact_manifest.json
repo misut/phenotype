@@ -14,7 +14,8 @@
     "Trash",
     "Create",
     "Status",
-    "[File] README.txt"
+    "[File] README.txt",
+    "Mobile Mode Segmented Control"
   ],
   "require_roles": [
     "button",
@@ -36,131 +37,132 @@
   "require_material_plans": true,
   "require_material_semantic_runtime_match": true,
   "require_material_plan_summary": {
-    "count": 28,
+    "count": 29,
     "fallback": 0,
-    "backdrop_sampling": 28,
+    "backdrop_sampling": 29,
     "contract_versions": {
-      "30": 28
+      "30": 29
     },
-    "theme_foreground_matches_theme": 28,
-    "theme_accent_matches_theme": 28,
-    "theme_tint_matches_surface": 28,
-    "theme_border_matches_theme": 28,
-    "theme_default_glass_tokens": 28,
+    "theme_foreground_matches_theme": 29,
+    "theme_accent_matches_theme": 0,
+    "theme_tint_matches_surface": 29,
+    "theme_border_matches_theme": 29,
+    "theme_default_glass_tokens": 0,
     "theme_sources": {
-      "material-style": 28
+      "material-style": 29
     },
     "theme_token_policies": {
-      "explicit-material-style-tokens": 28
+      "explicit-material-style-tokens": 29
     },
     "roles": {
+      "navigation": 2,
+      "status_bar": 1,
       "surface": 25,
-      "toolbar": 1,
-      "navigation": 1,
-      "status_bar": 1
+      "toolbar": 1
     },
     "container_modes": {
-      "container": 28
+      "container": 28,
+      "isolated": 1
     },
     "container_ids": {
       "3100": 28
     },
     "container_participating": 28,
     "container_unioned": 0,
-    "container_interactive": 1,
-    "container_morph_transitions": 28,
-    "reference_interactive_response": 1,
-    "interaction_enabled": 1,
+    "container_interactive": 2,
+    "container_morph_transitions": 29,
+    "reference_interactive_response": 2,
+    "interaction_enabled": 2,
     "interaction_active": 0,
     "interaction_specular_highlight_active": 0,
     "interaction_states": {
-      "idle": 1,
+      "idle": 2,
       "inactive": 27
     },
     "interaction_enablement_reasons": {
-      "interactive-container": 1,
+      "interactive-container": 2,
       "noninteractive-container": 27
     },
     "interaction_response_models": {
-      "liquid-glass-interaction": 1,
+      "liquid-glass-interaction": 2,
       "none": 27
     },
     "interaction_specular_models": {
-      "none": 28
+      "none": 29
     },
     "interaction_motion_policies": {
-      "animated-optical-response": 1,
+      "animated-optical-response": 2,
       "static": 27
     },
     "optical_interaction_active": 0,
     "optical_interaction_modulates_optics": 0,
-    "shape_valid": 28,
+    "shape_valid": 29,
     "shape_radius_clamped": 0,
     "pass_names": {
-      "backdrop-sample-blur": 28
+      "backdrop-sample-blur": 29
     },
     "pass_executors": {
-      "backdrop-filter": 28
+      "backdrop-filter": 29
     },
     "sampling_kernels": {
-      "weighted-5x5-manhattan": 28
+      "weighted-5x5-manhattan": 29
     },
     "sampling_weight_profiles": {
-      "center4-cardinal2-diagonal1": 28
+      "center4-cardinal2-diagonal1": 29
     },
-    "backdrop_access_required": 28,
-    "backdrop_access_stable_required": 28,
-    "backdrop_access_frame_history_required": 28,
-    "backdrop_access_shared_frame_capture": 28,
-    "backdrop_access_next_frame_capture_required": 28,
-    "backdrop_access_excludes_foreground_text": 28,
-    "backdrop_access_bounded": 28,
+    "backdrop_access_required": 29,
+    "backdrop_access_stable_required": 29,
+    "backdrop_access_frame_history_required": 29,
+    "backdrop_access_shared_frame_capture": 29,
+    "backdrop_access_next_frame_capture_required": 29,
+    "backdrop_access_excludes_foreground_text": 29,
+    "backdrop_access_bounded": 29,
     "backdrop_access_sources": {
-      "previous-presented-frame-sampled-grid": 28
+      "previous-presented-frame-sampled-grid": 29
     },
     "backdrop_capture_scopes": {
-      "shared-frame": 28
+      "shared-frame": 29
     },
     "backdrop_capture_reasons": {
-      "sample-current-frame": 28
+      "sample-current-frame": 29
     },
-    "decision_can_sample_backdrop": 28,
-    "decision_backend_supports_backdrop": 28,
-    "decision_backdrop_source_ready": 28,
-    "decision_next_frame_capture_required": 28,
+    "decision_can_sample_backdrop": 29,
+    "decision_backend_supports_backdrop": 29,
+    "decision_backdrop_source_ready": 29,
+    "decision_next_frame_capture_required": 29,
     "decision_reduced_transparency": 0,
     "verifier_region_passes": {
       "clear-over-rich-backdrop": "backdrop-sample-blur",
-      "thin-balanced-backdrop": "backdrop-sample-blur",
       "regular-legibility-backdrop": "backdrop-sample-blur",
-      "thick-high-contrast-backdrop": "backdrop-sample-blur"
+      "thick-high-contrast-backdrop": "backdrop-sample-blur",
+      "thin-balanced-backdrop": "backdrop-sample-blur"
     },
     "luminance_curves": {
-      "adaptive-backdrop-luma": 28
+      "adaptive-backdrop-luma": 29
     },
     "optical_response_models": {
-      "sampled-backdrop": 28
+      "sampled-backdrop": 29
     },
     "optical_blur_strategies": {
-      "backdrop-sample-blur": 28
+      "backdrop-sample-blur": 29
     },
     "optical_color_strategies": {
-      "adaptive-backdrop-color": 28
+      "adaptive-backdrop-color": 29
     },
     "optical_depth_strategies": {
-      "layered-shadow-edge-noise": 28
+      "layered-shadow-edge-noise": 29
     },
-    "optical_backdrop_driven": 28,
-    "optical_blur_active": 28,
-    "optical_frosting_active": 28,
-    "optical_tint_active": 28,
-    "optical_saturation_active": 27,
-    "optical_luminance_preservation_active": 28,
-    "optical_edge_highlight_active": 28,
-    "optical_depth_shadow_active": 28,
-    "optical_noise_dither_active": 28,
-    "optical_foreground_vibrancy_active": 28,
-    "optical_deterministic_fallback": 28
+    "optical_backdrop_driven": 29,
+    "optical_blur_active": 29,
+    "optical_frosting_active": 29,
+    "optical_tint_active": 29,
+    "optical_saturation_active": 28,
+    "optical_luminance_preservation_active": 29,
+    "optical_edge_highlight_active": 29,
+    "optical_depth_shadow_active": 29,
+    "optical_noise_dither_active": 29,
+    "optical_foreground_vibrancy_active": 29,
+    "optical_deterministic_fallback": 29
   },
   "require_capabilities": [
     "material_backdrop_blur"
@@ -614,7 +616,7 @@
     },
     {
       "path": "renderer.material_executor_summary.material_total_sample_taps",
-      "equals": 700
+      "equals": 725
     }
   ],
   "require_runtime_numeric_bounds": [
@@ -638,28 +640,28 @@
     "max_sampling_kernel_radius_gte": 2,
     "max_pass_count_lte": 1,
     "max_backdrop_pixels_lte": 4000000,
-    "max_container_spacing_lte": 12.0,
-    "max_container_spacing_gte": 12.0,
+    "max_container_spacing_lte": 20.0,
+    "max_container_spacing_gte": 20.0,
     "max_pass_texture_copy_pixels_lte": 4000000,
     "max_frame_capture_count_lte": 1,
     "max_frame_capture_count_gte": 1,
     "max_frame_capture_pixels_lte": 4000000,
-    "max_frame_capture_pixels_gte": 1,
+    "max_frame_capture_pixels_gte": 1216800,
     "total_surface_sample_pixels_lte": 88000000,
-    "total_surface_sample_pixels_gte": 1,
+    "total_surface_sample_pixels_gte": 3826444,
     "max_surface_sample_pixels_lte": 4000000,
-    "max_surface_sample_pixels_gte": 1,
-    "total_plan_sample_taps_lte": 700,
-    "total_plan_sample_taps_gte": 700,
-    "total_runtime_passes_gte": 1,
-    "active_runtime_passes_gte": 1,
-    "backdrop_runtime_passes_gte": 1,
-    "total_execution_stages_lte": 112,
-    "total_execution_stages_gte": 112,
-    "active_execution_stages_lte": 112,
-    "active_execution_stages_gte": 112,
-    "backdrop_execution_stages_lte": 28,
-    "backdrop_execution_stages_gte": 28,
+    "max_surface_sample_pixels_gte": 755424,
+    "total_plan_sample_taps_lte": 725,
+    "total_plan_sample_taps_gte": 725,
+    "total_runtime_passes_gte": 29,
+    "active_runtime_passes_gte": 29,
+    "backdrop_runtime_passes_gte": 29,
+    "total_execution_stages_lte": 116,
+    "total_execution_stages_gte": 116,
+    "active_execution_stages_lte": 116,
+    "active_execution_stages_gte": 116,
+    "backdrop_execution_stages_lte": 29,
+    "backdrop_execution_stages_gte": 29,
     "dropped_execution_stages_lte": 0,
     "dropped_execution_stages_gte": 0,
     "max_execution_stage_count_lte": 4,

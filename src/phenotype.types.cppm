@@ -1273,6 +1273,15 @@ struct GlassControlStyleOptions {
     TextAlign text_align = TextAlign::Center;
 };
 
+struct TabsStyleOptions {
+    MaterialKind kind = MaterialKind::Regular;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Navigation;
+    bool interactive = true;
+    float border_radius = -1.0f;
+    float border_width = 0.0f;
+    char const* semantic_label = "Segmented Control";
+};
+
 struct ButtonVisualState {
     bool hovered = false;
     bool focused = false;

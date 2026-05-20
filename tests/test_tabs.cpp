@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <string_view>
 #include <vector>
 import phenotype;
 
@@ -69,9 +70,14 @@ void test_tabs_renders_one_button_per_item() {
     LAYOUT_NODE(root_h, 600.0f);
 
     auto& root = detail::node_at(root_h);
-    // tabs is now a pill column wrapping (a) the tab row and
-    // (b) the sliding-indicator track.
+    // tabs is a material-backed pill column wrapping (a) the tab row
+    // and (b) the sliding-indicator track.
     auto& pill = detail::node_at(root.children[0]);
+    assert(pill.material.kind == MaterialKind::Regular);
+    assert(pill.material.role == MaterialSurfaceRole::Navigation);
+    assert(pill.material.container.interactive);
+    assert(std::string_view{pill.debug_semantic_label}
+           == "Segmented Control");
     assert(pill.children.size() == 2);
     auto& bar = detail::node_at(pill.children[0]);
     assert(bar.children.size() == 3);

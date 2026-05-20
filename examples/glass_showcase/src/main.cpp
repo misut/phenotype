@@ -224,6 +224,12 @@ static void view(State const& state) {
                             widget::tabs<Msg>(tabs, state.selected_density,
                                 [](std::size_t index) -> Msg {
                                     return glass::select_density(index);
+                                },
+                                TabsStyleOptions{
+                                    .kind = MaterialKind::Regular,
+                                    .role = MaterialSurfaceRole::Navigation,
+                                    .semantic_label =
+                                        "Density Segmented Control",
                                 });
                         }
                         layout::spacer(8);

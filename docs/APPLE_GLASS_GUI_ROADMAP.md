@@ -206,6 +206,11 @@ chrome can now opt in with `MaterialSurfaceOptions.interactive`; the built-in
 toolbar-group and navigation glass presets use that opt-in so Finder-style
 toolbar clusters and segmented navigation controls expose interaction response
 without requiring every app to wrap them in a separate material container.
+Segmented controls and popovers are now first-class glass presets as well:
+`widget::tabs` emits a material-backed segmented control by default,
+`TabsStyleOptions` lets callers choose kind/role/label, and
+`layout::segmented_control_surface` / `layout::popover` keep Finder-style
+toolbar and overflow chrome on the typed MaterialRect path.
 Pointer-driven active responses now include a pure, normalized
 `pointer-specular` highlight descriptor. The macOS Metal executor consumes that
 descriptor as shader input to add a bounded glint near the pointer anchor, while
@@ -836,11 +841,12 @@ Current seed:
 
 ## Next recommended PR
 
-The initial G0-G4 path is now landed. The next useful PR should avoid another
+The initial G0-G4 path is now landed, and segmented controls/popovers now use
+the first-class material helper path. The next useful PR should avoid another
 schema-only increment unless a real failure appears. Recommended directions:
 
-- expand first-class material-aware controls beyond glass buttons, especially
-  segmented controls and popovers;
+- expand first-class material-aware controls beyond buttons and segmented
+  controls, especially menu/list selection chrome and inline search fields;
 - tighten macOS material executor budgets after collecting a small sample of
   local and CI timing/copy values;
 - add Android CI emulator wiring if runner capacity and cost are acceptable;

@@ -862,6 +862,20 @@ phenotype::layout::MaterialSurfaceOptions toolbar_group_options(
     return options;
 }
 
+phenotype::layout::MaterialSurfaceOptions segmented_toolbar_options(
+        char const* label,
+        float max_width) {
+    using namespace phenotype;
+    auto options = layout::glass_surface_options(
+        layout::GlassSurfacePreset::SegmentedControl,
+        label);
+    options.role = MaterialSurfaceRole::Toolbar;
+    options.max_width = max_width;
+    options.fixed_height = k_toolbar_group_height;
+    options.border_radius = k_toolbar_group_radius;
+    return options;
+}
+
 phenotype::layout::MaterialSurfaceOptions content_surface_options(
         phenotype::SpaceToken gap = phenotype::SpaceToken::Md) {
     using namespace phenotype;
@@ -2212,8 +2226,8 @@ void finder_toolbar(State const& state,
             : snap.relative_location,
             TextSize::Heading);
         layout::weighted(1.0f, [] {});
-        layout::toolbar(
-            toolbar_group_options(
+        layout::segmented_control_surface(
+            segmented_toolbar_options(
                 "View Controls",
                 file_explorer_demo::k_desktop_toolbar_view_group_width),
             [&] {
@@ -2302,7 +2316,7 @@ void finder_more_actions(State const& state,
         options.max_width = 376.0f;
         options.fixed_height = 392.0f;
         options.border_radius = k_toolbar_group_radius;
-        layout::material_surface(
+        layout::popover(
             options,
             [&] {
                 layout::column([&] {

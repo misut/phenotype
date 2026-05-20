@@ -1387,8 +1387,10 @@ inline void switch_(str label, bool on, Msg msg) {
 // caller (typically lifted into user `State`), so the widget itself
 // stays stateless — `Msg`/`update` round-trip is the source of truth.
 //
-// Visual chrome is the design system's "pill" treatment: a code_bg-
-// filled outer container with rounded corners. The pill is now a
+// Visual chrome is the design system's material segmented-control
+// treatment: the outer pill emits a `MaterialRect` using
+// `TabsStyleOptions`, so the same pure Liquid Glass plan powers
+// text tabs, mobile mode pickers, and native examples. The pill is a
 // Column wrapping (a) the row of tabs and (b) a sliding 2-pixel
 // indicator track. Tabs use `flex_grow = 1` and `gap = 0` so each
 // occupies exactly `inner_width / N` — the indicator track divides
@@ -1410,20 +1412,42 @@ inline void switch_(str label, bool on, Msg msg) {
 template<typename Msg>
 inline void tabs(std::vector<str> const& items,
                  std::size_t selected,
-                 Msg (*on_select)(std::size_t)) {
+                 Msg (*on_select)(std::size_t),
+                 TabsStyleOptions options = {}) {
     auto const& t = detail::g_app.theme;
 
     auto pill_h = detail::alloc_node();
     {
         auto& pill = detail::node_at(pill_h);
+        auto material = material_style_for_kind(options.kind, t);
+        material.role = options.role;
+        material.container = MaterialContainerDescriptor{
+            0u,
+            0u,
+            20.0f,
+            options.interactive,
+            true};
+        pill.material = material;
         pill.style.flex_direction = FlexDirection::Column;
         pill.style.gap = 0;
-        pill.background = t.code_bg;
-        pill.border_radius = t.radius_md;
+        pill.background = options.kind == MaterialKind::None
+            ? t.code_bg
+            : material.tint;
+        pill.border_color = options.kind == MaterialKind::None
+            ? t.transparent
+            : material.border;
+        pill.border_width = options.kind == MaterialKind::None
+            ? 0.0f
+            : options.border_width;
+        pill.border_radius = options.border_radius >= 0.0f
+            ? options.border_radius
+            : t.radius_md;
         pill.style.padding[0] = t.space_xs;
         pill.style.padding[1] = t.space_xs;
         pill.style.padding[2] = t.space_xs;
         pill.style.padding[3] = t.space_xs;
+        if (options.semantic_label && options.semantic_label[0] != '\0')
+            pill.debug_semantic_label = options.semantic_label;
     }
     detail::attach_to_scope(pill_h);
 
@@ -2323,10 +2347,12 @@ enum class GlassSurfacePreset {
     Window,
     Toolbar,
     ToolbarGroup,
+    SegmentedControl,
     Navigation,
     Sidebar,
     Content,
     StatusBar,
+    Popover,
 };
 
 inline char const* glass_surface_preset_name(
@@ -2335,10 +2361,13 @@ inline char const* glass_surface_preset_name(
         case GlassSurfacePreset::Window:       return "window";
         case GlassSurfacePreset::Toolbar:      return "toolbar";
         case GlassSurfacePreset::ToolbarGroup: return "toolbar_group";
+        case GlassSurfacePreset::SegmentedControl:
+            return "segmented_control";
         case GlassSurfacePreset::Navigation:   return "navigation";
         case GlassSurfacePreset::Sidebar:      return "sidebar";
         case GlassSurfacePreset::Content:      return "content";
         case GlassSurfacePreset::StatusBar:    return "status_bar";
+        case GlassSurfacePreset::Popover:      return "popover";
     }
     return "content";
 }
@@ -2448,6 +2477,19 @@ inline MaterialSurfaceOptions glass_surface_options(
                 semantic_label,
                 "Toolbar Group");
             break;
+        case GlassSurfacePreset::SegmentedControl:
+            options.kind = MaterialKind::Regular;
+            options.role = MaterialSurfaceRole::Navigation;
+            options.direction = FlexDirection::Row;
+            options.padding = SpaceToken::Xs;
+            options.gap = SpaceToken::Xs;
+            options.cross_align = CrossAxisAlignment::Center;
+            options.interactive = true;
+            options.border_radius = t.radius_md;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Segmented Control");
+            break;
         case GlassSurfacePreset::Navigation:
             options.kind = MaterialKind::Thin;
             options.role = MaterialSurfaceRole::Navigation;
@@ -2490,6 +2532,18 @@ inline MaterialSurfaceOptions glass_surface_options(
             options.semantic_label = chrome_label_or(
                 semantic_label,
                 "Status Bar");
+            break;
+        case GlassSurfacePreset::Popover:
+            options.kind = MaterialKind::Regular;
+            options.role = MaterialSurfaceRole::Overlay;
+            options.direction = FlexDirection::Column;
+            options.padding = SpaceToken::Md;
+            options.gap = SpaceToken::Sm;
+            options.interactive = true;
+            options.border_radius = t.radius_lg;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Popover");
             break;
     }
     return options;
@@ -2566,6 +2620,26 @@ void navigation(F&& builder,
 
 template<typename F>
     requires std::is_invocable_v<F>
+void segmented_control_surface(MaterialSurfaceOptions options, F&& builder) {
+    options.interactive = true;
+    options.semantic_label = chrome_label_or(options.semantic_label,
+                                             "Segmented Control");
+    material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void segmented_control_surface(F&& builder,
+                               char const* semantic_label =
+                                   "Segmented Control") {
+    material_surface(
+        glass_surface_options(GlassSurfacePreset::SegmentedControl,
+                              semantic_label),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
 void sidebar(MaterialSurfaceOptions options, F&& builder) {
     options.role = MaterialSurfaceRole::Sidebar;
     options.semantic_label = chrome_label_or(options.semantic_label, "Sidebar");
@@ -2617,6 +2691,29 @@ void status_bar(F&& builder,
             .semantic_label = "Status Bar",
         },
         std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void popover(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::Overlay;
+    options.interactive = true;
+    options.semantic_label = chrome_label_or(options.semantic_label, "Popover");
+    material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void popover(F&& builder,
+             MaterialKind kind = MaterialKind::Regular,
+             SpaceToken padding = SpaceToken::Md,
+             SpaceToken gap = SpaceToken::Sm) {
+    auto options = glass_surface_options(GlassSurfacePreset::Popover,
+                                         "Popover");
+    options.kind = kind;
+    options.padding = padding;
+    options.gap = gap;
+    material_surface(options, std::forward<F>(builder));
 }
 
 // overlay — render `builder`'s contents above the main tree, after

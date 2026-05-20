@@ -729,6 +729,14 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
                         widget::button<DebugPlaneMsg>("Documents",
                                                        DebugPlaneNoop{});
                     });
+                layout::segmented_control_surface(
+                    [&] {
+                        widget::button<DebugPlaneMsg>("Icons",
+                                                       DebugPlaneNoop{});
+                        widget::button<DebugPlaneMsg>("List",
+                                                       DebugPlaneNoop{});
+                    },
+                    "Mode Segmented Control");
                 layout::sidebar(160.0f, [&] {
                     widget::text("Locations");
                 });
@@ -747,6 +755,14 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
                     [&] {
                         widget::text("Compact Ready");
                     });
+                layout::popover(
+                    layout::glass_surface_options(
+                        layout::GlassSurfacePreset::Popover,
+                        "Actions Popover"),
+                    [&] {
+                        widget::button<DebugPlaneMsg>("Share",
+                                                       DebugPlaneNoop{});
+                    });
             });
         },
         [](DiagState&, DebugPlaneMsg) {});
@@ -763,17 +779,23 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
     auto const* navigation = find_semantic_child(children, "material", "Navigation");
     auto const* compact_navigation =
         find_semantic_child(children, "material", "Compact Navigation");
+    auto const* segmented =
+        find_semantic_child(children, "material", "Mode Segmented Control");
     auto const* sidebar = find_semantic_child(children, "material", "Sidebar");
     auto const* status_bar = find_semantic_child(children, "material", "Status Bar");
     auto const* compact_status =
         find_semantic_child(children, "material", "Compact Status");
+    auto const* popover =
+        find_semantic_child(children, "material", "Actions Popover");
     assert(toolbar != nullptr);
     assert(compact_toolbar != nullptr);
     assert(navigation != nullptr);
     assert(compact_navigation != nullptr);
+    assert(segmented != nullptr);
     assert(sidebar != nullptr);
     assert(status_bar != nullptr);
     assert(compact_status != nullptr);
+    assert(popover != nullptr);
     assert(toolbar->at("material").as_object().at("kind").as_string() == "clear");
     assert(toolbar->at("material").as_object().at("role").as_string() == "toolbar");
     assert(compact_toolbar->at("material").as_object().at("kind").as_string()
@@ -788,6 +810,13 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
            == "regular");
     assert(compact_navigation->at("material").as_object().at("role").as_string()
            == "navigation");
+    assert(segmented->at("material").as_object().at("kind").as_string()
+           == "regular");
+    assert(segmented->at("material").as_object().at("role").as_string()
+           == "navigation");
+    assert(segmented->at("material").as_object()
+               .at("container").as_object()
+               .at("interactive").as_bool());
     assert(sidebar->at("material").as_object().at("kind").as_string() == "thin");
     assert(sidebar->at("material").as_object().at("role").as_string() == "sidebar");
     assert(status_bar->at("material").as_object().at("kind").as_string()
@@ -798,6 +827,13 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
            == "clear");
     assert(compact_status->at("material").as_object().at("role").as_string()
            == "status_bar");
+    assert(popover->at("material").as_object().at("kind").as_string()
+           == "regular");
+    assert(popover->at("material").as_object().at("role").as_string()
+           == "overlay");
+    assert(popover->at("material").as_object()
+               .at("container").as_object()
+               .at("interactive").as_bool());
     assert(find_semantic_descendant(*toolbar, "button", "New") != nullptr);
     assert(find_semantic_descendant(*compact_toolbar, "button", "Compact")
            != nullptr);
@@ -805,10 +841,12 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
            != nullptr);
     assert(find_semantic_descendant(*compact_navigation, "button", "Documents")
            != nullptr);
+    assert(find_semantic_descendant(*segmented, "button", "Icons") != nullptr);
     assert(find_semantic_descendant(*sidebar, "text", "Locations") != nullptr);
     assert(find_semantic_descendant(*status_bar, "text", "Ready") != nullptr);
     assert(find_semantic_descendant(*compact_status, "text", "Compact Ready")
            != nullptr);
+    assert(find_semantic_descendant(*popover, "button", "Share") != nullptr);
 }
 
 void test_material_container_semantic_debug_fields() {
