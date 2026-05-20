@@ -611,6 +611,12 @@ void test_container_group_runtime_summary_contract() {
     finalize_material_runtime_summary(runtime_summary, records);
     assert(runtime_summary.container_groups.group_count == groups.group_count);
     assert(runtime_summary.container_groups.max_group_size == groups.max_group_size);
+    assert(runtime_summary.max_saturation >= 1.0f);
+    assert(runtime_summary.max_edge_highlight > 0.0f);
+    assert(runtime_summary.max_edge_width > 0.0f);
+    assert(runtime_summary.max_noise_opacity > 0.0f);
+    assert(runtime_summary.max_shadow_alpha > 0.0f);
+    assert(runtime_summary.max_shadow_radius > 0.0f);
 
     MaterialExecutorSummary executor_summary{};
     for (auto const& record : records)

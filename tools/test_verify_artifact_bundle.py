@@ -792,6 +792,12 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "max_effective_radius": shape["effective_radius"],
         "max_radius_limit": shape["radius_limit"],
         "max_normalized_radius": shape["normalized_radius"],
+        "max_saturation": plan["saturation"],
+        "max_edge_highlight": plan["edge_highlight"],
+        "max_edge_width": plan["edge_width"],
+        "max_noise_opacity": plan["noise_opacity"],
+        "max_shadow_alpha": plan["shadow_alpha"],
+        "max_shadow_radius": plan["shadow_radius"],
         "min_foreground_contrast_ratio": (
             plan["foreground"]["primary_contrast_ratio"]
         ),

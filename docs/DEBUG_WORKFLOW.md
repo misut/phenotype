@@ -1206,8 +1206,12 @@ resolved plan. The runtime pass limits are aggregated from
 list, not only the pure resource budget. Backends also serialize
 `renderer.material_runtime_summary`; the verifier recomputes the same counters
 from `renderer.material_plans[]` and reports the exact summary field if the
-backend's view of executed material work drifts from the resolved plans. The
-same cross-check applies to
+backend's view of executed material work drifts from the resolved plans. This
+includes optical maxima such as `max_saturation`, `max_edge_highlight`,
+`max_edge_width`, `max_noise_opacity`, `max_shadow_alpha`, and
+`max_shadow_radius`; if a glass frame looks visually flat, these fields show
+whether the pure response reached the runtime artifact before inspecting pixels.
+The same cross-check applies to
 `renderer.material_runtime_summary.container_groups.*`, so grouped, unioned,
 morphing, interactive, shared-backdrop-scope, and mixed-fallback glass groups
 must match the pure summary.

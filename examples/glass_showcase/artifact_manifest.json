@@ -611,6 +611,36 @@
       "path": "renderer.material_executor_summary.cpu_total_ns",
       "gte": 1,
       "lte": 100000000
+    },
+    {
+      "path": "renderer.material_runtime_summary.max_saturation",
+      "gte": 1.0,
+      "lte": 1.5
+    },
+    {
+      "path": "renderer.material_runtime_summary.max_edge_highlight",
+      "gte": 0.1,
+      "lte": 1.0
+    },
+    {
+      "path": "renderer.material_runtime_summary.max_edge_width",
+      "gte": 0.5,
+      "lte": 4.0
+    },
+    {
+      "path": "renderer.material_runtime_summary.max_noise_opacity",
+      "gte": 0.001,
+      "lte": 0.05
+    },
+    {
+      "path": "renderer.material_runtime_summary.max_shadow_alpha",
+      "gte": 0.01,
+      "lte": 0.4
+    },
+    {
+      "path": "renderer.material_runtime_summary.max_shadow_radius",
+      "gte": 1.0,
+      "lte": 40.0
     }
   ],
   "require_material_fallback": true,

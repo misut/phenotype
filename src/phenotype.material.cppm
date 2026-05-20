@@ -647,6 +647,12 @@ struct MaterialRuntimeSummary {
     float max_effective_radius = 0.0f;
     float max_radius_limit = 0.0f;
     float max_normalized_radius = 0.0f;
+    float max_saturation = 0.0f;
+    float max_edge_highlight = 0.0f;
+    float max_edge_width = 0.0f;
+    float max_noise_opacity = 0.0f;
+    float max_shadow_alpha = 0.0f;
+    float max_shadow_radius = 0.0f;
     float min_foreground_contrast_ratio = 0.0f;
     std::uint32_t unbounded_texture_copy = 0;
     std::uint32_t non_deterministic_fallback = 0;
@@ -1111,6 +1117,18 @@ inline void accumulate_material_runtime_summary(
     summary.max_normalized_radius = std::max(
         summary.max_normalized_radius,
         plan.shape.normalized_radius);
+    summary.max_saturation =
+        std::max(summary.max_saturation, plan.saturation);
+    summary.max_edge_highlight =
+        std::max(summary.max_edge_highlight, plan.edge_highlight);
+    summary.max_edge_width =
+        std::max(summary.max_edge_width, plan.edge_width);
+    summary.max_noise_opacity =
+        std::max(summary.max_noise_opacity, plan.noise_opacity);
+    summary.max_shadow_alpha =
+        std::max(summary.max_shadow_alpha, plan.shadow_alpha);
+    summary.max_shadow_radius =
+        std::max(summary.max_shadow_radius, plan.shadow_radius);
     if (plan.foreground.primary_contrast_ratio > 0.0f) {
         summary.min_foreground_contrast_ratio =
             summary.min_foreground_contrast_ratio == 0.0f
