@@ -511,6 +511,53 @@ void test_executor_frame_capture_policy_contract() {
     std::puts("PASS: executor frame capture policy contract");
 }
 
+void test_executor_sampled_status_contract() {
+    MaterialExecutorSummary standard_summary{};
+    accumulate_material_executor_plan_summary(
+        standard_summary,
+        plan_material_surface(content_request(), sampled_environment()));
+    finalize_material_executor_execution_status(standard_summary);
+    assert(!standard_summary.material_sampled_backdrop_upload_required);
+    assert(!standard_summary.material_sampled_backdrop_draw_required);
+    assert(std::string_view(standard_summary.material_upload_status)
+        == "not-needed");
+    assert(std::string_view(standard_summary.material_draw_status)
+        == "not-needed");
+
+    MaterialExecutorSummary pipeline_missing{};
+    accumulate_material_executor_plan_summary(
+        pipeline_missing,
+        plan_material_surface(regular_request(), sampled_environment()));
+    finalize_material_executor_execution_status(pipeline_missing);
+    assert(pipeline_missing.material_sampled_backdrop_upload_required);
+    assert(pipeline_missing.material_sampled_backdrop_draw_required);
+    assert(!pipeline_missing.material_sampled_backdrop_uploaded);
+    assert(!pipeline_missing.material_sampled_backdrop_drawn);
+    assert(std::string_view(pipeline_missing.material_upload_status)
+        == "skipped-material-pipeline-unavailable");
+    assert(std::string_view(pipeline_missing.material_draw_status)
+        == "skipped-material-pipeline-unavailable");
+
+    MaterialExecutorSummary backdrop_missing = pipeline_missing;
+    backdrop_missing.material_pipeline_ready = true;
+    backdrop_missing.material_upload_bytes = 64;
+    finalize_material_executor_execution_status(backdrop_missing);
+    assert(backdrop_missing.material_sampled_backdrop_uploaded);
+    assert(std::string_view(backdrop_missing.material_upload_status)
+        == "uploaded");
+    assert(std::string_view(backdrop_missing.material_draw_status)
+        == "skipped-material-backdrop-source-unavailable");
+
+    MaterialExecutorSummary drawn = backdrop_missing;
+    drawn.material_backdrop_source_ready = true;
+    drawn.material_draw_calls = 1;
+    finalize_material_executor_execution_status(drawn);
+    assert(drawn.material_sampled_backdrop_drawn);
+    assert(std::string_view(drawn.material_draw_status) == "drawn");
+
+    std::puts("PASS: executor sampled status contract");
+}
+
 void test_container_group_runtime_summary_contract() {
     auto request = regular_request();
     request.style.container = MaterialContainerDescriptor{
@@ -587,6 +634,7 @@ int main() {
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     test_executor_frame_capture_policy_contract();
+    test_executor_sampled_status_contract();
     test_container_group_runtime_summary_contract();
     std::puts("\nAll material tests passed.");
     return 0;

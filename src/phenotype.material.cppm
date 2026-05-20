@@ -697,6 +697,14 @@ struct MaterialExecutorSummary {
     std::uint64_t backdrop_descriptor_luma_frame = 0;
     char const* backdrop_descriptor_luma_status = "not-sampled";
     char const* backdrop_descriptor_source = "none";
+    bool material_pipeline_ready = false;
+    bool material_backdrop_source_ready = false;
+    bool material_sampled_backdrop_upload_required = false;
+    bool material_sampled_backdrop_draw_required = false;
+    bool material_sampled_backdrop_uploaded = false;
+    bool material_sampled_backdrop_drawn = false;
+    char const* material_upload_status = "not-needed";
+    char const* material_draw_status = "not-needed";
     std::uint32_t backdrop_luma_sampling_skipped_count = 0;
     char const* backdrop_luma_sampling_skip_reason = "none";
     char const* backdrop_copy_skip_reason = "none";
@@ -714,6 +722,48 @@ inline bool material_executor_requires_frame_capture(
         MaterialExecutorSummary const& summary) noexcept {
     return summary.planned_frame_capture_count > 0
         && summary.planned_frame_capture_pixels > 0;
+}
+
+inline char const* material_executor_sampled_upload_status(
+        MaterialExecutorSummary const& summary) noexcept {
+    if (summary.sampled_backdrop_instance_count == 0u)
+        return "not-needed";
+    if (summary.material_upload_bytes > 0)
+        return "uploaded";
+    if (!summary.material_pipeline_ready)
+        return "skipped-material-pipeline-unavailable";
+    return "skipped-material-buffer-upload-not-recorded";
+}
+
+inline char const* material_executor_sampled_draw_status(
+        MaterialExecutorSummary const& summary) noexcept {
+    if (summary.sampled_backdrop_instance_count == 0u)
+        return "not-needed";
+    if (summary.material_draw_calls > 0u)
+        return "drawn";
+    if (!summary.material_pipeline_ready)
+        return "skipped-material-pipeline-unavailable";
+    if (!summary.material_backdrop_source_ready)
+        return "skipped-material-backdrop-source-unavailable";
+    if (!summary.material_sampled_backdrop_uploaded)
+        return "skipped-material-buffer-upload-not-recorded";
+    return "skipped-material-draw-not-recorded";
+}
+
+inline void finalize_material_executor_execution_status(
+        MaterialExecutorSummary& summary) noexcept {
+    summary.material_sampled_backdrop_upload_required =
+        summary.sampled_backdrop_instance_count > 0u;
+    summary.material_sampled_backdrop_draw_required =
+        summary.sampled_backdrop_instance_count > 0u;
+    summary.material_sampled_backdrop_uploaded =
+        summary.material_upload_bytes > 0;
+    summary.material_sampled_backdrop_drawn =
+        summary.material_draw_calls > 0u;
+    summary.material_upload_status =
+        material_executor_sampled_upload_status(summary);
+    summary.material_draw_status =
+        material_executor_sampled_draw_status(summary);
 }
 
 inline float material_safe_luma(float value, float fallback) noexcept;
@@ -933,6 +983,7 @@ inline void finalize_material_executor_summary(
         MaterialExecutorSummary& summary,
         std::span<MaterialRuntimeRecord const> records) {
     summary.container_groups = summarize_material_container_groups(records);
+    finalize_material_executor_execution_status(summary);
 }
 
 inline void accumulate_material_runtime_summary(

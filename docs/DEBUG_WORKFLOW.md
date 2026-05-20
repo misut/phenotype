@@ -1053,6 +1053,13 @@ When the pure planner requires warmup or sampled backdrop access,
 `backdrop_copy_required=true`, `backdrop_copy_count=1`, and
 `backdrop_copy_pixels` should match the drawable size unless the skip reason
 names a Metal texture or blit-encoder failure.
+For sampled material passes, also check `material_upload_status` and
+`material_draw_status`. These are derived from edge facts in
+`material_executor_summary`: `material_pipeline_ready`,
+`material_backdrop_source_ready`, upload bytes, draw calls, and the sampled
+plan count. A status of `uploaded`/`drawn` means the backend executed the
+sampled pass; a `skipped-*` value names the missing edge dependency without
+requiring a visual guess.
 
 Manifests can also set `require_material_plan_summary` to assert the resolved
 material aggregate, not just the per-plan schema. Supported keys are `count`,
@@ -1247,6 +1254,11 @@ must fit the reported material buffer capacity, and copied backdrop pixels must 
 within the pure resource budget. Foreground remaps must also be less than or
 equal to foreground text candidates, otherwise the backend has counted a remap
 without a material surface hit.
+The verifier additionally checks the sampled upload/draw requirement booleans
+against `sampled_backdrop_instance_count`, checks uploaded/drawn booleans against
+the numeric counters, and recomputes `material_upload_status` and
+`material_draw_status` from the same facts. If one fails, the JSON report points
+at the exact status path and the likely `material-executor` pass.
 For sampled-backdrop PRs, require the foreground-exclusion booleans in both the
 plan summary and executor summary. This keeps the final artifact/readback frame
 complete while proving the material shader sampled a separate safe backdrop

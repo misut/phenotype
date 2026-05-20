@@ -1234,6 +1234,8 @@ void test_material_runtime_record_json_contract() {
     executor_summary.plan_count = 1;
     executor_summary.fallback_instance_count = 1;
     executor_summary.deterministic_fallback_instance_count = 1;
+    executor_summary.material_pipeline_ready = true;
+    executor_summary.material_backdrop_source_ready = true;
     executor_summary.foreground_text_candidate_count = 2;
     executor_summary.foreground_text_remap_count = 1;
     MaterialBackdropDescriptor sampled_backdrop;
@@ -1250,6 +1252,7 @@ void test_material_runtime_record_json_contract() {
     set_material_executor_backdrop_descriptor_summary(
         executor_summary,
         sampled_backdrop);
+    finalize_material_executor_execution_status(executor_summary);
     executor_summary.cpu_decode_ns = 120;
     auto executor = diag::detail::material_executor_summary_json(
         executor_summary);
@@ -1276,6 +1279,17 @@ void test_material_runtime_record_json_contract() {
            == "sampled-async-grid");
     assert(executor_obj.at("backdrop_descriptor_source").as_string()
            == "previous-presented-frame-sampled-grid");
+    assert(executor_obj.at("material_pipeline_ready").as_bool());
+    assert(executor_obj.at("material_backdrop_source_ready").as_bool());
+    assert(!executor_obj.at("material_sampled_backdrop_upload_required")
+                .as_bool());
+    assert(!executor_obj.at("material_sampled_backdrop_draw_required").as_bool());
+    assert(!executor_obj.at("material_sampled_backdrop_uploaded").as_bool());
+    assert(!executor_obj.at("material_sampled_backdrop_drawn").as_bool());
+    assert(executor_obj.at("material_upload_status").as_string()
+           == "not-needed");
+    assert(executor_obj.at("material_draw_status").as_string()
+           == "not-needed");
     assert(executor_obj.at("cpu_decode_ns").as_integer() == 120);
 
     auto empty = diag::detail::empty_material_renderer_contract(
@@ -1296,6 +1310,10 @@ void test_material_runtime_record_json_contract() {
                .at("dropped_execution_stages").as_integer() == 0);
     assert(empty.at("material_executor_summary").as_object()
                .at("plan_count").as_integer() == 0);
+    assert(empty.at("material_executor_summary").as_object()
+               .at("material_pipeline_ready").as_bool() == false);
+    assert(empty.at("material_executor_summary").as_object()
+               .at("material_upload_status").as_string() == "not-needed");
     assert(empty.at("material_executor_summary").as_object()
                .at("dropped_execution_stage_count").as_integer() == 0);
     assert(empty.at("material_fallback_policy").as_string()
