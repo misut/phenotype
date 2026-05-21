@@ -925,6 +925,12 @@ def material_failure_context(
         material_contract["renderer_executor_summary_present"] = isinstance(
             renderer_details.get("material_executor_summary"),
             dict)
+        executor_summary = renderer_details.get("material_executor_summary")
+        if isinstance(executor_summary, dict):
+            material_contract["executor_budget"] = (
+                material_executor_budget_context(
+                    executor_summary,
+                    material_plan_summary))
     if isinstance(material_plan_summary, dict):
         decision_trace = material_plan_summary.get("decision_trace")
         if not isinstance(decision_trace, dict):
@@ -981,6 +987,91 @@ def material_failure_context(
             material_contract["app_probe_names"] = sorted(material_probes.keys())
     context["material_contract"] = material_contract
     return context
+
+
+def budget_ratio(
+    numerator: int | float | None,
+    denominator: int | float | None,
+) -> float | None:
+    if not isinstance(numerator, (int, float)) or isinstance(numerator, bool):
+        return None
+    if not isinstance(denominator, (int, float)) or isinstance(denominator, bool):
+        return None
+    if float(denominator) <= 0.0:
+        return 0.0
+    return float(numerator) / float(denominator)
+
+
+def material_executor_budget_context(
+    executor_summary: JsonObject,
+    material_plan_summary: JsonObject | None,
+) -> JsonObject:
+    bounds = (
+        material_plan_summary.get("resource_bounds")
+        if isinstance(material_plan_summary, dict)
+        else None)
+    if not isinstance(bounds, dict):
+        bounds = {}
+
+    upload_bytes = number_at(executor_summary, "material_upload_bytes")
+    upload_capacity = number_at(
+        executor_summary,
+        "material_buffer_capacity_bytes")
+    copied_pixels = number_at(executor_summary, "backdrop_copy_pixels")
+    max_backdrop_pixels = number_at(bounds, "max_backdrop_pixels")
+
+    return {
+        "plan_count": executor_summary.get("plan_count"),
+        "material_instance_count": executor_summary.get(
+            "material_instance_count"),
+        "sampled_backdrop_instance_count": executor_summary.get(
+            "sampled_backdrop_instance_count"),
+        "fallback_instance_count": executor_summary.get(
+            "fallback_instance_count"),
+        "execution_stage_count": executor_summary.get(
+            "execution_stage_count"),
+        "active_execution_stage_count": executor_summary.get(
+            "active_execution_stage_count"),
+        "backdrop_execution_stage_count": executor_summary.get(
+            "backdrop_execution_stage_count"),
+        "draw_calls": executor_summary.get("material_draw_calls"),
+        "total_sample_taps": executor_summary.get(
+            "material_total_sample_taps"),
+        "max_sample_taps": executor_summary.get("material_max_sample_taps"),
+        "upload_bytes": upload_bytes,
+        "buffer_capacity_bytes": upload_capacity,
+        "upload_utilization": budget_ratio(upload_bytes, upload_capacity),
+        "backdrop_copy_count": executor_summary.get("backdrop_copy_count"),
+        "backdrop_copy_pixels": copied_pixels,
+        "max_backdrop_pixels": max_backdrop_pixels,
+        "backdrop_copy_utilization": budget_ratio(
+            copied_pixels,
+            max_backdrop_pixels),
+        "planned_frame_capture_count": executor_summary.get(
+            "planned_frame_capture_count"),
+        "planned_frame_capture_pixels": executor_summary.get(
+            "planned_frame_capture_pixels"),
+        "planned_surface_sample_pixels": executor_summary.get(
+            "planned_surface_sample_pixels"),
+        "pipeline_ready": executor_summary.get("material_pipeline_ready"),
+        "backdrop_source_ready": executor_summary.get(
+            "material_backdrop_source_ready"),
+        "upload_required": executor_summary.get(
+            "material_sampled_backdrop_upload_required"),
+        "draw_required": executor_summary.get(
+            "material_sampled_backdrop_draw_required"),
+        "uploaded": executor_summary.get("material_sampled_backdrop_uploaded"),
+        "drawn": executor_summary.get("material_sampled_backdrop_drawn"),
+        "upload_status": executor_summary.get("material_upload_status"),
+        "draw_status": executor_summary.get("material_draw_status"),
+        "backdrop_copy_policy": executor_summary.get("backdrop_copy_policy"),
+        "backdrop_copy_required": executor_summary.get(
+            "backdrop_copy_required"),
+        "backdrop_copy_skipped_count": executor_summary.get(
+            "backdrop_copy_skipped_count"),
+        "backdrop_copy_skip_reason": executor_summary.get(
+            "backdrop_copy_skip_reason"),
+    }
 
 
 def bool_at(value: JsonObject, key: str) -> bool | None:
