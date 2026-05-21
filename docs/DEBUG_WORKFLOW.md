@@ -1182,7 +1182,12 @@ transparent before the material pass executes. Check
 `native_backdrop_underlay_kind=nsvisualeffectview`,
 `native_backdrop_underlay_material=under-window-background`,
 `native_backdrop_underlay_blending_mode=behind-window`, and
-`native_backdrop_underlay_state=active`. The renderer must also report
+`native_backdrop_underlay_state=active`. The same `window` object summarizes
+the combined contract in `glass_backdrop_composition`: `status=ready`,
+`ready=true`, `failure_reason=none`, and
+`policy=transparent-window-clear-metal-under-window-background`. If it is
+`blocked`, use `failure_reason`, `likely_layer`, and `likely_pass` before
+guessing from pixels. The renderer must also report
 `renderer.clear_alpha=0`, `renderer.clear_alpha_for_transparent_window=true`,
 `renderer.full_frame_opaque_fill_count=0`, and
 `renderer.transparent_window_has_opaque_frame_fill=false`; otherwise an opaque

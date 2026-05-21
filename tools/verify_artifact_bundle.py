@@ -1625,7 +1625,31 @@ def check_file_explorer_native_chrome_contract(
         runtime_renderer = object_at(debug, "platform_runtime.details.renderer")
         if isinstance(runtime_window, dict) and (
                 runtime_window.get("surface_kind") == "macos_window"):
+            composition_summary = object_at(
+                runtime_window,
+                "glass_backdrop_composition")
             composition_actual = {
+                "summary_schema_version": (
+                    composition_summary.get("schema_version")
+                    if isinstance(composition_summary, dict) else None),
+                "summary_policy": (
+                    composition_summary.get("policy")
+                    if isinstance(composition_summary, dict) else None),
+                "summary_status": (
+                    composition_summary.get("status")
+                    if isinstance(composition_summary, dict) else None),
+                "summary_ready": (
+                    composition_summary.get("ready")
+                    if isinstance(composition_summary, dict) else None),
+                "summary_failure_reason": (
+                    composition_summary.get("failure_reason")
+                    if isinstance(composition_summary, dict) else None),
+                "summary_likely_layer": (
+                    composition_summary.get("likely_layer")
+                    if isinstance(composition_summary, dict) else None),
+                "summary_likely_pass": (
+                    composition_summary.get("likely_pass")
+                    if isinstance(composition_summary, dict) else None),
                 "window_opaque": runtime_window.get("window_opaque"),
                 "window_background_clear": runtime_window.get(
                     "window_background_clear"),
@@ -1659,7 +1683,15 @@ def check_file_explorer_native_chrome_contract(
             }
             report.check(
                 "file explorer macOS window has native wallpaper backdrop underlay",
-                composition_actual["window_opaque"] is False
+                composition_actual["summary_schema_version"] == 1
+                and composition_actual["summary_policy"] == (
+                    "transparent-window-clear-metal-under-window-background")
+                and composition_actual["summary_status"] == "ready"
+                and composition_actual["summary_ready"] is True
+                and composition_actual["summary_failure_reason"] == "none"
+                and composition_actual["summary_likely_layer"] == "none"
+                and composition_actual["summary_likely_pass"] == "none"
+                and composition_actual["window_opaque"] is False
                 and composition_actual["window_background_clear"] is True
                 and composition_actual["window_background_alpha"] == 0
                 and composition_actual["metal_layer_opaque"] is False
@@ -1685,6 +1717,14 @@ def check_file_explorer_native_chrome_contract(
                     is False),
                 path="debug.platform_runtime.details.window",
                 expected={
+                    "summary_schema_version": 1,
+                    "summary_policy": (
+                        "transparent-window-clear-metal-under-window-background"),
+                    "summary_status": "ready",
+                    "summary_ready": True,
+                    "summary_failure_reason": "none",
+                    "summary_likely_layer": "none",
+                    "summary_likely_pass": "none",
                     "window_opaque": False,
                     "window_background_clear": True,
                     "window_background_alpha": 0,

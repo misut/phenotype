@@ -1885,6 +1885,22 @@ def snapshot_with_file_explorer_chrome(
         "native_backdrop_underlay_blending_mode": "behind-window",
         "native_backdrop_underlay_state": "active",
         "native_backdrop_underlay_emphasized": True,
+        "glass_backdrop_composition": {
+            "schema_version": 1,
+            "policy": (
+                "transparent-window-clear-metal-under-window-background"),
+            "status": "ready",
+            "ready": True,
+            "failure_reason": "none",
+            "likely_layer": "none",
+            "likely_pass": "none",
+            "requires_transparent_window": True,
+            "requires_clear_metal_layer": True,
+            "requires_under_window_background_underlay": True,
+            "requires_alpha_zero_clear": True,
+            "requires_no_full_frame_opaque_fill": True,
+            "samples_external_backdrop": True,
+        },
         "native_window_controls": {
             "ownership_policy": "platform_edge_standard_buttons_only",
             "integration_policy": (
@@ -2417,6 +2433,16 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         runtime_window["native_backdrop_underlay_material"] = "none"
         runtime_window["native_backdrop_underlay_blending_mode"] = "none"
         runtime_window["native_backdrop_underlay_state"] = "none"
+        runtime_window["glass_backdrop_composition"] = {
+            "schema_version": 1,
+            "policy": (
+                "transparent-window-clear-metal-under-window-background"),
+            "status": "blocked",
+            "ready": False,
+            "failure_reason": "nswindow_opaque",
+            "likely_layer": "native-window-composition",
+            "likely_pass": "appkit-window-opacity",
+        }
         runtime_renderer = snap["debug"]["platform_runtime"]["details"]["renderer"]
         runtime_renderer["clear_alpha"] = 1
         runtime_renderer["clear_alpha_for_transparent_window"] = False
@@ -2437,6 +2463,14 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             failure["actual"],
             {
+                "summary_schema_version": 1,
+                "summary_policy": (
+                    "transparent-window-clear-metal-under-window-background"),
+                "summary_status": "blocked",
+                "summary_ready": False,
+                "summary_failure_reason": "nswindow_opaque",
+                "summary_likely_layer": "native-window-composition",
+                "summary_likely_pass": "appkit-window-opacity",
                 "window_opaque": True,
                 "window_background_clear": False,
                 "window_background_alpha": 255,

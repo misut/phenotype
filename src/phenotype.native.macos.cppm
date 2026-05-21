@@ -9713,6 +9713,9 @@ inline json::Object macos_window_runtime_json() {
         ? objc_send<id>(ns_window, sel_background_color())
         : nullptr;
     auto const background_rgba = nscolor_to_srgb_color(background_color);
+    std::int64_t const window_background_alpha =
+        static_cast<std::int64_t>(
+            background_rgba.has_value() ? background_rgba->a : 255);
     bool const window_background_clear =
         background_rgba.has_value() && background_rgba->a == 0;
     bool const metal_layer_opaque = g_renderer.layer
@@ -9754,6 +9757,54 @@ inline json::Object macos_window_runtime_json() {
         && objc_send<signed char>(
             window_content_view,
             sel_registerName("isEmphasized")) != 0;
+    bool const native_backdrop_underlay_ready =
+        native_backdrop_underlay_enabled
+        && native_backdrop_material == 21
+        && native_backdrop_blending_mode == 0
+        && native_backdrop_state == 1;
+    bool const renderer_clear_ready =
+        g_renderer.last_clear_alpha == 0.0
+        && g_renderer.last_clear_alpha_for_transparent_window;
+    bool const renderer_fill_ready =
+        g_renderer.last_full_frame_opaque_fill_count == 0
+        && !g_renderer.last_transparent_window_has_opaque_frame_fill;
+    char const* backdrop_status = "ready";
+    char const* backdrop_failure_reason = "none";
+    char const* backdrop_likely_layer = "none";
+    char const* backdrop_likely_pass = "none";
+    if (window_opaque) {
+        backdrop_status = "blocked";
+        backdrop_failure_reason = "nswindow_opaque";
+        backdrop_likely_layer = "native-window-composition";
+        backdrop_likely_pass = "appkit-window-opacity";
+    } else if (!window_background_clear || window_background_alpha != 0) {
+        backdrop_status = "blocked";
+        backdrop_failure_reason = "nswindow_background_not_clear";
+        backdrop_likely_layer = "native-window-composition";
+        backdrop_likely_pass = "appkit-window-background";
+    } else if (metal_layer_opaque) {
+        backdrop_status = "blocked";
+        backdrop_failure_reason = "metal_layer_opaque";
+        backdrop_likely_layer = "native-window-composition";
+        backdrop_likely_pass = "metal-layer-opacity";
+    } else if (!native_backdrop_underlay_ready) {
+        backdrop_status = "blocked";
+        backdrop_failure_reason = "native_backdrop_underlay_not_ready";
+        backdrop_likely_layer = "native-window-composition";
+        backdrop_likely_pass = "appkit-visual-effect-underlay";
+    } else if (!renderer_clear_ready) {
+        backdrop_status = "blocked";
+        backdrop_failure_reason = "renderer_clear_not_alpha_zero";
+        backdrop_likely_layer = "native-renderer";
+        backdrop_likely_pass = "metal-clear";
+    } else if (!renderer_fill_ready) {
+        backdrop_status = "blocked";
+        backdrop_failure_reason = "full_frame_opaque_fill";
+        backdrop_likely_layer = "app-root-surface";
+        backdrop_likely_pass = "frame-command-decode";
+    }
+    bool const backdrop_ready =
+        std::string_view{backdrop_status} == "ready";
     bool const app_active = ns_app
         && objc_send<bool>(ns_app, sel_is_active());
     bool const window_visible = ns_window
@@ -9809,9 +9860,7 @@ inline json::Object macos_window_runtime_json() {
         json::Value{window_background_clear});
     window.emplace(
         "window_background_alpha",
-        json::Value{
-            static_cast<std::int64_t>(
-                background_rgba.has_value() ? background_rgba->a : 255)});
+        json::Value{window_background_alpha});
     window.emplace("metal_layer_opaque", json::Value{metal_layer_opaque});
     window.emplace(
         "native_backdrop_underlay_enabled",
@@ -9835,6 +9884,44 @@ inline json::Object macos_window_runtime_json() {
     window.emplace(
         "native_backdrop_underlay_emphasized",
         json::Value{native_backdrop_emphasized});
+    json::Object backdrop_composition;
+    backdrop_composition.emplace("schema_version", json::Value{1});
+    backdrop_composition.emplace(
+        "policy",
+        json::Value{
+            "transparent-window-clear-metal-under-window-background"});
+    backdrop_composition.emplace("status", json::Value{backdrop_status});
+    backdrop_composition.emplace("ready", json::Value{backdrop_ready});
+    backdrop_composition.emplace(
+        "failure_reason",
+        json::Value{backdrop_failure_reason});
+    backdrop_composition.emplace(
+        "likely_layer",
+        json::Value{backdrop_likely_layer});
+    backdrop_composition.emplace(
+        "likely_pass",
+        json::Value{backdrop_likely_pass});
+    backdrop_composition.emplace(
+        "requires_transparent_window",
+        json::Value{true});
+    backdrop_composition.emplace(
+        "requires_clear_metal_layer",
+        json::Value{true});
+    backdrop_composition.emplace(
+        "requires_under_window_background_underlay",
+        json::Value{true});
+    backdrop_composition.emplace(
+        "requires_alpha_zero_clear",
+        json::Value{true});
+    backdrop_composition.emplace(
+        "requires_no_full_frame_opaque_fill",
+        json::Value{true});
+    backdrop_composition.emplace(
+        "samples_external_backdrop",
+        json::Value{true});
+    window.emplace(
+        "glass_backdrop_composition",
+        json::Value{std::move(backdrop_composition)});
     window.emplace(
         "native_window_controls",
         native_window_controls_runtime_json(
