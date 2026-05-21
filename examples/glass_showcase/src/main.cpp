@@ -369,6 +369,68 @@ static void view(State const& state) {
                 }, "Glass Context Menu Probe");
             });
         }, SpaceToken::Sm, CrossAxisAlignment::Start, MainAxisAlignment::Center);
+
+        layout::spacer(10);
+        layout::row([&] {
+            auto const selection_probe = glass::glass_material_probe_at(11);
+            auto const outline_probe = glass::glass_material_probe_at(12);
+            layout::sized_box(230.0f, [&] {
+                widget::button<Msg>(
+                    std::string{selection_probe.label},
+                    glass::SetInspector{true},
+                    widget::glass_selection_button_style(
+                        GlassSelectionStyleOptions{
+                            .chrome = GlassSelectionChrome::SidebarPill,
+                            .role = MaterialSurfaceRole::Sidebar,
+                            .selected = true,
+                            .width = 220.0f,
+                            .height = 30.0f,
+                        }));
+            });
+            layout::sized_box(230.0f, [&] {
+                widget::button<Msg>(
+                    std::string{outline_probe.label},
+                    glass::SetBackdropContrast{
+                        !state.high_contrast_backdrop},
+                    widget::glass_outline_row_button_style(
+                        GlassOutlineRowStyleOptions{
+                            .chrome = GlassOutlineRowChrome::SidebarPill,
+                            .role = MaterialSurfaceRole::Sidebar,
+                            .selected = true,
+                            .depth = 1u,
+                            .width = 220.0f,
+                            .height = 30.0f,
+                        }));
+            });
+        }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Center);
+
+        layout::spacer(8);
+        layout::row([&] {
+            auto const table_header_probe = glass::glass_material_probe_at(13);
+            auto const disclosure_probe = glass::glass_material_probe_at(14);
+            layout::sized_box(230.0f, [&] {
+                widget::button<Msg>(
+                    std::string{table_header_probe.label},
+                    glass::select_density(state.selected_density),
+                    widget::glass_table_header_button_style(
+                        GlassTableHeaderStyleOptions{
+                            .sorted = true,
+                            .width = 220.0f,
+                            .height = 30.0f,
+                        }));
+            });
+            layout::sized_box(230.0f, [&] {
+                widget::button<Msg>(
+                    std::string{disclosure_probe.label},
+                    glass::ToggleInspector{},
+                    widget::glass_disclosure_header_style(
+                        GlassDisclosureStyleOptions{
+                            .expanded = true,
+                            .width = 220.0f,
+                            .height = 30.0f,
+                        }));
+            });
+        }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Center);
     });
 }
 

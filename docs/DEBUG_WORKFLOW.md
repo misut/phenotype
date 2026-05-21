@@ -385,7 +385,7 @@ mise exec -- exon build
   --script ../../examples/glass_showcase/glass_showcase.drive \
   --expect backdrop:high \
   --expect density:dense \
-  --expect material-count:12
+  --expect material-count:16
 ```
 
 The output reports the shared glass state, per-input trace, public material
@@ -791,6 +791,11 @@ pixel signatures. For example, `widget::tabs` emits a segmented-control
 material node through `TabsStyleOptions`, and Finder-style examples can require
 labels such as `Density Segmented Control` or `Mobile Mode Segmented Control`
 to prove that the pure material planner saw the control chrome.
+The glass showcase carries the same rule for app-like probe chrome:
+`Glass Sidebar Selection`, `Glass Outline Row`, `Glass Table Header`, and
+`Glass Disclosure Header` are startup artifact labels backed by material plans,
+so list selection and hierarchy regressions can be reproduced without opening
+the larger file explorer examples.
 Search fields follow the same rule: examples label their glass text inputs as
 `Search Field` or `Mobile Search Field`, which lets verifier output explain
 that the input surface produced a real `MaterialPlan` instead of an ordinary
