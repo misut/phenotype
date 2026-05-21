@@ -1283,6 +1283,8 @@ void test_material_runtime_record_json_contract() {
            == "translucent-rounded-rect");
     assert(observation.at("primary_executor").as_string()
            == "fallback-fill");
+    assert(observation.at("expected_stage_order").as_string()
+           == "shadow-primary-edge");
     assert(observation.at("expected_runtime_passes").as_integer() == 1);
     assert(observation.at("expected_paint_layers").as_integer() == 3);
     assert(observation.at("expected_active_paint_layers").as_integer() == 3);
@@ -1304,6 +1306,15 @@ void test_material_runtime_record_json_contract() {
            == "material-fallback-pass");
     assert(observation.at("likely_pass").as_string()
            == "translucent-rounded-rect");
+    auto const& audit = obj.at("execution_audit").as_object();
+    assert(audit.at("contract_satisfied").as_bool() == true);
+    assert(audit.at("mismatch_count").as_integer() == 0);
+    assert(audit.at("first_mismatch").as_string() == "none");
+    assert(audit.at("stage_order_match").as_bool() == true);
+    assert(audit.at("expected_stage_order").as_string()
+           == "shadow-primary-edge");
+    assert(audit.at("actual_stage_order").as_string()
+           == "shadow-primary-edge");
     auto const& stages = obj.at("execution_stages").as_array();
     assert(stages.size() == 3);
     auto const& shadow_stage = stages[0].as_object();
@@ -1370,6 +1381,10 @@ void test_material_runtime_record_json_contract() {
     assert(std::fabs(pure_summary.max_normalized_radius
                      - (12.0f / 32.0f)) < 0.0001f);
     assert(pure_summary.max_container_spacing == 0.0f);
+    assert(pure_summary.stage_order_match_count == 1);
+    assert(pure_summary.stage_order_mismatch_count == 0);
+    assert(std::string_view(pure_summary.first_stage_order_mismatch)
+           == "none");
 
     auto summary = diag::detail::material_runtime_summary_json(records);
     auto const& summary_obj = summary.as_object();
@@ -1426,6 +1441,10 @@ void test_material_runtime_record_json_contract() {
     assert(std::fabs(summary_obj.at("max_interaction_specular_intensity")
                          .as_float()) < 0.0001f);
     assert(summary_obj.at("max_container_spacing").as_float() == 0.0f);
+    assert(summary_obj.at("stage_order_match_count").as_integer() == 1);
+    assert(summary_obj.at("stage_order_mismatch_count").as_integer() == 0);
+    assert(summary_obj.at("first_stage_order_mismatch").as_string()
+           == "none");
 
     MaterialExecutorSummary executor_summary;
     executor_summary.plan_count = 1;
@@ -1466,6 +1485,10 @@ void test_material_runtime_record_json_contract() {
     assert(executor_obj.at("next_frame_capture_plan_count").as_integer() == 0);
     assert(executor_obj.at("material_max_sample_taps").as_integer() == 0);
     assert(executor_obj.at("material_total_sample_taps").as_integer() == 0);
+    assert(executor_obj.at("stage_order_match_count").as_integer() == 0);
+    assert(executor_obj.at("stage_order_mismatch_count").as_integer() == 0);
+    assert(executor_obj.at("first_stage_order_mismatch").as_string()
+           == "none");
     assert(executor_obj.at("foreground_text_candidate_count").as_integer()
            == 2);
     assert(executor_obj.at("foreground_text_remap_count").as_integer() == 1);
@@ -1515,6 +1538,8 @@ void test_material_runtime_record_json_contract() {
                .at("plan_count").as_integer() == 0);
     assert(empty.at("material_runtime_summary").as_object()
                .at("dropped_execution_stages").as_integer() == 0);
+    assert(empty.at("material_runtime_summary").as_object()
+               .at("stage_order_mismatch_count").as_integer() == 0);
     assert(empty.at("material_executor_summary").as_object()
                .at("plan_count").as_integer() == 0);
     assert(empty.at("material_executor_summary").as_object()
@@ -1528,6 +1553,8 @@ void test_material_runtime_record_json_contract() {
            == 0.0f);
     assert(empty.at("material_executor_summary").as_object()
                .at("dropped_execution_stage_count").as_integer() == 0);
+    assert(empty.at("material_executor_summary").as_object()
+               .at("stage_order_mismatch_count").as_integer() == 0);
     assert(empty.at("material_fallback_policy").as_string()
            == "test-semantic-fallback");
 }

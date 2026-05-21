@@ -501,6 +501,22 @@ def material_plan(
         "passes": [primary],
         "execution_stages": [
             {
+                "name": "shape-shadow",
+                "active": True,
+                "requires_backdrop": False,
+                "sample_taps": 0,
+                "likely_layer": "material-shadow-pass",
+                "executor": "shape-shadow",
+                "max_texture_copy_pixels": 0,
+                "bounded": True,
+                "optics": stage_optics(
+                    "shape-shadow",
+                    edge_width=1.0,
+                    shadow_alpha=0.14,
+                    shadow_radius=14.0,
+                ),
+            },
+            {
                 "name": "translucent-rounded-rect",
                 "active": True,
                 "requires_backdrop": False,
@@ -518,7 +534,22 @@ def material_plan(
                     luminance_floor=0.08,
                     luminance_gain=1.08,
                 ),
-            }
+            },
+            {
+                "name": "edge-highlight",
+                "active": True,
+                "requires_backdrop": False,
+                "sample_taps": 0,
+                "likely_layer": "material-fallback-pass",
+                "executor": "edge-highlight",
+                "max_texture_copy_pixels": 0,
+                "bounded": True,
+                "optics": stage_optics(
+                    "edge-highlight",
+                    edge_highlight=0.34,
+                    edge_width=1.0,
+                ),
+            },
         ],
         "paint_layers": material_paint_layers(str(primary["name"])),
     }
@@ -905,6 +936,7 @@ def refresh_observation_contract(plan: dict[str, object]) -> None:
         "fallback_reason": plan["fallback_reason"],
         "primary_pass": primary["name"],
         "primary_executor": primary["executor"],
+        "expected_stage_order": plan["optical_composition"]["stage_order"],
         "expected_runtime_passes": len(plan["passes"]),
         "expected_active_runtime_passes": sum(
             1 for pass_plan in plan["passes"]
@@ -982,6 +1014,9 @@ def refresh_execution_audit(plan: dict[str, object]) -> None:
             1 for layer in paint_layers
             if isinstance(layer, dict) and layer["executor"] == "rounded-edge"),
     }
+    actual_stage_order = verifier.actual_execution_stage_order(
+        stages,
+        plan["primary_pass"] if isinstance(plan["primary_pass"], dict) else None)
     match_pairs = (
         ("runtime_passes_match", "expected_runtime_passes", "actual_runtime_passes", "runtime-pass-count"),
         ("active_runtime_passes_match", "expected_active_runtime_passes", "actual_active_runtime_passes", "active-runtime-pass-count"),
@@ -1000,6 +1035,8 @@ def refresh_execution_audit(plan: dict[str, object]) -> None:
         **actuals,
         "bounded_texture_copy": budget["bounded_texture_copy"],
         "deterministic_fallback": budget["deterministic_fallback"],
+        "expected_stage_order": observation["expected_stage_order"],
+        "actual_stage_order": actual_stage_order,
         "likely_layer": observation["likely_layer"],
         "likely_pass": observation["likely_pass"],
     }
@@ -1012,6 +1049,13 @@ def refresh_execution_audit(plan: dict[str, object]) -> None:
             mismatch_count += 1
             if first_mismatch == "none":
                 first_mismatch = mismatch_name
+    stage_order_matched = (
+        observation["expected_stage_order"] == audit["actual_stage_order"])
+    audit["stage_order_match"] = stage_order_matched
+    if not stage_order_matched:
+        mismatch_count += 1
+        if first_mismatch == "none":
+            first_mismatch = "stage-order"
     for audit_key, observation_key, mismatch_name in (
             ("bounded_texture_copy", "bounded_texture_copy_required", "bounded-texture-copy"),
             ("deterministic_fallback", "deterministic_fallback_required", "deterministic-fallback")):
@@ -1140,6 +1184,22 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     plan["passes"] = [plan["primary_pass"]]
     plan["execution_stages"] = [
         {
+            "name": "shape-shadow",
+            "active": True,
+            "requires_backdrop": False,
+            "sample_taps": 0,
+            "likely_layer": "material-shadow-pass",
+            "executor": "shape-shadow",
+            "max_texture_copy_pixels": 0,
+            "bounded": True,
+            "optics": stage_optics(
+                "shape-shadow",
+                edge_width=1.0,
+                shadow_alpha=0.14,
+                shadow_radius=14.0,
+            ),
+        },
+        {
             "name": "backdrop-sample-blur",
             "active": True,
             "requires_backdrop": True,
@@ -1161,7 +1221,36 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
                 refraction_edge_bias=0.378333,
                 refraction_offset_pixels=0.572617,
             ),
-        }
+        },
+        {
+            "name": "edge-highlight",
+            "active": True,
+            "requires_backdrop": False,
+            "sample_taps": 0,
+            "likely_layer": "material-edge-pass",
+            "executor": "edge-highlight",
+            "max_texture_copy_pixels": 0,
+            "bounded": True,
+            "optics": stage_optics(
+                "edge-highlight",
+                edge_highlight=0.34,
+                edge_width=1.0,
+            ),
+        },
+        {
+            "name": "noise-dither",
+            "active": True,
+            "requires_backdrop": False,
+            "sample_taps": 0,
+            "likely_layer": "material-noise-pass",
+            "executor": "ordered-dither",
+            "max_texture_copy_pixels": 0,
+            "bounded": True,
+            "optics": stage_optics(
+                "noise-dither",
+                noise_opacity=0.014,
+            ),
+        },
     ]
     plan["paint_layers"] = []
     assert isinstance(plan["verifier"], dict)
@@ -1393,7 +1482,12 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "execution_contract_mismatch_count": (
             0 if audit["contract_satisfied"] else 1),
         "execution_contract_mismatch_total": audit["mismatch_count"],
+        "stage_order_match_count": 1 if audit["stage_order_match"] else 0,
+        "stage_order_mismatch_count": 0 if audit["stage_order_match"] else 1,
         "first_execution_contract_mismatch": audit["first_mismatch"],
+        "first_stage_order_mismatch": (
+            "none" if audit["stage_order_match"]
+            else audit["actual_stage_order"]),
         "container_groups": material_container_group_summary(plan),
     }
 
@@ -1532,7 +1626,12 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "execution_contract_mismatch_count": (
             0 if audit["contract_satisfied"] else 1),
         "execution_contract_mismatch_total": audit["mismatch_count"],
+        "stage_order_match_count": 1 if audit["stage_order_match"] else 0,
+        "stage_order_mismatch_count": 0 if audit["stage_order_match"] else 1,
         "first_execution_contract_mismatch": audit["first_mismatch"],
+        "first_stage_order_mismatch": (
+            "none" if audit["stage_order_match"]
+            else audit["actual_stage_order"]),
         "foreground_text_candidate_count": 1,
         "foreground_text_remap_count": 1,
         "interaction_enabled_count": 1 if interaction["enabled"] else 0,
@@ -3189,16 +3288,16 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "active_runtime_passes_gte": 1,
                 "backdrop_runtime_passes_lte": 1,
                 "backdrop_runtime_passes_gte": 1,
-                "total_execution_stages_lte": 1,
-                "total_execution_stages_gte": 1,
-                "active_execution_stages_lte": 1,
-                "active_execution_stages_gte": 1,
+                "total_execution_stages_lte": 4,
+                "total_execution_stages_gte": 4,
+                "active_execution_stages_lte": 4,
+                "active_execution_stages_gte": 4,
                 "backdrop_execution_stages_lte": 1,
                 "backdrop_execution_stages_gte": 1,
                 "dropped_execution_stages_lte": 0,
                 "dropped_execution_stages_gte": 0,
-                "max_execution_stage_count_lte": 1,
-                "max_execution_stage_count_gte": 1,
+                "max_execution_stage_count_lte": 4,
+                "max_execution_stage_count_gte": 4,
                 "max_execution_stage_capacity_lte": 4,
                 "max_execution_stage_capacity_gte": 4,
                 "max_execution_stages_lte": 4,
@@ -3242,7 +3341,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["resource_bounds"][
                 "total_execution_stages"],
-            1)
+            4)
         self.assertEqual(
             report["material_plans"]["resource_bounds"][
                 "max_execution_stages"],
@@ -3286,10 +3385,14 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         manifest = {
             "require_material_plan_summary": {
                 "stage_names": {
+                    "shape-shadow": 1,
                     "translucent-rounded-rect": 1,
+                    "edge-highlight": 1,
                 },
                 "stage_executors": {
+                    "shape-shadow": 1,
                     "fallback-fill": 1,
+                    "edge-highlight": 1,
                 },
                 "paint_layer_names": {
                     "fallback-shadow": 1,
@@ -3309,10 +3412,18 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertTrue(report["ok"])
         self.assertEqual(
             report["material_plans"]["stage_names"],
-            {"translucent-rounded-rect": 1})
+            {
+                "shape-shadow": 1,
+                "translucent-rounded-rect": 1,
+                "edge-highlight": 1,
+            })
         self.assertEqual(
             report["material_plans"]["stage_executors"],
-            {"fallback-fill": 1})
+            {
+                "shape-shadow": 1,
+                "fallback-fill": 1,
+                "edge-highlight": 1,
+            })
         self.assertEqual(
             report["material_plans"]["paint_layer_executors"],
             {"rounded-shadow": 1, "rounded-fill": 1, "rounded-edge": 1})
@@ -3586,6 +3697,17 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "motion_policy": "animated-optical-response",
             "specular_model": "pointer-specular",
             "specular_highlight_active": True,
+            "specular_anchor_x": 0.62,
+            "specular_anchor_y": 0.38,
+            "specular_radius": 0.34,
+            "specular_intensity": 0.24,
+        })
+        stages = plan["execution_stages"]
+        assert isinstance(stages, list)
+        edge_optics = stages[2]["optics"]
+        assert isinstance(edge_optics, dict)
+        edge_optics.update({
+            "specular_model": "pointer-specular",
             "specular_anchor_x": 0.62,
             "specular_anchor_y": 0.38,
             "specular_radius": 0.34,
@@ -4000,6 +4122,29 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["likely_layer"], "material-execution-contract")
         self.assertEqual(failure["likely_pass"], "backdrop-sample-blur")
         self.assertIn("stage counts", failure["hint"])
+
+    def test_execution_stage_order_mismatch_points_to_stage_contract(self) -> None:
+        plan = sampled_material_plan()
+        stages = plan["execution_stages"]
+        assert isinstance(stages, list)
+        stages[0], stages[1] = stages[1], stages[0]
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material execution audit actual stage order matches stages"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".execution_audit.actual_stage_order")
+        self.assertEqual(failure["expected"], "unexpected-stage-order")
+        self.assertEqual(failure["actual"], "shadow-primary-edge-noise")
+        self.assertEqual(failure["likely_layer"], "material-execution-contract")
+        self.assertEqual(failure["likely_pass"], "backdrop-sample-blur")
+        self.assertIn("execution_stages", failure["hint"])
 
     def test_fallback_pass_texture_copy_points_to_pass_contract(self) -> None:
         plan = material_plan()
@@ -4423,7 +4568,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             failure["path"],
             "debug.platform_runtime.details.renderer.material_executor_summary"
             ".execution_stage_count")
-        self.assertEqual(failure["expected"], 1)
+        self.assertEqual(failure["expected"], 4)
         self.assertEqual(failure["actual"], 0)
         self.assertEqual(failure["likely_layer"], "platform-runtime")
         self.assertEqual(failure["likely_pass"], "material-executor")

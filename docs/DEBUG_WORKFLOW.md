@@ -987,6 +987,12 @@ For schema 35 and later, inspect `execution_audit` immediately after
 serialized pass, stage, and paint-layer arrays. A mismatch points at pure
 planning, command serialization, or debug JSON assembly. It should not be fixed
 by adding backend policy branches.
+For schema 39 and later, also compare
+`execution_audit.expected_stage_order` with `actual_stage_order`.
+`expected_stage_order` mirrors `optical_composition.stage_order`, while
+`actual_stage_order` is derived from `execution_stages[]`. If
+`stage_order_match` is false, fix the pure stage append order or the JSON stage
+serialization before changing a Metal, AppKit, Direct3D, Vulkan, or web shader.
 For schema 38 and later, inspect `refraction` and `optical_composition` before
 comparing stage optics or shader constants. A mismatch in
 `execution_stages[n].optics.refraction_*` should trace back to these pure

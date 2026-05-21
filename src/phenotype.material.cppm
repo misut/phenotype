@@ -12,7 +12,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 38;
+inline constexpr std::uint32_t material_plan_contract_version = 39;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -303,6 +303,7 @@ struct MaterialObservationContract {
     char const* fallback_reason = "";
     char const* primary_pass = "none";
     char const* primary_executor = "none";
+    char const* expected_stage_order = "none";
     std::uint32_t expected_runtime_passes = 0;
     std::uint32_t expected_active_runtime_passes = 0;
     std::uint32_t expected_backdrop_runtime_passes = 0;
@@ -347,11 +348,14 @@ struct MaterialExecutionAudit {
     bool shadow_paint_layers_match = true;
     bool fill_paint_layers_match = true;
     bool edge_paint_layers_match = true;
+    bool stage_order_match = true;
     bool bounded_texture_copy = true;
     bool deterministic_fallback = true;
     bool contract_satisfied = true;
     std::uint32_t mismatch_count = 0;
     char const* first_mismatch = "none";
+    char const* expected_stage_order = "none";
+    char const* actual_stage_order = "none";
     char const* likely_layer = "material-execution-contract";
     char const* likely_pass = "none";
 };
@@ -935,6 +939,7 @@ inline MaterialObservationContract material_observation_contract(
     contract.fallback_reason = plan.fallback_reason;
     contract.primary_pass = plan.primary_pass.name;
     contract.primary_executor = plan.primary_pass.executor;
+    contract.expected_stage_order = plan.optical_composition.stage_order;
     contract.expected_runtime_passes = 1;
     contract.expected_active_runtime_passes =
         plan.primary_pass.active ? 1u : 0u;
@@ -989,6 +994,9 @@ inline void material_record_execution_mismatch(
     }
 }
 
+inline char const* material_execution_stage_order_name(
+        MaterialPlan const& plan) noexcept;
+
 inline MaterialExecutionAudit material_execution_audit(
         MaterialPlan const& plan) noexcept {
     auto const& observation = plan.observation_contract;
@@ -1001,6 +1009,8 @@ inline MaterialExecutionAudit material_execution_audit(
         plan.primary_pass.requires_backdrop ? 1u : 0u;
     audit.actual_execution_stages = plan.execution_stage_count;
     audit.actual_paint_layers = plan.paint_layer_count;
+    audit.expected_stage_order = observation.expected_stage_order;
+    audit.actual_stage_order = material_execution_stage_order_name(plan);
     audit.bounded_texture_copy = plan.resource_budget.bounded_texture_copy;
     audit.deterministic_fallback =
         plan.resource_budget.deterministic_fallback;
@@ -1062,6 +1072,13 @@ inline MaterialExecutionAudit material_execution_audit(
     audit.edge_paint_layers_match =
         observation.expected_edge_paint_layers
             == audit.actual_edge_paint_layers;
+    audit.stage_order_match =
+        std::string_view{audit.expected_stage_order
+            ? audit.expected_stage_order
+            : "none"}
+        == std::string_view{audit.actual_stage_order
+            ? audit.actual_stage_order
+            : "none"};
 
     material_record_execution_mismatch(
         audit, audit.runtime_passes_match, "runtime-pass-count");
@@ -1085,6 +1102,8 @@ inline MaterialExecutionAudit material_execution_audit(
         audit, audit.fill_paint_layers_match, "fill-paint-layer-count");
     material_record_execution_mismatch(
         audit, audit.edge_paint_layers_match, "edge-paint-layer-count");
+    material_record_execution_mismatch(
+        audit, audit.stage_order_match, "stage-order");
     material_record_execution_mismatch(
         audit,
         !observation.bounded_texture_copy_required
@@ -1214,7 +1233,10 @@ struct MaterialRuntimeSummary {
     std::uint32_t execution_contract_satisfied_count = 0;
     std::uint32_t execution_contract_mismatch_count = 0;
     std::uint32_t execution_contract_mismatch_total = 0;
+    std::uint32_t stage_order_match_count = 0;
+    std::uint32_t stage_order_mismatch_count = 0;
     char const* first_execution_contract_mismatch = "none";
+    char const* first_stage_order_mismatch = "none";
 };
 
 struct MaterialExecutorSummary {
@@ -1260,7 +1282,10 @@ struct MaterialExecutorSummary {
     std::uint32_t execution_contract_satisfied_count = 0;
     std::uint32_t execution_contract_mismatch_count = 0;
     std::uint32_t execution_contract_mismatch_total = 0;
+    std::uint32_t stage_order_match_count = 0;
+    std::uint32_t stage_order_mismatch_count = 0;
     char const* first_execution_contract_mismatch = "none";
+    char const* first_stage_order_mismatch = "none";
     std::uint32_t foreground_text_candidate_count = 0;
     std::uint32_t foreground_text_remap_count = 0;
     std::uint32_t interaction_enabled_count = 0;
@@ -1389,6 +1414,85 @@ inline bool material_stage_matches(
         char const* actual,
         std::string_view expected) noexcept {
     return actual && std::string_view{actual} == expected;
+}
+
+inline char const* material_execution_stage_role(
+        MaterialPlan const& plan,
+        MaterialExecutionStage const& stage) noexcept {
+    if (material_stage_matches(stage.name, "shape-shadow"))
+        return "shadow";
+    if (material_stage_matches(stage.name, "edge-highlight"))
+        return "edge";
+    if (material_stage_matches(stage.name, "noise-dither"))
+        return "noise";
+    if (plan.primary_pass.active
+        && material_stage_matches(stage.name, plan.primary_pass.name)) {
+        return "primary";
+    }
+    return "unknown";
+}
+
+inline bool material_execution_stage_role_at(
+        MaterialPlan const& plan,
+        unsigned int index,
+        std::string_view expected) noexcept {
+    if (index >= plan.execution_stage_count)
+        return false;
+    return std::string_view{
+        material_execution_stage_role(plan, plan.execution_stages[index])
+    } == expected;
+}
+
+inline char const* material_execution_stage_order_name(
+        MaterialPlan const& plan) noexcept {
+    switch (plan.execution_stage_count) {
+        case 0:
+            return "none";
+        case 1:
+            return material_execution_stage_role_at(plan, 0, "primary")
+                ? "primary"
+                : "unexpected-stage-order";
+        case 2:
+            if (material_execution_stage_role_at(plan, 0, "shadow")
+                && material_execution_stage_role_at(plan, 1, "primary")) {
+                return "shadow-primary";
+            }
+            if (material_execution_stage_role_at(plan, 0, "primary")
+                && material_execution_stage_role_at(plan, 1, "edge")) {
+                return "primary-edge";
+            }
+            if (material_execution_stage_role_at(plan, 0, "primary")
+                && material_execution_stage_role_at(plan, 1, "noise")) {
+                return "primary-noise";
+            }
+            return "unexpected-stage-order";
+        case 3:
+            if (material_execution_stage_role_at(plan, 0, "shadow")
+                && material_execution_stage_role_at(plan, 1, "primary")
+                && material_execution_stage_role_at(plan, 2, "edge")) {
+                return "shadow-primary-edge";
+            }
+            if (material_execution_stage_role_at(plan, 0, "shadow")
+                && material_execution_stage_role_at(plan, 1, "primary")
+                && material_execution_stage_role_at(plan, 2, "noise")) {
+                return "shadow-primary-noise";
+            }
+            if (material_execution_stage_role_at(plan, 0, "primary")
+                && material_execution_stage_role_at(plan, 1, "edge")
+                && material_execution_stage_role_at(plan, 2, "noise")) {
+                return "primary-edge-noise";
+            }
+            return "unexpected-stage-order";
+        case 4:
+            if (material_execution_stage_role_at(plan, 0, "shadow")
+                && material_execution_stage_role_at(plan, 1, "primary")
+                && material_execution_stage_role_at(plan, 2, "edge")
+                && material_execution_stage_role_at(plan, 3, "noise")) {
+                return "shadow-primary-edge-noise";
+            }
+            return "unexpected-stage-order";
+    }
+    return "unexpected-stage-order";
 }
 
 inline bool material_plan_uses_sampled_backdrop_executor(
@@ -1835,6 +1939,15 @@ inline void accumulate_material_executor_plan_summary(
     }
     summary.execution_contract_mismatch_total +=
         plan.execution_audit.mismatch_count;
+    if (plan.execution_audit.stage_order_match) {
+        ++summary.stage_order_match_count;
+    } else {
+        ++summary.stage_order_mismatch_count;
+        if (std::string_view{summary.first_stage_order_mismatch} == "none") {
+            summary.first_stage_order_mismatch =
+                plan.execution_audit.actual_stage_order;
+        }
+    }
 }
 
 inline void finalize_material_executor_summary(
@@ -2058,6 +2171,15 @@ inline void accumulate_material_runtime_summary(
     }
     summary.execution_contract_mismatch_total +=
         plan.execution_audit.mismatch_count;
+    if (plan.execution_audit.stage_order_match) {
+        ++summary.stage_order_match_count;
+    } else {
+        ++summary.stage_order_mismatch_count;
+        if (std::string_view{summary.first_stage_order_mismatch} == "none") {
+            summary.first_stage_order_mismatch =
+                plan.execution_audit.actual_stage_order;
+        }
+    }
 }
 
 inline void finalize_material_runtime_summary(
