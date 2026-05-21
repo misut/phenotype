@@ -58,7 +58,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 37);
+    assert(material_plan_contract_version == 38);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -156,6 +156,12 @@ void test_sampled_backdrop_access_contract() {
         == "sampled-backdrop-edge-refraction");
     assert(std::string_view(plan.optical_composition.fallback_source)
         == "none");
+    assert(std::string_view(plan.optical_composition.stage_order)
+        == "shadow-primary-edge-noise");
+    assert(std::string_view(plan.optical_composition.backdrop_capture_policy)
+        == "sample-current-frame");
+    assert(std::string_view(plan.optical_composition.foreground_sampling_policy)
+        == "foreground-excluded-from-sample");
     assert(plan.optical_composition.backdrop_sampled);
     assert(plan.optical_composition.blur_required);
     assert(plan.optical_composition.frosting_required);
@@ -167,6 +173,9 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_composition.noise_required);
     assert(plan.optical_composition.refraction_required);
     assert(!plan.optical_composition.fallback_required);
+    assert(plan.optical_composition.backdrop_capture_required);
+    assert(plan.optical_composition.foreground_excluded_from_backdrop);
+    assert(plan.optical_composition.stage_order_stable);
     assert(plan.optical_composition.bounded);
     assert(plan.optical_composition.deterministic);
     assert(plan.optical_composition.sample_taps == plan.sample_taps);
@@ -351,6 +360,15 @@ void test_content_layer_stays_standard_material_contract() {
         == "standard-content-color");
     assert(std::string_view(plan.optical_response.depth_strategy)
         == "standard-content-edge");
+    assert(std::string_view(plan.optical_composition.stage_order)
+        == "shadow-primary-edge");
+    assert(std::string_view(plan.optical_composition.backdrop_capture_policy)
+        == "no-capture");
+    assert(std::string_view(plan.optical_composition.foreground_sampling_policy)
+        == "not-applicable");
+    assert(!plan.optical_composition.backdrop_capture_required);
+    assert(!plan.optical_composition.foreground_excluded_from_backdrop);
+    assert(plan.optical_composition.stage_order_stable);
     assert(!plan.refraction.active);
     assert(plan.refraction.bounded);
     assert(std::string_view(plan.refraction.model) == "none");
@@ -449,6 +467,12 @@ void test_fallback_backdrop_access_contract() {
         == "none");
     assert(std::string_view(plan.optical_composition.fallback_source)
         == "unsupported-backend");
+    assert(std::string_view(plan.optical_composition.stage_order)
+        == "shadow-primary-edge");
+    assert(std::string_view(plan.optical_composition.backdrop_capture_policy)
+        == "no-capture");
+    assert(std::string_view(plan.optical_composition.foreground_sampling_policy)
+        == "not-applicable");
     assert(!plan.optical_composition.backdrop_sampled);
     assert(!plan.optical_composition.blur_required);
     assert(!plan.optical_composition.frosting_required);
@@ -460,6 +484,9 @@ void test_fallback_backdrop_access_contract() {
     assert(!plan.optical_composition.noise_required);
     assert(!plan.optical_composition.refraction_required);
     assert(plan.optical_composition.fallback_required);
+    assert(!plan.optical_composition.backdrop_capture_required);
+    assert(!plan.optical_composition.foreground_excluded_from_backdrop);
+    assert(plan.optical_composition.stage_order_stable);
     assert(plan.optical_composition.bounded);
     assert(plan.optical_composition.deterministic);
     assert(!plan.optical_response.backdrop_driven);
@@ -745,6 +772,15 @@ void test_warmup_backdrop_access_contract() {
         == "shared-frame");
     assert(std::string_view(plan.observation_contract.backdrop_capture_reason)
         == "warmup-next-frame");
+    assert(std::string_view(plan.optical_composition.stage_order)
+        == "shadow-primary-edge");
+    assert(std::string_view(plan.optical_composition.backdrop_capture_policy)
+        == "warmup-next-frame");
+    assert(std::string_view(plan.optical_composition.foreground_sampling_policy)
+        == "foreground-excluded-from-warmup");
+    assert(plan.optical_composition.backdrop_capture_required);
+    assert(plan.optical_composition.foreground_excluded_from_backdrop);
+    assert(plan.optical_composition.stage_order_stable);
     std::puts("PASS: warmup backdrop access contract");
 }
 

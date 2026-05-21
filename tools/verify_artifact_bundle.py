@@ -355,6 +355,32 @@ ALLOWED_MATERIAL_OPTICAL_FALLBACK_SOURCES = {
     "unsupported-backend",
 }
 
+ALLOWED_MATERIAL_OPTICAL_STAGE_ORDERS = {
+    "none",
+    "primary",
+    "primary-edge",
+    "primary-edge-noise",
+    "primary-noise",
+    "shadow-primary",
+    "shadow-primary-edge",
+    "shadow-primary-edge-noise",
+    "shadow-primary-noise",
+}
+
+ALLOWED_MATERIAL_OPTICAL_BACKDROP_CAPTURE_POLICIES = {
+    "no-capture",
+    "sample-current-frame",
+    "shared-frame-capture",
+    "warmup-next-frame",
+}
+
+ALLOWED_MATERIAL_OPTICAL_FOREGROUND_SAMPLING_POLICIES = {
+    "foreground-excluded-from-sample",
+    "foreground-excluded-from-warmup",
+    "foreground-inclusion-risk",
+    "not-applicable",
+}
+
 ALLOWED_MATERIAL_INTERACTION_STATES = {
     "focused",
     "hovered",
@@ -396,7 +422,7 @@ ALLOWED_MATERIAL_REFRACTION_SOURCES = {
     "sampled-backdrop-edge-refraction",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 37
+MATERIAL_PLAN_CONTRACT_VERSION = 38
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 MATERIAL_MAX_REFRACTION_OFFSET_PIXELS = 3.5
@@ -2874,6 +2900,9 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "optical_blur_strategies",
         "optical_color_strategies",
         "optical_depth_strategies",
+        "optical_stage_orders",
+        "optical_backdrop_capture_policies",
+        "optical_foreground_sampling_policies",
         "optical_backdrop_driven",
         "optical_blur_active",
         "optical_frosting_active",
@@ -3092,6 +3121,11 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "optical_blur_strategies": ALLOWED_MATERIAL_OPTICAL_BLUR_STRATEGIES,
         "optical_color_strategies": ALLOWED_MATERIAL_OPTICAL_COLOR_STRATEGIES,
         "optical_depth_strategies": ALLOWED_MATERIAL_OPTICAL_DEPTH_STRATEGIES,
+        "optical_stage_orders": ALLOWED_MATERIAL_OPTICAL_STAGE_ORDERS,
+        "optical_backdrop_capture_policies": (
+            ALLOWED_MATERIAL_OPTICAL_BACKDROP_CAPTURE_POLICIES),
+        "optical_foreground_sampling_policies": (
+            ALLOWED_MATERIAL_OPTICAL_FOREGROUND_SAMPLING_POLICIES),
     }
     for field, allowed_keys in map_vocabularies.items():
         if field in value:
@@ -4193,6 +4227,9 @@ MATERIAL_OPTICAL_COMPOSITION_STRING_FIELDS = (
     "refraction_source",
     "interaction_source",
     "fallback_source",
+    "stage_order",
+    "backdrop_capture_policy",
+    "foreground_sampling_policy",
 )
 MATERIAL_OPTICAL_COMPOSITION_BOOL_FIELDS = (
     "backdrop_sampled",
@@ -4207,6 +4244,9 @@ MATERIAL_OPTICAL_COMPOSITION_BOOL_FIELDS = (
     "refraction_required",
     "interaction_required",
     "fallback_required",
+    "backdrop_capture_required",
+    "foreground_excluded_from_backdrop",
+    "stage_order_stable",
     "bounded",
     "deterministic",
 )
@@ -5064,6 +5104,67 @@ def expected_optical_depth_strategy(
     return "none"
 
 
+def expected_optical_stage_order(
+        primary_pass: JsonObject | None,
+        backdrop_sampling: bool | None,
+        edge_highlight: int | float | None,
+        shadow_alpha: int | float | None,
+        noise_opacity: int | float | None) -> str | None:
+    if not isinstance(primary_pass, dict):
+        return None
+    if primary_pass.get("active") is not True:
+        return "none"
+    if backdrop_sampling is None:
+        return None
+    stages = []
+    if isinstance(shadow_alpha, (int, float)) and float(shadow_alpha) > 0.0:
+        stages.append("shadow")
+    stages.append("primary")
+    if isinstance(edge_highlight, (int, float)) and float(edge_highlight) > 0.0:
+        stages.append("edge")
+    if (backdrop_sampling
+            and isinstance(noise_opacity, (int, float))
+            and float(noise_opacity) > 0.0):
+        stages.append("noise")
+    return "-".join(stages)
+
+
+def expected_optical_backdrop_capture_policy(
+        backdrop_access: JsonObject | None,
+        backdrop_sampling: bool | None) -> str | None:
+    if not isinstance(backdrop_access, dict) or backdrop_sampling is None:
+        return None
+    captures_backdrop = (
+        backdrop_access.get("shared_frame_capture") is True
+        or backdrop_access.get("next_frame_capture_required") is True
+        or backdrop_access.get("required") is True)
+    if not captures_backdrop:
+        return "no-capture"
+    if backdrop_sampling:
+        return "sample-current-frame"
+    if backdrop_access.get("next_frame_capture_required") is True:
+        return "warmup-next-frame"
+    return "shared-frame-capture"
+
+
+def expected_optical_foreground_sampling_policy(
+        backdrop_access: JsonObject | None,
+        backdrop_sampling: bool | None) -> str | None:
+    if not isinstance(backdrop_access, dict) or backdrop_sampling is None:
+        return None
+    captures_backdrop = (
+        backdrop_access.get("shared_frame_capture") is True
+        or backdrop_access.get("next_frame_capture_required") is True
+        or backdrop_access.get("required") is True)
+    if not captures_backdrop:
+        return "not-applicable"
+    if backdrop_access.get("excludes_foreground_text") is True:
+        if backdrop_sampling:
+            return "foreground-excluded-from-sample"
+        return "foreground-excluded-from-warmup"
+    return "foreground-inclusion-risk"
+
+
 def summarize_material_plans(
     plans: Any,
     report: Report,
@@ -5325,6 +5426,9 @@ def summarize_material_plans(
             "refraction_sources": {},
             "interaction_sources": {},
             "fallback_sources": {},
+            "stage_orders": {},
+            "backdrop_capture_policies": {},
+            "foreground_sampling_policies": {},
             "backdrop_sampled": 0,
             "blur_required": 0,
             "frosting_required": 0,
@@ -5337,6 +5441,9 @@ def summarize_material_plans(
             "refraction_required": 0,
             "interaction_required": 0,
             "fallback_required": 0,
+            "backdrop_capture_required": 0,
+            "foreground_excluded_from_backdrop": 0,
+            "stage_order_stable": 0,
             "bounded": 0,
             "deterministic": 0,
             "max_blur_radius": 0.0,
@@ -9713,6 +9820,15 @@ def summarize_material_plans(
                 "fallback_source": (
                     "fallback_sources",
                     ALLOWED_MATERIAL_OPTICAL_FALLBACK_SOURCES),
+                "stage_order": (
+                    "stage_orders",
+                    ALLOWED_MATERIAL_OPTICAL_STAGE_ORDERS),
+                "backdrop_capture_policy": (
+                    "backdrop_capture_policies",
+                    ALLOWED_MATERIAL_OPTICAL_BACKDROP_CAPTURE_POLICIES),
+                "foreground_sampling_policy": (
+                    "foreground_sampling_policies",
+                    ALLOWED_MATERIAL_OPTICAL_FOREGROUND_SAMPLING_POLICIES),
             }
             composition_values: JsonObject = {}
             for key, (summary_key, allowed) in composition_string_specs.items():
@@ -9792,6 +9908,27 @@ def summarize_material_plans(
                 and refraction.get("active") is True
                 and isinstance(refraction.get("source"), str)
                 else "none")
+            backdrop_access_for_composition = plan.get("backdrop_access")
+            expected_stage_order = expected_optical_stage_order(
+                primary_pass,
+                backdrop_sampling if isinstance(backdrop_sampling, bool) else None,
+                plan_edge_highlight,
+                plan_shadow_alpha,
+                plan_noise_opacity)
+            expected_backdrop_capture_policy = (
+                expected_optical_backdrop_capture_policy(
+                    backdrop_access_for_composition
+                    if isinstance(backdrop_access_for_composition, dict)
+                    else None,
+                    backdrop_sampling
+                    if isinstance(backdrop_sampling, bool) else None))
+            expected_foreground_sampling_policy = (
+                expected_optical_foreground_sampling_policy(
+                    backdrop_access_for_composition
+                    if isinstance(backdrop_access_for_composition, dict)
+                    else None,
+                    backdrop_sampling
+                    if isinstance(backdrop_sampling, bool) else None))
             composition_expected_strings = {
                 "model": expected_model,
                 "blur_source": expected_blur,
@@ -9802,6 +9939,9 @@ def summarize_material_plans(
                 "refraction_source": expected_refraction_source,
                 "interaction_source": expected_interaction_source,
                 "fallback_source": expected_fallback_source,
+                "stage_order": expected_stage_order,
+                "backdrop_capture_policy": expected_backdrop_capture_policy,
+                "foreground_sampling_policy": expected_foreground_sampling_policy,
             }
             for key, expected in composition_expected_strings.items():
                 if isinstance(expected, str):
@@ -9874,6 +10014,17 @@ def summarize_material_plans(
             resource_budget_for_composition = plan.get("resource_budget")
             sampling_kernel_for_composition = plan.get("sampling_kernel")
             backdrop_access_for_composition = plan.get("backdrop_access")
+            if isinstance(backdrop_access_for_composition, dict):
+                expected_bools["backdrop_capture_required"] = (
+                    backdrop_access_for_composition.get("shared_frame_capture")
+                    is True
+                    or backdrop_access_for_composition.get(
+                        "next_frame_capture_required") is True
+                    or backdrop_access_for_composition.get("required") is True)
+                expected_bools["foreground_excluded_from_backdrop"] = (
+                    backdrop_access_for_composition.get(
+                        "excludes_foreground_text"))
+                expected_bools["stage_order_stable"] = True
             if (isinstance(resource_budget_for_composition, dict)
                     and isinstance(sampling_kernel_for_composition, dict)
                     and isinstance(backdrop_access_for_composition, dict)

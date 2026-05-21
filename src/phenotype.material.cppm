@@ -12,7 +12,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 37;
+inline constexpr std::uint32_t material_plan_contract_version = 38;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -599,6 +599,9 @@ struct MaterialOpticalComposition {
     char const* refraction_source = "none";
     char const* interaction_source = "none";
     char const* fallback_source = "none";
+    char const* stage_order = "none";
+    char const* backdrop_capture_policy = "no-capture";
+    char const* foreground_sampling_policy = "not-applicable";
     bool backdrop_sampled = false;
     bool blur_required = false;
     bool frosting_required = false;
@@ -611,6 +614,9 @@ struct MaterialOpticalComposition {
     bool refraction_required = false;
     bool interaction_required = false;
     bool fallback_required = false;
+    bool backdrop_capture_required = false;
+    bool foreground_excluded_from_backdrop = false;
+    bool stage_order_stable = true;
     bool bounded = true;
     bool deterministic = true;
     float opacity = 0.0f;
@@ -3613,6 +3619,61 @@ inline char const* material_optical_refraction_source_name(
     return "none";
 }
 
+inline char const* material_optical_stage_order_name(
+        MaterialPlan const& plan) noexcept {
+    if (!plan.primary_pass.active)
+        return "none";
+    bool const shadow = plan.shadow_alpha > 0.0f;
+    bool const edge = plan.edge_highlight > 0.0f;
+    bool const noise = plan.backdrop_sampling && plan.noise_opacity > 0.0f;
+    if (shadow && edge && noise)
+        return "shadow-primary-edge-noise";
+    if (shadow && edge)
+        return "shadow-primary-edge";
+    if (shadow && noise)
+        return "shadow-primary-noise";
+    if (edge && noise)
+        return "primary-edge-noise";
+    if (shadow)
+        return "shadow-primary";
+    if (edge)
+        return "primary-edge";
+    if (noise)
+        return "primary-noise";
+    return "primary";
+}
+
+inline char const* material_optical_backdrop_capture_policy_name(
+        MaterialPlan const& plan) noexcept {
+    if (!plan.backdrop_access.shared_frame_capture
+        && !plan.backdrop_access.next_frame_capture_required
+        && !plan.backdrop_access.required) {
+        return "no-capture";
+    }
+    if (plan.backdrop_sampling)
+        return "sample-current-frame";
+    if (plan.backdrop_access.next_frame_capture_required)
+        return "warmup-next-frame";
+    return "shared-frame-capture";
+}
+
+inline char const* material_optical_foreground_sampling_policy_name(
+        MaterialPlan const& plan) noexcept {
+    bool const captures_backdrop =
+        plan.backdrop_access.shared_frame_capture
+        || plan.backdrop_access.next_frame_capture_required
+        || plan.backdrop_access.required;
+    if (!captures_backdrop)
+        return "not-applicable";
+    if (plan.backdrop_access.excludes_foreground_text
+        && plan.backdrop_sampling) {
+        return "foreground-excluded-from-sample";
+    }
+    if (plan.backdrop_access.excludes_foreground_text)
+        return "foreground-excluded-from-warmup";
+    return "foreground-inclusion-risk";
+}
+
 inline MaterialOpticalComposition material_resolve_optical_composition(
         MaterialPlan const& plan) noexcept {
     MaterialOpticalComposition composition{};
@@ -3630,6 +3691,11 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.fallback_source = plan.fallback()
         ? material_fallback_path_name(plan.fallback_path)
         : "none";
+    composition.stage_order = material_optical_stage_order_name(plan);
+    composition.backdrop_capture_policy =
+        material_optical_backdrop_capture_policy_name(plan);
+    composition.foreground_sampling_policy =
+        material_optical_foreground_sampling_policy_name(plan);
     composition.backdrop_sampled = plan.backdrop_sampling;
     composition.blur_required = plan.primary_pass.requires_backdrop;
     composition.frosting_required = plan.backdrop_sampling;
@@ -3651,6 +3717,13 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.refraction_required = plan.refraction.active;
     composition.interaction_required = plan.interaction.active;
     composition.fallback_required = plan.fallback();
+    composition.backdrop_capture_required =
+        plan.backdrop_access.shared_frame_capture
+        || plan.backdrop_access.next_frame_capture_required
+        || plan.backdrop_access.required;
+    composition.foreground_excluded_from_backdrop =
+        plan.backdrop_access.excludes_foreground_text;
+    composition.stage_order_stable = true;
     composition.bounded =
         plan.resource_budget.bounded_texture_copy
         && plan.sampling_kernel.bounded

@@ -2,7 +2,7 @@
 
 Status: implementation baseline for `origin/main` after
 `feat(theme): add pure glass theme contract`, with the in-progress material
-runtime branch carrying the schema-37 material contract through
+runtime branch carrying the schema-38 material contract through
 `MaterialPlan.refraction` and `MaterialPlan.optical_composition`. This includes
 the pure material-planning boundary, macOS sampled-backdrop execution,
 deterministic fallback contracts on non-macOS backends, edge executor telemetry,
@@ -250,14 +250,16 @@ blur/color/depth strategy and explicit booleans for blur, frosting, tint,
 saturation, luminance preservation, edge highlight, depth shadow, noise/dither,
 foreground vibrancy, interaction-driven optical modulation, and fallback
 behavior.
-Schema 37 carries `MaterialPlan.refraction`, a bounded edge-lens profile with
+Schema 38 carries `MaterialPlan.refraction`, a bounded edge-lens profile with
 stable model/source names, active/backdrop/interaction/reduced-motion flags, and
 the exact strength, edge bias, and maximum pixel offset the backend may upload.
 `MaterialPlan.optical_composition` remains the fuller pure optical recipe
 consumed by execution stages. It carries the resolved model plus blur, frosting,
 tint, luminance, refraction, depth, interaction, and fallback sources; booleans
-for every required optical channel; bounded/deterministic safety flags; and the
-scalar values and copy/sample bounds that backend adapters are allowed to use.
+for every required optical channel; the stable shadow/primary/edge/noise stage
+order; backdrop capture and foreground exclusion policies; bounded/deterministic
+safety flags; and the scalar values and copy/sample bounds that backend adapters
+are allowed to use.
 Stage `optics` are now derived from this composition, so a backend cannot
 silently invent a different blur, tint, luminance, refraction, edge, shadow, or
 noise contract.

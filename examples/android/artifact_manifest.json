@@ -32,7 +32,7 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "37": 1
+      "38": 1
     },
     "theme_foreground_matches_theme": 1,
     "theme_accent_matches_theme": 1,
@@ -139,6 +139,15 @@
     },
     "optical_depth_strategies": {
       "fallback-shadow-edge": 1
+    },
+    "optical_stage_orders": {
+      "shadow-primary-edge": 1
+    },
+    "optical_backdrop_capture_policies": {
+      "no-capture": 1
+    },
+    "optical_foreground_sampling_policies": {
+      "not-applicable": 1
     },
     "optical_backdrop_driven": 0,
     "optical_blur_active": 0,

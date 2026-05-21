@@ -1949,6 +1949,15 @@ namespace detail {
             "fallback_source",
             json::Value{composition.fallback_source});
         optical_composition.emplace(
+            "stage_order",
+            json::Value{composition.stage_order});
+        optical_composition.emplace(
+            "backdrop_capture_policy",
+            json::Value{composition.backdrop_capture_policy});
+        optical_composition.emplace(
+            "foreground_sampling_policy",
+            json::Value{composition.foreground_sampling_policy});
+        optical_composition.emplace(
             "backdrop_sampled",
             json::Value{composition.backdrop_sampled});
         optical_composition.emplace(
@@ -1984,6 +1993,15 @@ namespace detail {
         optical_composition.emplace(
             "fallback_required",
             json::Value{composition.fallback_required});
+        optical_composition.emplace(
+            "backdrop_capture_required",
+            json::Value{composition.backdrop_capture_required});
+        optical_composition.emplace(
+            "foreground_excluded_from_backdrop",
+            json::Value{composition.foreground_excluded_from_backdrop});
+        optical_composition.emplace(
+            "stage_order_stable",
+            json::Value{composition.stage_order_stable});
         optical_composition.emplace("bounded", json::Value{composition.bounded});
         optical_composition.emplace(
             "deterministic",
