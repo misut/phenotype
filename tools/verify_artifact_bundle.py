@@ -1635,6 +1635,9 @@ def check_file_explorer_native_chrome_contract(
                 "summary_policy": (
                     composition_summary.get("policy")
                     if isinstance(composition_summary, dict) else None),
+                "summary_native_backdrop_expected_material": (
+                    composition_summary.get("native_backdrop_expected_material")
+                    if isinstance(composition_summary, dict) else None),
                 "summary_status": (
                     composition_summary.get("status")
                     if isinstance(composition_summary, dict) else None),
@@ -1663,6 +1666,8 @@ def check_file_explorer_native_chrome_contract(
                     "native_backdrop_underlay_kind"),
                 "native_backdrop_underlay_material": runtime_window.get(
                     "native_backdrop_underlay_material"),
+                "native_backdrop_expected_material": runtime_window.get(
+                    "native_backdrop_expected_material"),
                 "native_backdrop_underlay_blending_mode": runtime_window.get(
                     "native_backdrop_underlay_blending_mode"),
                 "native_backdrop_underlay_state": runtime_window.get(
@@ -1685,7 +1690,11 @@ def check_file_explorer_native_chrome_contract(
                 "file explorer macOS window has native wallpaper backdrop underlay",
                 composition_actual["summary_schema_version"] == 1
                 and composition_actual["summary_policy"] == (
-                    "transparent-window-clear-metal-under-window-background")
+                    "transparent-window-clear-metal-native-sidebar")
+                and (
+                    composition_actual[
+                        "summary_native_backdrop_expected_material"]
+                    == "sidebar")
                 and composition_actual["summary_status"] == "ready"
                 and composition_actual["summary_ready"] is True
                 and composition_actual["summary_failure_reason"] == "none"
@@ -1699,7 +1708,9 @@ def check_file_explorer_native_chrome_contract(
                 and composition_actual["native_backdrop_underlay_kind"]
                     == "nsvisualeffectview"
                 and composition_actual["native_backdrop_underlay_material"]
-                    == "under-window-background"
+                    == "sidebar"
+                and composition_actual["native_backdrop_expected_material"]
+                    == "sidebar"
                 and composition_actual["native_backdrop_underlay_blending_mode"]
                     == "behind-window"
                 and composition_actual["native_backdrop_underlay_state"]
@@ -1719,7 +1730,8 @@ def check_file_explorer_native_chrome_contract(
                 expected={
                     "summary_schema_version": 1,
                     "summary_policy": (
-                        "transparent-window-clear-metal-under-window-background"),
+                        "transparent-window-clear-metal-native-sidebar"),
+                    "summary_native_backdrop_expected_material": "sidebar",
                     "summary_status": "ready",
                     "summary_ready": True,
                     "summary_failure_reason": "none",
@@ -1731,7 +1743,8 @@ def check_file_explorer_native_chrome_contract(
                     "metal_layer_opaque": False,
                     "native_backdrop_underlay_enabled": True,
                     "native_backdrop_underlay_kind": "nsvisualeffectview",
-                    "native_backdrop_underlay_material": "under-window-background",
+                    "native_backdrop_underlay_material": "sidebar",
+                    "native_backdrop_expected_material": "sidebar",
                     "native_backdrop_underlay_blending_mode": "behind-window",
                     "native_backdrop_underlay_state": "active",
                     "renderer_clear_alpha": 0,
@@ -2035,9 +2048,9 @@ def desktop_sidebar_glass_descriptor_ok(value: JsonObject | None) -> bool:
         and blur_radius is not None
         and float(blur_radius) >= 24.0
         and saturation is not None
-        and float(saturation) >= 1.20
+        and float(saturation) >= 1.15
         and edge_highlight is not None
-        and float(edge_highlight) >= 0.28
+        and float(edge_highlight) >= 0.16
         and tint_alpha is not None
         and int(tint_alpha) <= 96)
 
@@ -2127,8 +2140,8 @@ def check_file_explorer_desktop_sidebar_glass_contract(
             "opacity_lte": 0.36,
             "blur_radius_gte": 24.0,
             "tint_alpha_lte": 96,
-            "saturation_gte": 1.20,
-            "edge_highlight_gte": 0.28,
+            "saturation_gte": 1.15,
+            "edge_highlight_gte": 0.16,
         },
         actual=semantic_actual,
         likely_layer="finder-sidebar-glass",

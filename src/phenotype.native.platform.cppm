@@ -129,6 +129,22 @@ inline char const* window_chrome_style_name(WindowChromeStyle style) noexcept {
     }
 }
 
+enum class NativeBackdropMaterial {
+    UnderWindowBackground,
+    Sidebar,
+};
+
+inline char const* native_backdrop_material_name(
+        NativeBackdropMaterial material) noexcept {
+    switch (material) {
+        case NativeBackdropMaterial::Sidebar:
+            return "sidebar";
+        case NativeBackdropMaterial::UnderWindowBackground:
+        default:
+            return "under-window-background";
+    }
+}
+
 struct IntegratedTitlebarOptions {
     // Logical pixels reserved by the app chrome at the top of the
     // window. Desktop shells use this for native drag/hit-test
@@ -150,6 +166,8 @@ struct IntegratedTitlebarOptions {
 struct WindowOptions {
     WindowChromeStyle chrome = WindowChromeStyle::System;
     IntegratedTitlebarOptions integrated_titlebar = {};
+    NativeBackdropMaterial native_backdrop_material =
+        NativeBackdropMaterial::UnderWindowBackground;
 };
 
 struct NativeSurfaceDescriptor {
@@ -163,6 +181,8 @@ struct NativeSurfaceDescriptor {
     float content_scale = 1.0f;
     WindowChromeStyle window_chrome = WindowChromeStyle::System;
     IntegratedTitlebarOptions integrated_titlebar = {};
+    NativeBackdropMaterial native_backdrop_material =
+        NativeBackdropMaterial::UnderWindowBackground;
     bool window_options_valid = false;
 };
 

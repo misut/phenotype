@@ -85,7 +85,11 @@ static void test_window_options_integrated_titlebar_contract() {
     assert(defaults.integrated_titlebar.drag_region_height == 52.0f);
     assert(defaults.integrated_titlebar.leading_control_reserved_width == 0.0f);
     assert(defaults.integrated_titlebar.trailing_control_reserved_width == 156.0f);
+    assert(defaults.native_backdrop_material
+        == NativeBackdropMaterial::UnderWindowBackground);
     assert(std::string_view(window_chrome_style_name(defaults.chrome)) == "system");
+    assert(std::string_view(native_backdrop_material_name(
+        defaults.native_backdrop_material)) == "under-window-background");
 
     WindowOptions integrated{
         .chrome = WindowChromeStyle::IntegratedTitlebar,
@@ -95,14 +99,18 @@ static void test_window_options_integrated_titlebar_contract() {
             .leading_control_reserved_width = 144.0f,
             .trailing_control_reserved_width = 168.0f,
         },
+        .native_backdrop_material = NativeBackdropMaterial::Sidebar,
     };
     assert(integrated.chrome == WindowChromeStyle::IntegratedTitlebar);
     assert(integrated.integrated_titlebar.height == 56.0f);
     assert(integrated.integrated_titlebar.drag_region_height == 48.0f);
     assert(integrated.integrated_titlebar.leading_control_reserved_width == 144.0f);
     assert(integrated.integrated_titlebar.trailing_control_reserved_width == 168.0f);
+    assert(integrated.native_backdrop_material == NativeBackdropMaterial::Sidebar);
     assert(std::string_view(window_chrome_style_name(integrated.chrome))
         == "integrated_titlebar");
+    assert(std::string_view(native_backdrop_material_name(
+        integrated.native_backdrop_material)) == "sidebar");
 
     NativeSurfaceDescriptor surface{};
     assert(surface.kind == NativeSurfaceKind::Unknown);
@@ -111,11 +119,13 @@ static void test_window_options_integrated_titlebar_contract() {
     surface.kind = NativeSurfaceKind::Win32Window;
     surface.window_chrome = integrated.chrome;
     surface.integrated_titlebar = integrated.integrated_titlebar;
+    surface.native_backdrop_material = integrated.native_backdrop_material;
     surface.window_options_valid = true;
     assert(std::string_view(native_surface_kind_name(surface.kind)) == "win32_window");
     assert(surface.window_chrome == WindowChromeStyle::IntegratedTitlebar);
     assert(surface.integrated_titlebar.height == 56.0f);
     assert(surface.integrated_titlebar.leading_control_reserved_width == 144.0f);
+    assert(surface.native_backdrop_material == NativeBackdropMaterial::Sidebar);
     std::puts("PASS: window options integrated titlebar contract");
 }
 
