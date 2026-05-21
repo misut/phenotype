@@ -1295,6 +1295,8 @@ def material_container_group_summary(plan: dict[str, object]) -> dict[str, objec
             "shared_capture_surface_count": 0,
             "shared_capture_saved_surface_count": 0,
             "max_shared_capture_group_surfaces": 0,
+            "shape_blend_execution_group_count": 0,
+            "shape_blend_execution_surface_count": 0,
             "fallback_mixed_group_count": 0,
             "max_group_size": 0,
             "max_active_surfaces": 0,
@@ -1311,6 +1313,7 @@ def material_container_group_summary(plan: dict[str, object]) -> dict[str, objec
             "max_group_bounds_width": 0.0,
             "max_group_bounds_height": 0.0,
             "max_group_bounds_area": 0.0,
+            "max_shape_blend_strength": 0.0,
         }
     active = 1 if primary["active"] else 0
     sampled = 1 if plan["backdrop_sampling"] else 0
@@ -1332,6 +1335,8 @@ def material_container_group_summary(plan: dict[str, object]) -> dict[str, objec
         "shared_capture_surface_count": shared_scope,
         "shared_capture_saved_surface_count": 0,
         "max_shared_capture_group_surfaces": shared_scope,
+        "shape_blend_execution_group_count": 0,
+        "shape_blend_execution_surface_count": 0,
         "fallback_mixed_group_count": 0,
         "max_group_size": 1,
         "max_active_surfaces": active,
@@ -1348,6 +1353,7 @@ def material_container_group_summary(plan: dict[str, object]) -> dict[str, objec
         "max_group_bounds_width": width,
         "max_group_bounds_height": height,
         "max_group_bounds_area": width * height,
+        "max_shape_blend_strength": 0.0,
     }
 
 
@@ -1537,6 +1543,10 @@ def material_container_group_details(plan: dict[str, object]) -> list[dict[str, 
         "shared_backdrop_scope_surfaces": (
             1 if container["shared_backdrop_scope"] else 0),
         "shared_capture_saved_surfaces": 0,
+        "execution_policy": "group-isolated",
+        "shape_blend_execution": False,
+        "shape_blend_execution_surfaces": 0,
+        "shape_blend_strength": 0.0,
         "shape_pair_count": 0,
         "blend_candidate_pair_count": 0,
         "union_candidate_pair_count": 0,
@@ -1572,6 +1582,9 @@ def material_container_group_details(plan: dict[str, object]) -> list[dict[str, 
             "shape_blending_expected": container["shape_blending_expected"],
             "morph_transitions": container["morph_transitions"],
             "shared_backdrop_scope": container["shared_backdrop_scope"],
+            "group_execution_policy": "group-isolated",
+            "shape_blend_execution": False,
+            "shape_blend_strength": 0.0,
             "reduced_motion_suppressed_morph": (
                 container["reduced_motion_suppressed_morph"]),
             "shape_kind": shape["kind"],
@@ -3175,6 +3188,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "container_shared_capture_surface_count": 1,
                 "container_shared_capture_saved_surface_count": 0,
                 "container_max_shared_capture_group_surfaces": 1,
+                "container_shape_blend_execution_group_count": 0,
+                "container_shape_blend_execution_surface_count": 0,
+                "container_max_shape_blend_strength": 0.0,
                 "container_fallback_mixed_group_count": 0,
                 "container_max_group_size": 1,
                 "container_max_active_surfaces": 1,

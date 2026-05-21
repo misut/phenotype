@@ -61,7 +61,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 43);
+    assert(material_plan_contract_version == 44);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -968,6 +968,8 @@ void test_container_group_runtime_summary_contract() {
     assert(groups.shared_capture_surface_count == 4u);
     assert(groups.shared_capture_saved_surface_count == 2u);
     assert(groups.max_shared_capture_group_surfaces == 3u);
+    assert(groups.shape_blend_execution_group_count == 1u);
+    assert(groups.shape_blend_execution_surface_count == 3u);
     assert(groups.fallback_mixed_group_count == 1u);
     assert(groups.max_group_size == 3u);
     assert(groups.max_active_surfaces == 3u);
@@ -984,6 +986,26 @@ void test_container_group_runtime_summary_contract() {
     assert(groups.max_group_bounds_width == 240.0f);
     assert(groups.max_group_bounds_height == 96.0f);
     assert(groups.max_group_bounds_area == 240.0f * 96.0f);
+    assert(groups.max_shape_blend_strength == 1.0f);
+
+    auto execution =
+        material_container_execution_descriptor(records[0], records);
+    assert(execution.command_index == 1u);
+    assert(execution.container_id == 42u);
+    assert(execution.surface_count == 3u);
+    assert(execution.active);
+    assert(execution.group_bounds_valid);
+    assert(execution.shape_blend_execution);
+    assert(execution.union_execution);
+    assert(execution.morph_execution);
+    assert(execution.shared_backdrop_scope);
+    assert(std::string_view(execution.execution_policy)
+           == "group-edge-continuity");
+    assert(execution.group_x == 12.0f);
+    assert(execution.group_y == 20.0f);
+    assert(execution.group_w == 240.0f);
+    assert(execution.group_h == 96.0f);
+    assert(execution.shape_blend_strength == 1.0f);
 
     MaterialRuntimeSummary runtime_summary{};
     for (auto const& record : records)
@@ -1001,8 +1023,14 @@ void test_container_group_runtime_summary_contract() {
            == groups.shared_capture_saved_surface_count);
     assert(runtime_summary.container_groups.max_shared_capture_group_surfaces
            == groups.max_shared_capture_group_surfaces);
+    assert(runtime_summary.container_groups.shape_blend_execution_group_count
+           == groups.shape_blend_execution_group_count);
+    assert(runtime_summary.container_groups.shape_blend_execution_surface_count
+           == groups.shape_blend_execution_surface_count);
     assert(runtime_summary.container_groups.max_group_bounds_area
            == groups.max_group_bounds_area);
+    assert(runtime_summary.container_groups.max_shape_blend_strength
+           == groups.max_shape_blend_strength);
     assert(runtime_summary.max_saturation >= 1.0f);
     assert(runtime_summary.max_edge_highlight > 0.0f);
     assert(runtime_summary.max_edge_width > 0.0f);
@@ -1033,6 +1061,9 @@ void test_container_group_runtime_summary_contract() {
     assert(executor_summary.container_groups.shared_capture_surface_count == 4u);
     assert(executor_summary.container_groups.shared_capture_saved_surface_count == 2u);
     assert(executor_summary.container_groups.max_shared_capture_group_surfaces == 3u);
+    assert(executor_summary.container_groups.shape_blend_execution_group_count == 1u);
+    assert(executor_summary.container_groups.shape_blend_execution_surface_count == 3u);
+    assert(executor_summary.container_groups.max_shape_blend_strength == 1.0f);
     assert(executor_summary.paint_layer_count == 3u);
     assert(executor_summary.active_paint_layer_count == 3u);
     assert(executor_summary.shadow_paint_layer_count == 1u);

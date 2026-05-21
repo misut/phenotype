@@ -1631,6 +1631,10 @@ struct MaterialInstanceGPU {
     float interaction[4]{};
     // refraction strength, edge bias, max offset pixels, reserved
     float refraction[4]{};
+    // group x/y/w/h for container edge-continuity execution
+    float group_rect[4]{};
+    // shape blend strength, surface count, flags, command index
+    float group_effects[4]{};
 };
 
 // Per-vertex GPU layout for the triangle pipeline (FillPath fast path).
@@ -1964,6 +1968,8 @@ struct FrameScratch {
     std::vector<PendingImageCmd> images;
     std::vector<std::string> overlay_text_storage;
     std::vector<MaterialRuntimeRecord> material_records;
+    std::vector<MaterialContainerExecutionDescriptor>
+        material_container_execution_descriptors;
     std::uint32_t foreground_text_candidate_count = 0;
     std::uint32_t foreground_text_remap_count = 0;
     std::uint32_t full_frame_opaque_fill_count = 0;
@@ -2000,6 +2006,7 @@ struct FrameScratch {
         overlay_text_instances.clear();
         overlay_text_storage.clear();
         material_records.clear();
+        material_container_execution_descriptors.clear();
         foreground_text_candidate_count = 0;
         foreground_text_remap_count = 0;
         full_frame_opaque_fill_count = 0;
@@ -2290,7 +2297,8 @@ inline void append_linear_gradient_instances(
 }
 
 inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
-                                     MaterialPlan const& plan) {
+                                     MaterialPlan const& plan,
+                                     std::uint32_t command_index) {
     MaterialInstanceGPU inst{};
     inst.rect[0] = plan.geometry.x;
     inst.rect[1] = plan.geometry.y;
@@ -2325,7 +2333,79 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.refraction[0] = plan.refraction.strength;
     inst.refraction[1] = plan.refraction.edge_bias;
     inst.refraction[2] = plan.refraction.max_offset_pixels;
+    inst.group_rect[0] = plan.geometry.x;
+    inst.group_rect[1] = plan.geometry.y;
+    inst.group_rect[2] = plan.geometry.w;
+    inst.group_rect[3] = plan.geometry.h;
+    inst.group_effects[3] = static_cast<float>(command_index);
     out.push_back(inst);
+}
+
+inline void apply_material_container_execution_descriptors(
+        FrameScratch& scratch) {
+    if (scratch.material_instances.empty() || scratch.material_records.empty())
+        return;
+    scratch.material_container_execution_descriptors.clear();
+    scratch.material_container_execution_descriptors.reserve(
+        scratch.material_records.size());
+    for (std::size_t index = 0; index < scratch.material_records.size(); ++index) {
+        auto const& record = scratch.material_records[index];
+        auto const& plan = record.plan;
+        if (!plan.container.participates || plan.container.container_id == 0u)
+            continue;
+        auto const container_id = plan.container.container_id;
+        auto seen = false;
+        for (std::size_t prior = 0; prior < index; ++prior) {
+            auto const& prior_plan = scratch.material_records[prior].plan;
+            if (prior_plan.container.participates
+                && prior_plan.container.container_id == container_id) {
+                seen = true;
+                break;
+            }
+        }
+        if (seen)
+            continue;
+        auto const group = accumulate_material_container_group(
+            scratch.material_records,
+            container_id);
+        for (auto const& candidate : scratch.material_records) {
+            if (!material_plan_in_container(candidate.plan, container_id))
+                continue;
+            scratch.material_container_execution_descriptors.push_back(
+                material_container_execution_descriptor_from_group(
+                    candidate,
+                    group));
+        }
+    }
+    for (auto& inst : scratch.material_instances) {
+        auto const command_index =
+            static_cast<std::uint32_t>(
+                std::max(0.0f, std::round(inst.group_effects[3])));
+        auto const* execution =
+            static_cast<MaterialContainerExecutionDescriptor const*>(nullptr);
+        for (auto const& candidate :
+             scratch.material_container_execution_descriptors) {
+            if (candidate.command_index == command_index) {
+                execution = &candidate;
+                break;
+            }
+        }
+        if (!execution)
+            continue;
+        if (execution->group_bounds_valid && execution->shape_blend_execution) {
+            inst.group_rect[0] = execution->group_x;
+            inst.group_rect[1] = execution->group_y;
+            inst.group_rect[2] = execution->group_w;
+            inst.group_rect[3] = execution->group_h;
+            inst.group_effects[0] = execution->shape_blend_strength;
+            inst.group_effects[1] = static_cast<float>(execution->surface_count);
+            inst.group_effects[2] =
+                (execution->shape_blend_execution ? 1.0f : 0.0f)
+                + (execution->union_execution ? 2.0f : 0.0f)
+                + (execution->morph_execution ? 4.0f : 0.0f)
+                + (execution->shared_backdrop_scope ? 8.0f : 0.0f);
+        }
+    }
 }
 
 inline float material_paint_layer_alpha(
@@ -2798,7 +2878,8 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 if (material_plan_uses_sampled_backdrop_executor(plan)) {
                     append_material_instance(
                         scratch.batches.back().materials,
-                        plan);
+                        plan,
+                        current_command_index);
                 } else {
                     append_material_paint_layer_instances(
                         scratch.batches.back().colors,
@@ -4116,6 +4197,7 @@ struct MaterialVsOut {
     float4 pos [[position]];
     float2 local_pos;
     float2 rect_size;
+    float2 screen_pos;
     float2 screen_uv;
     float content_scale;
     float4 tint;
@@ -4126,6 +4208,8 @@ struct MaterialVsOut {
     float4 luminance_curve;
     float4 interaction;
     float4 refraction;
+    float4 group_rect;
+    float4 group_effects;
 };
 
 struct MaterialInstance {
@@ -4138,6 +4222,8 @@ struct MaterialInstance {
     float4 luminance_curve;
     float4 interaction;
     float4 refraction;
+    float4 group_rect;
+    float4 group_effects;
 };
 
 vertex MaterialVsOut vs_material(
@@ -4160,6 +4246,7 @@ vertex MaterialVsOut vs_material(
     out.pos = float4(cx, cy, 0, 1);
     out.local_pos = c * inst.rect.zw;
     out.rect_size = inst.rect.zw;
+    out.screen_pos = float2(px, py);
     out.screen_uv = float2(px / u.viewport.x, py / u.viewport.y);
     out.content_scale = u.content_scale;
     out.tint = inst.tint;
@@ -4170,6 +4257,8 @@ vertex MaterialVsOut vs_material(
     out.luminance_curve = inst.luminance_curve;
     out.interaction = inst.interaction;
     out.refraction = inst.refraction;
+    out.group_rect = inst.group_rect;
+    out.group_effects = inst.group_effects;
     return out;
 }
 
@@ -4195,6 +4284,46 @@ fragment float4 fs_material(
         edge_alpha = clamp(0.5 - d, 0.0, 1.0);
         signed_edge_distance = abs(d);
     }
+    float2 normalized_local =
+        (in.local_pos / max(in.rect_size, float2(1.0)) - float2(0.5)) * 2.0;
+    float group_blend_strength = clamp(in.group_effects.x, 0.0, 1.0);
+    if (group_blend_strength > 0.0
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 group_size = max(in.group_rect.zw, float2(1.0));
+        float2 group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            group_size);
+        float2 group_edge_distance = min(
+            group_local,
+            max(group_size - group_local, float2(0.0)));
+        float group_signed_edge_distance = max(
+            min(group_edge_distance.x, group_edge_distance.y),
+            0.0);
+        float group_radius = min(
+            max(radius, 0.0),
+            min(group_size.x, group_size.y) * 0.5);
+        if (group_radius > 0.0) {
+            float2 group_half_size = group_size * 0.5;
+            float2 group_p =
+                abs(group_local - group_half_size)
+                - group_half_size
+                + float2(group_radius);
+            float group_d = length(max(group_p, float2(0.0))) - group_radius;
+            group_signed_edge_distance = abs(group_d);
+        }
+        signed_edge_distance = mix(
+            signed_edge_distance,
+            group_signed_edge_distance,
+            group_blend_strength);
+        float2 group_normalized_local =
+            (group_local / group_size - float2(0.5)) * 2.0;
+        normalized_local = mix(
+            normalized_local,
+            group_normalized_local,
+            group_blend_strength);
+    }
 
     float2 texel = 1.0 / float2(float(backdrop.get_width()),
                                 float(backdrop.get_height()));
@@ -4209,8 +4338,6 @@ fragment float4 fs_material(
     float refraction_edge_bias = clamp(in.refraction.y, 0.0, 1.0);
     float refraction_offset_pixels = clamp(in.refraction.z, 0.0, 8.0)
         * (refraction_strength > 0.0 ? 1.0 : 0.0);
-    float2 normalized_local =
-        (in.local_pos / max(in.rect_size, float2(1.0)) - float2(0.5)) * 2.0;
     float normalized_len = length(normalized_local);
     float2 refraction_dir = normalized_len > 0.0001
         ? normalized_local / normalized_len
@@ -7817,6 +7944,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         native_attrs("text_prepare"));
 
     finalize_batches(g_renderer.scratch);
+    apply_material_container_execution_descriptors(g_renderer.scratch);
 
     MaterialExecutorSummary material_summary;
     material_summary.cpu_decode_ns = decode_ns;

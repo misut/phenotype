@@ -2406,7 +2406,8 @@ namespace detail {
     }
 
     inline json::Value material_container_group_member_json(
-            MaterialRuntimeRecord const& record) {
+            MaterialRuntimeRecord const& record,
+            MaterialContainerExecutionDescriptor const& execution) {
         auto const& plan = record.plan;
         json::Object geometry;
         geometry.emplace("x", json::Value{plan.geometry.x});
@@ -2453,6 +2454,15 @@ namespace detail {
             "shared_backdrop_scope",
             json::Value{plan.container.shared_backdrop_scope});
         out.emplace(
+            "group_execution_policy",
+            json::Value{execution.execution_policy});
+        out.emplace(
+            "shape_blend_execution",
+            json::Value{execution.shape_blend_execution});
+        out.emplace(
+            "shape_blend_strength",
+            json::Value{execution.shape_blend_strength});
+        out.emplace(
             "reduced_motion_suppressed_morph",
             json::Value{plan.container.reduced_motion_suppressed_morph});
         out.emplace(
@@ -2472,6 +2482,10 @@ namespace detail {
         auto const bounds_height = group.has_bounds
             ? std::max(0.0f, group.max_y - group.min_y)
             : 0.0f;
+        auto const shape_blend_execution =
+            material_container_group_shape_blend_execution_active(group);
+        auto const shape_blend_strength =
+            material_container_group_shape_blend_strength(group);
 
         json::Object bounds;
         bounds.emplace("valid", json::Value{group.has_bounds});
@@ -2520,6 +2534,20 @@ namespace detail {
                     group.shared_backdrop_scope_surfaces > 1u
                         ? group.shared_backdrop_scope_surfaces - 1u
                         : 0u)});
+        out.emplace(
+            "execution_policy",
+            json::Value{material_container_execution_policy_name(group)});
+        out.emplace(
+            "shape_blend_execution",
+            json::Value{shape_blend_execution});
+        out.emplace(
+            "shape_blend_execution_surfaces",
+            json::Value{
+                static_cast<std::int64_t>(
+                    shape_blend_execution ? group.active_surfaces : 0u)});
+        out.emplace(
+            "shape_blend_strength",
+            json::Value{shape_blend_strength});
         out.emplace(
             "shape_pair_count",
             json::Value{static_cast<std::int64_t>(group.shape_pair_count)});
@@ -2609,8 +2637,14 @@ namespace detail {
                     ++group.interactive_surfaces;
                 if (candidate.container.shared_backdrop_scope)
                     ++group.shared_backdrop_scope_surfaces;
+                auto const execution =
+                    material_container_execution_descriptor(
+                        candidate_record,
+                        records);
                 members.push_back(
-                    material_container_group_member_json(candidate_record));
+                    material_container_group_member_json(
+                        candidate_record,
+                        execution));
             }
             for (std::size_t left = 0; left < records.size(); ++left) {
                 auto const& a = records[left].plan;
@@ -2674,6 +2708,16 @@ namespace detail {
                 static_cast<std::int64_t>(
                     summary.max_shared_capture_group_surfaces)});
         out.emplace(
+            "shape_blend_execution_group_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.shape_blend_execution_group_count)});
+        out.emplace(
+            "shape_blend_execution_surface_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.shape_blend_execution_surface_count)});
+        out.emplace(
             "fallback_mixed_group_count",
             json::Value{
                 static_cast<std::int64_t>(
@@ -2731,6 +2775,9 @@ namespace detail {
         out.emplace(
             "max_group_bounds_area",
             json::Value{summary.max_group_bounds_area});
+        out.emplace(
+            "max_shape_blend_strength",
+            json::Value{summary.max_shape_blend_strength});
         return json::Value{std::move(out)};
     }
 

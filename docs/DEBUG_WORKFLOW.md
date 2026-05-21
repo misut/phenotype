@@ -981,6 +981,15 @@ matching executor summary. These counters explain how many grouped surfaces use
 shared backdrop capture, how many per-surface captures the group saves, and the
 largest capture-sharing group size before you inspect a Metal or native blur
 pass.
+For schema 44 and later, inspect
+`renderer.material_runtime_summary.container_groups.shape_blend_*`,
+`max_shape_blend_strength`, and the matching fields in
+`renderer.material_container_groups[]` when grouped glass still looks like
+independent rounded rectangles. The pure descriptor now identifies which
+surfaces should execute group-edge continuity, and macOS uploads those bounds to
+the material shader. A mismatch usually points at stale `MaterialRuntimeRecord`
+group analysis, backend instance packing, or the Metal material fragment's
+group edge-distance calculation.
 For schema 32 and later, inspect `paint_layers[]` whenever a material surface is
 not sampled backdrop glass. This array is the pure fallback draw recipe, not
 backend telemetry: shadow, fill, and edge layers expose their executor,
@@ -1050,6 +1059,9 @@ The same summary can pin `container_modes`, `container_ids`, `union_ids`,
 `container_shared_capture_surface_count`,
 `container_shared_capture_saved_surface_count`,
 `container_max_shared_capture_group_surfaces`,
+`container_shape_blend_execution_group_count`,
+`container_shape_blend_execution_surface_count`,
+`container_max_shape_blend_strength`,
 `container_fallback_mixed_group_count`, `container_max_group_size`,
 `container_max_active_surfaces`, `container_max_sampled_backdrop_surfaces`, and
 `container_max_fallback_surfaces`.
