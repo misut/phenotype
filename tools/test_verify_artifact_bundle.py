@@ -710,6 +710,42 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
     else:
         depth_strategy = "none"
 
+    if bool(primary["active"]):
+        stages = []
+        if shadow:
+            stages.append("shadow")
+        stages.append("primary")
+        if edge:
+            stages.append("edge")
+        if noise:
+            stages.append("noise")
+        stage_order = "-".join(stages)
+    else:
+        stage_order = "none"
+
+    captures_backdrop = (
+        bool(backdrop_access["shared_frame_capture"])
+        or bool(backdrop_access["next_frame_capture_required"])
+        or bool(backdrop_access["required"]))
+    if not captures_backdrop:
+        backdrop_capture_policy = "no-capture"
+        foreground_sampling_policy = "not-applicable"
+    elif backdrop_sampling:
+        backdrop_capture_policy = "sample-current-frame"
+        foreground_sampling_policy = (
+            "foreground-excluded-from-sample"
+            if bool(backdrop_access["excludes_foreground_text"])
+            else "foreground-inclusion-risk")
+    else:
+        backdrop_capture_policy = (
+            "warmup-next-frame"
+            if bool(backdrop_access["next_frame_capture_required"])
+            else "shared-frame-capture")
+        foreground_sampling_policy = (
+            "foreground-excluded-from-warmup"
+            if bool(backdrop_access["excludes_foreground_text"])
+            else "foreground-inclusion-risk")
+
     if kind == "none":
         frosting_source = "none"
     elif backdrop_sampling:
@@ -742,6 +778,9 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
             interaction["response_model"]
             if bool(interaction["active"]) else "none"),
         "fallback_source": plan["fallback_path"] if fallback else "none",
+        "stage_order": stage_order,
+        "backdrop_capture_policy": backdrop_capture_policy,
+        "foreground_sampling_policy": foreground_sampling_policy,
         "backdrop_sampled": backdrop_sampling,
         "blur_required": bool(primary["requires_backdrop"]),
         "frosting_required": backdrop_sampling,
@@ -759,6 +798,10 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
         "refraction_required": bool(refraction["active"]),
         "interaction_required": bool(interaction["active"]),
         "fallback_required": fallback,
+        "backdrop_capture_required": captures_backdrop,
+        "foreground_excluded_from_backdrop": bool(
+            backdrop_access["excludes_foreground_text"]),
+        "stage_order_stable": True,
         "bounded": (
             bool(budget["bounded_texture_copy"])
             and bool(sampling_kernel["bounded"])
@@ -3079,6 +3122,29 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["likely_layer"], "material-optical-composition")
         self.assertEqual(failure["likely_pass"], "backdrop-sample-blur")
         self.assertIn("MaterialPlan", failure["hint"])
+
+    def test_optical_stage_order_mismatch_points_to_pure_contract(self) -> None:
+        plan = sampled_material_plan()
+        composition = plan["optical_composition"]
+        assert isinstance(composition, dict)
+        composition["stage_order"] = "primary"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"]
+            == "material optical composition stage_order matches plan")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".optical_composition.stage_order")
+        self.assertEqual(failure["expected"], "shadow-primary-edge-noise")
+        self.assertEqual(failure["actual"], "primary")
+        self.assertEqual(failure["likely_layer"], "material-optical-composition")
+        self.assertEqual(failure["likely_pass"], "backdrop-sample-blur")
+        self.assertIn("resolved pure MaterialPlan", failure["hint"])
 
     def test_renderer_contract_version_mismatch_is_llm_actionable(self) -> None:
         root = snapshot(material_plan())

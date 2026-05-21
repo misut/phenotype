@@ -42,7 +42,7 @@
     "fallback": 0,
     "backdrop_sampling": 30,
     "contract_versions": {
-      "37": 30
+      "38": 30
     },
     "theme_foreground_matches_theme": 30,
     "theme_accent_matches_theme": 0,
@@ -152,6 +152,15 @@
     },
     "optical_depth_strategies": {
       "layered-shadow-edge-noise": 30
+    },
+    "optical_stage_orders": {
+      "shadow-primary-edge-noise": 30
+    },
+    "optical_backdrop_capture_policies": {
+      "sample-current-frame": 30
+    },
+    "optical_foreground_sampling_policies": {
+      "foreground-excluded-from-sample": 30
     },
     "optical_backdrop_driven": 30,
     "optical_blur_active": 30,

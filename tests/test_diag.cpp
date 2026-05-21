@@ -1175,6 +1175,20 @@ void test_material_runtime_record_json_contract() {
     assert(optical_response.at("interaction_modulates_optics").as_bool()
            == false);
     assert(optical_response.at("deterministic_fallback").as_bool() == true);
+    auto const& optical_composition = obj.at("optical_composition").as_object();
+    assert(optical_composition.at("schema_version").as_integer()
+           == material_plan_contract_version);
+    assert(optical_composition.at("stage_order").as_string()
+           == "shadow-primary-edge");
+    assert(optical_composition.at("backdrop_capture_policy").as_string()
+           == "no-capture");
+    assert(optical_composition.at("foreground_sampling_policy").as_string()
+           == "not-applicable");
+    assert(optical_composition.at("backdrop_capture_required").as_bool()
+           == false);
+    assert(optical_composition.at("foreground_excluded_from_backdrop").as_bool()
+           == false);
+    assert(optical_composition.at("stage_order_stable").as_bool() == true);
     auto const& decision_trace = obj.at("decision_trace").as_object();
     assert(decision_trace.at("has_material").as_bool() == true);
     assert(decision_trace.at("role_allows_liquid_glass").as_bool() == true);

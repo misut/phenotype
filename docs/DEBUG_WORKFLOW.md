@@ -698,16 +698,17 @@ the actual `material_plans` executed for the frame. Each plan includes:
   backdrop, blur, frosting, tint, saturation, luminance preservation, edge
   highlight, bounded refraction, shadow depth, noise/dither, foreground
   vibrancy, and deterministic fallback;
-- `refraction`, the schema-37 pure bounded edge-lens profile. It names the
+- `refraction`, the schema-38 pure bounded edge-lens profile. It names the
   refraction model and source, records active/backdrop/interaction/reduced-
   motion/bounded flags, and exposes the exact strength, edge bias, and maximum
   pixel offset uploaded by sampled-backdrop material shaders;
 - `optical_composition`, the pure execution recipe for the same surface. It
   names the blur, frosting, tint, luminance, refraction, depth, interaction, and
-  fallback sources, records which optical channels are required, proves the
-  composition is bounded and deterministic, and exposes the exact scalar values,
-  sample taps, texture-copy pixels, and surface-sample pixels consumed by stage
-  optics;
+  fallback sources, records which optical channels are required, names the
+  stable shadow/primary/edge/noise order, publishes backdrop capture and
+  foreground sampling policy, proves the composition is bounded and
+  deterministic, and exposes the exact scalar values, sample taps, texture-copy
+  pixels, and surface-sample pixels consumed by stage optics;
 - raw `geometry`, derived `shape` analysis, tint, blur radius, saturation,
   luminance curve, edge highlight, noise, and shadow values for the resolved
   plan. `shape.kind` classifies the backend-executable geometry as
@@ -986,7 +987,7 @@ For schema 35 and later, inspect `execution_audit` immediately after
 serialized pass, stage, and paint-layer arrays. A mismatch points at pure
 planning, command serialization, or debug JSON assembly. It should not be fixed
 by adding backend policy branches.
-For schema 37 and later, inspect `refraction` and `optical_composition` before
+For schema 38 and later, inspect `refraction` and `optical_composition` before
 comparing stage optics or shader constants. A mismatch in
 `execution_stages[n].optics.refraction_*` should trace back to these pure
 objects, while a mismatch inside `optical_composition` itself points at

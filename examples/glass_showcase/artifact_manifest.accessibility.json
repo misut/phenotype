@@ -38,7 +38,7 @@
       "reduced transparency disables backdrop sampling": 8
     },
     "contract_versions": {
-      "37": 8
+      "38": 8
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -273,6 +273,15 @@
     },
     "optical_depth_strategies": {
       "fallback-shadow-edge": 8
+    },
+    "optical_stage_orders": {
+      "shadow-primary-edge": 8
+    },
+    "optical_backdrop_capture_policies": {
+      "no-capture": 8
+    },
+    "optical_foreground_sampling_policies": {
+      "not-applicable": 8
     },
     "optical_backdrop_driven": 0,
     "optical_blur_active": 0,
