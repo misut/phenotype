@@ -15,6 +15,40 @@ namespace fs = std::filesystem;
 using namespace phenotype_cli::common;
 using namespace phenotype_cli::runtime;
 
+struct MaterialExecutorBudgetObservation {
+    bool present = false;
+    std::int64_t plan_count = -1;
+    std::int64_t material_instance_count = -1;
+    std::int64_t sampled_backdrop_instance_count = -1;
+    std::int64_t fallback_instance_count = -1;
+    std::int64_t execution_stage_count = -1;
+    std::int64_t active_execution_stage_count = -1;
+    std::int64_t backdrop_execution_stage_count = -1;
+    std::int64_t dropped_execution_stage_count = -1;
+    std::int64_t draw_calls = -1;
+    std::int64_t total_sample_taps = -1;
+    std::int64_t max_sample_taps = -1;
+    std::int64_t upload_bytes = -1;
+    std::int64_t buffer_capacity_bytes = -1;
+    std::int64_t backdrop_copy_count = -1;
+    std::int64_t backdrop_copy_pixels = -1;
+    std::int64_t max_backdrop_pixels = -1;
+    std::int64_t planned_frame_capture_count = -1;
+    std::int64_t planned_frame_capture_pixels = -1;
+    std::int64_t planned_surface_sample_pixels = -1;
+    std::optional<bool> pipeline_ready;
+    std::optional<bool> backdrop_source_ready;
+    std::optional<bool> upload_required;
+    std::optional<bool> draw_required;
+    std::optional<bool> uploaded;
+    std::optional<bool> drawn;
+    std::optional<bool> backdrop_copy_required;
+    std::string upload_status = "unknown";
+    std::string draw_status = "unknown";
+    std::string backdrop_copy_policy = "unknown";
+    std::string backdrop_copy_skip_reason = "unknown";
+};
+
 struct MaterialObservationSummary {
     bool renderer_details_present = false;
     bool runtime_summary_present = false;
@@ -28,6 +62,7 @@ struct MaterialObservationSummary {
     std::int64_t runtime_plan_count = -1;
     std::int64_t runtime_backdrop_copy_count = -1;
     std::int64_t runtime_next_frame_capture_plan_count = -1;
+    MaterialExecutorBudgetObservation executor_budget;
     std::vector<std::string> kinds;
     std::vector<std::string> roles;
     std::vector<std::string> fallback_paths;
@@ -139,9 +174,136 @@ void append_json_string_field(json::Value const& value,
         append_unique(out, *text);
 }
 
+void assign_json_integer(json::Value const& value,
+                         std::initializer_list<std::string_view> path,
+                         std::int64_t& out) {
+    if (auto integer = json_integer_at(value, path))
+        out = *integer;
+}
+
+void assign_json_string(json::Value const& value,
+                        std::initializer_list<std::string_view> path,
+                        std::string& out) {
+    if (auto text = json_string_at(value, path))
+        out = *text;
+}
+
 auto json_report_or_null(std::optional<json::Value> const& value)
     -> std::string {
     return value ? json::emit(*value) : "null";
+}
+
+auto optional_bool_json(std::optional<bool> value) -> std::string {
+    if (!value)
+        return "null";
+    return *value ? "true" : "false";
+}
+
+auto material_executor_budget_from_runtime(json::Value const& runtime_value)
+    -> MaterialExecutorBudgetObservation {
+    auto budget = MaterialExecutorBudgetObservation{.present = true};
+    assign_json_integer(runtime_value, {"plan_count"}, budget.plan_count);
+    assign_json_integer(
+        runtime_value,
+        {"material_instance_count"},
+        budget.material_instance_count);
+    assign_json_integer(
+        runtime_value,
+        {"sampled_backdrop_instance_count"},
+        budget.sampled_backdrop_instance_count);
+    assign_json_integer(
+        runtime_value,
+        {"fallback_instance_count"},
+        budget.fallback_instance_count);
+    assign_json_integer(
+        runtime_value,
+        {"execution_stage_count"},
+        budget.execution_stage_count);
+    assign_json_integer(
+        runtime_value,
+        {"active_execution_stage_count"},
+        budget.active_execution_stage_count);
+    assign_json_integer(
+        runtime_value,
+        {"backdrop_execution_stage_count"},
+        budget.backdrop_execution_stage_count);
+    assign_json_integer(
+        runtime_value,
+        {"dropped_execution_stage_count"},
+        budget.dropped_execution_stage_count);
+    assign_json_integer(
+        runtime_value,
+        {"material_draw_calls"},
+        budget.draw_calls);
+    assign_json_integer(
+        runtime_value,
+        {"material_total_sample_taps"},
+        budget.total_sample_taps);
+    assign_json_integer(
+        runtime_value,
+        {"material_max_sample_taps"},
+        budget.max_sample_taps);
+    assign_json_integer(
+        runtime_value,
+        {"material_upload_bytes"},
+        budget.upload_bytes);
+    assign_json_integer(
+        runtime_value,
+        {"material_buffer_capacity_bytes"},
+        budget.buffer_capacity_bytes);
+    assign_json_integer(
+        runtime_value,
+        {"backdrop_copy_count"},
+        budget.backdrop_copy_count);
+    assign_json_integer(
+        runtime_value,
+        {"backdrop_copy_pixels"},
+        budget.backdrop_copy_pixels);
+    assign_json_integer(
+        runtime_value,
+        {"planned_frame_capture_count"},
+        budget.planned_frame_capture_count);
+    assign_json_integer(
+        runtime_value,
+        {"planned_frame_capture_pixels"},
+        budget.planned_frame_capture_pixels);
+    assign_json_integer(
+        runtime_value,
+        {"planned_surface_sample_pixels"},
+        budget.planned_surface_sample_pixels);
+    budget.pipeline_ready =
+        json_bool_at(runtime_value, {"material_pipeline_ready"});
+    budget.backdrop_source_ready =
+        json_bool_at(runtime_value, {"material_backdrop_source_ready"});
+    budget.upload_required = json_bool_at(
+        runtime_value,
+        {"material_sampled_backdrop_upload_required"});
+    budget.draw_required = json_bool_at(
+        runtime_value,
+        {"material_sampled_backdrop_draw_required"});
+    budget.uploaded =
+        json_bool_at(runtime_value, {"material_sampled_backdrop_uploaded"});
+    budget.drawn =
+        json_bool_at(runtime_value, {"material_sampled_backdrop_drawn"});
+    budget.backdrop_copy_required =
+        json_bool_at(runtime_value, {"backdrop_copy_required"});
+    assign_json_string(
+        runtime_value,
+        {"material_upload_status"},
+        budget.upload_status);
+    assign_json_string(
+        runtime_value,
+        {"material_draw_status"},
+        budget.draw_status);
+    assign_json_string(
+        runtime_value,
+        {"backdrop_copy_policy"},
+        budget.backdrop_copy_policy);
+    assign_json_string(
+        runtime_value,
+        {"backdrop_copy_skip_reason"},
+        budget.backdrop_copy_skip_reason);
+    return budget;
 }
 
 auto material_observation_from_snapshot(json::Value const& snapshot)
@@ -169,6 +331,8 @@ auto material_observation_from_snapshot(json::Value const& snapshot)
             {"material_executor_summary"})) {
         summary.runtime_summary_present = true;
         auto runtime_value = json::Value{*runtime};
+        summary.executor_budget =
+            material_executor_budget_from_runtime(runtime_value);
         if (auto count = json_integer_at(runtime_value, {"plan_count"}))
             summary.runtime_plan_count = *count;
         if (auto count = json_integer_at(runtime_value, {"backdrop_copy_count"}))
@@ -229,6 +393,12 @@ auto material_observation_from_snapshot(json::Value const& snapshot)
                 {"backdrop_access", "next_frame_capture_required"});
             next.value_or(false)) {
             ++summary.next_frame_capture_required_count;
+        }
+        if (auto pixels = json_integer_at(
+                plan,
+                {"resource_budget", "max_backdrop_pixels"})) {
+            summary.executor_budget.max_backdrop_pixels =
+                std::max(summary.executor_budget.max_backdrop_pixels, *pixels);
         }
     }
     return summary;
@@ -299,6 +469,60 @@ auto observe_snapshot(fs::path const& bundle) -> SnapshotObservation {
     return observation;
 }
 
+auto material_executor_budget_json(
+        MaterialExecutorBudgetObservation const& budget) -> std::string {
+    return std::format(
+        "{{\"present\":{},\"plan_count\":{},\"material_instance_count\":{},"
+        "\"sampled_backdrop_instance_count\":{},"
+        "\"fallback_instance_count\":{},\"execution_stage_count\":{},"
+        "\"active_execution_stage_count\":{},"
+        "\"backdrop_execution_stage_count\":{},"
+        "\"dropped_execution_stage_count\":{},\"draw_calls\":{},"
+        "\"total_sample_taps\":{},\"max_sample_taps\":{},"
+        "\"upload_bytes\":{},\"buffer_capacity_bytes\":{},"
+        "\"backdrop_copy_count\":{},\"backdrop_copy_pixels\":{},"
+        "\"max_backdrop_pixels\":{},"
+        "\"planned_frame_capture_count\":{},"
+        "\"planned_frame_capture_pixels\":{},"
+        "\"planned_surface_sample_pixels\":{},\"pipeline_ready\":{},"
+        "\"backdrop_source_ready\":{},\"upload_required\":{},"
+        "\"draw_required\":{},\"uploaded\":{},\"drawn\":{},"
+        "\"backdrop_copy_required\":{},\"upload_status\":{},"
+        "\"draw_status\":{},\"backdrop_copy_policy\":{},"
+        "\"backdrop_copy_skip_reason\":{}}}",
+        budget.present ? "true" : "false",
+        budget.plan_count,
+        budget.material_instance_count,
+        budget.sampled_backdrop_instance_count,
+        budget.fallback_instance_count,
+        budget.execution_stage_count,
+        budget.active_execution_stage_count,
+        budget.backdrop_execution_stage_count,
+        budget.dropped_execution_stage_count,
+        budget.draw_calls,
+        budget.total_sample_taps,
+        budget.max_sample_taps,
+        budget.upload_bytes,
+        budget.buffer_capacity_bytes,
+        budget.backdrop_copy_count,
+        budget.backdrop_copy_pixels,
+        budget.max_backdrop_pixels,
+        budget.planned_frame_capture_count,
+        budget.planned_frame_capture_pixels,
+        budget.planned_surface_sample_pixels,
+        optional_bool_json(budget.pipeline_ready),
+        optional_bool_json(budget.backdrop_source_ready),
+        optional_bool_json(budget.upload_required),
+        optional_bool_json(budget.draw_required),
+        optional_bool_json(budget.uploaded),
+        optional_bool_json(budget.drawn),
+        optional_bool_json(budget.backdrop_copy_required),
+        json_string(budget.upload_status),
+        json_string(budget.draw_status),
+        json_string(budget.backdrop_copy_policy),
+        json_string(budget.backdrop_copy_skip_reason));
+}
+
 auto material_observation_json(MaterialObservationSummary const& summary)
     -> std::string {
     return std::format(
@@ -310,6 +534,7 @@ auto material_observation_json(MaterialObservationSummary const& summary)
         "\"next_frame_capture_required_count\":{},"
         "\"runtime_plan_count\":{},\"runtime_backdrop_copy_count\":{},"
         "\"runtime_next_frame_capture_plan_count\":{},"
+        "\"executor_budget\":{},"
         "\"kinds\":{},\"roles\":{},\"fallback_paths\":{},"
         "\"fallback_reasons\":{},\"backdrop_sources\":{},"
         "\"backdrop_access_sources\":{},"
@@ -328,6 +553,7 @@ auto material_observation_json(MaterialObservationSummary const& summary)
         summary.runtime_plan_count,
         summary.runtime_backdrop_copy_count,
         summary.runtime_next_frame_capture_plan_count,
+        material_executor_budget_json(summary.executor_budget),
         string_array_json(summary.kinds),
         string_array_json(summary.roles),
         string_array_json(summary.fallback_paths),
