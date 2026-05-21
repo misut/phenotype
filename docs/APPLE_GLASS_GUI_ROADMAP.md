@@ -218,11 +218,21 @@ Finder-style search fields now use the same typed path through
 `TextFieldStyleOptions` and `widget::glass_text_field_style`, so input chrome
 can be verified as interactive material while keyboard-only focus-ring behavior
 stays in the core input/focus contract.
-Finder-style selected rows now use `GlassSelectionStyleOptions` and
-`widget::glass_selection_button_style`, giving sidebar/list/icon selection a
+Finder-style selected rows now use `GlassOutlineRowStyleOptions` and
+`widget::glass_outline_row_button_style`, giving sidebar/list/icon/column rows a
 first-class material plan instead of ad hoc painted button chrome. Unselected
-rows stay non-material by default so the selection affordance is debuggable
-without adding frame-to-frame material work for every file row.
+rows stay non-material by default, while expanded outline rows may opt into
+clear material so hierarchy affordances remain debuggable without making every
+file row a sampled-backdrop surface.
+Finder-style split controls now use `GlassSplitButtonStyleOptions` and
+`widget::glass_split_button_style`. The preset carries toolbar role, segment,
+container, union, spacing, hover/press, and morph metadata as immutable widget
+input before the backend sees a command, so grouped toolbar actions can join the
+same material-container contract as surrounding glass surfaces.
+Overlay panels now include first-class `Sheet`, `Inspector`, and
+`CommandPalette` surface presets. `layout::dialog` consumes the sheet preset as
+`Dialog Sheet`, so modal chrome is emitted as an interactive overlay material
+node with the same pure planning, fallback, and artifact contract as popovers.
 Finder-style popover menu actions now use `GlassMenuItemStyleOptions` and
 `widget::glass_menu_item_button_style`, giving transient overlay action chrome
 a clear material plan while keeping disabled or hidden actions out of the
@@ -597,8 +607,14 @@ Finder-like text and canvas buttons can share native-looking chrome without
 copying sidebar/toolbar constants in each example. `ButtonStyleOptions` now has
 an optional `MaterialStyle`, and `widget::glass_control_button_style` /
 `widget::glass_button` attach resolved material metadata to regular and canvas
-buttons. `widget::glass_selection_button_style` extends that contract to
-Finder-like selected rows while preserving non-material unselected rows.
+buttons. `widget::glass_outline_row_button_style` extends that contract to
+Finder-like selected and expanded outline rows while preserving non-material
+unselected rows. `widget::glass_split_button_style` adds grouped toolbar
+control metadata, including optional container/union/morph identity, without
+requiring a backend policy branch.
+`layout::sheet`, `layout::inspector_panel`, and `layout::command_palette` now
+cover overlay panels with typed glass presets; `layout::dialog` uses the sheet
+preset instead of a raw painted card.
 `widget::glass_menu_item_button_style` and
 `widget::glass_table_header_button_style` cover transient overlay actions and
 content-layer table headers without moving those policies into a backend.
@@ -711,8 +727,8 @@ Apple-style glass interface while preserving platform parity:
   sidebar/location navigation, list content, preview, search, create, and
   delete actions;
 - first-class material app-chrome helpers for toolbar, navigation, sidebar,
-  status bar, popover menu items, and table headers so examples do not need to
-  hand-roll every glass container shape;
+  status bar, split buttons, outline/list rows, popover menu items, and table
+  headers so examples do not need to hand-roll every glass container shape;
 - tests that cover command encoding, parser behavior, fallback policy, and at
   least one captured-frame invariant on native backends.
 
@@ -936,15 +952,14 @@ Current seed:
 
 ## Next recommended PR
 
-The initial G0-G4 path is now landed, and segmented controls/popovers/search
-fields/selected rows/menu items/table headers/disclosure rows now use the
-first-class material helper path. The next
-useful PR should avoid another schema-only increment unless a real failure
-appears. Recommended directions:
+The initial G0-G4 path is now landed, and segmented controls/popovers/sheets/
+inspectors/command palettes/search fields/selected rows/split buttons/outline
+rows/menu items/table headers/disclosure rows now use the first-class material
+helper path. The next useful PR should avoid another schema-only increment
+unless a real failure appears. Recommended directions:
 
-- expand first-class material-aware controls beyond buttons, segmented
-  controls, search fields, selected rows, menu items, and table headers,
-  especially split buttons and richer outline/list rows;
+- expand first-class material-aware controls into menus, tooltips, context
+  menus, and richer scroll/list selection states;
 - tighten macOS material executor budgets after collecting a small sample of
   local and CI timing/copy values;
 - add Android CI emulator wiring if runner capacity and cost are acceptable;

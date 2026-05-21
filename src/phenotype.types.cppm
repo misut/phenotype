@@ -1273,6 +1273,29 @@ struct GlassControlStyleOptions {
     TextAlign text_align = TextAlign::Center;
 };
 
+enum class GlassSplitButtonSegment {
+    Single,
+    Leading,
+    Middle,
+    Trailing,
+};
+
+struct GlassSplitButtonStyleOptions {
+    MaterialKind kind = MaterialKind::Clear;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Toolbar;
+    GlassSplitButtonSegment segment = GlassSplitButtonSegment::Single;
+    bool selected = false;
+    bool disabled = false;
+    std::uint32_t container_id = 0;
+    std::uint32_t union_id = 0;
+    float spacing = 0.0f;
+    float width = 0.0f;
+    float height = -1.0f;
+    float border_radius = -1.0f;
+    float font_size = 0.0f;
+    TextAlign text_align = TextAlign::Center;
+};
+
 enum class GlassSelectionChrome {
     AccentFill,
     SidebarPill,
@@ -1285,6 +1308,29 @@ struct GlassSelectionStyleOptions {
     MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
     bool selected = false;
     bool disabled = false;
+    float width = 0.0f;
+    float height = -1.0f;
+    float border_radius = -1.0f;
+    float font_size = 0.0f;
+    TextAlign text_align = TextAlign::Start;
+};
+
+enum class GlassOutlineRowChrome {
+    ListRow,
+    SidebarPill,
+    ColumnRow,
+};
+
+struct GlassOutlineRowStyleOptions {
+    GlassOutlineRowChrome chrome = GlassOutlineRowChrome::ListRow;
+    MaterialKind selected_kind = MaterialKind::Thin;
+    MaterialKind expanded_kind = MaterialKind::Clear;
+    MaterialKind unselected_kind = MaterialKind::None;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
+    bool selected = false;
+    bool expanded = false;
+    bool disabled = false;
+    unsigned int depth = 0;
     float width = 0.0f;
     float height = -1.0f;
     float border_radius = -1.0f;

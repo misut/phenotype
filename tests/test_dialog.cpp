@@ -69,11 +69,15 @@ void test_dialog_registers_overlay_with_centered_card() {
     auto& sized = detail::node_at(row.children[0]);
     auto& card = detail::node_at(sized.children[0]);
     auto const& theme = current_theme();
-    // Card chrome — surface fill, themed border, rounded corners,
-    // even inner padding on all sides.
-    assert(card.background.r == theme.surface.r);
-    assert(card.border_color.r == theme.border.r);
+    // Dialog chrome is a first-class overlay material sheet.
+    assert(card.debug_semantic_label.compare("Dialog Sheet") == 0);
+    assert(card.material.kind == MaterialKind::Regular);
+    assert(card.material.role == MaterialSurfaceRole::Overlay);
+    assert(card.material.container.interactive);
+    assert(card.background == card.material.tint);
+    assert(card.border_color == card.material.border);
     assert(card.border_width == 1.0f);
+    assert(card.border_radius == theme.radius_lg);
     assert(card.style.padding[0] == theme.space_lg);
     assert(card.style.padding[1] == theme.space_lg);
     assert(card.style.padding[2] == theme.space_lg);

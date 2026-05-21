@@ -429,6 +429,70 @@ inline ButtonStyleOptions glass_control_button_style(
     return style;
 }
 
+inline ButtonStyleOptions glass_split_button_style(
+        GlassSplitButtonStyleOptions options = {}) {
+    auto const& t = detail::g_app.theme;
+    auto const kind = options.disabled ? MaterialKind::None : options.kind;
+    auto material = material_style_for_kind(kind, t);
+    material.role = options.role;
+    material.fallback = kind != MaterialKind::None;
+    material.container = MaterialContainerDescriptor{
+        options.container_id,
+        options.union_id,
+        options.spacing,
+        options.container_id != 0u && !options.disabled,
+        options.container_id != 0u && !options.disabled};
+
+    bool const grouped = options.segment != GlassSplitButtonSegment::Single;
+    unsigned char const base_alpha = static_cast<unsigned char>(
+        options.selected ? 186 : (grouped ? 126 : 112));
+    unsigned char const hover_alpha = static_cast<unsigned char>(
+        options.selected ? 214 : (grouped ? 156 : 148));
+    unsigned char const pressed_alpha = static_cast<unsigned char>(
+        options.selected ? 232 : (grouped ? 184 : 174));
+    if (kind != MaterialKind::None) {
+        material.tint = material_with_alpha(t.surface, base_alpha);
+        material.border = material_with_alpha(
+            t.border,
+            static_cast<unsigned char>(options.selected ? 150 : 96));
+        material.foreground = options.selected ? t.foreground : t.muted;
+    }
+
+    ButtonStyleOptions style;
+    style.disabled = options.disabled;
+    style.has_material = kind != MaterialKind::None;
+    style.material = material;
+    style.has_background = true;
+    style.background = kind != MaterialKind::None
+        ? material.tint
+        : t.transparent;
+    style.has_hover_background = true;
+    style.hover_background = material_with_alpha(t.surface, hover_alpha);
+    style.has_pressed_background = true;
+    style.pressed_background = material_with_alpha(t.surface, pressed_alpha);
+    style.has_border_color = true;
+    style.border_color = kind != MaterialKind::None
+        ? material.border
+        : t.transparent;
+    style.has_text_color = true;
+    style.text_color = options.disabled
+        ? t.state_disabled_fg
+        : (options.selected ? t.foreground : t.muted);
+    style.border_width = kind != MaterialKind::None
+        ? (options.selected ? 1.0f : 0.0f)
+        : 0.0f;
+    style.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : t.radius_md;
+    style.font_size = options.font_size;
+    style.max_width = options.width;
+    style.fixed_height = options.height;
+    style.min_hit_width = minimum_button_activation_size;
+    style.min_hit_height = minimum_button_activation_size;
+    style.text_align = options.text_align;
+    return style;
+}
+
 inline ButtonStyleOptions glass_selection_button_style(
         GlassSelectionStyleOptions options = {}) {
     auto const& t = detail::g_app.theme;
@@ -492,6 +556,93 @@ inline ButtonStyleOptions glass_selection_button_style(
     style.font_size = options.font_size;
     style.max_width = options.width;
     style.fixed_height = options.height;
+    style.min_hit_width = minimum_button_activation_size;
+    style.min_hit_height = minimum_button_activation_size;
+    style.text_align = options.text_align;
+    return style;
+}
+
+inline ButtonStyleOptions glass_outline_row_button_style(
+        GlassOutlineRowStyleOptions options = {}) {
+    auto const& t = detail::g_app.theme;
+    auto const kind = options.disabled ? MaterialKind::None
+        : (options.selected ? options.selected_kind
+           : (options.expanded ? options.expanded_kind
+              : options.unselected_kind));
+    auto material = material_style_for_kind(kind, t);
+    material.role = options.role;
+    material.fallback = kind != MaterialKind::None;
+    material.container = MaterialContainerDescriptor{
+        0u,
+        0u,
+        10.0f + static_cast<float>(options.depth) * 4.0f,
+        (options.selected || options.expanded) && !options.disabled,
+        true};
+
+    bool const sidebar =
+        options.chrome == GlassOutlineRowChrome::SidebarPill;
+    bool const column = options.chrome == GlassOutlineRowChrome::ColumnRow;
+    Color selected_bg = sidebar
+        ? material_with_alpha(t.code_bg, 150)
+        : (column ? material_with_alpha(t.surface, 172) : t.accent);
+    Color selected_hover = sidebar
+        ? material_with_alpha(t.code_bg, 176)
+        : (column ? material_with_alpha(t.surface, 196) : t.accent_strong);
+    Color selected_pressed = sidebar
+        ? material_with_alpha(t.code_bg, 196)
+        : (column ? material_with_alpha(t.surface, 216) : t.accent_strong);
+    Color selected_text = sidebar || column ? t.accent : t.state_active_fg;
+    auto const expanded_bg = material_with_alpha(t.surface, 122);
+    auto const expanded_hover = material_with_alpha(t.surface, 154);
+    auto const expanded_pressed = material_with_alpha(t.surface, 184);
+    auto const idle_hover = material_with_alpha(t.surface, 96);
+    auto const idle_pressed = material_with_alpha(t.surface, 126);
+
+    if (kind != MaterialKind::None) {
+        material.tint = options.selected ? selected_bg : expanded_bg;
+        material.border = material_with_alpha(
+            t.border,
+            static_cast<unsigned char>(
+                options.selected && !sidebar ? 92 : 0));
+        material.foreground = options.selected ? selected_text : t.foreground;
+        material.accent_foreground = t.accent;
+        material.strong_accent_foreground = t.accent_strong;
+    }
+
+    ButtonStyleOptions style;
+    style.disabled = options.disabled;
+    style.has_material = kind != MaterialKind::None;
+    style.material = material;
+    style.has_background = true;
+    style.background = options.selected ? selected_bg
+        : (options.expanded && kind != MaterialKind::None
+           ? expanded_bg
+           : t.transparent);
+    style.has_hover_background = true;
+    style.hover_background = options.selected ? selected_hover
+        : (options.expanded ? expanded_hover : idle_hover);
+    style.has_pressed_background = true;
+    style.pressed_background = options.selected ? selected_pressed
+        : (options.expanded ? expanded_pressed : idle_pressed);
+    style.has_border_color = true;
+    style.border_color = kind != MaterialKind::None
+        ? material.border
+        : t.transparent;
+    style.has_text_color = true;
+    style.text_color = options.disabled ? t.state_disabled_fg
+        : (options.selected ? selected_text : t.foreground);
+    style.border_width =
+        options.selected && kind != MaterialKind::None && !sidebar
+            ? 1.0f
+            : 0.0f;
+    style.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : t.radius_md;
+    style.font_size = options.font_size;
+    style.max_width = options.width;
+    style.fixed_height = options.height;
+    if (options.depth > 0u)
+        style.padding_left = static_cast<float>(options.depth) * 14.0f;
     style.min_hit_width = minimum_button_activation_size;
     style.min_hit_height = minimum_button_activation_size;
     style.text_align = options.text_align;
@@ -2677,6 +2828,9 @@ enum class GlassSurfacePreset {
     Content,
     StatusBar,
     Popover,
+    Sheet,
+    Inspector,
+    CommandPalette,
 };
 
 inline char const* glass_surface_preset_name(
@@ -2692,6 +2846,10 @@ inline char const* glass_surface_preset_name(
         case GlassSurfacePreset::Content:      return "content";
         case GlassSurfacePreset::StatusBar:    return "status_bar";
         case GlassSurfacePreset::Popover:      return "popover";
+        case GlassSurfacePreset::Sheet:        return "sheet";
+        case GlassSurfacePreset::Inspector:    return "inspector";
+        case GlassSurfacePreset::CommandPalette:
+            return "command_palette";
     }
     return "content";
 }
@@ -2871,6 +3029,45 @@ inline MaterialSurfaceOptions glass_surface_options(
                 semantic_label,
                 "Popover");
             break;
+        case GlassSurfacePreset::Sheet:
+            options.kind = MaterialKind::Regular;
+            options.role = MaterialSurfaceRole::Overlay;
+            options.direction = FlexDirection::Column;
+            options.padding = SpaceToken::Lg;
+            options.gap = SpaceToken::Md;
+            options.interactive = true;
+            options.border_radius = t.radius_lg;
+            options.border_width = 1.0f;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Sheet");
+            break;
+        case GlassSurfacePreset::Inspector:
+            options.kind = MaterialKind::Thin;
+            options.role = MaterialSurfaceRole::Overlay;
+            options.direction = FlexDirection::Column;
+            options.padding = SpaceToken::Md;
+            options.gap = SpaceToken::Sm;
+            options.interactive = true;
+            options.border_radius = t.radius_lg;
+            options.border_width = 1.0f;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Inspector");
+            break;
+        case GlassSurfacePreset::CommandPalette:
+            options.kind = MaterialKind::Thick;
+            options.role = MaterialSurfaceRole::Overlay;
+            options.direction = FlexDirection::Column;
+            options.padding = SpaceToken::Md;
+            options.gap = SpaceToken::Sm;
+            options.interactive = true;
+            options.border_radius = t.radius_lg;
+            options.border_width = 1.0f;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Command Palette");
+            break;
     }
     return options;
 }
@@ -3042,6 +3239,63 @@ void popover(F&& builder,
     material_surface(options, std::forward<F>(builder));
 }
 
+template<typename F>
+    requires std::is_invocable_v<F>
+void sheet(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::Overlay;
+    options.interactive = true;
+    options.semantic_label = chrome_label_or(options.semantic_label, "Sheet");
+    material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void sheet(F&& builder,
+           char const* semantic_label = "Sheet") {
+    material_surface(
+        glass_surface_options(GlassSurfacePreset::Sheet, semantic_label),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void inspector_panel(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::Overlay;
+    options.interactive = true;
+    options.semantic_label = chrome_label_or(options.semantic_label,
+                                             "Inspector");
+    material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void inspector_panel(F&& builder,
+                     char const* semantic_label = "Inspector") {
+    material_surface(
+        glass_surface_options(GlassSurfacePreset::Inspector, semantic_label),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void command_palette(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::Overlay;
+    options.interactive = true;
+    options.semantic_label = chrome_label_or(options.semantic_label,
+                                             "Command Palette");
+    material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void command_palette(F&& builder,
+                     char const* semantic_label = "Command Palette") {
+    material_surface(
+        glass_surface_options(GlassSurfacePreset::CommandPalette,
+                              semantic_label),
+        std::forward<F>(builder));
+}
+
 // overlay — render `builder`'s contents above the main tree, after
 // the rest of the UI has been laid out and painted. The overlay is
 // the foundation for dialogs, popovers, tooltips, snackbars, and
@@ -3110,20 +3364,9 @@ void dialog(F&& builder,
         }
         row([&] {
             sized_box(max_width, [&] {
-                auto card_h = detail::alloc_node();
-                auto& card = detail::node_at(card_h);
-                auto const& t = detail::g_app.theme;
-                card.style.flex_direction = FlexDirection::Column;
-                card.style.gap = t.space_md;
-                card.style.padding[0] = t.space_lg;
-                card.style.padding[1] = t.space_lg;
-                card.style.padding[2] = t.space_lg;
-                card.style.padding[3] = t.space_lg;
-                card.background = t.surface;
-                card.border_color = t.border;
-                card.border_width = 1;
-                card.border_radius = t.radius_lg;
-                detail::open_container(card_h, std::forward<F>(builder));
+                sheet(
+                    std::forward<F>(builder),
+                    "Dialog Sheet");
             });
         }, SpaceToken::Md, CrossAxisAlignment::Start, MainAxisAlignment::Center);
     });
