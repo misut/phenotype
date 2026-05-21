@@ -1638,6 +1638,19 @@ def check_file_explorer_native_chrome_contract(
                 "summary_native_backdrop_expected_material": (
                     composition_summary.get("native_backdrop_expected_material")
                     if isinstance(composition_summary, dict) else None),
+                "summary_native_backdrop_underlay_placement": (
+                    composition_summary.get("native_backdrop_underlay_placement")
+                    if isinstance(composition_summary, dict) else None),
+                "summary_native_backdrop_underlay_alpha": (
+                    number_at(
+                        composition_summary,
+                        "native_backdrop_underlay_alpha")
+                    if isinstance(composition_summary, dict) else None),
+                "summary_native_backdrop_expected_alpha": (
+                    number_at(
+                        composition_summary,
+                        "native_backdrop_expected_alpha")
+                    if isinstance(composition_summary, dict) else None),
                 "summary_status": (
                     composition_summary.get("status")
                     if isinstance(composition_summary, dict) else None),
@@ -1664,10 +1677,18 @@ def check_file_explorer_native_chrome_contract(
                     "native_backdrop_underlay_enabled"),
                 "native_backdrop_underlay_kind": runtime_window.get(
                     "native_backdrop_underlay_kind"),
+                "native_backdrop_underlay_placement": runtime_window.get(
+                    "native_backdrop_underlay_placement"),
                 "native_backdrop_underlay_material": runtime_window.get(
                     "native_backdrop_underlay_material"),
                 "native_backdrop_expected_material": runtime_window.get(
                     "native_backdrop_expected_material"),
+                "native_backdrop_underlay_alpha": number_at(
+                    runtime_window,
+                    "native_backdrop_underlay_alpha"),
+                "native_backdrop_expected_alpha": number_at(
+                    runtime_window,
+                    "native_backdrop_expected_alpha"),
                 "native_backdrop_underlay_blending_mode": runtime_window.get(
                     "native_backdrop_underlay_blending_mode"),
                 "native_backdrop_underlay_state": runtime_window.get(
@@ -1695,6 +1716,19 @@ def check_file_explorer_native_chrome_contract(
                     composition_actual[
                         "summary_native_backdrop_expected_material"]
                     == "sidebar")
+                and composition_actual[
+                    "summary_native_backdrop_underlay_placement"
+                    ] == "sibling-underlay"
+                and numbers_close(
+                    composition_actual[
+                        "summary_native_backdrop_underlay_alpha"],
+                    1.0,
+                    tolerance=0.01)
+                and numbers_close(
+                    composition_actual[
+                        "summary_native_backdrop_expected_alpha"],
+                    1.0,
+                    tolerance=0.01)
                 and composition_actual["summary_status"] == "ready"
                 and composition_actual["summary_ready"] is True
                 and composition_actual["summary_failure_reason"] == "none"
@@ -1707,10 +1741,20 @@ def check_file_explorer_native_chrome_contract(
                 and composition_actual["native_backdrop_underlay_enabled"] is True
                 and composition_actual["native_backdrop_underlay_kind"]
                     == "nsvisualeffectview"
+                and composition_actual["native_backdrop_underlay_placement"]
+                    == "sibling-underlay"
                 and composition_actual["native_backdrop_underlay_material"]
                     == "sidebar"
                 and composition_actual["native_backdrop_expected_material"]
                     == "sidebar"
+                and numbers_close(
+                    composition_actual["native_backdrop_underlay_alpha"],
+                    1.0,
+                    tolerance=0.01)
+                and numbers_close(
+                    composition_actual["native_backdrop_expected_alpha"],
+                    1.0,
+                    tolerance=0.01)
                 and composition_actual["native_backdrop_underlay_blending_mode"]
                     == "behind-window"
                 and composition_actual["native_backdrop_underlay_state"]
@@ -1732,6 +1776,10 @@ def check_file_explorer_native_chrome_contract(
                     "summary_policy": (
                         "transparent-window-clear-metal-native-sidebar"),
                     "summary_native_backdrop_expected_material": "sidebar",
+                    "summary_native_backdrop_underlay_placement":
+                        "sibling-underlay",
+                    "summary_native_backdrop_underlay_alpha": 1.0,
+                    "summary_native_backdrop_expected_alpha": 1.0,
                     "summary_status": "ready",
                     "summary_ready": True,
                     "summary_failure_reason": "none",
@@ -1743,8 +1791,11 @@ def check_file_explorer_native_chrome_contract(
                     "metal_layer_opaque": False,
                     "native_backdrop_underlay_enabled": True,
                     "native_backdrop_underlay_kind": "nsvisualeffectview",
+                    "native_backdrop_underlay_placement": "sibling-underlay",
                     "native_backdrop_underlay_material": "sidebar",
                     "native_backdrop_expected_material": "sidebar",
+                    "native_backdrop_underlay_alpha": 1.0,
+                    "native_backdrop_expected_alpha": 1.0,
                     "native_backdrop_underlay_blending_mode": "behind-window",
                     "native_backdrop_underlay_state": "active",
                     "renderer_clear_alpha": 0,
@@ -1759,7 +1810,7 @@ def check_file_explorer_native_chrome_contract(
                     "The Finder sidebar cannot reveal blurred desktop/backdrop "
                     "context if the NSWindow/CAMetalLayer stays opaque or if "
                     "the integrated-titlebar window lacks the AppKit "
-                    "NSVisualEffectView underlay, or if the renderer keeps the "
+                    "NSVisualEffectView sibling underlay, or if the renderer keeps the "
                     "theme clear alpha/root full-frame fill opaque. Check "
                     "configure_window(), "
                     "renderer_init(), decode_frame_commands(), and the frame "
@@ -2123,34 +2174,6 @@ def check_file_explorer_desktop_sidebar_glass_contract(
         for item in sidebar_descriptors
         if isinstance(item, dict)
     ]
-    report.check(
-        "file explorer desktop sidebar uses translucent Liquid Glass descriptor",
-        bool(sidebar_descriptors)
-        and any(
-            desktop_sidebar_glass_descriptor_ok(item)
-            for item in sidebar_descriptors
-            if isinstance(item, dict)),
-        path=(
-            "debug.semantic_tree.material_descriptors"
-            "[role=sidebar,kind=thin,container_id=2100]"),
-        expected={
-            "kind": "thin",
-            "role": "sidebar",
-            "container_id": 2100,
-            "opacity_lte": 0.36,
-            "blur_radius_gte": 24.0,
-            "tint_alpha_lte": 96,
-            "saturation_gte": 1.15,
-            "edge_highlight_gte": 0.16,
-        },
-        actual=semantic_actual,
-        likely_layer="finder-sidebar-glass",
-        likely_pass="material-command",
-        hint=(
-            "The Finder desktop sidebar must stay a low-tint thin material; "
-            "otherwise it reads as an opaque white panel instead of showing "
-            "blurred backdrop context. Check finder_sidebar_material_style() "
-            "and layout::MaterialSurfaceOptions.material_override."))
 
     plans = (
         renderer_details.get("material_plans")
@@ -2173,56 +2196,167 @@ def check_file_explorer_desktop_sidebar_glass_contract(
         sidebar_plan_actual(index, plan)
         for index, plan in runtime_candidates
     ]
-    backdrop_capable = (
-        bool_at(capabilities, "material_backdrop_blur") is True
-        and bool_at(capabilities, "material_shader_blur") is True)
 
-    def runtime_plan_ok(plan: JsonObject) -> bool:
-        command = plan.get("command_descriptor")
-        descriptor = (
-            material_descriptor_from(command)
-            if isinstance(command, dict)
-            else None)
-        if not desktop_sidebar_glass_descriptor_ok(descriptor):
-            return False
-        if backdrop_capable:
-            blur_radius = number_at(plan, "blur_radius")
-            return (
-                plan.get("plan_id") == "material.thin.liquid-glass"
-                and bool_at(plan, "backdrop_sampling") is True
-                and bool_at(plan, "fallback") is False
-                and blur_radius is not None
-                and float(blur_radius) >= 24.0)
-        return (
-            bool_at(plan, "fallback") is True
-            and isinstance(plan.get("fallback_reason"), str)
-            and bool(plan.get("fallback_reason")))
+    runtime_window = object_at(debug, "platform_runtime.details.window")
+    if not isinstance(runtime_window, dict):
+        return
+    if runtime_window.get("surface_kind") != "macos_window":
+        return
+
+    composition = object_at(runtime_window, "glass_backdrop_composition")
+    native_actual = {
+        "summary_schema_version": (
+            composition.get("schema_version")
+            if isinstance(composition, dict) else None),
+        "summary_policy": (
+            composition.get("policy")
+            if isinstance(composition, dict) else None),
+        "summary_native_backdrop_expected_material": (
+            composition.get("native_backdrop_expected_material")
+            if isinstance(composition, dict) else None),
+        "summary_native_backdrop_underlay_placement": (
+            composition.get("native_backdrop_underlay_placement")
+            if isinstance(composition, dict) else None),
+        "summary_native_backdrop_underlay_alpha": (
+            number_at(composition, "native_backdrop_underlay_alpha")
+            if isinstance(composition, dict) else None),
+        "summary_native_backdrop_expected_alpha": (
+            number_at(composition, "native_backdrop_expected_alpha")
+            if isinstance(composition, dict) else None),
+        "summary_status": (
+            composition.get("status")
+            if isinstance(composition, dict) else None),
+        "summary_ready": (
+            composition.get("ready")
+            if isinstance(composition, dict) else None),
+        "summary_failure_reason": (
+            composition.get("failure_reason")
+            if isinstance(composition, dict) else None),
+        "summary_samples_external_backdrop": (
+            composition.get("samples_external_backdrop")
+            if isinstance(composition, dict) else None),
+        "summary_requires_sibling_underlay": (
+            composition.get("requires_sibling_underlay")
+            if isinstance(composition, dict) else None),
+        "native_backdrop_underlay_enabled": runtime_window.get(
+            "native_backdrop_underlay_enabled"),
+        "native_backdrop_underlay_kind": runtime_window.get(
+            "native_backdrop_underlay_kind"),
+        "native_backdrop_underlay_placement": runtime_window.get(
+            "native_backdrop_underlay_placement"),
+        "native_backdrop_underlay_material": runtime_window.get(
+            "native_backdrop_underlay_material"),
+        "native_backdrop_expected_material": runtime_window.get(
+            "native_backdrop_expected_material"),
+        "native_backdrop_underlay_alpha": number_at(
+            runtime_window,
+            "native_backdrop_underlay_alpha"),
+        "native_backdrop_expected_alpha": number_at(
+            runtime_window,
+            "native_backdrop_expected_alpha"),
+        "native_backdrop_underlay_blending_mode": runtime_window.get(
+            "native_backdrop_underlay_blending_mode"),
+        "native_backdrop_underlay_state": runtime_window.get(
+            "native_backdrop_underlay_state"),
+    }
+    report.check(
+        "file explorer desktop sidebar uses native compositor backdrop blur",
+        native_actual["summary_schema_version"] == 1
+        and native_actual["summary_policy"]
+            == "transparent-window-clear-metal-native-sidebar"
+        and native_actual["summary_native_backdrop_expected_material"]
+            == "sidebar"
+        and native_actual["summary_native_backdrop_underlay_placement"]
+            == "sibling-underlay"
+        and numbers_close(
+            native_actual["summary_native_backdrop_underlay_alpha"],
+            1.0,
+            tolerance=0.01)
+        and numbers_close(
+            native_actual["summary_native_backdrop_expected_alpha"],
+            1.0,
+            tolerance=0.01)
+        and native_actual["summary_status"] == "ready"
+        and native_actual["summary_ready"] is True
+        and native_actual["summary_failure_reason"] == "none"
+        and native_actual["summary_samples_external_backdrop"] is True
+        and native_actual["summary_requires_sibling_underlay"] is True
+        and native_actual["native_backdrop_underlay_enabled"] is True
+        and native_actual["native_backdrop_underlay_kind"] == "nsvisualeffectview"
+        and native_actual["native_backdrop_underlay_placement"]
+            == "sibling-underlay"
+        and native_actual["native_backdrop_underlay_material"] == "sidebar"
+        and native_actual["native_backdrop_expected_material"] == "sidebar"
+        and numbers_close(
+            native_actual["native_backdrop_underlay_alpha"],
+            1.0,
+            tolerance=0.01)
+        and numbers_close(
+            native_actual["native_backdrop_expected_alpha"],
+            1.0,
+            tolerance=0.01)
+        and native_actual["native_backdrop_underlay_blending_mode"]
+            == "behind-window"
+        and native_actual["native_backdrop_underlay_state"] == "active",
+        path=(
+            "debug.platform_runtime.details.window."
+            "glass_backdrop_composition"),
+        expected={
+            "summary_schema_version": 1,
+            "summary_policy": (
+                "transparent-window-clear-metal-native-sidebar"),
+            "summary_native_backdrop_expected_material": "sidebar",
+            "summary_native_backdrop_underlay_placement": "sibling-underlay",
+            "summary_native_backdrop_underlay_alpha": 1.0,
+            "summary_native_backdrop_expected_alpha": 1.0,
+            "summary_status": "ready",
+            "summary_ready": True,
+            "summary_failure_reason": "none",
+            "summary_samples_external_backdrop": True,
+            "summary_requires_sibling_underlay": True,
+            "native_backdrop_underlay_enabled": True,
+            "native_backdrop_underlay_kind": "nsvisualeffectview",
+            "native_backdrop_underlay_placement": "sibling-underlay",
+            "native_backdrop_underlay_material": "sidebar",
+            "native_backdrop_expected_material": "sidebar",
+            "native_backdrop_underlay_alpha": 1.0,
+            "native_backdrop_expected_alpha": 1.0,
+            "native_backdrop_underlay_blending_mode": "behind-window",
+            "native_backdrop_underlay_state": "active",
+        },
+        actual=native_actual,
+        likely_layer="finder-sidebar-glass",
+        likely_pass="appkit-visual-effect-underlay",
+        hint=(
+            "The desktop sidebar reveals wallpaper/WindowServer content via "
+            "an AppKit NSVisualEffectView sibling underlay. The Metal "
+            "MaterialPlan can blur app-internal backdrops, but it cannot "
+            "sample the desktop compositor by itself; inspect "
+            "WindowOptions.native_backdrop_material, "
+            "native_backdrop_opacity, and configure_window()."))
 
     report.check(
-        "file explorer desktop sidebar material plan preserves backdrop translucency",
-        bool(runtime_candidates)
-        and any(runtime_plan_ok(plan) for _, plan in runtime_candidates),
+        "file explorer desktop sidebar does not fake wallpaper blur with Metal self sampling",
+        not sidebar_descriptors and not runtime_candidates,
         path=(
-            "debug.platform_runtime.details.renderer.material_plans"
+            "debug.semantic_tree.material_descriptors"
             "[role=sidebar,kind=thin,container_id=2100]"),
         expected={
-            "plan_id": (
-                "material.thin.liquid-glass"
-                if backdrop_capable
-                else "deterministic fallback with reason"),
-            "backdrop_sampling": True if backdrop_capable else "fallback",
-            "fallback": False if backdrop_capable else True,
-            "blur_radius_gte": 24.0,
-            "command_descriptor": "matches translucent sidebar descriptor",
+            "outer_sidebar_material": "none",
+            "external_backdrop_blur_owner": "native-compositor-underlay",
+            "metal_self_sampling_sidebar_candidates": 0,
         },
-        actual=runtime_actual,
+        actual={
+            "semantic_candidates": semantic_actual,
+            "runtime_candidates": runtime_actual,
+        },
         likely_layer="finder-sidebar-glass",
-        likely_pass="backdrop-sample-blur",
+        likely_pass="material-command-boundary",
         hint=(
-            "The backend should execute the pure sidebar MaterialPlan as a "
-            "backdrop-sampling thin glass pass on capable macOS targets. If "
-            "this fails, inspect the MaterialRect command payload, backend "
-            "capability snapshot, and material pass scheduling."))
+            "Do not reintroduce an outer kind=thin sidebar MaterialRect to "
+            "simulate wallpaper blur. Keep the outer sidebar transparent and "
+            "let the native compositor supply the external blurred backdrop; "
+            "use MaterialPlan surfaces for in-app glass controls only."))
 
 
 def list_of_strings(value: Any, key: str) -> list[str]:

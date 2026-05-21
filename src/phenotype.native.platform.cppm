@@ -168,6 +168,7 @@ struct WindowOptions {
     IntegratedTitlebarOptions integrated_titlebar = {};
     NativeBackdropMaterial native_backdrop_material =
         NativeBackdropMaterial::UnderWindowBackground;
+    float native_backdrop_opacity = 1.0f;
 };
 
 struct NativeSurfaceDescriptor {
@@ -183,6 +184,7 @@ struct NativeSurfaceDescriptor {
     IntegratedTitlebarOptions integrated_titlebar = {};
     NativeBackdropMaterial native_backdrop_material =
         NativeBackdropMaterial::UnderWindowBackground;
+    float native_backdrop_opacity = 1.0f;
     bool window_options_valid = false;
 };
 

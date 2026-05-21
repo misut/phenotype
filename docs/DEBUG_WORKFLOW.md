@@ -1180,17 +1180,27 @@ transparent before the material pass executes. Check
 `window` object. Then check the native underlay:
 `native_backdrop_underlay_enabled=true`,
 `native_backdrop_underlay_kind=nsvisualeffectview`,
+`native_backdrop_underlay_placement=sibling-underlay`,
+`native_backdrop_underlay_alpha=1`,
+`native_backdrop_expected_alpha=1`,
 `native_backdrop_underlay_blending_mode=behind-window`, and
 `native_backdrop_underlay_state=active`. Finder-style sidebar windows request
 `native_backdrop_expected_material=sidebar`, so
 `native_backdrop_underlay_material` must also be `sidebar`; generic integrated
-titlebar windows keep the default `under-window-background` material. The same
+titlebar windows keep the default `under-window-background` material. The
+underlay must be a sibling behind the Metal view rather than a parent wrapper;
+otherwise changing native backdrop opacity can fade the rendered content
+instead of only changing the compositor material strength. The same
 `window` object summarizes the combined contract in
 `glass_backdrop_composition`: `status=ready`, `ready=true`,
-`failure_reason=none`, `requires_native_backdrop_underlay=true`, and a policy
-such as `transparent-window-clear-metal-native-sidebar`. If it is `blocked`,
-use `failure_reason`, `likely_layer`, and `likely_pass` before guessing from
-pixels. The renderer must also report
+`failure_reason=none`, `requires_native_backdrop_underlay=true`,
+`requires_sibling_underlay=true`,
+`native_backdrop_underlay_placement=sibling-underlay`,
+`native_backdrop_underlay_alpha=1`,
+`native_backdrop_expected_alpha=1`, and a policy such as
+`transparent-window-clear-metal-native-sidebar`. If it is `blocked`, use
+`failure_reason`, `likely_layer`, and `likely_pass` before guessing from pixels.
+The renderer must also report
 `renderer.clear_alpha=0`, `renderer.clear_alpha_for_transparent_window=true`,
 `renderer.full_frame_opaque_fill_count=0`, and
 `renderer.transparent_window_has_opaque_frame_fill=false`; otherwise an opaque

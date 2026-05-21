@@ -966,19 +966,20 @@ phenotype::layout::MaterialSurfaceOptions content_surface_options(
 phenotype::MaterialStyle finder_sidebar_material_style() {
     using namespace phenotype;
     auto material = layout::material_style(MaterialKind::Thin);
+    material.kind = MaterialKind::None;
     material.role = MaterialSurfaceRole::Sidebar;
-    material.opacity = 0.08f;
+    material.opacity = 0.0f;
     material.blur_radius = 28.0f;
-    material.tint = rgba(248, 248, 250, 16);
-    material.border = rgba(255, 255, 255, 32);
-    material.saturation = 1.18f;
+    material.tint = rgba(248, 248, 250, 0);
+    material.border = rgba(255, 255, 255, 0);
+    material.saturation = 1.0f;
     material.luminance_floor = 0.01f;
     material.luminance_gain = 1.01f;
-    material.edge_highlight = 0.18f;
-    material.noise_opacity = 0.006f;
-    material.shadow_alpha = 0.04f;
-    material.shadow_radius = 8.0f;
-    material.contrast_intent = "native-sidebar-backdrop";
+    material.edge_highlight = 0.0f;
+    material.noise_opacity = 0.0f;
+    material.shadow_alpha = 0.0f;
+    material.shadow_radius = 0.0f;
+    material.contrast_intent = "native-sidebar-blur-translucency";
     return material;
 }
 
@@ -3106,6 +3107,7 @@ int main(int argc, char** argv) {
         },
         .native_backdrop_material =
             phenotype::native::NativeBackdropMaterial::Sidebar,
+        .native_backdrop_opacity = 1.0f,
     };
 
     return phenotype::native::run_app<State, Msg>(

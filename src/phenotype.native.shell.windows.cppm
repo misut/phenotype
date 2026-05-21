@@ -754,6 +754,7 @@ int run_app_with_windows_platform(platform_api const& platform,
     surface.window_chrome = options.chrome;
     surface.integrated_titlebar = options.integrated_titlebar;
     surface.native_backdrop_material = options.native_backdrop_material;
+    surface.native_backdrop_opacity = options.native_backdrop_opacity;
     surface.window_options_valid = true;
     host.window = &surface;
     host.platform = &platform;
