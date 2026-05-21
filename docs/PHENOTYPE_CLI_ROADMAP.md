@@ -145,7 +145,7 @@ Current commands:
 | `phenotype theme contract` | implemented | Emits the pure `phenotype_theme_contract` baseline for the default Apple-like glass theme, including Pretendard typography, Liquid Glass usage boundary, macOS/Finder-style iconography policy, owned/permissive SVG asset policy, grouped-container policy, performance bounds, accessibility fallback policy, unsupported-backend degradation policy, color tokens, radii, typography, and semantic surface roles. |
 | `phenotype io contract` | implemented | Emits the pure `phenotype.io` contract for typed input events, deterministic input scripts, output observation summaries, LLM-debuggable artifact descriptors, edge-effect placement, and release-adapter bypass policy. |
 | `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs or line-based scripts through the `phenotype_cli.file_explorer` module and emits a stable observation JSON with trace, entries including file-type symbol metadata, `entry_symbol_summary`, viewport, view mode, pure Finder chrome/grid metrics including density policy and icon-grid top inset, default glass theme metadata, capabilities, operation receipt, preview excerpt fields, localized labels, package-resource metadata, the keyboard-vs-pointer `input_model` focus contract, and optional expectation results. |
-| `phenotype drive glass-showcase` | implemented | Drives the shared material probe model through the `phenotype_cli.glass_showcase` module from typed CLI inputs or line-based scripts and emits a stable observation JSON with final state, trace, public material kinds, expected material plan count, backdrop/inspector/density/viewport state, progress value, the pure `GlassProbeContract`, per-probe material kind/container/pass/kernel/luminance/fallback metadata, and optional expectation results. |
+| `phenotype drive glass-showcase` | implemented | Drives the shared material probe model through the `phenotype_cli.glass_showcase` module from typed CLI inputs or line-based scripts and emits a stable observation JSON with final state, trace, public material kinds, expected material plan count, expected execution-stage budget, expected sample-tap budget, backdrop/inspector/density/viewport state, progress value, the pure `GlassProbeContract`, per-probe material kind/container/pass/kernel/luminance/fallback metadata, and optional expectation results. |
 | `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, passes package-root environment when a manifest exists, validates file explorer `--input`/`--script` through the shared model, and emits a stable JSON launch receipt with build/run output tails, input counts, timeout state, artifact bundle summary, optional `--observe-output` artifact observation, and explicit environment overrides. |
 
 The desktop and mobile file explorer examples now include inspectable
@@ -167,10 +167,13 @@ The glass showcase now follows the same shared-model pattern through
 state, update, density, viewport, material-count, and `GlassProbeContract`
 contracts, while
 `phenotype drive glass-showcase` applies the same typed inputs from the CLI and
-serializes the material probe contract without opening a native window. Native
-startup artifacts serialize the same contract under
-`debug.application.glass_showcase`, letting verifier failures point at the
-expected material probe rather than relying on visual inspection alone.
+serializes the material probe contract without opening a native window. Its
+expectation grammar also asserts the cheap material budget envelope through
+`material-count`, `execution-stages`, and `sample-taps`, so CI can catch probe
+contract drift before a slow native artifact capture. Native startup artifacts
+serialize the same contract under `debug.application.glass_showcase`, letting
+verifier failures point at the expected material probe rather than relying on
+visual inspection alone.
 Pull-request CI routes CLI and file explorer package-resource edits through a
 lightweight Linux CLI/package job instead of the full root native matrix.
 The PR gate only validates command metadata and resource catalogs for the slow
