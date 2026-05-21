@@ -764,6 +764,15 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
                         widget::button<DebugPlaneMsg>("Share",
                                                        DebugPlaneNoop{});
                     });
+                layout::tooltip([&] {
+                    widget::text("Explains material affordance");
+                }, "Glass Tooltip");
+                layout::context_menu([&] {
+                    widget::button<DebugPlaneMsg>("Open",
+                                                   DebugPlaneNoop{});
+                    widget::button<DebugPlaneMsg>("Move to Trash",
+                                                   DebugPlaneNoop{});
+                }, "Glass Context Menu");
             });
         },
         [](DiagState&, DebugPlaneMsg) {});
@@ -788,6 +797,10 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
         find_semantic_child(children, "material", "Compact Status");
     auto const* popover =
         find_semantic_child(children, "material", "Actions Popover");
+    auto const* tooltip =
+        find_semantic_child(children, "material", "Glass Tooltip");
+    auto const* context_menu =
+        find_semantic_child(children, "material", "Glass Context Menu");
     assert(toolbar != nullptr);
     assert(compact_toolbar != nullptr);
     assert(navigation != nullptr);
@@ -797,6 +810,8 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
     assert(status_bar != nullptr);
     assert(compact_status != nullptr);
     assert(popover != nullptr);
+    assert(tooltip != nullptr);
+    assert(context_menu != nullptr);
     assert(toolbar->at("material").as_object().at("kind").as_string() == "clear");
     assert(toolbar->at("material").as_object().at("role").as_string() == "toolbar");
     assert(compact_toolbar->at("material").as_object().at("kind").as_string()
@@ -835,6 +850,20 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
     assert(popover->at("material").as_object()
                .at("container").as_object()
                .at("interactive").as_bool());
+    assert(tooltip->at("material").as_object().at("kind").as_string()
+           == "thin");
+    assert(tooltip->at("material").as_object().at("role").as_string()
+           == "overlay");
+    assert(!tooltip->at("material").as_object()
+                .at("container").as_object()
+                .at("interactive").as_bool());
+    assert(context_menu->at("material").as_object().at("kind").as_string()
+           == "regular");
+    assert(context_menu->at("material").as_object().at("role").as_string()
+           == "overlay");
+    assert(context_menu->at("material").as_object()
+               .at("container").as_object()
+               .at("interactive").as_bool());
     assert(find_semantic_descendant(*toolbar, "button", "New") != nullptr);
     assert(find_semantic_descendant(*compact_toolbar, "button", "Compact")
            != nullptr);
@@ -848,6 +877,10 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
     assert(find_semantic_descendant(*compact_status, "text", "Compact Ready")
            != nullptr);
     assert(find_semantic_descendant(*popover, "button", "Share") != nullptr);
+    assert(find_semantic_descendant(*tooltip, "text",
+                                    "Explains material affordance") != nullptr);
+    assert(find_semantic_descendant(*context_menu, "button", "Open")
+           != nullptr);
 }
 
 void test_material_container_semantic_debug_fields() {

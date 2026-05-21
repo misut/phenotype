@@ -26,7 +26,7 @@ inline constexpr float k_default_viewport_scale = 1.0f;
 inline constexpr std::size_t k_density_count = 3;
 inline constexpr std::size_t k_default_density = 1;
 inline constexpr std::size_t k_material_kind_count = 4;
-inline constexpr std::size_t k_base_material_plan_count = 6;
+inline constexpr std::size_t k_base_material_plan_count = 8;
 inline constexpr std::size_t k_inspector_material_plan_count = 1;
 inline constexpr std::size_t k_total_material_probe_count =
     k_base_material_plan_count + k_inspector_material_plan_count;
@@ -174,6 +174,23 @@ inline constexpr std::array<GlassMaterialProbe, k_total_material_probe_count>
             .has_union_id = true,
             .morph_transitions = true,
             .verifier_profile = "thin-balanced-backdrop",
+        },
+        {
+            .name = "tooltip_probe",
+            .label = "Glass Tooltip Probe",
+            .description =
+                "Noninteractive overlay tooltip proving lightweight glass affordances stay semantic.",
+            .kind = GlassProbeMaterialKind::Thin,
+            .verifier_profile = "thin-balanced-backdrop",
+        },
+        {
+            .name = "context_menu_probe",
+            .label = "Glass Context Menu Probe",
+            .description =
+                "Interactive overlay menu proving contextual actions use the same material contract.",
+            .kind = GlassProbeMaterialKind::Regular,
+            .interactive = true,
+            .verifier_profile = "regular-legibility-backdrop",
         },
         {
             .name = "debug_contract",

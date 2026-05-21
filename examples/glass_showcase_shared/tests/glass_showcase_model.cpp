@@ -50,7 +50,7 @@ int main() {
     assert(bad_density.error.find("density") != std::string::npos);
 
     auto material_count =
-        demo::parse_glass_expectation("material-count:6");
+        demo::parse_glass_expectation("material-count:8");
     assert(material_count.ok);
     assert(material_count.expectation.kind
         == demo::GlassExpectationKind::MaterialCount);
@@ -71,12 +71,12 @@ int main() {
     assert(result.state.viewport_width == 640);
     assert(result.state.viewport_height == 820);
     assert(result.state.viewport_scale == 2.0f);
-    assert(demo::expected_material_plan_count(result.state) == 6);
-    assert(demo::expected_material_probe_count(result.state) == 6);
+    assert(demo::expected_material_plan_count(result.state) == 8);
+    assert(demo::expected_material_probe_count(result.state) == 8);
     assert(demo::progress_value(result.state) == 0.85f);
     auto closed_contract = demo::glass_probe_contract(result.state);
-    assert(closed_contract.active_material_probe_count == 6);
-    assert(closed_contract.total_expected_execution_stages == 24);
+    assert(closed_contract.active_material_probe_count == 8);
+    assert(closed_contract.total_expected_execution_stages == 32);
     assert(closed_contract.sample_taps_per_probe == 25);
     assert(closed_contract.max_blur_radius == 36.0f);
     auto blur_probe = demo::glass_material_probe_at(5);
@@ -95,7 +95,7 @@ int main() {
         demo::parse_glass_expectation("inspector:closed").expectation,
         demo::parse_glass_expectation("note-contains:observable").expectation,
         demo::parse_glass_expectation("viewport:640x820@2").expectation,
-        demo::parse_glass_expectation("material-count:6").expectation,
+        demo::parse_glass_expectation("material-count:8").expectation,
     };
     auto checked = demo::check_glass_expectations(result, expectations);
     assert(demo::glass_expectations_ok(checked));
@@ -106,11 +106,17 @@ int main() {
         std::span<demo::GlassInput const>{&reset_input.input, 1});
     assert(reset_result.state.inspector_open);
     assert(reset_result.state.selected_density == demo::k_default_density);
-    assert(demo::expected_material_plan_count(reset_result.state) == 7);
+    assert(demo::expected_material_plan_count(reset_result.state) == 9);
     auto open_contract = demo::glass_probe_contract(reset_result.state);
-    assert(open_contract.active_material_probe_count == 7);
-    assert(open_contract.total_expected_execution_stages == 28);
-    auto debug_probe = demo::glass_material_probe_at(6);
+    assert(open_contract.active_material_probe_count == 9);
+    assert(open_contract.total_expected_execution_stages == 36);
+    auto tooltip_probe = demo::glass_material_probe_at(6);
+    assert(tooltip_probe.name == std::string_view{"tooltip_probe"});
+    assert(!tooltip_probe.interactive);
+    auto context_menu_probe = demo::glass_material_probe_at(7);
+    assert(context_menu_probe.name == std::string_view{"context_menu_probe"});
+    assert(context_menu_probe.interactive);
+    auto debug_probe = demo::glass_material_probe_at(8);
     assert(debug_probe.requires_inspector_open);
     assert(demo::glass_probe_is_active(debug_probe, reset_result.state));
     assert(!demo::glass_probe_is_active(debug_probe, result.state));
@@ -124,9 +130,12 @@ int main() {
     auto& contract = showcase["probe_contract"].as_object();
     assert(contract["contract_name"].as_string()
            == "glass_showcase_material_probe_contract");
-    assert(contract["active_material_probe_count"].as_integer() == 7);
+    assert(contract["active_material_probe_count"].as_integer() == 9);
     auto& probes = contract["material_probes"].as_object();
     assert(probes.contains("visible_blur_probe"));
+    assert(probes.contains("tooltip_probe"));
+    assert(probes.contains("context_menu_probe"));
     assert(probes["visible_blur_probe"].as_object()["kind"].as_string()
            == "thin");
+    assert(probes["context_menu_probe"].as_object()["interactive"].as_bool());
 }

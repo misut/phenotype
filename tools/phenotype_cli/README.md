@@ -349,7 +349,7 @@ mise exec -- exon build
   --script ../../examples/glass_showcase/glass_showcase.drive \
   --expect backdrop:high \
   --expect density:dense \
-  --expect material-count:7
+  --expect material-count:9
 .exon/debug/phenotype_cli package bundle --json \
   ../../examples/file_explorer_desktop \
   --output /tmp/phenotype-file-explorer

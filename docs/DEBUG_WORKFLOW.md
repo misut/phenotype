@@ -385,7 +385,7 @@ mise exec -- exon build
   --script ../../examples/glass_showcase/glass_showcase.drive \
   --expect backdrop:high \
   --expect density:dense \
-  --expect material-count:7
+  --expect material-count:9
 ```
 
 The output reports the shared glass state, per-input trace, public material
@@ -747,6 +747,12 @@ the actual `material_plans` executed for the frame. Each plan includes:
   source, estimated background luminance, contrast ratios, contrast margins,
   minimum contrast target, named contrast/remap policies, accessibility flags,
   and whether the recommendation was backdrop-driven or vibrancy-enabled;
+- transient overlay surfaces such as `layout::tooltip` and
+  `layout::context_menu` should appear as `role: overlay` material nodes in the
+  semantic tree and as resolved runtime plans. Tooltips are intentionally
+  passive thin material; context menus are interactive regular material. If one
+  disappears, compare the semantic label, material role, and `container.mode`
+  before inspecting pixels;
 - `sampling_kernel`, including the pure kernel name, radius, tap count, blur
   step scale, weight profile, backdrop dependency, and boundedness flag;
 - `quality_policy`, `primary_pass`, `resource_budget`,

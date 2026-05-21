@@ -6,6 +6,8 @@
     "Glass Material Showcase",
     "Backdrop Test Pattern",
     "Visible Blur Probe",
+    "Glass Tooltip Probe",
+    "Glass Context Menu Probe",
     "Material Ramp",
     "Debug Contract",
     "Density Segmented Control"
@@ -23,44 +25,46 @@
   ],
   "require_material_surface_roles": [
     "surface",
-    "navigation"
+    "navigation",
+    "overlay"
   ],
   "require_material_plans": true,
   "require_material_semantic_runtime_match": true,
   "require_material_plan_summary": {
-    "count": 8,
-    "fallback": 8,
+    "count": 10,
+    "fallback": 10,
     "backdrop_sampling": 0,
     "fallback_paths": {
-      "reduced-transparency": 8
+      "reduced-transparency": 10
     },
     "fallback_reasons": {
-      "reduced transparency disables backdrop sampling": 8
+      "reduced transparency disables backdrop sampling": 10
     },
     "contract_versions": {
-      "44": 8
+      "44": 10
     },
-    "theme_foreground_matches_theme": 7,
-    "theme_accent_matches_theme": 7,
-    "theme_tint_matches_surface": 7,
-    "theme_border_matches_theme": 7,
-    "theme_default_glass_tokens": 7,
+    "theme_foreground_matches_theme": 10,
+    "theme_accent_matches_theme": 10,
+    "theme_tint_matches_surface": 10,
+    "theme_border_matches_theme": 10,
+    "theme_default_glass_tokens": 10,
     "theme_profile_names": {
-      "apple-glass-light": 8
+      "apple-glass-light": 10
     },
     "theme_sources": {
-      "material-style": 8
+      "material-style": 10
     },
     "theme_token_policies": {
-      "explicit-material-style-tokens": 8
+      "explicit-material-style-tokens": 10
     },
     "roles": {
       "navigation": 1,
+      "overlay": 2,
       "surface": 7
     },
     "container_modes": {
       "container": 5,
-      "isolated": 2,
+      "isolated": 4,
       "union": 1
     },
     "container_ids": {
@@ -73,7 +77,7 @@
     },
     "container_participating": 6,
     "container_unioned": 1,
-    "container_interactive": 2,
+    "container_interactive": 3,
     "container_morph_transitions": 0,
     "container_group_count": 3,
     "container_multi_surface_group_count": 1,
@@ -104,219 +108,219 @@
     "container_max_group_bounds_area": 566720.0,
     "container_max_shape_blend_strength": 0.6,
     "reference_technologies": {
-      "liquid-glass": 8
+      "liquid-glass": 10
     },
     "reference_layers": {
-      "functional-layer": 8
+      "functional-layer": 10
     },
     "reference_material_policies": {
-      "liquid-glass-functional-layer": 8
+      "liquid-glass-functional-layer": 10
     },
     "reference_variants": {
       "clear": 1,
-      "regular": 3,
+      "regular": 4,
       "thick": 2,
-      "thin": 2
+      "thin": 3
     },
     "reference_shapes": {
-      "rounded-rectangle": 8
+      "rounded-rectangle": 10
     },
     "reference_shape_scopes": {
-      "view-bounds": 8
+      "view-bounds": 10
     },
     "reference_blending_scopes": {
-      "deterministic-fallback": 8
+      "deterministic-fallback": 10
     },
     "reference_semantic_thickness": {
       "clear": 1,
-      "regular": 3,
+      "regular": 4,
       "thick": 2,
-      "thin": 2
+      "thin": 3
     },
     "reference_accessibility_responses": {
-      "combined-accessibility": 8
+      "combined-accessibility": 10
     },
     "reference_performance_responses": {
-      "deterministic-fallback": 8
+      "deterministic-fallback": 10
     },
-    "reference_view_bounds_anchored": 8,
-    "reference_shape_matches_geometry": 8,
-    "reference_tint_applied": 8,
-    "reference_interactive_response": 2,
+    "reference_view_bounds_anchored": 10,
+    "reference_shape_matches_geometry": 10,
+    "reference_tint_applied": 10,
+    "reference_interactive_response": 3,
     "reference_container_grouped": 6,
     "reference_container_union": 1,
     "reference_container_morphing": 0,
-    "reference_legibility_preserved": 8,
+    "reference_legibility_preserved": 10,
     "reference_vibrancy_expected": 0,
-    "reference_deterministic_degradation": 8,
-    "interaction_enabled": 2,
+    "reference_deterministic_degradation": 10,
+    "interaction_enabled": 3,
     "interaction_active": 1,
     "interaction_hovered": 1,
     "interaction_pressed": 0,
     "interaction_focused": 1,
     "interaction_pointer_inside": 1,
-    "interaction_reduce_motion": 8,
-    "interaction_deterministic": 8,
+    "interaction_reduce_motion": 10,
+    "interaction_deterministic": 10,
     "interaction_specular_highlight_active": 1,
     "interaction_states": {
       "hovered": 1,
-      "idle": 1,
-      "inactive": 6
+      "idle": 2,
+      "inactive": 7
     },
     "interaction_enablement_reasons": {
-      "interactive-container": 2,
-      "noninteractive-container": 6
+      "interactive-container": 3,
+      "noninteractive-container": 7
     },
     "interaction_response_models": {
-      "liquid-glass-interaction": 2,
-      "none": 6
+      "liquid-glass-interaction": 3,
+      "none": 7
     },
     "interaction_specular_models": {
-      "none": 7,
+      "none": 9,
       "pointer-specular": 1
     },
     "interaction_motion_policies": {
-      "reduced-motion-static": 2,
-      "static": 6
+      "reduced-motion-static": 3,
+      "static": 7
     },
-    "shape_valid": 8,
-    "shape_rounded": 8,
+    "shape_valid": 10,
+    "shape_rounded": 10,
     "shape_radius_clamped": 0,
     "kinds": {
       "clear": 1,
-      "regular": 3,
+      "regular": 4,
       "thick": 2,
-      "thin": 2
+      "thin": 3
     },
     "pass_names": {
-      "translucent-rounded-rect": 8
+      "translucent-rounded-rect": 10
     },
     "pass_executors": {
-      "fallback-fill": 8
+      "fallback-fill": 10
     },
     "stage_names": {
-      "edge-highlight": 8,
-      "shape-shadow": 8,
-      "translucent-rounded-rect": 8
+      "edge-highlight": 10,
+      "shape-shadow": 10,
+      "translucent-rounded-rect": 10
     },
     "stage_executors": {
-      "edge-highlight": 8,
-      "fallback-fill": 8,
-      "shape-shadow": 8
+      "edge-highlight": 10,
+      "fallback-fill": 10,
+      "shape-shadow": 10
     },
     "sampling_kernels": {
-      "none": 8
+      "none": 10
     },
     "sampling_weight_profiles": {
-      "none": 8
+      "none": 10
     },
     "luminance_curves": {
-      "fallback-flat": 8
+      "fallback-flat": 10
     },
     "backdrop_available": 0,
     "backdrop_stable": 0,
     "backdrop_sources": {
-      "none": 8
+      "none": 10
     },
     "backdrop_access_required": 0,
     "backdrop_access_stable_required": 0,
     "backdrop_access_frame_history_required": 0,
     "backdrop_access_shared_frame_capture": 0,
     "backdrop_access_next_frame_capture_required": 0,
-    "backdrop_access_bounded": 8,
+    "backdrop_access_bounded": 10,
     "backdrop_access_sources": {
-      "none": 8
+      "none": 10
     },
     "backdrop_capture_scopes": {
-      "none": 8
+      "none": 10
     },
     "backdrop_capture_reasons": {
-      "not-required": 8
+      "not-required": 10
     },
     "luminance_responses": {
-      "not-sampled": 8
+      "not-sampled": 10
     },
     "luminance_adapted": 0,
     "foreground_schemes": {
-      "high-contrast": 8
+      "high-contrast": 10
     },
     "foreground_sources": {
-      "accessibility": 8
+      "accessibility": 10
     },
     "foreground_contrast_policies": {
-      "enhanced-contrast": 8
+      "enhanced-contrast": 10
     },
     "foreground_remap_policies": {
-      "strict-theme-role-remap": 8
+      "strict-theme-role-remap": 10
     },
     "foreground_backdrop_driven": 0,
-    "foreground_high_contrast": 8,
+    "foreground_high_contrast": 10,
     "foreground_vibrant": 0,
-    "foreground_deterministic": 8,
+    "foreground_deterministic": 10,
     "foreground_min_primary_contrast_gte": 7.0,
     "foreground_minimum_contrast_gte": 7.0,
     "refraction_models": {
-      "none": 8
+      "none": 10
     },
     "refraction_sources": {
-      "none": 8
+      "none": 10
     },
     "refraction_active": 0,
     "refraction_backdrop_driven": 0,
     "refraction_interaction_driven": 0,
     "refraction_reduced_motion_suppressed": 0,
-    "refraction_bounded": 8,
+    "refraction_bounded": 10,
     "refraction_max_strength_lte": 0,
     "refraction_max_offset_pixels_lte": 0,
     "optical_response_models": {
-      "deterministic-fallback": 8
+      "deterministic-fallback": 10
     },
     "optical_blur_strategies": {
-      "fallback-fill": 8
+      "fallback-fill": 10
     },
     "optical_color_strategies": {
-      "fallback-solid-color": 8
+      "fallback-solid-color": 10
     },
     "optical_depth_strategies": {
-      "fallback-shadow-edge": 8
+      "fallback-shadow-edge": 10
     },
     "optical_stage_orders": {
-      "shadow-primary-edge": 8
+      "shadow-primary-edge": 10
     },
     "optical_backdrop_capture_policies": {
-      "no-capture": 8
+      "no-capture": 10
     },
     "optical_foreground_sampling_policies": {
-      "not-applicable": 8
+      "not-applicable": 10
     },
     "optical_backdrop_driven": 0,
     "optical_blur_active": 0,
     "optical_frosting_active": 0,
-    "optical_tint_active": 8,
+    "optical_tint_active": 10,
     "optical_saturation_active": 0,
-    "optical_luminance_preservation_active": 8,
-    "optical_edge_highlight_active": 8,
-    "optical_depth_shadow_active": 8,
+    "optical_luminance_preservation_active": 10,
+    "optical_edge_highlight_active": 10,
+    "optical_depth_shadow_active": 10,
     "optical_noise_dither_active": 0,
     "optical_refraction_active": 0,
     "optical_foreground_vibrancy_active": 0,
     "optical_interaction_active": 1,
     "optical_interaction_modulates_optics": 1,
-    "optical_deterministic_fallback": 8,
-    "render_target_ready": 8,
-    "render_target_within_backdrop_budget": 8,
+    "optical_deterministic_fallback": 10,
+    "render_target_ready": 10,
+    "render_target_within_backdrop_budget": 10,
     "render_target_pixel_formats": {
-      "bgra8unorm": 8
+      "bgra8unorm": 10
     },
     "decision_can_sample_backdrop": 0,
-    "decision_backend_supports_backdrop": 8,
+    "decision_backend_supports_backdrop": 10,
     "decision_backdrop_source_ready": 0,
     "decision_next_frame_capture_required": 0,
-    "decision_reduced_transparency": 8,
-    "decision_increase_contrast": 8,
-    "decision_reduce_motion": 8,
+    "decision_reduced_transparency": 10,
+    "decision_increase_contrast": 10,
+    "decision_reduce_motion": 10,
     "decision_blockers": {
-      "reduced-transparency": 8
+      "reduced-transparency": 10
     },
     "verifier_require_backdrop_source": 0,
     "verifier_require_edge_highlight": 0,
@@ -324,9 +328,9 @@
     "verifier_require_container_morph_contract": 0,
     "verifier_profiles": {
       "clear-over-rich-backdrop": 1,
-      "regular-legibility-backdrop": 3,
+      "regular-legibility-backdrop": 4,
       "thick-high-contrast-backdrop": 2,
-      "thin-balanced-backdrop": 2
+      "thin-balanced-backdrop": 3
     },
     "verifier_region_layers": {
       "clear-over-rich-backdrop": "material-fallback-pass",
@@ -367,16 +371,16 @@
     "max_surface_sample_pixels_gte": 0,
     "max_refraction_offset_pixels_lte": 0,
     "max_refraction_offset_pixels_gte": 0,
-    "total_runtime_passes_lte": 8,
-    "total_runtime_passes_gte": 8,
-    "active_runtime_passes_lte": 8,
-    "active_runtime_passes_gte": 8,
+    "total_runtime_passes_lte": 10,
+    "total_runtime_passes_gte": 10,
+    "active_runtime_passes_lte": 10,
+    "active_runtime_passes_gte": 10,
     "backdrop_runtime_passes_lte": 0,
     "backdrop_runtime_passes_gte": 0,
-    "total_execution_stages_lte": 24,
-    "total_execution_stages_gte": 24,
-    "active_execution_stages_lte": 24,
-    "active_execution_stages_gte": 24,
+    "total_execution_stages_lte": 30,
+    "total_execution_stages_gte": 30,
+    "active_execution_stages_lte": 30,
+    "active_execution_stages_gte": 30,
     "backdrop_execution_stages_lte": 0,
     "backdrop_execution_stages_gte": 0,
     "dropped_execution_stages_lte": 0,
@@ -469,7 +473,7 @@
     },
     {
       "path": "application.glass_showcase.probe_contract.active_material_probe_count",
-      "equals": 7
+      "equals": 9
     },
     {
       "path": "application.glass_showcase.probe_contract.fallback_contract",
@@ -478,12 +482,20 @@
     {
       "path": "application.glass_showcase.probe_contract.material_probes.debug_contract.requires_inspector_open",
       "equals": true
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.material_probes.tooltip_probe.interactive",
+      "equals": false
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.material_probes.context_menu_probe.interactive",
+      "equals": true
     }
   ],
   "require_runtime_numeric_bounds": [
     {
       "path": "renderer.material_executor_summary.plan_count",
-      "equals": 8
+      "equals": 10
     },
     {
       "path": "renderer.material_executor_summary.material_instance_count",
@@ -491,15 +503,15 @@
     },
     {
       "path": "renderer.material_executor_summary.fallback_instance_count",
-      "equals": 8
+      "equals": 10
     },
     {
       "path": "renderer.material_executor_summary.execution_stage_count",
-      "equals": 24
+      "equals": 30
     },
     {
       "path": "renderer.material_executor_summary.active_execution_stage_count",
-      "equals": 24
+      "equals": 30
     },
     {
       "path": "renderer.material_executor_summary.backdrop_execution_stage_count",
@@ -507,7 +519,7 @@
     },
     {
       "path": "renderer.material_executor_summary.primary_execution_stage_count",
-      "equals": 8
+      "equals": 10
     },
     {
       "path": "renderer.material_executor_summary.backdrop_filter_stage_count",
@@ -515,15 +527,15 @@
     },
     {
       "path": "renderer.material_executor_summary.fallback_fill_stage_count",
-      "equals": 8
+      "equals": 10
     },
     {
       "path": "renderer.material_executor_summary.shadow_stage_count",
-      "equals": 8
+      "equals": 10
     },
     {
       "path": "renderer.material_executor_summary.edge_highlight_stage_count",
-      "equals": 8
+      "equals": 10
     },
     {
       "path": "renderer.material_executor_summary.noise_dither_stage_count",
