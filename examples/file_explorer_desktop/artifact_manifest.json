@@ -274,7 +274,7 @@
     },
     {
       "path": "application.file_explorer.finder_visual_contract.sidebar_selection_style",
-      "equals": "finder_soft_selected_row_no_outline_accent_symbol"
+      "equals": "finder_translucent_selected_row_no_outline_accent_symbol"
     },
     {
       "path": "application.file_explorer.finder_visual_contract.sidebar_selected_row_border_width",
@@ -794,15 +794,15 @@
     },
     {
       "path": "application.file_explorer.chrome.sidebar_selected_row_background_alpha",
-      "equals": 255
+      "equals": 150
     },
     {
       "path": "application.file_explorer.chrome.sidebar_selected_row_hover_background_alpha",
-      "equals": 255
+      "equals": 176
     },
     {
       "path": "application.file_explorer.chrome.sidebar_selection_policy",
-      "equals": "finder_soft_selected_row_no_outline_accent_symbol"
+      "equals": "finder_translucent_selected_row_no_outline_accent_symbol"
     },
     {
       "path": "application.file_explorer.chrome.geometry.toolbar_shell_x",
@@ -1086,7 +1086,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.sidebar_selected_pressed_background_alpha",
-      "equals": 255
+      "equals": 196
     },
     {
       "path": "application.file_explorer.chrome.icon_system.pressed_symbol_opacity",

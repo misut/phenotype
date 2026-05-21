@@ -432,7 +432,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && icon_catalog::symbol_control_chrome_policy()
                 == std::string_view{"macos_finder_symbol_state_chrome"}
             && toolbar_chrome.hover_background_color.a == 120
-            && sidebar_selected_chrome.background_color.a == 255
+            && sidebar_selected_chrome.background_color.a == 150
             && icon_catalog::macos_interaction_tone(
                    icon_catalog::SymbolPresentationRole::Sidebar,
                    icon_catalog::SymbolInteractionState{true, true})
@@ -458,7 +458,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && toolbar_pressed_recipe.background_color.a == 150
             && toolbar_pressed_recipe.symbol_opacity < 1.0f
             && toolbar_pressed_recipe.scale < 1.0f
-            && selected_sidebar_pressed_recipe.background_color.a == 255
+            && selected_sidebar_pressed_recipe.background_color.a == 196
             && disabled_recipe.symbol_opacity < 0.5f,
          .detail = std::format(
              "{}; phases={}",

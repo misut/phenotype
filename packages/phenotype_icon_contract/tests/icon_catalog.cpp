@@ -504,9 +504,9 @@ int main() {
     assert(selected_sidebar_chrome.symbol_tone == icons::SymbolTone::Accent);
     assert(selected_sidebar_chrome.symbol_color.b == 255);
     assert(selected_sidebar_chrome.background_color.r == 236);
-    assert(selected_sidebar_chrome.background_color.a == 255);
+    assert(selected_sidebar_chrome.background_color.a == 150);
     assert(selected_sidebar_chrome.hover_background_color.r == 232);
-    assert(selected_sidebar_chrome.hover_background_color.a == 255);
+    assert(selected_sidebar_chrome.hover_background_color.a == 176);
     assert(selected_sidebar_chrome.corner_radius == 10.0f);
     auto const disabled_toolbar_chrome = icons::macos_control_chrome(
         icons::SymbolPresentationRole::Toolbar,
@@ -530,7 +530,7 @@ int main() {
         icons::SymbolInteractionPhase::Pressed);
     assert(selected_sidebar_pressed_recipe.symbol_tone
            == icons::SymbolTone::Accent);
-    assert(selected_sidebar_pressed_recipe.background_color.a == 255);
+    assert(selected_sidebar_pressed_recipe.background_color.a == 196);
     assert(selected_sidebar_pressed_recipe.scale < 1.0f);
     auto const disabled_recipe = icons::macos_state_recipe(
         icons::SymbolPresentationRole::Toolbar,

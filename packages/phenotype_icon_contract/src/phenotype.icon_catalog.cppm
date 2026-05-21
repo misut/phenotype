@@ -1790,10 +1790,10 @@ inline auto macos_control_chrome(SymbolPresentationRole role,
             tone,
             symbol_color,
             state.selected
-                ? SymbolColor{236, 236, 240, 255}
+                ? SymbolColor{236, 236, 240, 150}
                 : transparent,
             state.selected
-                ? SymbolColor{232, 232, 236, 255}
+                ? SymbolColor{232, 232, 236, 176}
                 : SymbolColor{230, 230, 234, 150},
             10.0f,
             hit_target_size(role),
@@ -1851,7 +1851,7 @@ inline auto macos_phase_background_color(SymbolPresentationRole role,
             return chrome.background_color;
         if (role == SymbolPresentationRole::Sidebar) {
             return state.selected
-                ? SymbolColor{226, 226, 232, 255}
+                ? SymbolColor{226, 226, 232, 196}
                 : SymbolColor{218, 218, 224, 190};
         }
         return state.selected

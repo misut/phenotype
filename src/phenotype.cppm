@@ -450,9 +450,9 @@ inline ButtonStyleOptions glass_selection_button_style(
     auto selected_pressed = t.accent_strong;
     auto selected_text = t.state_active_fg;
     if (options.chrome == GlassSelectionChrome::SidebarPill) {
-        selected_bg = material_with_alpha(t.code_bg, 238);
-        selected_hover = material_with_alpha(t.code_bg, 248);
-        selected_pressed = t.code_bg;
+        selected_bg = material_with_alpha(t.code_bg, 150);
+        selected_hover = material_with_alpha(t.code_bg, 176);
+        selected_pressed = material_with_alpha(t.code_bg, 196);
         selected_text = t.accent;
     }
     if (kind != MaterialKind::None) {
