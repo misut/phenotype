@@ -981,15 +981,48 @@ inline void glass_button(str label,
 }
 
 namespace _impl {
+inline MaterialStyle glass_control_indicator_material(
+        MaterialKind kind,
+        MaterialSurfaceRole role,
+        bool active,
+        bool hovered,
+        bool focused,
+        bool pressed,
+        Color active_tint,
+        Color idle_tint,
+        Color active_border,
+        Color idle_border) {
+    auto const& t = ::phenotype::detail::g_app.theme;
+    auto material = material_style_for_kind(kind, t);
+    material.role = role;
+    material.fallback = kind != MaterialKind::None;
+    material.tint = active ? active_tint : idle_tint;
+    material.border = active ? active_border : idle_border;
+    material.foreground = active ? t.state_active_fg : t.foreground;
+    material.accent_foreground = t.accent;
+    material.strong_accent_foreground = t.accent_strong;
+    material.interaction = MaterialInteractionDescriptor{
+        .hovered = hovered,
+        .pressed = pressed,
+        .focused = focused,
+        .pointer_inside = hovered,
+        .pointer_x = 0.5f,
+        .pointer_y = 0.5f,
+    };
+    return material;
+}
+
 template<typename Msg>
 inline void toggle(str label, bool active, Msg msg,
                    float corner_radius, Decoration active_decoration,
-                   InteractionRole role) {
+                   InteractionRole role,
+                   GlassToggleStyleOptions const* glass_options = nullptr) {
     auto const& t = ::phenotype::detail::g_app.theme;
     auto id = static_cast<unsigned int>(
         ::phenotype::detail::g_app.callbacks.size());
     bool const is_hovered = (id == ::phenotype::detail::g_app.hovered_id);
     bool const is_focused = ::phenotype::detail::focus_ring_visible(id);
+    bool const is_pressed = (id == ::phenotype::detail::g_app.pressed_id);
     Color const ring_off{t.state_focus_ring.r, t.state_focus_ring.g,
                          t.state_focus_ring.b, 0};
     auto row_h = ::phenotype::detail::alloc_node();
@@ -1051,6 +1084,36 @@ inline void toggle(str label, bool active, Msg msg,
             box.background   = ::phenotype::detail::g_app.theme.surface;
             box.border_color = ::phenotype::detail::g_app.theme.border;
         }
+        if (glass_options && glass_options->kind != MaterialKind::None) {
+            auto const active_blue =
+                lerp_color(t.accent_strong, Color{0, 0, 0, 255}, 0.16f);
+            auto active_tint = material_with_alpha(
+                active_blue,
+                static_cast<unsigned char>(
+                    is_pressed ? 232 : (is_hovered ? 214 : 196)));
+            auto idle_tint = material_with_alpha(
+                t.surface,
+                static_cast<unsigned char>(
+                    is_pressed ? 190 : (is_hovered ? 166 : 136)));
+            auto material = glass_control_indicator_material(
+                glass_options->kind,
+                glass_options->role,
+                active,
+                is_hovered,
+                is_focused,
+                is_pressed,
+                active_tint,
+                idle_tint,
+                material_with_alpha(t.accent_strong, 210),
+                material_with_alpha(t.border, 140));
+            box.material = material;
+            box.background = material.tint;
+            box.border_color = material.border;
+            box.debug_semantic_hidden = false;
+            box.debug_semantic_role = "material";
+            box.debug_semantic_label =
+                std::string(label.data, label.len) + " Indicator";
+        }
         box.border_width = 1;
         ::phenotype::detail::append_child(row_h, box_h);
     }
@@ -1076,10 +1139,26 @@ inline void checkbox(str label, bool checked, Msg msg) {
 }
 
 template<typename Msg>
+inline void glass_checkbox(str label, bool checked, Msg msg,
+                           GlassToggleStyleOptions options = {}) {
+    _impl::toggle(label, checked, std::move(msg),
+                  detail::g_app.theme.radius_xs, Decoration::Check,
+                  InteractionRole::Checkbox, &options);
+}
+
+template<typename Msg>
 inline void radio(str label, bool selected, Msg msg) {
     _impl::toggle(label, selected, std::move(msg),
                   detail::g_app.theme.radius_lg, Decoration::Dot,
                   InteractionRole::Radio);
+}
+
+template<typename Msg>
+inline void glass_radio(str label, bool selected, Msg msg,
+                        GlassToggleStyleOptions options = {}) {
+    _impl::toggle(label, selected, std::move(msg),
+                  detail::g_app.theme.radius_lg, Decoration::Dot,
+                  InteractionRole::Radio, &options);
 }
 
 // text_field<Msg> — single-line text input.
@@ -1753,12 +1832,16 @@ inline void progress_indeterminate(float max_width = 200.0f) {
 // events. Per-call-site widget ids let two switches in one view
 // animate independently — see the framework_local sibling-counter
 // mechanism.
+namespace _impl {
 template<typename Msg>
-inline void switch_(str label, bool on, Msg msg) {
+inline void switch_control(str label, bool on, Msg msg,
+                           GlassSwitchStyleOptions const* glass_options = nullptr) {
     auto const& t = detail::g_app.theme;
     auto id = static_cast<unsigned int>(
         detail::g_app.callbacks.size());
+    bool const is_hovered = (id == detail::g_app.hovered_id);
     bool const is_focused = detail::focus_ring_visible(id);
+    bool const is_pressed = (id == detail::g_app.pressed_id);
     Color const ring_off{t.state_focus_ring.r, t.state_focus_ring.g,
                          t.state_focus_ring.b, 0};
 
@@ -1812,6 +1895,40 @@ inline void switch_(str label, bool on, Msg msg) {
         tr.background = animate_color(on ? t.accent : t.border, 150);
         tr.border_radius = 9.0f;
         tr.debug_semantic_hidden = true;
+        if (glass_options && glass_options->kind != MaterialKind::None) {
+            auto const active_blue =
+                lerp_color(t.accent_strong, Color{0, 0, 0, 255}, 0.16f);
+            auto active_tint = material_with_alpha(
+                active_blue,
+                static_cast<unsigned char>(
+                    is_pressed ? 236 : (is_hovered ? 218 : 198)));
+            auto idle_tint = material_with_alpha(
+                t.surface,
+                static_cast<unsigned char>(
+                    is_pressed ? 192 : (is_hovered ? 166 : 136)));
+            auto animated_tint = animate_color(
+                on ? active_tint : idle_tint,
+                150);
+            auto material = glass_control_indicator_material(
+                glass_options->kind,
+                glass_options->role,
+                on,
+                is_hovered,
+                is_focused,
+                is_pressed,
+                animated_tint,
+                animated_tint,
+                material_with_alpha(t.accent_strong, 210),
+                material_with_alpha(t.border, 150));
+            tr.material = material;
+            tr.background = material.tint;
+            tr.border_color = material.border;
+            tr.border_width = 0.5f;
+            tr.debug_semantic_hidden = false;
+            tr.debug_semantic_role = "material";
+            tr.debug_semantic_label =
+                std::string(label.data, label.len) + " Track";
+        }
     }
     detail::append_child(row_h, track_h);
 
@@ -1853,6 +1970,18 @@ inline void switch_(str label, bool on, Msg msg) {
         lbl.debug_semantic_hidden = true;
         detail::append_child(row_h, lbl_h);
     }
+}
+} // namespace _impl
+
+template<typename Msg>
+inline void switch_(str label, bool on, Msg msg) {
+    _impl::switch_control(label, on, std::move(msg));
+}
+
+template<typename Msg>
+inline void glass_switch(str label, bool on, Msg msg,
+                         GlassSwitchStyleOptions options = {}) {
+    _impl::switch_control(label, on, std::move(msg), &options);
 }
 
 // tabs — segmented row of buttons that posts `on_select(i)` when the

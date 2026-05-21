@@ -4080,13 +4080,21 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             {"regular-legibility-backdrop": "material-fallback-pass"})
 
     def test_manifest_can_require_material_surface_role(self) -> None:
+        plan = material_plan()
+        plan["role"] = "control"
+        assert isinstance(plan["command_descriptor"], dict)
+        plan["command_descriptor"]["role"] = "control"
+        root = snapshot(plan)
+        semantic_material = root["debug"]["semantic_tree"]["children"][0]["material"]
+        assert isinstance(semantic_material, dict)
+        semantic_material["role"] = "control"
         manifest = {
-            "require_material_surface_roles": ["surface"],
+            "require_material_surface_roles": ["control"],
             "require_material_plan_summary": {
-                "roles": {"surface": 1},
+                "roles": {"control": 1},
             },
         }
-        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+        code, report = self.run_verifier(root, manifest)
 
         self.assertEqual(code, 0)
         self.assertTrue(report["ok"])

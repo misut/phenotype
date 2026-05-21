@@ -67,7 +67,7 @@ inline char const* material_kind_name(MaterialKind kind) noexcept {
 
 // Functional role for a material surface. This is semantic information, not
 // backend policy: pure planning and artifacts keep it so Liquid Glass usage can
-// be audited as app chrome, navigation, content, or overlay structure.
+// be audited as app chrome, navigation, controls, content, or overlay structure.
 enum class MaterialSurfaceRole {
     Surface,
     Toolbar,
@@ -76,6 +76,7 @@ enum class MaterialSurfaceRole {
     Navigation,
     Content,
     Overlay,
+    Control,
 };
 
 inline char const* material_surface_role_name(MaterialSurfaceRole role) noexcept {
@@ -87,6 +88,7 @@ inline char const* material_surface_role_name(MaterialSurfaceRole role) noexcept
         case MaterialSurfaceRole::Navigation: return "navigation";
         case MaterialSurfaceRole::Content:    return "content";
         case MaterialSurfaceRole::Overlay:    return "overlay";
+        case MaterialSurfaceRole::Control:    return "control";
     }
     return "surface";
 }
@@ -101,6 +103,7 @@ inline MaterialSurfaceRole material_surface_role_from_wire(
         case MaterialSurfaceRole::Navigation:
         case MaterialSurfaceRole::Content:
         case MaterialSurfaceRole::Overlay:
+        case MaterialSurfaceRole::Control:
             return static_cast<MaterialSurfaceRole>(raw);
     }
     return MaterialSurfaceRole::Surface;
@@ -1271,6 +1274,16 @@ struct GlassControlStyleOptions {
     float border_radius = -1.0f;
     float font_size = 0.0f;
     TextAlign text_align = TextAlign::Center;
+};
+
+struct GlassToggleStyleOptions {
+    MaterialKind kind = MaterialKind::Thin;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Control;
+};
+
+struct GlassSwitchStyleOptions {
+    MaterialKind kind = MaterialKind::Thin;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Control;
 };
 
 enum class GlassSplitButtonSegment {

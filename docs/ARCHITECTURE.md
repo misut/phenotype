@@ -1128,11 +1128,13 @@ fallbacks rather than a claim to reproduce private system component behavior.
 The layout DSL exposes this boundary through `layout::material_surface` for
 low-level material containers and `layout::toolbar`, `layout::navigation`,
 `layout::segmented_control_surface`, `layout::popover`, `layout::sidebar`, and
-`layout::status_bar` for common app chrome. Those
+`layout::status_bar` for common app chrome, plus `widget::glass_checkbox`,
+`widget::glass_radio`, and `widget::glass_switch` for control indicators. Those
 helpers only configure layout, semantic labels, and `MaterialSurfaceRole`; they
 still emit the same `MaterialRect` command and flow through the pure
 planner/backend executor contract above. Artifact gates can require roles such
-as `toolbar`, `sidebar`, `status_bar`, `navigation`, `overlay`, or `surface`
+as `toolbar`, `sidebar`, `status_bar`, `navigation`, `overlay`, `control`, or
+`surface`
 without changing backend rendering policy. `MaterialSurfaceOptions` also
 carries explicit border radius and border width overrides; these are
 view/layout chrome decisions that shape the emitted command while leaving

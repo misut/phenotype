@@ -26,7 +26,7 @@ inline constexpr float k_default_viewport_scale = 1.0f;
 inline constexpr std::size_t k_density_count = 3;
 inline constexpr std::size_t k_default_density = 1;
 inline constexpr std::size_t k_material_kind_count = 4;
-inline constexpr std::size_t k_base_material_plan_count = 8;
+inline constexpr std::size_t k_base_material_plan_count = 11;
 inline constexpr std::size_t k_inspector_material_plan_count = 1;
 inline constexpr std::size_t k_total_material_probe_count =
     k_base_material_plan_count + k_inspector_material_plan_count;
@@ -161,6 +161,36 @@ inline constexpr std::array<GlassMaterialProbe, k_total_material_probe_count>
             .has_container_id = true,
             .interactive = true,
             .verifier_profile = "regular-legibility-backdrop",
+        },
+        {
+            .name = "checkbox_control_probe",
+            .label = "Glass Checkbox",
+            .description =
+                "Material-backed checkbox indicator proving boolean controls are part of the glass contract.",
+            .kind = GlassProbeMaterialKind::Thin,
+            .interactive = true,
+            .verifier_profile = "thin-balanced-backdrop",
+            .likely_layer = "material-control-indicator",
+        },
+        {
+            .name = "radio_control_probe",
+            .label = "Glass Radio",
+            .description =
+                "Material-backed radio indicator proving selection controls expose resolved glass optics.",
+            .kind = GlassProbeMaterialKind::Thin,
+            .interactive = true,
+            .verifier_profile = "thin-balanced-backdrop",
+            .likely_layer = "material-control-indicator",
+        },
+        {
+            .name = "switch_control_probe",
+            .label = "Glass Switch",
+            .description =
+                "Material-backed switch track proving animated control state stays artifact-visible.",
+            .kind = GlassProbeMaterialKind::Thin,
+            .interactive = true,
+            .verifier_profile = "thin-balanced-backdrop",
+            .likely_layer = "material-control-track",
         },
         {
             .name = "visible_blur_probe",

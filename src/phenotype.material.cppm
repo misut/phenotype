@@ -267,6 +267,7 @@ inline bool material_role_allows_liquid_glass(
         case MaterialSurfaceRole::StatusBar:
         case MaterialSurfaceRole::Navigation:
         case MaterialSurfaceRole::Overlay:
+        case MaterialSurfaceRole::Control:
             return true;
     }
     return true;
