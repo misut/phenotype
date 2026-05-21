@@ -350,12 +350,16 @@ and `performance_policy` tells backend adapters whether to use a single surface,
 a shared container capture, or a shared union capture path.
 The current sampled-glass kernel is a pure tap-tier descriptor:
 `weighted-center`, `weighted-cross-5`, `weighted-3x3-grid`, or
-`weighted-5x5-manhattan`, with the resolved tap count, kernel radius, blur step
-scale, and weight profile; fallback plans serialize the inactive `none` kernel.
-This keeps blur spread and tap-shape policy in `plan_material_surface` while
-macOS Metal executes the descriptor and other backends publish deterministic
-fallback metadata. macOS converts that logical blur spread with the current
-content scale before sampling the framebuffer, and reports both the content
+`gaussian-5x5`, with the resolved tap count, kernel radius, blur step scale,
+and Gaussian/separable weight profile; fallback plans serialize the inactive
+`none` kernel. Schema 43 switches the high-quality macOS sampled material path
+from the older cardinal/diagonal integer weighting to a Gaussian 5x5 separable
+profile, keeping blur visibly frosted instead of alpha-only while preserving the
+bounded 25-tap shader budget. This keeps blur spread and tap-shape policy in
+`plan_material_surface` while macOS Metal executes the descriptor and other
+backends publish deterministic fallback metadata. macOS converts that logical
+blur spread with the current content scale before sampling the framebuffer, and
+reports both the content
 scale and maximum physical shader step in `material_executor_summary` so Retina
 and non-Retina artifacts stay comparable.
 Backdrops also degrade through an explicit

@@ -768,7 +768,7 @@ allows more. The pure planner normalizes caller tap limits to executable
 backdrop kernels of 1, 5, 9, 13, or 25 taps, selecting the largest kernel that
 does not exceed `quality_policy.max_sample_taps`. `sampling_kernel` then names
 the exact bounded blur kernel (`weighted-center`, `weighted-cross-5`,
-`weighted-3x3-grid`, or `weighted-5x5-manhattan`), its radius, resolved tap
+`weighted-3x3-grid`, or `gaussian-5x5`), its radius, resolved tap
 count, blur step scale, weight profile, and whether it requires a backdrop
 source. Deterministic fallback plans use the inactive `none` kernel so stale
 blur metadata cannot leak into fallback artifacts. macOS uploads the kernel's

@@ -13,7 +13,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 42;
+inline constexpr std::uint32_t material_plan_contract_version = 43;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -2543,7 +2543,7 @@ inline MaterialSamplingKernel material_resolve_sampling_kernel(
             1u,
             sample_taps,
             0.35f,
-            "center4-cardinal2",
+            "gaussian-cross-5-separable",
             true,
             true,
         };
@@ -2553,16 +2553,16 @@ inline MaterialSamplingKernel material_resolve_sampling_kernel(
             1u,
             sample_taps,
             0.35f,
-            "center4-cardinal2-diagonal1",
+            "gaussian-3x3-separable",
             true,
             true,
         };
     return MaterialSamplingKernel{
-        "weighted-5x5-manhattan",
+        "gaussian-5x5",
         2u,
         sample_taps,
         0.35f,
-        "center4-cardinal2-diagonal1",
+        "gaussian-5x5-separable",
         true,
         true,
     };

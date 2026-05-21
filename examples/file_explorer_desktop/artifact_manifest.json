@@ -61,7 +61,7 @@
     "fallback": 0,
     "backdrop_sampling": 8,
     "contract_versions": {
-      "42": 9
+      "43": 9
     },
     "theme_foreground_matches_theme": 0,
     "theme_accent_matches_theme": 0,
@@ -154,11 +154,11 @@
       "standard-fill": 1
     },
     "sampling_kernels": {
-      "weighted-5x5-manhattan": 8,
+      "gaussian-5x5": 8,
       "none": 1
     },
     "sampling_weight_profiles": {
-      "center4-cardinal2-diagonal1": 8,
+      "gaussian-5x5-separable": 8,
       "none": 1
     },
     "backdrop_access_required": 8,

@@ -192,6 +192,7 @@ ALLOWED_MATERIAL_DEPTH_RESPONSES = {
 }
 
 ALLOWED_MATERIAL_SAMPLING_KERNELS = {
+    "gaussian-5x5",
     "none",
     "weighted-3x3-grid",
     "weighted-center",
@@ -203,6 +204,9 @@ ALLOWED_MATERIAL_SAMPLING_WEIGHT_PROFILES = {
     "center4",
     "center4-cardinal2",
     "center4-cardinal2-diagonal1",
+    "gaussian-3x3-separable",
+    "gaussian-5x5-separable",
+    "gaussian-cross-5-separable",
     "none",
 }
 
@@ -431,7 +435,7 @@ ALLOWED_MATERIAL_REFRACTION_SOURCES = {
     "sampled-backdrop-edge-refraction",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 42
+MATERIAL_PLAN_CONTRACT_VERSION = 43
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 MATERIAL_MAX_REFRACTION_OFFSET_PIXELS = 3.5
@@ -1036,7 +1040,7 @@ def expected_material_sampling_kernel(
             "name": "weighted-cross-5",
             "radius": 1,
             "blur_step_scale": 0.35,
-            "weight_profile": "center4-cardinal2",
+            "weight_profile": "gaussian-cross-5-separable",
             "requires_backdrop": True,
             "bounded": True,
         }
@@ -1045,15 +1049,15 @@ def expected_material_sampling_kernel(
             "name": "weighted-3x3-grid",
             "radius": 1,
             "blur_step_scale": 0.35,
-            "weight_profile": "center4-cardinal2-diagonal1",
+            "weight_profile": "gaussian-3x3-separable",
             "requires_backdrop": True,
             "bounded": True,
         }
     return {
-        "name": "weighted-5x5-manhattan",
+        "name": "gaussian-5x5",
         "radius": 2,
         "blur_step_scale": 0.35,
-        "weight_profile": "center4-cardinal2-diagonal1",
+        "weight_profile": "gaussian-5x5-separable",
         "requires_backdrop": True,
         "bounded": True,
     }
