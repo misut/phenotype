@@ -125,6 +125,10 @@ the verifier's compact `artifact_context.material_contract.executor_budget`
 under `verifier.material_budget` when present. Use this as the first artifact
 triage command when a CI log or local bundle needs one machine-readable
 explanation before deeper pixel-contract debugging.
+Without `--json`, the same command prints short `snapshot material budget` and
+`verifier material budget` blocks when those counters are available, so local
+triage can see plan, stage, tap, upload, draw, and backdrop-copy status without
+opening the full report.
 
 When debugging the CLI/native input-output boundary itself, first check the
 pure contract surface:
