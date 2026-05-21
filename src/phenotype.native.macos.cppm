@@ -1629,6 +1629,8 @@ struct MaterialInstanceGPU {
     float luminance_curve[4]{};
     // specular anchor x/y, radius, intensity
     float interaction[4]{};
+    // refraction strength, edge bias, max offset pixels, reserved
+    float refraction[4]{};
 };
 
 // Per-vertex GPU layout for the triangle pipeline (FillPath fast path).
@@ -2320,6 +2322,9 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.interaction[1] = plan.interaction.specular_anchor_y;
     inst.interaction[2] = plan.interaction.specular_radius;
     inst.interaction[3] = plan.interaction.specular_intensity;
+    inst.refraction[0] = plan.refraction.strength;
+    inst.refraction[1] = plan.refraction.edge_bias;
+    inst.refraction[2] = plan.refraction.max_offset_pixels;
     out.push_back(inst);
 }
 
@@ -4120,6 +4125,7 @@ struct MaterialVsOut {
     float4 sampling;
     float4 luminance_curve;
     float4 interaction;
+    float4 refraction;
 };
 
 struct MaterialInstance {
@@ -4131,6 +4137,7 @@ struct MaterialInstance {
     float4 sampling;
     float4 luminance_curve;
     float4 interaction;
+    float4 refraction;
 };
 
 vertex MaterialVsOut vs_material(
@@ -4162,6 +4169,7 @@ vertex MaterialVsOut vs_material(
     out.sampling = inst.sampling;
     out.luminance_curve = inst.luminance_curve;
     out.interaction = inst.interaction;
+    out.refraction = inst.refraction;
     return out;
 }
 
@@ -4197,6 +4205,23 @@ fragment float4 fs_material(
     float content_scale = max(in.content_scale, 1.0);
     float2 step_uv =
         texel * max(1.0, blur_points * content_scale * blur_step_scale);
+    float refraction_strength = clamp(in.refraction.x, 0.0, 1.0);
+    float refraction_edge_bias = clamp(in.refraction.y, 0.0, 1.0);
+    float refraction_offset_pixels = clamp(in.refraction.z, 0.0, 8.0)
+        * (refraction_strength > 0.0 ? 1.0 : 0.0);
+    float2 normalized_local =
+        (in.local_pos / max(in.rect_size, float2(1.0)) - float2(0.5)) * 2.0;
+    float normalized_len = length(normalized_local);
+    float2 refraction_dir = normalized_len > 0.0001
+        ? normalized_local / normalized_len
+        : float2(0.0);
+    float edge_span = max(edge_width * (2.0 + 5.0 * refraction_edge_bias),
+                          min(in.rect_size.x, in.rect_size.y) * 0.035);
+    float edge_lens = 1.0 - smoothstep(0.0, edge_span, signed_edge_distance);
+    float2 refraction_uv =
+        refraction_dir * texel
+        * (refraction_offset_pixels * content_scale)
+        * edge_lens;
     float4 acc = float4(0.0);
     float weight_sum = 0.0;
     for (int y = -2; y <= 2; ++y) {
@@ -4216,7 +4241,9 @@ fragment float4 fs_material(
             float dist = float(manhattan);
             float weight = (dist == 0.0) ? 4.0 : ((dist <= 1.0) ? 2.0 : 1.0);
             float2 uv = clamp(
-                in.screen_uv + float2(float(x), float(y)) * step_uv,
+                in.screen_uv
+                    + refraction_uv
+                    + float2(float(x), float(y)) * step_uv,
                 float2(0.0),
                 float2(1.0));
             acc += backdrop.sample(samp, uv) * weight;

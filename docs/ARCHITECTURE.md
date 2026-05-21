@@ -719,17 +719,20 @@ shadow alpha/radius, edge highlight/width, or noise opacity.
 the response model (`sampled-backdrop`, `standard-content`, `deterministic-fallback`,
 or `inactive`), blur strategy, color strategy, depth strategy, and explicit
 booleans for backdrop, blur, frosting, tint, saturation, luminance preservation,
-edge highlight, shadow depth, noise/dither, foreground vibrancy, and deterministic
-fallback. This gives CI and LLM debugging one stable JSON object that says
+edge highlight, bounded refraction, shadow depth, noise/dither, foreground
+vibrancy, and deterministic fallback. This gives CI and LLM debugging one
+stable JSON object that says
 whether the material behaved like Apple Liquid Glass, a content-layer standard
 material, or a deterministic fallback before any pixel threshold is interpreted.
-`optical_composition` is the schema-36 executable optical recipe behind that
-summary. It records the same response model plus named blur, frosting, tint,
-luminance, depth, interaction, and fallback sources, per-channel required flags,
-bounded/deterministic safety, the scalar optics, sample taps, and copy/sample
-pixel bounds. `execution_stages[].optics` is derived from this object, so
-backend adapters consume one immutable pure composition instead of rebuilding
-optical policy at the edge.
+`refraction` is the schema-37 pure edge-lens profile. It records the model,
+source, activation flags, reduced-motion suppression, strength, edge bias, and
+bounded maximum pixel offset. `optical_composition` is the executable optical
+recipe behind that summary. It records the same response model plus named blur,
+frosting, tint, luminance, refraction, depth, interaction, and fallback sources,
+per-channel required flags, bounded/deterministic safety, the scalar optics,
+sample taps, and copy/sample pixel bounds. `execution_stages[].optics` is
+derived from this object, so backend adapters consume one immutable pure
+composition instead of rebuilding optical policy at the edge.
 `execution_stage_capacity` records the fixed plan storage capacity and
 `dropped_execution_stage_count` records overflow explicitly; any nonzero drop is
 treated as a verifier failure, which forces future stage additions to update the

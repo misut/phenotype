@@ -1142,6 +1142,13 @@ void test_material_runtime_record_json_contract() {
     assert(std::fabs(interaction.at("specular_radius").as_float()) < 0.0001f);
     assert(std::fabs(interaction.at("specular_intensity").as_float()) < 0.0001f);
     assert(interaction.at("deterministic").as_bool() == true);
+    auto const& refraction = obj.at("refraction").as_object();
+    assert(refraction.at("model").as_string() == "none");
+    assert(refraction.at("source").as_string() == "none");
+    assert(refraction.at("active").as_bool() == false);
+    assert(refraction.at("bounded").as_bool() == true);
+    assert(std::fabs(refraction.at("strength").as_float()) < 0.0001f);
+    assert(std::fabs(refraction.at("max_offset_pixels").as_float()) < 0.0001f);
     auto const& optical_response = obj.at("optical_response").as_object();
     assert(optical_response.at("response_model").as_string()
            == "deterministic-fallback");
@@ -1161,6 +1168,7 @@ void test_material_runtime_record_json_contract() {
     assert(optical_response.at("edge_highlight_active").as_bool() == true);
     assert(optical_response.at("depth_shadow_active").as_bool() == true);
     assert(optical_response.at("noise_dither_active").as_bool() == false);
+    assert(optical_response.at("refraction_active").as_bool() == false);
     assert(optical_response.at("foreground_vibrancy_active").as_bool()
            == false);
     assert(optical_response.at("interaction_active").as_bool() == false);

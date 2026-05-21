@@ -1508,6 +1508,9 @@ namespace detail {
             "max_surface_sample_pixels",
             json::Value{plan.resource_budget.max_surface_sample_pixels});
         resource_budget.emplace(
+            "max_refraction_offset_pixels",
+            json::Value{plan.resource_budget.max_refraction_offset_pixels});
+        resource_budget.emplace(
             "max_container_spacing",
             json::Value{plan.resource_budget.max_container_spacing});
         resource_budget.emplace(
@@ -1770,6 +1773,26 @@ namespace detail {
             "deterministic",
             json::Value{plan.foreground.deterministic});
 
+        json::Object refraction;
+        refraction.emplace("model", json::Value{plan.refraction.model});
+        refraction.emplace("source", json::Value{plan.refraction.source});
+        refraction.emplace("active", json::Value{plan.refraction.active});
+        refraction.emplace(
+            "backdrop_driven",
+            json::Value{plan.refraction.backdrop_driven});
+        refraction.emplace(
+            "interaction_driven",
+            json::Value{plan.refraction.interaction_driven});
+        refraction.emplace(
+            "reduced_motion_suppressed",
+            json::Value{plan.refraction.reduced_motion_suppressed});
+        refraction.emplace("bounded", json::Value{plan.refraction.bounded});
+        refraction.emplace("strength", json::Value{plan.refraction.strength});
+        refraction.emplace("edge_bias", json::Value{plan.refraction.edge_bias});
+        refraction.emplace(
+            "max_offset_pixels",
+            json::Value{plan.refraction.max_offset_pixels});
+
         json::Object interaction;
         interaction.emplace("enabled", json::Value{plan.interaction.enabled});
         interaction.emplace("active", json::Value{plan.interaction.active});
@@ -1879,6 +1902,9 @@ namespace detail {
             "noise_dither_active",
             json::Value{plan.optical_response.noise_dither_active});
         optical_response.emplace(
+            "refraction_active",
+            json::Value{plan.optical_response.refraction_active});
+        optical_response.emplace(
             "foreground_vibrancy_active",
             json::Value{plan.optical_response.foreground_vibrancy_active});
         optical_response.emplace(
@@ -1914,6 +1940,9 @@ namespace detail {
             "depth_source",
             json::Value{composition.depth_source});
         optical_composition.emplace(
+            "refraction_source",
+            json::Value{composition.refraction_source});
+        optical_composition.emplace(
             "interaction_source",
             json::Value{composition.interaction_source});
         optical_composition.emplace(
@@ -1946,6 +1975,9 @@ namespace detail {
         optical_composition.emplace(
             "noise_required",
             json::Value{composition.noise_required});
+        optical_composition.emplace(
+            "refraction_required",
+            json::Value{composition.refraction_required});
         optical_composition.emplace(
             "interaction_required",
             json::Value{composition.interaction_required});
@@ -1987,6 +2019,15 @@ namespace detail {
         optical_composition.emplace(
             "shadow_radius",
             json::Value{composition.shadow_radius});
+        optical_composition.emplace(
+            "refraction_strength",
+            json::Value{composition.refraction_strength});
+        optical_composition.emplace(
+            "refraction_edge_bias",
+            json::Value{composition.refraction_edge_bias});
+        optical_composition.emplace(
+            "refraction_offset_pixels",
+            json::Value{composition.refraction_offset_pixels});
         optical_composition.emplace(
             "interaction_response_strength",
             json::Value{composition.interaction_response_strength});
@@ -2145,6 +2186,18 @@ namespace detail {
             optics_json.emplace(
                 "specular_intensity",
                 json::Value{optics.specular_intensity});
+            optics_json.emplace(
+                "refraction_model",
+                json::Value{optics.refraction_model});
+            optics_json.emplace(
+                "refraction_strength",
+                json::Value{optics.refraction_strength});
+            optics_json.emplace(
+                "refraction_edge_bias",
+                json::Value{optics.refraction_edge_bias});
+            optics_json.emplace(
+                "refraction_offset_pixels",
+                json::Value{optics.refraction_offset_pixels});
             json::Object out_stage;
             out_stage.emplace("name", json::Value{stage.name});
             out_stage.emplace("active", json::Value{stage.active});
@@ -2235,6 +2288,7 @@ namespace detail {
             json::Value{std::move(backdrop_access)});
         out.emplace("theme", json::Value{std::move(theme)});
         out.emplace("foreground", json::Value{std::move(foreground)});
+        out.emplace("refraction", json::Value{std::move(refraction)});
         out.emplace("interaction", json::Value{std::move(interaction)});
         out.emplace(
             "optical_response",
@@ -2608,6 +2662,11 @@ namespace detail {
                 static_cast<std::int64_t>(
                     summary.interaction_specular_highlight_count)});
         out.emplace(
+            "refraction_active_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.refraction_active_count)});
+        out.emplace(
             "theme_default_glass_token_count",
             json::Value{
                 static_cast<std::int64_t>(
@@ -2649,6 +2708,15 @@ namespace detail {
         out.emplace(
             "max_interaction_specular_intensity",
             json::Value{summary.max_interaction_specular_intensity});
+        out.emplace(
+            "max_refraction_strength",
+            json::Value{summary.max_refraction_strength});
+        out.emplace(
+            "max_refraction_edge_bias",
+            json::Value{summary.max_refraction_edge_bias});
+        out.emplace(
+            "max_refraction_offset_pixels",
+            json::Value{summary.max_refraction_offset_pixels});
         out.emplace(
             "min_foreground_contrast_ratio",
             json::Value{summary.min_foreground_contrast_ratio});
@@ -2911,6 +2979,11 @@ namespace detail {
                 static_cast<std::int64_t>(
                     summary.interaction_specular_highlight_count)});
         out.emplace(
+            "refraction_active_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.refraction_active_count)});
+        out.emplace(
             "max_interaction_response_strength",
             json::Value{summary.max_interaction_response_strength});
         out.emplace(
@@ -2919,6 +2992,15 @@ namespace detail {
         out.emplace(
             "max_interaction_specular_intensity",
             json::Value{summary.max_interaction_specular_intensity});
+        out.emplace(
+            "max_refraction_strength",
+            json::Value{summary.max_refraction_strength});
+        out.emplace(
+            "max_refraction_edge_bias",
+            json::Value{summary.max_refraction_edge_bias});
+        out.emplace(
+            "max_refraction_offset_pixels",
+            json::Value{summary.max_refraction_offset_pixels});
         out.emplace(
             "backdrop_descriptor_luma_available",
             json::Value{summary.backdrop_descriptor_luma_available});
