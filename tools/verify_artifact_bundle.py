@@ -431,7 +431,7 @@ ALLOWED_MATERIAL_REFRACTION_SOURCES = {
     "sampled-backdrop-edge-refraction",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 40
+MATERIAL_PLAN_CONTRACT_VERSION = 41
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 MATERIAL_MAX_REFRACTION_OFFSET_PIXELS = 3.5
@@ -906,6 +906,14 @@ def material_failure_context(
         material_contract["renderer_plans_present"] = isinstance(
             renderer_details.get("material_plans"),
             list)
+        renderer_group_details = renderer_details.get("material_container_groups")
+        material_contract["renderer_container_groups_present"] = isinstance(
+            renderer_group_details,
+            list)
+        material_contract["renderer_container_group_detail_count"] = (
+            len(renderer_group_details)
+            if isinstance(renderer_group_details, list)
+            else None)
         material_contract["renderer_runtime_summary_present"] = isinstance(
             renderer_details.get("material_runtime_summary"),
             dict)
@@ -12647,6 +12655,216 @@ def check_material_container_group_summary_contract(
                 "backend finalization of material runtime records."))
 
 
+def check_material_container_group_details_contract(
+        summary: JsonObject,
+        group_details: Any,
+        report: Report) -> None:
+    base_path = "debug.platform_runtime.details.renderer.material_container_groups"
+    expected_summary = summary.get("container_groups")
+    if not isinstance(expected_summary, dict):
+        expected_summary = {}
+    report.check(
+        "renderer material_container_groups is array",
+        isinstance(group_details, list),
+        path=base_path,
+        expected="array",
+        actual=type(group_details).__name__,
+        likely_layer="material-container",
+        likely_pass="container-group-analysis",
+        hint=(
+            "Renderer details should include per-container material-group "
+            "members so an LLM can map a union/morph failure to the exact "
+            "MaterialRect command."))
+    if not isinstance(group_details, list):
+        return
+    expected_group_count = expected_summary.get("group_count")
+    report.check(
+        "renderer material_container_groups length matches plan summary",
+        len(group_details) == expected_group_count,
+        path=base_path,
+        expected=expected_group_count,
+        actual=len(group_details),
+        likely_layer="material-container",
+        likely_pass="container-group-analysis",
+        hint=(
+            "The material_container_groups array must be derived from the same "
+            "MaterialRuntimeRecord list as material_plans and runtime summary."))
+    seen_container_ids: set[int] = set()
+    max_group_size = 0
+    total_shape_pair_count = 0
+    blend_candidate_pair_count = 0
+    union_candidate_pair_count = 0
+    morph_candidate_pair_count = 0
+    separated_pair_count = 0
+    for index, group in enumerate(group_details):
+        group_path = f"{base_path}[{index}]"
+        report.check(
+            "renderer material_container_groups entry is object",
+            isinstance(group, dict),
+            path=group_path,
+            expected="object",
+            actual=type(group).__name__,
+            likely_layer="material-container",
+            likely_pass="container-group-analysis",
+            hint="Each material container group needs a stable JSON object.")
+        if not isinstance(group, dict):
+            continue
+        container_id = group.get("container_id")
+        container_id_ok = (
+            isinstance(container_id, int)
+            and not isinstance(container_id, bool)
+            and container_id > 0)
+        report.check(
+            "renderer material_container_groups container_id is positive",
+            container_id_ok,
+            path=f"{group_path}.container_id",
+            expected={">": 0},
+            actual=container_id,
+            likely_layer="material-container",
+            likely_pass="container-group-analysis",
+            hint="Container ids should mirror MaterialPlan.container.container_id.")
+        if container_id_ok:
+            report.check(
+                "renderer material_container_groups container_id is unique",
+                container_id not in seen_container_ids,
+                path=f"{group_path}.container_id",
+                expected="unique",
+                actual=container_id,
+                likely_layer="material-container",
+                likely_pass="container-group-analysis",
+                hint=(
+                    "Each material_container_groups entry should describe one "
+                    "container id."))
+            seen_container_ids.add(container_id)
+        members = group.get("members")
+        report.check(
+            "renderer material_container_groups members is array",
+            isinstance(members, list),
+            path=f"{group_path}.members",
+            expected="array",
+            actual=type(members).__name__,
+            likely_layer="material-container",
+            likely_pass="container-group-analysis",
+            hint=(
+                "Group members should list command_index, plan_id, geometry, "
+                "union, morph, and fallback details for exact debugging."))
+        surface_count = group.get("surface_count")
+        if isinstance(surface_count, (int, float)) and not isinstance(surface_count, bool):
+            max_group_size = max(max_group_size, int(surface_count))
+        if isinstance(members, list):
+            report.check(
+                "renderer material_container_groups surface_count matches members",
+                surface_count == len(members),
+                path=f"{group_path}.surface_count",
+                expected=len(members),
+                actual=surface_count,
+                likely_layer="material-container",
+                likely_pass="container-group-analysis",
+                hint=(
+                    "surface_count should be the number of serialized member "
+                    "surfaces in the group."))
+            for member_index, member in enumerate(members):
+                member_path = f"{group_path}.members[{member_index}]"
+                report.check(
+                    "renderer material_container_groups member is object",
+                    isinstance(member, dict),
+                    path=member_path,
+                    expected="object",
+                    actual=type(member).__name__,
+                    likely_layer="material-container",
+                    likely_pass="container-group-analysis",
+                    hint="Each group member should be a command-level object.")
+                if not isinstance(member, dict):
+                    continue
+                for field in (
+                        "command_index",
+                        "plan_id",
+                        "kind",
+                        "role",
+                        "fallback_path",
+                        "mode",
+                        "shape_kind"):
+                    report.check(
+                        f"renderer material_container_groups member {field} exists",
+                        field in member,
+                        path=f"{member_path}.{field}",
+                        expected="present",
+                        actual=member.get(field),
+                        likely_layer="material-container",
+                        likely_pass="container-group-analysis",
+                        hint=(
+                            "Group members must be self-describing enough to "
+                            "debug without cross-referencing pixels by eye."))
+                geometry = member.get("geometry")
+                report.check(
+                    "renderer material_container_groups member geometry is object",
+                    isinstance(geometry, dict),
+                    path=f"{member_path}.geometry",
+                    expected="object",
+                    actual=type(geometry).__name__,
+                    likely_layer="material-container",
+                    likely_pass="container-group-analysis",
+                    hint="Member geometry should identify the surface bounds.")
+        bounds = group.get("bounds")
+        report.check(
+            "renderer material_container_groups bounds is object",
+            isinstance(bounds, dict),
+            path=f"{group_path}.bounds",
+            expected="object",
+            actual=type(bounds).__name__,
+            likely_layer="material-container",
+            likely_pass="container-group-analysis",
+            hint="Group bounds should show the union/morph analysis extent.")
+        for field in (
+                "shape_pair_count",
+                "blend_candidate_pair_count",
+                "union_candidate_pair_count",
+                "morph_candidate_pair_count",
+                "separated_pair_count"):
+            value = group.get(field)
+            report.check(
+                f"renderer material_container_groups {field} is non-negative",
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and float(value) >= 0.0,
+                path=f"{group_path}.{field}",
+                expected={">=": 0},
+                actual=value,
+                likely_layer="material-container",
+                likely_pass="container-group-analysis",
+                hint="Container group pair counts must be numeric.")
+        total_shape_pair_count += int(group.get("shape_pair_count") or 0)
+        blend_candidate_pair_count += int(
+            group.get("blend_candidate_pair_count") or 0)
+        union_candidate_pair_count += int(
+            group.get("union_candidate_pair_count") or 0)
+        morph_candidate_pair_count += int(
+            group.get("morph_candidate_pair_count") or 0)
+        separated_pair_count += int(group.get("separated_pair_count") or 0)
+    expected_pairs = {
+        "max_group_size": max_group_size,
+        "total_shape_pair_count": total_shape_pair_count,
+        "blend_candidate_pair_count": blend_candidate_pair_count,
+        "union_candidate_pair_count": union_candidate_pair_count,
+        "morph_candidate_pair_count": morph_candidate_pair_count,
+        "separated_pair_count": separated_pair_count,
+    }
+    for field, actual in expected_pairs.items():
+        expected = expected_summary.get(field)
+        report.check(
+            f"renderer material_container_groups aggregate {field} matches summary",
+            actual == expected,
+            path=f"{base_path}#{field}",
+            expected=expected,
+            actual=actual,
+            likely_layer="material-container",
+            likely_pass="container-group-analysis",
+            hint=(
+                "Per-group detail aggregation should match the material plan "
+                "summary so CI logs can point to either the exact group or the "
+                "summary counter."))
+
+
 def check_material_runtime_summary_contract(
         summary: JsonObject,
         runtime_summary: Any,
@@ -14221,6 +14439,10 @@ def verify(args: argparse.Namespace) -> int:
             check_material_runtime_summary_contract(
                 material_plan_summary,
                 renderer_details.get("material_runtime_summary"),
+                report)
+            check_material_container_group_details_contract(
+                material_plan_summary,
+                renderer_details.get("material_container_groups"),
                 report)
             check_material_executor_summary_contract(
                 material_plan_summary,

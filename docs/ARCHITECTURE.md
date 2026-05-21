@@ -848,6 +848,13 @@ Backends may observe `color_mean`, `color_sample_count`, and
 preserved, treated as neutral backdrop color, or softly adapted toward sampled
 colored content. `MaterialPlan.backdrop.color_response` and
 `tint_color_delta` make that decision reviewable without a screenshot.
+Schema 41 adds `renderer.material_container_groups[]`, a command-level detail
+array derived from the same material runtime records as `material_plans[]`.
+Each group lists its container id, grouped member command indexes, plan ids,
+geometry, fallback path, union/morph flags, and pair-count aggregates. The flat
+runtime and executor summaries remain the stable CI counters, while this detail
+array gives an LLM enough evidence to identify the specific grouped surface or
+GlassEffectContainer-style spacing contract that drifted.
 `backdrop_access` mirrors the active shared frame contract per plan:
 sampled-backdrop plans require `capture_scope: shared-frame` and
 `capture_reason: sample-current-frame` with one bounded frame-history copy that
@@ -960,10 +967,12 @@ schemas before reading version-specific fields. The renderer object also carries
 `material_plan_contract_version`, allowing empty renderer contracts to advertise
 the same artifact schema. Backends also publish
 `renderer.material_runtime_summary`, a flat count/max summary derived from
-the same records; the artifact verifier recomputes it from
+the same records, plus `renderer.material_container_groups[]` for exact grouped
+surface membership. The artifact verifier recomputes both from
 `material_plans[]` so CI can catch summary drift, unexpected executor pass
-growth, stage-capacity overflow, texture-copy budget drift, and material shape
-drift such as a clamped radius not matching the backend-executed radius. The
+growth, stage-capacity overflow, texture-copy budget drift, material container
+membership drift, and material shape drift such as a clamped radius not matching
+the backend-executed radius. The
 same summary exposes optical maxima for saturation, edge highlight, edge width,
 noise opacity, shadow alpha, and shadow radius so a backend artifact can prove
 that the pure glass response survived serialization and execution. Interaction

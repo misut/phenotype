@@ -968,6 +968,13 @@ instead of a silent debug-plane mismatch.
 The renderer contract also publishes `material_plan_contract_version` next to
 `material_plans[]`, so snapshot-only or empty material renderers still expose the
 same artifact schema version without requiring a per-plan object.
+For schema 41 and later, inspect `renderer.material_container_groups[]` when a
+grouped Liquid Glass control behaves incorrectly. The array lists each
+container id, member command index, plan id, geometry, fallback path,
+union/morph flags, and aggregate pair counts. The verifier compares this detail
+array with `material_plans[]` and the flat runtime summary, so a missing split
+button segment, sidebar row, or toolbar union appears as an exact JSON-path
+failure instead of a visual-only mismatch.
 For schema 32 and later, inspect `paint_layers[]` whenever a material surface is
 not sampled backdrop glass. This array is the pure fallback draw recipe, not
 backend telemetry: shadow, fill, and edge layers expose their executor,

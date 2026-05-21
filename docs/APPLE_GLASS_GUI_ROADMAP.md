@@ -333,6 +333,12 @@ may sample the backdrop color, but the planner owns the tint adaptation:
 `MaterialPlan.backdrop.color_response` plus `tint_color_delta` explain whether
 the resolved tint was preserved, treated as neutral backdrop color, or gently
 pulled toward a sampled colored backdrop.
+Schema 41 adds per-container group details beside the flat summaries. Runtime
+artifacts now serialize `renderer.material_container_groups[]` with each
+container id, member command index, plan id, geometry, union/morph flags,
+fallback path, and aggregate pair counts. This keeps SwiftUI-style
+GlassEffectContainer spacing, union, and morph behavior debuggable from CI logs
+without visually guessing which surface in a grouped toolbar or sidebar failed.
 Each surface's container policy stays explicit: spacing resolves
 to `blend_distance`, positive spacing drives `shape_blending_expected`, union ids
 select the union-proximity blend policy, Reduced Motion suppresses only morphing,
