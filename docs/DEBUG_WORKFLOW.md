@@ -385,7 +385,9 @@ mise exec -- exon build
   --script ../../examples/glass_showcase/glass_showcase.drive \
   --expect backdrop:high \
   --expect density:dense \
-  --expect material-count:16
+  --expect material-count:16 \
+  --expect execution-stages:62 \
+  --expect sample-taps:350
 ```
 
 The output reports the shared glass state, per-input trace, public material

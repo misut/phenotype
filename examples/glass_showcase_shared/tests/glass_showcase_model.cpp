@@ -54,6 +54,16 @@ int main() {
     assert(material_count.ok);
     assert(material_count.expectation.kind
         == demo::GlassExpectationKind::MaterialCount);
+    auto execution_stages =
+        demo::parse_glass_expectation("execution-stages:58");
+    assert(execution_stages.ok);
+    assert(execution_stages.expectation.kind
+        == demo::GlassExpectationKind::ExecutionStages);
+    auto sample_taps =
+        demo::parse_glass_expectation("sample-taps:325");
+    assert(sample_taps.ok);
+    assert(sample_taps.expectation.kind
+        == demo::GlassExpectationKind::SampleTaps);
 
     auto inputs = std::vector<demo::GlassInput>{
         demo::parse_glass_input("backdrop:high").input,
@@ -126,6 +136,8 @@ int main() {
         demo::parse_glass_expectation("note-contains:observable").expectation,
         demo::parse_glass_expectation("viewport:640x820@2").expectation,
         demo::parse_glass_expectation("material-count:15").expectation,
+        demo::parse_glass_expectation("execution-stages:58").expectation,
+        demo::parse_glass_expectation("sample-taps:325").expectation,
     };
     auto checked = demo::check_glass_expectations(result, expectations);
     assert(demo::glass_expectations_ok(checked));

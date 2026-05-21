@@ -609,6 +609,8 @@ enum class GlassExpectationKind {
     NoteContains,
     Viewport,
     MaterialCount,
+    ExecutionStages,
+    SampleTaps,
 };
 
 struct GlassExpectation {
@@ -620,6 +622,8 @@ struct GlassExpectation {
     int viewport_height = k_default_viewport_height;
     float viewport_scale = k_default_viewport_scale;
     std::size_t material_count = 0;
+    std::size_t execution_stages = 0;
+    std::size_t sample_taps = 0;
 };
 
 struct GlassExpectationParseResult {
@@ -1132,6 +1136,30 @@ inline GlassExpectationParseResult parse_glass_expectation(
             .material_count = static_cast<std::size_t>(*count),
         });
     }
+    if (name == "execution-stages" || name == "execution_stages"
+        || name == "stage-count" || name == "stage_count") {
+        auto count = parse_positive_int(value);
+        if (!count)
+            return expectation_parse_error(
+                "expectation 'execution-stages' must be a positive integer");
+        return parsed_expectation({
+            .kind = GlassExpectationKind::ExecutionStages,
+            .value = std::to_string(*count),
+            .execution_stages = static_cast<std::size_t>(*count),
+        });
+    }
+    if (name == "sample-taps" || name == "sample_taps"
+        || name == "tap-count" || name == "tap_count") {
+        auto count = parse_positive_int(value);
+        if (!count)
+            return expectation_parse_error(
+                "expectation 'sample-taps' must be a positive integer");
+        return parsed_expectation({
+            .kind = GlassExpectationKind::SampleTaps,
+            .value = std::to_string(*count),
+            .sample_taps = static_cast<std::size_t>(*count),
+        });
+    }
 
     return expectation_parse_error("unknown glass showcase expectation: " + name);
 }
@@ -1145,6 +1173,8 @@ inline std::string glass_expectation_kind_name(GlassExpectationKind kind) {
         case GlassExpectationKind::NoteContains: return "note-contains";
         case GlassExpectationKind::Viewport: return "viewport";
         case GlassExpectationKind::MaterialCount: return "material-count";
+        case GlassExpectationKind::ExecutionStages: return "execution-stages";
+        case GlassExpectationKind::SampleTaps: return "sample-taps";
     }
     return "density";
 }
@@ -1217,6 +1247,24 @@ inline GlassExpectationResult check_glass_expectation(
             checked.detail = checked.ok
                 ? "material plan count matched"
                 : "material plan count did not match";
+            return checked;
+        case GlassExpectationKind::ExecutionStages:
+            checked.actual =
+                std::to_string(expected_material_execution_stage_count(state));
+            checked.ok = expected_material_execution_stage_count(state)
+                == expectation.execution_stages;
+            checked.detail = checked.ok
+                ? "material execution stage budget matched"
+                : "material execution stage budget did not match";
+            return checked;
+        case GlassExpectationKind::SampleTaps:
+            checked.actual =
+                std::to_string(expected_material_sample_tap_count(state));
+            checked.ok = expected_material_sample_tap_count(state)
+                == expectation.sample_taps;
+            checked.detail = checked.ok
+                ? "material sample tap budget matched"
+                : "material sample tap budget did not match";
             return checked;
     }
     checked.actual = "<unknown>";

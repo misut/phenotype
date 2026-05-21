@@ -654,7 +654,9 @@ jobs:
             --script examples/glass_showcase/glass_showcase.drive \
             --expect backdrop:high \
             --expect density:dense \
-            --expect material-count:16 | json_tool >/dev/null
+            --expect material-count:16 \
+            --expect execution-stages:62 \
+            --expect sample-taps:350 | json_tool >/dev/null
           script="$RUNNER_TEMP/file-explorer.drive"
           printf '%s\n' \
             '# deterministic CLI input script' \
