@@ -2016,6 +2016,58 @@
       "equals": "active"
     },
     {
+      "path": "window.glass_backdrop_composition.schema_version",
+      "equals": 1
+    },
+    {
+      "path": "window.glass_backdrop_composition.policy",
+      "equals": "transparent-window-clear-metal-under-window-background"
+    },
+    {
+      "path": "window.glass_backdrop_composition.status",
+      "equals": "ready"
+    },
+    {
+      "path": "window.glass_backdrop_composition.ready",
+      "equals": true
+    },
+    {
+      "path": "window.glass_backdrop_composition.failure_reason",
+      "equals": "none"
+    },
+    {
+      "path": "window.glass_backdrop_composition.likely_layer",
+      "equals": "none"
+    },
+    {
+      "path": "window.glass_backdrop_composition.likely_pass",
+      "equals": "none"
+    },
+    {
+      "path": "window.glass_backdrop_composition.requires_transparent_window",
+      "equals": true
+    },
+    {
+      "path": "window.glass_backdrop_composition.requires_clear_metal_layer",
+      "equals": true
+    },
+    {
+      "path": "window.glass_backdrop_composition.requires_under_window_background_underlay",
+      "equals": true
+    },
+    {
+      "path": "window.glass_backdrop_composition.requires_alpha_zero_clear",
+      "equals": true
+    },
+    {
+      "path": "window.glass_backdrop_composition.requires_no_full_frame_opaque_fill",
+      "equals": true
+    },
+    {
+      "path": "window.glass_backdrop_composition.samples_external_backdrop",
+      "equals": true
+    },
+    {
       "path": "renderer.clear_alpha",
       "equals": 0
     },
