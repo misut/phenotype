@@ -294,7 +294,7 @@ static void view(State const& state) {
                     },
                     [] {
                         auto const blur_probe =
-                            glass::glass_material_probe_at(5);
+                            glass::glass_material_probe_at(8);
                         layout::material_surface(
                             material_kind(blur_probe.kind),
                             [blur_probe] {
@@ -314,10 +314,35 @@ static void view(State const& state) {
             });
         }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Center);
 
+        layout::spacer(8);
+        layout::row([&] {
+            auto const checkbox_probe = glass::glass_material_probe_at(5);
+            auto const radio_probe = glass::glass_material_probe_at(6);
+            auto const switch_probe = glass::glass_material_probe_at(7);
+            widget::glass_checkbox<Msg>(
+                phenotype::str{
+                    checkbox_probe.label.data(),
+                    static_cast<unsigned int>(checkbox_probe.label.size())},
+                state.high_contrast_backdrop,
+                glass::ToggleBackdrop{});
+            widget::glass_radio<Msg>(
+                phenotype::str{
+                    radio_probe.label.data(),
+                    static_cast<unsigned int>(radio_probe.label.size())},
+                state.selected_density == 2u,
+                glass::select_density(2u));
+            widget::glass_switch<Msg>(
+                phenotype::str{
+                    switch_probe.label.data(),
+                    static_cast<unsigned int>(switch_probe.label.size())},
+                state.inspector_open,
+                glass::ToggleInspector{});
+        }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Center);
+
         layout::spacer(12);
         layout::row([&] {
-            auto const tooltip_probe = glass::glass_material_probe_at(6);
-            auto const context_menu_probe = glass::glass_material_probe_at(7);
+            auto const tooltip_probe = glass::glass_material_probe_at(9);
+            auto const context_menu_probe = glass::glass_material_probe_at(10);
             layout::sized_box(220.0f, [&] {
                 layout::tooltip([tooltip_probe] {
                     widget::text(phenotype::str{

@@ -385,7 +385,7 @@ mise exec -- exon build
   --script ../../examples/glass_showcase/glass_showcase.drive \
   --expect backdrop:high \
   --expect density:dense \
-  --expect material-count:9
+  --expect material-count:12
 ```
 
 The output reports the shared glass state, per-input trace, public material
@@ -784,7 +784,7 @@ against `MaterialPlan.command_descriptor`, then separately reports whether the
 resolved plan ran the glass pass or a deterministic fallback.
 It also compares semantic material roles against runtime plan roles, so app
 chrome can prove that a glass surface was emitted as `toolbar`, `sidebar`,
-`status_bar`, `navigation`, `content`, `overlay`, or a generic `surface`
+`status_bar`, `navigation`, `content`, `overlay`, `control`, or a generic `surface`
 without visual inspection.
 Material-backed controls should therefore have stable semantic labels, not just
 pixel signatures. For example, `widget::tabs` emits a segmented-control
@@ -1414,7 +1414,8 @@ default Apple-like glass contract, a foreground contrast recommendation falling
 below the pure minimum, or a quality/capability downgrade losing its
 LLM-actionable reason string.
 Use `require_material_surface_roles` when a scene must contain at least one
-semantic material node for each functional role.
+semantic material node for each functional role, including `control` surfaces
+emitted by glass checkbox, radio, and switch indicators.
 
 The plan schema check also treats `primary_pass` as a runtime contract. Its
 sample-tap count must match the plan, and the backend `passes[]` list must

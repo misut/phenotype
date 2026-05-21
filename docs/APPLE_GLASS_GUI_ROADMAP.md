@@ -892,6 +892,10 @@ Deliverables:
   kernel values from the plan; runtime JSON mirrors the plan's `primary_pass`,
   sampling kernel, resource budget, fallback reason, and verifier expectations
   so a CI failure points back to the likely layer/pass;
+- control surfaces are first-class functional material roles: glass checkbox,
+  radio, and switch helpers expose `MaterialSurfaceRole::Control`, semantic
+  material nodes, and showcase probes so verifier gates cover control indicators
+  as well as panels and overlays;
 - Windows Direct3D 12 implementation second;
 - Android Vulkan implementation or explicit fallback;
 - WASI/WebGPU shim path or explicit fallback;

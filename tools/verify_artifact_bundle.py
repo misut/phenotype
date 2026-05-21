@@ -50,6 +50,7 @@ ALLOWED_MATERIAL_KINDS = {
 
 ALLOWED_MATERIAL_SURFACE_ROLES = {
     "content",
+    "control",
     "navigation",
     "overlay",
     "sidebar",

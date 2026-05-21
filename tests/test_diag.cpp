@@ -773,6 +773,18 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
                     widget::button<DebugPlaneMsg>("Move to Trash",
                                                    DebugPlaneNoop{});
                 }, "Glass Context Menu");
+                widget::glass_checkbox<DebugPlaneMsg>(
+                    "Glass Checkbox",
+                    true,
+                    DebugPlaneNoop{});
+                widget::glass_radio<DebugPlaneMsg>(
+                    "Glass Radio",
+                    true,
+                    DebugPlaneNoop{});
+                widget::glass_switch<DebugPlaneMsg>(
+                    "Glass Switch",
+                    true,
+                    DebugPlaneNoop{});
             });
         },
         [](DiagState&, DebugPlaneMsg) {});
@@ -801,6 +813,27 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
         find_semantic_child(children, "material", "Glass Tooltip");
     auto const* context_menu =
         find_semantic_child(children, "material", "Glass Context Menu");
+    auto const* checkbox_indicator =
+        find_semantic_descendant(
+            parsed.as_object()
+                .at("debug").as_object()
+                .at("semantic_tree").as_object(),
+            "material",
+            "Glass Checkbox Indicator");
+    auto const* radio_indicator =
+        find_semantic_descendant(
+            parsed.as_object()
+                .at("debug").as_object()
+                .at("semantic_tree").as_object(),
+            "material",
+            "Glass Radio Indicator");
+    auto const* switch_track =
+        find_semantic_descendant(
+            parsed.as_object()
+                .at("debug").as_object()
+                .at("semantic_tree").as_object(),
+            "material",
+            "Glass Switch Track");
     assert(toolbar != nullptr);
     assert(compact_toolbar != nullptr);
     assert(navigation != nullptr);
@@ -812,6 +845,9 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
     assert(popover != nullptr);
     assert(tooltip != nullptr);
     assert(context_menu != nullptr);
+    assert(checkbox_indicator != nullptr);
+    assert(radio_indicator != nullptr);
+    assert(switch_track != nullptr);
     assert(toolbar->at("material").as_object().at("kind").as_string() == "clear");
     assert(toolbar->at("material").as_object().at("role").as_string() == "toolbar");
     assert(compact_toolbar->at("material").as_object().at("kind").as_string()
@@ -864,6 +900,14 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
     assert(context_menu->at("material").as_object()
                .at("container").as_object()
                .at("interactive").as_bool());
+    assert(checkbox_indicator->at("material").as_object().at("kind").as_string()
+           == "thin");
+    assert(checkbox_indicator->at("material").as_object().at("role").as_string()
+           == "control");
+    assert(radio_indicator->at("material").as_object().at("role").as_string()
+           == "control");
+    assert(switch_track->at("material").as_object().at("role").as_string()
+           == "control");
     assert(find_semantic_descendant(*toolbar, "button", "New") != nullptr);
     assert(find_semantic_descendant(*compact_toolbar, "button", "Compact")
            != nullptr);
