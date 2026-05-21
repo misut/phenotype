@@ -158,7 +158,13 @@ readbacks, not request echoes.
 For the live sidebar glass path, the runtime also asserts a non-opaque
 `NSWindow`, clear AppKit background, non-opaque `CAMetalLayer`,
 `NSVisualEffectView` sidebar-material underlay with behind-window blending,
-alpha-0 drawable clear, and zero full-frame opaque fills. That last check
+`sibling-underlay` placement, underlay alpha equal to the requested native
+backdrop opacity, alpha-0 drawable clear, and zero full-frame opaque fills. The
+outer sidebar surface intentionally stays transparent instead of drawing a
+Metal `kind=thin` material over the full sidebar; the desktop wallpaper and
+other WindowServer content can only be blurred by the native compositor
+underlay, while phenotype `MaterialPlan` surfaces remain responsible for
+in-app glass controls. That last check
 matters because a transparent native compositor is still hidden if the
 application root paints an opaque background over the whole drawable.
 On macOS it additionally checks WindowServer bounds, onscreen state, artifact

@@ -7344,6 +7344,28 @@ inline bool is_visual_effect_view(id view) {
         cls) != 0;
 }
 
+inline id find_visual_effect_subview(id view) {
+    if (!view || !objc_responds_to(view, sel_registerName("subviews")))
+        return nullptr;
+    id subviews = objc_send<id>(view, sel_registerName("subviews"));
+    if (!subviews || !objc_responds_to(subviews, sel_registerName("count")))
+        return nullptr;
+    auto const count = objc_send<unsigned long>(
+        subviews,
+        sel_registerName("count"));
+    if (!objc_responds_to(subviews, sel_registerName("objectAtIndex:")))
+        return nullptr;
+    for (unsigned long index = 0; index < count; ++index) {
+        id child = objc_send<id>(
+            subviews,
+            sel_registerName("objectAtIndex:"),
+            index);
+        if (is_visual_effect_view(child))
+            return child;
+    }
+    return nullptr;
+}
+
 inline long ns_visual_effect_material_value(
         NativeBackdropMaterial material) noexcept {
     constexpr long visual_effect_material_sidebar = 7;
@@ -7368,54 +7390,30 @@ inline char const* native_backdrop_policy_name(
     }
 }
 
-inline bool install_integrated_titlebar_backdrop_underlay(
-        NativeSurfaceDescriptor* surface,
-        id ns_window,
-        NativeBackdropMaterial material) {
-    if (!surface || !ns_window)
-        return false;
+inline float clamp_native_backdrop_opacity(float opacity) noexcept {
+    if (opacity < 0.0f)
+        return 0.0f;
+    if (opacity > 1.0f)
+        return 1.0f;
+    return opacity;
+}
 
-    id content_view = surface_content_view(surface);
-    if (!content_view)
-        return false;
-
-    id window_content = objc_send<id>(ns_window, sel_content_view());
-    id content_superview = objc_responds_to(content_view, sel_superview())
-        ? objc_send<id>(content_view, sel_superview())
-        : nullptr;
-    if (is_visual_effect_view(window_content)
-        && content_superview == window_content) {
-        return true;
-    }
-    if (window_content != content_view)
-        return false;
-
-    auto effect_class = static_cast<Class>(objc_getClass("NSVisualEffectView"));
-    if (!effect_class)
-        return false;
-
-    CGRect bounds = objc_responds_to(content_view, sel_bounds())
-        ? objc_send<CGRect>(content_view, sel_bounds())
-        : CGRect{};
-    id effect_view = objc_send<id>(
-        objc_send<id>(class_as_id(effect_class), sel_alloc()),
-        sel_init_with_frame(),
-        bounds);
+inline void configure_visual_effect_backdrop(
+        id effect_view,
+        NativeBackdropMaterial material,
+        float opacity) {
     if (!effect_view)
-        return false;
-
-    constexpr unsigned long view_width_sizable = 1ul << 1;
-    constexpr unsigned long view_height_sizable = 1ul << 4;
+        return;
     constexpr long visual_effect_blending_behind_window = 0;
     constexpr long visual_effect_state_active = 1;
     objc_send<void>(
         effect_view,
-        sel_registerName("setAutoresizingMask:"),
-        view_width_sizable | view_height_sizable);
-    objc_send<void>(
-        effect_view,
         sel_registerName("setMaterial:"),
         ns_visual_effect_material_value(material));
+    objc_send<void>(
+        effect_view,
+        sel_registerName("setAlphaValue:"),
+        static_cast<double>(clamp_native_backdrop_opacity(opacity)));
     objc_send<void>(
         effect_view,
         sel_registerName("setBlendingMode:"),
@@ -7430,20 +7428,98 @@ inline bool install_integrated_titlebar_backdrop_underlay(
             sel_registerName("setEmphasized:"),
             static_cast<signed char>(1));
     }
+}
+
+inline bool install_integrated_titlebar_backdrop_underlay(
+        NativeSurfaceDescriptor* surface,
+        id ns_window,
+        NativeBackdropMaterial material,
+        float opacity) {
+    if (!surface || !ns_window)
+        return false;
+
+    id content_view = surface_content_view(surface);
+    if (!content_view)
+        return false;
+
+    id window_content = objc_send<id>(ns_window, sel_content_view());
+    id content_superview = objc_responds_to(content_view, sel_superview())
+        ? objc_send<id>(content_view, sel_superview())
+        : nullptr;
+    if (is_visual_effect_view(window_content)
+        && content_superview == window_content) {
+        configure_visual_effect_backdrop(
+            window_content,
+            material,
+            opacity);
+        return true;
+    }
+    if (content_superview && content_superview == window_content) {
+        id existing_backdrop = find_visual_effect_subview(content_superview);
+        if (existing_backdrop) {
+            configure_visual_effect_backdrop(
+                existing_backdrop,
+                material,
+                opacity);
+            return true;
+        }
+    }
+    if (window_content != content_view)
+        return false;
+
+    auto view_class = static_cast<Class>(objc_getClass("NSView"));
+    auto effect_class = static_cast<Class>(objc_getClass("NSVisualEffectView"));
+    if (!view_class || !effect_class)
+        return false;
+
+    CGRect bounds = objc_responds_to(content_view, sel_bounds())
+        ? objc_send<CGRect>(content_view, sel_bounds())
+        : CGRect{};
+    id container_view = objc_send<id>(
+        objc_send<id>(class_as_id(view_class), sel_alloc()),
+        sel_init_with_frame(),
+        bounds);
+    id effect_view = objc_send<id>(
+        objc_send<id>(class_as_id(effect_class), sel_alloc()),
+        sel_init_with_frame(),
+        bounds);
+    if (!container_view || !effect_view) {
+        if (container_view)
+            objc_send<void>(container_view, sel_release());
+        if (effect_view)
+            objc_send<void>(effect_view, sel_release());
+        return false;
+    }
+
+    constexpr unsigned long view_width_sizable = 1ul << 1;
+    constexpr unsigned long view_height_sizable = 1ul << 4;
+    auto const autoresizing = view_width_sizable | view_height_sizable;
+    objc_send<void>(
+        container_view,
+        sel_registerName("setAutoresizingMask:"),
+        autoresizing);
+    objc_send<void>(
+        effect_view,
+        sel_registerName("setAutoresizingMask:"),
+        autoresizing);
+    configure_visual_effect_backdrop(effect_view, material, opacity);
 
     objc_send<id>(content_view, sel_retain());
     objc_send<void>(
         ns_window,
         sel_registerName("setContentView:"),
-        effect_view);
+        container_view);
+    objc_send<void>(effect_view, sel_set_frame(), bounds);
+    objc_send<void>(container_view, sel_add_subview(), effect_view);
     objc_send<void>(content_view, sel_set_frame(), bounds);
     objc_send<void>(
         content_view,
         sel_registerName("setAutoresizingMask:"),
-        view_width_sizable | view_height_sizable);
-    objc_send<void>(effect_view, sel_add_subview(), content_view);
+        autoresizing);
+    objc_send<void>(container_view, sel_add_subview(), content_view);
     objc_send<void>(content_view, sel_release());
     objc_send<void>(effect_view, sel_release());
+    objc_send<void>(container_view, sel_release());
     return true;
 }
 
@@ -7498,7 +7574,8 @@ inline void configure_window(native_surface_handle handle,
     (void)install_integrated_titlebar_backdrop_underlay(
         surface,
         ns_window,
-        options->native_backdrop_material);
+        options->native_backdrop_material,
+        options->native_backdrop_opacity);
 }
 
 inline void renderer_init(native_surface_handle handle) {
@@ -9720,6 +9797,10 @@ inline json::Object macos_window_runtime_json() {
         has_options
             ? surface->native_backdrop_material
             : NativeBackdropMaterial::UnderWindowBackground;
+    float const expected_backdrop_opacity =
+        has_options
+            ? clamp_native_backdrop_opacity(surface->native_backdrop_opacity)
+            : 1.0f;
     long const expected_native_backdrop_material =
         ns_visual_effect_material_value(expected_backdrop_material);
     constexpr unsigned long move_to_active_space = 1ul << 1;
@@ -9762,37 +9843,62 @@ inline json::Object macos_window_runtime_json() {
         && objc_responds_to(content_view, sel_superview())
         ? objc_send<id>(content_view, sel_superview())
         : nullptr;
-    bool const native_backdrop_underlay_enabled =
-        is_visual_effect_view(window_content_view)
-        && content_superview == window_content_view;
+    id native_backdrop_view = nullptr;
+    char const* native_backdrop_underlay_placement = "none";
+    if (is_visual_effect_view(window_content_view)
+        && content_superview == window_content_view) {
+        native_backdrop_view = window_content_view;
+        native_backdrop_underlay_placement = "parent-content-view";
+    } else if (content_superview && content_superview == window_content_view) {
+        native_backdrop_view = find_visual_effect_subview(content_superview);
+        if (native_backdrop_view)
+            native_backdrop_underlay_placement = "sibling-underlay";
+    }
+    bool const native_backdrop_underlay_enabled = native_backdrop_view != nullptr;
     long const native_backdrop_material =
         native_backdrop_underlay_enabled
-        && objc_responds_to(window_content_view, sel_registerName("material"))
-            ? objc_send<long>(window_content_view, sel_registerName("material"))
+        && objc_responds_to(native_backdrop_view, sel_registerName("material"))
+            ? objc_send<long>(native_backdrop_view, sel_registerName("material"))
             : -1;
     long const native_backdrop_blending_mode =
         native_backdrop_underlay_enabled
         && objc_responds_to(
-            window_content_view,
+            native_backdrop_view,
             sel_registerName("blendingMode"))
             ? objc_send<long>(
-                window_content_view,
+                native_backdrop_view,
                 sel_registerName("blendingMode"))
             : -1;
     long const native_backdrop_state =
         native_backdrop_underlay_enabled
-        && objc_responds_to(window_content_view, sel_registerName("state"))
-            ? objc_send<long>(window_content_view, sel_registerName("state"))
+        && objc_responds_to(native_backdrop_view, sel_registerName("state"))
+            ? objc_send<long>(native_backdrop_view, sel_registerName("state"))
             : -1;
     bool const native_backdrop_emphasized =
         native_backdrop_underlay_enabled
-        && objc_responds_to(window_content_view, sel_registerName("isEmphasized"))
+        && objc_responds_to(native_backdrop_view, sel_registerName("isEmphasized"))
         && objc_send<signed char>(
-            window_content_view,
+            native_backdrop_view,
             sel_registerName("isEmphasized")) != 0;
+    double const native_backdrop_alpha =
+        native_backdrop_underlay_enabled
+        && objc_responds_to(native_backdrop_view, sel_registerName("alphaValue"))
+            ? objc_send<double>(
+                native_backdrop_view,
+                sel_registerName("alphaValue"))
+            : 1.0;
+    double const native_backdrop_alpha_delta =
+        native_backdrop_alpha - static_cast<double>(expected_backdrop_opacity);
+    double const native_backdrop_abs_alpha_delta =
+        native_backdrop_alpha_delta < 0.0
+            ? -native_backdrop_alpha_delta
+            : native_backdrop_alpha_delta;
     bool const native_backdrop_underlay_ready =
         native_backdrop_underlay_enabled
         && native_backdrop_material == expected_native_backdrop_material
+        && native_backdrop_abs_alpha_delta <= 0.01
+        && std::string_view{native_backdrop_underlay_placement}
+            == "sibling-underlay"
         && native_backdrop_blending_mode == 0
         && native_backdrop_state == 1;
     bool const renderer_clear_ready =
@@ -9905,11 +10011,20 @@ inline json::Object macos_window_runtime_json() {
                 ? "nsvisualeffectview"
                 : "none"});
     window.emplace(
+        "native_backdrop_underlay_placement",
+        json::Value{native_backdrop_underlay_placement});
+    window.emplace(
         "native_backdrop_underlay_material",
         json::Value{visual_effect_material_name(native_backdrop_material)});
     window.emplace(
         "native_backdrop_expected_material",
         json::Value{native_backdrop_material_name(expected_backdrop_material)});
+    window.emplace(
+        "native_backdrop_underlay_alpha",
+        json::Value{native_backdrop_alpha});
+    window.emplace(
+        "native_backdrop_expected_alpha",
+        json::Value{static_cast<double>(expected_backdrop_opacity)});
     window.emplace(
         "native_backdrop_underlay_blending_mode",
         json::Value{
@@ -9928,6 +10043,15 @@ inline json::Object macos_window_runtime_json() {
     backdrop_composition.emplace(
         "native_backdrop_expected_material",
         json::Value{native_backdrop_material_name(expected_backdrop_material)});
+    backdrop_composition.emplace(
+        "native_backdrop_underlay_placement",
+        json::Value{native_backdrop_underlay_placement});
+    backdrop_composition.emplace(
+        "native_backdrop_underlay_alpha",
+        json::Value{native_backdrop_alpha});
+    backdrop_composition.emplace(
+        "native_backdrop_expected_alpha",
+        json::Value{static_cast<double>(expected_backdrop_opacity)});
     backdrop_composition.emplace("status", json::Value{backdrop_status});
     backdrop_composition.emplace("ready", json::Value{backdrop_ready});
     backdrop_composition.emplace(
@@ -9947,6 +10071,9 @@ inline json::Object macos_window_runtime_json() {
         json::Value{true});
     backdrop_composition.emplace(
         "requires_native_backdrop_underlay",
+        json::Value{true});
+    backdrop_composition.emplace(
+        "requires_sibling_underlay",
         json::Value{true});
     backdrop_composition.emplace(
         "requires_under_window_background_underlay",

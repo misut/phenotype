@@ -1881,8 +1881,11 @@ def snapshot_with_file_explorer_chrome(
         "metal_layer_opaque": False,
         "native_backdrop_underlay_enabled": True,
         "native_backdrop_underlay_kind": "nsvisualeffectview",
+        "native_backdrop_underlay_placement": "sibling-underlay",
         "native_backdrop_underlay_material": "sidebar",
         "native_backdrop_expected_material": "sidebar",
+        "native_backdrop_underlay_alpha": 1.0,
+        "native_backdrop_expected_alpha": 1.0,
         "native_backdrop_underlay_blending_mode": "behind-window",
         "native_backdrop_underlay_state": "active",
         "native_backdrop_underlay_emphasized": True,
@@ -1891,6 +1894,9 @@ def snapshot_with_file_explorer_chrome(
             "policy": (
                 "transparent-window-clear-metal-native-sidebar"),
             "native_backdrop_expected_material": "sidebar",
+            "native_backdrop_underlay_placement": "sibling-underlay",
+            "native_backdrop_underlay_alpha": 1.0,
+            "native_backdrop_expected_alpha": 1.0,
             "status": "ready",
             "ready": True,
             "failure_reason": "none",
@@ -1899,6 +1905,7 @@ def snapshot_with_file_explorer_chrome(
             "requires_transparent_window": True,
             "requires_clear_metal_layer": True,
             "requires_native_backdrop_underlay": True,
+            "requires_sibling_underlay": True,
             "requires_under_window_background_underlay": False,
             "requires_alpha_zero_clear": True,
             "requires_no_full_frame_opaque_fill": True,
@@ -2433,8 +2440,11 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         runtime_window["metal_layer_opaque"] = True
         runtime_window["native_backdrop_underlay_enabled"] = False
         runtime_window["native_backdrop_underlay_kind"] = "none"
+        runtime_window["native_backdrop_underlay_placement"] = "none"
         runtime_window["native_backdrop_underlay_material"] = "none"
         runtime_window["native_backdrop_expected_material"] = "sidebar"
+        runtime_window["native_backdrop_underlay_alpha"] = 0.55
+        runtime_window["native_backdrop_expected_alpha"] = 1.0
         runtime_window["native_backdrop_underlay_blending_mode"] = "none"
         runtime_window["native_backdrop_underlay_state"] = "none"
         runtime_window["glass_backdrop_composition"] = {
@@ -2442,6 +2452,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "policy": (
                 "transparent-window-clear-metal-native-sidebar"),
             "native_backdrop_expected_material": "sidebar",
+            "native_backdrop_underlay_placement": "none",
+            "native_backdrop_underlay_alpha": 0.55,
+            "native_backdrop_expected_alpha": 1.0,
             "status": "blocked",
             "ready": False,
             "failure_reason": "nswindow_opaque",
@@ -2472,6 +2485,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "summary_policy": (
                     "transparent-window-clear-metal-native-sidebar"),
                 "summary_native_backdrop_expected_material": "sidebar",
+                "summary_native_backdrop_underlay_placement": "none",
+                "summary_native_backdrop_underlay_alpha": 0.55,
+                "summary_native_backdrop_expected_alpha": 1.0,
                 "summary_status": "blocked",
                 "summary_ready": False,
                 "summary_failure_reason": "nswindow_opaque",
@@ -2483,8 +2499,11 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "metal_layer_opaque": True,
                 "native_backdrop_underlay_enabled": False,
                 "native_backdrop_underlay_kind": "none",
+                "native_backdrop_underlay_placement": "none",
                 "native_backdrop_underlay_material": "none",
                 "native_backdrop_expected_material": "sidebar",
+                "native_backdrop_underlay_alpha": 0.55,
+                "native_backdrop_expected_alpha": 1.0,
                 "native_backdrop_underlay_blending_mode": "none",
                 "native_backdrop_underlay_state": "none",
                 "renderer_clear_alpha": 1,
@@ -2492,6 +2511,30 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "renderer_full_frame_opaque_fill_count": 1,
                 "renderer_transparent_window_has_opaque_frame_fill": True,
             })
+
+    def test_file_explorer_native_chrome_contract_rejects_backdrop_alpha_drift(self) -> None:
+        snap = snapshot_with_file_explorer_chrome(material_plan())
+        runtime_window = snap["debug"]["platform_runtime"]["details"]["window"]
+        runtime_window["native_backdrop_underlay_alpha"] = 0.55
+        composition = runtime_window["glass_backdrop_composition"]
+        composition["native_backdrop_underlay_alpha"] = 0.55
+
+        code, report = self.run_verifier(snap)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "file explorer macOS window has native wallpaper "
+                "backdrop underlay"))
+        self.assertEqual(failure["likely_layer"], "native-window-composition")
+        self.assertEqual(failure["likely_pass"], "appkit-visual-effect-underlay")
+        self.assertEqual(
+            failure["actual"]["native_backdrop_underlay_alpha"],
+            0.55)
+        self.assertEqual(
+            failure["actual"]["native_backdrop_expected_alpha"],
+            1.0)
 
     def test_file_explorer_finder_visual_contract_rejects_drift(self) -> None:
         snap = snapshot_with_file_explorer_chrome(material_plan())
@@ -2561,7 +2604,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["semantic_tree"]["material_descriptor_missing"],
             0)
 
-    def test_file_explorer_sidebar_glass_contract_rejects_opaque_sidebar(self) -> None:
+    def test_file_explorer_sidebar_glass_contract_rejects_metal_self_blur(self) -> None:
         snap = snapshot_with_file_explorer_chrome(material_plan())
         install_file_explorer_sidebar_material(snap, opacity=0.70, tint_alpha=180)
 
@@ -2571,17 +2614,21 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         failure = next(
             item for item in report["failures"]
             if item["name"] == (
-                "file explorer desktop sidebar uses translucent "
-                "Liquid Glass descriptor"))
+                "file explorer desktop sidebar does not fake wallpaper blur "
+                "with Metal self sampling"))
         self.assertEqual(failure["likely_layer"], "finder-sidebar-glass")
-        self.assertEqual(failure["likely_pass"], "material-command")
+        self.assertEqual(failure["likely_pass"], "material-command-boundary")
         self.assertEqual(
             failure["path"],
             "debug.semantic_tree.material_descriptors"
             "[role=sidebar,kind=thin,container_id=2100]")
-        self.assertEqual(failure["actual"][0]["opacity"], 0.70)
-        self.assertEqual(failure["actual"][0]["tint_alpha"], 180)
-        self.assertIn("opaque white panel", failure["hint"])
+        self.assertEqual(
+            failure["actual"]["semantic_candidates"][0]["opacity"],
+            0.70)
+        self.assertEqual(
+            failure["actual"]["semantic_candidates"][0]["tint_alpha"],
+            180)
+        self.assertIn("native compositor", failure["hint"])
 
     def test_reference_model_failure_points_to_pure_planner(self) -> None:
         plan = material_plan()
