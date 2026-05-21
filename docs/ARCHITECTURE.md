@@ -860,6 +860,16 @@ Schema 42 extends those flat summaries with grouped capture-budget counters:
 `max_shared_capture_group_surfaces`. Backends still perform the real platform
 capture at the edge, but CI can now verify that the pure plan is asking grouped
 glass to share a bounded capture surface.
+Schema 44 adds the first executor-facing group shape blend contract:
+`shape_blend_execution_group_count`, `shape_blend_execution_surface_count`, and
+`max_shape_blend_strength`. The pure helper
+`material_container_execution_descriptor` derives command-level group bounds and
+blend strength from `MaterialRuntimeRecord` values; macOS then uploads those
+immutable descriptors to the Metal material shader so inner edges in nearby
+container surfaces use group-edge continuity for highlight, shadow, and
+refraction calculations. The backend still decides no policy locally: if the
+pure descriptor says the surface is isolated, the uploaded group rect is the
+surface rect and blend strength remains zero.
 `backdrop_access` mirrors the active shared frame contract per plan:
 sampled-backdrop plans require `capture_scope: shared-frame` and
 `capture_reason: sample-current-frame` with one bounded frame-history copy that
@@ -886,6 +896,12 @@ pairs, blend/union/morph candidate pairs, separated pairs, min/max shape gap,
 max blend distance, and max group bounds width/height/area. This keeps
 Apple-style grouped glass behavior reviewable from JSON before any backend
 introduces hidden per-container caches, shared captures, or extra blur passes.
+Schema 44 extends that reviewable shape contract to execution: the same summary
+now proves how many grouped surfaces are eligible for shader-level edge
+continuity and the strongest resolved blend factor, while
+`renderer.material_container_groups[]` records each group's
+`execution_policy`, `shape_blend_execution_surfaces`, and
+`shape_blend_strength`.
 Backends use the pure `default_material_quality_policy()`,
 `sanitize_material_quality_policy()`, and capability-aware
 `resolve_material_quality_policy()` helpers instead of owning hard-coded

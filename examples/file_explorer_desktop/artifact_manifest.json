@@ -61,7 +61,7 @@
     "fallback": 0,
     "backdrop_sampling": 8,
     "contract_versions": {
-      "43": 9
+      "44": 9
     },
     "theme_foreground_matches_theme": 0,
     "theme_accent_matches_theme": 0,
@@ -102,6 +102,9 @@
     "container_shared_capture_surface_count": 8,
     "container_shared_capture_saved_surface_count": 7,
     "container_max_shared_capture_group_surfaces": 8,
+    "container_shape_blend_execution_group_count": 1,
+    "container_shape_blend_execution_surface_count": 8,
+    "container_max_shape_blend_strength": 1.0,
     "reference_interactive_response": 7,
     "interaction_enabled": 7,
     "interaction_active": 0,

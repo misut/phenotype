@@ -13,7 +13,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 43;
+inline constexpr std::uint32_t material_plan_contract_version = 44;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1144,6 +1144,8 @@ struct MaterialContainerGroupRuntimeSummary {
     std::uint32_t shared_capture_surface_count = 0;
     std::uint32_t shared_capture_saved_surface_count = 0;
     std::uint32_t max_shared_capture_group_surfaces = 0;
+    std::uint32_t shape_blend_execution_group_count = 0;
+    std::uint32_t shape_blend_execution_surface_count = 0;
     std::uint32_t fallback_mixed_group_count = 0;
     std::uint32_t max_group_size = 0;
     std::uint32_t max_active_surfaces = 0;
@@ -1160,6 +1162,25 @@ struct MaterialContainerGroupRuntimeSummary {
     float max_group_bounds_width = 0.0f;
     float max_group_bounds_height = 0.0f;
     float max_group_bounds_area = 0.0f;
+    float max_shape_blend_strength = 0.0f;
+};
+
+struct MaterialContainerExecutionDescriptor {
+    std::uint32_t command_index = 0;
+    std::uint32_t container_id = 0;
+    std::uint32_t surface_count = 0;
+    bool active = false;
+    bool group_bounds_valid = false;
+    bool shared_backdrop_scope = false;
+    bool shape_blend_execution = false;
+    bool union_execution = false;
+    bool morph_execution = false;
+    char const* execution_policy = "isolated";
+    float group_x = 0.0f;
+    float group_y = 0.0f;
+    float group_w = 0.0f;
+    float group_h = 0.0f;
+    float shape_blend_strength = 0.0f;
 };
 
 struct MaterialRuntimeSummary {
@@ -1727,6 +1748,141 @@ inline void accumulate_material_container_pair(
     }
 }
 
+inline bool material_container_group_shape_blend_execution_active(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    return group.active_surfaces > 1u
+        && group.blend_candidate_pair_count > 0u
+        && (group.union_surfaces > 0u
+            || group.morph_surfaces > 0u
+            || group.shared_backdrop_scope_surfaces > 1u
+            || group.interactive_surfaces > 0u);
+}
+
+inline float material_container_group_shape_blend_strength(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (!material_container_group_shape_blend_execution_active(group)
+        || !group.has_shape_gap) {
+        return 0.0f;
+    }
+    if (group.max_blend_distance <= 0.0f)
+        return group.min_shape_gap <= 0.5f ? 1.0f : 0.0f;
+    auto const proximity = std::clamp(
+        (group.max_blend_distance - group.min_shape_gap)
+            / group.max_blend_distance,
+        0.0f,
+        1.0f);
+    return std::clamp(std::max(0.25f, proximity), 0.0f, 1.0f);
+}
+
+inline char const* material_container_execution_policy_name(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (material_container_group_shape_blend_execution_active(group))
+        return "group-edge-continuity";
+    if (group.surface_count > 0u)
+        return "group-isolated";
+    return "isolated";
+}
+
+inline MaterialContainerGroupAccumulator accumulate_material_container_group(
+        std::span<MaterialRuntimeRecord const> records,
+        std::uint32_t container_id) noexcept {
+    MaterialContainerGroupAccumulator group{
+        .container_id = container_id,
+    };
+    if (container_id == 0u)
+        return group;
+    for (auto const& candidate_record : records) {
+        auto const& candidate = candidate_record.plan;
+        if (!candidate.container.participates
+            || candidate.container.container_id != container_id) {
+            continue;
+        }
+        ++group.surface_count;
+        accumulate_material_container_bounds(group, candidate);
+        if (candidate.primary_pass.active)
+            ++group.active_surfaces;
+        if (candidate.backdrop_sampling)
+            ++group.sampled_backdrop_surfaces;
+        if (candidate.fallback())
+            ++group.fallback_surfaces;
+        if (candidate.container.shape_union_expected)
+            ++group.union_surfaces;
+        if (candidate.container.morph_transitions)
+            ++group.morph_surfaces;
+        if (candidate.container.interactive)
+            ++group.interactive_surfaces;
+        if (candidate.container.shared_backdrop_scope)
+            ++group.shared_backdrop_scope_surfaces;
+    }
+    for (std::size_t left = 0; left < records.size(); ++left) {
+        auto const& a = records[left].plan;
+        if (!material_plan_in_container(a, container_id))
+            continue;
+        for (std::size_t right = left + 1; right < records.size(); ++right) {
+            auto const& b = records[right].plan;
+            if (!material_plan_in_container(b, container_id))
+                continue;
+            accumulate_material_container_pair(group, a, b);
+        }
+    }
+    return group;
+}
+
+inline MaterialContainerExecutionDescriptor
+material_container_execution_descriptor_from_group(
+        MaterialRuntimeRecord const& record,
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    MaterialContainerExecutionDescriptor descriptor{};
+    descriptor.command_index = record.command_index;
+    auto const& plan = record.plan;
+    if (!plan.container.participates
+        || plan.container.container_id == 0u
+        || plan.container.container_id != group.container_id) {
+        return descriptor;
+    }
+
+    descriptor.container_id = group.container_id;
+    descriptor.surface_count = group.surface_count;
+    descriptor.active = plan.primary_pass.active && group.surface_count > 0u;
+    descriptor.group_bounds_valid = group.has_bounds;
+    descriptor.shared_backdrop_scope = plan.container.shared_backdrop_scope
+        && group.shared_backdrop_scope_surfaces > 1u;
+    descriptor.shape_blend_execution =
+        descriptor.active
+        && material_container_group_shape_blend_execution_active(group);
+    descriptor.union_execution =
+        descriptor.shape_blend_execution && group.union_surfaces > 0u;
+    descriptor.morph_execution =
+        descriptor.shape_blend_execution && group.morph_surfaces > 0u;
+    descriptor.execution_policy =
+        material_container_execution_policy_name(group);
+    descriptor.shape_blend_strength =
+        material_container_group_shape_blend_strength(group);
+    if (group.has_bounds) {
+        descriptor.group_x = group.min_x;
+        descriptor.group_y = group.min_y;
+        descriptor.group_w = std::max(0.0f, group.max_x - group.min_x);
+        descriptor.group_h = std::max(0.0f, group.max_y - group.min_y);
+    }
+    return descriptor;
+}
+
+inline MaterialContainerExecutionDescriptor
+material_container_execution_descriptor(
+        MaterialRuntimeRecord const& record,
+        std::span<MaterialRuntimeRecord const> records) {
+    MaterialContainerExecutionDescriptor descriptor{};
+    descriptor.command_index = record.command_index;
+    auto const& plan = record.plan;
+    if (!plan.container.participates || plan.container.container_id == 0u)
+        return descriptor;
+
+    auto const group = accumulate_material_container_group(
+        records,
+        plan.container.container_id);
+    return material_container_execution_descriptor_from_group(record, group);
+}
+
 inline MaterialContainerGroupRuntimeSummary summarize_material_container_groups(
         std::span<MaterialRuntimeRecord const> records) {
     MaterialContainerGroupRuntimeSummary summary{};
@@ -1814,6 +1970,14 @@ inline MaterialContainerGroupRuntimeSummary summarize_material_container_groups(
             summary.max_shared_capture_group_surfaces = std::max(
                 summary.max_shared_capture_group_surfaces,
                 group.shared_backdrop_scope_surfaces);
+        }
+        if (material_container_group_shape_blend_execution_active(group)) {
+            ++summary.shape_blend_execution_group_count;
+            summary.shape_blend_execution_surface_count +=
+                group.active_surfaces;
+            summary.max_shape_blend_strength = std::max(
+                summary.max_shape_blend_strength,
+                material_container_group_shape_blend_strength(group));
         }
         if (group.fallback_surfaces > 0u
             && group.active_surfaces > group.fallback_surfaces) {

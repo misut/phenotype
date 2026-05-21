@@ -343,6 +343,14 @@ Schema 42 adds capture-budget counters to the same group contract:
 `shared_capture_surface_count`, `shared_capture_saved_surface_count`, and
 `max_shared_capture_group_surfaces` show whether grouped glass can execute as a
 single shared backdrop capture instead of one capture per surface.
+Schema 44 connects that pure group contract to actual macOS execution:
+`material_container_execution_descriptor` resolves per-command group bounds and
+shape-blend strength, and the Metal material shader uses those values to reduce
+inner-edge highlight, depth, and refraction discontinuities across nearby
+container surfaces. The artifact contract records
+`shape_blend_execution_group_count`, `shape_blend_execution_surface_count`, and
+`max_shape_blend_strength`, so CI can prove grouped glass is executing as a
+coordinated surface instead of a collection of independent rounded rectangles.
 Each surface's container policy stays explicit: spacing resolves
 to `blend_distance`, positive spacing drives `shape_blending_expected`, union ids
 select the union-proximity blend policy, Reduced Motion suppresses only morphing,
@@ -734,6 +742,9 @@ Apple-style glass interface while preserving platform parity:
 - material container and shape-union identity that lets related glass surfaces
   share backdrop scope, spacing/blend policy, morph expectations, and capture
   reuse policy without moving those decisions into a backend;
+- macOS group-edge continuity execution for eligible container surfaces, driven
+  by pure `MaterialRuntimeRecord` descriptors instead of shader-local grouping
+  heuristics;
 - a glass showcase under `examples/` with controls/navigation as the glass
   layer and rich content below it;
 - desktop and mobile file explorer examples under `examples/` that translate

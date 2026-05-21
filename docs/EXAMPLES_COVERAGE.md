@@ -312,6 +312,10 @@ The glass showcase manifests now also pin schema-33 container group geometry:
 shape-pair totals, blend/morph/separation counts, min/max gaps, blend distance,
 and group bounds. That makes the example a verifier-readable `GlassEffectContainer`
 probe instead of only a visual material ramp.
+Schema 44 extends that probe with group-edge execution counters:
+shape-blend execution groups, participating surfaces, and max blend strength.
+These values prove that eligible grouped glass controls reach the macOS shader
+as coordinated group bounds instead of independent rounded-rectangle optics.
 Schema 34 extends the same probe with runtime capability limits. macOS artifacts
 now show the Metal-derived material capability profile, 2D texture limit, shader
 tap budget, and bounded 16M backdrop-copy budget, while Android and other

@@ -998,6 +998,12 @@ void test_material_runtime_record_json_contract() {
     assert(group.at("blend_candidate_pair_count").as_integer() == 1);
     assert(group.at("union_candidate_pair_count").as_integer() == 1);
     assert(group.at("morph_candidate_pair_count").as_integer() == 1);
+    assert(group.at("execution_policy").as_string()
+           == "group-edge-continuity");
+    assert(group.at("shape_blend_execution").as_bool());
+    assert(group.at("shape_blend_execution_surfaces").as_integer() == 2);
+    assert(std::fabs(group.at("shape_blend_strength").as_float() - 0.75f)
+           < 0.0001f);
     auto const& members = group.at("members").as_array();
     assert(members.size() == 2);
     auto const& first_member = members[0].as_object();
@@ -1007,6 +1013,12 @@ void test_material_runtime_record_json_contract() {
     assert(first_member.at("union_id").as_integer() == 4);
     assert(first_member.at("shape_union_expected").as_bool());
     assert(first_member.at("morph_transitions").as_bool());
+    assert(first_member.at("group_execution_policy").as_string()
+           == "group-edge-continuity");
+    assert(first_member.at("shape_blend_execution").as_bool());
+    assert(std::fabs(
+               first_member.at("shape_blend_strength").as_float() - 0.75f)
+           < 0.0001f);
     assert(first_member.at("geometry").as_object().at("w").as_float()
            == 44.0f);
 

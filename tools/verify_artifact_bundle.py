@@ -435,7 +435,7 @@ ALLOWED_MATERIAL_REFRACTION_SOURCES = {
     "sampled-backdrop-edge-refraction",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 43
+MATERIAL_PLAN_CONTRACT_VERSION = 44
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 MATERIAL_MAX_REFRACTION_OFFSET_PIXELS = 3.5
@@ -2743,6 +2743,8 @@ MATERIAL_CONTAINER_GROUP_SUMMARY_FIELDS = (
     "shared_capture_surface_count",
     "shared_capture_saved_surface_count",
     "max_shared_capture_group_surfaces",
+    "shape_blend_execution_group_count",
+    "shape_blend_execution_surface_count",
     "fallback_mixed_group_count",
     "max_group_size",
     "max_active_surfaces",
@@ -2759,6 +2761,7 @@ MATERIAL_CONTAINER_GROUP_SUMMARY_FIELDS = (
     "max_group_bounds_width",
     "max_group_bounds_height",
     "max_group_bounds_area",
+    "max_shape_blend_strength",
 )
 
 MATERIAL_CONTAINER_GROUP_SPEC_FIELDS = {
@@ -2775,6 +2778,10 @@ MATERIAL_CONTAINER_GROUP_SPEC_FIELDS = {
         "shared_capture_saved_surface_count"),
     "container_max_shared_capture_group_surfaces": (
         "max_shared_capture_group_surfaces"),
+    "container_shape_blend_execution_group_count": (
+        "shape_blend_execution_group_count"),
+    "container_shape_blend_execution_surface_count": (
+        "shape_blend_execution_surface_count"),
     "container_fallback_mixed_group_count": "fallback_mixed_group_count",
     "container_max_group_size": "max_group_size",
     "container_max_active_surfaces": "max_active_surfaces",
@@ -2792,6 +2799,7 @@ MATERIAL_CONTAINER_GROUP_SPEC_FIELDS = {
     "container_max_group_bounds_width": "max_group_bounds_width",
     "container_max_group_bounds_height": "max_group_bounds_height",
     "container_max_group_bounds_area": "max_group_bounds_area",
+    "container_max_shape_blend_strength": "max_shape_blend_strength",
 }
 
 MATERIAL_CONTAINER_GROUP_FLOAT_SPEC_FIELDS = {
@@ -2801,6 +2809,7 @@ MATERIAL_CONTAINER_GROUP_FLOAT_SPEC_FIELDS = {
     "container_max_group_bounds_width",
     "container_max_group_bounds_height",
     "container_max_group_bounds_area",
+    "container_max_shape_blend_strength",
 }
 
 MATERIAL_CONTAINER_GROUP_INTEGER_SPEC_FIELDS = tuple(
@@ -5373,6 +5382,8 @@ def summarize_material_plans(
             "shared_capture_surface_count": 0,
             "shared_capture_saved_surface_count": 0,
             "max_shared_capture_group_surfaces": 0,
+            "shape_blend_execution_group_count": 0,
+            "shape_blend_execution_surface_count": 0,
             "fallback_mixed_group_count": 0,
             "max_group_size": 0,
             "max_active_surfaces": 0,
@@ -5389,6 +5400,7 @@ def summarize_material_plans(
             "max_group_bounds_width": 0.0,
             "max_group_bounds_height": 0.0,
             "max_group_bounds_area": 0.0,
+            "max_shape_blend_strength": 0.0,
         },
         "reference_model": {
             "technologies": {},
@@ -11679,6 +11691,9 @@ def summarize_material_plans(
             if isinstance(surface, dict)
             and surface.get("shape_valid") is True
         ]
+        group_blend_candidate_pair_count = 0
+        group_min_shape_gap: float | None = None
+        group_max_blend_distance = 0.0
         if surfaces:
             group_max_blend = max(
                 float(surface["blend_distance"]) for surface in surfaces)
@@ -11707,6 +11722,9 @@ def summarize_material_plans(
         for left, a in enumerate(surfaces):
             for b in surfaces[left + 1:]:
                 gap = material_container_surface_gap(a, b)
+                group_min_shape_gap = (
+                    gap if group_min_shape_gap is None
+                    else min(group_min_shape_gap, gap))
                 previous_pairs = int(group_summary["total_shape_pair_count"])
                 group_summary["total_shape_pair_count"] = previous_pairs + 1
                 if previous_pairs == 0:
@@ -11722,10 +11740,14 @@ def summarize_material_plans(
                 blend_distance = min(
                     float(a["blend_distance"]),
                     float(b["blend_distance"]))
+                group_max_blend_distance = max(
+                    group_max_blend_distance,
+                    blend_distance)
                 group_summary["max_blend_distance"] = max(
                     float(group_summary["max_blend_distance"]),
                     blend_distance)
                 if gap <= blend_distance:
+                    group_blend_candidate_pair_count += 1
                     group_summary["blend_candidate_pair_count"] = (
                         int(group_summary["blend_candidate_pair_count"]) + 1)
                     if (a.get("shape_union_expected") is True
@@ -11739,6 +11761,35 @@ def summarize_material_plans(
                 else:
                     group_summary["separated_pair_count"] = (
                         int(group_summary["separated_pair_count"]) + 1)
+        shape_blend_execution = (
+            active_surfaces > 1
+            and group_blend_candidate_pair_count > 0
+            and (int(group["union_surfaces"]) > 0
+                 or int(group["morph_surfaces"]) > 0
+                 or int(group["shared_backdrop_scope_surfaces"]) > 1
+                 or int(group["interactive_surfaces"]) > 0))
+        if shape_blend_execution:
+            group_summary["shape_blend_execution_group_count"] = (
+                int(group_summary["shape_blend_execution_group_count"]) + 1)
+            group_summary["shape_blend_execution_surface_count"] = (
+                int(group_summary["shape_blend_execution_surface_count"])
+                + active_surfaces)
+            if group_min_shape_gap is None:
+                blend_strength = 0.0
+            elif group_max_blend_distance <= 0.0:
+                blend_strength = 1.0 if group_min_shape_gap <= 0.5 else 0.0
+            else:
+                blend_strength = max(
+                    0.25,
+                    min(
+                        1.0,
+                        max(
+                            0.0,
+                            ((group_max_blend_distance - group_min_shape_gap)
+                             / group_max_blend_distance))))
+            group_summary["max_shape_blend_strength"] = max(
+                float(group_summary["max_shape_blend_strength"]),
+                blend_strength)
     return summary
 
 
@@ -12653,6 +12704,7 @@ def check_material_container_group_summary_contract(
                 "max_group_bounds_width",
                 "max_group_bounds_height",
                 "max_group_bounds_area",
+                "max_shape_blend_strength",
             }
             else actual == expected
         )
@@ -12725,6 +12777,9 @@ def check_material_container_group_details_contract(
     shared_capture_surface_count = 0
     shared_capture_saved_surface_count = 0
     max_shared_capture_group_surfaces = 0
+    shape_blend_execution_group_count = 0
+    shape_blend_execution_surface_count = 0
+    max_shape_blend_strength = 0.0
     for index, group in enumerate(group_details):
         group_path = f"{base_path}[{index}]"
         report.check(
@@ -12812,6 +12867,9 @@ def check_material_container_group_details_contract(
                         "role",
                         "fallback_path",
                         "mode",
+                        "group_execution_policy",
+                        "shape_blend_execution",
+                        "shape_blend_strength",
                         "shape_kind"):
                     report.check(
                         f"renderer material_container_groups member {field} exists",
@@ -12847,6 +12905,8 @@ def check_material_container_group_details_contract(
         for field in (
                 "shared_backdrop_scope_surfaces",
                 "shared_capture_saved_surfaces",
+                "shape_blend_execution_surfaces",
+                "shape_blend_strength",
                 "shape_pair_count",
                 "blend_candidate_pair_count",
                 "union_candidate_pair_count",
@@ -12878,6 +12938,13 @@ def check_material_container_group_details_contract(
         max_shared_capture_group_surfaces = max(
             max_shared_capture_group_surfaces,
             shared_surfaces)
+        if group.get("shape_blend_execution") is True:
+            shape_blend_execution_group_count += 1
+            shape_blend_execution_surface_count += int(
+                group.get("shape_blend_execution_surfaces") or 0)
+            max_shape_blend_strength = max(
+                max_shape_blend_strength,
+                float(group.get("shape_blend_strength") or 0.0))
     expected_pairs = {
         "max_group_size": max_group_size,
         "shared_capture_surface_count": shared_capture_surface_count,
@@ -12885,6 +12952,11 @@ def check_material_container_group_details_contract(
             shared_capture_saved_surface_count),
         "max_shared_capture_group_surfaces": (
             max_shared_capture_group_surfaces),
+        "shape_blend_execution_group_count": (
+            shape_blend_execution_group_count),
+        "shape_blend_execution_surface_count": (
+            shape_blend_execution_surface_count),
+        "max_shape_blend_strength": max_shape_blend_strength,
         "total_shape_pair_count": total_shape_pair_count,
         "blend_candidate_pair_count": blend_candidate_pair_count,
         "union_candidate_pair_count": union_candidate_pair_count,
@@ -12893,9 +12965,13 @@ def check_material_container_group_details_contract(
     }
     for field, actual in expected_pairs.items():
         expected = expected_summary.get(field)
+        matches = (
+            numbers_close(actual, expected, tolerance=0.1)
+            if field == "max_shape_blend_strength"
+            else actual == expected)
         report.check(
             f"renderer material_container_groups aggregate {field} matches summary",
-            actual == expected,
+            matches,
             path=f"{base_path}#{field}",
             expected=expected,
             actual=actual,
