@@ -4937,6 +4937,8 @@ struct RendererState {
     bool last_frame_available = false;
     bool last_material_backdrop_available = false;
     bool last_material_backdrop_excludes_foreground_text = false;
+    bool last_material_backdrop_color_available = false;
+    Color last_material_backdrop_color_mean = {255, 255, 255, 255};
     bool last_material_backdrop_luma_available = false;
     float last_material_backdrop_luma_min = 0.0f;
     float last_material_backdrop_luma_max = 1.0f;
@@ -5203,6 +5205,8 @@ inline bool ensure_material_backdrop_texture(int width, int height) {
         g_renderer.material_backdrop_height = 0;
         g_renderer.last_material_backdrop_available = false;
         g_renderer.last_material_backdrop_excludes_foreground_text = false;
+        g_renderer.last_material_backdrop_color_available = false;
+        g_renderer.last_material_backdrop_color_mean = {255, 255, 255, 255};
         g_renderer.last_material_backdrop_luma_available = false;
         g_renderer.last_material_backdrop_luma_sample_count = 0;
         g_renderer.last_material_backdrop_luma_grid_width = 0;
@@ -5301,6 +5305,7 @@ inline void process_completed_material_backdrop_luma_sample() {
     if (status == MTL::CommandBufferStatusError
         || !g_renderer.material_backdrop_luma_sample_buf
         || g_renderer.material_backdrop_luma_pending_sample_count == 0) {
+        g_renderer.last_material_backdrop_color_available = false;
         g_renderer.last_material_backdrop_luma_available = false;
         g_renderer.last_material_backdrop_luma_sample_count = 0;
         g_renderer.last_material_backdrop_luma_status =
@@ -5314,6 +5319,7 @@ inline void process_completed_material_backdrop_luma_sample() {
     auto const* mapped = static_cast<std::uint8_t const*>(
         g_renderer.material_backdrop_luma_sample_buf->contents());
     if (!mapped) {
+        g_renderer.last_material_backdrop_color_available = false;
         g_renderer.last_material_backdrop_luma_available = false;
         g_renderer.last_material_backdrop_luma_sample_count = 0;
         g_renderer.last_material_backdrop_luma_status =
@@ -5325,6 +5331,10 @@ inline void process_completed_material_backdrop_luma_sample() {
     float luma_min = 1.0f;
     float luma_max = 0.0f;
     float luma_sum = 0.0f;
+    std::uint64_t red_sum = 0;
+    std::uint64_t green_sum = 0;
+    std::uint64_t blue_sum = 0;
+    std::uint64_t alpha_sum = 0;
     std::uint32_t sampled = 0;
     for (std::uint32_t i = 0;
          i < g_renderer.material_backdrop_luma_pending_sample_count;
@@ -5337,10 +5347,28 @@ inline void process_completed_material_backdrop_luma_sample() {
         luma_min = std::min(luma_min, luma);
         luma_max = std::max(luma_max, luma);
         luma_sum += luma;
+        blue_sum += pixel[0];
+        green_sum += pixel[1];
+        red_sum += pixel[2];
+        alpha_sum += pixel[3];
         ++sampled;
     }
 
     if (sampled > 0) {
+        auto mean_channel = [sampled](std::uint64_t sum) {
+            return static_cast<unsigned char>(
+                std::min<std::uint64_t>(
+                    255,
+                    (sum + static_cast<std::uint64_t>(sampled / 2u))
+                        / static_cast<std::uint64_t>(sampled)));
+        };
+        g_renderer.last_material_backdrop_color_available = true;
+        g_renderer.last_material_backdrop_color_mean = Color{
+            mean_channel(red_sum),
+            mean_channel(green_sum),
+            mean_channel(blue_sum),
+            mean_channel(alpha_sum),
+        };
         g_renderer.last_material_backdrop_luma_available = true;
         g_renderer.last_material_backdrop_luma_min = luma_min;
         g_renderer.last_material_backdrop_luma_max = luma_max;
@@ -7711,6 +7739,14 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         ? "previous-presented-frame"
         : "none";
     if (backdrop_ready && g_renderer.last_material_backdrop_luma_available) {
+        if (g_renderer.last_material_backdrop_color_available) {
+            material_env.backdrop.color_mean =
+                g_renderer.last_material_backdrop_color_mean;
+            material_env.backdrop.color_sample_count =
+                g_renderer.last_material_backdrop_luma_sample_count;
+            material_env.backdrop.color_sample_status =
+                g_renderer.last_material_backdrop_luma_status;
+        }
         material_env.backdrop.luma_min =
             g_renderer.last_material_backdrop_luma_min;
         material_env.backdrop.luma_max =
@@ -8333,6 +8369,8 @@ inline void renderer_shutdown() {
     g_renderer.last_frame_available = false;
     g_renderer.last_material_backdrop_available = false;
     g_renderer.last_material_backdrop_excludes_foreground_text = false;
+    g_renderer.last_material_backdrop_color_available = false;
+    g_renderer.last_material_backdrop_color_mean = {255, 255, 255, 255};
     g_renderer.last_material_backdrop_luma_available = false;
     if (g_renderer.frame_readback_buf) { g_renderer.frame_readback_buf->release(); g_renderer.frame_readback_buf = nullptr; }
     if (g_renderer.image_atlas_texture) { g_renderer.image_atlas_texture->release(); g_renderer.image_atlas_texture = nullptr; }
@@ -9145,6 +9183,29 @@ inline json::Object macos_renderer_runtime_json() {
     luma_descriptor.emplace(
         "available",
         json::Value{g_renderer.last_material_backdrop_luma_available});
+    luma_descriptor.emplace(
+        "color_available",
+        json::Value{g_renderer.last_material_backdrop_color_available});
+    json::Object color_mean;
+    color_mean.emplace(
+        "r",
+        json::Value{static_cast<std::int64_t>(
+            g_renderer.last_material_backdrop_color_mean.r)});
+    color_mean.emplace(
+        "g",
+        json::Value{static_cast<std::int64_t>(
+            g_renderer.last_material_backdrop_color_mean.g)});
+    color_mean.emplace(
+        "b",
+        json::Value{static_cast<std::int64_t>(
+            g_renderer.last_material_backdrop_color_mean.b)});
+    color_mean.emplace(
+        "a",
+        json::Value{static_cast<std::int64_t>(
+            g_renderer.last_material_backdrop_color_mean.a)});
+    luma_descriptor.emplace(
+        "color_mean",
+        json::Value{std::move(color_mean)});
     luma_descriptor.emplace(
         "luma_min",
         json::Value{g_renderer.last_material_backdrop_luma_min});

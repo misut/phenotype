@@ -830,6 +830,12 @@ copies `observation_contract.expected_stage_order`, derives
 the pure optical order. Backends should treat a nonzero execution-contract or
 stage-order mismatch as a planner/serialization bug instead of silently
 compensating in native drawing code.
+Schema 40 adds sampled backdrop color response to this artifact boundary.
+Backends may observe `color_mean`, `color_sample_count`, and
+`color_sample_status`, but the pure planner decides whether the tint is
+preserved, treated as neutral backdrop color, or softly adapted toward sampled
+colored content. `MaterialPlan.backdrop.color_response` and
+`tint_color_delta` make that decision reviewable without a screenshot.
 `backdrop_access` mirrors the active shared frame contract per plan:
 sampled-backdrop plans require `capture_scope: shared-frame` and
 `capture_reason: sample-current-frame` with one bounded frame-history copy that
@@ -887,16 +893,18 @@ records `reduced_motion_suppressed_morph` and disables morph-transition
 expectations in the pure plan, matching Apple's guidance to coordinate related
 glass surfaces while still respecting accessibility settings.
 When a stable backdrop descriptor is available, the pure planner also copies
-its source, readiness flags, foreground-exclusion flag, sanitized luminance
-statistics, luminance response bucket, optical response buckets, and
-floor/gain/edge/tint/saturation/depth deltas into `MaterialPlan.backdrop`.
+its source, readiness flags, foreground-exclusion flag, sampled mean color,
+sanitized luminance statistics, luminance response bucket, optical response
+buckets, and floor/gain/edge/tint-color/tint-alpha/saturation/depth deltas into
+`MaterialPlan.backdrop`.
 The same value drives the `MaterialPlan.luminance_curve`
-gamma/midpoint/contrast, tint alpha, saturation, opacity, edge-highlight, and
-shadow-depth adjustment before the plan reaches a backend. This keeps
+gamma/midpoint/contrast, tint color, tint alpha, saturation, opacity,
+edge-highlight, and shadow-depth adjustment before the plan reaches a backend.
+This keeps
 legibility and Liquid Glass optical policy in the deterministic layer as blur,
 tint, and fallback decisions, and lets artifacts explain why a material
-responded to dark, bright, flat, or neutral backdrop content without requiring
-a visual guess. The per-stage `optics` descriptors repeat only the values used
+responded to dark, bright, flat, neutral, or colored backdrop content without
+requiring a visual guess. The per-stage `optics` descriptors repeat only the values used
 by that stage, so a failure can tell whether the pure scalar was missing before
 or after backend execution.
 Artifact gates can separately bound actual plan taps and resource-budget taps,
@@ -970,10 +978,11 @@ deterministic fallback fill, planned shared frame capture count/pixels, planned
 surface sample pixels, upload bytes/capacity, framebuffer-history copy bounds,
 CPU enqueue timings, `foreground_text_candidate_count`, and
 `foreground_text_remap_count`. The same summary includes the exact backdrop
-luminance descriptor that fed the pure planner (`backdrop_descriptor_luma_*`)
-and any bounded sampling skip reason. It also repeats the sampled-material edge
-readiness (`material_pipeline_ready`, `material_backdrop_source_ready`) and the
-purely derived upload/draw status strings (`material_upload_status`,
+luminance and color descriptors that fed the pure planner
+(`backdrop_descriptor_luma_*`, `backdrop_descriptor_color_*`) and any bounded
+sampling skip reason. It also repeats the sampled-material edge readiness
+(`material_pipeline_ready`, `material_backdrop_source_ready`) and the purely
+derived upload/draw status strings (`material_upload_status`,
 `material_draw_status`). It also publishes `material_shader_content_scale` and
 `material_max_shader_blur_step_pixels`, so artifacts can prove that logical
 material blur radii were converted to physical shader sample distances without
@@ -981,9 +990,10 @@ hiding scale policy in Metal. Backends fill only the edge facts and counters; th
 status helper derives `uploaded`, `drawn`, or a stable `skipped-*` reason from
 those facts so policy decisions remain inspectable instead of hiding in a
 renderer branch. `renderer.material_backdrop_luma_descriptor` exposes the latest
-observed backend descriptor independently of the plans, so an artifact can tell
-whether the backend had a completed async sample, a pending sample, or a
-deterministic unsupported fallback. macOS additionally separates
+observed backend descriptor, including color availability and mean color,
+independently of the plans, so an artifact can tell whether the backend had a
+completed async sample, a pending sample, or a deterministic unsupported
+fallback. macOS additionally separates
 the material backdrop texture from the final debug/readback texture. The
 backend only allocates or blits that backdrop texture when the pure executor
 summary says a shared-frame or next-frame capture is required; standard content

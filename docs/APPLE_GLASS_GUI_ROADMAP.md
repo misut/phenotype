@@ -316,6 +316,13 @@ actual order from `execution_stages[]`, and runtime/executor summaries expose
 stage-order match and mismatch counts. This keeps future Liquid Glass blur,
 highlight, refraction, and dither work from being reordered at the backend edge
 without a machine-readable artifact failure.
+Schema 40 adds backdrop color response to the same pure contract. Edge adapters
+may sample the backdrop color, but the planner owns the tint adaptation:
+`MaterialBackdropDescriptor.color_mean`, `color_sample_count`, and
+`color_sample_status` flow inward as immutable inputs, and
+`MaterialPlan.backdrop.color_response` plus `tint_color_delta` explain whether
+the resolved tint was preserved, treated as neutral backdrop color, or gently
+pulled toward a sampled colored backdrop.
 Each surface's container policy stays explicit: spacing resolves
 to `blend_distance`, positive spacing drives `shape_blending_expected`, union ids
 select the union-proximity blend policy, Reduced Motion suppresses only morphing,
@@ -351,14 +358,15 @@ backdrop source before the foreground text pass, and reporting the ordering in
 `renderer.material_executor_summary`. Unsupported, reduced-transparency,
 invalid, and quality-policy fallback plans keep this access contract inactive.
 with zero capture/sample budgets. `MaterialPlan.backdrop` also carries pure
-optical response metadata: `frosting_response`, `tint_response`,
-`saturation_response`, `depth_response`, and numeric deltas for opacity, tint
-alpha, saturation, shadow alpha, and shadow radius, plus the existing luminance
-floor/gain/edge deltas. Dark, bright, and flat backdrop buckets can therefore
-change the actual sampled-glass inputs in the pure plan while artifacts explain
-the exact response. Neutral sampled backdrops keep balanced/preserve/standard
-responses and zero deltas; fallback plans report `not-sampled` responses and
-zero optical deltas.
+optical response metadata: sampled mean color, `frosting_response`,
+`color_response`, `tint_response`, `saturation_response`, `depth_response`, and
+numeric deltas for opacity, tint color, tint alpha, saturation, shadow alpha,
+and shadow radius, plus the existing luminance floor/gain/edge deltas. Dark,
+bright, flat, neutral, and colored backdrop buckets can therefore change the
+actual sampled-glass inputs in the pure plan while artifacts explain the exact
+response. Neutral sampled backdrops keep balanced/preserve/standard responses
+and zero deltas; fallback plans report `not-sampled` responses and zero optical
+deltas.
 macOS performs the actual texture copy at the edge and reports it through
 `material_executor_summary`, while other backends
 can keep the same contract and explicitly fall back.
@@ -411,11 +419,14 @@ required shared-frame or next-frame capture, and it publishes
 `backdrop_copy_policy`, `backdrop_copy_required`, and
 `backdrop_copy_skip_reason` for artifact debugging.
 macOS also samples the copied foreground-excluded backdrop with a fixed 5x5
-asynchronous BGRA grid. Completed samples are consumed by the next pure
+asynchronous BGRA grid. The same readback now derives both luminance statistics
+and a mean RGBA backdrop color, so tint color response does not add another GPU
+pass or texture copy. Completed samples are consumed by the next pure
 `MaterialEnvironment.backdrop`; pending or unsupported samples degrade to the
 neutral deterministic descriptor and are reported through
-`renderer.material_backdrop_luma_descriptor` plus
-`MaterialPlan.backdrop.luma_sample_*`.
+`renderer.material_backdrop_luma_descriptor`,
+`MaterialPlan.backdrop.luma_sample_*`, and
+`MaterialPlan.backdrop.color_sample_*`.
 
 ### Theme and widgets
 

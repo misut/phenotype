@@ -9,10 +9,11 @@ module;
 export module phenotype.material;
 
 import phenotype.types;
+import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 39;
+inline constexpr std::uint32_t material_plan_contract_version = 40;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -77,6 +78,9 @@ struct MaterialBackdropDescriptor {
     bool available = false;
     bool stable = false;
     bool excludes_foreground_text = false;
+    Color color_mean = {255, 255, 255, 255};
+    std::uint32_t color_sample_count = 0;
+    char const* color_sample_status = "not-sampled";
     float luma_min = 0.0f;
     float luma_max = 1.0f;
     float luma_mean = 0.5f;
@@ -464,6 +468,9 @@ struct MaterialBackdropAnalysis {
     bool available = false;
     bool stable = false;
     bool excludes_foreground_text = false;
+    Color color_mean = {255, 255, 255, 255};
+    std::uint32_t color_sample_count = 0;
+    char const* color_sample_status = "not-sampled";
     float luma_min = 0.0f;
     float luma_max = 1.0f;
     float luma_mean = 0.5f;
@@ -476,6 +483,7 @@ struct MaterialBackdropAnalysis {
     char const* source = "none";
     char const* luminance_response = "not-sampled";
     char const* frosting_response = "not-sampled";
+    char const* color_response = "not-sampled";
     char const* tint_response = "not-sampled";
     char const* saturation_response = "not-sampled";
     char const* depth_response = "not-sampled";
@@ -483,6 +491,7 @@ struct MaterialBackdropAnalysis {
     float luminance_gain_delta = 0.0f;
     float edge_highlight_delta = 0.0f;
     float opacity_delta = 0.0f;
+    float tint_color_delta = 0.0f;
     float tint_alpha_delta = 0.0f;
     float saturation_delta = 0.0f;
     float shadow_alpha_delta = 0.0f;
@@ -1298,6 +1307,10 @@ struct MaterialExecutorSummary {
     float max_refraction_strength = 0.0f;
     float max_refraction_edge_bias = 0.0f;
     float max_refraction_offset_pixels = 0.0f;
+    bool backdrop_descriptor_color_available = false;
+    Color backdrop_descriptor_color_mean = {255, 255, 255, 255};
+    std::uint32_t backdrop_descriptor_color_sample_count = 0;
+    char const* backdrop_descriptor_color_status = "not-sampled";
     bool backdrop_descriptor_luma_available = false;
     float backdrop_descriptor_luma_min = 0.0f;
     float backdrop_descriptor_luma_max = 1.0f;
@@ -1384,6 +1397,15 @@ inline float material_safe_luma(float value, float fallback) noexcept;
 inline void set_material_executor_backdrop_descriptor_summary(
         MaterialExecutorSummary& summary,
         MaterialBackdropDescriptor const& backdrop) noexcept {
+    summary.backdrop_descriptor_color_available =
+        backdrop.available && backdrop.color_sample_count > 0;
+    summary.backdrop_descriptor_color_mean = backdrop.color_mean;
+    summary.backdrop_descriptor_color_sample_count =
+        backdrop.color_sample_count;
+    summary.backdrop_descriptor_color_status =
+        backdrop.color_sample_status && backdrop.color_sample_status[0]
+            ? backdrop.color_sample_status
+            : "not-sampled";
     summary.backdrop_descriptor_luma_available =
         backdrop.available && backdrop.luma_sample_count > 0;
     summary.backdrop_descriptor_luma_min =
@@ -2713,10 +2735,27 @@ inline bool material_color_rgb_equal(Color a, Color b) noexcept {
     return a.r == b.r && a.g == b.g && a.b == b.b;
 }
 
+inline Color material_color_from_contract_token(
+        theme_contract::ColorToken color) noexcept {
+    return Color{color.r, color.g, color.b, color.a};
+}
+
 inline MaterialThemeSnapshot material_resolve_theme_snapshot(
         MaterialStyle const& style) noexcept {
     MaterialThemeSnapshot snapshot{};
-    Theme const default_theme{};
+    auto const contract = theme_contract::default_glass_theme_contract();
+    auto const default_foreground =
+        material_color_from_contract_token(contract.foreground);
+    auto const default_muted =
+        material_color_from_contract_token(contract.muted);
+    auto const default_accent =
+        material_color_from_contract_token(contract.accent);
+    auto const default_accent_strong =
+        material_color_from_contract_token(contract.accent_strong);
+    auto const default_surface =
+        material_color_from_contract_token(contract.surface);
+    auto const default_border =
+        material_color_from_contract_token(contract.border);
     snapshot.foreground = style.foreground;
     snapshot.secondary_foreground = style.secondary_foreground;
     snapshot.accent_foreground = style.accent_foreground;
@@ -2724,23 +2763,24 @@ inline MaterialThemeSnapshot material_resolve_theme_snapshot(
     snapshot.tint = style.tint;
     snapshot.border = style.border;
     snapshot.foreground_matches_theme =
-        style.foreground == default_theme.foreground
-        && style.secondary_foreground == default_theme.muted;
+        style.foreground == default_foreground
+        && style.secondary_foreground == default_muted;
     snapshot.accent_matches_theme =
-        style.accent_foreground == default_theme.accent
-        && style.strong_accent_foreground == default_theme.accent_strong;
+        style.accent_foreground == default_accent
+        && style.strong_accent_foreground == default_accent_strong;
     snapshot.tint_matches_surface =
         style.kind == MaterialKind::None
-        || material_color_rgb_equal(style.tint, default_theme.surface);
+        || material_color_rgb_equal(style.tint, default_surface);
     snapshot.border_matches_theme =
         style.kind == MaterialKind::None
-        || material_color_rgb_equal(style.border, default_theme.border);
+        || material_color_rgb_equal(style.border, default_border);
     snapshot.default_glass_tokens =
         snapshot.foreground_matches_theme
         && snapshot.accent_matches_theme
         && snapshot.tint_matches_surface
         && snapshot.border_matches_theme
-        && theme_matches_default_glass_contract(default_theme);
+        && contract.profile_name == "apple-glass-light"
+        && contract.typography.default_font_family == "Pretendard";
     snapshot.profile_name = snapshot.default_glass_tokens
         ? "apple-glass-light"
         : "custom";
@@ -2827,6 +2867,12 @@ inline MaterialBackdropAnalysis analyze_material_backdrop(
     analysis.available = backdrop.available;
     analysis.stable = backdrop.stable;
     analysis.excludes_foreground_text = backdrop.excludes_foreground_text;
+    analysis.color_mean = backdrop.color_mean;
+    analysis.color_sample_count = backdrop.color_sample_count;
+    analysis.color_sample_status =
+        backdrop.color_sample_status && backdrop.color_sample_status[0]
+            ? backdrop.color_sample_status
+            : "not-sampled";
     analysis.luma_min = material_safe_luma(backdrop.luma_min, 0.0f);
     analysis.luma_max = std::max(
         analysis.luma_min,
@@ -3046,6 +3092,41 @@ inline char const* material_tint_response_name(
     return "preserve";
 }
 
+inline float material_color_channel_fraction(unsigned char value) noexcept {
+    return static_cast<float>(value) / 255.0f;
+}
+
+inline float material_rgb_distance(Color a, Color b) noexcept {
+    auto const red = std::fabs(
+        material_color_channel_fraction(a.r)
+        - material_color_channel_fraction(b.r));
+    auto const green = std::fabs(
+        material_color_channel_fraction(a.g)
+        - material_color_channel_fraction(b.g));
+    auto const blue = std::fabs(
+        material_color_channel_fraction(a.b)
+        - material_color_channel_fraction(b.b));
+    return std::max(red, std::max(green, blue));
+}
+
+inline float material_colorfulness(Color color) noexcept {
+    auto const red = material_color_channel_fraction(color.r);
+    auto const green = material_color_channel_fraction(color.g);
+    auto const blue = material_color_channel_fraction(color.b);
+    auto const high = std::max(red, std::max(green, blue));
+    auto const low = std::min(red, std::min(green, blue));
+    return high - low;
+}
+
+inline char const* material_color_response_name(float colorfulness,
+                                                float distance) noexcept {
+    if (distance <= 0.025f)
+        return "preserve";
+    if (colorfulness <= 0.025f)
+        return "neutral-backdrop-color";
+    return "sampled-backdrop-color";
+}
+
 inline char const* material_saturation_response_name(
         bool dark,
         bool bright,
@@ -3194,6 +3275,37 @@ inline void apply_backdrop_luminance_policy(MaterialPlan& plan) noexcept {
         plan.backdrop.shadow_radius_delta =
             plan.shadow_radius - shadow_radius_before;
     }
+}
+
+inline void apply_backdrop_color_policy(MaterialPlan& plan) noexcept {
+    if (!plan.backdrop_sampling || plan.backdrop.color_sample_count == 0) {
+        plan.backdrop.color_response = "not-sampled";
+        return;
+    }
+
+    auto const source = plan.backdrop.color_mean;
+    auto const colorfulness = material_colorfulness(source);
+    auto const distance = material_rgb_distance(plan.tint, source);
+    plan.backdrop.color_response =
+        material_color_response_name(colorfulness, distance);
+    if (std::string_view{plan.backdrop.color_response}
+        != "sampled-backdrop-color") {
+        return;
+    }
+
+    auto const before = plan.tint;
+    auto target = source;
+    target.a = before.a;
+    auto const response_strength = std::clamp(
+        0.06f
+            + 0.10f * colorfulness
+            + 0.04f * std::clamp(plan.backdrop.response_strength, 0.0f, 1.0f),
+        0.0f,
+        0.18f);
+    plan.tint = lerp_color(before, target, response_strength);
+    plan.tint.a = before.a;
+    plan.backdrop.tint_color_delta =
+        material_rgb_distance(before, plan.tint);
 }
 
 inline float material_clamped_pointer_coordinate(float value) noexcept {
@@ -4133,6 +4245,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.sample_taps = 0u;
     } else {
         apply_backdrop_luminance_policy(plan);
+        apply_backdrop_color_policy(plan);
     }
     plan.sampling_kernel = material_resolve_sampling_kernel(
         plan.backdrop_sampling,

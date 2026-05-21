@@ -1545,6 +1545,18 @@ namespace detail {
         backdrop.emplace(
             "excludes_foreground_text",
             json::Value{plan.backdrop.excludes_foreground_text});
+        backdrop.emplace(
+            "color_mean",
+            color_to_json(plan.backdrop.color_mean));
+        backdrop.emplace(
+            "color_sample_count",
+            json::Value{static_cast<std::int64_t>(
+                plan.backdrop.color_sample_count)});
+        backdrop.emplace(
+            "color_sample_status",
+            json::Value{plan.backdrop.color_sample_status
+                            ? plan.backdrop.color_sample_status
+                            : "not-sampled"});
         backdrop.emplace("luma_min", json::Value{plan.backdrop.luma_min});
         backdrop.emplace("luma_max", json::Value{plan.backdrop.luma_max});
         backdrop.emplace("luma_mean", json::Value{plan.backdrop.luma_mean});
@@ -1578,6 +1590,9 @@ namespace detail {
             "frosting_response",
             json::Value{plan.backdrop.frosting_response});
         backdrop.emplace(
+            "color_response",
+            json::Value{plan.backdrop.color_response});
+        backdrop.emplace(
             "tint_response",
             json::Value{plan.backdrop.tint_response});
         backdrop.emplace(
@@ -1598,6 +1613,9 @@ namespace detail {
         backdrop.emplace(
             "opacity_delta",
             json::Value{plan.backdrop.opacity_delta});
+        backdrop.emplace(
+            "tint_color_delta",
+            json::Value{plan.backdrop.tint_color_delta});
         backdrop.emplace(
             "tint_alpha_delta",
             json::Value{plan.backdrop.tint_alpha_delta});
@@ -3061,6 +3079,21 @@ namespace detail {
         out.emplace(
             "max_refraction_offset_pixels",
             json::Value{summary.max_refraction_offset_pixels});
+        out.emplace(
+            "backdrop_descriptor_color_available",
+            json::Value{summary.backdrop_descriptor_color_available});
+        out.emplace(
+            "backdrop_descriptor_color_mean",
+            color_to_json(summary.backdrop_descriptor_color_mean));
+        out.emplace(
+            "backdrop_descriptor_color_sample_count",
+            json::Value{static_cast<std::int64_t>(
+                summary.backdrop_descriptor_color_sample_count)});
+        out.emplace(
+            "backdrop_descriptor_color_status",
+            json::Value{summary.backdrop_descriptor_color_status
+                            ? summary.backdrop_descriptor_color_status
+                            : "not-sampled"});
         out.emplace(
             "backdrop_descriptor_luma_available",
             json::Value{summary.backdrop_descriptor_luma_available});

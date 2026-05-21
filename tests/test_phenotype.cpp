@@ -44,6 +44,14 @@ extern "C" {
 #define CMD_LEN                          phenotype_cmd_len
 #endif
 
+static std::unique_ptr<MaterialPlan> make_test_material_plan(
+        MaterialRequest const& request,
+        MaterialEnvironment environment) {
+    auto owner = std::make_unique<MaterialPlan>();
+    *owner = plan_material_surface(request, environment);
+    return owner;
+}
+
 // ============================================================
 // Layout tests
 // ============================================================
@@ -1566,7 +1574,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     fallback_env.render_target.width = 520;
     fallback_env.render_target.height = 760;
     fallback_env.render_target.scale = 2.0f;
-    auto fallback_plan = plan_material_surface(request, fallback_env);
+    // Keep large MaterialPlan values out of this wasm test stack frame.
+    auto fallback_plan_owner =
+        make_test_material_plan(request, fallback_env);
+    auto& fallback_plan = *fallback_plan_owner;
     assert(fallback_plan.contract_version == material_plan_contract_version);
     assert(fallback_plan.kind == MaterialKind::Regular);
     assert(fallback_plan.role == MaterialSurfaceRole::Surface);
@@ -1764,8 +1775,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     MaterialEnvironment unsupported_large_env = fallback_env;
     unsupported_large_env.render_target.width = 2400;
     unsupported_large_env.render_target.height = 2400;
-    auto unsupported_large_plan =
-        plan_material_surface(request, unsupported_large_env);
+    auto unsupported_large_plan_owner =
+        make_test_material_plan(request, unsupported_large_env);
+    auto& unsupported_large_plan = *unsupported_large_plan_owner;
     assert(unsupported_large_plan.fallback());
     assert(unsupported_large_plan.fallback_path
            == MaterialFallbackPath::UnsupportedBackend);
@@ -1778,7 +1790,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     warmup_env.backdrop.available = false;
     warmup_env.backdrop.stable = false;
     warmup_env.backdrop.source = "none";
-    auto warmup_plan = plan_material_surface(request, warmup_env);
+    auto warmup_plan_owner = make_test_material_plan(request, warmup_env);
+    auto& warmup_plan = *warmup_plan_owner;
     assert(warmup_plan.fallback());
     assert(warmup_plan.fallback_path == MaterialFallbackPath::NoBackdropSource);
     assert(warmup_plan.decision_trace.backend_supports_backdrop);
@@ -1823,7 +1836,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     glass_env.backdrop.stable = true;
     glass_env.backdrop.excludes_foreground_text = true;
     glass_env.backdrop.source = "previous-presented-frame";
-    auto glass_plan = plan_material_surface(request, glass_env);
+    auto glass_plan_owner = make_test_material_plan(request, glass_env);
+    auto& glass_plan = *glass_plan_owner;
     assert(glass_plan.contract_version == material_plan_contract_version);
     assert(glass_plan.role == MaterialSurfaceRole::Surface);
     assert(glass_plan.container.mode == MaterialContainerMode::Isolated);
@@ -2034,7 +2048,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
         24.0f,
         true,
         true};
-    auto container_plan = plan_material_surface(container_request, glass_env);
+    auto container_plan_owner =
+        make_test_material_plan(container_request, glass_env);
+    auto& container_plan = *container_plan_owner;
     assert(!container_plan.fallback());
     assert(container_plan.container.mode == MaterialContainerMode::Union);
     assert(std::string(container_plan.container.mode_name) == "union");
@@ -2070,8 +2086,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
 
     MaterialRequest clamped_shape_request = request;
     clamped_shape_request.geometry.radius = 200.0f;
-    auto clamped_shape_plan =
-        plan_material_surface(clamped_shape_request, glass_env);
+    auto clamped_shape_plan_owner =
+        make_test_material_plan(clamped_shape_request, glass_env);
+    auto& clamped_shape_plan = *clamped_shape_plan_owner;
     assert(!clamped_shape_plan.fallback());
     assert(clamped_shape_plan.shape.valid);
     assert(clamped_shape_plan.shape.kind == MaterialShapeKind::Capsule);
@@ -2085,8 +2102,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
 
     MaterialEnvironment reduced_motion_container_env = glass_env;
     reduced_motion_container_env.capabilities.reduce_motion = true;
-    auto reduced_motion_container_plan =
-        plan_material_surface(container_request, reduced_motion_container_env);
+    auto reduced_motion_container_plan_owner =
+        make_test_material_plan(container_request, reduced_motion_container_env);
+    auto& reduced_motion_container_plan =
+        *reduced_motion_container_plan_owner;
     assert(reduced_motion_container_plan.container.participates);
     assert(reduced_motion_container_plan.container.interactive);
     assert(reduced_motion_container_plan.container.requested_morph_transitions);
@@ -2104,8 +2123,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     dark_backdrop_env.backdrop.luma_min = 0.02f;
     dark_backdrop_env.backdrop.luma_max = 0.28f;
     dark_backdrop_env.backdrop.luma_mean = 0.12f;
-    auto dark_backdrop_plan =
-        plan_material_surface(request, dark_backdrop_env);
+    auto dark_backdrop_plan_owner =
+        make_test_material_plan(request, dark_backdrop_env);
+    auto& dark_backdrop_plan = *dark_backdrop_plan_owner;
     assert(dark_backdrop_plan.backdrop_sampling);
     assert(dark_backdrop_plan.luminance_floor
            > glass_plan.luminance_floor);
@@ -2143,8 +2163,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     bright_backdrop_env.backdrop.luma_min = 0.84f;
     bright_backdrop_env.backdrop.luma_max = 0.97f;
     bright_backdrop_env.backdrop.luma_mean = 0.90f;
-    auto bright_backdrop_plan =
-        plan_material_surface(request, bright_backdrop_env);
+    auto bright_backdrop_plan_owner =
+        make_test_material_plan(request, bright_backdrop_env);
+    auto& bright_backdrop_plan = *bright_backdrop_plan_owner;
     assert(bright_backdrop_plan.backdrop_sampling);
     assert(bright_backdrop_plan.luminance_gain
            < glass_plan.luminance_gain);
@@ -2178,8 +2199,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     flat_backdrop_env.backdrop.luma_min = 0.46f;
     flat_backdrop_env.backdrop.luma_max = 0.50f;
     flat_backdrop_env.backdrop.luma_mean = 0.48f;
-    auto flat_backdrop_plan =
-        plan_material_surface(request, flat_backdrop_env);
+    auto flat_backdrop_plan_owner =
+        make_test_material_plan(request, flat_backdrop_env);
+    auto& flat_backdrop_plan = *flat_backdrop_plan_owner;
     assert(flat_backdrop_plan.backdrop_sampling);
     assert(flat_backdrop_plan.backdrop.luma_span < 0.05f);
     assert(std::string(flat_backdrop_plan.backdrop.luminance_response)
@@ -2207,8 +2229,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     MaterialEnvironment contrast_motion_env = glass_env;
     contrast_motion_env.capabilities.increase_contrast = true;
     contrast_motion_env.capabilities.reduce_motion = true;
-    auto contrast_motion_plan =
-        plan_material_surface(request, contrast_motion_env);
+    auto contrast_motion_plan_owner =
+        make_test_material_plan(request, contrast_motion_env);
+    auto& contrast_motion_plan = *contrast_motion_plan_owner;
     assert(contrast_motion_plan.backdrop_sampling);
     assert(contrast_motion_plan.decision_trace.increase_contrast);
     assert(contrast_motion_plan.decision_trace.reduce_motion);
@@ -2232,7 +2255,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "budgeted-effects");
 
     glass_env.capabilities.reduce_transparency = true;
-    auto reduced_plan = plan_material_surface(request, glass_env);
+    auto reduced_plan_owner = make_test_material_plan(request, glass_env);
+    auto& reduced_plan = *reduced_plan_owner;
     assert(reduced_plan.fallback());
     assert(reduced_plan.fallback_path == MaterialFallbackPath::ReducedTransparency);
     assert(!reduced_plan.backdrop_sampling);
@@ -2257,8 +2281,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     glass_env.capabilities.reduce_transparency = false;
     MaterialEnvironment disabled_quality_env = glass_env;
     disabled_quality_env.quality.allow_backdrop_sampling = false;
-    auto disabled_quality_plan =
-        plan_material_surface(request, disabled_quality_env);
+    auto disabled_quality_plan_owner =
+        make_test_material_plan(request, disabled_quality_env);
+    auto& disabled_quality_plan = *disabled_quality_plan_owner;
     assert(disabled_quality_plan.fallback());
     assert(disabled_quality_plan.fallback_path
            == MaterialFallbackPath::QualityPolicy);
@@ -2274,7 +2299,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
 
     MaterialEnvironment zero_tap_env = glass_env;
     zero_tap_env.quality.max_sample_taps = 0;
-    auto zero_tap_plan = plan_material_surface(request, zero_tap_env);
+    auto zero_tap_plan_owner =
+        make_test_material_plan(request, zero_tap_env);
+    auto& zero_tap_plan = *zero_tap_plan_owner;
     assert(zero_tap_plan.fallback());
     assert(zero_tap_plan.fallback_path == MaterialFallbackPath::QualityPolicy);
     assert(zero_tap_plan.quality_policy.max_sample_taps == 0);
@@ -2288,7 +2315,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     budget_env.quality.max_backdrop_pixels = 600'000;
     budget_env.quality.allow_noise = false;
     budget_env.quality.allow_shadow = false;
-    auto budget_plan = plan_material_surface(request, budget_env);
+    auto budget_plan_owner = make_test_material_plan(request, budget_env);
+    auto& budget_plan = *budget_plan_owner;
     assert(budget_plan.blur_radius == 12.0f);
     assert(budget_plan.sample_taps == 5);
     assert(budget_plan.primary_pass.sample_taps == 5);
@@ -2324,7 +2352,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     capability_env.capabilities.max_backdrop_pixels = 500'000;
     capability_env.quality.max_sample_taps = 25;
     capability_env.quality.max_backdrop_pixels = 1'000'000;
-    auto capability_plan = plan_material_surface(request, capability_env);
+    auto capability_plan_owner =
+        make_test_material_plan(request, capability_env);
+    auto& capability_plan = *capability_plan_owner;
     assert(capability_plan.capability_snapshot.max_shader_sample_taps == 9);
     assert(capability_plan.capability_snapshot.max_texture_dimension_2d == 1024);
     assert(capability_plan.capability_snapshot.max_backdrop_pixels == 500'000);
@@ -2342,7 +2372,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     MaterialEnvironment texture_limit_env = glass_env;
     texture_limit_env.capabilities.max_texture_dimension_2d = 128;
     texture_limit_env.capabilities.max_backdrop_pixels = 1'000'000;
-    auto texture_limit_plan = plan_material_surface(request, texture_limit_env);
+    auto texture_limit_plan_owner =
+        make_test_material_plan(request, texture_limit_env);
+    auto& texture_limit_plan = *texture_limit_plan_owner;
     assert(texture_limit_plan.fallback());
     assert(texture_limit_plan.fallback_path == MaterialFallbackPath::QualityPolicy);
     assert(texture_limit_plan.capability_snapshot.texture_limits_known);
@@ -2356,8 +2388,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     MaterialEnvironment excessive_quality_env = glass_env;
     excessive_quality_env.quality.max_blur_radius = 999.0f;
     excessive_quality_env.quality.max_sample_taps = 999;
-    auto excessive_quality_plan =
-        plan_material_surface(request, excessive_quality_env);
+    auto excessive_quality_plan_owner =
+        make_test_material_plan(request, excessive_quality_env);
+    auto& excessive_quality_plan = *excessive_quality_plan_owner;
     assert(!excessive_quality_plan.fallback());
     assert(excessive_quality_plan.quality_policy.max_blur_radius
            == material_max_blur_radius);
@@ -2372,7 +2405,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
 
     MaterialEnvironment oversize_env = glass_env;
     oversize_env.quality.max_backdrop_pixels = 100;
-    auto oversize_plan = plan_material_surface(request, oversize_env);
+    auto oversize_plan_owner =
+        make_test_material_plan(request, oversize_env);
+    auto& oversize_plan = *oversize_plan_owner;
     assert(oversize_plan.fallback());
     assert(oversize_plan.fallback_path == MaterialFallbackPath::QualityPolicy);
     assert(oversize_plan.render_target.pixel_count == 395'200);
@@ -2392,7 +2427,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
 
     MaterialRequest invalid_request = request;
     invalid_request.geometry.w = 0.0f;
-    auto invalid_plan = plan_material_surface(invalid_request, glass_env);
+    auto invalid_plan_owner =
+        make_test_material_plan(invalid_request, glass_env);
+    auto& invalid_plan = *invalid_plan_owner;
     assert(invalid_plan.fallback());
     assert(invalid_plan.fallback_path == MaterialFallbackPath::InvalidGeometry);
     assert(!invalid_plan.primary_pass.active);
@@ -2428,7 +2465,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(invalid_plan.decision_trace.first_blocker)
            == "invalid-geometry");
 
-    MaterialPlan capacity_plan;
+    auto capacity_plan_owner = std::make_unique<MaterialPlan>();
+    auto& capacity_plan = *capacity_plan_owner;
     capacity_plan.execution_stage_capacity = 1;
     MaterialExecutionStage active_stage{
         .name = "shape-shadow",
@@ -2472,7 +2510,8 @@ void test_material_text_foreground_resolution() {
     env.render_target.height = 760;
     env.render_target.scale = 2.0f;
 
-    auto plan = plan_material_surface(request, env);
+    auto plan_owner = make_test_material_plan(request, env);
+    auto& plan = *plan_owner;
     assert(plan.backdrop_sampling);
     assert(plan.foreground.backdrop_driven);
     std::vector<MaterialRuntimeRecord> records{
@@ -2867,12 +2906,13 @@ void test_material_surface_interactive_option_enables_plan_response() {
     env.render_target.width = 320;
     env.render_target.height = 56;
 
-    auto plan = plan_material_surface(
+    auto plan_owner = make_test_material_plan(
         material_request_for_command(
             descriptor,
             MaterialGeometry{cmd.x, cmd.y, cmd.w, cmd.h, cmd.radius},
             detail::g_app.theme),
         env);
+    auto& plan = *plan_owner;
     assert(plan.container.interactive);
     assert(plan.interaction.enabled);
     assert(plan.interaction.active);
@@ -3114,12 +3154,13 @@ void test_material_command_preserves_style_optics() {
     env.backdrop.stable = true;
     env.render_target.width = 320;
     env.render_target.height = 40;
-    auto plan = plan_material_surface(
+    auto plan_owner = make_test_material_plan(
         material_request_for_command(
             descriptor,
             MaterialGeometry{cmd->x, cmd->y, cmd->w, cmd->h, cmd->radius},
             detail::g_app.theme),
         env);
+    auto& plan = *plan_owner;
     assert(!plan.fallback());
     assert(plan.role == MaterialSurfaceRole::Content);
     assert(plan.command_descriptor.role == MaterialSurfaceRole::Content);

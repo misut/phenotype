@@ -160,6 +160,13 @@ ALLOWED_MATERIAL_FROSTING_RESPONSES = {
     "not-sampled",
 }
 
+ALLOWED_MATERIAL_COLOR_RESPONSES = {
+    "neutral-backdrop-color",
+    "not-sampled",
+    "preserve",
+    "sampled-backdrop-color",
+}
+
 ALLOWED_MATERIAL_TINT_RESPONSES = {
     "lift-dark-backdrop",
     "not-sampled",
@@ -424,7 +431,7 @@ ALLOWED_MATERIAL_REFRACTION_SOURCES = {
     "sampled-backdrop-edge-refraction",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 39
+MATERIAL_PLAN_CONTRACT_VERSION = 40
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 MATERIAL_MAX_REFRACTION_OFFSET_PIXELS = 3.5
@@ -1156,6 +1163,7 @@ def check_object_field(
     path: str,
     *,
     likely_layer: str,
+    likely_pass: str = "",
     hint: str,
 ) -> JsonObject | None:
     item = value.get(key)
@@ -1166,6 +1174,7 @@ def check_object_field(
         expected="object",
         actual=type(item).__name__,
         likely_layer=likely_layer,
+        likely_pass=likely_pass,
         hint=hint,
         record_success=False)
     return item if isinstance(item, dict) else None
@@ -1241,6 +1250,7 @@ def check_string_field(
     *,
     allow_empty: bool = False,
     likely_layer: str,
+    likely_pass: str = "",
     hint: str,
 ) -> str | None:
     item = value.get(key)
@@ -1252,6 +1262,7 @@ def check_string_field(
         expected="string" if allow_empty else "non-empty string",
         actual=item,
         likely_layer=likely_layer,
+        likely_pass=likely_pass,
         hint=hint,
         record_success=False)
     return item if isinstance(item, str) else None
@@ -3099,6 +3110,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "backdrop_capture_scopes": ALLOWED_MATERIAL_BACKDROP_CAPTURE_SCOPES,
         "luminance_responses": ALLOWED_MATERIAL_LUMINANCE_RESPONSES,
         "frosting_responses": ALLOWED_MATERIAL_FROSTING_RESPONSES,
+        "color_responses": ALLOWED_MATERIAL_COLOR_RESPONSES,
         "tint_responses": ALLOWED_MATERIAL_TINT_RESPONSES,
         "saturation_responses": ALLOWED_MATERIAL_SATURATION_RESPONSES,
         "depth_responses": ALLOWED_MATERIAL_DEPTH_RESPONSES,
@@ -3984,6 +3996,9 @@ MATERIAL_BACKDROP_BOOL_FIELDS = (
     "stable",
     "excludes_foreground_text",
 )
+MATERIAL_BACKDROP_COLOR_SAMPLE_FIELDS = (
+    "color_sample_count",
+)
 MATERIAL_BACKDROP_LUMA_FIELDS = (
     "luma_min",
     "luma_max",
@@ -4001,6 +4016,7 @@ MATERIAL_BACKDROP_DELTA_FIELDS = (
     "luminance_gain_delta",
     "edge_highlight_delta",
     "opacity_delta",
+    "tint_color_delta",
     "tint_alpha_delta",
     "saturation_delta",
     "shadow_alpha_delta",
@@ -4009,6 +4025,7 @@ MATERIAL_BACKDROP_DELTA_FIELDS = (
 )
 MATERIAL_BACKDROP_RESPONSE_FIELDS = (
     ("frosting_response", ALLOWED_MATERIAL_FROSTING_RESPONSES),
+    ("color_response", ALLOWED_MATERIAL_COLOR_RESPONSES),
     ("tint_response", ALLOWED_MATERIAL_TINT_RESPONSES),
     ("saturation_response", ALLOWED_MATERIAL_SATURATION_RESPONSES),
     ("depth_response", ALLOWED_MATERIAL_DEPTH_RESPONSES),
@@ -5443,9 +5460,11 @@ def summarize_material_plans(
             "sources": {},
             "luminance_responses": {},
             "frosting_responses": {},
+            "color_responses": {},
             "tint_responses": {},
             "saturation_responses": {},
             "depth_responses": {},
+            "color_sampled": 0,
             "luminance_adapted": 0,
             "optical_adapted": 0,
             "max_luma_span": 0.0,
@@ -5453,6 +5472,7 @@ def summarize_material_plans(
             "max_abs_gain_delta": 0.0,
             "max_abs_edge_delta": 0.0,
             "max_abs_opacity_delta": 0.0,
+            "max_abs_tint_color_delta": 0.0,
             "max_abs_tint_alpha_delta": 0.0,
             "max_abs_saturation_delta": 0.0,
             "max_abs_shadow_alpha_delta": 0.0,
@@ -8573,6 +8593,79 @@ def summarize_material_plans(
                     available = value
                 elif key == "stable":
                     stable = value
+            color_mean = check_object_field(
+                report,
+                backdrop,
+                "color_mean",
+                f"{plan_path}.backdrop",
+                likely_layer=likely_layer,
+                hint=(
+                    "Backdrop color_mean should expose the sampled average "
+                    "surrounding color used by pure tint adaptation."))
+            if color_mean is not None:
+                for channel in MATERIAL_COLOR_FIELDS:
+                    check_number_field(
+                        report,
+                        color_mean,
+                        channel,
+                        f"{plan_path}.backdrop.color_mean",
+                        min_value=0.0,
+                        max_value=255.0,
+                        likely_layer=likely_layer,
+                        hint="Backdrop color channels must be byte values.")
+            for key in MATERIAL_BACKDROP_COLOR_SAMPLE_FIELDS:
+                value = check_number_field(
+                    report,
+                    backdrop,
+                    key,
+                    f"{plan_path}.backdrop",
+                    min_value=0.0,
+                    likely_layer=likely_layer,
+                    hint=(
+                        "Backdrop color sample metadata must be deterministic "
+                        "and share the bounded backend sample grid."))
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    report.check(
+                        f"material backdrop {key} is integer-valued",
+                        float(value).is_integer(),
+                        path=f"{plan_path}.backdrop.{key}",
+                        expected="integer-valued number",
+                        actual=value,
+                        likely_layer=likely_layer,
+                        hint="Serialize color sample counts as whole numbers.",
+                        record_success=False)
+                    if float(value) > 0.0:
+                        backdrop_summary["color_sampled"] = (
+                            int(backdrop_summary["color_sampled"]) + 1)
+            color_sample_status = check_string_field(
+                report,
+                backdrop,
+                "color_sample_status",
+                f"{plan_path}.backdrop",
+                likely_layer=likely_layer,
+                hint=(
+                    "Expose whether backdrop color came from an async grid "
+                    "sample or a deterministic fallback."))
+            color_sample_count = backdrop.get("color_sample_count")
+            if (
+                isinstance(color_sample_status, str)
+                and isinstance(color_sample_count, (int, float))
+            ):
+                report.check(
+                    "material backdrop color sampled status matches sample count",
+                    (float(color_sample_count) > 0.0)
+                    == (color_sample_status != "not-sampled"),
+                    path=f"{plan_path}.backdrop.color_sample_status",
+                    expected="not-sampled iff color sample count is zero",
+                    actual={
+                        "color_sample_status": color_sample_status,
+                        "color_sample_count": color_sample_count,
+                    },
+                    likely_layer=likely_layer,
+                    hint=(
+                        "Keep color sample metadata aligned with the backend "
+                        "sample grid used for tint adaptation."),
+                    record_success=False)
             luma_values: dict[str, int | float] = {}
             for key in MATERIAL_BACKDROP_LUMA_FIELDS:
                 value = check_number_field(
@@ -8705,6 +8798,7 @@ def summarize_material_plans(
                         "luminance_gain_delta": "max_abs_gain_delta",
                         "edge_highlight_delta": "max_abs_edge_delta",
                         "opacity_delta": "max_abs_opacity_delta",
+                        "tint_color_delta": "max_abs_tint_color_delta",
                         "tint_alpha_delta": "max_abs_tint_alpha_delta",
                         "saturation_delta": "max_abs_saturation_delta",
                         "shadow_alpha_delta": "max_abs_shadow_alpha_delta",
@@ -8782,6 +8876,7 @@ def summarize_material_plans(
                     response_values[key] = response_value
                     summary_key = {
                         "frosting_response": "frosting_responses",
+                        "color_response": "color_responses",
                         "tint_response": "tint_responses",
                         "saturation_response": "saturation_responses",
                         "depth_response": "depth_responses",
@@ -8832,6 +8927,7 @@ def summarize_material_plans(
                     record_success=False)
                 for key in (
                         "frosting_response",
+                        "color_response",
                         "tint_response",
                         "saturation_response",
                         "depth_response"):
@@ -8876,6 +8972,7 @@ def summarize_material_plans(
                     record_success=False)
                 for key in (
                         "frosting_response",
+                        "color_response",
                         "tint_response",
                         "saturation_response",
                         "depth_response"):
@@ -12253,6 +12350,7 @@ def check_material_plan_summary_requirements(
                 summary_path = f"{base_path}.backdrop.luminance_responses"
             elif field in (
                     "frosting_responses",
+                    "color_responses",
                     "tint_responses",
                     "saturation_responses",
                     "depth_responses"):
@@ -12912,6 +13010,7 @@ def check_material_executor_summary_contract(
         "stage_order_mismatch_count",
         "foreground_text_candidate_count",
         "foreground_text_remap_count",
+        "backdrop_descriptor_color_sample_count",
         "backdrop_descriptor_luma_min",
         "backdrop_descriptor_luma_max",
         "backdrop_descriptor_luma_mean",
@@ -12942,6 +13041,7 @@ def check_material_executor_summary_contract(
     bool_fields = (
         "backdrop_copy_excludes_foreground_text",
         "foreground_pass_after_backdrop_copy",
+        "backdrop_descriptor_color_available",
         "backdrop_descriptor_luma_available",
         "material_pipeline_ready",
         "material_backdrop_source_ready",
@@ -12961,6 +13061,73 @@ def check_material_executor_summary_contract(
             likely_layer="platform-runtime",
             likely_pass="material-executor",
             hint="Executor foreground/capture ordering telemetry must be explicit.")
+
+    color_mean = check_object_field(
+        report,
+        executor_summary,
+        "backdrop_descriptor_color_mean",
+        base_path,
+        likely_layer="platform-runtime",
+        likely_pass="material-executor",
+        hint="Executor summary should expose the sampled backdrop mean color.")
+    if color_mean is not None:
+        for channel in MATERIAL_COLOR_FIELDS:
+            check_number_field(
+                report,
+                color_mean,
+                channel,
+                f"{base_path}.backdrop_descriptor_color_mean",
+                min_value=0.0,
+                max_value=255.0,
+                likely_layer="platform-runtime",
+                likely_pass="material-executor",
+                hint="Executor backdrop color channels must be byte values.")
+    color_status = check_string_field(
+        report,
+        executor_summary,
+        "backdrop_descriptor_color_status",
+        base_path,
+        likely_layer="platform-runtime",
+        likely_pass="material-executor",
+        hint=(
+            "Executor summary should expose whether backdrop color came from "
+            "the async sample grid or a deterministic fallback."))
+    color_available = executor_summary.get("backdrop_descriptor_color_available")
+    color_sample_count = executor_summary.get(
+        "backdrop_descriptor_color_sample_count")
+    if isinstance(color_available, bool) and isinstance(
+            color_sample_count, (int, float)):
+        report.check(
+            "material executor backdrop color availability matches sample count",
+            color_available == (float(color_sample_count) > 0.0),
+            path=f"{base_path}.backdrop_descriptor_color_available",
+            expected="true iff backdrop_descriptor_color_sample_count is positive",
+            actual={
+                "backdrop_descriptor_color_available": color_available,
+                "backdrop_descriptor_color_sample_count": color_sample_count,
+            },
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "Set the executor color availability flag only after a "
+                "completed sample is available to the pure planner."))
+    if isinstance(color_status, str) and isinstance(
+            color_sample_count, (int, float)):
+        report.check(
+            "material executor backdrop color status matches sample count",
+            (float(color_sample_count) > 0.0)
+            == (color_status != "not-sampled"),
+            path=f"{base_path}.backdrop_descriptor_color_status",
+            expected="not-sampled iff backdrop descriptor color count is zero",
+            actual={
+                "backdrop_descriptor_color_status": color_status,
+                "backdrop_descriptor_color_sample_count": color_sample_count,
+            },
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "Keep executor color sampling telemetry aligned with the "
+                "descriptor passed into MaterialEnvironment."))
 
     upload_status = check_string_field(
         report,
@@ -13333,6 +13500,34 @@ def check_renderer_backdrop_luma_descriptor_contract(
         likely_layer="platform-runtime",
         likely_pass="material-backdrop-descriptor",
         hint="Async sample pending state must be explicit.")
+    color_available = check_bool_field(
+        report,
+        descriptor,
+        "color_available",
+        base_path,
+        likely_layer="platform-runtime",
+        likely_pass="material-backdrop-descriptor",
+        hint="Backdrop descriptor color availability must be explicit.")
+    color_mean = check_object_field(
+        report,
+        descriptor,
+        "color_mean",
+        base_path,
+        likely_layer="platform-runtime",
+        likely_pass="material-backdrop-descriptor",
+        hint="Backdrop descriptor should expose the sampled mean color.")
+    if color_mean is not None:
+        for channel in MATERIAL_COLOR_FIELDS:
+            check_number_field(
+                report,
+                color_mean,
+                channel,
+                f"{base_path}.color_mean",
+                min_value=0.0,
+                max_value=255.0,
+                likely_layer="platform-runtime",
+                likely_pass="material-backdrop-descriptor",
+                hint="Renderer backdrop color channels must be byte values.")
     for key in (
             "luma_min",
             "luma_max",
@@ -13375,6 +13570,21 @@ def check_renderer_backdrop_luma_descriptor_contract(
             hint=(
                 "Set the descriptor available flag only after a completed "
                 "sample has been consumed by the backend."))
+    if isinstance(color_available, bool) and isinstance(sample_count, (int, float)):
+        report.check(
+            "renderer material backdrop color availability matches sample count",
+            color_available == (float(sample_count) > 0.0),
+            path=f"{base_path}.color_available",
+            expected="true iff sample_count is positive",
+            actual={
+                "color_available": color_available,
+                "sample_count": sample_count,
+            },
+            likely_layer="platform-runtime",
+            likely_pass="material-backdrop-descriptor",
+            hint=(
+                "Color is sampled from the same fixed grid as luminance; keep "
+                "the availability flags aligned."))
     if isinstance(status, str):
         report.check(
             "renderer material backdrop luma status is actionable",
