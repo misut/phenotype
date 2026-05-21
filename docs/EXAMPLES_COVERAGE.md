@@ -214,7 +214,7 @@ mise exec -- exon build
   --expect input-modality:pointer
 .exon/debug/phenotype_cli drive glass-showcase --json \
   --script ../../examples/glass_showcase/glass_showcase.drive \
-  --expect material-count:12
+  --expect material-count:16
 ```
 
 The same file explorer drive output and native artifacts expose

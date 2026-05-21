@@ -245,6 +245,10 @@ The glass showcase now includes noninteractive tooltip and interactive context
 menu overlay probes, so transient overlay surfaces are exercised by the same
 material plan, fallback, resource-bound, and accessibility manifests as the
 base clear/thin/regular/thick material ramp.
+It also exercises selected sidebar/list rows, sorted table headers, and
+expanded disclosure headers, so app-like selection and hierarchy chrome are
+covered by the same material-plan and accessibility artifact gates rather than
+only by the file explorer examples.
 Finder-style table/list headers now use `GlassTableHeaderStyleOptions` and
 `widget::glass_table_header_button_style`. The preset emits clear `content`
 material for sortable header cells, keeps sorted-state tint/border decisions in

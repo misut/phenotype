@@ -21,12 +21,12 @@ import json;
 export namespace glass_showcase_demo {
 
 inline constexpr int k_default_viewport_width = 520;
-inline constexpr int k_default_viewport_height = 760;
+inline constexpr int k_default_viewport_height = 860;
 inline constexpr float k_default_viewport_scale = 1.0f;
 inline constexpr std::size_t k_density_count = 3;
 inline constexpr std::size_t k_default_density = 1;
 inline constexpr std::size_t k_material_kind_count = 4;
-inline constexpr std::size_t k_base_material_plan_count = 11;
+inline constexpr std::size_t k_base_material_plan_count = 15;
 inline constexpr std::size_t k_inspector_material_plan_count = 1;
 inline constexpr std::size_t k_total_material_probe_count =
     k_base_material_plan_count + k_inspector_material_plan_count;
@@ -66,6 +66,7 @@ struct GlassMaterialProbe {
     bool requires_noise_dither = true;
     bool excludes_foreground_text = true;
     std::size_t stage_count = k_probe_stage_count;
+    std::size_t sample_taps = k_probe_sample_taps;
 };
 
 struct GlassProbeContract {
@@ -92,6 +93,8 @@ struct GlassProbeContract {
     float max_blur_radius = k_probe_max_blur_radius;
     std::size_t total_expected_execution_stages =
         k_total_material_probe_count * k_probe_stage_count;
+    std::size_t total_expected_sample_taps =
+        k_total_material_probe_count * k_probe_sample_taps;
 };
 
 inline auto glass_probe_material_kind_name(
@@ -223,6 +226,66 @@ inline constexpr std::array<GlassMaterialProbe, k_total_material_probe_count>
             .verifier_profile = "regular-legibility-backdrop",
         },
         {
+            .name = "selection_sidebar_probe",
+            .label = "Glass Sidebar Selection",
+            .description =
+                "Selected sidebar pill proving list selection chrome stays on the sampled glass path.",
+            .kind = GlassProbeMaterialKind::Thin,
+            .interactive = true,
+            .verifier_profile = "thin-balanced-backdrop",
+            .likely_layer = "material-selection-row",
+        },
+        {
+            .name = "outline_row_probe",
+            .label = "Glass Outline Row",
+            .description =
+                "Selected outline row proving hierarchical list state emits typed material metadata.",
+            .kind = GlassProbeMaterialKind::Thin,
+            .interactive = true,
+            .verifier_profile = "thin-balanced-backdrop",
+            .likely_layer = "material-outline-row",
+        },
+        {
+            .name = "table_header_probe",
+            .label = "Glass Table Header",
+            .description =
+                "Sorted content header proving dense table chrome uses standard material without backdrop sampling.",
+            .kind = GlassProbeMaterialKind::Clear,
+            .interactive = true,
+            .verifier_profile = "clear-content-standard-material",
+            .likely_layer = "material-standard-pass",
+            .expected_pass = "standard-material-fill",
+            .expected_executor = "standard-fill",
+            .expected_luminance_curve = "fallback-flat",
+            .expected_sampling_kernel = "none",
+            .fallback_path = "none",
+            .requires_backdrop_sampling = false,
+            .requires_noise_dither = false,
+            .excludes_foreground_text = false,
+            .stage_count = 3u,
+            .sample_taps = 0u,
+        },
+        {
+            .name = "disclosure_header_probe",
+            .label = "Glass Disclosure Header",
+            .description =
+                "Expanded disclosure header proving app hierarchy chrome keeps a debuggable material node.",
+            .kind = GlassProbeMaterialKind::Clear,
+            .interactive = true,
+            .verifier_profile = "clear-content-standard-material",
+            .likely_layer = "material-standard-pass",
+            .expected_pass = "standard-material-fill",
+            .expected_executor = "standard-fill",
+            .expected_luminance_curve = "fallback-flat",
+            .expected_sampling_kernel = "none",
+            .fallback_path = "none",
+            .requires_backdrop_sampling = false,
+            .requires_noise_dither = false,
+            .excludes_foreground_text = false,
+            .stage_count = 3u,
+            .sample_taps = 0u,
+        },
+        {
             .name = "debug_contract",
             .label = "Debug Contract",
             .description =
@@ -271,11 +334,36 @@ inline std::size_t expected_material_probe_count(State const& state) {
         + (state.inspector_open ? k_inspector_material_plan_count : 0);
 }
 
+inline bool glass_probe_is_active(GlassMaterialProbe const& probe,
+                                  State const& state) {
+    return !probe.requires_inspector_open || state.inspector_open;
+}
+
+inline std::size_t expected_material_execution_stage_count(State const& state) {
+    std::size_t total = 0;
+    for (auto const& probe : k_material_probes) {
+        if (glass_probe_is_active(probe, state))
+            total += probe.stage_count;
+    }
+    return total;
+}
+
+inline std::size_t expected_material_sample_tap_count(State const& state) {
+    std::size_t total = 0;
+    for (auto const& probe : k_material_probes) {
+        if (glass_probe_is_active(probe, state))
+            total += probe.sample_taps;
+    }
+    return total;
+}
+
 inline GlassProbeContract glass_probe_contract(State const& state) {
     auto contract = GlassProbeContract{};
     contract.active_material_probe_count = expected_material_probe_count(state);
     contract.total_expected_execution_stages =
-        contract.active_material_probe_count * contract.stage_count_per_probe;
+        expected_material_execution_stage_count(state);
+    contract.total_expected_sample_taps =
+        expected_material_sample_tap_count(state);
     return contract;
 }
 
@@ -283,11 +371,6 @@ inline GlassMaterialProbe glass_material_probe_at(std::size_t index) {
     if (index >= k_material_probes.size())
         return k_material_probes.front();
     return k_material_probes[index];
-}
-
-inline bool glass_probe_is_active(GlassMaterialProbe const& probe,
-                                  State const& state) {
-    return !probe.requires_inspector_open || state.inspector_open;
 }
 
 inline json::Value glass_material_probe_debug_json(
@@ -351,6 +434,9 @@ inline json::Value glass_material_probe_debug_json(
     out.emplace(
         "stage_count",
         json::Value{static_cast<std::int64_t>(probe.stage_count)});
+    out.emplace(
+        "sample_taps",
+        json::Value{static_cast<std::int64_t>(probe.sample_taps)});
     return json::Value{std::move(out)};
 }
 
@@ -419,6 +505,10 @@ inline json::Value glass_probe_contract_debug_json(State const& state) {
         "total_expected_execution_stages",
         json::Value{static_cast<std::int64_t>(
             contract.total_expected_execution_stages)});
+    out.emplace(
+        "total_expected_sample_taps",
+        json::Value{static_cast<std::int64_t>(
+            contract.total_expected_sample_taps)});
     out.emplace("material_probes", json::Value{std::move(probes)});
     return json::Value{std::move(out)};
 }
