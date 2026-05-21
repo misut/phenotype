@@ -696,11 +696,15 @@ the actual `material_plans` executed for the frame. Each plan includes:
   sampled Liquid Glass, content-layer standard material, deterministic fallback,
   or inactive, then records blur/color/depth strategies and booleans for
   backdrop, blur, frosting, tint, saturation, luminance preservation, edge
-  highlight, shadow depth, noise/dither, foreground vibrancy, and deterministic
-  fallback;
-- `optical_composition`, the schema-36 pure execution recipe for the same
-  surface. It names the blur, frosting, tint, luminance, depth, interaction,
-  and fallback sources, records which optical channels are required, proves the
+  highlight, bounded refraction, shadow depth, noise/dither, foreground
+  vibrancy, and deterministic fallback;
+- `refraction`, the schema-37 pure bounded edge-lens profile. It names the
+  refraction model and source, records active/backdrop/interaction/reduced-
+  motion/bounded flags, and exposes the exact strength, edge bias, and maximum
+  pixel offset uploaded by sampled-backdrop material shaders;
+- `optical_composition`, the pure execution recipe for the same surface. It
+  names the blur, frosting, tint, luminance, refraction, depth, interaction, and
+  fallback sources, records which optical channels are required, proves the
   composition is bounded and deterministic, and exposes the exact scalar values,
   sample taps, texture-copy pixels, and surface-sample pixels consumed by stage
   optics;
@@ -982,10 +986,11 @@ For schema 35 and later, inspect `execution_audit` immediately after
 serialized pass, stage, and paint-layer arrays. A mismatch points at pure
 planning, command serialization, or debug JSON assembly. It should not be fixed
 by adding backend policy branches.
-For schema 36 and later, inspect `optical_composition` before comparing stage
-optics or shader constants. A mismatch in `execution_stages[n].optics` should
-trace back to this pure object, while a mismatch inside `optical_composition`
-itself points at `plan_material_surface` policy or stale JSON serialization.
+For schema 37 and later, inspect `refraction` and `optical_composition` before
+comparing stage optics or shader constants. A mismatch in
+`execution_stages[n].optics.refraction_*` should trace back to these pure
+objects, while a mismatch inside `optical_composition` itself points at
+`plan_material_surface` policy or stale JSON serialization.
 `renderer.material_backdrop_luma_descriptor` is the edge-side view of that same
 contract. It reports the latest observed luma min/max/mean, sample grid, sample
 frame, pending state, skipped sample count, and status such as

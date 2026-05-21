@@ -33,6 +33,10 @@ def stage_optics(
     specular_anchor_y: float = 0.5,
     specular_radius: float = 0.0,
     specular_intensity: float = 0.0,
+    refraction_model: str = "none",
+    refraction_strength: float = 0.0,
+    refraction_edge_bias: float = 0.0,
+    refraction_offset_pixels: float = 0.0,
 ) -> dict[str, object]:
     return {
         "channel": channel,
@@ -52,6 +56,10 @@ def stage_optics(
         "specular_anchor_y": specular_anchor_y,
         "specular_radius": specular_radius,
         "specular_intensity": specular_intensity,
+        "refraction_model": refraction_model,
+        "refraction_strength": refraction_strength,
+        "refraction_edge_bias": refraction_edge_bias,
+        "refraction_offset_pixels": refraction_offset_pixels,
     }
 
 
@@ -394,6 +402,18 @@ def material_plan(
             "uses_vibrancy": False,
             "deterministic": True,
         },
+        "refraction": {
+            "model": "none",
+            "source": "none",
+            "active": False,
+            "backdrop_driven": False,
+            "interaction_driven": False,
+            "reduced_motion_suppressed": False,
+            "bounded": True,
+            "strength": 0.0,
+            "edge_bias": 0.0,
+            "max_offset_pixels": 0.0,
+        },
         "interaction": {
             "enabled": False,
             "active": False,
@@ -457,6 +477,7 @@ def material_plan(
             "max_frame_capture_count": 0,
             "max_frame_capture_pixels": 0,
             "max_surface_sample_pixels": 0,
+            "max_refraction_offset_pixels": 0.0,
             "max_container_spacing": 0.0,
             "max_paint_layer_inflate": 7.0,
             "bounded_texture_copy": True,
@@ -556,12 +577,14 @@ def refresh_reference_model(plan: dict[str, object]) -> None:
     tint = plan["tint"]
     container = plan["container"]
     foreground = plan["foreground"]
+    refraction = plan["refraction"]
     interaction = plan["interaction"]
     budget = plan["resource_budget"]
     assert isinstance(shape, dict)
     assert isinstance(tint, dict)
     assert isinstance(container, dict)
     assert isinstance(foreground, dict)
+    assert isinstance(refraction, dict)
     assert isinstance(interaction, dict)
     assert isinstance(budget, dict)
     shape_valid = bool(shape["valid"])
@@ -624,6 +647,7 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
     tint = plan["tint"]
     curve = plan["luminance_curve"]
     foreground = plan["foreground"]
+    refraction = plan["refraction"]
     interaction = plan["interaction"]
     budget = plan["resource_budget"]
     reference = plan["reference_model"]
@@ -633,6 +657,7 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
     assert isinstance(tint, dict)
     assert isinstance(curve, dict)
     assert isinstance(foreground, dict)
+    assert isinstance(refraction, dict)
     assert isinstance(interaction, dict)
     assert isinstance(budget, dict)
     assert isinstance(reference, dict)
@@ -711,6 +736,8 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
         "tint_source": tint_source,
         "luminance_source": curve["name"],
         "depth_source": depth_strategy,
+        "refraction_source": (
+            refraction["source"] if bool(refraction["active"]) else "none"),
         "interaction_source": (
             interaction["response_model"]
             if bool(interaction["active"]) else "none"),
@@ -729,13 +756,15 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
         "edge_required": bool(primary["active"]) and edge,
         "shadow_required": bool(primary["active"]) and shadow,
         "noise_required": noise,
+        "refraction_required": bool(refraction["active"]),
         "interaction_required": bool(interaction["active"]),
         "fallback_required": fallback,
         "bounded": (
             bool(budget["bounded_texture_copy"])
             and bool(sampling_kernel["bounded"])
             and bool(curve["bounded"])
-            and bool(backdrop_access["bounded"])),
+            and bool(backdrop_access["bounded"])
+            and bool(refraction["bounded"])),
         "deterministic": (
             bool(budget["deterministic_fallback"])
             and bool(foreground["deterministic"])
@@ -751,6 +780,9 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
         "noise_opacity": plan["noise_opacity"],
         "shadow_alpha": plan["shadow_alpha"],
         "shadow_radius": plan["shadow_radius"],
+        "refraction_strength": refraction["strength"],
+        "refraction_edge_bias": refraction["edge_bias"],
+        "refraction_offset_pixels": refraction["max_offset_pixels"],
         "interaction_response_strength": interaction["response_strength"],
         "sample_taps": plan["sample_taps"],
         "max_texture_copy_pixels": primary["max_texture_copy_pixels"],
@@ -775,6 +807,7 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
         "edge_highlight_active": bool(primary["active"]) and edge,
         "depth_shadow_active": bool(primary["active"]) and shadow,
         "noise_dither_active": noise,
+        "refraction_active": bool(refraction["active"]),
         "foreground_vibrancy_active": bool(foreground["uses_vibrancy"]),
         "interaction_active": bool(interaction["active"]),
         "interaction_modulates_optics": (
@@ -959,6 +992,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     assert isinstance(plan["sampling_kernel"], dict)
     assert isinstance(plan["luminance_curve"], dict)
     assert isinstance(plan["foreground"], dict)
+    assert isinstance(plan["refraction"], dict)
     plan["plan_id"] = "material.regular.liquid-glass"
     plan["backdrop_sampling"] = True
     plan["fallback"] = False
@@ -1039,6 +1073,18 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "backdrop_driven": True,
         "uses_vibrancy": True,
     })
+    plan["refraction"].update({
+        "model": "edge-lens",
+        "source": "sampled-backdrop-edge-refraction",
+        "active": True,
+        "backdrop_driven": True,
+        "interaction_driven": False,
+        "reduced_motion_suppressed": False,
+        "bounded": True,
+        "strength": 0.124167,
+        "edge_bias": 0.378333,
+        "max_offset_pixels": 0.572617,
+    })
     assert isinstance(plan["resource_budget"], dict)
     plan["resource_budget"]["max_sampling_kernel_radius"] = (
         kernel_contract["radius"]
@@ -1046,6 +1092,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     plan["resource_budget"]["max_frame_capture_count"] = 1
     plan["resource_budget"]["max_frame_capture_pixels"] = 320 * 240
     plan["resource_budget"]["max_surface_sample_pixels"] = 240 * 96
+    plan["resource_budget"]["max_refraction_offset_pixels"] = 0.572617
     plan["resource_budget"]["max_paint_layer_inflate"] = 0.0
     plan["passes"] = [plan["primary_pass"]]
     plan["execution_stages"] = [
@@ -1066,6 +1113,10 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
                 saturation=1.08,
                 luminance_floor=0.08,
                 luminance_gain=1.08,
+                refraction_model="edge-lens",
+                refraction_strength=0.124167,
+                refraction_edge_bias=0.378333,
+                refraction_offset_pixels=0.572617,
             ),
         }
     ]
@@ -1160,6 +1211,7 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     execution_stages = plan["execution_stages"]
     paint_layers = plan["paint_layers"]
     interaction = plan["interaction"]
+    refraction = plan["refraction"]
     audit = plan["execution_audit"]
     assert isinstance(budget, dict)
     assert isinstance(primary, dict)
@@ -1168,6 +1220,7 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     assert isinstance(execution_stages, list)
     assert isinstance(paint_layers, list)
     assert isinstance(interaction, dict)
+    assert isinstance(refraction, dict)
     assert isinstance(audit, dict)
     active_paint_layers = [
         layer for layer in paint_layers
@@ -1268,6 +1321,10 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
             1 if interaction["reduce_motion"] else 0),
         "interaction_specular_highlight_count": (
             1 if interaction["specular_highlight_active"] else 0),
+        "refraction_active_count": 1 if refraction["active"] else 0,
+        "max_refraction_strength": refraction["strength"],
+        "max_refraction_edge_bias": refraction["edge_bias"],
+        "max_refraction_offset_pixels": refraction["max_offset_pixels"],
         "max_surface_area": shape["surface_area"],
         "max_effective_radius": shape["effective_radius"],
         "max_radius_limit": shape["radius_limit"],
@@ -1315,10 +1372,12 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
     primary = plan["primary_pass"]
     backdrop_access = plan["backdrop_access"]
     interaction = plan["interaction"]
+    refraction = plan["refraction"]
     audit = plan["execution_audit"]
     assert isinstance(primary, dict)
     assert isinstance(backdrop_access, dict)
     assert isinstance(interaction, dict)
+    assert isinstance(refraction, dict)
     assert isinstance(audit, dict)
     sampled_backdrop_instances = (
         1 if primary["executor"] == "backdrop-filter" else 0)
@@ -1437,6 +1496,10 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "interaction_active_count": 1 if interaction["active"] else 0,
         "interaction_specular_highlight_count": (
             1 if interaction["specular_highlight_active"] else 0),
+        "refraction_active_count": 1 if refraction["active"] else 0,
+        "max_refraction_strength": refraction["strength"],
+        "max_refraction_edge_bias": refraction["edge_bias"],
+        "max_refraction_offset_pixels": refraction["max_offset_pixels"],
         "max_interaction_response_strength": interaction["response_strength"],
         "max_interaction_specular_radius": interaction["specular_radius"],
         "max_interaction_specular_intensity": interaction["specular_intensity"],

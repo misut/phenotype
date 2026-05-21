@@ -36,7 +36,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "36": 8
+      "37": 8
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -264,6 +264,22 @@
     "foreground_deterministic": 8,
     "foreground_min_primary_contrast_gte": 4.5,
     "foreground_minimum_contrast_gte": 4.5,
+    "refraction_models": {
+      "edge-lens": 7,
+      "interactive-edge-lens": 1
+    },
+    "refraction_sources": {
+      "sampled-backdrop-edge-refraction": 8
+    },
+    "refraction_active": 8,
+    "refraction_backdrop_driven": 8,
+    "refraction_interaction_driven": 1,
+    "refraction_reduced_motion_suppressed": 0,
+    "refraction_bounded": 8,
+    "refraction_max_strength_gte": 0.1,
+    "refraction_max_strength_lte": 0.22,
+    "refraction_max_offset_pixels_gte": 0.1,
+    "refraction_max_offset_pixels_lte": 3.5,
     "optical_response_models": {
       "sampled-backdrop": 8
     },
@@ -285,6 +301,7 @@
     "optical_edge_highlight_active": 8,
     "optical_depth_shadow_active": 8,
     "optical_noise_dither_active": 8,
+    "optical_refraction_active": 8,
     "optical_foreground_vibrancy_active": 8,
     "optical_interaction_active": 1,
     "optical_interaction_modulates_optics": 1,
@@ -351,6 +368,8 @@
     "total_surface_sample_pixels_gte": 3873872,
     "max_surface_sample_pixels_lte": 4000000,
     "max_surface_sample_pixels_gte": 730883,
+    "max_refraction_offset_pixels_lte": 3.5,
+    "max_refraction_offset_pixels_gte": 0.1,
     "total_runtime_passes_lte": 8,
     "total_runtime_passes_gte": 8,
     "active_runtime_passes_lte": 8,
@@ -645,7 +664,7 @@
     },
     {
       "path": "renderer.material_executor_summary.material_upload_bytes",
-      "lte": 1024
+      "lte": 1536
     },
     {
       "path": "renderer.material_executor_summary.material_buffer_capacity_bytes",

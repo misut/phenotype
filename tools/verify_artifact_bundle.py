@@ -322,6 +322,11 @@ ALLOWED_MATERIAL_OPTICAL_DEPTH_STRATEGIES = {
     "standard-content-edge",
 }
 
+ALLOWED_MATERIAL_OPTICAL_REFRACTION_SOURCES = {
+    "none",
+    "sampled-backdrop-edge-refraction",
+}
+
 ALLOWED_MATERIAL_OPTICAL_FROSTING_SOURCES = {
     "none",
     "sampled-backdrop-frosting",
@@ -380,9 +385,21 @@ ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS = {
     "pointer-specular",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 36
+ALLOWED_MATERIAL_REFRACTION_MODELS = {
+    "edge-lens",
+    "interactive-edge-lens",
+    "none",
+}
+
+ALLOWED_MATERIAL_REFRACTION_SOURCES = {
+    "none",
+    "sampled-backdrop-edge-refraction",
+}
+
+MATERIAL_PLAN_CONTRACT_VERSION = 37
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
+MATERIAL_MAX_REFRACTION_OFFSET_PIXELS = 3.5
 
 ALLOWED_INPUT_MODALITIES = {
     "none",
@@ -584,10 +601,20 @@ def suggested_action_for_failure(
             "Inspect MaterialPlan.interaction.enablement_reason, "
             "MaterialSurfaceOptions.interaction, and MaterialRect interaction "
             "payload decoding.")
+    if likely_layer == "material-refraction":
+        return (
+            "Inspect MaterialPlan.refraction, MaterialResourceBudget."
+            "max_refraction_offset_pixels, and the backend material shader "
+            "refraction upload path.")
     if likely_layer == "material-optical-response":
         return (
             "Inspect MaterialPlan.optical_response and the pure blur, tint, "
-            "luminance, edge, depth, and fallback fields it summarizes.")
+            "luminance, edge, refraction, depth, and fallback fields it "
+            "summarizes.")
+    if likely_layer == "material-stage-optics":
+        return (
+            "Inspect MaterialPlan.execution_stages[].optics and the pure "
+            "optical_composition values copied into backend stage inputs.")
     if likely_layer == "material-reference":
         return (
             "Inspect MaterialPlan.reference_model, plan_material_surface, and "
@@ -865,6 +892,8 @@ def material_failure_context(
         material_contract["plan_reference_model"] = (
             material_plan_summary.get("reference_model"))
         material_contract["plan_shape"] = material_plan_summary.get("shape")
+        material_contract["plan_refraction"] = (
+            material_plan_summary.get("refraction"))
         material_contract["fallback_paths"] = material_plan_summary.get(
             "fallback_paths")
         material_contract["pass_executors"] = material_plan_summary.get(
@@ -2641,6 +2670,19 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "interaction_response_models",
         "interaction_motion_policies",
         "interaction_specular_models",
+        "refraction_active",
+        "refraction_backdrop_driven",
+        "refraction_interaction_driven",
+        "refraction_reduced_motion_suppressed",
+        "refraction_bounded",
+        "refraction_models",
+        "refraction_sources",
+        "refraction_max_strength_lte",
+        "refraction_max_strength_gte",
+        "refraction_max_edge_bias_lte",
+        "refraction_max_edge_bias_gte",
+        "refraction_max_offset_pixels_lte",
+        "refraction_max_offset_pixels_gte",
         "optical_response_models",
         "optical_blur_strategies",
         "optical_color_strategies",
@@ -2654,6 +2696,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "optical_edge_highlight_active",
         "optical_depth_shadow_active",
         "optical_noise_dither_active",
+        "optical_refraction_active",
         "optical_foreground_vibrancy_active",
         "optical_interaction_active",
         "optical_interaction_modulates_optics",
@@ -2755,6 +2798,11 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "interaction_reduce_motion",
             "interaction_deterministic",
             "interaction_specular_highlight_active",
+            "refraction_active",
+            "refraction_backdrop_driven",
+            "refraction_interaction_driven",
+            "refraction_reduced_motion_suppressed",
+            "refraction_bounded",
             "optical_backdrop_driven",
             "optical_blur_active",
             "optical_frosting_active",
@@ -2764,6 +2812,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "optical_edge_highlight_active",
             "optical_depth_shadow_active",
             "optical_noise_dither_active",
+            "optical_refraction_active",
             "optical_foreground_vibrancy_active",
             "optical_interaction_active",
             "optical_interaction_modulates_optics",
@@ -2792,7 +2841,13 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "shape_max_normalized_radius_gte",
             *MATERIAL_CONTAINER_GROUP_FLOAT_SPEC_FIELDS,
             "foreground_min_primary_contrast_gte",
-            "foreground_minimum_contrast_gte"):
+            "foreground_minimum_contrast_gte",
+            "refraction_max_strength_lte",
+            "refraction_max_strength_gte",
+            "refraction_max_edge_bias_lte",
+            "refraction_max_edge_bias_gte",
+            "refraction_max_offset_pixels_lte",
+            "refraction_max_offset_pixels_gte"):
         if field in value:
             spec[field] = non_negative_number(
                 value[field],
@@ -2844,6 +2899,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             ALLOWED_MATERIAL_INTERACTION_MOTION_POLICIES),
         "interaction_specular_models": (
             ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS),
+        "refraction_models": ALLOWED_MATERIAL_REFRACTION_MODELS,
+        "refraction_sources": ALLOWED_MATERIAL_REFRACTION_SOURCES,
         "optical_response_models": ALLOWED_MATERIAL_OPTICAL_RESPONSE_MODELS,
         "optical_blur_strategies": ALLOWED_MATERIAL_OPTICAL_BLUR_STRATEGIES,
         "optical_color_strategies": ALLOWED_MATERIAL_OPTICAL_COLOR_STRATEGIES,
@@ -2988,6 +3045,8 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
         "max_paint_layer_capacity_gte",
         "max_paint_layer_inflate_lte",
         "max_paint_layer_inflate_gte",
+        "max_refraction_offset_pixels_lte",
+        "max_refraction_offset_pixels_gte",
     }
     bool_fields = {
         "require_bounded_texture_copy",
@@ -3555,6 +3614,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "backdrop_access",
     "theme",
     "foreground",
+    "refraction",
     "interaction",
     "optical_composition",
     "optical_response",
@@ -3590,6 +3650,20 @@ MATERIAL_PLAN_NUMERIC_FIELDS = (
     "noise_opacity",
     "shadow_alpha",
     "shadow_radius",
+)
+
+MATERIAL_REFRACTION_STRING_FIELDS = ("model", "source")
+MATERIAL_REFRACTION_BOOL_FIELDS = (
+    "active",
+    "backdrop_driven",
+    "interaction_driven",
+    "reduced_motion_suppressed",
+    "bounded",
+)
+MATERIAL_REFRACTION_NUMERIC_FIELDS = (
+    "strength",
+    "edge_bias",
+    "max_offset_pixels",
 )
 
 MATERIAL_COMMAND_DESCRIPTOR_NUMERIC_FIELDS = (
@@ -3778,6 +3852,9 @@ MATERIAL_STAGE_OPTICS_NUMERIC_FIELDS = (
     "specular_anchor_y",
     "specular_radius",
     "specular_intensity",
+    "refraction_strength",
+    "refraction_edge_bias",
+    "refraction_offset_pixels",
 )
 MATERIAL_OBSERVATION_BOOL_FIELDS = (
     "semantic_material_required",
@@ -3913,6 +3990,7 @@ MATERIAL_OPTICAL_RESPONSE_BOOL_FIELDS = (
     "edge_highlight_active",
     "depth_shadow_active",
     "noise_dither_active",
+    "refraction_active",
     "foreground_vibrancy_active",
     "interaction_active",
     "interaction_modulates_optics",
@@ -3925,6 +4003,7 @@ MATERIAL_OPTICAL_COMPOSITION_STRING_FIELDS = (
     "tint_source",
     "luminance_source",
     "depth_source",
+    "refraction_source",
     "interaction_source",
     "fallback_source",
 )
@@ -3938,6 +4017,7 @@ MATERIAL_OPTICAL_COMPOSITION_BOOL_FIELDS = (
     "edge_required",
     "shadow_required",
     "noise_required",
+    "refraction_required",
     "interaction_required",
     "fallback_required",
     "bounded",
@@ -3955,6 +4035,9 @@ MATERIAL_OPTICAL_COMPOSITION_NUMERIC_FIELDS = (
     "noise_opacity",
     "shadow_alpha",
     "shadow_radius",
+    "refraction_strength",
+    "refraction_edge_bias",
+    "refraction_offset_pixels",
     "interaction_response_strength",
     "sample_taps",
     "max_texture_copy_pixels",
@@ -4993,6 +5076,18 @@ def summarize_material_plans(
             "min_minimum_contrast": 0.0,
             "max_background_luma": 0.0,
         },
+        "refraction": {
+            "models": {},
+            "sources": {},
+            "active": 0,
+            "backdrop_driven": 0,
+            "interaction_driven": 0,
+            "reduced_motion_suppressed": 0,
+            "bounded": 0,
+            "max_strength": 0.0,
+            "max_edge_bias": 0.0,
+            "max_offset_pixels": 0.0,
+        },
         "interaction": {
             "states": {},
             "enablement_reasons": {},
@@ -5027,6 +5122,7 @@ def summarize_material_plans(
             "edge_highlight_active": 0,
             "depth_shadow_active": 0,
             "noise_dither_active": 0,
+            "refraction_active": 0,
             "foreground_vibrancy_active": 0,
             "interaction_active": 0,
             "interaction_modulates_optics": 0,
@@ -5039,6 +5135,7 @@ def summarize_material_plans(
             "tint_sources": {},
             "luminance_sources": {},
             "depth_sources": {},
+            "refraction_sources": {},
             "interaction_sources": {},
             "fallback_sources": {},
             "backdrop_sampled": 0,
@@ -5050,11 +5147,14 @@ def summarize_material_plans(
             "edge_required": 0,
             "shadow_required": 0,
             "noise_required": 0,
+            "refraction_required": 0,
             "interaction_required": 0,
             "fallback_required": 0,
             "bounded": 0,
             "deterministic": 0,
             "max_blur_radius": 0.0,
+            "max_refraction_strength": 0.0,
+            "max_refraction_offset_pixels": 0.0,
             "max_sample_taps": 0,
             "max_texture_copy_pixels": 0,
             "max_surface_sample_pixels": 0,
@@ -5082,6 +5182,7 @@ def summarize_material_plans(
             "max_frame_capture_pixels": 0,
             "total_surface_sample_pixels": 0,
             "max_surface_sample_pixels": 0,
+            "max_refraction_offset_pixels": 0.0,
             "max_container_spacing": 0.0,
             "max_paint_layer_inflate": 0.0,
             "total_runtime_passes": 0,
@@ -6839,6 +6940,229 @@ def summarize_material_plans(
                             "Specular model should mirror whether the pointer "
                             "highlight is active."),
                         record_success=False)
+
+        refraction = check_object_field(
+            report,
+            plan,
+            "refraction",
+            plan_path,
+            likely_layer="material-refraction",
+            hint=(
+                "MaterialPlan.refraction must expose the pure bounded edge-lens "
+                "profile before backend execution."))
+        if refraction is not None:
+            refraction_summary = summary["refraction"]
+            refraction_strings: JsonObject = {}
+            for key in MATERIAL_REFRACTION_STRING_FIELDS:
+                value = check_string_field(
+                    report,
+                    refraction,
+                    key,
+                    f"{plan_path}.refraction",
+                    likely_layer="material-refraction",
+                    hint="Refraction strings must use stable pure-plan vocabulary.")
+                if isinstance(value, str):
+                    refraction_strings[key] = value
+                    allowed = (
+                        ALLOWED_MATERIAL_REFRACTION_MODELS
+                        if key == "model"
+                        else ALLOWED_MATERIAL_REFRACTION_SOURCES)
+                    bucket = refraction_summary[
+                        "models" if key == "model" else "sources"]
+                    bucket[value] = bucket.get(value, 0) + 1
+                    report.check(
+                        f"material refraction {key} is known",
+                        value in allowed,
+                        path=f"{plan_path}.refraction.{key}",
+                        expected=sorted(allowed),
+                        actual=value,
+                        likely_layer="material-refraction",
+                        likely_pass="edge-lens",
+                        hint=(
+                            "Add intentional refraction vocabulary to the "
+                            "verifier before changing artifact shape."),
+                        record_success=False)
+            refraction_bools: JsonObject = {}
+            for key in MATERIAL_REFRACTION_BOOL_FIELDS:
+                value = check_bool_field(
+                    report,
+                    refraction,
+                    key,
+                    f"{plan_path}.refraction",
+                    likely_layer="material-refraction",
+                    likely_pass="edge-lens",
+                    hint="Refraction booleans must stay explicit pure-plan facts.")
+                if isinstance(value, bool):
+                    refraction_bools[key] = value
+                    if value:
+                        refraction_summary[key] = (
+                            int(refraction_summary[key]) + 1)
+            refraction_numbers: JsonObject = {}
+            for key in MATERIAL_REFRACTION_NUMERIC_FIELDS:
+                max_value = (
+                    MATERIAL_MAX_REFRACTION_OFFSET_PIXELS
+                    if key == "max_offset_pixels"
+                    else 1.0)
+                value = check_number_field(
+                    report,
+                    refraction,
+                    key,
+                    f"{plan_path}.refraction",
+                    min_value=0.0,
+                    max_value=max_value,
+                    likely_layer="material-refraction",
+                    likely_pass="edge-lens",
+                    hint=(
+                        "Refraction numeric fields must be bounded pure-plan "
+                        "shader inputs."))
+                if isinstance(value, (int, float)):
+                    refraction_numbers[key] = value
+                    summary_key = {
+                        "strength": "max_strength",
+                        "edge_bias": "max_edge_bias",
+                        "max_offset_pixels": "max_offset_pixels",
+                    }[key]
+                    refraction_summary[summary_key] = max(
+                        float(refraction_summary[summary_key]),
+                        float(value))
+
+            expected_refraction_active = (
+                isinstance(kind, str)
+                and kind != "none"
+                and backdrop_sampling is True
+                and fallback is False)
+            interaction_active = (
+                interaction.get("active")
+                if isinstance(interaction, dict) else None)
+            decision_for_refraction = plan.get("decision_trace")
+            reduced_motion = (
+                decision_for_refraction.get("reduce_motion")
+                if isinstance(decision_for_refraction, dict) else None)
+            expected_refraction_model = (
+                "interactive-edge-lens"
+                if interaction_active is True else "edge-lens")
+            expected_refraction_source = "sampled-backdrop-edge-refraction"
+            primary_pass_for_refraction = plan.get("primary_pass")
+            refraction_pass_name = (
+                string_at(primary_pass_for_refraction, "name")
+                if isinstance(primary_pass_for_refraction, dict)
+                else "edge-lens")
+            if isinstance(kind, str):
+                report.check(
+                    "material refraction active flag matches backdrop sampling",
+                    refraction_bools.get("active") is expected_refraction_active,
+                    path=f"{plan_path}.refraction.active",
+                    expected=expected_refraction_active,
+                    actual=refraction_bools.get("active"),
+                    likely_layer="material-refraction",
+                    likely_pass=refraction_pass_name or "edge-lens",
+                    hint=(
+                        "Refraction should be active only for non-fallback "
+                        "sampled Liquid Glass plans."),
+                    record_success=False)
+            if expected_refraction_active:
+                report.check(
+                    "material sampled refraction uses edge-lens model",
+                    refraction_strings.get("model") == expected_refraction_model,
+                    path=f"{plan_path}.refraction.model",
+                    expected=expected_refraction_model,
+                    actual=refraction_strings.get("model"),
+                    likely_layer="material-refraction",
+                    likely_pass=refraction_pass_name or "edge-lens",
+                    hint=(
+                        "Refraction model should be selected in pure planning "
+                        "from the interaction state."),
+                    record_success=False)
+                report.check(
+                    "material sampled refraction source is backdrop-driven",
+                    refraction_strings.get("source") == expected_refraction_source,
+                    path=f"{plan_path}.refraction.source",
+                    expected=expected_refraction_source,
+                    actual=refraction_strings.get("source"),
+                    likely_layer="material-refraction",
+                    likely_pass=refraction_pass_name or "edge-lens",
+                    hint=(
+                        "Sampled refraction should name the backdrop edge-lens "
+                        "source consumed by the shader."),
+                    record_success=False)
+                for key, expected in {
+                        "backdrop_driven": True,
+                        "interaction_driven": interaction_active is True,
+                        "reduced_motion_suppressed": reduced_motion is True,
+                        "bounded": True}.items():
+                    report.check(
+                        f"material refraction {key} matches plan",
+                        refraction_bools.get(key) is expected,
+                        path=f"{plan_path}.refraction.{key}",
+                        expected=expected,
+                        actual=refraction_bools.get(key),
+                        likely_layer="material-refraction",
+                        likely_pass=refraction_pass_name or "edge-lens",
+                        hint=(
+                            "Refraction booleans should derive from backdrop, "
+                            "interaction, reduced-motion, and bounded resource "
+                            "policy."),
+                        record_success=False)
+                for key in MATERIAL_REFRACTION_NUMERIC_FIELDS:
+                    report.check(
+                        f"material active refraction {key} is positive",
+                        isinstance(refraction_numbers.get(key), (int, float))
+                        and float(refraction_numbers[key]) > 0.0,
+                        path=f"{plan_path}.refraction.{key}",
+                        expected={">": 0},
+                        actual=refraction_numbers.get(key),
+                        likely_layer="material-refraction",
+                        likely_pass=refraction_pass_name or "edge-lens",
+                        hint=(
+                            "Active refraction should upload a non-zero bounded "
+                            "edge-lens input."),
+                        record_success=False)
+            else:
+                report.check(
+                    "material inactive refraction model is none",
+                    refraction_strings.get("model") == "none",
+                    path=f"{plan_path}.refraction.model",
+                    expected="none",
+                    actual=refraction_strings.get("model"),
+                    likely_layer="material-refraction",
+                    likely_pass=refraction_pass_name or "edge-lens",
+                    hint="Inactive/fallback plans must not leave stale refraction model metadata.",
+                    record_success=False)
+                report.check(
+                    "material inactive refraction source is none",
+                    refraction_strings.get("source") == "none",
+                    path=f"{plan_path}.refraction.source",
+                    expected="none",
+                    actual=refraction_strings.get("source"),
+                    likely_layer="material-refraction",
+                    likely_pass=refraction_pass_name or "edge-lens",
+                    hint="Inactive/fallback plans must not leave stale refraction source metadata.",
+                    record_success=False)
+                for key in ("backdrop_driven",
+                            "interaction_driven",
+                            "reduced_motion_suppressed"):
+                    report.check(
+                        f"material inactive refraction {key} is false",
+                        refraction_bools.get(key) is False,
+                        path=f"{plan_path}.refraction.{key}",
+                        expected=False,
+                        actual=refraction_bools.get(key),
+                        likely_layer="material-refraction",
+                        likely_pass=refraction_pass_name or "edge-lens",
+                        hint="Inactive/fallback plans should keep refraction flags false.",
+                        record_success=False)
+                for key in MATERIAL_REFRACTION_NUMERIC_FIELDS:
+                    report.check(
+                        f"material inactive refraction {key} is zero",
+                        numbers_close(refraction_numbers.get(key), 0.0),
+                        path=f"{plan_path}.refraction.{key}",
+                        expected=0.0,
+                        actual=refraction_numbers.get(key),
+                        likely_layer="material-refraction",
+                        likely_pass=refraction_pass_name or "edge-lens",
+                        hint="Inactive/fallback plans should keep refraction inputs zero.",
+                        record_success=False)
+
         sample_taps = check_number_field(
             report,
             plan,
@@ -8789,6 +9113,22 @@ def summarize_material_plans(
                 bounds["max_surface_sample_pixels"] = max(
                     int(bounds["max_surface_sample_pixels"]),
                     int(max_surface_sample_pixels))
+            max_refraction_offset_pixels = check_number_field(
+                report,
+                resource_budget,
+                "max_refraction_offset_pixels",
+                f"{plan_path}.resource_budget",
+                min_value=0.0,
+                max_value=MATERIAL_MAX_REFRACTION_OFFSET_PIXELS,
+                likely_layer="material-refraction",
+                likely_pass="resource-budget",
+                hint=(
+                    "Refraction offset should be bounded by the pure material "
+                    "resource budget before shader upload."))
+            if isinstance(max_refraction_offset_pixels, (int, float)):
+                bounds["max_refraction_offset_pixels"] = max(
+                    float(bounds["max_refraction_offset_pixels"]),
+                    float(max_refraction_offset_pixels))
             max_container_spacing = check_number_field(
                 report,
                 resource_budget,
@@ -9177,6 +9517,9 @@ def summarize_material_plans(
                 "depth_source": (
                     "depth_sources",
                     ALLOWED_MATERIAL_OPTICAL_DEPTH_STRATEGIES),
+                "refraction_source": (
+                    "refraction_sources",
+                    ALLOWED_MATERIAL_OPTICAL_REFRACTION_SOURCES),
                 "interaction_source": (
                     "interaction_sources",
                     ALLOWED_MATERIAL_OPTICAL_INTERACTION_SOURCES),
@@ -9256,6 +9599,12 @@ def summarize_material_plans(
                 else "none")
             expected_fallback_source = (
                 plan.get("fallback_path") if fallback is True else "none")
+            expected_refraction_source = (
+                refraction.get("source")
+                if isinstance(refraction, dict)
+                and refraction.get("active") is True
+                and isinstance(refraction.get("source"), str)
+                else "none")
             composition_expected_strings = {
                 "model": expected_model,
                 "blur_source": expected_blur,
@@ -9263,6 +9612,7 @@ def summarize_material_plans(
                 "tint_source": expected_tint,
                 "luminance_source": expected_luminance,
                 "depth_source": expected_depth,
+                "refraction_source": expected_refraction_source,
                 "interaction_source": expected_interaction_source,
                 "fallback_source": expected_fallback_source,
             }
@@ -9326,6 +9676,9 @@ def summarize_material_plans(
                     backdrop_sampling is True
                     and isinstance(plan_noise_opacity, (int, float))
                     and float(plan_noise_opacity) > 0.0),
+                "refraction_required": (
+                    refraction.get("active")
+                    if isinstance(refraction, dict) else None),
                 "interaction_required": (
                     interaction.get("active")
                     if isinstance(interaction, dict) else None),
@@ -9343,7 +9696,9 @@ def summarize_material_plans(
                     is True
                     and sampling_kernel_for_composition.get("bounded") is True
                     and luminance_curve.get("bounded") is True
-                    and backdrop_access_for_composition.get("bounded") is True)
+                    and backdrop_access_for_composition.get("bounded") is True
+                    and (not isinstance(refraction, dict)
+                         or refraction.get("bounded") is True))
                 expected_bools["deterministic"] = (
                     resource_budget_for_composition.get("deterministic_fallback")
                     is True
@@ -9390,6 +9745,15 @@ def summarize_material_plans(
                 "noise_opacity": plan_noise_opacity,
                 "shadow_alpha": plan_shadow_alpha,
                 "shadow_radius": plan_shadow_radius,
+                "refraction_strength": (
+                    refraction.get("strength")
+                    if isinstance(refraction, dict) else None),
+                "refraction_edge_bias": (
+                    refraction.get("edge_bias")
+                    if isinstance(refraction, dict) else None),
+                "refraction_offset_pixels": (
+                    refraction.get("max_offset_pixels")
+                    if isinstance(refraction, dict) else None),
                 "interaction_response_strength": (
                     interaction.get("response_strength")
                     if isinstance(interaction, dict) else None),
@@ -9433,6 +9797,17 @@ def summarize_material_plans(
                     composition_summary["max_surface_sample_pixels"] = max(
                         int(composition_summary["max_surface_sample_pixels"]),
                         int(value))
+                elif (key == "refraction_strength"
+                      and isinstance(value, (int, float))):
+                    composition_summary["max_refraction_strength"] = max(
+                        float(composition_summary["max_refraction_strength"]),
+                        float(value))
+                elif (key == "refraction_offset_pixels"
+                      and isinstance(value, (int, float))):
+                    composition_summary["max_refraction_offset_pixels"] = max(
+                        float(composition_summary[
+                            "max_refraction_offset_pixels"]),
+                        float(value))
                 expected = expected_numbers.get(key)
                 if isinstance(expected, (int, float)):
                     report.check(
@@ -9606,6 +9981,9 @@ def summarize_material_plans(
                     backdrop_sampling is True
                     and isinstance(plan_noise_opacity, (int, float))
                     and float(plan_noise_opacity) > 0.0),
+                "refraction_active": (
+                    refraction.get("active")
+                    if isinstance(refraction, dict) else None),
                 "foreground_vibrancy_active": (
                     foreground.get("uses_vibrancy")
                     if isinstance(foreground, dict) else None),
@@ -10009,6 +10387,27 @@ def summarize_material_plans(
                                 "Add intentional stage optical channels to the "
                                 "verifier before changing artifact shape."),
                             record_success=False)
+                    stage_refraction_model = check_string_field(
+                        report,
+                        stage_optics,
+                        "refraction_model",
+                        f"{stage_path}.optics",
+                        likely_layer="material-stage-optics",
+                        hint="Stage optics must expose the refraction model.")
+                    if isinstance(stage_refraction_model, str):
+                        report.check(
+                            "material execution stage optics refraction_model is known",
+                            stage_refraction_model
+                            in ALLOWED_MATERIAL_REFRACTION_MODELS,
+                            path=f"{stage_path}.optics.refraction_model",
+                            expected=sorted(ALLOWED_MATERIAL_REFRACTION_MODELS),
+                            actual=stage_refraction_model,
+                            likely_layer="material-stage-optics",
+                            likely_pass=stage_name_for_hint,
+                            hint=(
+                                "Stage refraction optics must use the same stable "
+                                "vocabulary as MaterialPlan.refraction."),
+                            record_success=False)
                     stage_specular_model = check_string_field(
                         report,
                         stage_optics,
@@ -10064,6 +10463,15 @@ def summarize_material_plans(
                             "saturation": plan_saturation,
                             "luminance_floor": plan_luminance_floor,
                             "luminance_gain": plan_luminance_gain,
+                            "refraction_strength": (
+                                refraction.get("strength")
+                                if isinstance(refraction, dict) else None),
+                            "refraction_edge_bias": (
+                                refraction.get("edge_bias")
+                                if isinstance(refraction, dict) else None),
+                            "refraction_offset_pixels": (
+                                refraction.get("max_offset_pixels")
+                                if isinstance(refraction, dict) else None),
                         }
                     elif stage_name_for_hint == "edge-highlight":
                         expected_channel = "edge-highlight"
@@ -10121,6 +10529,21 @@ def summarize_material_plans(
                             hint=(
                                 "Edge-highlight stage optics should carry the "
                                 "same specular model resolved by the pure plan."),
+                            record_success=False)
+                    if (stage_name_for_hint == primary_pass_name
+                            and isinstance(refraction, dict)
+                            and isinstance(refraction.get("model"), str)):
+                        report.check(
+                            "material execution stage optics refraction_model matches plan",
+                            stage_refraction_model == refraction.get("model"),
+                            path=f"{stage_path}.optics.refraction_model",
+                            expected=refraction.get("model"),
+                            actual=stage_refraction_model,
+                            likely_layer="material-stage-optics",
+                            likely_pass=stage_name_for_hint,
+                            hint=(
+                                "Primary stage optics should carry the same "
+                                "refraction model resolved by the pure plan."),
                             record_success=False)
                 if stage_texture_copy_pixels is not None:
                     if stage_active is False:
@@ -10780,6 +11203,11 @@ def check_material_plan_summary_requirements(
             "interaction_reduce_motion",
             "interaction_deterministic",
             "interaction_specular_highlight_active",
+            "refraction_active",
+            "refraction_backdrop_driven",
+            "refraction_interaction_driven",
+            "refraction_reduced_motion_suppressed",
+            "refraction_bounded",
             "optical_backdrop_driven",
             "optical_blur_active",
             "optical_frosting_active",
@@ -10789,6 +11217,7 @@ def check_material_plan_summary_requirements(
             "optical_edge_highlight_active",
             "optical_depth_shadow_active",
             "optical_noise_dither_active",
+            "optical_refraction_active",
             "optical_foreground_vibrancy_active",
             "optical_interaction_active",
             "optical_interaction_modulates_optics",
@@ -10927,6 +11356,13 @@ def check_material_plan_summary_requirements(
                 nested_field = field.removeprefix("interaction_")
                 actual = interaction_summary.get(nested_field)
                 summary_path = f"{base_path}.interaction.{nested_field}"
+            elif field.startswith("refraction_"):
+                refraction_summary = summary.get("refraction")
+                if not isinstance(refraction_summary, dict):
+                    refraction_summary = {}
+                nested_field = field.removeprefix("refraction_")
+                actual = refraction_summary.get(nested_field)
+                summary_path = f"{base_path}.refraction.{nested_field}"
             elif field.startswith("optical_"):
                 optical_summary = summary.get("optical_response")
                 if not isinstance(optical_summary, dict):
@@ -10976,6 +11412,35 @@ def check_material_plan_summary_requirements(
             actual=actual,
             likely_layer="material-foreground",
             hint="Inspect MaterialPlan.foreground contrast selection.")
+    refraction_bounds = {
+        "refraction_max_strength": "max_strength",
+        "refraction_max_edge_bias": "max_edge_bias",
+        "refraction_max_offset_pixels": "max_offset_pixels",
+    }
+    for prefix, nested_field in refraction_bounds.items():
+        for suffix, comparator in (("_lte", "<="), ("_gte", ">=")):
+            field = f"{prefix}{suffix}"
+            if field not in spec:
+                continue
+            refraction_summary = summary.get("refraction")
+            if not isinstance(refraction_summary, dict):
+                refraction_summary = {}
+            actual = refraction_summary.get(nested_field)
+            expected = spec[field]
+            condition = (
+                isinstance(actual, (int, float))
+                and not isinstance(actual, bool)
+                and (actual <= expected if comparator == "<=" else actual >= expected))
+            report.check(
+                f"material plan summary {field} bound",
+                condition,
+                path=f"{base_path}.refraction.{nested_field}",
+                expected={comparator: expected},
+                actual=actual,
+                likely_layer="material-refraction",
+                hint=(
+                    "Inspect MaterialPlan.refraction and resource budget caps "
+                    "before changing verifier thresholds."))
     shape_bounds = {
         "shape_max_surface_area": "max_surface_area",
         "shape_max_effective_radius": "max_effective_radius",
@@ -11157,6 +11622,12 @@ def check_material_plan_summary_requirements(
         "interaction_specular_models": (
             "material-interaction",
             "Inspect MaterialPlan.interaction.specular_model and pointer highlight policy."),
+        "refraction_models": (
+            "material-refraction",
+            "Inspect MaterialPlan.refraction.model and pure edge-lens policy."),
+        "refraction_sources": (
+            "material-refraction",
+            "Inspect MaterialPlan.refraction.source and sampled backdrop eligibility."),
         "optical_response_models": (
             "material-optical-response",
             "Inspect MaterialPlan.optical_response.response_model and role/sampling policy."),
@@ -11228,6 +11699,8 @@ def check_material_plan_summary_requirements(
             "interaction_response_models",
             "interaction_motion_policies",
             "interaction_specular_models",
+            "refraction_models",
+            "refraction_sources",
             "optical_response_models",
             "optical_blur_strategies",
             "optical_color_strategies",
@@ -11348,6 +11821,16 @@ def check_material_plan_summary_requirements(
                 }[field]
                 actual = interaction_summary.get(nested)
                 summary_path = f"{base_path}.interaction.{nested}"
+            elif field.startswith("refraction_"):
+                refraction_summary = summary.get("refraction")
+                if not isinstance(refraction_summary, dict):
+                    refraction_summary = {}
+                nested = {
+                    "refraction_models": "models",
+                    "refraction_sources": "sources",
+                }[field]
+                actual = refraction_summary.get(nested)
+                summary_path = f"{base_path}.refraction.{nested}"
             elif field.startswith("optical_"):
                 optical_summary = summary.get("optical_response")
                 if not isinstance(optical_summary, dict):
@@ -11429,6 +11912,7 @@ def check_material_resource_bounds_requirements(
         "max_paint_layers_lte": "max_paint_layers",
         "max_paint_layer_capacity_lte": "max_paint_layer_capacity",
         "max_paint_layer_inflate_lte": "max_paint_layer_inflate",
+        "max_refraction_offset_pixels_lte": "max_refraction_offset_pixels",
     }
     for spec_field, summary_field in field_map.items():
         if spec_field not in spec:
@@ -11475,6 +11959,7 @@ def check_material_resource_bounds_requirements(
         "max_paint_layers_gte": "max_paint_layers",
         "max_paint_layer_capacity_gte": "max_paint_layer_capacity",
         "max_paint_layer_inflate_gte": "max_paint_layer_inflate",
+        "max_refraction_offset_pixels_gte": "max_refraction_offset_pixels",
     }
     for spec_field, summary_field in min_field_map.items():
         if spec_field not in spec:
@@ -11601,6 +12086,9 @@ def check_material_runtime_summary_contract(
     optical_bounds = summary.get("optical_bounds")
     if not isinstance(optical_bounds, dict):
         optical_bounds = {}
+    refraction_summary = summary.get("refraction")
+    if not isinstance(refraction_summary, dict):
+        refraction_summary = {}
     execution_audit = summary.get("execution_audit")
     if not isinstance(execution_audit, dict):
         execution_audit = {}
@@ -11696,6 +12184,11 @@ def check_material_runtime_summary_contract(
         "max_noise_opacity": optical_bounds.get("max_noise_opacity"),
         "max_shadow_alpha": optical_bounds.get("max_shadow_alpha"),
         "max_shadow_radius": optical_bounds.get("max_shadow_radius"),
+        "refraction_active_count": refraction_summary.get("active"),
+        "max_refraction_strength": refraction_summary.get("max_strength"),
+        "max_refraction_edge_bias": refraction_summary.get("max_edge_bias"),
+        "max_refraction_offset_pixels": refraction_summary.get(
+            "max_offset_pixels"),
         "min_foreground_contrast_ratio": summary.get(
             "foreground", {}).get("min_primary_contrast")
             if isinstance(summary.get("foreground"), dict) else None,
@@ -11811,6 +12304,16 @@ def check_material_executor_summary_contract(
             "total_surface_sample_pixels"),
     }
     expected_fields.update(expected_access_fields)
+    refraction_summary = summary.get("refraction")
+    if not isinstance(refraction_summary, dict):
+        refraction_summary = {}
+    expected_fields.update({
+        "refraction_active_count": refraction_summary.get("active"),
+        "max_refraction_strength": refraction_summary.get("max_strength"),
+        "max_refraction_edge_bias": refraction_summary.get("max_edge_bias"),
+        "max_refraction_offset_pixels": refraction_summary.get(
+            "max_offset_pixels"),
+    })
     execution_audit = summary.get("execution_audit")
     if not isinstance(execution_audit, dict):
         execution_audit = {}
@@ -11895,6 +12398,10 @@ def check_material_executor_summary_contract(
         "planned_frame_capture_count",
         "planned_frame_capture_pixels",
         "planned_surface_sample_pixels",
+        "refraction_active_count",
+        "max_refraction_strength",
+        "max_refraction_edge_bias",
+        "max_refraction_offset_pixels",
         "material_max_sample_taps",
         "material_total_sample_taps",
         "backdrop_copy_pixels",

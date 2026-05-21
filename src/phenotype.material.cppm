@@ -12,7 +12,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 36;
+inline constexpr std::uint32_t material_plan_contract_version = 37;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -399,6 +399,7 @@ struct MaterialResourceBudget {
     std::uint32_t max_frame_capture_count = 0;
     std::int64_t max_frame_capture_pixels = 0;
     std::int64_t max_surface_sample_pixels = 0;
+    float max_refraction_offset_pixels = 0.0f;
     float max_container_spacing = 0.0f;
     float max_paint_layer_inflate = 0.0f;
     bool bounded_texture_copy = true;
@@ -423,6 +424,10 @@ struct MaterialStageOptics {
     float specular_anchor_y = 0.5f;
     float specular_radius = 0.0f;
     float specular_intensity = 0.0f;
+    char const* refraction_model = "none";
+    float refraction_strength = 0.0f;
+    float refraction_edge_bias = 0.0f;
+    float refraction_offset_pixels = 0.0f;
 };
 
 struct MaterialExecutionStage {
@@ -519,6 +524,19 @@ struct MaterialForegroundRecommendation {
     bool deterministic = true;
 };
 
+struct MaterialRefractionProfile {
+    char const* model = "none";
+    char const* source = "none";
+    bool active = false;
+    bool backdrop_driven = false;
+    bool interaction_driven = false;
+    bool reduced_motion_suppressed = false;
+    bool bounded = true;
+    float strength = 0.0f;
+    float edge_bias = 0.0f;
+    float max_offset_pixels = 0.0f;
+};
+
 struct MaterialInteractionResponse {
     bool enabled = false;
     bool active = false;
@@ -563,6 +581,7 @@ struct MaterialOpticalResponseContract {
     bool edge_highlight_active = false;
     bool depth_shadow_active = false;
     bool noise_dither_active = false;
+    bool refraction_active = false;
     bool foreground_vibrancy_active = false;
     bool interaction_active = false;
     bool interaction_modulates_optics = false;
@@ -577,6 +596,7 @@ struct MaterialOpticalComposition {
     char const* tint_source = "none";
     char const* luminance_source = "none";
     char const* depth_source = "none";
+    char const* refraction_source = "none";
     char const* interaction_source = "none";
     char const* fallback_source = "none";
     bool backdrop_sampled = false;
@@ -588,6 +608,7 @@ struct MaterialOpticalComposition {
     bool edge_required = false;
     bool shadow_required = false;
     bool noise_required = false;
+    bool refraction_required = false;
     bool interaction_required = false;
     bool fallback_required = false;
     bool bounded = true;
@@ -603,6 +624,9 @@ struct MaterialOpticalComposition {
     float noise_opacity = 0.0f;
     float shadow_alpha = 0.0f;
     float shadow_radius = 0.0f;
+    float refraction_strength = 0.0f;
+    float refraction_edge_bias = 0.0f;
+    float refraction_offset_pixels = 0.0f;
     float interaction_response_strength = 0.0f;
     unsigned int sample_taps = 0;
     std::int64_t max_texture_copy_pixels = 0;
@@ -739,6 +763,7 @@ struct MaterialPlan {
     MaterialBackdropAccess backdrop_access{};
     MaterialThemeSnapshot theme{};
     MaterialForegroundRecommendation foreground{};
+    MaterialRefractionProfile refraction{};
     MaterialInteractionResponse interaction{};
     MaterialOpticalComposition optical_composition{};
     MaterialOpticalResponseContract optical_response{};
@@ -790,6 +815,10 @@ inline MaterialStageOptics material_primary_stage_optics(
     optics.saturation = composition.saturation;
     optics.luminance_floor = composition.luminance_floor;
     optics.luminance_gain = composition.luminance_gain;
+    optics.refraction_model = plan.refraction.model;
+    optics.refraction_strength = plan.refraction.strength;
+    optics.refraction_edge_bias = plan.refraction.edge_bias;
+    optics.refraction_offset_pixels = plan.refraction.max_offset_pixels;
     return optics;
 }
 
@@ -1153,6 +1182,7 @@ struct MaterialRuntimeSummary {
     std::uint32_t interaction_active_count = 0;
     std::uint32_t interaction_reduce_motion_count = 0;
     std::uint32_t interaction_specular_highlight_count = 0;
+    std::uint32_t refraction_active_count = 0;
     std::uint32_t theme_default_glass_token_count = 0;
     std::uint32_t theme_custom_token_count = 0;
     MaterialContainerGroupRuntimeSummary container_groups{};
@@ -1169,6 +1199,9 @@ struct MaterialRuntimeSummary {
     float max_interaction_response_strength = 0.0f;
     float max_interaction_specular_radius = 0.0f;
     float max_interaction_specular_intensity = 0.0f;
+    float max_refraction_strength = 0.0f;
+    float max_refraction_edge_bias = 0.0f;
+    float max_refraction_offset_pixels = 0.0f;
     float min_foreground_contrast_ratio = 0.0f;
     std::uint32_t unbounded_texture_copy = 0;
     std::uint32_t non_deterministic_fallback = 0;
@@ -1227,9 +1260,13 @@ struct MaterialExecutorSummary {
     std::uint32_t interaction_enabled_count = 0;
     std::uint32_t interaction_active_count = 0;
     std::uint32_t interaction_specular_highlight_count = 0;
+    std::uint32_t refraction_active_count = 0;
     float max_interaction_response_strength = 0.0f;
     float max_interaction_specular_radius = 0.0f;
     float max_interaction_specular_intensity = 0.0f;
+    float max_refraction_strength = 0.0f;
+    float max_refraction_edge_bias = 0.0f;
+    float max_refraction_offset_pixels = 0.0f;
     bool backdrop_descriptor_luma_available = false;
     float backdrop_descriptor_luma_min = 0.0f;
     float backdrop_descriptor_luma_max = 1.0f;
@@ -1749,6 +1786,8 @@ inline void accumulate_material_executor_plan_summary(
         ++summary.interaction_active_count;
     if (plan.interaction.specular_highlight_active)
         ++summary.interaction_specular_highlight_count;
+    if (plan.refraction.active)
+        ++summary.refraction_active_count;
     summary.max_interaction_response_strength = std::max(
         summary.max_interaction_response_strength,
         plan.interaction.response_strength);
@@ -1758,6 +1797,15 @@ inline void accumulate_material_executor_plan_summary(
     summary.max_interaction_specular_intensity = std::max(
         summary.max_interaction_specular_intensity,
         plan.interaction.specular_intensity);
+    summary.max_refraction_strength = std::max(
+        summary.max_refraction_strength,
+        plan.refraction.strength);
+    summary.max_refraction_edge_bias = std::max(
+        summary.max_refraction_edge_bias,
+        plan.refraction.edge_bias);
+    summary.max_refraction_offset_pixels = std::max(
+        summary.max_refraction_offset_pixels,
+        plan.refraction.max_offset_pixels);
     if (plan.backdrop_access.shared_frame_capture
         || plan.backdrop_access.next_frame_capture_required) {
         summary.planned_frame_capture_count = std::max(
@@ -1897,6 +1945,9 @@ inline void accumulate_material_runtime_summary(
     summary.max_surface_sample_pixels = std::max(
         summary.max_surface_sample_pixels,
         plan.resource_budget.max_surface_sample_pixels);
+    summary.max_refraction_offset_pixels = std::max(
+        summary.max_refraction_offset_pixels,
+        plan.resource_budget.max_refraction_offset_pixels);
     summary.max_container_spacing = std::max(
         summary.max_container_spacing,
         plan.resource_budget.max_container_spacing);
@@ -1930,6 +1981,8 @@ inline void accumulate_material_runtime_summary(
         ++summary.interaction_reduce_motion_count;
     if (plan.interaction.specular_highlight_active)
         ++summary.interaction_specular_highlight_count;
+    if (plan.refraction.active)
+        ++summary.refraction_active_count;
     if (plan.theme.default_glass_tokens)
         ++summary.theme_default_glass_token_count;
     else
@@ -1967,6 +2020,15 @@ inline void accumulate_material_runtime_summary(
     summary.max_interaction_specular_intensity = std::max(
         summary.max_interaction_specular_intensity,
         plan.interaction.specular_intensity);
+    summary.max_refraction_strength = std::max(
+        summary.max_refraction_strength,
+        plan.refraction.strength);
+    summary.max_refraction_edge_bias = std::max(
+        summary.max_refraction_edge_bias,
+        plan.refraction.edge_bias);
+    summary.max_refraction_offset_pixels = std::max(
+        summary.max_refraction_offset_pixels,
+        plan.refraction.max_offset_pixels);
     if (plan.foreground.primary_contrast_ratio > 0.0f) {
         summary.min_foreground_contrast_ratio =
             summary.min_foreground_contrast_ratio == 0.0f
@@ -3162,6 +3224,68 @@ inline void apply_material_interaction_policy(MaterialPlan& plan) noexcept {
     plan.interaction = response;
 }
 
+inline float material_base_refraction_strength(MaterialKind kind) noexcept {
+    switch (kind) {
+        case MaterialKind::Clear: return 0.075f;
+        case MaterialKind::Thin: return 0.095f;
+        case MaterialKind::Regular: return 0.120f;
+        case MaterialKind::Thick: return 0.150f;
+        case MaterialKind::None: return 0.0f;
+    }
+    return 0.0f;
+}
+
+inline MaterialRefractionProfile material_resolve_refraction_profile(
+        MaterialPlan const& plan) noexcept {
+    MaterialRefractionProfile profile{};
+    profile.bounded = true;
+    if (!plan.backdrop_sampling || plan.fallback() || plan.kind == MaterialKind::None)
+        return profile;
+
+    auto const thickness_strength =
+        material_base_refraction_strength(plan.kind);
+    auto const radius_strength =
+        0.020f * std::clamp(plan.shape.normalized_radius, 0.0f, 1.0f);
+    auto const interaction_boost =
+        plan.interaction.active
+            ? 0.035f * std::clamp(
+                plan.interaction.response_strength,
+                0.0f,
+                1.0f)
+            : 0.0f;
+    auto const motion_scale = plan.decision_trace.reduce_motion ? 0.48f : 1.0f;
+    auto const strength = std::clamp(
+        motion_scale * (thickness_strength + radius_strength + interaction_boost),
+        0.0f,
+        0.22f);
+    if (strength <= 0.0001f)
+        return profile;
+
+    profile.active = true;
+    profile.backdrop_driven = true;
+    profile.interaction_driven = plan.interaction.active;
+    profile.reduced_motion_suppressed =
+        plan.decision_trace.reduce_motion && motion_scale < 1.0f;
+    profile.model = profile.interaction_driven
+        ? "interactive-edge-lens"
+        : "edge-lens";
+    profile.source = "sampled-backdrop-edge-refraction";
+    profile.strength = strength;
+    profile.edge_bias = std::clamp(
+        0.32f + 0.28f * plan.shape.normalized_radius,
+        0.20f,
+        0.72f);
+    auto const blur_offset =
+        0.18f * std::clamp(plan.blur_radius, 0.0f, material_max_blur_radius);
+    auto const edge_offset =
+        0.65f * std::clamp(plan.edge_width, 0.5f, 8.0f);
+    profile.max_offset_pixels = std::clamp(
+        motion_scale * (blur_offset + edge_offset) * profile.strength,
+        0.0f,
+        3.50f);
+    return profile;
+}
+
 inline MaterialBackdropAccess material_resolve_backdrop_access(
         MaterialPlan const& plan) noexcept {
     MaterialBackdropAccess access{};
@@ -3480,6 +3604,15 @@ inline char const* material_optical_interaction_source_name(
     return "none";
 }
 
+inline char const* material_optical_refraction_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.refraction.active
+        && plan.refraction.source
+        && plan.refraction.source[0])
+        return plan.refraction.source;
+    return "none";
+}
+
 inline MaterialOpticalComposition material_resolve_optical_composition(
         MaterialPlan const& plan) noexcept {
     MaterialOpticalComposition composition{};
@@ -3490,6 +3623,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.tint_source = material_optical_tint_source_name(plan);
     composition.luminance_source = plan.luminance_curve.name;
     composition.depth_source = material_optical_depth_strategy_name(plan);
+    composition.refraction_source =
+        material_optical_refraction_source_name(plan);
     composition.interaction_source =
         material_optical_interaction_source_name(plan);
     composition.fallback_source = plan.fallback()
@@ -3513,13 +3648,15 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.primary_pass.active && plan.shadow_alpha > 0.0f;
     composition.noise_required =
         plan.backdrop_sampling && plan.noise_opacity > 0.0f;
+    composition.refraction_required = plan.refraction.active;
     composition.interaction_required = plan.interaction.active;
     composition.fallback_required = plan.fallback();
     composition.bounded =
         plan.resource_budget.bounded_texture_copy
         && plan.sampling_kernel.bounded
         && plan.luminance_curve.bounded
-        && plan.backdrop_access.bounded;
+        && plan.backdrop_access.bounded
+        && plan.refraction.bounded;
     composition.deterministic =
         plan.resource_budget.deterministic_fallback
         && plan.foreground.deterministic
@@ -3535,6 +3672,9 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.noise_opacity = plan.noise_opacity;
     composition.shadow_alpha = plan.shadow_alpha;
     composition.shadow_radius = plan.shadow_radius;
+    composition.refraction_strength = plan.refraction.strength;
+    composition.refraction_edge_bias = plan.refraction.edge_bias;
+    composition.refraction_offset_pixels = plan.refraction.max_offset_pixels;
     composition.interaction_response_strength =
         plan.interaction.response_strength;
     composition.sample_taps = plan.sample_taps;
@@ -3563,6 +3703,7 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
     response.edge_highlight_active = composition.edge_required;
     response.depth_shadow_active = composition.shadow_required;
     response.noise_dither_active = composition.noise_required;
+    response.refraction_active = composition.refraction_required;
     response.foreground_vibrancy_active = plan.foreground.uses_vibrancy;
     response.interaction_active = composition.interaction_required;
     response.interaction_modulates_optics =
@@ -3819,6 +3960,9 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.saturation = std::min(plan.saturation, 1.0f);
     }
     apply_material_interaction_policy(plan);
+    plan.refraction = material_resolve_refraction_profile(plan);
+    plan.resource_budget.max_refraction_offset_pixels =
+        plan.refraction.max_offset_pixels;
     plan.luminance_curve = material_resolve_luminance_curve(
         plan.backdrop_sampling,
         plan.backdrop,
