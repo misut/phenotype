@@ -243,7 +243,8 @@ static void view(State const& state) {
 
             if (state.inspector_open) {
                 layout::spacer(12);
-                auto const debug_probe = glass::glass_material_probe_at(6);
+                auto const debug_probe = glass::glass_material_probe_at(
+                    glass::k_total_material_probe_count - 1u);
                 layout::material_surface(material_kind(debug_probe.kind), [&] {
                     widget::text(phenotype::str{
                         debug_probe.label.data(),
@@ -312,6 +313,37 @@ static void view(State const& state) {
                     });
             });
         }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Center);
+
+        layout::spacer(12);
+        layout::row([&] {
+            auto const tooltip_probe = glass::glass_material_probe_at(6);
+            auto const context_menu_probe = glass::glass_material_probe_at(7);
+            layout::sized_box(220.0f, [&] {
+                layout::tooltip([tooltip_probe] {
+                    widget::text(phenotype::str{
+                        tooltip_probe.label.data(),
+                        static_cast<unsigned int>(
+                            tooltip_probe.label.size())});
+                    layout::spacer(4);
+                    widget::text(phenotype::str{
+                        tooltip_probe.description.data(),
+                        static_cast<unsigned int>(
+                            tooltip_probe.description.size())});
+                }, "Glass Tooltip Probe");
+            });
+            layout::sized_box(240.0f, [&] {
+                layout::context_menu([context_menu_probe] {
+                    widget::text(phenotype::str{
+                        context_menu_probe.label.data(),
+                        static_cast<unsigned int>(
+                            context_menu_probe.label.size())});
+                    layout::spacer(4);
+                    widget::button<Msg>("Preview", glass::ToggleInspector{});
+                    widget::button<Msg>("Use contrast backdrop",
+                                        glass::SetBackdropContrast{true});
+                }, "Glass Context Menu Probe");
+            });
+        }, SpaceToken::Sm, CrossAxisAlignment::Start, MainAxisAlignment::Center);
     });
 }
 

@@ -209,11 +209,13 @@ chrome can now opt in with `MaterialSurfaceOptions.interactive`; the built-in
 toolbar-group and navigation glass presets use that opt-in so Finder-style
 toolbar clusters and segmented navigation controls expose interaction response
 without requiring every app to wrap them in a separate material container.
-Segmented controls and popovers are now first-class glass presets as well:
+Segmented controls, popovers, tooltips, and context menus are now first-class
+glass presets as well:
 `widget::tabs` emits a material-backed segmented control by default,
 `TabsStyleOptions` lets callers choose kind/role/label, and
-`layout::segmented_control_surface` / `layout::popover` keep Finder-style
-toolbar and overflow chrome on the typed MaterialRect path.
+`layout::segmented_control_surface` / `layout::popover` /
+`layout::tooltip` / `layout::context_menu` keep Finder-style toolbar,
+overflow, help, and contextual chrome on the typed MaterialRect path.
 Finder-style search fields now use the same typed path through
 `TextFieldStyleOptions` and `widget::glass_text_field_style`, so input chrome
 can be verified as interactive material while keyboard-only focus-ring behavior
@@ -239,6 +241,10 @@ a clear material plan while keeping disabled or hidden actions out of the
 material hot path. The desktop file explorer `more-actions-open` verifier
 scenario requires this overlay material role so menu regressions fail from the
 semantic/debug contract instead of a screenshot comparison.
+The glass showcase now includes noninteractive tooltip and interactive context
+menu overlay probes, so transient overlay surfaces are exercised by the same
+material plan, fallback, resource-bound, and accessibility manifests as the
+base clear/thin/regular/thick material ramp.
 Finder-style table/list headers now use `GlassTableHeaderStyleOptions` and
 `widget::glass_table_header_button_style`. The preset emits clear `content`
 material for sortable header cells, keeps sorted-state tint/border decisions in
@@ -752,8 +758,9 @@ Apple-style glass interface while preserving platform parity:
   sidebar/location navigation, list content, preview, search, create, and
   delete actions;
 - first-class material app-chrome helpers for toolbar, navigation, sidebar,
-  status bar, split buttons, outline/list rows, popover menu items, and table
-  headers so examples do not need to hand-roll every glass container shape;
+  status bar, split buttons, outline/list rows, popovers, tooltips, context
+  menus, popover menu items, and table headers so examples do not need to
+  hand-roll every glass container shape;
 - tests that cover command encoding, parser behavior, fallback policy, and at
   least one captured-frame invariant on native backends.
 
@@ -977,14 +984,14 @@ Current seed:
 
 ## Next recommended PR
 
-The initial G0-G4 path is now landed, and segmented controls/popovers/sheets/
-inspectors/command palettes/search fields/selected rows/split buttons/outline
-rows/menu items/table headers/disclosure rows now use the first-class material
-helper path. The next useful PR should avoid another schema-only increment
-unless a real failure appears. Recommended directions:
+The initial G0-G4 path is now landed, and segmented controls/popovers/tooltips/
+context menus/sheets/inspectors/command palettes/search fields/selected rows/
+split buttons/outline rows/menu items/table headers/disclosure rows now use the
+first-class material helper path. The next useful PR should avoid another
+schema-only increment unless a real failure appears. Recommended directions:
 
-- expand first-class material-aware controls into menus, tooltips, context
-  menus, and richer scroll/list selection states;
+- expand first-class material-aware controls into richer scroll/list selection
+  and transient overlay states;
 - tighten macOS material executor budgets after collecting a small sample of
   local and CI timing/copy values;
 - add Android CI emulator wiring if runner capacity and cost are acceptable;

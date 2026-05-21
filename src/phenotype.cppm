@@ -2828,6 +2828,8 @@ enum class GlassSurfacePreset {
     Content,
     StatusBar,
     Popover,
+    Tooltip,
+    ContextMenu,
     Sheet,
     Inspector,
     CommandPalette,
@@ -2846,6 +2848,8 @@ inline char const* glass_surface_preset_name(
         case GlassSurfacePreset::Content:      return "content";
         case GlassSurfacePreset::StatusBar:    return "status_bar";
         case GlassSurfacePreset::Popover:      return "popover";
+        case GlassSurfacePreset::Tooltip:      return "tooltip";
+        case GlassSurfacePreset::ContextMenu:  return "context_menu";
         case GlassSurfacePreset::Sheet:        return "sheet";
         case GlassSurfacePreset::Inspector:    return "inspector";
         case GlassSurfacePreset::CommandPalette:
@@ -3028,6 +3032,31 @@ inline MaterialSurfaceOptions glass_surface_options(
             options.semantic_label = chrome_label_or(
                 semantic_label,
                 "Popover");
+            break;
+        case GlassSurfacePreset::Tooltip:
+            options.kind = MaterialKind::Thin;
+            options.role = MaterialSurfaceRole::Overlay;
+            options.direction = FlexDirection::Column;
+            options.padding = SpaceToken::Xs;
+            options.gap = SpaceToken::Xs;
+            options.interactive = false;
+            options.border_radius = t.radius_sm;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Tooltip");
+            break;
+        case GlassSurfacePreset::ContextMenu:
+            options.kind = MaterialKind::Regular;
+            options.role = MaterialSurfaceRole::Overlay;
+            options.direction = FlexDirection::Column;
+            options.padding = SpaceToken::Xs;
+            options.gap = SpaceToken::Xs;
+            options.interactive = true;
+            options.border_radius = t.radius_md;
+            options.border_width = 1.0f;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Context Menu");
             break;
         case GlassSurfacePreset::Sheet:
             options.kind = MaterialKind::Regular;
@@ -3237,6 +3266,44 @@ void popover(F&& builder,
     options.padding = padding;
     options.gap = gap;
     material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void tooltip(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::Overlay;
+    options.interactive = false;
+    options.semantic_label = chrome_label_or(options.semantic_label, "Tooltip");
+    material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void tooltip(F&& builder,
+             char const* semantic_label = "Tooltip") {
+    material_surface(
+        glass_surface_options(GlassSurfacePreset::Tooltip, semantic_label),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void context_menu(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::Overlay;
+    options.interactive = true;
+    options.semantic_label = chrome_label_or(options.semantic_label,
+                                             "Context Menu");
+    material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void context_menu(F&& builder,
+                  char const* semantic_label = "Context Menu") {
+    material_surface(
+        glass_surface_options(GlassSurfacePreset::ContextMenu,
+                              semantic_label),
+        std::forward<F>(builder));
 }
 
 template<typename F>
