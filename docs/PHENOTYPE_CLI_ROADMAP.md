@@ -191,6 +191,8 @@ metadata, `phenotype_cli.command_tree` owns recursive command-tree JSON,
 reporting, `phenotype_cli.artifacts` owns artifact summary, uv-managed verifier
 invocation, snapshot/material observation including compact executor budget
 visibility, and likely-layer suggestions,
+`phenotype_cli.material_budget` owns shared verifier budget parsing, JSON, and
+human count formatting for material artifact gates,
 `phenotype_cli.contracts` owns the pure theme/IO contract commands,
 `phenotype_cli.file_explorer` owns file explorer observation, chrome/native
 window control, and drive JSON, `phenotype_cli.icons` owns icon/SVG command
