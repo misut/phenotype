@@ -9283,6 +9283,11 @@ inline json::Object macos_renderer_runtime_json() {
         "material_plans",
         json::Value{material_plans_runtime_json()});
     renderer.emplace(
+        "material_container_groups",
+        json::Value{
+            ::phenotype::diag::detail::material_container_group_details_json(
+                g_renderer.scratch.material_records)});
+    renderer.emplace(
         "material_runtime_summary",
         ::phenotype::diag::detail::material_runtime_summary_json(
             g_renderer.scratch.material_records));

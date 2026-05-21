@@ -1501,6 +1501,78 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     }
 
 
+def material_container_group_details(plan: dict[str, object]) -> list[dict[str, object]]:
+    container = plan["container"]
+    geometry = plan["geometry"]
+    shape = plan["shape"]
+    primary = plan["primary_pass"]
+    assert isinstance(container, dict)
+    assert isinstance(geometry, dict)
+    assert isinstance(shape, dict)
+    assert isinstance(primary, dict)
+    participates = (
+        bool(container["participates"])
+        and int(container["container_id"]) > 0)
+    if not participates:
+        return []
+    width = float(geometry["w"])
+    height = float(geometry["h"])
+    summary = material_container_group_summary(plan)
+    return [{
+        "container_id": int(container["container_id"]),
+        "surface_count": 1,
+        "active_surfaces": 1 if primary["active"] else 0,
+        "sampled_backdrop_surfaces": 1 if plan["backdrop_sampling"] else 0,
+        "fallback_surfaces": 1 if plan["fallback"] else 0,
+        "union_surfaces": 1 if container["shape_union_expected"] else 0,
+        "morph_surfaces": 1 if container["morph_transitions"] else 0,
+        "interactive_surfaces": 1 if container["interactive"] else 0,
+        "shared_backdrop_scope_surfaces": (
+            1 if container["shared_backdrop_scope"] else 0),
+        "shape_pair_count": 0,
+        "blend_candidate_pair_count": 0,
+        "union_candidate_pair_count": 0,
+        "morph_candidate_pair_count": 0,
+        "separated_pair_count": 0,
+        "min_shape_gap": 0.0,
+        "max_shape_gap": 0.0,
+        "max_blend_distance": summary["max_blend_distance"],
+        "bounds": {
+            "valid": bool(shape["valid"]),
+            "x": float(geometry["x"]),
+            "y": float(geometry["y"]),
+            "w": width,
+            "h": height,
+            "area": width * height,
+        },
+        "likely_layer": "material-container",
+        "likely_pass": "container-group-analysis",
+        "members": [{
+            "command_index": 0,
+            "plan_id": plan["plan_id"],
+            "kind": plan["kind"],
+            "role": plan["role"],
+            "fallback_path": plan["fallback_path"],
+            "backdrop_sampling": plan["backdrop_sampling"],
+            "active_pass": primary["active"],
+            "interactive": container["interactive"],
+            "union_id": int(container["union_id"]),
+            "mode": container["mode"],
+            "spacing": container["spacing"],
+            "blend_distance": container["blend_distance"],
+            "shape_union_expected": container["shape_union_expected"],
+            "shape_blending_expected": container["shape_blending_expected"],
+            "morph_transitions": container["morph_transitions"],
+            "shared_backdrop_scope": container["shared_backdrop_scope"],
+            "reduced_motion_suppressed_morph": (
+                container["reduced_motion_suppressed_morph"]),
+            "shape_kind": shape["kind"],
+            "shape_valid": shape["valid"],
+            "geometry": geometry.copy(),
+        }],
+    }]
+
+
 def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
     sample_taps = 0 if plan["fallback"] else int(plan["sample_taps"])
     stages = plan["execution_stages"]
@@ -1876,6 +1948,8 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                         },
                         "material_plan_count": 1,
                         "material_plans": [plan],
+                        "material_container_groups": (
+                            material_container_group_details(plan)),
                         "material_runtime_summary": material_runtime_summary(plan),
                         "material_executor_summary": material_executor_summary(plan),
                     }
@@ -2202,6 +2276,7 @@ def install_file_explorer_sidebar_material(
     refresh_observation_contract(plan)
     refresh_execution_audit(plan)
     renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+    renderer["material_container_groups"] = material_container_group_details(plan)
     renderer["material_runtime_summary"] = material_runtime_summary(plan)
     renderer["material_executor_summary"] = material_executor_summary(plan)
 
@@ -3015,6 +3090,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         material["container"] = request_container
         renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
         assert isinstance(renderer, dict)
+        renderer["material_container_groups"] = material_container_group_details(plan)
         renderer["material_runtime_summary"] = material_runtime_summary(plan)
 
         code, report = self.run_verifier(root)

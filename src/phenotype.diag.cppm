@@ -2405,6 +2405,225 @@ namespace detail {
         return plans;
     }
 
+    inline json::Value material_container_group_member_json(
+            MaterialRuntimeRecord const& record) {
+        auto const& plan = record.plan;
+        json::Object geometry;
+        geometry.emplace("x", json::Value{plan.geometry.x});
+        geometry.emplace("y", json::Value{plan.geometry.y});
+        geometry.emplace("w", json::Value{plan.geometry.w});
+        geometry.emplace("h", json::Value{plan.geometry.h});
+        geometry.emplace("radius", json::Value{plan.geometry.radius});
+
+        json::Object out;
+        out.emplace(
+            "command_index",
+            json::Value{static_cast<std::int64_t>(record.command_index)});
+        out.emplace("plan_id", json::Value{plan.plan_id});
+        out.emplace("kind", json::Value{material_kind_name(plan.kind)});
+        out.emplace(
+            "role",
+            json::Value{material_surface_role_name(plan.role)});
+        out.emplace(
+            "fallback_path",
+            json::Value{material_fallback_path_name(plan.fallback_path)});
+        out.emplace("backdrop_sampling", json::Value{plan.backdrop_sampling});
+        out.emplace("active_pass", json::Value{plan.primary_pass.active});
+        out.emplace("interactive", json::Value{plan.container.interactive});
+        out.emplace(
+            "union_id",
+            json::Value{static_cast<std::int64_t>(plan.container.union_id)});
+        out.emplace(
+            "mode",
+            json::Value{plan.container.mode_name});
+        out.emplace("spacing", json::Value{plan.container.spacing});
+        out.emplace(
+            "blend_distance",
+            json::Value{plan.container.blend_distance});
+        out.emplace(
+            "shape_union_expected",
+            json::Value{plan.container.shape_union_expected});
+        out.emplace(
+            "shape_blending_expected",
+            json::Value{plan.container.shape_blending_expected});
+        out.emplace(
+            "morph_transitions",
+            json::Value{plan.container.morph_transitions});
+        out.emplace(
+            "shared_backdrop_scope",
+            json::Value{plan.container.shared_backdrop_scope});
+        out.emplace(
+            "reduced_motion_suppressed_morph",
+            json::Value{plan.container.reduced_motion_suppressed_morph});
+        out.emplace(
+            "shape_kind",
+            json::Value{material_shape_kind_name(plan.shape.kind)});
+        out.emplace("shape_valid", json::Value{plan.shape.valid});
+        out.emplace("geometry", json::Value{std::move(geometry)});
+        return json::Value{std::move(out)};
+    }
+
+    inline json::Value material_container_group_detail_json(
+            MaterialContainerGroupAccumulator const& group,
+            json::Array members) {
+        auto const bounds_width = group.has_bounds
+            ? std::max(0.0f, group.max_x - group.min_x)
+            : 0.0f;
+        auto const bounds_height = group.has_bounds
+            ? std::max(0.0f, group.max_y - group.min_y)
+            : 0.0f;
+
+        json::Object bounds;
+        bounds.emplace("valid", json::Value{group.has_bounds});
+        bounds.emplace("x", json::Value{group.has_bounds ? group.min_x : 0.0f});
+        bounds.emplace("y", json::Value{group.has_bounds ? group.min_y : 0.0f});
+        bounds.emplace("w", json::Value{bounds_width});
+        bounds.emplace("h", json::Value{bounds_height});
+        bounds.emplace("area", json::Value{bounds_width * bounds_height});
+
+        json::Object out;
+        out.emplace(
+            "container_id",
+            json::Value{static_cast<std::int64_t>(group.container_id)});
+        out.emplace(
+            "surface_count",
+            json::Value{static_cast<std::int64_t>(group.surface_count)});
+        out.emplace(
+            "active_surfaces",
+            json::Value{static_cast<std::int64_t>(group.active_surfaces)});
+        out.emplace(
+            "sampled_backdrop_surfaces",
+            json::Value{
+                static_cast<std::int64_t>(group.sampled_backdrop_surfaces)});
+        out.emplace(
+            "fallback_surfaces",
+            json::Value{static_cast<std::int64_t>(group.fallback_surfaces)});
+        out.emplace(
+            "union_surfaces",
+            json::Value{static_cast<std::int64_t>(group.union_surfaces)});
+        out.emplace(
+            "morph_surfaces",
+            json::Value{static_cast<std::int64_t>(group.morph_surfaces)});
+        out.emplace(
+            "interactive_surfaces",
+            json::Value{
+                static_cast<std::int64_t>(group.interactive_surfaces)});
+        out.emplace(
+            "shared_backdrop_scope_surfaces",
+            json::Value{
+                static_cast<std::int64_t>(
+                    group.shared_backdrop_scope_surfaces)});
+        out.emplace(
+            "shape_pair_count",
+            json::Value{static_cast<std::int64_t>(group.shape_pair_count)});
+        out.emplace(
+            "blend_candidate_pair_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    group.blend_candidate_pair_count)});
+        out.emplace(
+            "union_candidate_pair_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    group.union_candidate_pair_count)});
+        out.emplace(
+            "morph_candidate_pair_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    group.morph_candidate_pair_count)});
+        out.emplace(
+            "separated_pair_count",
+            json::Value{static_cast<std::int64_t>(group.separated_pair_count)});
+        out.emplace(
+            "min_shape_gap",
+            json::Value{group.has_shape_gap ? group.min_shape_gap : 0.0f});
+        out.emplace(
+            "max_shape_gap",
+            json::Value{group.has_shape_gap ? group.max_shape_gap : 0.0f});
+        out.emplace(
+            "max_blend_distance",
+            json::Value{group.max_blend_distance});
+        out.emplace("bounds", json::Value{std::move(bounds)});
+        out.emplace(
+            "likely_layer",
+            json::Value{"material-container"});
+        out.emplace(
+            "likely_pass",
+            json::Value{"container-group-analysis"});
+        out.emplace(
+            "members",
+            json::Value{std::move(members)});
+        return json::Value{std::move(out)};
+    }
+
+    inline json::Array material_container_group_details_json(
+            std::vector<MaterialRuntimeRecord> const& records) {
+        json::Array groups;
+        for (std::size_t index = 0; index < records.size(); ++index) {
+            auto const& plan = records[index].plan;
+            if (!plan.container.participates || plan.container.container_id == 0u)
+                continue;
+            auto const container_id = plan.container.container_id;
+            auto seen = false;
+            for (std::size_t prior = 0; prior < index; ++prior) {
+                auto const& prior_plan = records[prior].plan;
+                if (prior_plan.container.participates
+                    && prior_plan.container.container_id == container_id) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (seen)
+                continue;
+
+            MaterialContainerGroupAccumulator group{
+                .container_id = container_id,
+            };
+            json::Array members;
+            for (auto const& candidate_record : records) {
+                auto const& candidate = candidate_record.plan;
+                if (!candidate.container.participates
+                    || candidate.container.container_id != container_id) {
+                    continue;
+                }
+                ++group.surface_count;
+                accumulate_material_container_bounds(group, candidate);
+                if (candidate.primary_pass.active)
+                    ++group.active_surfaces;
+                if (candidate.backdrop_sampling)
+                    ++group.sampled_backdrop_surfaces;
+                if (candidate.fallback())
+                    ++group.fallback_surfaces;
+                if (candidate.container.shape_union_expected)
+                    ++group.union_surfaces;
+                if (candidate.container.morph_transitions)
+                    ++group.morph_surfaces;
+                if (candidate.container.interactive)
+                    ++group.interactive_surfaces;
+                if (candidate.container.shared_backdrop_scope)
+                    ++group.shared_backdrop_scope_surfaces;
+                members.push_back(
+                    material_container_group_member_json(candidate_record));
+            }
+            for (std::size_t left = 0; left < records.size(); ++left) {
+                auto const& a = records[left].plan;
+                if (!material_plan_in_container(a, container_id))
+                    continue;
+                for (std::size_t right = left + 1;
+                     right < records.size();
+                     ++right) {
+                    auto const& b = records[right].plan;
+                    if (!material_plan_in_container(b, container_id))
+                        continue;
+                    accumulate_material_container_pair(group, a, b);
+                }
+            }
+            groups.push_back(
+                material_container_group_detail_json(group, std::move(members)));
+        }
+        return groups;
+    }
+
     inline json::Value material_container_group_summary_json(
             MaterialContainerGroupRuntimeSummary const& summary) {
         json::Object out;
@@ -3224,6 +3443,9 @@ namespace detail {
                     material_plan_contract_version)});
         renderer.emplace("material_plan_count", json::Value{std::int64_t{0}});
         renderer.emplace("material_plans", json::Value{json::Array{}});
+        renderer.emplace(
+            "material_container_groups",
+            json::Value{json::Array{}});
         renderer.emplace(
             "material_runtime_summary",
             material_runtime_summary_json(MaterialRuntimeSummary{}));
