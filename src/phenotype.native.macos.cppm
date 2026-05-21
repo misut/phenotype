@@ -7379,25 +7379,6 @@ inline long ns_visual_effect_material_value(
     }
 }
 
-inline char const* native_backdrop_policy_name(
-        NativeBackdropMaterial material) noexcept {
-    switch (material) {
-        case NativeBackdropMaterial::Sidebar:
-            return "transparent-window-clear-metal-native-sidebar";
-        case NativeBackdropMaterial::UnderWindowBackground:
-        default:
-            return "transparent-window-clear-metal-under-window-background";
-    }
-}
-
-inline float clamp_native_backdrop_opacity(float opacity) noexcept {
-    if (opacity < 0.0f)
-        return 0.0f;
-    if (opacity > 1.0f)
-        return 1.0f;
-    return opacity;
-}
-
 inline void configure_visual_effect_backdrop(
         id effect_view,
         NativeBackdropMaterial material,
@@ -7413,7 +7394,7 @@ inline void configure_visual_effect_backdrop(
     objc_send<void>(
         effect_view,
         sel_registerName("setAlphaValue:"),
-        static_cast<double>(clamp_native_backdrop_opacity(opacity)));
+        static_cast<double>(sanitize_native_backdrop_opacity(opacity)));
     objc_send<void>(
         effect_view,
         sel_registerName("setBlendingMode:"),
@@ -9799,7 +9780,7 @@ inline json::Object macos_window_runtime_json() {
             : NativeBackdropMaterial::UnderWindowBackground;
     float const expected_backdrop_opacity =
         has_options
-            ? clamp_native_backdrop_opacity(surface->native_backdrop_opacity)
+            ? sanitize_native_backdrop_opacity(surface->native_backdrop_opacity)
             : 1.0f;
     long const expected_native_backdrop_material =
         ns_visual_effect_material_value(expected_backdrop_material);
@@ -9893,57 +9874,47 @@ inline json::Object macos_window_runtime_json() {
         native_backdrop_alpha_delta < 0.0
             ? -native_backdrop_alpha_delta
             : native_backdrop_alpha_delta;
-    bool const native_backdrop_underlay_ready =
-        native_backdrop_underlay_enabled
-        && native_backdrop_material == expected_native_backdrop_material
-        && native_backdrop_abs_alpha_delta <= 0.01
-        && std::string_view{native_backdrop_underlay_placement}
-            == "sibling-underlay"
-        && native_backdrop_blending_mode == 0
-        && native_backdrop_state == 1;
-    bool const renderer_clear_ready =
-        g_renderer.last_clear_alpha == 0.0
-        && g_renderer.last_clear_alpha_for_transparent_window;
-    bool const renderer_fill_ready =
-        g_renderer.last_full_frame_opaque_fill_count == 0
-        && !g_renderer.last_transparent_window_has_opaque_frame_fill;
-    char const* backdrop_status = "ready";
-    char const* backdrop_failure_reason = "none";
-    char const* backdrop_likely_layer = "none";
-    char const* backdrop_likely_pass = "none";
-    if (window_opaque) {
-        backdrop_status = "blocked";
-        backdrop_failure_reason = "nswindow_opaque";
-        backdrop_likely_layer = "native-window-composition";
-        backdrop_likely_pass = "appkit-window-opacity";
-    } else if (!window_background_clear || window_background_alpha != 0) {
-        backdrop_status = "blocked";
-        backdrop_failure_reason = "nswindow_background_not_clear";
-        backdrop_likely_layer = "native-window-composition";
-        backdrop_likely_pass = "appkit-window-background";
-    } else if (metal_layer_opaque) {
-        backdrop_status = "blocked";
-        backdrop_failure_reason = "metal_layer_opaque";
-        backdrop_likely_layer = "native-window-composition";
-        backdrop_likely_pass = "metal-layer-opacity";
-    } else if (!native_backdrop_underlay_ready) {
-        backdrop_status = "blocked";
-        backdrop_failure_reason = "native_backdrop_underlay_not_ready";
-        backdrop_likely_layer = "native-window-composition";
-        backdrop_likely_pass = "appkit-visual-effect-underlay";
-    } else if (!renderer_clear_ready) {
-        backdrop_status = "blocked";
-        backdrop_failure_reason = "renderer_clear_not_alpha_zero";
-        backdrop_likely_layer = "native-renderer";
-        backdrop_likely_pass = "metal-clear";
-    } else if (!renderer_fill_ready) {
-        backdrop_status = "blocked";
-        backdrop_failure_reason = "full_frame_opaque_fill";
-        backdrop_likely_layer = "app-root-surface";
-        backdrop_likely_pass = "frame-command-decode";
-    }
-    bool const backdrop_ready =
-        std::string_view{backdrop_status} == "ready";
+    bool const native_backdrop_underlay_material_matches =
+        native_backdrop_material == expected_native_backdrop_material;
+    bool const native_backdrop_underlay_alpha_matches =
+        native_backdrop_abs_alpha_delta <= 0.01;
+    bool const native_backdrop_underlay_sibling =
+        std::string_view{native_backdrop_underlay_placement}
+            == "sibling-underlay";
+    bool const native_backdrop_underlay_blending_behind_window =
+        native_backdrop_blending_mode == 0;
+    bool const native_backdrop_underlay_active =
+        native_backdrop_state == 1;
+    bool const renderer_clear_alpha_zero =
+        g_renderer.last_clear_alpha == 0.0;
+    bool const renderer_clear_for_transparent_window =
+        g_renderer.last_clear_alpha_for_transparent_window;
+    bool const renderer_has_full_frame_opaque_fill =
+        g_renderer.last_full_frame_opaque_fill_count != 0
+        || g_renderer.last_transparent_window_has_opaque_frame_fill;
+    auto const backdrop_composition_plan =
+        plan_native_backdrop_composition(NativeBackdropCompositionInput{
+            .chrome = chrome,
+            .expected_material = expected_backdrop_material,
+            .expected_alpha = expected_backdrop_opacity,
+            .window_opaque = window_opaque,
+            .window_background_clear = window_background_clear,
+            .window_background_alpha = static_cast<int>(window_background_alpha),
+            .metal_layer_opaque = metal_layer_opaque,
+            .underlay_enabled = native_backdrop_underlay_enabled,
+            .underlay_material_matches =
+                native_backdrop_underlay_material_matches,
+            .underlay_alpha_matches = native_backdrop_underlay_alpha_matches,
+            .underlay_sibling = native_backdrop_underlay_sibling,
+            .underlay_blending_behind_window =
+                native_backdrop_underlay_blending_behind_window,
+            .underlay_active = native_backdrop_underlay_active,
+            .renderer_clear_alpha_zero = renderer_clear_alpha_zero,
+            .renderer_clear_for_transparent_window =
+                renderer_clear_for_transparent_window,
+            .renderer_has_full_frame_opaque_fill =
+                renderer_has_full_frame_opaque_fill,
+        });
     bool const app_active = ns_app
         && objc_send<bool>(ns_app, sel_is_active());
     bool const window_visible = ns_window
@@ -10036,13 +10007,18 @@ inline json::Object macos_window_runtime_json() {
         "native_backdrop_underlay_emphasized",
         json::Value{native_backdrop_emphasized});
     json::Object backdrop_composition;
-    backdrop_composition.emplace("schema_version", json::Value{1});
+    backdrop_composition.emplace(
+        "schema_version",
+        json::Value{
+            static_cast<int>(backdrop_composition_plan.schema_version)});
     backdrop_composition.emplace(
         "policy",
-        json::Value{native_backdrop_policy_name(expected_backdrop_material)});
+        json::Value{backdrop_composition_plan.policy});
     backdrop_composition.emplace(
         "native_backdrop_expected_material",
-        json::Value{native_backdrop_material_name(expected_backdrop_material)});
+        json::Value{
+            native_backdrop_material_name(
+                backdrop_composition_plan.expected_material)});
     backdrop_composition.emplace(
         "native_backdrop_underlay_placement",
         json::Value{native_backdrop_underlay_placement});
@@ -10051,44 +10027,51 @@ inline json::Object macos_window_runtime_json() {
         json::Value{native_backdrop_alpha});
     backdrop_composition.emplace(
         "native_backdrop_expected_alpha",
-        json::Value{static_cast<double>(expected_backdrop_opacity)});
-    backdrop_composition.emplace("status", json::Value{backdrop_status});
-    backdrop_composition.emplace("ready", json::Value{backdrop_ready});
+        json::Value{
+            static_cast<double>(backdrop_composition_plan.expected_alpha)});
+    backdrop_composition.emplace(
+        "status",
+        json::Value{backdrop_composition_plan.status});
+    backdrop_composition.emplace(
+        "ready",
+        json::Value{backdrop_composition_plan.ready});
     backdrop_composition.emplace(
         "failure_reason",
-        json::Value{backdrop_failure_reason});
+        json::Value{backdrop_composition_plan.failure_reason});
     backdrop_composition.emplace(
         "likely_layer",
-        json::Value{backdrop_likely_layer});
+        json::Value{backdrop_composition_plan.likely_layer});
     backdrop_composition.emplace(
         "likely_pass",
-        json::Value{backdrop_likely_pass});
+        json::Value{backdrop_composition_plan.likely_pass});
     backdrop_composition.emplace(
         "requires_transparent_window",
-        json::Value{true});
+        json::Value{backdrop_composition_plan.requires_transparent_window});
     backdrop_composition.emplace(
         "requires_clear_metal_layer",
-        json::Value{true});
+        json::Value{backdrop_composition_plan.requires_clear_metal_layer});
     backdrop_composition.emplace(
         "requires_native_backdrop_underlay",
-        json::Value{true});
+        json::Value{
+            backdrop_composition_plan.requires_native_backdrop_underlay});
     backdrop_composition.emplace(
         "requires_sibling_underlay",
-        json::Value{true});
+        json::Value{backdrop_composition_plan.requires_sibling_underlay});
     backdrop_composition.emplace(
         "requires_under_window_background_underlay",
         json::Value{
-            expected_backdrop_material
-                == NativeBackdropMaterial::UnderWindowBackground});
+            backdrop_composition_plan
+                .requires_under_window_background_underlay});
     backdrop_composition.emplace(
         "requires_alpha_zero_clear",
-        json::Value{true});
+        json::Value{backdrop_composition_plan.requires_alpha_zero_clear});
     backdrop_composition.emplace(
         "requires_no_full_frame_opaque_fill",
-        json::Value{true});
+        json::Value{
+            backdrop_composition_plan.requires_no_full_frame_opaque_fill});
     backdrop_composition.emplace(
         "samples_external_backdrop",
-        json::Value{true});
+        json::Value{backdrop_composition_plan.samples_external_backdrop});
     window.emplace(
         "glass_backdrop_composition",
         json::Value{std::move(backdrop_composition)});

@@ -1190,7 +1190,11 @@ transparent before the material pass executes. Check
 titlebar windows keep the default `under-window-background` material. The
 underlay must be a sibling behind the Metal view rather than a parent wrapper;
 otherwise changing native backdrop opacity can fade the rendered content
-instead of only changing the compositor material strength. The same
+instead of only changing the compositor material strength. The `status`,
+`ready`, `failure_reason`, `likely_layer`, and `likely_pass` fields are produced
+by the pure shared `plan_native_backdrop_composition()` contract from native
+window/readback inputs, so macOS supplies AppKit evidence but does not invent a
+backend-local failure vocabulary. The same
 `window` object summarizes the combined contract in
 `glass_backdrop_composition`: `status=ready`, `ready=true`,
 `failure_reason=none`, `requires_native_backdrop_underlay=true`,

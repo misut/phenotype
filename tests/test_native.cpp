@@ -134,6 +134,88 @@ static void test_window_options_integrated_titlebar_contract() {
     std::puts("PASS: window options integrated titlebar contract");
 }
 
+static NativeBackdropCompositionInput ready_native_backdrop_input() {
+    return NativeBackdropCompositionInput{
+        .chrome = WindowChromeStyle::IntegratedTitlebar,
+        .expected_material = NativeBackdropMaterial::Sidebar,
+        .expected_alpha = 0.72f,
+        .window_opaque = false,
+        .window_background_clear = true,
+        .window_background_alpha = 0,
+        .metal_layer_opaque = false,
+        .underlay_enabled = true,
+        .underlay_material_matches = true,
+        .underlay_alpha_matches = true,
+        .underlay_sibling = true,
+        .underlay_blending_behind_window = true,
+        .underlay_active = true,
+        .renderer_clear_alpha_zero = true,
+        .renderer_clear_for_transparent_window = true,
+        .renderer_has_full_frame_opaque_fill = false,
+    };
+}
+
+static void test_native_backdrop_composition_plan_contract() {
+    assert(sanitize_native_backdrop_opacity(-0.25f) == 0.0f);
+    assert(sanitize_native_backdrop_opacity(0.72f) == 0.72f);
+    assert(sanitize_native_backdrop_opacity(1.5f) == 1.0f);
+    assert(std::string_view(native_backdrop_composition_policy_name(
+        NativeBackdropMaterial::Sidebar))
+        == "transparent-window-clear-metal-native-sidebar");
+
+    auto input = ready_native_backdrop_input();
+    auto ready = plan_native_backdrop_composition(input);
+    assert(ready.ready);
+    assert(std::string_view(ready.status) == "ready");
+    assert(std::string_view(ready.failure_reason) == "none");
+    assert(std::string_view(ready.likely_layer) == "none");
+    assert(std::string_view(ready.likely_pass) == "none");
+    assert(ready.expected_material == NativeBackdropMaterial::Sidebar);
+    assert(ready.expected_alpha == 0.72f);
+    assert(!ready.requires_under_window_background_underlay);
+    assert(ready.requires_sibling_underlay);
+    assert(ready.samples_external_backdrop);
+
+    auto opaque = input;
+    opaque.window_opaque = true;
+    auto opaque_plan = plan_native_backdrop_composition(opaque);
+    assert(!opaque_plan.ready);
+    assert(std::string_view(opaque_plan.failure_reason) == "nswindow_opaque");
+    assert(std::string_view(opaque_plan.likely_pass)
+        == "appkit-window-opacity");
+
+    auto parent_underlay = input;
+    parent_underlay.underlay_sibling = false;
+    auto parent_plan = plan_native_backdrop_composition(parent_underlay);
+    assert(!parent_plan.ready);
+    assert(std::string_view(parent_plan.failure_reason)
+        == "native_backdrop_underlay_not_sibling");
+
+    auto alpha_drift = input;
+    alpha_drift.underlay_alpha_matches = false;
+    auto alpha_plan = plan_native_backdrop_composition(alpha_drift);
+    assert(!alpha_plan.ready);
+    assert(std::string_view(alpha_plan.failure_reason)
+        == "native_backdrop_alpha_mismatch");
+
+    auto fill = input;
+    fill.renderer_has_full_frame_opaque_fill = true;
+    auto fill_plan = plan_native_backdrop_composition(fill);
+    assert(!fill_plan.ready);
+    assert(std::string_view(fill_plan.failure_reason)
+        == "full_frame_opaque_fill");
+    assert(std::string_view(fill_plan.likely_layer) == "app-root-surface");
+
+    auto system_chrome = input;
+    system_chrome.chrome = WindowChromeStyle::System;
+    auto system_plan = plan_native_backdrop_composition(system_chrome);
+    assert(!system_plan.ready);
+    assert(std::string_view(system_plan.failure_reason)
+        == "integrated_titlebar_not_requested");
+
+    std::puts("PASS: native backdrop composition plan contract");
+}
+
 static void test_native_system_settings_product_api() {
     auto original_theme = phenotype::current_theme();
     auto settings = phenotype::native::system_settings();
@@ -3958,6 +4040,7 @@ static void test_stub_renderer_hit_test() {
 
 int main() {
     test_window_options_integrated_titlebar_contract();
+    test_native_backdrop_composition_plan_contract();
     test_native_system_settings_product_api();
     test_shell_pointer_hover_click_and_tab_navigation();
     test_shell_platform_consumed_pointer_hides_focus_ring();
