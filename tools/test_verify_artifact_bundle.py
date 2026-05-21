@@ -1881,14 +1881,16 @@ def snapshot_with_file_explorer_chrome(
         "metal_layer_opaque": False,
         "native_backdrop_underlay_enabled": True,
         "native_backdrop_underlay_kind": "nsvisualeffectview",
-        "native_backdrop_underlay_material": "under-window-background",
+        "native_backdrop_underlay_material": "sidebar",
+        "native_backdrop_expected_material": "sidebar",
         "native_backdrop_underlay_blending_mode": "behind-window",
         "native_backdrop_underlay_state": "active",
         "native_backdrop_underlay_emphasized": True,
         "glass_backdrop_composition": {
             "schema_version": 1,
             "policy": (
-                "transparent-window-clear-metal-under-window-background"),
+                "transparent-window-clear-metal-native-sidebar"),
+            "native_backdrop_expected_material": "sidebar",
             "status": "ready",
             "ready": True,
             "failure_reason": "none",
@@ -1896,7 +1898,8 @@ def snapshot_with_file_explorer_chrome(
             "likely_pass": "none",
             "requires_transparent_window": True,
             "requires_clear_metal_layer": True,
-            "requires_under_window_background_underlay": True,
+            "requires_native_backdrop_underlay": True,
+            "requires_under_window_background_underlay": False,
             "requires_alpha_zero_clear": True,
             "requires_no_full_frame_opaque_fill": True,
             "samples_external_backdrop": True,
@@ -2431,12 +2434,14 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         runtime_window["native_backdrop_underlay_enabled"] = False
         runtime_window["native_backdrop_underlay_kind"] = "none"
         runtime_window["native_backdrop_underlay_material"] = "none"
+        runtime_window["native_backdrop_expected_material"] = "sidebar"
         runtime_window["native_backdrop_underlay_blending_mode"] = "none"
         runtime_window["native_backdrop_underlay_state"] = "none"
         runtime_window["glass_backdrop_composition"] = {
             "schema_version": 1,
             "policy": (
-                "transparent-window-clear-metal-under-window-background"),
+                "transparent-window-clear-metal-native-sidebar"),
+            "native_backdrop_expected_material": "sidebar",
             "status": "blocked",
             "ready": False,
             "failure_reason": "nswindow_opaque",
@@ -2465,7 +2470,8 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             {
                 "summary_schema_version": 1,
                 "summary_policy": (
-                    "transparent-window-clear-metal-under-window-background"),
+                    "transparent-window-clear-metal-native-sidebar"),
+                "summary_native_backdrop_expected_material": "sidebar",
                 "summary_status": "blocked",
                 "summary_ready": False,
                 "summary_failure_reason": "nswindow_opaque",
@@ -2478,6 +2484,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "native_backdrop_underlay_enabled": False,
                 "native_backdrop_underlay_kind": "none",
                 "native_backdrop_underlay_material": "none",
+                "native_backdrop_expected_material": "sidebar",
                 "native_backdrop_underlay_blending_mode": "none",
                 "native_backdrop_underlay_state": "none",
                 "renderer_clear_alpha": 1,

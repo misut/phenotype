@@ -7344,9 +7344,34 @@ inline bool is_visual_effect_view(id view) {
         cls) != 0;
 }
 
+inline long ns_visual_effect_material_value(
+        NativeBackdropMaterial material) noexcept {
+    constexpr long visual_effect_material_sidebar = 7;
+    constexpr long visual_effect_material_under_window_background = 21;
+    switch (material) {
+        case NativeBackdropMaterial::Sidebar:
+            return visual_effect_material_sidebar;
+        case NativeBackdropMaterial::UnderWindowBackground:
+        default:
+            return visual_effect_material_under_window_background;
+    }
+}
+
+inline char const* native_backdrop_policy_name(
+        NativeBackdropMaterial material) noexcept {
+    switch (material) {
+        case NativeBackdropMaterial::Sidebar:
+            return "transparent-window-clear-metal-native-sidebar";
+        case NativeBackdropMaterial::UnderWindowBackground:
+        default:
+            return "transparent-window-clear-metal-under-window-background";
+    }
+}
+
 inline bool install_integrated_titlebar_backdrop_underlay(
         NativeSurfaceDescriptor* surface,
-        id ns_window) {
+        id ns_window,
+        NativeBackdropMaterial material) {
     if (!surface || !ns_window)
         return false;
 
@@ -7381,7 +7406,6 @@ inline bool install_integrated_titlebar_backdrop_underlay(
 
     constexpr unsigned long view_width_sizable = 1ul << 1;
     constexpr unsigned long view_height_sizable = 1ul << 4;
-    constexpr long visual_effect_material_under_window_background = 21;
     constexpr long visual_effect_blending_behind_window = 0;
     constexpr long visual_effect_state_active = 1;
     objc_send<void>(
@@ -7391,7 +7415,7 @@ inline bool install_integrated_titlebar_backdrop_underlay(
     objc_send<void>(
         effect_view,
         sel_registerName("setMaterial:"),
-        visual_effect_material_under_window_background);
+        ns_visual_effect_material_value(material));
     objc_send<void>(
         effect_view,
         sel_registerName("setBlendingMode:"),
@@ -7471,7 +7495,10 @@ inline void configure_window(native_surface_handle handle,
                 clear_color);
         }
     }
-    (void)install_integrated_titlebar_backdrop_underlay(surface, ns_window);
+    (void)install_integrated_titlebar_backdrop_underlay(
+        surface,
+        ns_window,
+        options->native_backdrop_material);
 }
 
 inline void renderer_init(native_surface_handle handle) {
@@ -9689,6 +9716,12 @@ inline json::Object macos_window_runtime_json() {
         has_options ? surface->window_chrome : WindowChromeStyle::System;
     IntegratedTitlebarOptions const titlebar_options =
         has_options ? surface->integrated_titlebar : IntegratedTitlebarOptions{};
+    NativeBackdropMaterial const expected_backdrop_material =
+        has_options
+            ? surface->native_backdrop_material
+            : NativeBackdropMaterial::UnderWindowBackground;
+    long const expected_native_backdrop_material =
+        ns_visual_effect_material_value(expected_backdrop_material);
     constexpr unsigned long move_to_active_space = 1ul << 1;
     constexpr unsigned long full_size_content_view_mask = 1ul << 15;
     constexpr long hidden_title = 1;
@@ -9759,7 +9792,7 @@ inline json::Object macos_window_runtime_json() {
             sel_registerName("isEmphasized")) != 0;
     bool const native_backdrop_underlay_ready =
         native_backdrop_underlay_enabled
-        && native_backdrop_material == 21
+        && native_backdrop_material == expected_native_backdrop_material
         && native_backdrop_blending_mode == 0
         && native_backdrop_state == 1;
     bool const renderer_clear_ready =
@@ -9875,6 +9908,9 @@ inline json::Object macos_window_runtime_json() {
         "native_backdrop_underlay_material",
         json::Value{visual_effect_material_name(native_backdrop_material)});
     window.emplace(
+        "native_backdrop_expected_material",
+        json::Value{native_backdrop_material_name(expected_backdrop_material)});
+    window.emplace(
         "native_backdrop_underlay_blending_mode",
         json::Value{
             visual_effect_blending_mode_name(native_backdrop_blending_mode)});
@@ -9888,8 +9924,10 @@ inline json::Object macos_window_runtime_json() {
     backdrop_composition.emplace("schema_version", json::Value{1});
     backdrop_composition.emplace(
         "policy",
-        json::Value{
-            "transparent-window-clear-metal-under-window-background"});
+        json::Value{native_backdrop_policy_name(expected_backdrop_material)});
+    backdrop_composition.emplace(
+        "native_backdrop_expected_material",
+        json::Value{native_backdrop_material_name(expected_backdrop_material)});
     backdrop_composition.emplace("status", json::Value{backdrop_status});
     backdrop_composition.emplace("ready", json::Value{backdrop_ready});
     backdrop_composition.emplace(
@@ -9908,8 +9946,13 @@ inline json::Object macos_window_runtime_json() {
         "requires_clear_metal_layer",
         json::Value{true});
     backdrop_composition.emplace(
-        "requires_under_window_background_underlay",
+        "requires_native_backdrop_underlay",
         json::Value{true});
+    backdrop_composition.emplace(
+        "requires_under_window_background_underlay",
+        json::Value{
+            expected_backdrop_material
+                == NativeBackdropMaterial::UnderWindowBackground});
     backdrop_composition.emplace(
         "requires_alpha_zero_clear",
         json::Value{true});

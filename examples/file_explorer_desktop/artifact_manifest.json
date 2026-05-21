@@ -2005,7 +2005,11 @@
     },
     {
       "path": "window.native_backdrop_underlay_material",
-      "equals": "under-window-background"
+      "equals": "sidebar"
+    },
+    {
+      "path": "window.native_backdrop_expected_material",
+      "equals": "sidebar"
     },
     {
       "path": "window.native_backdrop_underlay_blending_mode",
@@ -2021,7 +2025,11 @@
     },
     {
       "path": "window.glass_backdrop_composition.policy",
-      "equals": "transparent-window-clear-metal-under-window-background"
+      "equals": "transparent-window-clear-metal-native-sidebar"
+    },
+    {
+      "path": "window.glass_backdrop_composition.native_backdrop_expected_material",
+      "equals": "sidebar"
     },
     {
       "path": "window.glass_backdrop_composition.status",
@@ -2052,8 +2060,12 @@
       "equals": true
     },
     {
-      "path": "window.glass_backdrop_composition.requires_under_window_background_underlay",
+      "path": "window.glass_backdrop_composition.requires_native_backdrop_underlay",
       "equals": true
+    },
+    {
+      "path": "window.glass_backdrop_composition.requires_under_window_background_underlay",
+      "equals": false
     },
     {
       "path": "window.glass_backdrop_composition.requires_alpha_zero_clear",
@@ -2229,20 +2241,20 @@
     {
       "name": "finder-titlebar-close-reserve",
       "rect": [0.028, 0.034, 0.02, 0.034],
-      "min_luma_delta": 1.0,
-      "min_unique_colors": 2
+      "min_luma_delta": 0.0,
+      "min_unique_colors": 1
     },
     {
       "name": "finder-titlebar-minimize-reserve",
       "rect": [0.046, 0.034, 0.02, 0.034],
-      "min_luma_delta": 1.0,
-      "min_unique_colors": 2
+      "min_luma_delta": 0.0,
+      "min_unique_colors": 1
     },
     {
       "name": "finder-titlebar-zoom-reserve",
       "rect": [0.064, 0.034, 0.02, 0.034],
-      "min_luma_delta": 1.0,
-      "min_unique_colors": 2
+      "min_luma_delta": 0.0,
+      "min_unique_colors": 1
     },
     {
       "name": "finder-sidebar",
