@@ -145,6 +145,25 @@ inline char const* native_backdrop_material_name(
     }
 }
 
+inline char const* native_backdrop_composition_policy_name(
+        NativeBackdropMaterial material) noexcept {
+    switch (material) {
+        case NativeBackdropMaterial::Sidebar:
+            return "transparent-window-clear-metal-native-sidebar";
+        case NativeBackdropMaterial::UnderWindowBackground:
+        default:
+            return "transparent-window-clear-metal-under-window-background";
+    }
+}
+
+inline float sanitize_native_backdrop_opacity(float opacity) noexcept {
+    if (!(opacity >= 0.0f))
+        return 0.0f;
+    if (opacity > 1.0f)
+        return 1.0f;
+    return opacity;
+}
+
 struct IntegratedTitlebarOptions {
     // Logical pixels reserved by the app chrome at the top of the
     // window. Desktop shells use this for native drag/hit-test
@@ -187,6 +206,113 @@ struct NativeSurfaceDescriptor {
     float native_backdrop_opacity = 1.0f;
     bool window_options_valid = false;
 };
+
+struct NativeBackdropCompositionInput {
+    WindowChromeStyle chrome = WindowChromeStyle::System;
+    NativeBackdropMaterial expected_material =
+        NativeBackdropMaterial::UnderWindowBackground;
+    float expected_alpha = 1.0f;
+    bool window_opaque = true;
+    bool window_background_clear = false;
+    int window_background_alpha = 255;
+    bool metal_layer_opaque = true;
+    bool underlay_enabled = false;
+    bool underlay_material_matches = false;
+    bool underlay_alpha_matches = false;
+    bool underlay_sibling = false;
+    bool underlay_blending_behind_window = false;
+    bool underlay_active = false;
+    bool renderer_clear_alpha_zero = false;
+    bool renderer_clear_for_transparent_window = false;
+    bool renderer_has_full_frame_opaque_fill = true;
+};
+
+struct NativeBackdropCompositionPlan {
+    std::uint32_t schema_version = 1;
+    char const* policy =
+        "transparent-window-clear-metal-under-window-background";
+    NativeBackdropMaterial expected_material =
+        NativeBackdropMaterial::UnderWindowBackground;
+    float expected_alpha = 1.0f;
+    bool ready = false;
+    char const* status = "blocked";
+    char const* failure_reason = "not-evaluated";
+    char const* likely_layer = "native-window-composition";
+    char const* likely_pass = "native-backdrop-composition";
+    bool requires_transparent_window = true;
+    bool requires_clear_metal_layer = true;
+    bool requires_native_backdrop_underlay = true;
+    bool requires_sibling_underlay = true;
+    bool requires_under_window_background_underlay = true;
+    bool requires_alpha_zero_clear = true;
+    bool requires_no_full_frame_opaque_fill = true;
+    bool samples_external_backdrop = true;
+};
+
+inline NativeBackdropCompositionPlan plan_native_backdrop_composition(
+        NativeBackdropCompositionInput input) noexcept {
+    input.expected_alpha =
+        sanitize_native_backdrop_opacity(input.expected_alpha);
+    NativeBackdropCompositionPlan plan{};
+    plan.policy =
+        native_backdrop_composition_policy_name(input.expected_material);
+    plan.expected_material = input.expected_material;
+    plan.expected_alpha = input.expected_alpha;
+    plan.requires_under_window_background_underlay =
+        input.expected_material == NativeBackdropMaterial::UnderWindowBackground;
+    plan.ready = false;
+    plan.status = "blocked";
+    plan.likely_layer = "native-window-composition";
+
+    if (input.chrome != WindowChromeStyle::IntegratedTitlebar) {
+        plan.failure_reason = "integrated_titlebar_not_requested";
+        plan.likely_pass = "window-options";
+    } else if (input.window_opaque) {
+        plan.failure_reason = "nswindow_opaque";
+        plan.likely_pass = "appkit-window-opacity";
+    } else if (!input.window_background_clear
+            || input.window_background_alpha != 0) {
+        plan.failure_reason = "nswindow_background_not_clear";
+        plan.likely_pass = "appkit-window-background";
+    } else if (input.metal_layer_opaque) {
+        plan.failure_reason = "metal_layer_opaque";
+        plan.likely_pass = "metal-layer-opacity";
+    } else if (!input.underlay_enabled) {
+        plan.failure_reason = "native_backdrop_underlay_missing";
+        plan.likely_pass = "appkit-visual-effect-underlay";
+    } else if (!input.underlay_sibling) {
+        plan.failure_reason = "native_backdrop_underlay_not_sibling";
+        plan.likely_pass = "appkit-visual-effect-underlay";
+    } else if (!input.underlay_material_matches) {
+        plan.failure_reason = "native_backdrop_material_mismatch";
+        plan.likely_pass = "appkit-visual-effect-underlay";
+    } else if (!input.underlay_alpha_matches) {
+        plan.failure_reason = "native_backdrop_alpha_mismatch";
+        plan.likely_pass = "appkit-visual-effect-underlay";
+    } else if (!input.underlay_blending_behind_window) {
+        plan.failure_reason = "native_backdrop_blending_mode_mismatch";
+        plan.likely_pass = "appkit-visual-effect-underlay";
+    } else if (!input.underlay_active) {
+        plan.failure_reason = "native_backdrop_state_inactive";
+        plan.likely_pass = "appkit-visual-effect-underlay";
+    } else if (!input.renderer_clear_alpha_zero
+            || !input.renderer_clear_for_transparent_window) {
+        plan.failure_reason = "renderer_clear_not_alpha_zero";
+        plan.likely_layer = "native-renderer";
+        plan.likely_pass = "metal-clear";
+    } else if (input.renderer_has_full_frame_opaque_fill) {
+        plan.failure_reason = "full_frame_opaque_fill";
+        plan.likely_layer = "app-root-surface";
+        plan.likely_pass = "frame-command-decode";
+    } else {
+        plan.ready = true;
+        plan.status = "ready";
+        plan.failure_reason = "none";
+        plan.likely_layer = "none";
+        plan.likely_pass = "none";
+    }
+    return plan;
+}
 
 // Opaque native surface handle. Desktop shells pass a
 // NativeSurfaceDescriptor*. Android still passes its platform window directly
