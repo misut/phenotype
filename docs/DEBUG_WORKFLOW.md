@@ -207,8 +207,11 @@ expected platform, accessibility display policy, and the same compact material
 budget concepts that `phenotype observe` exposes under
 `snapshot.material.executor_budget`. `artifact
 verify-file-explorer` owns the shared-model test, desktop/mobile builds,
-deterministic native captures, and uv-managed verifier calls directly. Both
-commands are local verification commands, not default PR CI jobs.
+deterministic native captures, and uv-managed verifier calls directly. Its case
+JSON includes `material_budget` whenever the verifier report contains
+`artifact_context.material_contract.executor_budget`, and the non-JSON output
+prints the same case-level plans/work/status summary. Both commands are local
+verification commands, not default PR CI jobs.
 
 For file explorer workflow debugging that does not need a native window, use
 the deterministic drive command:
