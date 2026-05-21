@@ -741,7 +741,7 @@ duplicate
     assert(chrome.icon_toolbar_selected_button_background_alpha == 150);
     assert(chrome.icon_toolbar_selected_button_hover_background_alpha == 190);
     assert(chrome.icon_toolbar_pressed_button_background_alpha == 150);
-    assert(chrome.icon_sidebar_selected_pressed_background_alpha == 255);
+    assert(chrome.icon_sidebar_selected_pressed_background_alpha == 196);
     assert(chrome.icon_pressed_symbol_opacity == 0.82f);
     assert(chrome.icon_pressed_scale == 0.985f);
     assert(chrome.icon_module == "phenotype.icons");

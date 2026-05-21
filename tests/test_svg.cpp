@@ -721,9 +721,9 @@ void test_builtin_icons_parse() {
     assert(sidebar_chrome.symbol_tone == icons::SymbolTone::Accent);
     assert((sidebar_chrome.symbol_color == Color{0, 122, 255, 255}));
     assert(sidebar_chrome.background_color.r == 236);
-    assert(sidebar_chrome.background_color.a == 255);
+    assert(sidebar_chrome.background_color.a == 150);
     assert(sidebar_chrome.hover_background_color.r == 232);
-    assert(sidebar_chrome.hover_background_color.a == 255);
+    assert(sidebar_chrome.hover_background_color.a == 176);
     assert(sidebar_chrome.corner_radius == 10.0f);
     assert(icons::macos_interaction_tone(
                icons::Symbol::Recents,

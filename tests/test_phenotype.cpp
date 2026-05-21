@@ -4290,11 +4290,12 @@ void test_macos_control_button_style_contract() {
     auto style = icons::macos_control_button_style(options);
     assert(style.has_background);
     assert(style.background.r == 236);
-    assert(style.background.a == 255);
+    assert(style.background.a == 150);
     assert(style.has_hover_background);
     assert(style.hover_background.r == 232);
-    assert(style.hover_background.a == 255);
+    assert(style.hover_background.a == 176);
     assert(style.has_pressed_background);
+    assert(style.pressed_background.a == 196);
     assert(style.border_width == 0.0f);
     assert(style.border_radius == 8.0f);
     assert(style.max_width == 180.0f);
@@ -4392,6 +4393,9 @@ void test_glass_selection_button_style_material_contract() {
     assert(style.has_background);
     assert(style.has_hover_background);
     assert(style.has_pressed_background);
+    assert(style.background.a == 150);
+    assert(style.hover_background.a == 176);
+    assert(style.pressed_background.a == 196);
     assert(style.border_width == 0.0f);
     assert(style.border_radius == 9.0f);
     assert(style.max_width == 188.0f);
@@ -5445,8 +5449,8 @@ void test_icon_catalog_umbrella_export() {
     auto const sidebar_chrome = phenotype::icon_catalog::macos_control_chrome(
         phenotype::icon_catalog::SymbolPresentationRole::Sidebar,
         phenotype::icon_catalog::SymbolInteractionState{true, true});
-    assert(sidebar_chrome.background_color.a == 255);
-    assert(sidebar_chrome.hover_background_color.a == 255);
+    assert(sidebar_chrome.background_color.a == 150);
+    assert(sidebar_chrome.hover_background_color.a == 176);
 
     std::puts("PASS: umbrella module exports icon catalog contract");
 }

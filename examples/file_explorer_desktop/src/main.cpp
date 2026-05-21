@@ -890,7 +890,7 @@ constexpr float k_toolbar_icon_button_width =
     file_explorer_demo::k_desktop_toolbar_icon_button_width;
 constexpr float k_toolbar_icon_button_height =
     file_explorer_demo::k_desktop_toolbar_icon_button_height;
-constexpr float k_file_thumbnail_symbol_stroke_scale = 0.78f;
+constexpr float k_file_thumbnail_symbol_stroke_scale = 0.68f;
 constexpr float k_native_window_control_reserve_height =
     file_explorer_demo::k_desktop_titlebar_control_cluster_height;
 constexpr float k_titlebar_drag_region_height =

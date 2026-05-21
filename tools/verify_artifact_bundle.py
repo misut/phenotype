@@ -1813,7 +1813,7 @@ def check_file_explorer_finder_visual_contract(
         if native_controls
         else "not_applicable_mobile_shell")
     expected_sidebar_style = (
-        "finder_soft_selected_row_no_outline_accent_symbol"
+        "finder_translucent_selected_row_no_outline_accent_symbol"
         if profile == "desktop"
         else "n/a")
     expected_thumbnail = (

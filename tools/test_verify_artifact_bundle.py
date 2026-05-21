@@ -1769,9 +1769,9 @@ def snapshot_with_file_explorer_chrome(
                 "native_control_palette_policy": (
                     "traffic_light_palette_forbidden_in_content_and_artifacts"),
                 "sidebar_selection_style": (
-                    "finder_soft_selected_row_no_outline_accent_symbol"),
+                    "finder_translucent_selected_row_no_outline_accent_symbol"),
                 "sidebar_selected_row_border_width": 0.0,
-                "sidebar_selected_row_background_alpha": 238,
+                "sidebar_selected_row_background_alpha": 150,
                 "focus_ring_policy": (
                     "keyboard_tab_navigation_only_pointer_click_hides_focus_ring"),
                 "icon_source_policy": (
@@ -1835,7 +1835,7 @@ def snapshot_with_file_explorer_chrome(
                 },
             },
             "chrome": {
-                "sidebar_selected_row_background_alpha": 238,
+                "sidebar_selected_row_background_alpha": 150,
                 "thumbnail_system": {
                     "visual_policy": "finder_rich_preview_thumbnails_v1",
                 },
