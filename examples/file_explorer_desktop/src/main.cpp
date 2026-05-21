@@ -967,11 +967,11 @@ phenotype::MaterialStyle finder_sidebar_material_style() {
     using namespace phenotype;
     auto material = layout::material_style(MaterialKind::Thin);
     material.role = MaterialSurfaceRole::Sidebar;
-    material.opacity = 0.34f;
+    material.opacity = 0.22f;
     material.blur_radius = 28.0f;
-    material.tint = rgba(248, 248, 250, 76);
-    material.border = rgba(255, 255, 255, 84);
-    material.saturation = 1.28f;
+    material.tint = rgba(248, 248, 250, 42);
+    material.border = rgba(255, 255, 255, 52);
+    material.saturation = 1.34f;
     material.luminance_floor = 0.03f;
     material.luminance_gain = 1.03f;
     material.edge_highlight = 0.32f;
@@ -3034,6 +3034,9 @@ void view(State const& state) {
             window_options.max_width = 0.0f;
             window_options.fixed_height = -1.0f;
             window_options.border_radius = k_window_radius;
+            window_options.kind = MaterialKind::None;
+            window_options.has_material_override = true;
+            window_options.material_override = MaterialStyle{};
             layout::material_surface(
                 window_options,
                 [&] {
@@ -3062,7 +3065,7 @@ int main(int argc, char** argv) {
     theme = phenotype::theme_with_resource_defaults(
         theme,
         runtime_resource_catalog());
-    theme.background = rgba(246, 246, 246);
+    theme.background = rgba(246, 246, 246, 0);
     theme.foreground = rgba(29, 29, 31);
     theme.accent = rgba(0, 122, 255);
     theme.accent_strong = rgba(0, 99, 204);

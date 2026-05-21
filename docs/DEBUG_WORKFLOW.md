@@ -1172,9 +1172,22 @@ Finder-style sidebar glass also depends on the native window compositor staying
 transparent before the material pass executes. Check
 `window_opaque=false`, `window_background_clear=true`,
 `window_background_alpha=0`, and `metal_layer_opaque=false` in the same
-`window` object. If those fields drift, fix AppKit/CAMetalLayer setup before
-tuning sidebar material tint, blur, or opacity; an opaque native surface hides
-the real backdrop even when the pure `MaterialPlan` requests sampled glass.
+`window` object. Then check the native underlay:
+`native_backdrop_underlay_enabled=true`,
+`native_backdrop_underlay_kind=nsvisualeffectview`,
+`native_backdrop_underlay_material=under-window-background`,
+`native_backdrop_underlay_blending_mode=behind-window`, and
+`native_backdrop_underlay_state=active`. The renderer must also report
+`renderer.clear_alpha=0`, `renderer.clear_alpha_for_transparent_window=true`,
+`renderer.full_frame_opaque_fill_count=0`, and
+`renderer.transparent_window_has_opaque_frame_fill=false`; otherwise an opaque
+theme clear command or root background fill will flatten the drawable before
+the WindowServer/AppKit backdrop can show through. If those fields drift, fix
+AppKit/CAMetalLayer setup, clear-alpha handling, or the app root background
+before tuning sidebar material tint, blur, or opacity; an opaque native surface,
+missing `NSVisualEffectView` underlay, opaque Metal clear, or full-frame opaque
+fill hides the real blurred wallpaper/backdrop even when the pure
+`MaterialPlan` requests sampled glass.
 Plan-level failures route to `plan_material_surface` and runtime plan
 serialization; semantic/runtime contract failures route to semantic material
 nodes, `MaterialRect` command emission, and `renderer.material_plans[]` parity.
