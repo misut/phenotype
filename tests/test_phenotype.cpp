@@ -2960,6 +2960,24 @@ void test_glass_surface_presets_emit_material_contract() {
     assert(popover.direction == FlexDirection::Column);
     assert(popover.interactive);
     assert(std::string_view{popover.semantic_label} == "Actions");
+    auto sheet = layout::glass_surface_options(
+        layout::GlassSurfacePreset::Sheet,
+        "Confirm Sheet");
+    assert(sheet.kind == MaterialKind::Regular);
+    assert(sheet.role == MaterialSurfaceRole::Overlay);
+    assert(sheet.padding == SpaceToken::Lg);
+    assert(sheet.interactive);
+    assert(std::string_view{sheet.semantic_label} == "Confirm Sheet");
+    auto inspector = layout::glass_surface_options(
+        layout::GlassSurfacePreset::Inspector);
+    assert(inspector.kind == MaterialKind::Thin);
+    assert(inspector.role == MaterialSurfaceRole::Overlay);
+    assert(inspector.interactive);
+    auto command_palette = layout::glass_surface_options(
+        layout::GlassSurfacePreset::CommandPalette);
+    assert(command_palette.kind == MaterialKind::Thick);
+    assert(command_palette.role == MaterialSurfaceRole::Overlay);
+    assert(command_palette.interactive);
     assert(std::string_view{
         layout::glass_surface_preset_name(
             layout::GlassSurfacePreset::ToolbarGroup)}
@@ -2968,6 +2986,10 @@ void test_glass_surface_presets_emit_material_contract() {
         layout::glass_surface_preset_name(
             layout::GlassSurfacePreset::SegmentedControl)}
         == "segmented_control");
+    assert(std::string_view{
+        layout::glass_surface_preset_name(
+            layout::GlassSurfacePreset::CommandPalette)}
+        == "command_palette");
 
     auto content = layout::glass_surface_options(
         layout::GlassSurfacePreset::Content,
@@ -4414,6 +4436,92 @@ void test_glass_control_button_style_material_contract() {
     std::puts("PASS: glass control button style emits material contract");
 }
 
+void test_glass_split_button_style_material_contract() {
+    set_theme(Theme{});
+
+    auto style = widget::glass_split_button_style(
+        GlassSplitButtonStyleOptions{
+            .kind = MaterialKind::Clear,
+            .role = MaterialSurfaceRole::Toolbar,
+            .segment = GlassSplitButtonSegment::Leading,
+            .selected = true,
+            .disabled = false,
+            .container_id = 77u,
+            .union_id = 12u,
+            .spacing = 6.0f,
+            .width = 44.0f,
+            .height = 36.0f,
+            .border_radius = 14.0f,
+        });
+    assert(style.has_material);
+    assert(style.material.kind == MaterialKind::Clear);
+    assert(style.material.role == MaterialSurfaceRole::Toolbar);
+    assert(style.material.fallback);
+    assert(style.material.container.container_id == 77u);
+    assert(style.material.container.union_id == 12u);
+    assert(style.material.container.spacing == 6.0f);
+    assert(style.material.container.interactive);
+    assert(style.material.container.morph_transitions);
+    assert(style.border_width == 1.0f);
+    assert(style.border_radius == 14.0f);
+    assert(style.max_width == 44.0f);
+    assert(style.fixed_height == 36.0f);
+    assert(style.text_align == TextAlign::Center);
+
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.callback_roles.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::symbol_button<button_test::ButtonMsg>(
+        "Sort",
+        icons::Symbol::SortGroup,
+        button_test::Click{},
+        icons::SymbolButtonOptions{
+            .role = icons::SymbolPresentationRole::Toolbar,
+            .width = 44.0f,
+            .height = 36.0f,
+            .token_salt = 0x7712u,
+        },
+        style);
+    Scope::set_current(nullptr);
+
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    auto& btn = detail::node_at(root.children[0]);
+    assert(btn.interaction_role == InteractionRole::Button);
+    assert(btn.debug_semantic_label == "Sort");
+    assert(btn.material.kind == MaterialKind::Clear);
+    assert(btn.material.role == MaterialSurfaceRole::Toolbar);
+    assert(btn.material.container.container_id == 77u);
+    assert(btn.material.container.union_id == 12u);
+    assert(btn.material.container.interactive);
+    assert(btn.material.container.morph_transitions);
+    assert(btn.material.tint == btn.background);
+    assert(btn.children.size() == 1);
+
+    auto disabled = widget::glass_split_button_style(
+        GlassSplitButtonStyleOptions{
+            .kind = MaterialKind::Clear,
+            .role = MaterialSurfaceRole::Toolbar,
+            .segment = GlassSplitButtonSegment::Trailing,
+            .selected = false,
+            .disabled = true,
+            .container_id = 77u,
+            .union_id = 12u,
+        });
+    assert(disabled.disabled);
+    assert(!disabled.has_material);
+
+    std::puts("PASS: glass split button style emits material contract");
+}
+
 void test_glass_selection_button_style_material_contract() {
     set_theme(Theme{});
 
@@ -4471,6 +4579,80 @@ void test_glass_selection_button_style_material_contract() {
     assert(unselected_btn.style.fixed_height == 28.0f);
 
     std::puts("PASS: glass selection button style emits material contract");
+}
+
+void test_glass_outline_row_button_style_material_contract() {
+    set_theme(Theme{});
+
+    auto selected = widget::glass_outline_row_button_style(
+        GlassOutlineRowStyleOptions{
+            .chrome = GlassOutlineRowChrome::ListRow,
+            .selected_kind = MaterialKind::Thin,
+            .expanded_kind = MaterialKind::Clear,
+            .unselected_kind = MaterialKind::None,
+            .role = MaterialSurfaceRole::Surface,
+            .selected = true,
+            .expanded = false,
+            .disabled = false,
+            .depth = 2u,
+            .width = 220.0f,
+            .height = 28.0f,
+            .border_radius = 8.0f,
+            .font_size = 13.0f,
+        });
+    assert(selected.has_material);
+    assert(selected.material.kind == MaterialKind::Thin);
+    assert(selected.material.role == MaterialSurfaceRole::Surface);
+    assert(selected.material.fallback);
+    assert(selected.material.container.interactive);
+    assert(selected.background == detail::g_app.theme.accent);
+    assert(selected.border_width == 1.0f);
+    assert(selected.border_radius == 8.0f);
+    assert(selected.font_size == 13.0f);
+    assert(selected.max_width == 220.0f);
+    assert(selected.fixed_height == 28.0f);
+    assert(selected.padding_left == 28.0f);
+
+    auto row_h = button_test::build_canvas_button_with_options(selected);
+    auto& row = detail::node_at(row_h);
+    assert(row.interaction_role == InteractionRole::Button);
+    assert(row.material.kind == MaterialKind::Thin);
+    assert(row.material.role == MaterialSurfaceRole::Surface);
+    assert(row.material.tint == row.background);
+    assert(row.material.foreground == row.text_color);
+    assert(row.children.size() == 1);
+
+    auto sidebar = widget::glass_outline_row_button_style(
+        GlassOutlineRowStyleOptions{
+            .chrome = GlassOutlineRowChrome::SidebarPill,
+            .role = MaterialSurfaceRole::Sidebar,
+            .selected = true,
+        });
+    assert(sidebar.has_material);
+    assert(sidebar.material.kind == MaterialKind::Thin);
+    assert(sidebar.material.role == MaterialSurfaceRole::Sidebar);
+    assert(sidebar.text_color == detail::g_app.theme.accent);
+    assert(sidebar.border_width == 0.0f);
+
+    auto expanded = widget::glass_outline_row_button_style(
+        GlassOutlineRowStyleOptions{
+            .chrome = GlassOutlineRowChrome::ColumnRow,
+            .role = MaterialSurfaceRole::Content,
+            .selected = false,
+            .expanded = true,
+        });
+    assert(expanded.has_material);
+    assert(expanded.material.kind == MaterialKind::Clear);
+    assert(expanded.material.role == MaterialSurfaceRole::Content);
+    assert(expanded.material.container.interactive);
+    assert(expanded.background.a == 122);
+
+    auto unselected = widget::glass_outline_row_button_style(
+        GlassOutlineRowStyleOptions{.selected = false});
+    assert(!unselected.has_material);
+    assert(unselected.background.a == 0);
+
+    std::puts("PASS: glass outline row style emits material contract");
 }
 
 void test_glass_menu_item_symbol_button_material_contract() {
@@ -5649,7 +5831,9 @@ int main() {
     test_symbol_button_macos_contract();
     test_macos_control_button_style_contract();
     test_glass_control_button_style_material_contract();
+    test_glass_split_button_style_material_contract();
     test_glass_selection_button_style_material_contract();
+    test_glass_outline_row_button_style_material_contract();
     test_glass_menu_item_symbol_button_material_contract();
     test_glass_table_header_button_material_contract();
     test_glass_disclosure_header_style_material_contract();

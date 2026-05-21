@@ -316,16 +316,21 @@ renderer path: each preset lowers to `MaterialSurfaceOptions`, then to the same
 pure `MaterialStyle` and `MaterialRect` command contract as
 `layout::material_surface`. The preset enum captures product roles such as
 window, toolbar, toolbar group, segmented control, navigation, sidebar,
-content, status bar, and popover so example code does not hand-roll blur
-thickness, semantic role, alignment, and chrome radius for every surface.
+content, status bar, popover, sheet, inspector, and command palette so example
+code does not hand-roll blur thickness, semantic role, alignment, and chrome
+radius for every surface.
 `MaterialSurfaceOptions.interactive` is the surface-level opt-in for glass that
 belongs to controls. It does not create a backend policy branch: it marks the
 resolved material container descriptor as interactive before command emission,
 so `plan_material_surface` can decide the response from immutable input.
-`ToolbarGroup`, `SegmentedControl`, `Navigation`, and `Popover` presets set this
-flag by default because they represent clickable chrome; passive window,
-content, sidebar, and status-bar surfaces stay noninteractive unless the app
-opts in explicitly. `widget::tabs` uses the same material contract by default
+`ToolbarGroup`, `SegmentedControl`, `Navigation`, `Popover`, `Sheet`,
+`Inspector`, and `CommandPalette` presets set this flag by default because they
+represent clickable or transient chrome; passive window, content, sidebar, and
+status-bar surfaces stay noninteractive unless the app opts in explicitly.
+`layout::dialog` now lowers its card to a `Dialog Sheet` material node through
+the same sheet preset, so modal overlay chrome has a resolved `MaterialPlan`
+instead of an untyped painted card. `widget::tabs` uses the same material
+contract by default
 through `TabsStyleOptions`, so text tabs, mobile mode pickers, and native
 examples show up as semantic material nodes and resolved runtime plans instead
 of only as painted pill backgrounds. Text input keeps the same boundary:
@@ -333,10 +338,17 @@ of only as painted pill backgrounds. Text input keeps the same boundary:
 `widget::glass_text_field_style` is the Finder-style search-field preset that
 marks the field as interactive material without moving search/input policy into
 the backend. Selection chrome follows the same boundary through
-`GlassSelectionStyleOptions` and `widget::glass_selection_button_style`.
-Examples use it for Finder sidebar/list/icon rows so the selected row is a
-semantic material command with a resolved `MaterialPlan`, while unselected rows
-remain lightweight non-material buttons unless a caller explicitly opts in.
+`GlassOutlineRowStyleOptions` and `widget::glass_outline_row_button_style`.
+Examples use it for Finder sidebar/list/icon/column rows so selected and
+expanded hierarchy rows become semantic material commands with resolved
+`MaterialPlan` output, while ordinary unselected rows remain lightweight
+non-material buttons unless a caller explicitly opts in.
+Toolbar split controls follow the same edge-only policy through
+`GlassSplitButtonStyleOptions` and `widget::glass_split_button_style`. The
+style helper resolves segment, selected, disabled, container, union, spacing,
+and morph metadata into a `ButtonStyleOptions::material` value before command
+emission, so grouped controls can participate in material containers without
+backend-specific decision code.
 Transient menu and popover actions use `GlassMenuItemStyleOptions` and
 `widget::glass_menu_item_button_style`. The preset defaults to a clear overlay
 material and keeps disabled actions non-material, so open menus can expose

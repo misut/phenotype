@@ -788,12 +788,18 @@ to prove that the pure material planner saw the control chrome.
 Search fields follow the same rule: examples label their glass text inputs as
 `Search Field` or `Mobile Search Field`, which lets verifier output explain
 that the input surface produced a real `MaterialPlan` instead of an ordinary
-painted rectangle. Finder-style selected rows use
-`widget::glass_selection_button_style`; the desktop manifest now expects one
-extra sampled sidebar selection plan, an isolated interactive container, and a
-bounded increase from 200 to 225 total sample taps. If that count changes,
-start with the selected sidebar row semantic material node before investigating
-the backend.
+painted rectangle. Finder-style selected and expanded hierarchy rows use
+`widget::glass_outline_row_button_style`; the desktop manifest expects sidebar
+selection to remain a `sidebar` role material node and list/column hierarchy
+rows to opt into clear `content` or `surface` material only when selected or
+expanded. If that count changes, start with the selected sidebar row, expanded
+folder row, or icon-grid selected label semantic node before investigating the
+backend.
+Toolbar split controls use `widget::glass_split_button_style`. The desktop
+sort control should appear as a `toolbar` role material node with explicit
+container identity when it opts into the shared toolbar material container; if
+the morph or container count changes, inspect that semantic node before looking
+at Metal stage allocation.
 Popover action rows follow the same semantic-material rule through
 `widget::glass_menu_item_button_style`. The desktop `more-actions-open`
 scenario requires an `overlay` material surface role while the menu is visible;
@@ -801,6 +807,11 @@ disabled actions intentionally resolve to non-material buttons. If that
 requirement fails, inspect the `More Actions Menu` semantic subtree and the
 `New File` / `New Folder` / `Duplicate` icon-button nodes before looking at
 Metal or pixel thresholds.
+Sheet, inspector, and command-palette surfaces follow the same overlay role
+through `layout::glass_surface_options`. Dialogs specifically emit a
+`Dialog Sheet` material node; if a modal overlay appears visually but has no
+resolved material plan, inspect `layout::dialog` before debugging overlay
+ordering or platform compositing.
 Table/list headers use `widget::glass_table_header_button_style`. The desktop
 list-view gate requires the `Name`, `Kind`, and `Size` header labels and a
 resolved material plan; those headers should appear as `content` role material

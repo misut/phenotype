@@ -1655,9 +1655,9 @@ void finder_column_location_button(std::string label,
                                    float max_width,
                                    float font_size,
                                    phenotype::icons::SymbolDocumentCache const& cache) {
-    auto options = phenotype::widget::glass_selection_button_style(
-        phenotype::GlassSelectionStyleOptions{
-            .chrome = phenotype::GlassSelectionChrome::SidebarPill,
+    auto options = phenotype::widget::glass_outline_row_button_style(
+        phenotype::GlassOutlineRowStyleOptions{
+            .chrome = phenotype::GlassOutlineRowChrome::ColumnRow,
             .role = phenotype::MaterialSurfaceRole::Sidebar,
             .selected = selected,
             .width = max_width,
@@ -1723,8 +1723,8 @@ void finder_icon_label_button(std::string const& label,
                               float max_width,
                               float font_size,
                               float fixed_height) {
-    auto options = phenotype::widget::glass_selection_button_style(
-        phenotype::GlassSelectionStyleOptions{
+    auto options = phenotype::widget::glass_outline_row_button_style(
+        phenotype::GlassOutlineRowStyleOptions{
             .role = phenotype::MaterialSurfaceRole::Surface,
             .selected = selected,
             .width = max_width,
@@ -1776,10 +1776,12 @@ void finder_entry_row_button(file_explorer_demo::Entry const& entry,
                              float font_size,
                              float fixed_height,
                              phenotype::icons::SymbolDocumentCache const& cache) {
-    auto options = phenotype::widget::glass_selection_button_style(
-        phenotype::GlassSelectionStyleOptions{
+    auto options = phenotype::widget::glass_outline_row_button_style(
+        phenotype::GlassOutlineRowStyleOptions{
+            .chrome = phenotype::GlassOutlineRowChrome::ListRow,
             .role = phenotype::MaterialSurfaceRole::Surface,
             .selected = selected,
+            .expanded = entry.folder,
             .width = max_width,
             .height = fixed_height,
             .border_radius = 8.0f,
@@ -1840,9 +1842,9 @@ void sidebar_row(std::string_view label,
                  bool selected,
                  phenotype::icons::SymbolDocumentCache const& cache) {
     using namespace phenotype;
-    auto options = widget::glass_selection_button_style(
-        GlassSelectionStyleOptions{
-            .chrome = GlassSelectionChrome::SidebarPill,
+    auto options = widget::glass_outline_row_button_style(
+        GlassOutlineRowStyleOptions{
+            .chrome = GlassOutlineRowChrome::SidebarPill,
             .role = MaterialSurfaceRole::Sidebar,
             .selected = selected,
             .width = k_sidebar_row_width,
@@ -2042,6 +2044,19 @@ void sort_action_button(file_explorer_demo::Snapshot const& snap) {
     std::string semantic_label = "Group Sort";
     if (!snap.sort_label.empty())
         semantic_label += " (" + snap.sort_label + ")";
+    auto style = phenotype::widget::glass_split_button_style(
+        phenotype::GlassSplitButtonStyleOptions{
+            .kind = phenotype::MaterialKind::Clear,
+            .role = phenotype::MaterialSurfaceRole::Toolbar,
+            .segment = phenotype::GlassSplitButtonSegment::Single,
+            .selected = false,
+            .disabled = false,
+            .container_id = 2100u,
+            .spacing = 16.0f,
+            .width = k_toolbar_icon_button_width,
+            .height = k_toolbar_icon_button_height,
+            .border_radius = 18.0f,
+        });
     phenotype::widget::symbol_button<Msg>(
         phenotype::str{semantic_label},
         phenotype::icons::Symbol::SortGroup,
@@ -2051,7 +2066,8 @@ void sort_action_button(file_explorer_demo::Snapshot const& snap) {
             .width = k_toolbar_icon_button_width,
             .height = k_toolbar_icon_button_height,
             .token_salt = 0x6501u,
-        });
+        },
+        style);
 }
 
 void file_action_button(char const* label,
