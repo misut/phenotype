@@ -155,6 +155,12 @@ On macOS, the same runtime object reports live `NSWindow` chrome state:
 transparent titlebar, full-size content view, hidden native title, and
 background dragging must all be enabled. These fields are actual platform
 readbacks, not request echoes.
+For the live sidebar glass path, the runtime also asserts a non-opaque
+`NSWindow`, clear AppKit background, non-opaque `CAMetalLayer`,
+`NSVisualEffectView` under-window-background underlay with behind-window blending, alpha-0
+drawable clear, and zero full-frame opaque fills. That last check matters
+because a transparent native compositor is still hidden if the application root
+paints an opaque background over the whole drawable.
 On macOS it additionally checks WindowServer bounds, onscreen state, artifact
 capture readiness, active-Space collection behavior, and key/main window state,
 which catches regressions where the process owns a Dock icon but the ordered

@@ -606,6 +606,11 @@ inline SEL sel_release() {
     return sel;
 }
 
+inline SEL sel_retain() {
+    static auto sel = sel_registerName("retain");
+    return sel;
+}
+
 inline SEL sel_perform_key_equivalent() {
     static auto sel = sel_registerName("performKeyEquivalent:");
     return sel;
@@ -1959,6 +1964,7 @@ struct FrameScratch {
     std::vector<MaterialRuntimeRecord> material_records;
     std::uint32_t foreground_text_candidate_count = 0;
     std::uint32_t foreground_text_remap_count = 0;
+    std::uint32_t full_frame_opaque_fill_count = 0;
 
     // Per-FillPath scratch buffers, reused across every Cmd::FillPath
     // decode in a single frame. CAD HATCH-heavy content (e.g.
@@ -1994,6 +2000,7 @@ struct FrameScratch {
         material_records.clear();
         foreground_text_candidate_count = 0;
         foreground_text_remap_count = 0;
+        full_frame_opaque_fill_count = 0;
         overlay_text_first = 0;
         overlay_text_count = 0;
     }
@@ -2586,6 +2593,22 @@ inline bool is_http_url(std::string const& url) {
     return cppx::resource::is_remote(url);
 }
 
+inline bool fills_logical_viewport(float x, float y, float w, float h,
+                                   MaterialEnvironment const& env) noexcept {
+    float const scale = env.render_target.scale > 0.0f
+        ? env.render_target.scale
+        : 1.0f;
+    float const logical_width =
+        static_cast<float>(env.render_target.width) / scale;
+    float const logical_height =
+        static_cast<float>(env.render_target.height) / scale;
+    constexpr float tolerance = 0.75f;
+    return std::fabs(x) <= tolerance
+        && std::fabs(y) <= tolerance
+        && std::fabs(w - logical_width) <= tolerance
+        && std::fabs(h - logical_height) <= tolerance;
+}
+
 inline std::filesystem::path resolve_image_path(std::string const& url) {
     return cppx::resource::resolve_path(
         std::filesystem::current_path(),
@@ -2634,6 +2657,10 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     || !reader.read_u32(packed))
                     return false;
                 auto color = unpack_color(packed);
+                if (color.a == 255
+                    && fills_logical_viewport(x, y, w, h, material_env)) {
+                    ++scratch.full_frame_opaque_fill_count;
+                }
                 append_color_instance(
                     scratch.batches.back().colors,
                     x, y, w, h,
@@ -4873,6 +4900,10 @@ struct RendererState {
     int drawable_height = 0;
     int last_render_width = 0;
     int last_render_height = 0;
+    double last_clear_alpha = 1.0;
+    bool last_clear_alpha_for_transparent_window = false;
+    std::uint32_t last_full_frame_opaque_fill_count = 0;
+    bool last_transparent_window_has_opaque_frame_fill = false;
     std::uint32_t material_frame_sequence = 0;
     MacOSAccessibilityDisplayOptions accessibility_options{};
     MaterialExecutorSummary material_executor_summary{};
@@ -7276,13 +7307,103 @@ inline bool input_dismiss_transient() {
     return true;
 }
 
+inline bool is_visual_effect_view(id view) {
+    auto cls = static_cast<Class>(objc_getClass("NSVisualEffectView"));
+    if (!view || !cls || !objc_responds_to(view, sel_registerName("isKindOfClass:")))
+        return false;
+    return objc_send<signed char>(
+        view,
+        sel_registerName("isKindOfClass:"),
+        cls) != 0;
+}
+
+inline bool install_integrated_titlebar_backdrop_underlay(
+        NativeSurfaceDescriptor* surface,
+        id ns_window) {
+    if (!surface || !ns_window)
+        return false;
+
+    id content_view = surface_content_view(surface);
+    if (!content_view)
+        return false;
+
+    id window_content = objc_send<id>(ns_window, sel_content_view());
+    id content_superview = objc_responds_to(content_view, sel_superview())
+        ? objc_send<id>(content_view, sel_superview())
+        : nullptr;
+    if (is_visual_effect_view(window_content)
+        && content_superview == window_content) {
+        return true;
+    }
+    if (window_content != content_view)
+        return false;
+
+    auto effect_class = static_cast<Class>(objc_getClass("NSVisualEffectView"));
+    if (!effect_class)
+        return false;
+
+    CGRect bounds = objc_responds_to(content_view, sel_bounds())
+        ? objc_send<CGRect>(content_view, sel_bounds())
+        : CGRect{};
+    id effect_view = objc_send<id>(
+        objc_send<id>(class_as_id(effect_class), sel_alloc()),
+        sel_init_with_frame(),
+        bounds);
+    if (!effect_view)
+        return false;
+
+    constexpr unsigned long view_width_sizable = 1ul << 1;
+    constexpr unsigned long view_height_sizable = 1ul << 4;
+    constexpr long visual_effect_material_under_window_background = 21;
+    constexpr long visual_effect_blending_behind_window = 0;
+    constexpr long visual_effect_state_active = 1;
+    objc_send<void>(
+        effect_view,
+        sel_registerName("setAutoresizingMask:"),
+        view_width_sizable | view_height_sizable);
+    objc_send<void>(
+        effect_view,
+        sel_registerName("setMaterial:"),
+        visual_effect_material_under_window_background);
+    objc_send<void>(
+        effect_view,
+        sel_registerName("setBlendingMode:"),
+        visual_effect_blending_behind_window);
+    objc_send<void>(
+        effect_view,
+        sel_registerName("setState:"),
+        visual_effect_state_active);
+    if (objc_responds_to(effect_view, sel_registerName("setEmphasized:"))) {
+        objc_send<void>(
+            effect_view,
+            sel_registerName("setEmphasized:"),
+            static_cast<signed char>(1));
+    }
+
+    objc_send<id>(content_view, sel_retain());
+    objc_send<void>(
+        ns_window,
+        sel_registerName("setContentView:"),
+        effect_view);
+    objc_send<void>(content_view, sel_set_frame(), bounds);
+    objc_send<void>(
+        content_view,
+        sel_registerName("setAutoresizingMask:"),
+        view_width_sizable | view_height_sizable);
+    objc_send<void>(effect_view, sel_add_subview(), content_view);
+    objc_send<void>(content_view, sel_release());
+    objc_send<void>(effect_view, sel_release());
+    return true;
+}
+
 inline void configure_window(native_surface_handle handle,
                              WindowOptions const* options) {
     if (!handle || !options
         || options->chrome != WindowChromeStyle::IntegratedTitlebar)
         return;
 
-    auto ns_window = surface_ns_window(desktop_surface(handle));
+    auto surface = desktop_surface(handle);
+    auto ns_window = surface_ns_window(surface);
     if (!ns_window)
         return;
 
@@ -7323,6 +7444,7 @@ inline void configure_window(native_surface_handle handle,
                 clear_color);
         }
     }
+    (void)install_integrated_titlebar_backdrop_underlay(surface, ns_window);
 }
 
 inline void renderer_init(native_surface_handle handle) {
@@ -7512,6 +7634,16 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         pool->release();
         return;
     }
+    if (transparent_window_surface)
+        ca = 0.0;
+    g_renderer.last_clear_alpha = ca;
+    g_renderer.last_clear_alpha_for_transparent_window =
+        transparent_window_surface && ca == 0.0;
+    g_renderer.last_full_frame_opaque_fill_count =
+        g_renderer.scratch.full_frame_opaque_fill_count;
+    g_renderer.last_transparent_window_has_opaque_frame_fill =
+        transparent_window_surface
+        && g_renderer.last_full_frame_opaque_fill_count > 0;
     auto const decode_ns = metrics::detail::now_ns() - decode_started;
     metrics::inst::native_phase_duration.record(
         decode_ns,
@@ -8140,6 +8272,10 @@ inline void renderer_shutdown() {
     g_renderer.material_backdrop_height = 0;
     g_renderer.last_render_width = 0;
     g_renderer.last_render_height = 0;
+    g_renderer.last_clear_alpha = 1.0;
+    g_renderer.last_clear_alpha_for_transparent_window = false;
+    g_renderer.last_full_frame_opaque_fill_count = 0;
+    g_renderer.last_transparent_window_has_opaque_frame_fill = false;
     g_renderer.material_frame_sequence = 0;
     g_renderer.material_backdrop_luma_skipped_sample_count = 0;
     g_renderer.last_material_backdrop_luma_sample_count = 0;
@@ -8862,6 +8998,21 @@ inline json::Object macos_renderer_runtime_json() {
         "last_frame_available",
         json::Value{g_renderer.last_frame_available});
     renderer.emplace(
+        "clear_alpha",
+        json::Value{g_renderer.last_clear_alpha});
+    renderer.emplace(
+        "clear_alpha_for_transparent_window",
+        json::Value{g_renderer.last_clear_alpha_for_transparent_window});
+    renderer.emplace(
+        "full_frame_opaque_fill_count",
+        json::Value{
+            static_cast<std::int64_t>(
+                g_renderer.last_full_frame_opaque_fill_count)});
+    renderer.emplace(
+        "transparent_window_has_opaque_frame_fill",
+        json::Value{
+            g_renderer.last_transparent_window_has_opaque_frame_fill});
+    renderer.emplace(
         "readback_texture_ready",
         json::Value{g_renderer.debug_capture_texture != nullptr});
     renderer.emplace(
@@ -9455,6 +9606,48 @@ inline WindowServerSnapshot window_server_snapshot(id ns_window) {
     return snapshot;
 }
 
+inline char const* visual_effect_material_name(long value) noexcept {
+    switch (value) {
+    case 3: return "titlebar";
+    case 4: return "selection";
+    case 5: return "menu";
+    case 6: return "popover";
+    case 7: return "sidebar";
+    case 10: return "header-view";
+    case 11: return "sheet";
+    case 12: return "window-background";
+    case 13: return "hud-window";
+    case 15: return "fullscreen-ui";
+    case 17: return "tooltip";
+    case 18: return "content-background";
+    case 21: return "under-window-background";
+    case 22: return "under-page-background";
+    case 0: return "appearance-based";
+    case 1: return "light";
+    case 2: return "dark";
+    case 8: return "medium-light";
+    case 9: return "ultra-dark";
+    default: return "unknown";
+    }
+}
+
+inline char const* visual_effect_blending_mode_name(long value) noexcept {
+    switch (value) {
+    case 0: return "behind-window";
+    case 1: return "within-window";
+    default: return "unknown";
+    }
+}
+
+inline char const* visual_effect_state_name(long value) noexcept {
+    switch (value) {
+    case 0: return "follows-window-active-state";
+    case 1: return "active";
+    case 2: return "inactive";
+    default: return "unknown";
+    }
+}
+
 inline json::Object macos_window_runtime_json() {
     auto const* surface = g_renderer.surface;
     auto ns_window = g_renderer.ns_window;
@@ -9499,6 +9692,41 @@ inline json::Object macos_window_runtime_json() {
         && objc_send<bool>(
             reinterpret_cast<id>(g_renderer.layer),
             sel_is_opaque());
+    id window_content_view = ns_window
+        ? objc_send<id>(ns_window, sel_content_view())
+        : nullptr;
+    id content_superview = content_view
+        && objc_responds_to(content_view, sel_superview())
+        ? objc_send<id>(content_view, sel_superview())
+        : nullptr;
+    bool const native_backdrop_underlay_enabled =
+        is_visual_effect_view(window_content_view)
+        && content_superview == window_content_view;
+    long const native_backdrop_material =
+        native_backdrop_underlay_enabled
+        && objc_responds_to(window_content_view, sel_registerName("material"))
+            ? objc_send<long>(window_content_view, sel_registerName("material"))
+            : -1;
+    long const native_backdrop_blending_mode =
+        native_backdrop_underlay_enabled
+        && objc_responds_to(
+            window_content_view,
+            sel_registerName("blendingMode"))
+            ? objc_send<long>(
+                window_content_view,
+                sel_registerName("blendingMode"))
+            : -1;
+    long const native_backdrop_state =
+        native_backdrop_underlay_enabled
+        && objc_responds_to(window_content_view, sel_registerName("state"))
+            ? objc_send<long>(window_content_view, sel_registerName("state"))
+            : -1;
+    bool const native_backdrop_emphasized =
+        native_backdrop_underlay_enabled
+        && objc_responds_to(window_content_view, sel_registerName("isEmphasized"))
+        && objc_send<signed char>(
+            window_content_view,
+            sel_registerName("isEmphasized")) != 0;
     bool const app_active = ns_app
         && objc_send<bool>(ns_app, sel_is_active());
     bool const window_visible = ns_window
@@ -9558,6 +9786,28 @@ inline json::Object macos_window_runtime_json() {
             static_cast<std::int64_t>(
                 background_rgba.has_value() ? background_rgba->a : 255)});
     window.emplace("metal_layer_opaque", json::Value{metal_layer_opaque});
+    window.emplace(
+        "native_backdrop_underlay_enabled",
+        json::Value{native_backdrop_underlay_enabled});
+    window.emplace(
+        "native_backdrop_underlay_kind",
+        json::Value{
+            native_backdrop_underlay_enabled
+                ? "nsvisualeffectview"
+                : "none"});
+    window.emplace(
+        "native_backdrop_underlay_material",
+        json::Value{visual_effect_material_name(native_backdrop_material)});
+    window.emplace(
+        "native_backdrop_underlay_blending_mode",
+        json::Value{
+            visual_effect_blending_mode_name(native_backdrop_blending_mode)});
+    window.emplace(
+        "native_backdrop_underlay_state",
+        json::Value{visual_effect_state_name(native_backdrop_state)});
+    window.emplace(
+        "native_backdrop_underlay_emphasized",
+        json::Value{native_backdrop_emphasized});
     window.emplace(
         "native_window_controls",
         native_window_controls_runtime_json(

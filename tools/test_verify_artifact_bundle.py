@@ -1816,6 +1816,12 @@ def snapshot_with_file_explorer_chrome(
         "window_background_clear": True,
         "window_background_alpha": 0,
         "metal_layer_opaque": False,
+        "native_backdrop_underlay_enabled": True,
+        "native_backdrop_underlay_kind": "nsvisualeffectview",
+        "native_backdrop_underlay_material": "under-window-background",
+        "native_backdrop_underlay_blending_mode": "behind-window",
+        "native_backdrop_underlay_state": "active",
+        "native_backdrop_underlay_emphasized": True,
         "native_window_controls": {
             "ownership_policy": "platform_edge_standard_buttons_only",
             "integration_policy": (
@@ -1834,6 +1840,13 @@ def snapshot_with_file_explorer_chrome(
             "artifact_drawn_window_control_count": 0,
         },
     }
+    debug["platform_runtime"]["details"]["renderer"]["clear_alpha"] = 0
+    debug["platform_runtime"]["details"]["renderer"][
+        "clear_alpha_for_transparent_window"] = True
+    debug["platform_runtime"]["details"]["renderer"][
+        "full_frame_opaque_fill_count"] = 0
+    debug["platform_runtime"]["details"]["renderer"][
+        "transparent_window_has_opaque_frame_fill"] = False
     return root
 
 
@@ -2336,6 +2349,16 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         runtime_window["window_background_clear"] = False
         runtime_window["window_background_alpha"] = 255
         runtime_window["metal_layer_opaque"] = True
+        runtime_window["native_backdrop_underlay_enabled"] = False
+        runtime_window["native_backdrop_underlay_kind"] = "none"
+        runtime_window["native_backdrop_underlay_material"] = "none"
+        runtime_window["native_backdrop_underlay_blending_mode"] = "none"
+        runtime_window["native_backdrop_underlay_state"] = "none"
+        runtime_renderer = snap["debug"]["platform_runtime"]["details"]["renderer"]
+        runtime_renderer["clear_alpha"] = 1
+        runtime_renderer["clear_alpha_for_transparent_window"] = False
+        runtime_renderer["full_frame_opaque_fill_count"] = 1
+        runtime_renderer["transparent_window_has_opaque_frame_fill"] = True
 
         code, report = self.run_verifier(snap)
 
@@ -2343,10 +2366,10 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         failure = next(
             item for item in report["failures"]
             if item["name"] == (
-                "file explorer macOS window is transparent "
-                "for sidebar backdrop"))
+                "file explorer macOS window has native wallpaper "
+                "backdrop underlay"))
         self.assertEqual(failure["likely_layer"], "native-window-composition")
-        self.assertEqual(failure["likely_pass"], "appkit-metal-layer")
+        self.assertEqual(failure["likely_pass"], "appkit-visual-effect-underlay")
         self.assertIn("CAMetalLayer stays opaque", failure["hint"])
         self.assertEqual(
             failure["actual"],
@@ -2355,6 +2378,15 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "window_background_clear": False,
                 "window_background_alpha": 255,
                 "metal_layer_opaque": True,
+                "native_backdrop_underlay_enabled": False,
+                "native_backdrop_underlay_kind": "none",
+                "native_backdrop_underlay_material": "none",
+                "native_backdrop_underlay_blending_mode": "none",
+                "native_backdrop_underlay_state": "none",
+                "renderer_clear_alpha": 1,
+                "renderer_clear_alpha_for_transparent_window": False,
+                "renderer_full_frame_opaque_fill_count": 1,
+                "renderer_transparent_window_has_opaque_frame_fill": True,
             })
 
     def test_file_explorer_finder_visual_contract_rejects_drift(self) -> None:

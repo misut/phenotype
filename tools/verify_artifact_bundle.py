@@ -1593,6 +1593,7 @@ def check_file_explorer_native_chrome_contract(
                 "before adding content-side controls."))
 
         runtime_window = object_at(debug, "platform_runtime.details.window")
+        runtime_renderer = object_at(debug, "platform_runtime.details.renderer")
         if isinstance(runtime_window, dict) and (
                 runtime_window.get("surface_kind") == "macos_window"):
             composition_actual = {
@@ -1603,28 +1604,85 @@ def check_file_explorer_native_chrome_contract(
                     "window_background_alpha"),
                 "metal_layer_opaque": runtime_window.get(
                     "metal_layer_opaque"),
+                "native_backdrop_underlay_enabled": runtime_window.get(
+                    "native_backdrop_underlay_enabled"),
+                "native_backdrop_underlay_kind": runtime_window.get(
+                    "native_backdrop_underlay_kind"),
+                "native_backdrop_underlay_material": runtime_window.get(
+                    "native_backdrop_underlay_material"),
+                "native_backdrop_underlay_blending_mode": runtime_window.get(
+                    "native_backdrop_underlay_blending_mode"),
+                "native_backdrop_underlay_state": runtime_window.get(
+                    "native_backdrop_underlay_state"),
+                "renderer_clear_alpha": (
+                    runtime_renderer.get("clear_alpha")
+                    if isinstance(runtime_renderer, dict) else None),
+                "renderer_clear_alpha_for_transparent_window": (
+                    runtime_renderer.get("clear_alpha_for_transparent_window")
+                    if isinstance(runtime_renderer, dict) else None),
+                "renderer_full_frame_opaque_fill_count": (
+                    runtime_renderer.get("full_frame_opaque_fill_count")
+                    if isinstance(runtime_renderer, dict) else None),
+                "renderer_transparent_window_has_opaque_frame_fill": (
+                    runtime_renderer.get(
+                        "transparent_window_has_opaque_frame_fill")
+                    if isinstance(runtime_renderer, dict) else None),
             }
             report.check(
-                "file explorer macOS window is transparent for sidebar backdrop",
+                "file explorer macOS window has native wallpaper backdrop underlay",
                 composition_actual["window_opaque"] is False
                 and composition_actual["window_background_clear"] is True
                 and composition_actual["window_background_alpha"] == 0
-                and composition_actual["metal_layer_opaque"] is False,
+                and composition_actual["metal_layer_opaque"] is False
+                and composition_actual["native_backdrop_underlay_enabled"] is True
+                and composition_actual["native_backdrop_underlay_kind"]
+                    == "nsvisualeffectview"
+                and composition_actual["native_backdrop_underlay_material"]
+                    == "under-window-background"
+                and composition_actual["native_backdrop_underlay_blending_mode"]
+                    == "behind-window"
+                and composition_actual["native_backdrop_underlay_state"]
+                    == "active"
+                and composition_actual["renderer_clear_alpha"] == 0
+                and (
+                    composition_actual[
+                        "renderer_clear_alpha_for_transparent_window"] is True)
+                and (
+                    composition_actual[
+                        "renderer_full_frame_opaque_fill_count"] == 0)
+                and (
+                    composition_actual[
+                        "renderer_transparent_window_has_opaque_frame_fill"]
+                    is False),
                 path="debug.platform_runtime.details.window",
                 expected={
                     "window_opaque": False,
                     "window_background_clear": True,
                     "window_background_alpha": 0,
                     "metal_layer_opaque": False,
+                    "native_backdrop_underlay_enabled": True,
+                    "native_backdrop_underlay_kind": "nsvisualeffectview",
+                    "native_backdrop_underlay_material": "under-window-background",
+                    "native_backdrop_underlay_blending_mode": "behind-window",
+                    "native_backdrop_underlay_state": "active",
+                    "renderer_clear_alpha": 0,
+                    "renderer_clear_alpha_for_transparent_window": True,
+                    "renderer_full_frame_opaque_fill_count": 0,
+                    "renderer_transparent_window_has_opaque_frame_fill": False,
                 },
                 actual=composition_actual,
                 likely_layer="native-window-composition",
-                likely_pass="appkit-metal-layer",
+                likely_pass="appkit-visual-effect-underlay",
                 hint=(
-                    "The Finder sidebar cannot reveal desktop/backdrop "
-                    "context if the NSWindow or CAMetalLayer stays opaque. "
-                    "Check configure_window(), renderer_init(), and the "
-                    "frame clear alpha for integrated titlebar windows."))
+                    "The Finder sidebar cannot reveal blurred desktop/backdrop "
+                    "context if the NSWindow/CAMetalLayer stays opaque or if "
+                    "the integrated-titlebar window lacks the AppKit "
+                    "NSVisualEffectView underlay, or if the renderer keeps the "
+                    "theme clear alpha/root full-frame fill opaque. Check "
+                    "configure_window(), "
+                    "renderer_init(), decode_frame_commands(), and the frame "
+                    "clear alpha/root background for integrated titlebar "
+                    "windows."))
             runtime_controls = object_at(runtime_window, "native_window_controls")
             actual = runtime_controls if isinstance(runtime_controls, dict) else None
             report.check(
