@@ -89,7 +89,7 @@ The first durable CLI should expose a small command tree with stable JSON:
 | `phenotype io contract` | Emit the pure input-frame and output-observation contract used by CLI/native adapters. | new |
 | `phenotype drive file-explorer` | Feed deterministic file workflow inputs into the shared desktop/mobile model. | new |
 | `phenotype drive glass-showcase` | Feed deterministic material probe inputs into the shared glass showcase model. | new |
-| `phenotype observe <artifact-or-run>` | Emit semantic tree, material plans, runtime summaries, pixel-region summaries, and likely failing pass/layer. | new |
+| `phenotype observe <artifact-or-run>` | Emit semantic tree, material plans, compact executor budget, runtime summaries, pixel-region summaries, and likely failing pass/layer. | new |
 
 Every command that can be used by CI must support:
 
@@ -128,7 +128,7 @@ Current commands:
 | `phenotype artifact verify <bundle>` | implemented | Edge wrapper that runs the uv-managed Python verifier through `mise` and forwards the verifier JSON report. |
 | `phenotype artifact verify-glass-showcase` | implemented | Local-only CLI-owned glass showcase build/capture/verifier gate, including accessibility mode, manifest override, expected-platform override, explicit bundle directory, and structured JSON for build/run/verifier/artifact state. PR CI should not run this slow native capture gate by default. Legacy `tools/verify_glass_showcase*.sh` entry points are thin compatibility wrappers that build and delegate to this command. |
 | `phenotype artifact verify-file-explorer` | implemented | Local-only edge wrapper around the desktop/mobile Finder-style artifact gate. Legacy `tools/verify_file_explorer_artifacts.sh` is now a thin build-and-delegate wrapper for this command. `--profile`, repeated `--view-mode`, and repeated `--scenario` narrow the capture set for faster local iteration before the full gate. |
-| `phenotype observe <bundle>` | implemented | C++ artifact observation envelope for LLM-actionable debugging. It parses `snapshot.json`, summarizes semantic/platform/runtime/material plan presence, material kinds/roles, fallback and backdrop capture reasons, executor counts, likely layer/pass hints, frame/platform files, and optionally embeds the uv-managed verifier report when `--manifest` or `--verify` is supplied. |
+| `phenotype observe <bundle>` | implemented | C++ artifact observation envelope for LLM-actionable debugging. It parses `snapshot.json`, summarizes semantic/platform/runtime/material plan presence, material kinds/roles, fallback and backdrop capture reasons, the compact `snapshot.material.executor_budget` counters and status strings, likely layer/pass hints, frame/platform files, and optionally embeds the uv-managed verifier report when `--manifest` or `--verify` is supplied. |
 | `phenotype android doctor/devices/emu-start/emu-stop/build/apk/install/launch/stop/run/logs/screencap/contract/clean` | implemented | Stable CLI namespace over the existing Android edge scripts and Android build command. `--json` emits a process/script result envelope, `--serial` forwards `ANDROID_SERIAL`, and `--state-dir`/`--avd`/`--apk` keep device state explicit. |
 | `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, CLI-owned debug verifier metadata, declared asset/locale/font counts, referenced `source` files, package-owned `app.icon` SVG/preload policy, Pretendard default-font policy, CJK fallback coverage, package resource directories, artifact manifest presence, pure resource-contract defaults, asset preload intent, locale fallback coverage, and per-SVG-asset parser inspections from `phenotype_svg_contract`. |
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
@@ -189,7 +189,8 @@ positional/error helpers, `phenotype_cli.commands` owns the `cppx.cli` command
 metadata, `phenotype_cli.command_tree` owns recursive command-tree JSON,
 `phenotype_cli.doctor` owns repository health and legacy-tool migration
 reporting, `phenotype_cli.artifacts` owns artifact summary, uv-managed verifier
-invocation, snapshot/material observation, and likely-layer suggestions,
+invocation, snapshot/material observation including compact executor budget
+visibility, and likely-layer suggestions,
 `phenotype_cli.contracts` owns the pure theme/IO contract commands,
 `phenotype_cli.file_explorer` owns file explorer observation, chrome/native
 window control, and drive JSON, `phenotype_cli.icons` owns icon/SVG command

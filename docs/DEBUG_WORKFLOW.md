@@ -117,7 +117,8 @@ mise exec -- exon build
 `observe` parses `snapshot.json` in C++ and reports semantic tree presence,
 platform capabilities, platform runtime details, material plan counts,
 material kinds and roles, fallback paths/reasons, backdrop sources and capture
-reasons, executor summary counts, frame/platform files, and likely
+reasons, a compact `snapshot.material.executor_budget` copied from
+`renderer.material_executor_summary`, frame/platform files, and likely
 layer/pass hints. Supplying `--manifest` or `--verify` also runs the
 uv-managed verifier and embeds its JSON report in the same envelope. Use this
 as the first artifact triage command when a CI log or local bundle needs one
@@ -202,7 +203,9 @@ mise exec -- exon build
 `artifact verify-glass-showcase` now owns the glass example build, native
 artifact capture, and uv-managed verifier call directly. Its JSON includes
 build/run/verifier exit state, artifact bundle presence, manifest path,
-expected platform, and accessibility display policy. `artifact
+expected platform, accessibility display policy, and the same compact material
+budget concepts that `phenotype observe` exposes under
+`snapshot.material.executor_budget`. `artifact
 verify-file-explorer` owns the shared-model test, desktop/mobile builds,
 deterministic native captures, and uv-managed verifier calls directly. Both
 commands are local verification commands, not default PR CI jobs.
