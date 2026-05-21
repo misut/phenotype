@@ -82,7 +82,8 @@ The initial scope is intentionally narrow:
   fallback and backdrop capture reasons, executor summaries, likely
   layer/pass hints, frame/platform file state, and optional uv-managed verifier
   output plus compact verifier material budget visibility when `--manifest`
-  or `--verify` is supplied.
+  or `--verify` is supplied. The human output prints compact material budget
+  blocks for snapshot and verifier counters when they are available.
 - `phenotype artifact verify-glass-showcase` owns the local glass showcase
   build, native artifact capture, and uv-managed verifier flow directly. It is
   intentionally local-only by default because native capture can be slow on CI;

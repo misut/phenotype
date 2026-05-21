@@ -643,6 +643,86 @@ auto artifact_observation_json(ArtifactObservation const& observation)
 }
 
 
+auto optional_bool_text(std::optional<bool> value) -> std::string {
+    if (!value)
+        return "unknown";
+    return *value ? "true" : "false";
+}
+
+void print_snapshot_material_budget(
+        MaterialExecutorBudgetObservation const& budget) {
+    if (!budget.present)
+        return;
+
+    std::println("snapshot material budget:");
+    std::println(
+        "  plans: {} sampled={} fallback={} stages={} active={} "
+        "backdrop-stages={} dropped={}",
+        budget_count(budget.plan_count),
+        budget_count(budget.sampled_backdrop_instance_count),
+        budget_count(budget.fallback_instance_count),
+        budget_count(budget.execution_stage_count),
+        budget_count(budget.active_execution_stage_count),
+        budget_count(budget.backdrop_execution_stage_count),
+        budget_count(budget.dropped_execution_stage_count));
+    std::println(
+        "  work: draw-calls={} taps={} max-taps={} upload={}/{} bytes "
+        "copy={}/{} px frame-capture={}/{} px surface-sample={} px",
+        budget_count(budget.draw_calls),
+        budget_count(budget.total_sample_taps),
+        budget_count(budget.max_sample_taps),
+        budget_count(budget.upload_bytes),
+        budget_count(budget.buffer_capacity_bytes),
+        budget_count(budget.backdrop_copy_pixels),
+        budget_count(budget.max_backdrop_pixels),
+        budget_count(budget.planned_frame_capture_count),
+        budget_count(budget.planned_frame_capture_pixels),
+        budget_count(budget.planned_surface_sample_pixels));
+    std::println(
+        "  status: upload={} draw={} uploaded={} drawn={} "
+        "copy-required={} copy-policy={} skip={}",
+        budget.upload_status,
+        budget.draw_status,
+        optional_bool_text(budget.uploaded),
+        optional_bool_text(budget.drawn),
+        optional_bool_text(budget.backdrop_copy_required),
+        budget.backdrop_copy_policy,
+        budget.backdrop_copy_skip_reason);
+}
+
+void print_verifier_material_budget(VerifierObservation const& verifier) {
+    if (!verifier.report)
+        return;
+    auto budget = material_budget_from_report(*verifier.report);
+    if (!budget)
+        return;
+
+    std::println("verifier material budget:");
+    std::println(
+        "  plans: {} sampled={} fallback={} stages={} backdrop-stages={}",
+        budget_count(budget->plan_count),
+        budget_count(budget->sampled_backdrop_instance_count),
+        budget_count(budget->fallback_instance_count),
+        budget_count(budget->execution_stage_count),
+        budget_count(budget->backdrop_execution_stage_count));
+    std::println(
+        "  work: draw-calls={} taps={} upload={}/{} bytes "
+        "copy={}/{} px surface-sample={} px",
+        budget_count(budget->draw_calls),
+        budget_count(budget->total_sample_taps),
+        budget_count(budget->upload_bytes),
+        budget_count(budget->buffer_capacity_bytes),
+        budget_count(budget->backdrop_copy_pixels),
+        budget_count(budget->max_backdrop_pixels),
+        budget_count(budget->planned_surface_sample_pixels));
+    std::println(
+        "  status: upload={} draw={} copy-policy={} skip={}",
+        budget->upload_status,
+        budget->draw_status,
+        budget->backdrop_copy_policy,
+        budget->backdrop_copy_skip_reason);
+}
+
 auto first_positional_or_error(cppx::cli::Invocation const& invocation,
                                std::string_view command_name)
     -> std::expected<fs::path, std::string> {
@@ -1046,6 +1126,9 @@ void print_artifact_observation(ArtifactObservation const& observation) {
     };
     std::println("phenotype observe artifact");
     std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    print_snapshot_material_budget(
+        observation.snapshot.material.executor_budget);
+    print_verifier_material_budget(observation.verifier);
     if (!observation.suggested_actions.empty()) {
         std::println("suggestions:");
         for (auto const& suggestion : observation.suggested_actions)
