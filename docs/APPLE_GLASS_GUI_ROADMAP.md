@@ -2,8 +2,9 @@
 
 Status: implementation baseline for `origin/main` after
 `feat(theme): add pure glass theme contract`, with the in-progress material
-runtime branch carrying the schema-38 material contract through
-`MaterialPlan.refraction` and `MaterialPlan.optical_composition`. This includes
+runtime branch carrying the schema-39 material contract through
+`MaterialPlan.refraction`, `MaterialPlan.optical_composition`, and executable
+stage-order auditing. This includes
 the pure material-planning boundary, macOS sampled-backdrop execution,
 deterministic fallback contracts on non-macOS backends, edge executor telemetry,
 pure observation/execution contracts, transparent native window composition for
@@ -309,6 +310,12 @@ the backend is expected to execute, compares them with the verifier-facing
 observation contract, and rolls the result into runtime and executor summaries.
 This makes a stale pass array, missing edge layer, or unbounded fallback visible
 as an explicit contract mismatch before a shader or native draw call is blamed.
+Schema 39 extends that audit from counts to ordering. The optical composition
+declares the expected shadow/primary/edge/noise order, the audit derives the
+actual order from `execution_stages[]`, and runtime/executor summaries expose
+stage-order match and mismatch counts. This keeps future Liquid Glass blur,
+highlight, refraction, and dither work from being reordered at the backend edge
+without a machine-readable artifact failure.
 Each surface's container policy stays explicit: spacing resolves
 to `blend_distance`, positive spacing drives `shape_blending_expected`, union ids
 select the union-proximity blend policy, Reduced Motion suppresses only morphing,

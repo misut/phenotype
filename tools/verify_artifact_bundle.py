@@ -366,6 +366,8 @@ ALLOWED_MATERIAL_OPTICAL_STAGE_ORDERS = {
     "shadow-primary-edge-noise",
     "shadow-primary-noise",
 }
+ALLOWED_MATERIAL_EXECUTION_STAGE_ORDERS = (
+    ALLOWED_MATERIAL_OPTICAL_STAGE_ORDERS | {"unexpected-stage-order"})
 
 ALLOWED_MATERIAL_OPTICAL_BACKDROP_CAPTURE_POLICIES = {
     "no-capture",
@@ -422,7 +424,7 @@ ALLOWED_MATERIAL_REFRACTION_SOURCES = {
     "sampled-backdrop-edge-refraction",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 38
+MATERIAL_PLAN_CONTRACT_VERSION = 39
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 MATERIAL_MAX_REFRACTION_OFFSET_PIXELS = 3.5
@@ -4114,6 +4116,7 @@ MATERIAL_OBSERVATION_STRING_FIELDS = (
     "fallback_reason",
     "primary_pass",
     "primary_executor",
+    "expected_stage_order",
     "region_name",
     "likely_layer",
     "likely_pass",
@@ -4130,6 +4133,7 @@ MATERIAL_EXECUTION_AUDIT_BOOL_FIELDS = (
     "shadow_paint_layers_match",
     "fill_paint_layers_match",
     "edge_paint_layers_match",
+    "stage_order_match",
     "bounded_texture_copy",
     "deterministic_fallback",
     "contract_satisfied",
@@ -4151,6 +4155,8 @@ MATERIAL_EXECUTION_AUDIT_INT_FIELDS = (
 )
 MATERIAL_EXECUTION_AUDIT_STRING_FIELDS = (
     "first_mismatch",
+    "expected_stage_order",
+    "actual_stage_order",
     "likely_layer",
     "likely_pass",
 )
@@ -4572,6 +4578,24 @@ def check_material_observation_contract(
             hint="Observation texture-copy bound should mirror MaterialPlan.primary_pass.",
             record_success=False)
 
+    optical_composition = plan.get("optical_composition")
+    if isinstance(optical_composition, dict):
+        expected_stage_order = optical_composition.get("stage_order")
+        report.check(
+            "material observation expected stage order matches optical composition",
+            observation.get("expected_stage_order") == expected_stage_order,
+            path=f"{observation_path}.expected_stage_order",
+            expected=expected_stage_order,
+            actual=observation.get("expected_stage_order"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint=(
+                "Observation expected_stage_order should mirror "
+                "MaterialPlan.optical_composition.stage_order so runtime "
+                "audits can compare pure optical order against executable "
+                "stages."),
+            record_success=False)
+
     passes = plan.get("passes")
     if isinstance(passes, list):
         active_passes = sum(
@@ -4814,7 +4838,12 @@ def check_material_execution_audit(
                 record_success=False)
 
     execution_stages = plan.get("execution_stages")
+    derived_stage_order: str | None = None
     if isinstance(execution_stages, list):
+        derived_stage_order = actual_execution_stage_order(
+            execution_stages,
+            plan.get("primary_pass")
+            if isinstance(plan.get("primary_pass"), dict) else None)
         actuals = {
             "actual_execution_stages": len(execution_stages),
             "actual_active_execution_stages": sum(
@@ -4836,6 +4865,58 @@ def check_material_execution_audit(
                 likely_pass=audit_likely_pass,
                 hint="Execution audit stage counts should mirror MaterialPlan.execution_stages.",
                 record_success=False)
+        report.check(
+            "material execution audit actual stage order matches stages",
+            audit.get("actual_stage_order") == derived_stage_order,
+            path=f"{audit_path}.actual_stage_order",
+            expected=derived_stage_order,
+            actual=audit.get("actual_stage_order"),
+            likely_layer="material-execution-contract",
+            likely_pass=audit_likely_pass,
+            hint=(
+                "actual_stage_order must be derived from the serialized "
+                "execution_stages array so stage reordering cannot hide behind "
+                "count-only telemetry."),
+            record_success=False)
+
+    expected_stage_order = None
+    observation_for_order = plan.get("observation_contract")
+    if isinstance(observation_for_order, dict):
+        expected_stage_order = observation_for_order.get("expected_stage_order")
+    optical_composition_for_order = plan.get("optical_composition")
+    if expected_stage_order is None and isinstance(
+            optical_composition_for_order,
+            dict):
+        expected_stage_order = optical_composition_for_order.get("stage_order")
+    if isinstance(expected_stage_order, str):
+        report.check(
+            "material execution audit expected stage order matches observation",
+            audit.get("expected_stage_order") == expected_stage_order,
+            path=f"{audit_path}.expected_stage_order",
+            expected=expected_stage_order,
+            actual=audit.get("expected_stage_order"),
+            likely_layer="material-execution-contract",
+            likely_pass=audit_likely_pass,
+            hint=(
+                "Execution audit should copy observation.expected_stage_order "
+                "before comparing it to executable stages."),
+            record_success=False)
+    for key, allowed in (
+            ("expected_stage_order", ALLOWED_MATERIAL_OPTICAL_STAGE_ORDERS),
+            ("actual_stage_order", ALLOWED_MATERIAL_EXECUTION_STAGE_ORDERS)):
+        value = audit.get(key)
+        report.check(
+            f"material execution audit {key} is known",
+            value in allowed,
+            path=f"{audit_path}.{key}",
+            expected=sorted(allowed),
+            actual=value,
+            likely_layer="material-execution-contract",
+            likely_pass=audit_likely_pass,
+            hint=(
+                "Stage order audit strings must use stable vocabulary so CI "
+                "can distinguish planned optical order from executable order."),
+            record_success=False)
 
     paint_layers = plan.get("paint_layers")
     if isinstance(paint_layers, list):
@@ -4904,6 +4985,28 @@ def check_material_execution_audit(
                     "Execution audit match flags should compare "
                     "observation_contract expectations with actual plan counts."),
                 record_success=False)
+        expected_stage_order_for_match = observation.get("expected_stage_order")
+        actual_stage_order_for_match = audit.get("actual_stage_order")
+        expected_match = (
+            isinstance(expected_stage_order_for_match, str)
+            and expected_stage_order_for_match == actual_stage_order_for_match)
+        if not expected_match:
+            mismatch_count += 1
+            if first_mismatch == "none":
+                first_mismatch = "stage-order"
+        report.check(
+            "material execution audit stage_order_match matches observation",
+            audit.get("stage_order_match") == expected_match,
+            path=f"{audit_path}.stage_order_match",
+            expected=expected_match,
+            actual=audit.get("stage_order_match"),
+            likely_layer="material-execution-contract",
+            likely_pass=audit_likely_pass,
+            hint=(
+                "Stage order must compare observation.expected_stage_order "
+                "against execution_audit.actual_stage_order, not just count "
+                "stage entries."),
+            record_success=False)
         for audit_key, observation_key, mismatch_name in (
                 ("bounded_texture_copy", "bounded_texture_copy_required", "bounded-texture-copy"),
                 ("deterministic_fallback", "deterministic_fallback_required", "deterministic-fallback")):
@@ -5127,6 +5230,39 @@ def expected_optical_stage_order(
             and float(noise_opacity) > 0.0):
         stages.append("noise")
     return "-".join(stages)
+
+
+def execution_stage_role(
+        stage: JsonObject,
+        primary_pass: JsonObject | None) -> str:
+    name = string_at(stage, "name")
+    if name == "shape-shadow":
+        return "shadow"
+    if name == "edge-highlight":
+        return "edge"
+    if name == "noise-dither":
+        return "noise"
+    if isinstance(primary_pass, dict) and name == primary_pass.get("name"):
+        return "primary"
+    return "unknown"
+
+
+def actual_execution_stage_order(
+        execution_stages: Any,
+        primary_pass: JsonObject | None) -> str | None:
+    if not isinstance(execution_stages, list):
+        return None
+    if not execution_stages:
+        return "none"
+    roles: list[str] = []
+    for stage in execution_stages:
+        if not isinstance(stage, dict):
+            return "unexpected-stage-order"
+        roles.append(execution_stage_role(stage, primary_pass))
+    order = "-".join(roles)
+    if order in ALLOWED_MATERIAL_OPTICAL_STAGE_ORDERS:
+        return order
+    return "unexpected-stage-order"
 
 
 def expected_optical_backdrop_capture_policy(
@@ -5505,7 +5641,10 @@ def summarize_material_plans(
             "satisfied": 0,
             "mismatched": 0,
             "mismatch_total": 0,
+            "stage_order_matched": 0,
+            "stage_order_mismatched": 0,
             "first_mismatch": "none",
+            "first_stage_order_mismatch": "none",
         },
         "quality_policy": {
             "backdrop_sampling_disabled": 0,
@@ -11357,6 +11496,16 @@ def summarize_material_plans(
                 audit_summary["mismatch_total"] = (
                     int(audit_summary["mismatch_total"])
                     + int(mismatch_count))
+            if execution_audit.get("stage_order_match") is True:
+                audit_summary["stage_order_matched"] = (
+                    int(audit_summary["stage_order_matched"]) + 1)
+            else:
+                audit_summary["stage_order_mismatched"] = (
+                    int(audit_summary["stage_order_mismatched"]) + 1)
+                if audit_summary["first_stage_order_mismatch"] == "none":
+                    audit_summary["first_stage_order_mismatch"] = (
+                        execution_audit.get("actual_stage_order")
+                        or "unknown")
     group_summary = summary["container_groups"]
     group_summary["group_count"] = len(container_group_accumulators)
     for group in container_group_accumulators.values():
@@ -12536,8 +12685,13 @@ def check_material_runtime_summary_contract(
         "execution_contract_mismatch_count": execution_audit.get("mismatched"),
         "execution_contract_mismatch_total": execution_audit.get(
             "mismatch_total"),
+        "stage_order_match_count": execution_audit.get("stage_order_matched"),
+        "stage_order_mismatch_count": execution_audit.get(
+            "stage_order_mismatched"),
         "first_execution_contract_mismatch": execution_audit.get(
             "first_mismatch"),
+        "first_stage_order_mismatch": execution_audit.get(
+            "first_stage_order_mismatch"),
     }
     for field, expected in expected_fields.items():
         actual = runtime_summary.get(field)
@@ -12660,8 +12814,13 @@ def check_material_executor_summary_contract(
         "execution_contract_mismatch_count": execution_audit.get("mismatched"),
         "execution_contract_mismatch_total": execution_audit.get(
             "mismatch_total"),
+        "stage_order_match_count": execution_audit.get("stage_order_matched"),
+        "stage_order_mismatch_count": execution_audit.get(
+            "stage_order_mismatched"),
         "first_execution_contract_mismatch": execution_audit.get(
             "first_mismatch"),
+        "first_stage_order_mismatch": execution_audit.get(
+            "first_stage_order_mismatch"),
     })
     render_target = summary.get("render_target")
     if not isinstance(render_target, dict):
@@ -12749,6 +12908,8 @@ def check_material_executor_summary_contract(
         "execution_contract_satisfied_count",
         "execution_contract_mismatch_count",
         "execution_contract_mismatch_total",
+        "stage_order_match_count",
+        "stage_order_mismatch_count",
         "foreground_text_candidate_count",
         "foreground_text_remap_count",
         "backdrop_descriptor_luma_min",

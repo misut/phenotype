@@ -1260,6 +1260,9 @@ namespace detail {
             "primary_executor",
             json::Value{observation.primary_executor});
         observation_contract.emplace(
+            "expected_stage_order",
+            json::Value{observation.expected_stage_order});
+        observation_contract.emplace(
             "expected_runtime_passes",
             json::Value{
                 static_cast<std::int64_t>(
@@ -1421,6 +1424,9 @@ namespace detail {
             "edge_paint_layers_match",
             json::Value{audit.edge_paint_layers_match});
         execution_audit.emplace(
+            "stage_order_match",
+            json::Value{audit.stage_order_match});
+        execution_audit.emplace(
             "bounded_texture_copy",
             json::Value{audit.bounded_texture_copy});
         execution_audit.emplace(
@@ -1435,6 +1441,16 @@ namespace detail {
         execution_audit.emplace(
             "first_mismatch",
             json::Value{audit.first_mismatch ? audit.first_mismatch : "none"});
+        execution_audit.emplace(
+            "expected_stage_order",
+            json::Value{audit.expected_stage_order
+                            ? audit.expected_stage_order
+                            : "none"});
+        execution_audit.emplace(
+            "actual_stage_order",
+            json::Value{audit.actual_stage_order
+                            ? audit.actual_stage_order
+                            : "none"});
         execution_audit.emplace(
             "likely_layer",
             json::Value{audit.likely_layer
@@ -2761,9 +2777,22 @@ namespace detail {
             json::Value{static_cast<std::int64_t>(
                 summary.execution_contract_mismatch_total)});
         out.emplace(
+            "stage_order_match_count",
+            json::Value{static_cast<std::int64_t>(
+                summary.stage_order_match_count)});
+        out.emplace(
+            "stage_order_mismatch_count",
+            json::Value{static_cast<std::int64_t>(
+                summary.stage_order_mismatch_count)});
+        out.emplace(
             "first_execution_contract_mismatch",
             json::Value{summary.first_execution_contract_mismatch
                             ? summary.first_execution_contract_mismatch
+                            : "none"});
+        out.emplace(
+            "first_stage_order_mismatch",
+            json::Value{summary.first_stage_order_mismatch
+                            ? summary.first_stage_order_mismatch
                             : "none"});
         return json::Value{std::move(out)};
     }
@@ -2967,9 +2996,22 @@ namespace detail {
             json::Value{static_cast<std::int64_t>(
                 summary.execution_contract_mismatch_total)});
         out.emplace(
+            "stage_order_match_count",
+            json::Value{static_cast<std::int64_t>(
+                summary.stage_order_match_count)});
+        out.emplace(
+            "stage_order_mismatch_count",
+            json::Value{static_cast<std::int64_t>(
+                summary.stage_order_mismatch_count)});
+        out.emplace(
             "first_execution_contract_mismatch",
             json::Value{summary.first_execution_contract_mismatch
                             ? summary.first_execution_contract_mismatch
+                            : "none"});
+        out.emplace(
+            "first_stage_order_mismatch",
+            json::Value{summary.first_stage_order_mismatch
+                            ? summary.first_stage_order_mismatch
                             : "none"});
         out.emplace(
             "foreground_text_candidate_count",

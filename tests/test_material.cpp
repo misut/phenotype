@@ -58,7 +58,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 38);
+    assert(material_plan_contract_version == 39);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -76,6 +76,15 @@ void test_sampled_backdrop_access_contract() {
            == plan.observation_contract.expected_runtime_passes);
     assert(plan.execution_audit.actual_execution_stages
            == plan.observation_contract.expected_execution_stages);
+    assert(std::string_view(plan.observation_contract.expected_stage_order)
+           == std::string_view(plan.optical_composition.stage_order));
+    assert(plan.execution_audit.stage_order_match);
+    assert(std::string_view(plan.execution_audit.expected_stage_order)
+           == "shadow-primary-edge-noise");
+    assert(std::string_view(plan.execution_audit.actual_stage_order)
+           == "shadow-primary-edge-noise");
+    assert(std::string_view(material_execution_stage_order_name(plan))
+           == "shadow-primary-edge-noise");
     assert(std::string_view(plan.interaction.enablement_reason)
         == "noninteractive-container");
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
@@ -973,6 +982,10 @@ void test_container_group_runtime_summary_contract() {
     assert(runtime_summary.max_paint_layer_count == 3u);
     assert(runtime_summary.max_paint_layers == material_max_paint_layers);
     assert(runtime_summary.max_paint_layer_inflate > 0.0f);
+    assert(runtime_summary.stage_order_match_count == records.size());
+    assert(runtime_summary.stage_order_mismatch_count == 0u);
+    assert(std::string_view(runtime_summary.first_stage_order_mismatch)
+           == "none");
 
     MaterialExecutorSummary executor_summary{};
     for (auto const& record : records)
@@ -988,7 +1001,11 @@ void test_container_group_runtime_summary_contract() {
     assert(executor_summary.fill_paint_layer_count == 1u);
     assert(executor_summary.edge_paint_layer_count == 1u);
     assert(executor_summary.max_paint_layer_inflate
-        == runtime_summary.max_paint_layer_inflate);
+           == runtime_summary.max_paint_layer_inflate);
+    assert(executor_summary.stage_order_match_count == records.size());
+    assert(executor_summary.stage_order_mismatch_count == 0u);
+    assert(std::string_view(executor_summary.first_stage_order_mismatch)
+           == "none");
     assert(runtime_summary.execution_contract_satisfied_count == records.size());
     assert(runtime_summary.execution_contract_mismatch_count == 0u);
     assert(runtime_summary.execution_contract_mismatch_total == 0u);

@@ -823,9 +823,13 @@ oversized Retina window or unsupported texture size takes a deterministic
 still matches the executable plan. It records actual runtime-pass,
 execution-stage, and paint-layer counts, mirrors bounded texture-copy and
 deterministic fallback safety, reports the first mismatch, and is aggregated into
-both `material_runtime_summary` and `material_executor_summary`. Backends should
-treat a nonzero execution-contract mismatch as a planner/serialization bug
-instead of silently compensating in native drawing code.
+both `material_runtime_summary` and `material_executor_summary`. Schema 39 also
+copies `observation_contract.expected_stage_order`, derives
+`actual_stage_order` from the serialized `execution_stages[]` array, and marks
+`stage_order_match` false if shadow, primary, edge, or noise stages drift out of
+the pure optical order. Backends should treat a nonzero execution-contract or
+stage-order mismatch as a planner/serialization bug instead of silently
+compensating in native drawing code.
 `backdrop_access` mirrors the active shared frame contract per plan:
 sampled-backdrop plans require `capture_scope: shared-frame` and
 `capture_reason: sample-current-frame` with one bounded frame-history copy that
