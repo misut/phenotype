@@ -1155,9 +1155,11 @@ The report also includes `artifact_context`, and failed runs copy that compact
 context into `failure_summary.artifact_context`. It records the platform,
 backend, viewport, semantic material counts, renderer material plan count,
 renderer material plan contract version, resolved plan count, fallback paths,
-pass executors, first decision blockers, and accessibility decision counts so
-CI logs can explain which semantic/runtime contract surface drifted before
-opening the full bundle.
+pass executors, first decision blockers, accessibility decision counts, and
+`material_contract.executor_budget`. That executor budget mirrors the runtime
+draw/copy/upload counters, sampled tap totals, frame-copy pixel budget, and
+upload/draw/copy status strings so CI logs can explain which semantic/runtime
+contract surface drifted before opening the full bundle.
 On native backends, also inspect
 `debug.platform_runtime.details.renderer.accessibility_display_options`; it
 records whether the frame used live system settings, deterministic fallback
@@ -1596,9 +1598,11 @@ mise exec -- exon build
 ```
 
 The command emits a deterministic JSON report with build, run, verifier, and
-artifact details, and exits non-zero when an invariant fails. The legacy
-`tools/verify_glass_showcase_artifact.sh` wrapper delegates to the same CLI
-command for local compatibility.
+artifact details, plus `material_budget` when the verifier report contains
+`artifact_context.material_contract.executor_budget`, and exits non-zero when
+an invariant fails. The non-JSON command prints the same material budget in a
+short plans/work/status block. The legacy `tools/verify_glass_showcase_artifact.sh`
+wrapper delegates to the same CLI command for local compatibility.
 
 To validate the accessibility downgrade contract end to end, run the companion
 gate:

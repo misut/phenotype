@@ -4534,6 +4534,20 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(material_contract["decision_reduced_transparency"], 0)
         self.assertEqual(material_contract["decision_increase_contrast"], 0)
         self.assertEqual(material_contract["decision_reduce_motion"], 0)
+        executor_budget = material_contract["executor_budget"]
+        self.assertEqual(executor_budget["plan_count"], 1)
+        self.assertEqual(executor_budget["sampled_backdrop_instance_count"], 0)
+        self.assertEqual(executor_budget["fallback_instance_count"], 1)
+        self.assertEqual(executor_budget["draw_calls"], 0)
+        self.assertEqual(executor_budget["total_sample_taps"], 0)
+        self.assertEqual(executor_budget["upload_bytes"], 0)
+        self.assertEqual(executor_budget["buffer_capacity_bytes"], 0)
+        self.assertEqual(executor_budget["upload_utilization"], 0.0)
+        self.assertEqual(executor_budget["backdrop_copy_count"], 0)
+        self.assertEqual(executor_budget["backdrop_copy_pixels"], 0)
+        self.assertEqual(executor_budget["backdrop_copy_utilization"], 0.0)
+        self.assertEqual(executor_budget["upload_status"], "not-needed")
+        self.assertEqual(executor_budget["draw_status"], "not-needed")
         self.assertEqual(
             material_contract["app_probe_contract_name"],
             "glass_showcase_material_probe_contract")
@@ -4548,6 +4562,39 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             material_contract["app_probe_names"],
             ["debug_contract", "visible_blur_probe"])
+
+    def test_material_executor_budget_context_summarizes_sampled_work(
+            self) -> None:
+        code, report = self.run_verifier(
+            snapshot(sampled_material_plan(sample_taps=13)))
+
+        self.assertEqual(code, 0)
+        budget = (
+            report["artifact_context"]
+            ["material_contract"]
+            ["executor_budget"])
+        self.assertEqual(budget["plan_count"], 1)
+        self.assertEqual(budget["material_instance_count"], 1)
+        self.assertEqual(budget["sampled_backdrop_instance_count"], 1)
+        self.assertEqual(budget["fallback_instance_count"], 0)
+        self.assertEqual(budget["execution_stage_count"], 4)
+        self.assertEqual(budget["draw_calls"], 1)
+        self.assertEqual(budget["total_sample_taps"], 13)
+        self.assertEqual(budget["max_sample_taps"], 13)
+        self.assertEqual(budget["upload_bytes"], 128)
+        self.assertEqual(budget["buffer_capacity_bytes"], 128)
+        self.assertEqual(budget["upload_utilization"], 1.0)
+        self.assertEqual(budget["backdrop_copy_count"], 0)
+        self.assertEqual(budget["backdrop_copy_pixels"], 0)
+        self.assertEqual(budget["backdrop_copy_utilization"], 0.0)
+        self.assertTrue(budget["pipeline_ready"])
+        self.assertTrue(budget["backdrop_source_ready"])
+        self.assertTrue(budget["upload_required"])
+        self.assertTrue(budget["draw_required"])
+        self.assertTrue(budget["uploaded"])
+        self.assertTrue(budget["drawn"])
+        self.assertEqual(budget["upload_status"], "uploaded")
+        self.assertEqual(budget["draw_status"], "drawn")
 
     def test_material_executor_summary_mismatch_is_llm_actionable(self) -> None:
         root = snapshot(material_plan())
