@@ -722,9 +722,10 @@ the actual `material_plans` executed for the frame. Each plan includes:
   fallback path;
 - `backdrop_sampling`, `fallback`, `fallback_path`, and `fallback_reason`;
 - `backdrop`, including source, readiness flags, whether foreground text was
-  excluded from the source, sanitized luminance statistics, luminance response,
-  optical frosting/tint/saturation/depth responses, and
-  floor/gain/edge/opacity/tint-alpha/saturation/shadow deltas;
+  excluded from the source, sampled mean color, color sample status, sanitized
+  luminance statistics, luminance response, optical
+  frosting/color/tint/saturation/depth responses, and
+  floor/gain/edge/opacity/tint-color/tint-alpha/saturation/shadow deltas;
 - `backdrop_access`, including whether the plan requires a stable frame-history
   source, whether that source is a shared frame capture, the capture scope, the
   capture reason, maximum capture count, maximum capture pixels, maximum
@@ -1269,7 +1270,7 @@ exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `contract_versions`, `pass_names`, `backdrop_sources`,
 `backdrop_access_sources`, `backdrop_capture_scopes`,
 `backdrop_capture_reasons`, `luminance_responses`, `frosting_responses`,
-`tint_responses`, `saturation_responses`, `depth_responses`,
+`color_responses`, `tint_responses`, `saturation_responses`, `depth_responses`,
 `render_target_pixel_formats`, `pass_executors`, `stage_names`,
 `stage_executors`, `sampling_kernels`,
 `sampling_weight_profiles`, `luminance_curves`, `decision_blockers`,

@@ -1053,12 +1053,16 @@ void test_material_runtime_record_json_contract() {
     assert(obj.at("backdrop_sampling").as_bool() == false);
     auto const& backdrop = obj.at("backdrop").as_object();
     assert(backdrop.at("excludes_foreground_text").as_bool() == false);
+    assert(backdrop.at("color_sample_count").as_integer() == 0);
+    assert(backdrop.at("color_sample_status").as_string() == "not-sampled");
     assert(backdrop.at("luminance_response").as_string() == "not-sampled");
     assert(backdrop.at("frosting_response").as_string() == "not-sampled");
+    assert(backdrop.at("color_response").as_string() == "not-sampled");
     assert(backdrop.at("tint_response").as_string() == "not-sampled");
     assert(backdrop.at("saturation_response").as_string() == "not-sampled");
     assert(backdrop.at("depth_response").as_string() == "not-sampled");
     assert(std::fabs(backdrop.at("opacity_delta").as_float()) < 0.0001f);
+    assert(std::fabs(backdrop.at("tint_color_delta").as_float()) < 0.0001f);
     assert(std::fabs(backdrop.at("tint_alpha_delta").as_float()) < 0.0001f);
     assert(std::fabs(backdrop.at("saturation_delta").as_float()) < 0.0001f);
     assert(std::fabs(backdrop.at("shadow_alpha_delta").as_float()) < 0.0001f);
@@ -1456,6 +1460,9 @@ void test_material_runtime_record_json_contract() {
     executor_summary.foreground_text_remap_count = 1;
     MaterialBackdropDescriptor sampled_backdrop;
     sampled_backdrop.available = true;
+    sampled_backdrop.color_mean = Color{126, 191, 255, 255};
+    sampled_backdrop.color_sample_count = 25;
+    sampled_backdrop.color_sample_status = "sampled-async-grid";
     sampled_backdrop.luma_min = 0.2f;
     sampled_backdrop.luma_max = 0.8f;
     sampled_backdrop.luma_mean = 0.4f;
@@ -1492,6 +1499,16 @@ void test_material_runtime_record_json_contract() {
     assert(executor_obj.at("foreground_text_candidate_count").as_integer()
            == 2);
     assert(executor_obj.at("foreground_text_remap_count").as_integer() == 1);
+    assert(executor_obj.at("backdrop_descriptor_color_available").as_bool());
+    auto const& executor_color =
+        executor_obj.at("backdrop_descriptor_color_mean").as_object();
+    assert(executor_color.at("r").as_integer() == 126);
+    assert(executor_color.at("g").as_integer() == 191);
+    assert(executor_color.at("b").as_integer() == 255);
+    assert(executor_obj.at("backdrop_descriptor_color_sample_count")
+               .as_integer() == 25);
+    assert(executor_obj.at("backdrop_descriptor_color_status").as_string()
+           == "sampled-async-grid");
     assert(executor_obj.at("backdrop_descriptor_luma_available").as_bool());
     assert(executor_obj.at("backdrop_descriptor_luma_sample_count")
                .as_integer() == 25);

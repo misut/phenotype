@@ -7161,6 +7161,15 @@ inline ::json::Object android_renderer_runtime_json() {
     r.emplace("material_backdrop_source_ready", ::json::Value{false});
     ::json::Object luma_descriptor;
     luma_descriptor.emplace("available", ::json::Value{false});
+    luma_descriptor.emplace("color_available", ::json::Value{false});
+    ::json::Object color_mean;
+    color_mean.emplace("r", ::json::Value{std::int64_t{255}});
+    color_mean.emplace("g", ::json::Value{std::int64_t{255}});
+    color_mean.emplace("b", ::json::Value{std::int64_t{255}});
+    color_mean.emplace("a", ::json::Value{std::int64_t{255}});
+    luma_descriptor.emplace(
+        "color_mean",
+        ::json::Value{std::move(color_mean)});
     luma_descriptor.emplace("luma_min", ::json::Value{0.0});
     luma_descriptor.emplace("luma_max", ::json::Value{1.0});
     luma_descriptor.emplace("luma_mean", ::json::Value{0.5});

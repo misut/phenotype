@@ -325,6 +325,9 @@ def material_plan(
             "available": False,
             "stable": False,
             "excludes_foreground_text": False,
+            "color_mean": {"r": 255, "g": 255, "b": 255, "a": 255},
+            "color_sample_count": 0,
+            "color_sample_status": "not-sampled",
             "luma_min": 0.0,
             "luma_max": 1.0,
             "luma_mean": 0.5,
@@ -337,6 +340,7 @@ def material_plan(
             "source": "none",
             "luminance_response": "not-sampled",
             "frosting_response": "not-sampled",
+            "color_response": "not-sampled",
             "tint_response": "not-sampled",
             "saturation_response": "not-sampled",
             "depth_response": "not-sampled",
@@ -344,6 +348,7 @@ def material_plan(
             "luminance_gain_delta": 0.0,
             "edge_highlight_delta": 0.0,
             "opacity_delta": 0.0,
+            "tint_color_delta": 0.0,
             "tint_alpha_delta": 0.0,
             "saturation_delta": 0.0,
             "shadow_alpha_delta": 0.0,
@@ -1109,9 +1114,13 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "available": True,
         "stable": True,
         "excludes_foreground_text": True,
+        "color_mean": {"r": 255, "g": 255, "b": 255, "a": 255},
+        "color_sample_count": sample_taps,
+        "color_sample_status": "sampled-async-grid",
         "source": "previous-presented-frame",
         "luminance_response": "neutral",
         "frosting_response": "balanced",
+        "color_response": "preserve",
         "tint_response": "preserve",
         "saturation_response": "preserve",
         "depth_response": "standard",
@@ -1508,11 +1517,13 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
     ]
     primary = plan["primary_pass"]
     backdrop_access = plan["backdrop_access"]
+    backdrop = plan["backdrop"]
     interaction = plan["interaction"]
     refraction = plan["refraction"]
     audit = plan["execution_audit"]
     assert isinstance(primary, dict)
     assert isinstance(backdrop_access, dict)
+    assert isinstance(backdrop, dict)
     assert isinstance(interaction, dict)
     assert isinstance(refraction, dict)
     assert isinstance(audit, dict)
@@ -1645,6 +1656,14 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "max_interaction_response_strength": interaction["response_strength"],
         "max_interaction_specular_radius": interaction["specular_radius"],
         "max_interaction_specular_intensity": interaction["specular_intensity"],
+        "backdrop_descriptor_color_available": (
+            bool(backdrop["available"])
+            and int(backdrop["color_sample_count"]) > 0),
+        "backdrop_descriptor_color_mean": backdrop["color_mean"],
+        "backdrop_descriptor_color_sample_count": (
+            backdrop["color_sample_count"]),
+        "backdrop_descriptor_color_status": (
+            backdrop["color_sample_status"]),
         "backdrop_descriptor_luma_available": False,
         "backdrop_descriptor_luma_min": plan["backdrop"]["luma_min"],
         "backdrop_descriptor_luma_max": plan["backdrop"]["luma_max"],
@@ -1837,6 +1856,13 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                             verifier.MATERIAL_PLAN_CONTRACT_VERSION),
                         "material_backdrop_luma_descriptor": {
                             "available": False,
+                            "color_available": False,
+                            "color_mean": {
+                                "r": 255,
+                                "g": 255,
+                                "b": 255,
+                                "a": 255,
+                            },
                             "luma_min": 0.0,
                             "luma_max": 1.0,
                             "luma_mean": 0.5,
