@@ -855,6 +855,11 @@ geometry, fallback path, union/morph flags, and pair-count aggregates. The flat
 runtime and executor summaries remain the stable CI counters, while this detail
 array gives an LLM enough evidence to identify the specific grouped surface or
 GlassEffectContainer-style spacing contract that drifted.
+Schema 42 extends those flat summaries with grouped capture-budget counters:
+`shared_capture_surface_count`, `shared_capture_saved_surface_count`, and
+`max_shared_capture_group_surfaces`. Backends still perform the real platform
+capture at the edge, but CI can now verify that the pure plan is asking grouped
+glass to share a bounded capture surface.
 `backdrop_access` mirrors the active shared frame contract per plan:
 sampled-backdrop plans require `capture_scope: shared-frame` and
 `capture_reason: sample-current-frame` with one bounded frame-history copy that

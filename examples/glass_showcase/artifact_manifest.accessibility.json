@@ -38,7 +38,7 @@
       "reduced transparency disables backdrop sampling": 8
     },
     "contract_versions": {
-      "41": 8
+      "42": 8
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -81,6 +81,9 @@
     "container_morph_group_count": 0,
     "container_interactive_group_count": 1,
     "container_shared_backdrop_scope_group_count": 3,
+    "container_shared_capture_surface_count": 6,
+    "container_shared_capture_saved_surface_count": 3,
+    "container_max_shared_capture_group_surfaces": 4,
     "container_fallback_mixed_group_count": 0,
     "container_max_group_size": 4,
     "container_max_active_surfaces": 4,

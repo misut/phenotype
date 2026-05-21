@@ -339,6 +339,10 @@ container id, member command index, plan id, geometry, union/morph flags,
 fallback path, and aggregate pair counts. This keeps SwiftUI-style
 GlassEffectContainer spacing, union, and morph behavior debuggable from CI logs
 without visually guessing which surface in a grouped toolbar or sidebar failed.
+Schema 42 adds capture-budget counters to the same group contract:
+`shared_capture_surface_count`, `shared_capture_saved_surface_count`, and
+`max_shared_capture_group_surfaces` show whether grouped glass can execute as a
+single shared backdrop capture instead of one capture per surface.
 Each surface's container policy stays explicit: spacing resolves
 to `blend_distance`, positive spacing drives `shape_blending_expected`, union ids
 select the union-proximity blend policy, Reduced Motion suppresses only morphing,

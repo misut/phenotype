@@ -42,7 +42,7 @@
     "fallback": 0,
     "backdrop_sampling": 30,
     "contract_versions": {
-      "41": 30
+      "42": 30
     },
     "theme_foreground_matches_theme": 30,
     "theme_accent_matches_theme": 0,
@@ -72,6 +72,15 @@
     "container_unioned": 0,
     "container_interactive": 3,
     "container_morph_transitions": 28,
+    "container_group_count": 1,
+    "container_multi_surface_group_count": 1,
+    "container_union_group_count": 0,
+    "container_morph_group_count": 1,
+    "container_interactive_group_count": 1,
+    "container_shared_backdrop_scope_group_count": 1,
+    "container_shared_capture_surface_count": 28,
+    "container_shared_capture_saved_surface_count": 27,
+    "container_max_shared_capture_group_surfaces": 28,
     "reference_interactive_response": 3,
     "interaction_enabled": 3,
     "interaction_active": 0,
