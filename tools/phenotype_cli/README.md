@@ -74,7 +74,8 @@ The initial scope is intentionally narrow:
 - `phenotype artifact summary <bundle>` summarizes a debug artifact bundle
   without replacing the Python verifier yet.
 - `phenotype artifact verify <bundle>` runs the uv-managed Python verifier
-  through `mise` and preserves its JSON report shape.
+  through `mise`, preserves its JSON report shape, and forwards the direct
+  material/debug contract options used for glass artifact checks.
 - `phenotype observe <bundle>` emits one output-observation envelope for an
   artifact bundle. It parses `snapshot.json` in C++, reports semantic tree and
   platform-runtime presence, material plan counts, material kinds/roles,

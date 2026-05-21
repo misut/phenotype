@@ -749,11 +749,17 @@ auto artifact_verify_args(fs::path const& bundle,
     append_option_arg(args, invocation, "expect-platform");
     append_flag_arg(args, invocation, "require-frame");
     append_repeatable_arg(args, invocation, "require-label");
+    append_repeatable_arg(args, invocation, "require-label-contains");
     append_repeatable_arg(args, invocation, "require-role");
+    append_option_arg(args, invocation, "require-disabled-count");
     append_repeatable_arg(args, invocation, "require-material-kind");
     append_repeatable_arg(args, invocation, "require-material-surface-role");
+    append_flag_arg(args, invocation, "require-material-fallback");
+    append_flag_arg(args, invocation, "require-material-plan");
+    append_flag_arg(args, invocation, "require-material-semantic-runtime-match");
     append_repeatable_arg(args, invocation, "require-capability");
     append_repeatable_arg(args, invocation, "require-runtime-detail");
+    append_repeatable_arg(args, invocation, "require-debug-detail");
     append_repeatable_arg(args, invocation, "require-pixel-region");
     append_repeatable_arg(args, invocation, "require-pixel-region-metric");
     return args;
