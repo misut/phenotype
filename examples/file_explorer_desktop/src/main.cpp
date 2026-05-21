@@ -18,7 +18,6 @@
 import file_explorer_shared;
 import phenotype;
 import phenotype.native;
-import phenotype.svg;
 
 namespace {
 
@@ -77,6 +76,13 @@ using Msg = std::variant<
     Resized,
     Noop>;
 
+fs::path g_initial_filesystem_root;
+std::string g_initial_filesystem_root_label;
+std::string g_initial_filesystem_root_source = "default-home";
+bool g_use_demo_root = false;
+bool g_initial_filesystem_root_configured = false;
+bool g_initial_filesystem_mutations_allowed = false;
+
 std::string read_text_file(fs::path const& path) {
     auto input = std::ifstream{path, std::ios::binary};
     if (!input)
@@ -84,6 +90,99 @@ std::string read_text_file(fs::path const& path) {
     auto out = std::ostringstream{};
     out << input.rdbuf();
     return out.str();
+}
+
+bool env_truthy(char const* raw);
+
+fs::path home_directory() {
+    if (char const* raw = std::getenv("HOME")) {
+        if (*raw)
+            return fs::path{raw};
+    }
+    std::error_code ec;
+    auto current = fs::current_path(ec);
+    return ec ? fs::path{} : current;
+}
+
+void set_initial_filesystem_root(
+        fs::path root,
+        std::string source,
+        std::string label = {}) {
+    g_initial_filesystem_root = std::move(root);
+    g_initial_filesystem_root_source = std::move(source);
+    g_initial_filesystem_root_label = std::move(label);
+    g_initial_filesystem_root_configured = true;
+    g_use_demo_root = false;
+}
+
+bool apply_initial_root_arg(
+        std::string_view arg,
+        char const* next) {
+    if (arg == "--demo-root") {
+        g_use_demo_root = true;
+        g_initial_filesystem_root_configured = false;
+        return false;
+    }
+    if (arg == "--allow-file-mutations"
+        || arg == "--allow-filesystem-mutations") {
+        g_initial_filesystem_mutations_allowed = true;
+        return false;
+    }
+    if (arg == "--path" || arg == "--root") {
+        if (next && *next)
+            set_initial_filesystem_root(fs::path{next}, "command-line");
+        return true;
+    }
+    constexpr std::string_view path_prefix = "--path=";
+    constexpr std::string_view root_prefix = "--root=";
+    if (arg.starts_with(path_prefix)) {
+        set_initial_filesystem_root(
+            fs::path{std::string{arg.substr(path_prefix.size())}},
+            "command-line");
+    } else if (arg.starts_with(root_prefix)) {
+        set_initial_filesystem_root(
+            fs::path{std::string{arg.substr(root_prefix.size())}},
+            "command-line");
+    }
+    return false;
+}
+
+void configure_initial_filesystem_root(int argc, char** argv) {
+    if (char const* mode = std::getenv("PHENOTYPE_FILE_EXPLORER_ROOT_MODE")) {
+        auto value = std::string_view{mode};
+        if (value == "demo" || value == "sandbox") {
+            g_use_demo_root = true;
+            g_initial_filesystem_root_configured = false;
+        }
+    }
+    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_ROOT")) {
+        if (*raw)
+            set_initial_filesystem_root(fs::path{raw}, "environment");
+    }
+    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_PATH")) {
+        if (*raw)
+            set_initial_filesystem_root(fs::path{raw}, "environment");
+    }
+    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_ROOT_LABEL")) {
+        if (*raw)
+            g_initial_filesystem_root_label = raw;
+    }
+    if (env_truthy(std::getenv("PHENOTYPE_FILE_EXPLORER_ALLOW_MUTATION"))
+        || env_truthy(std::getenv("PHENOTYPE_FILE_EXPLORER_ALLOW_MUTATIONS"))
+        || env_truthy(std::getenv(
+            "PHENOTYPE_FILE_EXPLORER_ALLOW_FILESYSTEM_MUTATIONS"))) {
+        g_initial_filesystem_mutations_allowed = true;
+    }
+    for (int i = 1; i < argc; ++i) {
+        auto arg = std::string_view{argv[i]};
+        char const* next = (i + 1) < argc ? argv[i + 1] : nullptr;
+        if (apply_initial_root_arg(arg, next))
+            ++i;
+    }
+    if (!g_initial_filesystem_root_configured && !g_use_demo_root
+        && !std::getenv("PHENOTYPE_ARTIFACT_EXIT")) {
+        set_initial_filesystem_root(home_directory(), "default-home", "Home");
+    }
 }
 
 void apply_startup_inputs(file_explorer_demo::ExplorerState& state,
@@ -133,7 +232,14 @@ void apply_startup_inputs(file_explorer_demo::ExplorerState& state,
 }
 
 file_explorer_demo::ExplorerState initial_explorer_state() {
-    auto state = file_explorer_demo::make_state("desktop");
+    auto state = g_use_demo_root || !g_initial_filesystem_root_configured
+        ? file_explorer_demo::make_state("desktop")
+        : file_explorer_demo::make_state_for_root(
+            "desktop",
+            g_initial_filesystem_root,
+            g_initial_filesystem_root_label,
+            g_initial_filesystem_root_source,
+            g_initial_filesystem_mutations_allowed);
     if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_VIEW")) {
         if (*raw) {
             state.view_mode = file_explorer_demo::known_view_mode_name(raw)
@@ -689,39 +795,9 @@ void sync_runtime_theme(file_explorer_demo::ExplorerState& explorer) {
     phenotype::set_theme(resolved.theme);
 }
 
-struct SvgPreviewDocumentCacheEntry {
-    std::string source;
-    phenotype::svg::Document document;
-};
-
-struct SvgPreviewDocumentCache {
-    std::vector<SvgPreviewDocumentCacheEntry> entries;
-};
-
-phenotype::svg::Document const* cached_svg_preview_document(
-        SvgPreviewDocumentCache& cache,
-        std::string_view source) {
-    if (source.empty())
-        return nullptr;
-    for (auto const& entry : cache.entries) {
-        if (entry.source == source)
-            return &entry.document;
-    }
-    if (cache.entries.size()
-        >= static_cast<std::size_t>(
-            file_explorer_demo::k_desktop_thumbnail_svg_document_cache_limit)) {
-        return nullptr;
-    }
-    auto& entry = cache.entries.emplace_back();
-    entry.source = std::string{source};
-    entry.document = phenotype::svg::parse(source);
-    return &entry.document;
-}
-
 struct State {
     phenotype::icons::SymbolDocumentCache icon_cache =
         phenotype::icons::make_symbol_document_cache();
-    mutable SvgPreviewDocumentCache svg_preview_cache;
     file_explorer_demo::ExplorerState explorer;
     file_explorer_demo::ExplorerLabels labels;
     bool search_visible = false;
@@ -740,9 +816,6 @@ struct State {
         apply_startup_inputs(explorer, "desktop");
         search_visible = !explorer.search.empty();
         sync_runtime_theme(explorer);
-        svg_preview_cache.entries.reserve(
-            static_cast<std::size_t>(
-                file_explorer_demo::k_desktop_thumbnail_svg_document_cache_limit));
     }
 };
 
@@ -817,6 +890,7 @@ constexpr float k_toolbar_icon_button_width =
     file_explorer_demo::k_desktop_toolbar_icon_button_width;
 constexpr float k_toolbar_icon_button_height =
     file_explorer_demo::k_desktop_toolbar_icon_button_height;
+constexpr float k_file_thumbnail_symbol_stroke_scale = 0.78f;
 constexpr float k_native_window_control_reserve_height =
     file_explorer_demo::k_desktop_titlebar_control_cluster_height;
 constexpr float k_titlebar_drag_region_height =
@@ -886,6 +960,39 @@ phenotype::layout::MaterialSurfaceOptions content_surface_options(
         "Files");
     options.gap = gap;
     options.border_radius = k_content_radius;
+    return options;
+}
+
+phenotype::MaterialStyle finder_sidebar_material_style() {
+    using namespace phenotype;
+    auto material = layout::material_style(MaterialKind::Thin);
+    material.role = MaterialSurfaceRole::Sidebar;
+    material.opacity = 0.34f;
+    material.blur_radius = 28.0f;
+    material.tint = rgba(248, 248, 250, 76);
+    material.border = rgba(255, 255, 255, 84);
+    material.saturation = 1.28f;
+    material.luminance_floor = 0.03f;
+    material.luminance_gain = 1.03f;
+    material.edge_highlight = 0.32f;
+    material.noise_opacity = 0.014f;
+    material.shadow_alpha = 0.10f;
+    material.shadow_radius = 14.0f;
+    material.contrast_intent = "context";
+    return material;
+}
+
+phenotype::layout::MaterialSurfaceOptions finder_sidebar_options() {
+    using namespace phenotype;
+    auto options = layout::glass_surface_options(
+        layout::GlassSurfacePreset::Sidebar,
+        "Sidebar");
+    options.max_width = k_sidebar_width;
+    options.padding = SpaceToken::Lg;
+    options.gap = SpaceToken::Xs;
+    options.border_radius = k_window_radius;
+    options.has_material_override = true;
+    options.material_override = finder_sidebar_material_style();
     return options;
 }
 
@@ -1051,15 +1158,6 @@ bool svg_image_extension(std::string_view ext) {
     return ext == "svg" || ext == "svgz";
 }
 
-bool image_extension(std::string_view ext) {
-    return ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "heic"
-        || ext == "heif" || ext == "webp" || svg_image_extension(ext);
-}
-
-bool movie_extension(std::string_view ext) {
-    return ext == "mov" || ext == "mp4" || ext == "m4v";
-}
-
 std::uint64_t stable_token(std::string_view value) {
     std::uint64_t h = 1469598103934665603ull;
     for (unsigned char ch : value) {
@@ -1069,258 +1167,51 @@ std::uint64_t stable_token(std::string_view value) {
     return h ? h : 1ull;
 }
 
-void paint_document_fold(phenotype::Painter& painter,
-                         float x,
-                         float y,
-                         float w,
-                         phenotype::Color border) {
-    phenotype::PathBuilder fold;
-    fold.move_to(x + w - 12.0f, y + 1.0f);
-    fold.line_to(x + w - 1.0f, y + 12.0f);
-    fold.line_to(x + w - 12.0f, y + 12.0f);
-    fold.close();
-    painter.fill_path(fold, rgba(238, 241, 245, 245));
-    painter.line(x + w - 12.0f, y + 1.0f,
-                 x + w - 1.0f, y + 12.0f,
-                 1.0f, border);
-    painter.line(x + w - 12.0f, y + 12.0f,
-                 x + w - 1.0f, y + 12.0f,
-                 1.0f, rgba(225, 229, 235));
-}
-
-void paint_pdf_thumbnail(phenotype::Painter& painter,
-                         std::string const& name,
-                         bool selected) {
-    auto accent = selected ? rgba(0, 122, 255) : rgba(38, 132, 255);
-    auto border = selected ? rgba(0, 122, 255) : rgba(210, 214, 220);
-    float const page_w = file_explorer_demo::k_desktop_thumbnail_pdf_page_width;
-    float const page_h = file_explorer_demo::k_desktop_thumbnail_pdf_page_height;
-    float const page_x =
-        (file_explorer_demo::k_desktop_icon_grid_thumbnail_width - page_w) * 0.5f;
-    float const page_y = 3.0f;
-    fill_round(painter,
-               page_x + 2.0f,
-               page_y + 3.0f,
-               page_w,
-               page_h,
-               file_explorer_demo::k_desktop_thumbnail_pdf_page_radius,
-               rgba(0, 0, 0, 24));
-    fill_round(painter,
-               page_x,
-               page_y,
-               page_w,
-               page_h,
-               file_explorer_demo::k_desktop_thumbnail_pdf_page_radius,
-               rgba(255, 255, 255, 250));
-    stroke_round(painter,
-                 page_x,
-                 page_y,
-                 page_w,
-                 page_h,
-                 file_explorer_demo::k_desktop_thumbnail_pdf_page_radius,
-                 1.0f,
-                 border);
-    paint_document_fold(painter, page_x, page_y, page_w, border);
-    fill_rect(painter, page_x + 4.0f, page_y + 5.0f, 27.0f, 3.5f, accent);
-    fill_rect(painter, page_x + 5.0f, page_y + 13.0f, 38.0f, 1.6f,
-              rgba(196, 204, 215));
-    fill_rect(painter, page_x + 5.0f, page_y + 17.0f, 18.0f, 1.4f,
-              rgba(228, 118, 118, 170));
-    fill_rect(painter, page_x + 26.0f, page_y + 17.0f, 15.0f, 1.4f,
-              rgba(196, 204, 215));
-    for (int row = 0;
-         row < file_explorer_demo::k_desktop_thumbnail_pdf_detail_line_count / 2;
-         ++row) {
-        float y = page_y + 23.0f + static_cast<float>(row) * 5.0f;
-        fill_rect(painter, page_x + 5.0f, y, 16.0f, 1.2f,
-                  rgba(202, 210, 221));
-        fill_rect(painter, page_x + 24.0f, y, 19.0f, 1.2f,
-                  rgba(221, 226, 234));
-        if (row % 2 == 0) {
-            fill_rect(painter, page_x + 5.0f, y + 2.2f, 38.0f, 1.0f,
-                      rgba(232, 235, 240));
-        }
-    }
-    fill_rect(painter, page_x + 5.0f, page_y + 52.0f, 20.0f, 6.0f,
-              rgba(255, 231, 125, 210));
-    fill_rect(painter, page_x + 28.0f, page_y + 52.0f, 14.0f, 6.0f,
-              rgba(238, 243, 251));
-    auto tag = extension_lower(name);
-    painter.text(page_x + 8.0f, page_y + 55.0f, tag.c_str(),
-                 static_cast<unsigned int>(tag.size()),
-                 9.0f, rgba(80, 87, 96), finder_font());
-}
-
-void paint_svg_preview_fallback(phenotype::Painter& painter,
-                                float x,
-                                float y) {
-    phenotype::PathBuilder curve;
-    curve.move_to(x + 14.0f, y + 25.0f);
-    curve.cubic_to(
-        x + 27.0f, y + 9.0f,
-        x + 57.0f, y + 9.0f,
-        x + 74.0f, y + 25.0f);
-    painter.stroke_path(curve, 2.2f, rgba(0, 122, 255, 210));
-    fill_round(painter, x + 10.0f, y + 12.0f, 6.0f, 6.0f, 3.0f,
-               rgba(0, 122, 255, 160));
-    fill_round(painter, x + 70.0f, y + 12.0f, 6.0f, 6.0f, 3.0f,
-               rgba(0, 122, 255, 160));
-}
-
-void paint_svg_file_preview(phenotype::Painter& painter,
-                            SvgPreviewDocumentCache& cache,
-                            std::string_view source,
-                            float x,
-                            float y,
-                            float w,
-                            float h,
-                            bool selected) {
-    auto local_doc = phenotype::svg::Document{};
-    auto const* doc = cached_svg_preview_document(cache, source);
-    if (!doc) {
-        local_doc = phenotype::svg::parse(source);
-        doc = &local_doc;
-    }
-    if (!doc->empty()) {
-        auto const current_color = selected
-            ? rgba(0, 122, 255)
-            : rgba(68, 76, 88);
-        phenotype::svg::paint(
-            painter,
-            *doc,
-            x + 10.0f,
-            y + 7.0f,
-            w - 20.0f,
-            h - 14.0f,
-            phenotype::svg::RenderOptions{current_color, true});
-    } else {
-        paint_svg_preview_fallback(painter, x, y);
-    }
-    fill_round(painter, x + w - 29.0f, y + h - 15.0f, 24.0f, 11.0f, 5.5f,
-               selected ? rgba(0, 122, 255, 220) : rgba(238, 243, 251, 235));
-    painter.text(x + w - 25.0f, y + h - 7.0f, "SVG", 3, 7.5f,
-                 selected ? rgba(255, 255, 255) : rgba(75, 82, 92),
-                 finder_font());
-}
-
-void paint_image_thumbnail(phenotype::Painter& painter,
-                           SvgPreviewDocumentCache& cache,
-                           bool selected,
-                           bool svg_file,
-                           std::string_view svg_source) {
-    auto border = selected ? rgba(0, 122, 255) : rgba(224, 228, 234);
-    float const w = file_explorer_demo::k_desktop_thumbnail_media_preview_width;
-    float const h = file_explorer_demo::k_desktop_thumbnail_media_preview_height;
-    float const x =
-        (file_explorer_demo::k_desktop_icon_grid_thumbnail_width - w) * 0.5f;
-    float const y = 19.0f;
-    float const radius =
-        file_explorer_demo::k_desktop_thumbnail_media_preview_radius;
-    fill_round(painter, x + 2.0f, y + 2.0f, w, h, radius, rgba(0, 0, 0, 22));
-    fill_round(painter, x, y, w, h, radius, rgba(255, 255, 255, 248));
-    painter.linear_gradient_rect(
-        x + 3.0f, y + 7.0f, w - 6.0f, h - 10.0f,
-        rgba(247, 249, 252),
-        rgba(225, 230, 238),
-        phenotype::GradientAxis::Horizontal,
-        12);
-    stroke_round(painter, x, y, w, h, radius, 1.0f, border);
-    fill_rect(painter, x + 3.0f, y + 4.0f, w - 6.0f, 2.0f,
-              rgba(235, 239, 245));
-    if (svg_file) {
-        paint_svg_file_preview(painter, cache, svg_source, x, y, w, h, selected);
-        return;
-    }
-    fill_round(painter, x + 10.0f, y + 13.0f, 26.0f, 10.0f, 4.0f,
-               rgba(210, 215, 224));
-    fill_round(painter, x + 40.0f, y + 13.0f, 18.0f, 10.0f, 4.0f,
-               rgba(184, 191, 202));
-    fill_round(painter, x + 61.0f, y + 13.0f, 16.0f, 10.0f, 4.0f,
-               rgba(232, 235, 240));
-    fill_rect(painter, x + 9.0f, y + 27.0f, 30.0f, 2.0f,
-              rgba(204, 211, 221));
-    fill_rect(painter, x + 44.0f, y + 27.0f, 33.0f, 2.0f,
-              rgba(222, 227, 234));
-}
-
-void paint_video_thumbnail(phenotype::Painter& painter,
-                           bool selected) {
-    auto border = selected ? rgba(0, 122, 255) : rgba(204, 211, 221);
-    float const w = file_explorer_demo::k_desktop_thumbnail_media_preview_width;
-    float const h = file_explorer_demo::k_desktop_thumbnail_media_preview_height;
-    float const x =
-        (file_explorer_demo::k_desktop_icon_grid_thumbnail_width - w) * 0.5f;
-    float const y = 18.0f;
-    float const radius =
-        file_explorer_demo::k_desktop_thumbnail_media_preview_radius;
-    fill_round(painter, x + 2.0f, y + 2.0f, w, h, radius, rgba(0, 0, 0, 30));
-    fill_round(painter, x, y, w, h, radius, rgba(246, 248, 251));
-    stroke_round(painter, x, y, w, h, radius, 1.0f, border);
-    painter.linear_gradient_rect(
-        x + 2.0f, y + 3.0f, w - 4.0f, 8.0f,
-        rgba(42, 123, 222, 185),
-        rgba(82, 96, 210, 160),
-        phenotype::GradientAxis::Horizontal,
-        10);
-    for (int i = 0;
-         i < file_explorer_demo::k_desktop_thumbnail_video_strip_count;
-         ++i) {
-        float const strip_x = x + 8.0f + static_cast<float>(i) * 12.0f;
-        fill_rect(painter, strip_x, y + 17.0f, 8.0f, 13.0f,
-                  (i % 2 == 0) ? rgba(212, 219, 228) : rgba(235, 239, 244));
-    }
-    fill_rect(painter, x + 7.0f, y + 32.0f, w - 14.0f, 2.0f,
-              rgba(198, 207, 219));
-}
-
-void paint_text_thumbnail(phenotype::Painter& painter,
-                          bool selected) {
-    auto border = selected ? rgba(0, 122, 255) : rgba(220, 224, 231);
-    fill_round(painter, 41.0f, 5.0f, 44.0f, 61.0f, 4.0f, rgba(0, 0, 0, 22));
-    fill_round(painter, 39.0f, 3.0f, 44.0f, 61.0f, 4.0f, rgba(255, 255, 255, 250));
-    stroke_round(painter, 39.0f, 3.0f, 44.0f, 61.0f, 4.0f, 1.0f, border);
-    paint_document_fold(painter, 39.0f, 3.0f, 44.0f, border);
-    for (int i = 0; i < 8; ++i) {
-        fill_rect(painter, 44.0f, 14.0f + static_cast<float>(i) * 5.6f,
-                  (i % 3 == 0) ? 25.0f : 33.0f,
-                  2.0f,
-                  rgba(204, 211, 221));
-    }
-}
-
-void paint_folder_thumbnail(phenotype::Painter& painter,
-                            bool selected) {
-    auto border = selected ? rgba(0, 122, 255) : rgba(223, 163, 41);
-    fill_round(painter, 22.0f, 25.0f, 86.0f, 46.0f, 8.0f, rgba(0, 0, 0, 20));
-    fill_round(painter, 20.0f, 23.0f, 86.0f, 46.0f, 8.0f, rgba(255, 202, 85));
-    fill_round(painter, 24.0f, 17.0f, 36.0f, 16.0f, 5.0f, rgba(255, 214, 118));
-    stroke_round(painter, 20.0f, 23.0f, 86.0f, 46.0f, 8.0f, 1.0f, border);
-}
+phenotype::Color entry_symbol_color(
+        file_explorer_demo::Entry const& entry,
+        bool selected);
 
 void paint_item_thumbnail(phenotype::Painter& painter,
-                          SvgPreviewDocumentCache& cache,
+                          phenotype::icons::SymbolDocumentCache const& cache,
                           file_explorer_demo::Entry const& entry,
                           bool selected,
                           std::string_view preview_source = {}) {
-    if (entry.folder) {
-        paint_folder_thumbnail(painter, selected);
-        return;
+    (void)preview_source;
+    auto const symbol = phenotype::icons::from_catalog_symbol(
+        file_explorer_demo::entry_symbol(entry));
+    auto const box_w = file_explorer_demo::k_desktop_icon_grid_thumbnail_width;
+    auto const box_h = file_explorer_demo::k_desktop_icon_grid_thumbnail_height;
+    auto const icon_box = std::min(box_w, box_h);
+    auto const icon_x = (box_w - icon_box) * 0.5f;
+    auto const icon_y = (box_h - icon_box) * 0.5f;
+    auto const icon_size = entry.folder ? 58.0f : 54.0f;
+    auto color = entry_symbol_color(entry, selected);
+    if (!selected) {
+        color = entry.folder
+            ? rgba(92, 92, 96)
+            : rgba(72, 72, 76);
     }
-    auto ext = extension_lower(entry.name);
-    if (ext == "pdf") {
-        paint_pdf_thumbnail(painter, entry.name, selected);
-    } else if (image_extension(ext)) {
-        paint_image_thumbnail(
-            painter,
-            cache,
-            selected,
-            svg_image_extension(ext),
-            preview_source);
-    } else if (movie_extension(ext)) {
-        paint_video_thumbnail(painter, selected);
-    } else {
-        paint_text_thumbnail(painter, selected);
+    if (selected) {
+        fill_round(painter, 20.0f, 3.0f, box_w - 40.0f, box_h - 6.0f,
+                   14.0f, rgba(0, 122, 255, 26));
     }
+    auto presentation = phenotype::icons::presentation(
+        symbol,
+        phenotype::icons::SymbolPresentationRole::FileType,
+        selected ? phenotype::icons::SymbolTone::Selected
+                 : phenotype::icons::SymbolTone::Secondary,
+        phenotype::icons::SymbolScale::Large);
+    presentation.point_size = icon_size;
+    presentation.color = color;
+    presentation.stroke_scale = k_file_thumbnail_symbol_stroke_scale;
+    paint_finder_symbol_centered(
+        painter,
+        cache,
+        presentation,
+        icon_x,
+        icon_y,
+        icon_box,
+        icon_box);
 }
 
 std::uint64_t thumbnail_paint_token(file_explorer_demo::Entry const& entry,
@@ -2037,23 +1928,21 @@ void native_window_control_reserve_slot() {
 void finder_sidebar(State const& state) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
-    auto relative = file_explorer_demo::relative_location(
-        explorer.root,
-        explorer.current);
-    bool const in_root = relative == "Demo Root";
+    auto relative = file_explorer_demo::relative_location(explorer);
+    bool const in_root = relative == explorer.root_label;
     auto const& labels = state.labels;
     auto const& icon_cache = state.icon_cache;
-    layout::sidebar(k_sidebar_width, [&] {
+    layout::sidebar(finder_sidebar_options(), [&] {
         native_window_control_reserve_slot();
         sidebar_row(labels.sidebar_recents, "recents", "root", in_root, icon_cache);
         sidebar_row(labels.sidebar_shared, "shared", "shared",
-                    relative == "Demo Root/Shared", icon_cache);
+                    relative == explorer.root_label + "/Shared", icon_cache);
         layout::spacer(k_sidebar_section_gap);
         sidebar_heading(labels.favorites);
         sidebar_row(labels.applications, "app", "root", false, icon_cache);
         sidebar_row(labels.desktop, "desktop", "root", false, icon_cache);
         sidebar_row(labels.documents, "doc", "documents",
-                    relative == "Demo Root/Documents", icon_cache);
+                    relative == explorer.root_label + "/Documents", icon_cache);
         sidebar_row(labels.downloads, "download", "root", false, icon_cache);
         layout::spacer(k_sidebar_section_gap);
         sidebar_heading(labels.locations);
@@ -2061,7 +1950,7 @@ void finder_sidebar(State const& state) {
         sidebar_row(labels.home, "home", "root", false, icon_cache);
         sidebar_row(labels.airdrop, "airdrop", "shared", false, icon_cache);
         sidebar_row(labels.trash, "trash", "trash", relative == "Trash", icon_cache);
-    }, MaterialKind::Thin, SpaceToken::Lg, SpaceToken::Xs);
+    });
 }
 
 void toolbar_separator() {
@@ -2225,7 +2114,7 @@ void finder_toolbar(State const& state,
                 navigation_button(state.labels.forward.c_str(), GoForward{}, snap.can_go_forward,
                                   icons::Symbol::Forward, 0x6202u);
             });
-        widget::text(snap.relative_location == "Demo Root"
+        widget::text(snap.root_is_demo && snap.relative_location == snap.root_label
             ? state.labels.title
             : snap.relative_location,
             TextSize::Heading);
@@ -2523,7 +2412,7 @@ void finder_grid(State const& state,
     auto const chrome = file_explorer_demo::explorer_chrome_metrics(
         state.explorer,
         "desktop");
-    auto& svg_cache = state.svg_preview_cache;
+    auto const& icon_cache = state.icon_cache;
     layout::material_surface(
         content_surface_options(),
         [&] {
@@ -2544,11 +2433,11 @@ void finder_grid(State const& state,
                         layout::column([&] {
                             widget::canvas(chrome.icon_grid_thumbnail_width,
                                 chrome.icon_grid_thumbnail_height,
-                                [entry, selected, preview_source, &svg_cache](
+                                [entry, selected, preview_source, &icon_cache](
                                         Painter& painter) {
                                     paint_item_thumbnail(
                                         painter,
-                                        svg_cache,
+                                        icon_cache,
                                         entry,
                                         selected,
                                         preview_source);
@@ -2670,7 +2559,7 @@ void finder_column_view(State const& state,
     auto entries = finder_entries(snap);
     float const column_height = file_explorer_demo::desktop_scroll_height(
         state.explorer, 224.0f, 500.0f, 620.0f);
-    auto& svg_cache = state.svg_preview_cache;
+    auto const& icon_cache = state.icon_cache;
     layout::material_surface(
         content_surface_options(),
         [&] {
@@ -2745,10 +2634,10 @@ void finder_column_view(State const& state,
                             widget::canvas(160.0f, 110.0f,
                                 [entry = snap.selected,
                                  preview = snap.preview,
-                                 &svg_cache](Painter& painter) {
+                                 &icon_cache](Painter& painter) {
                                     paint_item_thumbnail(
                                         painter,
-                                        svg_cache,
+                                        icon_cache,
                                         entry,
                                         true,
                                         preview);
@@ -2781,7 +2670,7 @@ void finder_gallery_view(State const& state,
     auto entries = finder_entries(snap);
     float const gallery_height = file_explorer_demo::desktop_scroll_height(
         state.explorer, 352.0f, 366.0f, 520.0f);
-    auto& svg_cache = state.svg_preview_cache;
+    auto const& icon_cache = state.icon_cache;
     file_explorer_demo::Entry hero = snap.has_selection && !snap.selected.name.empty()
         ? snap.selected
         : (entries.empty() ? file_explorer_demo::Entry{} : entries.front());
@@ -2798,10 +2687,10 @@ void finder_gallery_view(State const& state,
             }
             layout::row([&] {
                 widget::canvas(220.0f, 150.0f,
-                    [hero, hero_preview, &svg_cache](Painter& painter) {
+                    [hero, hero_preview, &icon_cache](Painter& painter) {
                         paint_item_thumbnail(
                             painter,
-                            svg_cache,
+                            icon_cache,
                             hero,
                             true,
                             hero_preview);
@@ -2833,11 +2722,11 @@ void finder_gallery_view(State const& state,
                             : std::string{};
                         layout::column([&] {
                             widget::canvas(128.0f, 76.0f,
-                                [entry, selected, preview_source, &svg_cache](
+                                [entry, selected, preview_source, &icon_cache](
                                         Painter& painter) {
                                     paint_item_thumbnail(
                                         painter,
-                                        svg_cache,
+                                        icon_cache,
                                         entry,
                                         selected,
                                         preview_source);
@@ -3167,7 +3056,8 @@ void view(State const& state) {
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    configure_initial_filesystem_root(argc, argv);
     phenotype::Theme theme = phenotype::current_theme();
     theme = phenotype::theme_with_resource_defaults(
         theme,

@@ -627,6 +627,8 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
     interaction = plan["interaction"]
     budget = plan["resource_budget"]
     reference = plan["reference_model"]
+    backdrop_access = plan["backdrop_access"]
+    sampling_kernel = plan["sampling_kernel"]
     assert isinstance(primary, dict)
     assert isinstance(tint, dict)
     assert isinstance(curve, dict)
@@ -634,6 +636,8 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
     assert isinstance(interaction, dict)
     assert isinstance(budget, dict)
     assert isinstance(reference, dict)
+    assert isinstance(backdrop_access, dict)
+    assert isinstance(sampling_kernel, dict)
     backdrop_sampling = bool(plan["backdrop_sampling"])
     fallback = bool(plan["fallback"])
     if kind == "none":
@@ -680,6 +684,78 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
         depth_strategy = "fallback-edge"
     else:
         depth_strategy = "none"
+
+    if kind == "none":
+        frosting_source = "none"
+    elif backdrop_sampling:
+        frosting_source = "sampled-backdrop-frosting"
+    elif fallback:
+        frosting_source = "solid-fallback-frosting"
+    elif role == "content":
+        frosting_source = "standard-material-fill"
+    else:
+        frosting_source = "none"
+
+    if kind == "none" or int(tint["a"]) <= 0:
+        tint_source = "none"
+    elif backdrop_sampling:
+        tint_source = "adaptive-backdrop-tint"
+    else:
+        tint_source = "style-tint"
+
+    plan["optical_composition"] = {
+        "schema_version": verifier.MATERIAL_PLAN_CONTRACT_VERSION,
+        "model": response_model,
+        "blur_source": blur_strategy,
+        "frosting_source": frosting_source,
+        "tint_source": tint_source,
+        "luminance_source": curve["name"],
+        "depth_source": depth_strategy,
+        "interaction_source": (
+            interaction["response_model"]
+            if bool(interaction["active"]) else "none"),
+        "fallback_source": plan["fallback_path"] if fallback else "none",
+        "backdrop_sampled": backdrop_sampling,
+        "blur_required": bool(primary["requires_backdrop"]),
+        "frosting_required": backdrop_sampling,
+        "tint_required": kind != "none" and int(tint["a"]) > 0,
+        "saturation_required": (
+            backdrop_sampling and abs(float(plan["saturation"]) - 1.0) > 0.0001),
+        "luminance_required": (
+            kind != "none"
+            and (bool(curve["bounded"])
+                 or float(foreground["primary_contrast_ratio"])
+                 >= float(foreground["minimum_contrast_ratio"]))),
+        "edge_required": bool(primary["active"]) and edge,
+        "shadow_required": bool(primary["active"]) and shadow,
+        "noise_required": noise,
+        "interaction_required": bool(interaction["active"]),
+        "fallback_required": fallback,
+        "bounded": (
+            bool(budget["bounded_texture_copy"])
+            and bool(sampling_kernel["bounded"])
+            and bool(curve["bounded"])
+            and bool(backdrop_access["bounded"])),
+        "deterministic": (
+            bool(budget["deterministic_fallback"])
+            and bool(foreground["deterministic"])
+            and bool(interaction["deterministic"])),
+        "opacity": plan["opacity"],
+        "blur_radius": plan["blur_radius"],
+        "tint_alpha": int(tint["a"]) / 255,
+        "saturation": plan["saturation"],
+        "luminance_floor": plan["luminance_floor"],
+        "luminance_gain": plan["luminance_gain"],
+        "edge_highlight": plan["edge_highlight"],
+        "edge_width": plan["edge_width"],
+        "noise_opacity": plan["noise_opacity"],
+        "shadow_alpha": plan["shadow_alpha"],
+        "shadow_radius": plan["shadow_radius"],
+        "interaction_response_strength": interaction["response_strength"],
+        "sample_taps": plan["sample_taps"],
+        "max_texture_copy_pixels": primary["max_texture_copy_pixels"],
+        "max_surface_sample_pixels": backdrop_access["max_surface_sample_pixels"],
+    }
 
     plan["optical_response"] = {
         "response_model": response_model,
@@ -1736,6 +1812,10 @@ def snapshot_with_file_explorer_chrome(
     }
     debug["platform_runtime"]["details"]["window"] = {
         "surface_kind": "macos_window",
+        "window_opaque": False,
+        "window_background_clear": True,
+        "window_background_alpha": 0,
+        "metal_layer_opaque": False,
         "native_window_controls": {
             "ownership_policy": "platform_edge_standard_buttons_only",
             "integration_policy": (
@@ -1755,6 +1835,105 @@ def snapshot_with_file_explorer_chrome(
         },
     }
     return root
+
+
+def install_file_explorer_sidebar_material(
+    root: dict[str, object],
+    *,
+    opacity: float = 0.34,
+    blur_radius: float = 28.0,
+    tint_alpha: int = 76,
+) -> None:
+    container = {
+        "mode": "container",
+        "container_id": 2100,
+        "union_id": 0,
+        "spacing": 16.0,
+        "interactive": False,
+        "morph_transitions": True,
+    }
+    descriptor = {
+        "kind": "thin",
+        "role": "sidebar",
+        "container": container,
+        "interaction": {
+            "hovered": False,
+            "pressed": False,
+            "focused": False,
+            "pointer_inside": False,
+            "active": False,
+            "pointer_x": 0.5,
+            "pointer_y": 0.5,
+        },
+        "opacity": opacity,
+        "blur_radius": blur_radius,
+        "tint": {"r": 248, "g": 248, "b": 250, "a": tint_alpha},
+        "saturation": 1.28,
+        "luminance_floor": 0.03,
+        "luminance_gain": 1.03,
+        "edge_highlight": 0.32,
+        "edge_width": 1.0,
+        "noise_opacity": 0.014,
+        "shadow_alpha": 0.10,
+        "shadow_radius": 14.0,
+    }
+
+    material = root["debug"]["semantic_tree"]["children"][0]["material"]
+    material.update({
+        key: value
+        for key, value in descriptor.items()
+        if key != "interaction"
+    })
+    material["fallback"] = True
+    material["verifier_profile"] = "thin-balanced-backdrop"
+
+    plan = root["debug"]["platform_runtime"]["details"]["renderer"][
+        "material_plans"][0]
+    plan.update({
+        "kind": "thin",
+        "role": "sidebar",
+        "plan_id": "material.thin.fallback",
+        "command_descriptor": descriptor,
+        "container": {
+            **container,
+            "blend_distance": 16.0,
+            "participates": True,
+            "requested_morph_transitions": True,
+            "shared_backdrop_scope": False,
+            "shape_union_expected": False,
+            "shape_blending_expected": True,
+            "reduced_motion_suppressed_morph": False,
+            "spacing_clamped": False,
+            "blend_policy": "container",
+            "morph_policy": "container-morph",
+            "performance_policy": "shared-container-capture",
+        },
+        "opacity": opacity,
+        "blur_radius": 0.0,
+        "tint": descriptor["tint"],
+        "saturation": 1.0,
+        "luminance_floor": 0.03,
+        "luminance_gain": 1.03,
+        "edge_highlight": 0.32,
+        "shadow_alpha": 0.10,
+        "shadow_radius": 14.0,
+    })
+    reference_model = plan["reference_model"]
+    reference_model.update({
+        "variant": "thin",
+        "semantic_thickness": "thin",
+        "container_grouped": True,
+        "container_morphing": True,
+    })
+    theme = plan["theme"]
+    theme["tint"] = descriptor["tint"]
+    verifier_obj = plan["verifier"]
+    verifier_obj["region_name"] = "thin-balanced-backdrop"
+    refresh_observation_contract(plan)
+    refresh_execution_audit(plan)
+    renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+    renderer["material_runtime_summary"] = material_runtime_summary(plan)
+    renderer["material_executor_summary"] = material_executor_summary(plan)
 
 
 def snapshot_with_glass_probe_contract(
@@ -2150,6 +2329,34 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["command_descriptor_missing"],
             0)
 
+    def test_file_explorer_native_chrome_contract_rejects_opaque_macos_window(self) -> None:
+        snap = snapshot_with_file_explorer_chrome(material_plan())
+        runtime_window = snap["debug"]["platform_runtime"]["details"]["window"]
+        runtime_window["window_opaque"] = True
+        runtime_window["window_background_clear"] = False
+        runtime_window["window_background_alpha"] = 255
+        runtime_window["metal_layer_opaque"] = True
+
+        code, report = self.run_verifier(snap)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "file explorer macOS window is transparent "
+                "for sidebar backdrop"))
+        self.assertEqual(failure["likely_layer"], "native-window-composition")
+        self.assertEqual(failure["likely_pass"], "appkit-metal-layer")
+        self.assertIn("CAMetalLayer stays opaque", failure["hint"])
+        self.assertEqual(
+            failure["actual"],
+            {
+                "window_opaque": True,
+                "window_background_clear": False,
+                "window_background_alpha": 255,
+                "metal_layer_opaque": True,
+            })
+
     def test_file_explorer_finder_visual_contract_rejects_drift(self) -> None:
         snap = snapshot_with_file_explorer_chrome(material_plan())
         contract = snap["debug"]["application"]["file_explorer"][
@@ -2217,6 +2424,28 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["semantic_tree"]["material_descriptor_missing"],
             0)
+
+    def test_file_explorer_sidebar_glass_contract_rejects_opaque_sidebar(self) -> None:
+        snap = snapshot_with_file_explorer_chrome(material_plan())
+        install_file_explorer_sidebar_material(snap, opacity=0.70, tint_alpha=180)
+
+        code, report = self.run_verifier(snap)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "file explorer desktop sidebar uses translucent "
+                "Liquid Glass descriptor"))
+        self.assertEqual(failure["likely_layer"], "finder-sidebar-glass")
+        self.assertEqual(failure["likely_pass"], "material-command")
+        self.assertEqual(
+            failure["path"],
+            "debug.semantic_tree.material_descriptors"
+            "[role=sidebar,kind=thin,container_id=2100]")
+        self.assertEqual(failure["actual"][0]["opacity"], 0.70)
+        self.assertEqual(failure["actual"][0]["tint_alpha"], 180)
+        self.assertIn("opaque white panel", failure["hint"])
 
     def test_reference_model_failure_points_to_pure_planner(self) -> None:
         plan = material_plan()
@@ -2644,6 +2873,29 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["contract_versions"],
             {str(verifier.MATERIAL_PLAN_CONTRACT_VERSION + 1): 1})
+
+    def test_optical_composition_mismatch_points_to_pure_contract(self) -> None:
+        plan = sampled_material_plan()
+        composition = plan["optical_composition"]
+        assert isinstance(composition, dict)
+        composition["blur_source"] = "fallback-fill"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"]
+            == "material optical composition blur_source matches plan")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".optical_composition.blur_source")
+        self.assertEqual(failure["expected"], "backdrop-sample-blur")
+        self.assertEqual(failure["actual"], "fallback-fill")
+        self.assertEqual(failure["likely_layer"], "material-optical-composition")
+        self.assertEqual(failure["likely_pass"], "backdrop-sample-blur")
+        self.assertIn("MaterialPlan", failure["hint"])
 
     def test_renderer_contract_version_mismatch_is_llm_actionable(self) -> None:
         root = snapshot(material_plan())

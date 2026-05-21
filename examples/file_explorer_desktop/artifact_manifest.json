@@ -64,7 +64,7 @@
     "fallback": 0,
     "backdrop_sampling": 9,
     "contract_versions": {
-      "35": 10
+      "36": 10
     },
     "theme_foreground_matches_theme": 0,
     "theme_accent_matches_theme": 0,
@@ -1963,6 +1963,22 @@
     {
       "path": "window.background_drag_enabled",
       "equals": true
+    },
+    {
+      "path": "window.window_opaque",
+      "equals": false
+    },
+    {
+      "path": "window.window_background_clear",
+      "equals": true
+    },
+    {
+      "path": "window.window_background_alpha",
+      "equals": 0
+    },
+    {
+      "path": "window.metal_layer_opaque",
+      "equals": false
     },
     {
       "path": "window.window_server_bounds.valid",

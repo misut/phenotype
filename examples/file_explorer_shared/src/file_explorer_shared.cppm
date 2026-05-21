@@ -190,6 +190,10 @@ struct ThemePreferenceSnapshot {
 struct Snapshot {
     fs::path root;
     fs::path current;
+    std::string root_label = "Demo Root";
+    std::string root_source = "demo-generated";
+    bool root_is_demo = true;
+    bool filesystem_mutations_allowed = true;
     std::string relative_location;
     std::vector<Entry> entries;
     Entry selected{};
@@ -219,6 +223,10 @@ struct Snapshot {
 struct ExplorerState {
     fs::path root;
     fs::path current;
+    std::string root_label = "Demo Root";
+    std::string root_source = "demo-generated";
+    bool root_is_demo = true;
+    bool filesystem_mutations_allowed = true;
     std::string selected_name;
     std::string search;
     std::string draft_name = "New Note.txt";
@@ -4304,6 +4312,12 @@ inline json::Value file_explorer_debug_json(
     out.emplace("profile", json::Value{std::string{profile}});
     out.emplace("root", json::Value{snap.root.string()});
     out.emplace("current", json::Value{snap.current.string()});
+    out.emplace("root_label", json::Value{snap.root_label});
+    out.emplace("root_source", json::Value{snap.root_source});
+    out.emplace("root_is_demo", json::Value{snap.root_is_demo});
+    out.emplace(
+        "filesystem_mutations_allowed",
+        json::Value{snap.filesystem_mutations_allowed});
     out.emplace("relative_location", json::Value{snap.relative_location});
     out.emplace("status", json::Value{state.status});
     out.emplace("search", json::Value{state.search});
@@ -5234,7 +5248,13 @@ inline std::string operation_label(OperationReceipt const& receipt) {
     return label;
 }
 
-inline std::string relative_location(fs::path const& root, fs::path const& current) {
+inline std::string relative_location(
+        fs::path const& root,
+        fs::path const& current,
+        std::string_view root_label = "Demo Root") {
+    auto root_name = root_label.empty()
+        ? std::string{"Demo Root"}
+        : std::string{root_label};
     std::error_code ec;
     auto const trash = trash_path(root);
     if (fs::equivalent(current, trash, ec))
@@ -5249,8 +5269,12 @@ inline std::string relative_location(fs::path const& root, fs::path const& curre
     ec.clear();
     auto rel = fs::relative(current, root, ec);
     if (ec || rel.empty() || rel == ".")
-        return "Demo Root";
-    return std::string("Demo Root/") + rel.generic_string();
+        return root_name;
+    return root_name + "/" + rel.generic_string();
+}
+
+inline std::string relative_location(ExplorerState const& state) {
+    return relative_location(state.root, state.current, state.root_label);
 }
 
 inline bool same_path(fs::path const& a, fs::path const& b) {
@@ -5461,21 +5485,24 @@ inline bool deletable_directory(
 }
 
 inline std::string operation_path_label(
-        fs::path const& root,
+        ExplorerState const& state,
         fs::path const& path) {
     if (path.empty())
         return {};
     auto const normalized = path.lexically_normal();
-    auto const rel = normalized.lexically_relative(root).generic_string();
+    auto const rel = normalized.lexically_relative(state.root).generic_string();
+    auto root_name = state.root_label.empty()
+        ? std::string{"Demo Root"}
+        : state.root_label;
     if (rel.empty() || rel == ".")
-        return "Demo Root";
+        return root_name;
     if (rel == ".." || rel.starts_with("../"))
         return "[outside-demo-root]";
     if (rel == ".Trash")
         return "Trash";
     if (rel.starts_with(".Trash/"))
         return std::string{"Trash/"} + rel.substr(7);
-    return std::string{"Demo Root/"} + rel;
+    return root_name + "/" + rel;
 }
 
 inline OperationPlan planned_file_create(
@@ -5485,9 +5512,9 @@ inline OperationPlan planned_file_create(
     return OperationPlan{
         .kind = "file_create",
         .display_name = display_name,
-        .destination = operation_path_label(state.root, target),
+        .destination = operation_path_label(state, target),
         .executable = true,
-        .sandboxed = path_inside_root(state.root, target),
+        .sandboxed = state.root_is_demo && path_inside_root(state.root, target),
         .mutates_filesystem = true,
         .writes_file = true,
     };
@@ -5500,9 +5527,9 @@ inline OperationPlan planned_folder_create(
     return OperationPlan{
         .kind = "folder_create",
         .display_name = display_name,
-        .destination = operation_path_label(state.root, target),
+        .destination = operation_path_label(state, target),
         .executable = true,
-        .sandboxed = path_inside_root(state.root, target),
+        .sandboxed = state.root_is_demo && path_inside_root(state.root, target),
         .mutates_filesystem = true,
         .creates_directory = true,
     };
@@ -5516,9 +5543,9 @@ inline OperationPlan planned_entry_read(
     return OperationPlan{
         .kind = folder ? "folder_select" : "file_read",
         .display_name = display_name,
-        .source = operation_path_label(state.root, source),
+        .source = operation_path_label(state, source),
         .executable = true,
-        .sandboxed = path_inside_root(state.root, source),
+        .sandboxed = state.root_is_demo && path_inside_root(state.root, source),
         .reads_file = !folder,
         .reads_directory = folder,
     };
@@ -5531,10 +5558,10 @@ inline OperationPlan planned_folder_open(
     return OperationPlan{
         .kind = "folder_open",
         .display_name = display_name,
-        .source = operation_path_label(state.root, source),
-        .destination = operation_path_label(state.root, source),
+        .source = operation_path_label(state, source),
+        .destination = operation_path_label(state, source),
         .executable = true,
-        .sandboxed = path_inside_root(state.root, source),
+        .sandboxed = state.root_is_demo && path_inside_root(state.root, source),
         .reads_directory = true,
     };
 }
@@ -5549,10 +5576,11 @@ inline OperationPlan planned_delete(
     return OperationPlan{
         .kind = folder ? "folder_delete" : "file_delete",
         .display_name = display_name,
-        .source = operation_path_label(state.root, source),
-        .destination = operation_path_label(state.root, destination),
+        .source = operation_path_label(state, source),
+        .destination = operation_path_label(state, destination),
         .executable = true,
-        .sandboxed = path_inside_root(state.root, source)
+        .sandboxed = state.root_is_demo
+            && path_inside_root(state.root, source)
             && (destination.empty() || path_inside_root(state.root, destination)),
         .mutates_filesystem = true,
         .deletes_file = !folder,
@@ -5570,10 +5598,11 @@ inline OperationPlan planned_duplicate(
     return OperationPlan{
         .kind = "file_duplicate",
         .display_name = display_name,
-        .source = operation_path_label(state.root, source),
-        .destination = operation_path_label(state.root, destination),
+        .source = operation_path_label(state, source),
+        .destination = operation_path_label(state, destination),
         .executable = true,
-        .sandboxed = path_inside_root(state.root, source)
+        .sandboxed = state.root_is_demo
+            && path_inside_root(state.root, source)
             && path_inside_root(state.root, destination),
         .mutates_filesystem = true,
         .reads_file = true,
@@ -5653,11 +5682,17 @@ inline Snapshot snapshot(ExplorerState const& state) {
     Snapshot out;
     out.root = state.root;
     out.current = state.current;
-    out.relative_location = relative_location(state.root, state.current);
+    out.root_label = state.root_label;
+    out.root_source = state.root_source;
+    out.root_is_demo = state.root_is_demo;
+    out.filesystem_mutations_allowed = state.filesystem_mutations_allowed;
+    out.relative_location = relative_location(state);
     out.can_go_back = !state.back_stack.empty();
     out.can_go_forward = !state.forward_stack.empty();
     std::error_code ec;
-    out.can_create_file = fs::is_directory(state.current, ec) && !ec;
+    out.can_create_file =
+        state.filesystem_mutations_allowed && fs::is_directory(state.current, ec)
+        && !ec;
     out.can_create_folder = out.can_create_file;
     out.entries = list_entries(state.current, state.search, state.sort_mode);
     out.operation_label = operation_label(state.last_operation);
@@ -5681,10 +5716,11 @@ inline Snapshot snapshot(ExplorerState const& state) {
         out.item_summary += ", " + std::to_string(out.folder_count) + " folders";
     if (out.has_selection) {
         auto const selected_path = state.current / out.selected.name;
-        out.can_delete_selected = out.selected.folder
+        out.can_delete_selected = state.filesystem_mutations_allowed && (out.selected.folder
             ? deletable_directory(state.root, selected_path)
-            : true;
-        out.can_duplicate_selected = !out.selected.folder;
+            : true);
+        out.can_duplicate_selected =
+            state.filesystem_mutations_allowed && !out.selected.folder;
         out.can_preview_selected = true;
         out.selected_kind_label = entry_kind_label(out.selected);
         out.selected_size_label = entry_size_label(out.selected);
@@ -5694,7 +5730,9 @@ inline Snapshot snapshot(ExplorerState const& state) {
             + out.selected_kind_label + " - " + out.selected_size_label;
         out.preview = read_preview(state.current / out.selected.name);
     } else {
-        out.action_summary = "Select a file to read, duplicate, or delete it.";
+        out.action_summary = state.filesystem_mutations_allowed
+            ? "Select a file to read, duplicate, or delete it."
+            : "Select a file to read it. Enable mutations explicitly before creating or deleting files.";
         out.preview = "Select a file to read its contents.";
     }
     return out;
@@ -5704,9 +5742,58 @@ inline ExplorerState make_state(std::string_view profile) {
     ExplorerState state;
     state.root = ensure_demo_tree(profile);
     state.current = state.root;
+    state.root_label = "Demo Root";
+    state.root_source = "demo-generated";
+    state.root_is_demo = true;
+    state.filesystem_mutations_allowed = true;
     state.selected_name.clear();
     state.sort_mode = default_sort_mode(profile);
     apply_default_viewport(state, profile);
+    return state;
+}
+
+inline std::string default_root_label(fs::path const& root) {
+    auto name = root.filename().string();
+    if (!name.empty())
+        return name;
+    auto text = root.lexically_normal().generic_string();
+    return text.empty() ? std::string{"Files"} : text;
+}
+
+inline ExplorerState make_state_for_root(
+        std::string_view profile,
+        fs::path root,
+        std::string root_label,
+        std::string root_source,
+        bool filesystem_mutations_allowed) {
+    ExplorerState state;
+    std::error_code ec;
+    auto normalized = fs::weakly_canonical(root, ec);
+    if (ec || normalized.empty())
+        normalized = root.lexically_normal();
+    ec.clear();
+    if (!fs::is_directory(normalized, ec) || ec) {
+        state = make_state(profile);
+        state.status = "Requested file explorer root is unavailable.";
+        return state;
+    }
+
+    state.root = normalized;
+    state.current = state.root;
+    state.root_label = root_label.empty()
+        ? default_root_label(state.root)
+        : std::move(root_label);
+    state.root_source = root_source.empty()
+        ? std::string{"external-filesystem"}
+        : std::move(root_source);
+    state.root_is_demo = false;
+    state.filesystem_mutations_allowed = filesystem_mutations_allowed;
+    state.selected_name.clear();
+    state.sort_mode = SortMode::Name;
+    apply_default_viewport(state, profile);
+    state.status = filesystem_mutations_allowed
+        ? "Opened real filesystem location with file changes enabled."
+        : "Opened real filesystem location in read-only mode.";
     return state;
 }
 
@@ -5767,19 +5854,19 @@ inline void select_location(ExplorerState& state, std::string_view id) {
     open_directory(
         state,
         next,
-        "Opened " + relative_location(state.root, next));
+        "Opened " + relative_location(state.root, next, state.root_label));
 }
 
 inline void go_up(ExplorerState& state) {
     if (state.current == state.root) {
-        state.status = "Already at the demo root.";
+        state.status = "Already at " + state.root_label + ".";
         return;
     }
     auto next = state.current.parent_path();
     open_directory(
         state,
         next,
-        "Moved up to " + relative_location(state.root, next));
+        "Moved up to " + relative_location(state.root, next, state.root_label));
 }
 
 inline void go_back(ExplorerState& state) {
@@ -5796,7 +5883,7 @@ inline void go_back(ExplorerState& state) {
     open_directory(
         state,
         next,
-        "Went back to " + relative_location(state.root, next),
+        "Went back to " + relative_location(state.root, next, state.root_label),
         false);
 }
 
@@ -5814,7 +5901,7 @@ inline void go_forward(ExplorerState& state) {
     open_directory(
         state,
         next,
-        "Went forward to " + relative_location(state.root, next),
+        "Went forward to " + relative_location(state.root, next, state.root_label),
         false);
 }
 
@@ -6029,6 +6116,13 @@ inline void create_file(ExplorerState& state) {
     auto name = sanitize_file_name(state.draft_name);
     auto path = unique_child_path(state.current, name);
     auto plan = planned_file_create(state, path.filename().string(), path);
+    if (!state.filesystem_mutations_allowed) {
+        plan.executable = false;
+        plan.fallback_reason = "Filesystem mutations are disabled for this root.";
+        state.status = "File changes are disabled for this location.";
+        record_operation(state, std::move(plan), false, state.status);
+        return;
+    }
     std::ofstream out(path, std::ios::binary);
     if (!out) {
         state.status = "Could not create " + name;
@@ -6054,6 +6148,13 @@ inline void create_folder(ExplorerState& state) {
     auto name = sanitize_folder_name(state.draft_folder_name);
     auto path = unique_child_path(state.current, name);
     auto plan = planned_folder_create(state, path.filename().string(), path);
+    if (!state.filesystem_mutations_allowed) {
+        plan.executable = false;
+        plan.fallback_reason = "Filesystem mutations are disabled for this root.";
+        state.status = "File changes are disabled for this location.";
+        record_operation(state, std::move(plan), false, state.status);
+        return;
+    }
     std::error_code ec;
     if (!fs::create_directory(path, ec) || ec) {
         state.status = "Could not create folder " + name;
@@ -6073,6 +6174,27 @@ inline void delete_selected(ExplorerState& state) {
     if (state.selected_name.empty()) {
         state.status = "Select a file or folder before deleting.";
         record_operation(state, "file_delete", {}, false, state.status);
+        return;
+    }
+    if (!state.filesystem_mutations_allowed) {
+        auto rejected = state.selected_name;
+        auto resolved = direct_child_entry_path(state, rejected);
+        auto plan = resolved
+            ? planned_delete(
+                state,
+                rejected,
+                *resolved,
+                false,
+                false)
+            : OperationPlan{
+                .kind = "file_delete",
+                .display_name = rejected,
+                .executable = false,
+            };
+        plan.executable = false;
+        plan.fallback_reason = "Filesystem mutations are disabled for this root.";
+        state.status = "File changes are disabled for this location.";
+        record_operation(state, std::move(plan), false, state.status);
         return;
     }
     auto resolved = direct_child_entry_path(state, state.selected_name);
@@ -6237,6 +6359,22 @@ inline void duplicate_selected(ExplorerState& state) {
         record_operation(state, "file_duplicate", {}, false, state.status);
         return;
     }
+    if (!state.filesystem_mutations_allowed) {
+        auto rejected = state.selected_name;
+        auto resolved = direct_child_entry_path(state, rejected);
+        auto plan = resolved
+            ? planned_duplicate(state, rejected, *resolved, state.current / rejected)
+            : OperationPlan{
+                .kind = "file_duplicate",
+                .display_name = rejected,
+                .executable = false,
+            };
+        plan.executable = false;
+        plan.fallback_reason = "Filesystem mutations are disabled for this root.";
+        state.status = "File changes are disabled for this location.";
+        record_operation(state, std::move(plan), false, state.status);
+        return;
+    }
     auto resolved = direct_child_entry_path(state, state.selected_name);
     if (!resolved) {
         auto rejected = state.selected_name;
@@ -6291,6 +6429,21 @@ inline void duplicate_selected(ExplorerState& state) {
 }
 
 inline void reset_demo_tree(ExplorerState& state, std::string_view profile) {
+    if (!state.root_is_demo) {
+        state.current = state.root;
+        state.selected_name.clear();
+        state.search.clear();
+        state.back_stack.clear();
+        state.forward_stack.clear();
+        state.last_operation = {};
+        state.sort_mode = SortMode::Name;
+        state.view_mode = ExplorerViewMode::Icon;
+        state.last_input_modality = ExplorerInputModality::Programmatic;
+        state.focus_target = ExplorerFocusTarget::None;
+        state.focus_visible = false;
+        state.status = "Real filesystem location refreshed.";
+        return;
+    }
     std::error_code ec;
     if (!state.root.empty())
         fs::remove_all(state.root, ec);

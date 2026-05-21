@@ -1891,6 +1891,116 @@ namespace detail {
             "deterministic_fallback",
             json::Value{plan.optical_response.deterministic_fallback});
 
+        auto const& composition = plan.optical_composition;
+        json::Object optical_composition;
+        optical_composition.emplace(
+            "schema_version",
+            json::Value{
+                static_cast<std::int64_t>(composition.schema_version)});
+        optical_composition.emplace("model", json::Value{composition.model});
+        optical_composition.emplace(
+            "blur_source",
+            json::Value{composition.blur_source});
+        optical_composition.emplace(
+            "frosting_source",
+            json::Value{composition.frosting_source});
+        optical_composition.emplace(
+            "tint_source",
+            json::Value{composition.tint_source});
+        optical_composition.emplace(
+            "luminance_source",
+            json::Value{composition.luminance_source});
+        optical_composition.emplace(
+            "depth_source",
+            json::Value{composition.depth_source});
+        optical_composition.emplace(
+            "interaction_source",
+            json::Value{composition.interaction_source});
+        optical_composition.emplace(
+            "fallback_source",
+            json::Value{composition.fallback_source});
+        optical_composition.emplace(
+            "backdrop_sampled",
+            json::Value{composition.backdrop_sampled});
+        optical_composition.emplace(
+            "blur_required",
+            json::Value{composition.blur_required});
+        optical_composition.emplace(
+            "frosting_required",
+            json::Value{composition.frosting_required});
+        optical_composition.emplace(
+            "tint_required",
+            json::Value{composition.tint_required});
+        optical_composition.emplace(
+            "saturation_required",
+            json::Value{composition.saturation_required});
+        optical_composition.emplace(
+            "luminance_required",
+            json::Value{composition.luminance_required});
+        optical_composition.emplace(
+            "edge_required",
+            json::Value{composition.edge_required});
+        optical_composition.emplace(
+            "shadow_required",
+            json::Value{composition.shadow_required});
+        optical_composition.emplace(
+            "noise_required",
+            json::Value{composition.noise_required});
+        optical_composition.emplace(
+            "interaction_required",
+            json::Value{composition.interaction_required});
+        optical_composition.emplace(
+            "fallback_required",
+            json::Value{composition.fallback_required});
+        optical_composition.emplace("bounded", json::Value{composition.bounded});
+        optical_composition.emplace(
+            "deterministic",
+            json::Value{composition.deterministic});
+        optical_composition.emplace("opacity", json::Value{composition.opacity});
+        optical_composition.emplace(
+            "blur_radius",
+            json::Value{composition.blur_radius});
+        optical_composition.emplace(
+            "tint_alpha",
+            json::Value{composition.tint_alpha});
+        optical_composition.emplace(
+            "saturation",
+            json::Value{composition.saturation});
+        optical_composition.emplace(
+            "luminance_floor",
+            json::Value{composition.luminance_floor});
+        optical_composition.emplace(
+            "luminance_gain",
+            json::Value{composition.luminance_gain});
+        optical_composition.emplace(
+            "edge_highlight",
+            json::Value{composition.edge_highlight});
+        optical_composition.emplace(
+            "edge_width",
+            json::Value{composition.edge_width});
+        optical_composition.emplace(
+            "noise_opacity",
+            json::Value{composition.noise_opacity});
+        optical_composition.emplace(
+            "shadow_alpha",
+            json::Value{composition.shadow_alpha});
+        optical_composition.emplace(
+            "shadow_radius",
+            json::Value{composition.shadow_radius});
+        optical_composition.emplace(
+            "interaction_response_strength",
+            json::Value{composition.interaction_response_strength});
+        optical_composition.emplace(
+            "sample_taps",
+            json::Value{
+                static_cast<std::int64_t>(composition.sample_taps)});
+        optical_composition.emplace(
+            "max_texture_copy_pixels",
+            json::Value{composition.max_texture_copy_pixels});
+        optical_composition.emplace(
+            "max_surface_sample_pixels",
+            json::Value{composition.max_surface_sample_pixels});
+
         json::Object quality_policy;
         quality_policy.emplace(
             "allow_backdrop_sampling",
@@ -2129,6 +2239,9 @@ namespace detail {
         out.emplace(
             "optical_response",
             json::Value{std::move(optical_response)});
+        out.emplace(
+            "optical_composition",
+            json::Value{std::move(optical_composition)});
         out.emplace("fallback", json::Value{plan.fallback()});
         out.emplace(
             "fallback_path",

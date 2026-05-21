@@ -2662,6 +2662,8 @@ struct MaterialSurfaceOptions {
     char const* semantic_label = "";
     bool inherit_material_container = true;
     bool interactive = false;
+    bool has_material_override = false;
+    MaterialStyle material_override{};
     MaterialContainerDescriptor container{};
 };
 
@@ -2697,7 +2699,9 @@ inline char const* glass_surface_preset_name(
 inline void configure_material_surface(LayoutNode& node,
                                        MaterialSurfaceOptions const& options) {
     auto const& t = detail::g_app.theme;
-    node.material = material_style(options.kind);
+    node.material = options.has_material_override
+        ? options.material_override
+        : material_style(options.kind);
     node.material.role = options.role;
     node.material.interaction = options.interaction;
     node.material.container = options.inherit_material_container

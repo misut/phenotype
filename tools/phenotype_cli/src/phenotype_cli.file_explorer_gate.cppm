@@ -543,6 +543,7 @@ auto run_file_explorer_case(fs::path const& root,
         {"PHENOTYPE_ACCESSIBILITY_DISPLAY", std::move(accessibility_display)},
         {"PHENOTYPE_ARTIFACT_EXIT", "1"},
         {"PHENOTYPE_FILE_EXPLORER_COLOR_SCHEME", "light"},
+        {"PHENOTYPE_FILE_EXPLORER_ROOT_MODE", "demo"},
     };
     if (item.profile == "desktop")
         env["PHENOTYPE_FILE_EXPLORER_VIEW"] = item.mode;

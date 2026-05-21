@@ -996,6 +996,47 @@ duplicate
     assert(snap.entries[5].name == "※해당 시 필독_①무주택자인 경우.pdf");
     assert(snap.entries[6].name == "[카카오] 퇴직금 지급 기준.pdf");
 
+    auto real_root =
+        fs::temp_directory_path() / unique_test_profile("test-real-root");
+    fs::create_directories(real_root / "Nested");
+    {
+        std::ofstream out(real_root / "alpha.txt", std::ios::binary);
+        out << "alpha real filesystem preview\n";
+    }
+    auto real_state = demo::make_state_for_root(
+        profile,
+        real_root,
+        "Real Root",
+        "test-real-filesystem",
+        false);
+    auto real_snap = demo::snapshot(real_state);
+    assert(real_snap.root == fs::weakly_canonical(real_root));
+    assert(real_snap.root_label == "Real Root");
+    assert(real_snap.root_source == "test-real-filesystem");
+    assert(!real_snap.root_is_demo);
+    assert(!real_snap.filesystem_mutations_allowed);
+    assert(real_snap.relative_location == "Real Root");
+    assert(demo::snapshot_has_entry(real_snap, "alpha.txt"));
+    assert(demo::snapshot_has_entry(real_snap, "Nested"));
+    assert(!real_snap.can_create_file);
+    assert(!real_snap.can_create_folder);
+    demo::select_entry(real_state, "alpha.txt");
+    real_snap = demo::snapshot(real_state);
+    assert(real_snap.has_selection);
+    assert(real_snap.can_preview_selected);
+    assert(!real_snap.can_duplicate_selected);
+    assert(!real_snap.can_delete_selected);
+    assert(real_snap.preview.find("alpha real filesystem preview")
+           != std::string::npos);
+    demo::create_file(real_state);
+    assert(!real_state.last_operation.ok);
+    assert(real_state.last_operation.plan.fallback_reason
+           == "Filesystem mutations are disabled for this root.");
+    demo::reset_demo_tree(real_state, profile);
+    assert(fs::exists(real_root / "alpha.txt"));
+    assert(real_state.root == fs::weakly_canonical(real_root));
+    fs::remove_all(real_root, ec);
+
     std::string const keyboard_profile =
         unique_test_profile("test-keyboard-navigation");
     auto keyboard_state = demo::make_state(keyboard_profile);
