@@ -120,9 +120,11 @@ material kinds and roles, fallback paths/reasons, backdrop sources and capture
 reasons, a compact `snapshot.material.executor_budget` copied from
 `renderer.material_executor_summary`, frame/platform files, and likely
 layer/pass hints. Supplying `--manifest` or `--verify` also runs the
-uv-managed verifier and embeds its JSON report in the same envelope. Use this
-as the first artifact triage command when a CI log or local bundle needs one
-machine-readable explanation before deeper pixel-contract debugging.
+uv-managed verifier, embeds its JSON report in the same envelope, and mirrors
+the verifier's compact `artifact_context.material_contract.executor_budget`
+under `verifier.material_budget` when present. Use this as the first artifact
+triage command when a CI log or local bundle needs one machine-readable
+explanation before deeper pixel-contract debugging.
 
 When debugging the CLI/native input-output boundary itself, first check the
 pure contract surface:

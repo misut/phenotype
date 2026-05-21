@@ -6,6 +6,7 @@ import cppx.process.system;
 import cppx.terminal;
 import json;
 import phenotype_cli.common;
+import phenotype_cli.material_budget;
 import phenotype_cli.runtime;
 import std;
 
@@ -13,6 +14,7 @@ export namespace phenotype_cli::artifacts {
 
 namespace fs = std::filesystem;
 using namespace phenotype_cli::common;
+using namespace phenotype_cli::material_budget;
 using namespace phenotype_cli::runtime;
 
 struct MaterialExecutorBudgetObservation {
@@ -603,10 +605,14 @@ auto snapshot_observation_json(SnapshotObservation const& observation)
 
 auto verifier_observation_json(VerifierObservation const& verifier)
     -> std::string {
+    auto const budget = verifier.report
+        ? material_budget_from_report(*verifier.report)
+        : std::optional<MaterialBudgetSummary>{};
     return std::format(
         "{{\"requested\":{},\"executed\":{},\"ok\":{},"
         "\"exit_code\":{},\"timed_out\":{},\"stdout_tail\":{},"
-        "\"stderr_tail\":{},\"report_error\":{},\"report\":{}}}",
+        "\"stderr_tail\":{},\"report_error\":{},"
+        "\"material_budget\":{},\"report\":{}}}",
         verifier.requested ? "true" : "false",
         verifier.executed ? "true" : "false",
         verifier.ok ? "true" : "false",
@@ -615,6 +621,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         json_string(verifier.stdout_tail),
         json_string(verifier.stderr_tail),
         json_string(verifier.report_error),
+        material_budget_json(budget),
         json_report_or_null(verifier.report));
 }
 
