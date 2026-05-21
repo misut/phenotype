@@ -132,20 +132,20 @@ def sampling_kernel_contract(sample_taps: int) -> dict[str, object]:
             "name": "weighted-cross-5",
             "radius": 1,
             "blur_step_scale": 0.35,
-            "weight_profile": "center4-cardinal2",
+            "weight_profile": "gaussian-cross-5-separable",
         }
     if sample_taps <= 9:
         return {
             "name": "weighted-3x3-grid",
             "radius": 1,
             "blur_step_scale": 0.35,
-            "weight_profile": "center4-cardinal2-diagonal1",
+            "weight_profile": "gaussian-3x3-separable",
         }
     return {
-        "name": "weighted-5x5-manhattan",
+        "name": "gaussian-5x5",
         "radius": 2,
         "blur_step_scale": 0.35,
-        "weight_profile": "center4-cardinal2-diagonal1",
+        "weight_profile": "gaussian-5x5-separable",
     }
 
 

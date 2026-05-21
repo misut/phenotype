@@ -901,11 +901,11 @@ also clamps executable blur to `material_max_blur_radius` (currently 36 px)
 before a backend receives the plan. The artifact verifier repeats those cap
 checks for `quality_policy` and `resource_budget`, so over-budget shader work
 fails with the exact JSON path instead of becoming backend-specific behavior.
-`sampling_kernel.name` is `weighted-5x5-manhattan` for active sampled glass and
+`sampling_kernel.name` is `gaussian-5x5` for active sampled glass and
 `none` for deterministic fallback at the default 25-tap quality tier. Lower
 quality tiers use `weighted-center` (1 tap), `weighted-cross-5` (5 taps), and
 `weighted-3x3-grid` (9 taps) before the 13/25-tap
-`weighted-5x5-manhattan` descriptor. Its `radius` and `blur_step_scale` are
+`gaussian-5x5` descriptor. Its `radius` and `blur_step_scale` are
 part of the pure contract and are uploaded to the macOS material shader, so
 changing blur spread requires changing the plan, serializer, verifier
 vocabulary, and docs together. macOS also reports
@@ -1415,9 +1415,9 @@ vocabularies. Current fallback paths are `none`, `no-material`, `invalid-geometr
 `quality-policy`; current pass names are `none`, `backdrop-sample-blur`, and
 `translucent-rounded-rect`; current sampling kernels are `none`,
 `weighted-center`, `weighted-cross-5`, `weighted-3x3-grid`, and
-`weighted-5x5-manhattan`; current sampling weight profiles are `none`,
-`center4`, `center4-cardinal2`, and `center4-cardinal2-diagonal1`; current
-luminance curves are
+`gaussian-5x5`; current sampling weight profiles are `none`, `center4`,
+`gaussian-cross-5-separable`, `gaussian-3x3-separable`, and
+`gaussian-5x5-separable`; current luminance curves are
 `adaptive-backdrop-luma` and `fallback-flat`. Current reference blending scopes
 are `none`, `sampled-backdrop`, and `deterministic-fallback`; current reference
 shapes are `none`, `invalid`, `rectangle`, `rounded-rectangle`, and `capsule`; current

@@ -36,7 +36,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "42": 8
+      "43": 8
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -202,10 +202,10 @@
       "shape-shadow": 8
     },
     "sampling_kernels": {
-      "weighted-5x5-manhattan": 8
+      "gaussian-5x5": 8
     },
     "sampling_weight_profiles": {
-      "center4-cardinal2-diagonal1": 8
+      "gaussian-5x5-separable": 8
     },
     "luminance_curves": {
       "adaptive-backdrop-luma": 8

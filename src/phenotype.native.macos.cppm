@@ -4238,8 +4238,9 @@ fragment float4 fs_material(
                 || (sample_taps >= 1u && manhattan == 0));
             if (!include)
                 continue;
-            float dist = float(manhattan);
-            float weight = (dist == 0.0) ? 4.0 : ((dist <= 1.0) ? 2.0 : 1.0);
+            float axis_weight_x = (ax == 0) ? 7.0 : ((ax == 1) ? 4.0 : 1.0);
+            float axis_weight_y = (ay == 0) ? 7.0 : ((ay == 1) ? 4.0 : 1.0);
+            float weight = axis_weight_x * axis_weight_y;
             float2 uv = clamp(
                 in.screen_uv
                     + refraction_uv

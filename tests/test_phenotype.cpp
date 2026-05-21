@@ -1520,14 +1520,15 @@ void test_material_planner_backdrop_and_fallback_paths() {
     auto const kernel5 = material_resolve_sampling_kernel(true, 5);
     assert(std::string(kernel5.name) == "weighted-cross-5");
     assert(kernel5.radius == 1);
-    assert(std::string(kernel5.weight_profile) == "center4-cardinal2");
+    assert(std::string(kernel5.weight_profile)
+           == "gaussian-cross-5-separable");
     auto const kernel9 = material_resolve_sampling_kernel(true, 9);
     assert(std::string(kernel9.name) == "weighted-3x3-grid");
     assert(kernel9.radius == 1);
     assert(std::string(kernel9.weight_profile)
-           == "center4-cardinal2-diagonal1");
+           == "gaussian-3x3-separable");
     auto const kernel13 = material_resolve_sampling_kernel(true, 13);
-    assert(std::string(kernel13.name) == "weighted-5x5-manhattan");
+    assert(std::string(kernel13.name) == "gaussian-5x5");
     assert(kernel13.radius == 2);
 
     auto default_quality = default_material_quality_policy();
@@ -1910,13 +1911,13 @@ void test_material_planner_backdrop_and_fallback_paths() {
         assert(glass_plan.execution_stages[i].bounded);
     }
     assert(std::string(glass_plan.sampling_kernel.name)
-           == "weighted-5x5-manhattan");
+           == "gaussian-5x5");
     assert(glass_plan.sampling_kernel.radius == 2);
     assert(glass_plan.sampling_kernel.sample_taps == glass_plan.sample_taps);
     assert(std::fabs(glass_plan.sampling_kernel.blur_step_scale - 0.35f)
            < 0.0001f);
     assert(std::string(glass_plan.sampling_kernel.weight_profile)
-           == "center4-cardinal2-diagonal1");
+           == "gaussian-5x5-separable");
     assert(glass_plan.sampling_kernel.requires_backdrop);
     assert(glass_plan.sampling_kernel.bounded);
     assert(std::string(glass_plan.luminance_curve.name)

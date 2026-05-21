@@ -58,7 +58,7 @@ struct GlassMaterialProbe {
     std::string_view expected_pass = "backdrop-sample-blur";
     std::string_view expected_executor = "backdrop-filter";
     std::string_view expected_luminance_curve = "adaptive-backdrop-luma";
-    std::string_view expected_sampling_kernel = "weighted-5x5-manhattan";
+    std::string_view expected_sampling_kernel = "gaussian-5x5";
     std::string_view fallback_path = "translucent-rounded-rect";
     bool requires_backdrop_sampling = true;
     bool requires_luminance_preservation = true;
