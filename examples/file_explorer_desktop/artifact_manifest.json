@@ -61,7 +61,7 @@
     "fallback": 0,
     "backdrop_sampling": 8,
     "contract_versions": {
-      "41": 9
+      "42": 9
     },
     "theme_foreground_matches_theme": 0,
     "theme_accent_matches_theme": 0,
@@ -93,6 +93,15 @@
     "container_unioned": 0,
     "container_interactive": 7,
     "container_morph_transitions": 8,
+    "container_group_count": 1,
+    "container_multi_surface_group_count": 1,
+    "container_union_group_count": 0,
+    "container_morph_group_count": 1,
+    "container_interactive_group_count": 1,
+    "container_shared_backdrop_scope_group_count": 1,
+    "container_shared_capture_surface_count": 8,
+    "container_shared_capture_saved_surface_count": 7,
+    "container_max_shared_capture_group_surfaces": 8,
     "reference_interactive_response": 7,
     "interaction_enabled": 7,
     "interaction_active": 0,

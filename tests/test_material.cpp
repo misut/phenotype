@@ -61,7 +61,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 41);
+    assert(material_plan_contract_version == 42);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -965,6 +965,9 @@ void test_container_group_runtime_summary_contract() {
     assert(groups.morph_group_count == 1u);
     assert(groups.interactive_group_count == 1u);
     assert(groups.shared_backdrop_scope_group_count == 2u);
+    assert(groups.shared_capture_surface_count == 4u);
+    assert(groups.shared_capture_saved_surface_count == 2u);
+    assert(groups.max_shared_capture_group_surfaces == 3u);
     assert(groups.fallback_mixed_group_count == 1u);
     assert(groups.max_group_size == 3u);
     assert(groups.max_active_surfaces == 3u);
@@ -992,6 +995,12 @@ void test_container_group_runtime_summary_contract() {
            == groups.total_shape_pair_count);
     assert(runtime_summary.container_groups.blend_candidate_pair_count
            == groups.blend_candidate_pair_count);
+    assert(runtime_summary.container_groups.shared_capture_surface_count
+           == groups.shared_capture_surface_count);
+    assert(runtime_summary.container_groups.shared_capture_saved_surface_count
+           == groups.shared_capture_saved_surface_count);
+    assert(runtime_summary.container_groups.max_shared_capture_group_surfaces
+           == groups.max_shared_capture_group_surfaces);
     assert(runtime_summary.container_groups.max_group_bounds_area
            == groups.max_group_bounds_area);
     assert(runtime_summary.max_saturation >= 1.0f);
@@ -1021,6 +1030,9 @@ void test_container_group_runtime_summary_contract() {
     assert(executor_summary.container_groups.fallback_mixed_group_count == 1u);
     assert(executor_summary.container_groups.union_candidate_pair_count == 2u);
     assert(executor_summary.container_groups.morph_candidate_pair_count == 3u);
+    assert(executor_summary.container_groups.shared_capture_surface_count == 4u);
+    assert(executor_summary.container_groups.shared_capture_saved_surface_count == 2u);
+    assert(executor_summary.container_groups.max_shared_capture_group_surfaces == 3u);
     assert(executor_summary.paint_layer_count == 3u);
     assert(executor_summary.active_paint_layer_count == 3u);
     assert(executor_summary.shadow_paint_layer_count == 1u);

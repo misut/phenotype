@@ -1292,6 +1292,9 @@ def material_container_group_summary(plan: dict[str, object]) -> dict[str, objec
             "morph_group_count": 0,
             "interactive_group_count": 0,
             "shared_backdrop_scope_group_count": 0,
+            "shared_capture_surface_count": 0,
+            "shared_capture_saved_surface_count": 0,
+            "max_shared_capture_group_surfaces": 0,
             "fallback_mixed_group_count": 0,
             "max_group_size": 0,
             "max_active_surfaces": 0,
@@ -1312,6 +1315,7 @@ def material_container_group_summary(plan: dict[str, object]) -> dict[str, objec
     active = 1 if primary["active"] else 0
     sampled = 1 if plan["backdrop_sampling"] else 0
     fallback = 1 if plan["fallback"] else 0
+    shared_scope = 1 if container["shared_backdrop_scope"] else 0
     geometry = plan["geometry"]
     assert isinstance(geometry, dict)
     width = float(geometry["w"])
@@ -1325,6 +1329,9 @@ def material_container_group_summary(plan: dict[str, object]) -> dict[str, objec
         "interactive_group_count": 1 if container["interactive"] else 0,
         "shared_backdrop_scope_group_count": (
             1 if container["shared_backdrop_scope"] else 0),
+        "shared_capture_surface_count": shared_scope,
+        "shared_capture_saved_surface_count": 0,
+        "max_shared_capture_group_surfaces": shared_scope,
         "fallback_mixed_group_count": 0,
         "max_group_size": 1,
         "max_active_surfaces": active,
@@ -1529,6 +1536,7 @@ def material_container_group_details(plan: dict[str, object]) -> list[dict[str, 
         "interactive_surfaces": 1 if container["interactive"] else 0,
         "shared_backdrop_scope_surfaces": (
             1 if container["shared_backdrop_scope"] else 0),
+        "shared_capture_saved_surfaces": 0,
         "shape_pair_count": 0,
         "blend_candidate_pair_count": 0,
         "union_candidate_pair_count": 0,
@@ -3164,6 +3172,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "container_morph_group_count": 1,
                 "container_interactive_group_count": 1,
                 "container_shared_backdrop_scope_group_count": 1,
+                "container_shared_capture_surface_count": 1,
+                "container_shared_capture_saved_surface_count": 0,
+                "container_max_shared_capture_group_surfaces": 1,
                 "container_fallback_mixed_group_count": 0,
                 "container_max_group_size": 1,
                 "container_max_active_surfaces": 1,

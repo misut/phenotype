@@ -975,6 +975,12 @@ union/morph flags, and aggregate pair counts. The verifier compares this detail
 array with `material_plans[]` and the flat runtime summary, so a missing split
 button segment, sidebar row, or toolbar union appears as an exact JSON-path
 failure instead of a visual-only mismatch.
+For schema 42 and later, compare that detail array with
+`renderer.material_runtime_summary.container_groups.shared_capture_*` and the
+matching executor summary. These counters explain how many grouped surfaces use
+shared backdrop capture, how many per-surface captures the group saves, and the
+largest capture-sharing group size before you inspect a Metal or native blur
+pass.
 For schema 32 and later, inspect `paint_layers[]` whenever a material surface is
 not sampled backdrop glass. This array is the pure fallback draw recipe, not
 backend telemetry: shadow, fill, and edge layers expose their executor,
@@ -1041,6 +1047,9 @@ The same summary can pin `container_modes`, `container_ids`, `union_ids`,
 `container_union_group_count`, `container_morph_group_count`,
 `container_interactive_group_count`,
 `container_shared_backdrop_scope_group_count`,
+`container_shared_capture_surface_count`,
+`container_shared_capture_saved_surface_count`,
+`container_max_shared_capture_group_surfaces`,
 `container_fallback_mixed_group_count`, `container_max_group_size`,
 `container_max_active_surfaces`, `container_max_sampled_backdrop_surfaces`, and
 `container_max_fallback_surfaces`.
@@ -1307,6 +1316,9 @@ can additionally assert pure aggregate group facts:
 `container_union_group_count`, `container_morph_group_count`,
 `container_interactive_group_count`,
 `container_shared_backdrop_scope_group_count`,
+`container_shared_capture_surface_count`,
+`container_shared_capture_saved_surface_count`,
+`container_max_shared_capture_group_surfaces`,
 `container_fallback_mixed_group_count`, `container_max_group_size`,
 `container_max_active_surfaces`, `container_max_sampled_backdrop_surfaces`, and
 `container_max_fallback_surfaces`. Per-plan container validation also checks

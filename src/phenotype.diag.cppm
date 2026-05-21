@@ -2514,6 +2514,13 @@ namespace detail {
                 static_cast<std::int64_t>(
                     group.shared_backdrop_scope_surfaces)});
         out.emplace(
+            "shared_capture_saved_surfaces",
+            json::Value{
+                static_cast<std::int64_t>(
+                    group.shared_backdrop_scope_surfaces > 1u
+                        ? group.shared_backdrop_scope_surfaces - 1u
+                        : 0u)});
+        out.emplace(
             "shape_pair_count",
             json::Value{static_cast<std::int64_t>(group.shape_pair_count)});
         out.emplace(
@@ -2651,6 +2658,21 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.shared_backdrop_scope_group_count)});
+        out.emplace(
+            "shared_capture_surface_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.shared_capture_surface_count)});
+        out.emplace(
+            "shared_capture_saved_surface_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.shared_capture_saved_surface_count)});
+        out.emplace(
+            "max_shared_capture_group_surfaces",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.max_shared_capture_group_surfaces)});
         out.emplace(
             "fallback_mixed_group_count",
             json::Value{

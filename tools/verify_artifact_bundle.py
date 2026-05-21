@@ -431,7 +431,7 @@ ALLOWED_MATERIAL_REFRACTION_SOURCES = {
     "sampled-backdrop-edge-refraction",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 41
+MATERIAL_PLAN_CONTRACT_VERSION = 42
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 MATERIAL_MAX_REFRACTION_OFFSET_PIXELS = 3.5
@@ -2736,6 +2736,9 @@ MATERIAL_CONTAINER_GROUP_SUMMARY_FIELDS = (
     "morph_group_count",
     "interactive_group_count",
     "shared_backdrop_scope_group_count",
+    "shared_capture_surface_count",
+    "shared_capture_saved_surface_count",
+    "max_shared_capture_group_surfaces",
     "fallback_mixed_group_count",
     "max_group_size",
     "max_active_surfaces",
@@ -2762,6 +2765,12 @@ MATERIAL_CONTAINER_GROUP_SPEC_FIELDS = {
     "container_interactive_group_count": "interactive_group_count",
     "container_shared_backdrop_scope_group_count": (
         "shared_backdrop_scope_group_count"),
+    "container_shared_capture_surface_count": (
+        "shared_capture_surface_count"),
+    "container_shared_capture_saved_surface_count": (
+        "shared_capture_saved_surface_count"),
+    "container_max_shared_capture_group_surfaces": (
+        "max_shared_capture_group_surfaces"),
     "container_fallback_mixed_group_count": "fallback_mixed_group_count",
     "container_max_group_size": "max_group_size",
     "container_max_active_surfaces": "max_active_surfaces",
@@ -5357,6 +5366,9 @@ def summarize_material_plans(
             "morph_group_count": 0,
             "interactive_group_count": 0,
             "shared_backdrop_scope_group_count": 0,
+            "shared_capture_surface_count": 0,
+            "shared_capture_saved_surface_count": 0,
+            "max_shared_capture_group_surfaces": 0,
             "fallback_mixed_group_count": 0,
             "max_group_size": 0,
             "max_active_surfaces": 0,
@@ -11645,6 +11657,16 @@ def summarize_material_plans(
         if int(group["shared_backdrop_scope_surfaces"]) > 0:
             group_summary["shared_backdrop_scope_group_count"] = (
                 int(group_summary["shared_backdrop_scope_group_count"]) + 1)
+            shared_surfaces = int(group["shared_backdrop_scope_surfaces"])
+            group_summary["shared_capture_surface_count"] = (
+                int(group_summary["shared_capture_surface_count"])
+                + shared_surfaces)
+            group_summary["shared_capture_saved_surface_count"] = (
+                int(group_summary["shared_capture_saved_surface_count"])
+                + max(0, shared_surfaces - 1))
+            group_summary["max_shared_capture_group_surfaces"] = max(
+                int(group_summary["max_shared_capture_group_surfaces"]),
+                shared_surfaces)
         if fallback_surfaces > 0 and active_surfaces > fallback_surfaces:
             group_summary["fallback_mixed_group_count"] = (
                 int(group_summary["fallback_mixed_group_count"]) + 1)
@@ -12696,6 +12718,9 @@ def check_material_container_group_details_contract(
     union_candidate_pair_count = 0
     morph_candidate_pair_count = 0
     separated_pair_count = 0
+    shared_capture_surface_count = 0
+    shared_capture_saved_surface_count = 0
+    max_shared_capture_group_surfaces = 0
     for index, group in enumerate(group_details):
         group_path = f"{base_path}[{index}]"
         report.check(
@@ -12816,6 +12841,8 @@ def check_material_container_group_details_contract(
             likely_pass="container-group-analysis",
             hint="Group bounds should show the union/morph analysis extent.")
         for field in (
+                "shared_backdrop_scope_surfaces",
+                "shared_capture_saved_surfaces",
                 "shape_pair_count",
                 "blend_candidate_pair_count",
                 "union_candidate_pair_count",
@@ -12841,8 +12868,19 @@ def check_material_container_group_details_contract(
         morph_candidate_pair_count += int(
             group.get("morph_candidate_pair_count") or 0)
         separated_pair_count += int(group.get("separated_pair_count") or 0)
+        shared_surfaces = int(group.get("shared_backdrop_scope_surfaces") or 0)
+        shared_capture_surface_count += shared_surfaces
+        shared_capture_saved_surface_count += max(0, shared_surfaces - 1)
+        max_shared_capture_group_surfaces = max(
+            max_shared_capture_group_surfaces,
+            shared_surfaces)
     expected_pairs = {
         "max_group_size": max_group_size,
+        "shared_capture_surface_count": shared_capture_surface_count,
+        "shared_capture_saved_surface_count": (
+            shared_capture_saved_surface_count),
+        "max_shared_capture_group_surfaces": (
+            max_shared_capture_group_surfaces),
         "total_shape_pair_count": total_shape_pair_count,
         "blend_candidate_pair_count": blend_candidate_pair_count,
         "union_candidate_pair_count": union_candidate_pair_count,

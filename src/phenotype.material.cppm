@@ -13,7 +13,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 41;
+inline constexpr std::uint32_t material_plan_contract_version = 42;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1141,6 +1141,9 @@ struct MaterialContainerGroupRuntimeSummary {
     std::uint32_t morph_group_count = 0;
     std::uint32_t interactive_group_count = 0;
     std::uint32_t shared_backdrop_scope_group_count = 0;
+    std::uint32_t shared_capture_surface_count = 0;
+    std::uint32_t shared_capture_saved_surface_count = 0;
+    std::uint32_t max_shared_capture_group_surfaces = 0;
     std::uint32_t fallback_mixed_group_count = 0;
     std::uint32_t max_group_size = 0;
     std::uint32_t max_active_surfaces = 0;
@@ -1801,6 +1804,17 @@ inline MaterialContainerGroupRuntimeSummary summarize_material_container_groups(
             ++summary.interactive_group_count;
         if (group.shared_backdrop_scope_surfaces > 0u)
             ++summary.shared_backdrop_scope_group_count;
+        if (group.shared_backdrop_scope_surfaces > 0u) {
+            summary.shared_capture_surface_count +=
+                group.shared_backdrop_scope_surfaces;
+            summary.shared_capture_saved_surface_count +=
+                group.shared_backdrop_scope_surfaces > 1u
+                    ? group.shared_backdrop_scope_surfaces - 1u
+                    : 0u;
+            summary.max_shared_capture_group_surfaces = std::max(
+                summary.max_shared_capture_group_surfaces,
+                group.shared_backdrop_scope_surfaces);
+        }
         if (group.fallback_surfaces > 0u
             && group.active_surfaces > group.fallback_surfaces) {
             ++summary.fallback_mixed_group_count;
