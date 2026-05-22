@@ -216,12 +216,13 @@ mise exec -- exon build
 
 `artifact verify` runs the uv-managed reference verifier from the repository
 root. The default output prints a compact status frame plus verifier manifest,
-material budget coverage, budget bound headroom, and material execution budget
-summaries. When verification fails, it also prints a compact verifier failure
-summary with the first failing paths, expected/actual values, hints, and
-suggested actions. `--json` forwards the raw verifier JSON report for machine
-consumers. This keeps Python managed by `mise`/`uv` while moving the
-developer-facing entry point under the CLI.
+material budget coverage, budget/resource/quality bound headroom, failed and
+tightest bound comparisons, and material execution budget summaries. When
+verification fails, it also prints a compact verifier failure summary with bound
+pressure, the first failing paths, expected/actual values, hints, and suggested
+actions. `--json` forwards the raw verifier JSON report for machine consumers.
+This keeps Python managed by `mise`/`uv` while moving the developer-facing entry
+point under the CLI.
 
 For icon-source regressions, start with the aggregate icon gate:
 
@@ -281,10 +282,13 @@ Both gates also accept the direct material bound guard options used by
 budget expectation without editing the checked-in manifest.
 When a parsed verifier report fails, JSON also includes
 `verifier_failure_summary` with the compact failure count, top likely
-layer/pass, top suggested action, and first failure details. The non-JSON gate
-prints the same compact `failure_summary` paths, expected/actual values, hints,
-and suggested actions instead of dumping the raw verifier JSON tail; use
-`--json` for the full report.
+layer/pass, top suggested action, manifest and budget coverage context,
+bound summaries, failed bound results, tightest bound results, bound pressure,
+material resource/quality context, first failure details, and the compact
+failure distribution maps. The non-JSON gate prints the same compact
+`failure_summary` paths, expected/actual values, hints, suggested actions,
+failed/tightest bounds, and pressure line instead of dumping the raw verifier
+JSON tail; use `--json` for the full report.
 `artifact
 verify-file-explorer` owns the shared-model test, desktop/mobile builds,
 deterministic native captures, and uv-managed verifier calls directly. Its case
@@ -296,16 +300,16 @@ whenever a case uses a manifest-backed verifier run, and
 `material_resource_bound_results`, `material_quality_policy_bound_summary`,
 `material_quality_policy_bound_results`, `material_budget_bound_summary`, and
 `material_budget_bound_results` when both inputs are present. Failed case JSON
-also includes
-`verifier_failure_summary` so machine consumers can triage the same compact
-failing paths and suggested actions without parsing verifier stdout; the
-non-JSON output prints the same case-level plans/work/status summary with
-upload/copy utilization, per-case manifest bound summaries, per-case material
-quality policy, per-case material resource bounds, per-case budget coverage,
-per-case budget bound headroom, and the tightest or failed expected-vs-actual
-budget bound detail when present. Failed cases also print the compact verifier
-failure summary when the verifier report parsed successfully, falling back to
-the raw report tail only when parsing failed.
+also includes `verifier_failure_summary` so machine consumers can triage the
+same compact failing paths, failed/tightest bounds, pressure state, and suggested
+actions without parsing verifier stdout; the non-JSON output prints the same
+case-level plans/work/status summary with upload/copy utilization, per-case
+manifest bound summaries, per-case material quality policy, per-case material
+resource bounds, per-case budget coverage, per-case budget bound headroom, and
+the tightest or failed expected-vs-actual budget bound detail when present.
+Failed cases also print the compact verifier failure summary when the verifier
+report parsed successfully, falling back to the raw report tail only when
+parsing failed.
 Both commands are local
 verification commands, not default PR CI jobs.
 
@@ -1640,11 +1644,17 @@ fields above to be guarded by compact budget bounds and require the compact
 executor budget to keep reporting all 22 currently guardable fields. Verifier
 reports also include
 `artifact_context.material_contract.executor_budget_bound_results` and
-`executor_budget_bound_summary`; each result records the bound key, field,
+`executor_budget_bound_summary`; resource and quality guards mirror the same
+shape under `material_plans.resource_bound_results` /
+`resource_bound_summary` and `material_plans.quality_policy_bound_results` /
+`quality_policy_bound_summary`. Each result records the bound key, field,
 operator, expected value, actual value, pass/fail state, and numeric margin.
-The summary reports pass/fail counts, failed keys, and the tightest bound
+The summaries report pass/fail counts, failed keys, and the tightest bound
 margin so local CLI output can show headroom without scanning the full
-`checks` array.
+`checks` array. Compact failure summaries additionally classify each bound group
+as `fail`, `tight`, `pass`, or `unknown` and count zero/negative margins in
+`bound_pressure`, which separates hard failures from budgets that are passing
+with no headroom.
 Whenever material plans are present, the verifier also cross-checks executor
 counts, including `material_executor_summary.container_groups.*`, against
 `renderer.material_plans#summary`: `plan_count`,
