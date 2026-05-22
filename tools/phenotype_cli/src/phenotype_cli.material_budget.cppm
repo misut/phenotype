@@ -105,10 +105,12 @@ struct VerifierManifestSummary {
     std::int64_t material_resource_bounds = -1;
     std::vector<std::string> material_resource_bound_keys;
     std::vector<std::string> material_resource_bound_fields;
+    std::vector<std::string> material_resource_bound_coverage_required_fields;
     std::vector<std::string> material_executor_budget_coverage_required_fields;
     std::int64_t material_quality_policy_bounds = -1;
     std::vector<std::string> material_quality_policy_bound_keys;
     std::vector<std::string> material_quality_policy_fields;
+    std::vector<std::string> material_quality_policy_coverage_required_fields;
 };
 
 struct MaterialBudgetCoverageSummary {
@@ -129,6 +131,21 @@ struct MaterialBudgetCoverageSummary {
     std::vector<std::string> missing_required_fields;
     std::vector<std::string> manifest_fields;
     std::vector<std::string> manifest_bound_keys;
+};
+
+struct MaterialBoundCoverageSummary {
+    std::int64_t guardable_field_count = -1;
+    std::int64_t observed_field_count = -1;
+    std::int64_t guarded_field_count = -1;
+    std::int64_t required_field_count = -1;
+    std::int64_t covered_required_field_count = -1;
+    std::int64_t observed_required_field_count = -1;
+    std::int64_t bound_key_count = -1;
+    std::vector<std::string> missing_guarded_fields;
+    std::vector<std::string> missing_observed_fields;
+    std::vector<std::string> observed_fields;
+    std::vector<std::string> guarded_fields;
+    std::vector<std::string> required_fields;
 };
 
 struct MaterialBudgetBoundResult {
@@ -459,6 +476,11 @@ auto verifier_manifest_summary_from_report(json::Value const& report)
         .material_resource_bound_fields = json_string_array_at(
             report,
             {"manifest", "material_resource_bound_fields"}),
+        .material_resource_bound_coverage_required_fields =
+            json_string_array_at(
+                report,
+                {"manifest",
+                 "material_resource_bound_coverage_required_fields"}),
         .material_executor_budget_coverage_required_fields =
             json_string_array_at(
                 report,
@@ -473,6 +495,11 @@ auto verifier_manifest_summary_from_report(json::Value const& report)
         .material_quality_policy_fields = json_string_array_at(
             report,
             {"manifest", "material_quality_policy_fields"}),
+        .material_quality_policy_coverage_required_fields =
+            json_string_array_at(
+                report,
+                {"manifest",
+                 "material_quality_policy_coverage_required_fields"}),
     };
 }
 
@@ -1002,6 +1029,68 @@ auto material_budget_coverage_summary(
     };
 }
 
+auto material_bound_coverage_from_object(json::Object const& coverage)
+    -> MaterialBoundCoverageSummary {
+    return MaterialBoundCoverageSummary{
+        .guardable_field_count = json_object_integer(
+            coverage,
+            "guardable_field_count").value_or(-1),
+        .observed_field_count = json_object_integer(
+            coverage,
+            "observed_field_count").value_or(-1),
+        .guarded_field_count = json_object_integer(
+            coverage,
+            "guarded_field_count").value_or(-1),
+        .required_field_count = json_object_integer(
+            coverage,
+            "required_field_count").value_or(-1),
+        .covered_required_field_count = json_object_integer(
+            coverage,
+            "covered_required_field_count").value_or(-1),
+        .observed_required_field_count = json_object_integer(
+            coverage,
+            "observed_required_field_count").value_or(-1),
+        .bound_key_count = json_object_integer(
+            coverage,
+            "bound_key_count").value_or(-1),
+        .missing_guarded_fields = json_object_string_array(
+            coverage,
+            "missing_guarded_fields"),
+        .missing_observed_fields = json_object_string_array(
+            coverage,
+            "missing_observed_fields"),
+        .observed_fields = json_object_string_array(
+            coverage,
+            "observed_fields"),
+        .guarded_fields = json_object_string_array(
+            coverage,
+            "guarded_fields"),
+        .required_fields = json_object_string_array(
+            coverage,
+            "required_fields"),
+    };
+}
+
+auto material_resource_bound_coverage_from_report(json::Value const& report)
+    -> std::optional<MaterialBoundCoverageSummary> {
+    auto const* coverage = json_object_at(
+        report,
+        {"material_plans", "resource_bound_coverage"});
+    if (!coverage)
+        return std::nullopt;
+    return material_bound_coverage_from_object(*coverage);
+}
+
+auto material_quality_policy_coverage_from_report(json::Value const& report)
+    -> std::optional<MaterialBoundCoverageSummary> {
+    auto const* coverage = json_object_at(
+        report,
+        {"material_plans", "quality_policy_bound_coverage"});
+    if (!coverage)
+        return std::nullopt;
+    return material_bound_coverage_from_object(*coverage);
+}
+
 auto budget_count(std::int64_t value) -> std::string {
     return value >= 0 ? std::format("{}", value) : std::string{"unknown"};
 }
@@ -1227,6 +1316,34 @@ auto material_budget_coverage_json(
         string_array_json(coverage->manifest_bound_keys));
 }
 
+auto material_bound_coverage_json(
+        std::optional<MaterialBoundCoverageSummary> const& coverage)
+    -> std::string {
+    if (!coverage)
+        return "null";
+    return std::format(
+        "{{\"guardable_field_count\":{},\"observed_field_count\":{},"
+        "\"guarded_field_count\":{},\"required_field_count\":{},"
+        "\"covered_required_field_count\":{},"
+        "\"observed_required_field_count\":{},"
+        "\"bound_key_count\":{},"
+        "\"missing_guarded_fields\":{},\"missing_observed_fields\":{},"
+        "\"observed_fields\":{},\"guarded_fields\":{},"
+        "\"required_fields\":{}}}",
+        manifest_count_json(coverage->guardable_field_count),
+        manifest_count_json(coverage->observed_field_count),
+        manifest_count_json(coverage->guarded_field_count),
+        manifest_count_json(coverage->required_field_count),
+        manifest_count_json(coverage->covered_required_field_count),
+        manifest_count_json(coverage->observed_required_field_count),
+        manifest_count_json(coverage->bound_key_count),
+        string_array_json(coverage->missing_guarded_fields),
+        string_array_json(coverage->missing_observed_fields),
+        string_array_json(coverage->observed_fields),
+        string_array_json(coverage->guarded_fields),
+        string_array_json(coverage->required_fields));
+}
+
 auto material_budget_bound_result_json(MaterialBudgetBoundResult const& result)
     -> std::string {
     return std::format(
@@ -1334,6 +1451,37 @@ auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage
         budget_field_list_text(coverage.unguarded_observed_fields))
         + required
         + missing;
+}
+
+auto material_bound_coverage_text(MaterialBoundCoverageSummary const& coverage)
+    -> std::string {
+    auto required = coverage.required_field_count > 0
+        ? std::format(
+            " required={}/{} observed-required={}/{}",
+            coverage.covered_required_field_count,
+            coverage.required_field_count,
+            coverage.observed_required_field_count,
+            coverage.required_field_count)
+        : std::string{};
+    auto missing_guarded = coverage.missing_guarded_fields.empty()
+        ? std::string{}
+        : std::format(
+            " missing-guarded=({})",
+            budget_field_list_text(coverage.missing_guarded_fields));
+    auto missing_observed = coverage.missing_observed_fields.empty()
+        ? std::string{}
+        : std::format(
+            " missing-observed=({})",
+            budget_field_list_text(coverage.missing_observed_fields));
+    return std::format(
+        "guarded={}/{} observed={} guard-keys={}",
+        coverage.guarded_field_count,
+        coverage.guardable_field_count,
+        coverage.observed_field_count,
+        coverage.bound_key_count)
+        + required
+        + missing_guarded
+        + missing_observed;
 }
 
 auto material_quality_policy_text(MaterialQualityPolicySummary const& policy)
@@ -2775,11 +2923,35 @@ auto verifier_material_budget_coverage_json(json::Value const& report)
 }
 
 auto verifier_material_budget_coverage_text(json::Value const& report)
-        -> std::string {
+    -> std::string {
     auto coverage = material_budget_coverage_summary(
         material_budget_from_report(report),
         verifier_manifest_summary_from_report(report));
     return coverage ? material_budget_coverage_text(*coverage) : std::string{};
+}
+
+auto verifier_material_resource_bound_coverage_json(json::Value const& report)
+    -> std::string {
+    return material_bound_coverage_json(
+        material_resource_bound_coverage_from_report(report));
+}
+
+auto verifier_material_quality_policy_coverage_json(json::Value const& report)
+    -> std::string {
+    return material_bound_coverage_json(
+        material_quality_policy_coverage_from_report(report));
+}
+
+auto verifier_material_resource_bound_coverage_text(json::Value const& report)
+    -> std::string {
+    auto coverage = material_resource_bound_coverage_from_report(report);
+    return coverage ? material_bound_coverage_text(*coverage) : std::string{};
+}
+
+auto verifier_material_quality_policy_coverage_text(json::Value const& report)
+    -> std::string {
+    auto coverage = material_quality_policy_coverage_from_report(report);
+    return coverage ? material_bound_coverage_text(*coverage) : std::string{};
 }
 
 auto verifier_manifest_summary_json(
@@ -2809,6 +2981,18 @@ auto verifier_manifest_context_text(json::Value const& report) -> std::string {
             " required-budget=({})",
             budget_field_list_text(
                 manifest->material_executor_budget_coverage_required_fields));
+    }
+    if (!manifest->material_resource_bound_coverage_required_fields.empty()) {
+        text += std::format(
+            " required-resource=({})",
+            budget_field_list_text(
+                manifest->material_resource_bound_coverage_required_fields));
+    }
+    if (!manifest->material_quality_policy_coverage_required_fields.empty()) {
+        text += std::format(
+            " required-quality=({})",
+            budget_field_list_text(
+                manifest->material_quality_policy_coverage_required_fields));
     }
     if (!manifest->material_executor_budget_bound_keys.empty()) {
         text += std::format(
@@ -2934,6 +3118,8 @@ auto verifier_failure_summary_json(json::Value const& report)
         "\"tightest_bound_results\":{},"
         "\"bound_pressure\":{},"
         "\"manifest_context\":{},\"budget_coverage\":{},"
+        "\"resource_bound_coverage\":{},"
+        "\"quality_policy_bound_coverage\":{},"
         "\"material_context\":{},"
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
         "\"by_path\":{},"
@@ -2956,6 +3142,8 @@ auto verifier_failure_summary_json(json::Value const& report)
         verifier_bound_pressure_json(report),
         verifier_manifest_context_json(report),
         verifier_material_budget_coverage_json(report),
+        verifier_material_resource_bound_coverage_json(report),
+        verifier_material_quality_policy_coverage_json(report),
         failure_material_context_json(report),
         failure_json_value_or_null(
             report,
@@ -3040,6 +3228,14 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto coverage = verifier_material_budget_coverage_text(report);
         !coverage.empty()) {
         lines.push_back("  coverage: " + coverage);
+    }
+    if (auto coverage = verifier_material_resource_bound_coverage_text(report);
+        !coverage.empty()) {
+        lines.push_back("  resource-coverage: " + coverage);
+    }
+    if (auto coverage = verifier_material_quality_policy_coverage_text(report);
+        !coverage.empty()) {
+        lines.push_back("  quality-coverage: " + coverage);
     }
     if (auto resources = failure_resource_bounds_line(report);
         !resources.empty()) {
@@ -3129,10 +3325,12 @@ auto verifier_manifest_summary_json(
         "\"material_resource_bounds\":{},"
         "\"material_resource_bound_keys\":{},"
         "\"material_resource_bound_fields\":{},"
+        "\"material_resource_bound_coverage_required_fields\":{},"
         "\"material_executor_budget_coverage_required_fields\":{},"
         "\"material_quality_policy_bounds\":{},"
         "\"material_quality_policy_bound_keys\":{},"
-        "\"material_quality_policy_fields\":{}}}",
+        "\"material_quality_policy_fields\":{},"
+        "\"material_quality_policy_coverage_required_fields\":{}}}",
         json_string(manifest->name),
         manifest_count_json(manifest->pixel_regions),
         manifest_count_json(manifest->pixel_region_metrics),
@@ -3146,10 +3344,14 @@ auto verifier_manifest_summary_json(
         string_array_json(manifest->material_resource_bound_keys),
         string_array_json(manifest->material_resource_bound_fields),
         string_array_json(
+            manifest->material_resource_bound_coverage_required_fields),
+        string_array_json(
             manifest->material_executor_budget_coverage_required_fields),
         manifest_count_json(manifest->material_quality_policy_bounds),
         string_array_json(manifest->material_quality_policy_bound_keys),
-        string_array_json(manifest->material_quality_policy_fields));
+        string_array_json(manifest->material_quality_policy_fields),
+        string_array_json(
+            manifest->material_quality_policy_coverage_required_fields));
 }
 
 } // namespace phenotype_cli::material_budget

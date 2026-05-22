@@ -44,6 +44,10 @@ auto sample_report() -> json::Value {
           "draw_calls",
           "execution_stage_count"
         ],
+        "material_resource_bound_coverage_required_fields": [
+          "bounded_texture_copy",
+          "max_plan_sample_taps"
+        ],
         "material_resource_bounds": 2,
         "material_resource_bound_keys": [
           "max_plan_sample_taps_lte",
@@ -51,7 +55,7 @@ auto sample_report() -> json::Value {
         ],
         "material_resource_bound_fields": [
           "max_plan_sample_taps",
-          "unbounded_texture_copy"
+          "bounded_texture_copy"
         ],
         "material_quality_policy_bounds": 2,
         "material_quality_policy_bound_keys": [
@@ -59,6 +63,10 @@ auto sample_report() -> json::Value {
           "require_noise_allowed"
         ],
         "material_quality_policy_fields": [
+          "max_blur_radius",
+          "noise_disabled"
+        ],
+        "material_quality_policy_coverage_required_fields": [
           "max_blur_radius",
           "noise_disabled"
         ]
@@ -223,6 +231,30 @@ auto sample_report() -> json::Value {
           "unbounded_texture_copy": 0,
           "non_deterministic_fallback": 0
         },
+        "resource_bound_coverage": {
+          "guardable_field_count": 4,
+          "observed_field_count": 3,
+          "guarded_field_count": 2,
+          "required_field_count": 2,
+          "covered_required_field_count": 2,
+          "observed_required_field_count": 2,
+          "missing_guarded_fields": [],
+          "missing_observed_fields": [],
+          "observed_fields": [
+            "bounded_texture_copy",
+            "max_frame_capture_pixels",
+            "max_plan_sample_taps"
+          ],
+          "guarded_fields": [
+            "bounded_texture_copy",
+            "max_plan_sample_taps"
+          ],
+          "required_fields": [
+            "bounded_texture_copy",
+            "max_plan_sample_taps"
+          ],
+          "bound_key_count": 2
+        },
 	        "resource_bound_summary": {
 	          "bound_count": 2,
 	          "pass_count": 2,
@@ -291,6 +323,33 @@ auto sample_report() -> json::Value {
           "max_blur_radius": 36,
           "max_sample_taps": 25,
           "max_backdrop_pixels": 4096
+        },
+        "quality_policy_bound_coverage": {
+          "guardable_field_count": 6,
+          "observed_field_count": 6,
+          "guarded_field_count": 2,
+          "required_field_count": 2,
+          "covered_required_field_count": 2,
+          "observed_required_field_count": 2,
+          "missing_guarded_fields": [],
+          "missing_observed_fields": [],
+          "observed_fields": [
+            "backdrop_sampling_disabled",
+            "max_backdrop_pixels",
+            "max_blur_radius",
+            "max_sample_taps",
+            "noise_disabled",
+            "shadow_disabled"
+          ],
+          "guarded_fields": [
+            "max_blur_radius",
+            "noise_disabled"
+          ],
+          "required_fields": [
+            "max_blur_radius",
+            "noise_disabled"
+          ],
+          "bound_key_count": 2
         },
 	        "quality_policy_bound_summary": {
 	          "bound_count": 2,
@@ -506,6 +565,10 @@ int main() {
     assert(manifest->material_executor_budget_bound_keys.size() == 3);
     assert(manifest->material_resource_bound_keys.size() == 2);
     assert(manifest->material_quality_policy_bound_keys.size() == 2);
+    assert(
+        manifest->material_resource_bound_coverage_required_fields.size() == 2);
+    assert(
+        manifest->material_quality_policy_coverage_required_fields.size() == 2);
 
     auto budget = material_budget_from_report(report);
     assert(budget);
@@ -525,6 +588,33 @@ int main() {
     assert(contains_text(
         material_budget_coverage_text(*coverage),
         "required=2/2"));
+
+    auto resource_coverage =
+        material_resource_bound_coverage_from_report(report);
+    assert(resource_coverage);
+    assert(resource_coverage->bound_key_count == 2);
+    assert(resource_coverage->guarded_field_count == 2);
+    assert(resource_coverage->observed_field_count == 3);
+    assert(resource_coverage->covered_required_field_count == 2);
+    assert(resource_coverage->observed_required_field_count == 2);
+    assert(resource_coverage->missing_guarded_fields.empty());
+    assert(resource_coverage->missing_observed_fields.empty());
+    assert(contains_text(
+        material_bound_coverage_json(resource_coverage),
+        "\"required_fields\":[\"bounded_texture_copy\",\"max_plan_sample_taps\"]"));
+    assert(contains_text(
+        material_bound_coverage_text(*resource_coverage),
+        "required=2/2 observed-required=2/2"));
+
+    auto quality_coverage =
+        material_quality_policy_coverage_from_report(report);
+    assert(quality_coverage);
+    assert(quality_coverage->guardable_field_count == 6);
+    assert(quality_coverage->observed_field_count == 6);
+    assert(quality_coverage->guarded_field_count == 2);
+    assert(contains_text(
+        material_bound_coverage_text(*quality_coverage),
+        "guarded=2/6 observed=6 guard-keys=2"));
 
     auto resource_bounds = material_resource_bounds_from_report(report);
     assert(resource_bounds);
@@ -675,10 +765,25 @@ int main() {
         "\"bound_pressure\":{\"executor\":{\"state\":\"fail\",\"bound_count\":3,\"pass_count\":2,\"fail_count\":1,\"zero_margin_count\":1,\"negative_margin_count\":1,\"zero_margin_sources\":[{\"key\":\"execution_stage_count_lte\",\"field\":\"execution_stage_count\",\"bound\":\"lte\",\"expected\":8,\"actual\":8,\"ok\":true,\"margin\":0}],\"negative_margin_sources\":[{\"key\":\"draw_calls_gte\",\"field\":\"draw_calls\",\"bound\":\"gte\",\"expected\":3,\"actual\":2,\"ok\":false,\"margin\":-1}],\"tightest_bound_key\":\"upload_utilization_lte\",\"tightest_bound_field\":\"upload_utilization\",\"tightest_bound_margin\":0.9375,\"tightest_bound_result\":{\"key\":\"upload_utilization_lte\",\"field\":\"upload_utilization\",\"bound\":\"lte\",\"expected\":1,\"actual\":0.0625,\"ok\":true,\"margin\":0.9375},\"failed_keys\":[\"draw_calls_gte\"]},\"resource\":{\"state\":\"tight\",\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"zero_margin_count\":2,\"negative_margin_count\":0,\"zero_margin_sources\":[{\"key\":\"max_plan_sample_taps_lte\",\"field\":\"max_plan_sample_taps\",\"bound\":\"lte\",\"expected\":25,\"actual\":25,\"ok\":true,\"margin\":0},{\"key\":\"require_bounded_texture_copy\",\"field\":\"unbounded_texture_copy\",\"bound\":\"equals\",\"expected\":0,\"actual\":0,\"ok\":true,\"margin\":0}],\"negative_margin_sources\":[],\"tightest_bound_key\":\"max_plan_sample_taps_lte\",\"tightest_bound_field\":\"max_plan_sample_taps\",\"tightest_bound_margin\":0,\"tightest_bound_result\":{\"key\":\"max_plan_sample_taps_lte\",\"field\":\"max_plan_sample_taps\",\"bound\":\"lte\",\"expected\":25,\"actual\":25,\"ok\":true,\"margin\":0},\"failed_keys\":[]},\"quality\":{\"state\":\"tight\",\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"zero_margin_count\":2,\"negative_margin_count\":0,\"zero_margin_sources\":[{\"key\":\"max_blur_radius_lte\",\"field\":\"max_blur_radius\",\"bound\":\"lte\",\"expected\":36,\"actual\":36,\"ok\":true,\"margin\":0},{\"key\":\"require_noise_allowed\",\"field\":\"noise_disabled\",\"bound\":\"equals\",\"expected\":0,\"actual\":0,\"ok\":true,\"margin\":0}],\"negative_margin_sources\":[],\"tightest_bound_key\":\"require_noise_allowed\",\"tightest_bound_field\":\"noise_disabled\",\"tightest_bound_margin\":0,\"tightest_bound_result\":{\"key\":\"require_noise_allowed\",\"field\":\"noise_disabled\",\"bound\":\"equals\",\"expected\":0,\"actual\":0,\"ok\":true,\"margin\":0},\"failed_keys\":[]}}"));
     assert(contains_text(
         failure_json,
-        "\"manifest_context\":{\"name\":\"unit-material-gate\",\"pixel_regions\":2,\"pixel_region_metrics\":3,\"pixel_region_metric_comparisons\":4,\"forbid_pixel_region_colors\":1,\"runtime_numeric_bounds\":5,\"material_executor_budget_bounds\":3,\"material_executor_budget_bound_keys\":[\"execution_stage_count_lte\",\"draw_calls_gte\",\"upload_utilization_lte\"],\"material_executor_budget_fields\":[\"draw_calls\",\"execution_stage_count\",\"upload_utilization\"],\"material_resource_bounds\":2,\"material_resource_bound_keys\":[\"max_plan_sample_taps_lte\",\"require_bounded_texture_copy\"],\"material_resource_bound_fields\":[\"max_plan_sample_taps\",\"unbounded_texture_copy\"],\"material_executor_budget_coverage_required_fields\":[\"draw_calls\",\"execution_stage_count\"],\"material_quality_policy_bounds\":2,\"material_quality_policy_bound_keys\":[\"max_blur_radius_lte\",\"require_noise_allowed\"],\"material_quality_policy_fields\":[\"max_blur_radius\",\"noise_disabled\"]}"));
+        "\"manifest_context\":{\"name\":\"unit-material-gate\""));
+    assert(contains_text(
+        failure_json,
+        "\"material_resource_bound_fields\":[\"max_plan_sample_taps\",\"bounded_texture_copy\"]"));
+    assert(contains_text(
+        failure_json,
+        "\"material_resource_bound_coverage_required_fields\":[\"bounded_texture_copy\",\"max_plan_sample_taps\"]"));
+    assert(contains_text(
+        failure_json,
+        "\"material_quality_policy_coverage_required_fields\":[\"max_blur_radius\",\"noise_disabled\"]"));
     assert(contains_text(
         failure_json,
         "\"budget_coverage\":{\"guardable_field_count\":22,\"observed_field_count\":22,\"guarded_observed_field_count\":3,\"unguarded_observed_field_count\":19,\"required_field_count\":2,\"covered_required_field_count\":2,\"missing_required_field_count\":0,\"manifest_field_count\":3,\"manifest_bound_key_count\":3"));
+    assert(contains_text(
+        failure_json,
+        "\"resource_bound_coverage\":{\"guardable_field_count\":4,\"observed_field_count\":3,\"guarded_field_count\":2,\"required_field_count\":2,\"covered_required_field_count\":2,\"observed_required_field_count\":2,\"bound_key_count\":2"));
+    assert(contains_text(
+        failure_json,
+        "\"quality_policy_bound_coverage\":{\"guardable_field_count\":6,\"observed_field_count\":6,\"guarded_field_count\":2,\"required_field_count\":2,\"covered_required_field_count\":2,\"observed_required_field_count\":2,\"bound_key_count\":2"));
     assert(contains_text(
         failure_json,
         "\"material_context\":{\"resource_bounds\":{\"max_plan_sample_taps\":25,\"total_plan_sample_taps\":50,\"max_backdrop_pixels\":4096,\"max_frame_capture_count\":1,\"max_frame_capture_pixels\":4096,\"total_surface_sample_pixels\":2048,\"total_execution_stages\":8,\"active_execution_stages\":8,\"backdrop_execution_stages\":2,\"dropped_execution_stages\":0,\"total_paint_layers\":6,\"active_paint_layers\":6,\"dropped_paint_layers\":0,\"max_pass_texture_copy_pixels\":1024,\"total_pass_texture_copy_pixels\":2048,\"unbounded_texture_copy\":0,\"non_deterministic_fallback\":0,\"max_refraction_offset_pixels\":3.5,\"max_container_spacing\":20,\"max_paint_layer_inflate\":6},\"quality_policy\":{\"backdrop_sampling_disabled\":0,\"noise_disabled\":0,\"shadow_disabled\":0,\"max_blur_radius\":36,\"max_sample_taps\":25,\"max_backdrop_pixels\":4096}}"));
@@ -730,10 +835,16 @@ int main() {
         "pressure: executor=fail,pass=2/3,fail=1,zero=1,negative=1,tightest=upload_utilization_lte,field=upload_utilization,tightest-margin=0.9375,tightest-result=(pass upload_utilization_lte/upload_utilization actual=0.0625 expected<=1 margin=0.9375),zero-sources=(pass execution_stage_count_lte/execution_stage_count actual=8 expected<=8 margin=0),negative-sources=(fail draw_calls_gte/draw_calls actual=2 expected>=3 margin=-1),failed=(draw_calls_gte); resource=tight,pass=2/2,fail=0,zero=2,negative=0,tightest=max_plan_sample_taps_lte,field=max_plan_sample_taps,tightest-margin=0,tightest-result=(pass max_plan_sample_taps_lte/max_plan_sample_taps actual=25 expected<=25 margin=0),zero-sources=(pass max_plan_sample_taps_lte/max_plan_sample_taps actual=25 expected<=25 margin=0, pass require_bounded_texture_copy/unbounded_texture_copy actual=0 expected==0 margin=0); quality=tight,pass=2/2,fail=0,zero=2,negative=0,tightest=require_noise_allowed,field=noise_disabled,tightest-margin=0,tightest-result=(pass require_noise_allowed/noise_disabled actual=0 expected==0 margin=0),zero-sources=(pass max_blur_radius_lte/max_blur_radius actual=36 expected<=36 margin=0, pass require_noise_allowed/noise_disabled actual=0 expected==0 margin=0)"));
     assert(contains_line(
         failure_lines,
-        "manifest: name=unit-material-gate runtime=5 pixel-regions=2 budget=3 resource=2 quality=2 required-budget=(draw_calls, execution_stage_count) budget-keys=(execution_stage_count_lte, draw_calls_gte, upload_utilization_lte) resource-keys=(max_plan_sample_taps_lte, require_bounded_texture_copy) quality-keys=(max_blur_radius_lte, require_noise_allowed)"));
+        "manifest: name=unit-material-gate runtime=5 pixel-regions=2 budget=3 resource=2 quality=2 required-budget=(draw_calls, execution_stage_count) required-resource=(bounded_texture_copy, max_plan_sample_taps) required-quality=(max_blur_radius, noise_disabled) budget-keys=(execution_stage_count_lte, draw_calls_gte, upload_utilization_lte) resource-keys=(max_plan_sample_taps_lte, require_bounded_texture_copy) quality-keys=(max_blur_radius_lte, require_noise_allowed)"));
     assert(contains_line(
         failure_lines,
         "coverage: guarded=3/22 observed=22 guard-keys=3 unguarded=19 (active_execution_stage_count, backdrop_copy_count, backdrop_copy_pixels, backdrop_copy_skipped_count, backdrop_copy_utilization, backdrop_execution_stage_count, buffer_capacity_bytes, dropped_execution_stage_count, +11 more) required=2/2"));
+    assert(contains_line(
+        failure_lines,
+        "resource-coverage: guarded=2/4 observed=3 guard-keys=2 required=2/2 observed-required=2/2"));
+    assert(contains_line(
+        failure_lines,
+        "quality-coverage: guarded=2/6 observed=6 guard-keys=2 required=2/2 observed-required=2/2"));
     assert(contains_line(
         failure_lines,
         "resources: plan-taps=25/50 runtime=8/8/2 stages-dropped=0 paint=6/6/0 copy=1024/2048 unbounded-copy=0 non-deterministic-fallback=0 refraction=3.5 spacing=20 inflate=6"));

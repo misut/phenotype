@@ -130,7 +130,11 @@ keys/fields, and quality-policy bound keys/fields. When both summaries are
 present, `verifier.material_budget_coverage` lists the observed budget fields,
 which observed fields are guarded by manifest bounds, and which observed fields
 are still unguarded. This keeps coverage drift visible without opening the full
-verifier report. `verifier.material_quality_policy` mirrors the
+verifier report. The same envelope now preserves
+`verifier.material_resource_bound_coverage` and
+`verifier.material_quality_policy_coverage`, so JSON consumers can see whether
+resource and legibility-policy guard fields are observed and bounded without
+opening the raw report. `verifier.material_quality_policy` mirrors the
 verifier's compact quality-policy summary, including disabled backdrop sampling,
 noise, and shadow counts plus maximum blur radius, sample taps, and backdrop
 pixel limits. `verifier.material_resource_bounds` mirrors the verifier's
@@ -155,14 +159,17 @@ shape for `require_material_resource_bounds`;
 manifest coverage contracts for resource and quality-policy bounds; those
 coverage summaries live under `material_plans.resource_bound_coverage` and
 `material_plans.quality_policy_bound_coverage`.
-`verifier.verifier_failure_summary` carries the same compact failure count, top
-likely layer/pass, top suggested action, and first failure details that the text
-output prints when the parsed verifier report fails.
+`verifier.verifier_failure_summary` carries the same compact failure count,
+manifest context, budget/resource/quality coverage summaries, top likely
+layer/pass, top suggested action, and first failure details that the text output
+prints when the parsed verifier report fails.
 Use this as the first artifact triage command when a CI log or local bundle
 needs one machine-readable explanation before deeper pixel-contract debugging.
 Without `--json`, the same command prints short `snapshot material budget` and
 `verifier material budget` blocks plus one-line `verifier manifest` and
-`material budget coverage` summaries when those counters are available. It also
+`material budget coverage`, `material resource bound coverage`, and
+`material quality policy coverage` summaries when those counters are available.
+It also
 prints `material quality policy`, the tightest budget bound detail, or failed
 bound details when a bound fails, so local triage can see plan, stage, tap,
 upload/copy utilization, draw, backdrop-copy status, quality-policy limits,

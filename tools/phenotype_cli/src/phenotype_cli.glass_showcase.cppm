@@ -389,6 +389,12 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         ? verifier_manifest_summary_from_report(*verifier_report)
         : std::optional<VerifierManifestSummary>{};
     auto coverage = material_budget_coverage_summary(budget, verifier_manifest);
+    auto resource_bound_coverage = verifier_report
+        ? material_resource_bound_coverage_from_report(*verifier_report)
+        : std::optional<MaterialBoundCoverageSummary>{};
+    auto quality_policy_coverage = verifier_report
+        ? material_quality_policy_coverage_from_report(*verifier_report)
+        : std::optional<MaterialBoundCoverageSummary>{};
     auto bound_summary = verifier_report
         ? material_budget_bound_summary_from_report(*verifier_report)
         : std::optional<MaterialBudgetBoundSummary>{};
@@ -416,6 +422,8 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         "\"material_quality_policy_bound_summary\":{},"
         "\"material_quality_policy_bound_results\":{},"
         "\"verifier_manifest\":{},\"material_budget_coverage\":{},"
+        "\"material_resource_bound_coverage\":{},"
+        "\"material_quality_policy_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
         "\"material_budget_bound_results\":{},"
         "\"verifier_bound_pressure\":{},"
@@ -443,6 +451,8 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         material_budget_bound_results_json(quality_policy_bound_results),
         verifier_manifest_summary_json(verifier_manifest),
         material_budget_coverage_json(coverage),
+        material_bound_coverage_json(resource_bound_coverage),
+        material_bound_coverage_json(quality_policy_coverage),
         material_budget_bound_summary_json(bound_summary),
         material_budget_bound_results_json(bound_results),
         bound_pressure,
@@ -511,6 +521,18 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
             std::println(
                 "material budget coverage: {}",
                 material_budget_coverage_text(*coverage));
+        }
+        if (auto coverage =
+                material_resource_bound_coverage_from_report(*verifier_report)) {
+            std::println(
+                "material resource bound coverage: {}",
+                material_bound_coverage_text(*coverage));
+        }
+        if (auto coverage =
+                material_quality_policy_coverage_from_report(*verifier_report)) {
+            std::println(
+                "material quality policy coverage: {}",
+                material_bound_coverage_text(*coverage));
         }
         if (auto quality_policy =
                 material_quality_policy_from_report(*verifier_report)) {
