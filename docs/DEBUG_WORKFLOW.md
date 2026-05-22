@@ -179,8 +179,13 @@ without opening the full report.
 For one-off budget probes that do not need a manifest file, pass direct guards to
 `artifact verify` or `observe`: `--require-material-budget-bound key=json`,
 `--require-material-resource-bound key=json`, or
-`--require-material-quality-bound key=json`. These options use the same key names
-and emit the same bound summary/result objects as the manifest fields.
+`--require-material-quality-bound key=json`. Add
+`--require-material-budget-coverage-field field`,
+`--require-material-resource-coverage-field field`, or
+`--require-material-quality-coverage-field field` when the ad-hoc probe must
+also prove the guarded fields are still observed by runtime telemetry. These
+options use the same key and field names and emit the same bound
+summary/result/coverage objects as the manifest fields.
 
 When debugging the CLI/native input-output boundary itself, first check the
 pure contract surface:
@@ -1696,6 +1701,12 @@ and the raw report records coverage summaries under `resource_bound_coverage`
 and `quality_policy_bound_coverage`. The glass showcase, file explorer, and
 Android artifact manifests require those coverage contracts for the shared
 resource bounds and for every quality-policy field they already guard.
+For manifestless iteration, the equivalent direct CLI field flags are
+`--require-material-budget-coverage-field`,
+`--require-material-resource-coverage-field`, and
+`--require-material-quality-coverage-field`; repeat them next to direct bound
+guards to require specific executor, resource, or quality-policy fields without
+creating a temporary manifest.
 Whenever material plans are present, the verifier also cross-checks executor
 counts, including `material_executor_summary.container_groups.*`, against
 `renderer.material_plans#summary`: `plan_count`,

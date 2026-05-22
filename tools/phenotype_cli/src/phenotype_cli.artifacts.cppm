@@ -1074,8 +1074,20 @@ auto artifact_verify_args(fs::path const& bundle,
     append_flag_arg(args, invocation, "require-material-plan");
     append_flag_arg(args, invocation, "require-material-semantic-runtime-match");
     append_repeatable_arg(args, invocation, "require-material-budget-bound");
+    append_repeatable_arg(
+        args,
+        invocation,
+        "require-material-budget-coverage-field");
     append_repeatable_arg(args, invocation, "require-material-resource-bound");
+    append_repeatable_arg(
+        args,
+        invocation,
+        "require-material-resource-coverage-field");
     append_repeatable_arg(args, invocation, "require-material-quality-bound");
+    append_repeatable_arg(
+        args,
+        invocation,
+        "require-material-quality-coverage-field");
     append_repeatable_arg(args, invocation, "require-capability");
     append_repeatable_arg(args, invocation, "require-runtime-detail");
     append_repeatable_arg(args, invocation, "require-debug-detail");
@@ -1384,7 +1396,10 @@ auto observe_artifact(fs::path bundle,
         || invocation.value("manifest").has_value()
         || !invocation.values("require-material-budget-bound").empty()
         || !invocation.values("require-material-resource-bound").empty()
-        || !invocation.values("require-material-quality-bound").empty();
+        || !invocation.values("require-material-quality-bound").empty()
+        || !invocation.values("require-material-budget-coverage-field").empty()
+        || !invocation.values("require-material-resource-coverage-field").empty()
+        || !invocation.values("require-material-quality-coverage-field").empty();
     observation.verifier.requested = verifier_requested;
     if (verifier_requested) {
         if (auto verifier = capture_artifact_verifier(
