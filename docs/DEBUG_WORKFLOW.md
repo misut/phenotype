@@ -1765,7 +1765,8 @@ shape under `material_plans.resource_bound_results` /
 `resource_bound_summary` and `material_plans.quality_policy_bound_results` /
 `quality_policy_bound_summary`. Resource and quality coverage summaries preserve
 the active bound key list as `bound_keys`, and CLI compact coverage text repeats
-that list as `guard-key-list=(...)`. Each result records the bound key, field,
+that list as `guard-key-list=(...)`; executor budget coverage compact text does
+the same for `manifest_bound_keys`. Each result records the bound key, field,
 operator, expected value, actual value, pass/fail state, and numeric margin.
 The summaries report pass/fail counts, failed keys, zero/negative margin sources,
 and the tightest bound result so local CLI output can show headroom without
