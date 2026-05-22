@@ -189,6 +189,13 @@ observed counters have not yet been promoted to manifest guards. The
 checked-in glass showcase, file
 explorer, and Android artifact manifests now opt into those resource and
 quality-policy coverage contracts.
+Raw `material_plans.resource_bound_sources` now records the plan id, JSON path,
+likely layer/pass, and container identity behind hot resource maxima such as
+sample taps, texture-copy pixels, frame/surface capture pixels, refraction
+offset, container spacing, paint inflate, and capacity counters. CLI compact
+`material_resource_bounds` JSON and non-JSON output preserve those source
+descriptors, so a tight or failed Liquid Glass resource guard can be traced to
+the responsible plan without opening the full plan array.
 
 Grouped Liquid Glass diagnostics are now compact at the CLI edge as well: raw
 `material_plans.container_groups` counters and

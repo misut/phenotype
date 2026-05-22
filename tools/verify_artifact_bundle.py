@@ -980,6 +980,11 @@ def material_failure_context(
         if isinstance(container_group_sources, dict):
             material_contract["container_group_sources"] = (
                 container_group_sources)
+        resource_bound_sources = material_plan_summary.get(
+            "resource_bound_sources")
+        if isinstance(resource_bound_sources, dict):
+            material_contract["resource_bound_sources"] = (
+                resource_bound_sources)
         material_contract["plan_reference_model"] = (
             material_plan_summary.get("reference_model"))
         material_contract["plan_shape"] = material_plan_summary.get("shape")
@@ -1362,6 +1367,76 @@ def material_container_group_source_value(group: JsonObject, key: str) -> float:
     if isinstance(value, bool):
         return 1.0 if value else 0.0
     return float(value) if isinstance(value, (int, float)) else 0.0
+
+
+def material_resource_bound_source(
+        metric: str,
+        value: int | float,
+        plan: JsonObject,
+        plan_path: str,
+        source_path: str,
+        *,
+        likely_layer: str,
+        likely_pass: str = "",
+        detail: JsonObject | None = None) -> JsonObject:
+    source: JsonObject = {
+        "metric": metric,
+        "value": value,
+        "plan_path": plan_path,
+        "source_path": source_path,
+        "likely_layer": likely_layer,
+    }
+    if likely_pass:
+        source["likely_pass"] = likely_pass
+    for key in ("plan_id", "kind", "role"):
+        if isinstance(plan.get(key), str):
+            source[key] = plan[key]
+    container = plan.get("container")
+    if isinstance(container, dict):
+        source["container"] = {
+            key: container.get(key)
+            for key in ("mode", "container_id", "union_id", "spacing")
+            if key in container
+        }
+    if isinstance(detail, dict) and detail:
+        source["detail"] = detail
+    return source
+
+
+def update_material_resource_bound_source(
+        summary: JsonObject,
+        metric: str,
+        value: Any,
+        plan: JsonObject,
+        plan_path: str,
+        source_path: str,
+        *,
+        likely_layer: str,
+        likely_pass: str = "",
+        detail: JsonObject | None = None) -> None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return
+    sources = summary.get("resource_bound_sources")
+    if not isinstance(sources, dict):
+        sources = {}
+        summary["resource_bound_sources"] = sources
+    existing = sources.get(metric)
+    existing_value = (
+        existing.get("value")
+        if isinstance(existing, dict)
+        else None)
+    if (not isinstance(existing_value, (int, float))
+            or isinstance(existing_value, bool)
+            or float(value) > float(existing_value)):
+        sources[metric] = material_resource_bound_source(
+            metric,
+            value,
+            plan,
+            plan_path,
+            source_path,
+            likely_layer=likely_layer,
+            likely_pass=likely_pass,
+            detail=detail)
 
 
 def check_object_field(
@@ -6390,6 +6465,7 @@ def summarize_material_plans(
             "unbounded_texture_copy": 0,
             "non_deterministic_fallback": 0,
         },
+        "resource_bound_sources": {},
         "execution_audit": {
             "satisfied": 0,
             "mismatched": 0,
@@ -6586,6 +6662,15 @@ def summarize_material_plans(
                 bounds["max_container_spacing"] = max(
                     float(bounds["max_container_spacing"]),
                     float(spacing))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_container_spacing",
+                    float(spacing),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.container.spacing",
+                    likely_layer="material-container",
+                    likely_pass="container-spacing")
             container_bools: dict[str, bool | None] = {}
             for key in (
                     "interactive",
@@ -8372,6 +8457,15 @@ def summarize_material_plans(
             bounds["max_plan_sample_taps"] = max(
                 int(bounds["max_plan_sample_taps"]),
                 int(sample_taps))
+            update_material_resource_bound_source(
+                summary,
+                "max_plan_sample_taps",
+                int(sample_taps),
+                plan,
+                plan_path,
+                f"{plan_path}.sample_taps",
+                likely_layer=likely_layer,
+                likely_pass="material-plan")
             bounds["total_plan_sample_taps"] = (
                 int(bounds["total_plan_sample_taps"]) + int(sample_taps))
 
@@ -8421,6 +8515,15 @@ def summarize_material_plans(
                             bounds["max_sampling_kernel_radius"] = max(
                                 int(bounds["max_sampling_kernel_radius"]),
                                 int(value))
+                            update_material_resource_bound_source(
+                                summary,
+                                "max_sampling_kernel_radius",
+                                int(value),
+                                plan,
+                                plan_path,
+                                f"{plan_path}.sampling_kernel.radius",
+                                likely_layer=likely_layer,
+                                likely_pass="sampling-kernel")
                     elif key == "sample_taps":
                         kernel_taps = value
                     elif key == "blur_step_scale":
@@ -10275,6 +10378,15 @@ def summarize_material_plans(
                 bounds["max_budget_blur_radius"] = max(
                     float(bounds["max_budget_blur_radius"]),
                     float(max_blur_radius))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_budget_blur_radius",
+                    float(max_blur_radius),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.max_blur_radius",
+                    likely_layer=likely_layer,
+                    likely_pass="resource-budget")
             max_sample_taps = check_number_field(
                 report,
                 resource_budget,
@@ -10299,6 +10411,15 @@ def summarize_material_plans(
                 bounds["max_sample_taps"] = max(
                     int(bounds["max_sample_taps"]),
                     int(max_sample_taps))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_sample_taps",
+                    int(max_sample_taps),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.max_sample_taps",
+                    likely_layer=likely_layer,
+                    likely_pass="resource-budget")
             max_pass_count = check_number_field(
                 report,
                 resource_budget,
@@ -10311,6 +10432,15 @@ def summarize_material_plans(
                 bounds["max_pass_count"] = max(
                     int(bounds["max_pass_count"]),
                     int(max_pass_count))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_pass_count",
+                    int(max_pass_count),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.max_pass_count",
+                    likely_layer=likely_layer,
+                    likely_pass="resource-budget")
             max_execution_stages = check_number_field(
                 report,
                 resource_budget,
@@ -10323,6 +10453,15 @@ def summarize_material_plans(
                 bounds["max_execution_stages"] = max(
                     int(bounds["max_execution_stages"]),
                     int(max_execution_stages))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_execution_stages",
+                    int(max_execution_stages),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.max_execution_stages",
+                    likely_layer=likely_layer,
+                    likely_pass="resource-budget")
             max_paint_layers = check_number_field(
                 report,
                 resource_budget,
@@ -10335,6 +10474,15 @@ def summarize_material_plans(
                 bounds["max_paint_layers"] = max(
                     int(bounds["max_paint_layers"]),
                     int(max_paint_layers))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_paint_layers",
+                    int(max_paint_layers),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.max_paint_layers",
+                    likely_layer="material-paint-layer",
+                    likely_pass="resource-budget")
             max_backdrop_pixels = check_number_field(
                 report,
                 resource_budget,
@@ -10347,6 +10495,15 @@ def summarize_material_plans(
                 bounds["max_backdrop_pixels"] = max(
                     int(bounds["max_backdrop_pixels"]),
                     int(max_backdrop_pixels))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_backdrop_pixels",
+                    int(max_backdrop_pixels),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.max_backdrop_pixels",
+                    likely_layer=likely_layer,
+                    likely_pass="resource-budget")
             max_frame_capture_count = check_number_field(
                 report,
                 resource_budget,
@@ -10359,6 +10516,15 @@ def summarize_material_plans(
                 bounds["max_frame_capture_count"] = max(
                     int(bounds["max_frame_capture_count"]),
                     int(max_frame_capture_count))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_frame_capture_count",
+                    int(max_frame_capture_count),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.max_frame_capture_count",
+                    likely_layer="material-backdrop",
+                    likely_pass="resource-budget")
             max_frame_capture_pixels = check_number_field(
                 report,
                 resource_budget,
@@ -10371,6 +10537,15 @@ def summarize_material_plans(
                 bounds["max_frame_capture_pixels"] = max(
                     int(bounds["max_frame_capture_pixels"]),
                     int(max_frame_capture_pixels))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_frame_capture_pixels",
+                    int(max_frame_capture_pixels),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.max_frame_capture_pixels",
+                    likely_layer="material-backdrop",
+                    likely_pass="resource-budget")
             max_surface_sample_pixels = check_number_field(
                 report,
                 resource_budget,
@@ -10386,6 +10561,15 @@ def summarize_material_plans(
                 bounds["max_surface_sample_pixels"] = max(
                     int(bounds["max_surface_sample_pixels"]),
                     int(max_surface_sample_pixels))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_surface_sample_pixels",
+                    int(max_surface_sample_pixels),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.max_surface_sample_pixels",
+                    likely_layer="material-backdrop",
+                    likely_pass="resource-budget")
             max_refraction_offset_pixels = check_number_field(
                 report,
                 resource_budget,
@@ -10402,6 +10586,15 @@ def summarize_material_plans(
                 bounds["max_refraction_offset_pixels"] = max(
                     float(bounds["max_refraction_offset_pixels"]),
                     float(max_refraction_offset_pixels))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_refraction_offset_pixels",
+                    float(max_refraction_offset_pixels),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.max_refraction_offset_pixels",
+                    likely_layer="material-refraction",
+                    likely_pass="resource-budget")
             max_container_spacing = check_number_field(
                 report,
                 resource_budget,
@@ -10414,6 +10607,15 @@ def summarize_material_plans(
                 bounds["max_container_spacing"] = max(
                     float(bounds["max_container_spacing"]),
                     float(max_container_spacing))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_container_spacing",
+                    float(max_container_spacing),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.max_container_spacing",
+                    likely_layer="material-container",
+                    likely_pass="resource-budget")
             max_paint_layer_inflate = check_number_field(
                 report,
                 resource_budget,
@@ -10426,6 +10628,15 @@ def summarize_material_plans(
                 bounds["max_paint_layer_inflate"] = max(
                     float(bounds["max_paint_layer_inflate"]),
                     float(max_paint_layer_inflate))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_paint_layer_inflate",
+                    float(max_paint_layer_inflate),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.max_paint_layer_inflate",
+                    likely_layer="material-paint-layer",
+                    likely_pass="resource-budget")
             bounded_texture_copy = check_bool_field(
                 report,
                 resource_budget,
@@ -10436,6 +10647,15 @@ def summarize_material_plans(
             if bounded_texture_copy is False:
                 bounds["unbounded_texture_copy"] = int(
                     bounds["unbounded_texture_copy"]) + 1
+                update_material_resource_bound_source(
+                    summary,
+                    "unbounded_texture_copy",
+                    int(bounds["unbounded_texture_copy"]),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.bounded_texture_copy",
+                    likely_layer=likely_layer,
+                    likely_pass="resource-budget")
             deterministic_fallback = check_bool_field(
                 report,
                 resource_budget,
@@ -10446,6 +10666,15 @@ def summarize_material_plans(
             if deterministic_fallback is False:
                 bounds["non_deterministic_fallback"] = int(
                     bounds["non_deterministic_fallback"]) + 1
+                update_material_resource_bound_source(
+                    summary,
+                    "non_deterministic_fallback",
+                    int(bounds["non_deterministic_fallback"]),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.resource_budget.deterministic_fallback",
+                    likely_layer=likely_layer,
+                    likely_pass="resource-budget")
             if isinstance(plan_blur_radius, (int, float)) and isinstance(max_blur_radius, (int, float)):
                 report.check(
                     "material blur radius is within budget",
@@ -10484,6 +10713,15 @@ def summarize_material_plans(
             bounds["max_execution_stage_capacity"] = max(
                 int(bounds["max_execution_stage_capacity"]),
                 capacity)
+            update_material_resource_bound_source(
+                summary,
+                "max_execution_stage_capacity",
+                capacity,
+                plan,
+                plan_path,
+                f"{plan_path}.execution_stage_capacity",
+                likely_layer="material-stage",
+                likely_pass="stage-capacity")
             if isinstance(max_execution_stages, (int, float)):
                 report.check(
                     "material execution stage capacity matches resource budget",
@@ -10549,6 +10787,15 @@ def summarize_material_plans(
             bounds["max_paint_layer_capacity"] = max(
                 int(bounds["max_paint_layer_capacity"]),
                 capacity)
+            update_material_resource_bound_source(
+                summary,
+                "max_paint_layer_capacity",
+                capacity,
+                plan,
+                plan_path,
+                f"{plan_path}.paint_layer_capacity",
+                likely_layer="material-paint-layer",
+                likely_pass="paint-layer-capacity")
             if isinstance(max_paint_layers, (int, float)):
                 report.check(
                     "material paint layer capacity matches resource budget",
@@ -10699,6 +10946,16 @@ def summarize_material_plans(
                 bounds["max_pass_texture_copy_pixels"] = max(
                     int(bounds["max_pass_texture_copy_pixels"]),
                     int(primary_pass_texture_copy_pixels))
+                update_material_resource_bound_source(
+                    summary,
+                    "max_pass_texture_copy_pixels",
+                    int(primary_pass_texture_copy_pixels),
+                    plan,
+                    plan_path,
+                    f"{plan_path}.primary_pass.max_texture_copy_pixels",
+                    likely_layer=likely_layer,
+                    likely_pass=primary_pass_name,
+                    detail={"source": "primary_pass"})
                 if primary_pass.get("active") is False:
                     report.check(
                         "material inactive primary pass has no texture copy",
@@ -11423,6 +11680,19 @@ def summarize_material_plans(
                             bounds["max_pass_texture_copy_pixels"] = max(
                                 int(bounds["max_pass_texture_copy_pixels"]),
                                 int(value))
+                            update_material_resource_bound_source(
+                                summary,
+                                "max_pass_texture_copy_pixels",
+                                int(value),
+                                plan,
+                                plan_path,
+                                f"{pass_path}.max_texture_copy_pixels",
+                                likely_layer=likely_layer,
+                                likely_pass=pass_name_for_hint,
+                                detail={
+                                    "source": "passes",
+                                    "index": pass_index,
+                                })
                             bounds["total_pass_texture_copy_pixels"] = (
                                 int(bounds["total_pass_texture_copy_pixels"])
                                 + int(value))
@@ -11533,6 +11803,15 @@ def summarize_material_plans(
             bounds["max_execution_stage_count"] = max(
                 int(bounds["max_execution_stage_count"]),
                 len(execution_stages))
+            update_material_resource_bound_source(
+                summary,
+                "max_execution_stage_count",
+                len(execution_stages),
+                plan,
+                plan_path,
+                f"{plan_path}.execution_stages",
+                likely_layer="material-stage",
+                likely_pass="stage-capacity")
             if isinstance(max_execution_stages, (int, float)):
                 report.check(
                     "material execution stage count is within budget",
@@ -11956,6 +12235,15 @@ def summarize_material_plans(
             paint_summary["max_count"] = max(
                 int(paint_summary["max_count"]),
                 len(paint_layers))
+            update_material_resource_bound_source(
+                summary,
+                "max_paint_layer_count",
+                len(paint_layers),
+                plan,
+                plan_path,
+                f"{plan_path}.paint_layers",
+                likely_layer="material-paint-layer",
+                likely_pass=primary_pass_name)
             bounds["total_paint_layers"] = int(
                 bounds["total_paint_layers"]) + len(paint_layers)
             bounds["max_paint_layer_count"] = max(
@@ -12168,6 +12456,15 @@ def summarize_material_plans(
             bounds["max_paint_layer_inflate"] = max(
                 float(bounds["max_paint_layer_inflate"]),
                 max_layer_inflate)
+            update_material_resource_bound_source(
+                summary,
+                "max_paint_layer_inflate",
+                max_layer_inflate,
+                plan,
+                plan_path,
+                f"{plan_path}.paint_layers",
+                likely_layer="material-paint-layer",
+                likely_pass="paint-layer-capacity")
             if isinstance(resource_budget, dict):
                 budget_inflate = resource_budget.get("max_paint_layer_inflate")
                 if isinstance(budget_inflate, (int, float)):

@@ -334,6 +334,63 @@ auto sample_report() -> json::Value {
           "unbounded_texture_copy": 0,
           "non_deterministic_fallback": 0
         },
+        "resource_bound_sources": {
+          "max_plan_sample_taps": {
+            "metric": "max_plan_sample_taps",
+            "value": 25,
+            "plan_id": "material.toolbar.liquid-glass",
+            "kind": "regular",
+            "role": "toolbar",
+            "plan_path": "debug.platform_runtime.details.renderer.material_plans[0]",
+            "source_path": "debug.platform_runtime.details.renderer.material_plans[0].sample_taps",
+            "likely_layer": "material-blur-pass",
+            "likely_pass": "material-plan",
+            "container": {
+              "mode": "union",
+              "container_id": 41,
+              "union_id": 7,
+              "spacing": 20
+            }
+          },
+          "max_pass_texture_copy_pixels": {
+            "metric": "max_pass_texture_copy_pixels",
+            "value": 1024,
+            "plan_id": "material.content.liquid-glass",
+            "kind": "thin",
+            "role": "content",
+            "plan_path": "debug.platform_runtime.details.renderer.material_plans[1]",
+            "source_path": "debug.platform_runtime.details.renderer.material_plans[1].passes[1].max_texture_copy_pixels",
+            "likely_layer": "material-blur-pass",
+            "likely_pass": "backdrop-sample-blur",
+            "container": {
+              "mode": "union",
+              "container_id": 41,
+              "union_id": 7,
+              "spacing": 20
+            },
+            "detail": {
+              "source": "passes",
+              "index": 1
+            }
+          },
+          "max_refraction_offset_pixels": {
+            "metric": "max_refraction_offset_pixels",
+            "value": 3.5,
+            "plan_id": "material.content.liquid-glass",
+            "kind": "thin",
+            "role": "content",
+            "plan_path": "debug.platform_runtime.details.renderer.material_plans[1]",
+            "source_path": "debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_refraction_offset_pixels",
+            "likely_layer": "material-refraction",
+            "likely_pass": "resource-budget",
+            "container": {
+              "mode": "union",
+              "container_id": 41,
+              "union_id": 7,
+              "spacing": 20
+            }
+          }
+        },
         "container_groups": {
           "group_count": 3,
           "multi_surface_group_count": 1,
@@ -897,7 +954,20 @@ int main() {
     assert(resource_bounds->max_plan_sample_taps == 25);
     assert(resource_bounds->total_execution_stages == 8);
     assert(resource_bounds->unbounded_texture_copy == 0);
-    assert(material_resource_bounds_lines(*resource_bounds).size() == 4);
+    assert(resource_bounds->sources.size() == 3);
+    assert(resource_bounds->sources[0].metric == "max_plan_sample_taps");
+    assert(resource_bounds->sources[0].plan_id
+        == "material.toolbar.liquid-glass");
+    assert(contains_text(resource_bounds->sources[1].detail_json, "\"source\""));
+    assert(contains_text(resource_bounds->sources[1].detail_json, "\"passes\""));
+    assert(contains_text(resource_bounds->sources[1].detail_json, "\"index\""));
+    assert(contains_text(
+        material_resource_bounds_json(resource_bounds),
+        "\"sources\":{\"max_plan_sample_taps\":{\"metric\":\"max_plan_sample_taps\""));
+    assert(material_resource_bounds_lines(*resource_bounds).size() == 5);
+    assert(contains_line(
+        material_resource_bounds_lines(*resource_bounds),
+        "sources: max_plan_sample_taps=25 layer=material-blur-pass"));
 
     auto container_groups = material_container_group_summary_from_report(report);
     assert(container_groups);
@@ -1123,6 +1193,9 @@ int main() {
     assert(contains_text(
         failure_json,
         "\"material_context\":{\"resource_bounds\":{\"max_plan_sample_taps\":25,\"total_plan_sample_taps\":50,\"max_backdrop_pixels\":4096"));
+    assert(contains_text(
+        failure_json,
+        "\"sources\":{\"max_plan_sample_taps\":{\"metric\":\"max_plan_sample_taps\""));
     assert(contains_text(
         failure_json,
         "\"container_groups\":{\"group_count\":3,\"multi_surface_group_count\":1,\"union_group_count\":1,\"morph_group_count\":2"));

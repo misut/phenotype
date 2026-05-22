@@ -54,6 +54,23 @@ struct MaterialQualityPolicySummary {
     std::int64_t max_backdrop_pixels = -1;
 };
 
+struct MaterialResourceBoundSource {
+    std::string metric;
+    double value = -1.0;
+    std::string plan_id;
+    std::string kind;
+    std::string role;
+    std::string plan_path;
+    std::string source_path;
+    std::string likely_layer;
+    std::string likely_pass;
+    std::string container_mode;
+    std::int64_t container_id = -1;
+    std::int64_t union_id = -1;
+    double container_spacing = -1.0;
+    std::string detail_json;
+};
+
 struct MaterialResourceBoundsSummary {
     double max_plan_blur_radius = -1.0;
     std::int64_t max_plan_sample_taps = -1;
@@ -90,6 +107,7 @@ struct MaterialResourceBoundsSummary {
     std::int64_t total_pass_texture_copy_pixels = -1;
     std::int64_t unbounded_texture_copy = -1;
     std::int64_t non_deterministic_fallback = -1;
+    std::vector<MaterialResourceBoundSource> sources;
 };
 
 struct MaterialContainerGroupSource {
@@ -733,6 +751,89 @@ auto resource_bounds_number_at(json::Value const& report,
     return json_number_at(report, {"material_plans", "resource_bounds", key});
 }
 
+auto material_resource_bound_source_from_object(json::Object const& object,
+                                               std::string_view fallback_metric)
+    -> MaterialResourceBoundSource {
+    auto container_mode = std::string{};
+    auto container_id = std::int64_t{-1};
+    auto union_id = std::int64_t{-1};
+    auto container_spacing = -1.0;
+    if (auto const* container = json_object_member(object, "container");
+        container && container->is_object()) {
+        auto const& container_object = container->as_object();
+        container_mode = json_object_string(container_object, "mode");
+        container_id =
+            json_object_integer(container_object, "container_id").value_or(-1);
+        union_id =
+            json_object_integer(container_object, "union_id").value_or(-1);
+        container_spacing =
+            json_object_number(container_object, "spacing").value_or(-1.0);
+    }
+    auto detail_json = std::string{};
+    if (auto const* detail = json_object_member(object, "detail");
+        detail && detail->is_object()) {
+        detail_json = json::emit(*detail);
+    }
+    auto metric = json_object_string(object, "metric");
+    if (metric.empty())
+        metric = std::string{fallback_metric};
+    return MaterialResourceBoundSource{
+        .metric = std::move(metric),
+        .value = json_object_number(object, "value").value_or(-1.0),
+        .plan_id = json_object_string(object, "plan_id"),
+        .kind = json_object_string(object, "kind"),
+        .role = json_object_string(object, "role"),
+        .plan_path = json_object_string(object, "plan_path"),
+        .source_path = json_object_string(object, "source_path"),
+        .likely_layer = json_object_string(object, "likely_layer"),
+        .likely_pass = json_object_string(object, "likely_pass"),
+        .container_mode = std::move(container_mode),
+        .container_id = container_id,
+        .union_id = union_id,
+        .container_spacing = container_spacing,
+        .detail_json = std::move(detail_json),
+    };
+}
+
+auto material_resource_bound_sources_from_report(json::Value const& report)
+    -> std::vector<MaterialResourceBoundSource> {
+    auto out = std::vector<MaterialResourceBoundSource>{};
+    auto const* sources = json_object_at(
+        report,
+        {"material_plans", "resource_bound_sources"});
+    if (!sources)
+        return out;
+    for (auto const& metric : {
+             "max_plan_sample_taps",
+             "max_sample_taps",
+             "max_sampling_kernel_radius",
+             "max_pass_count",
+             "max_execution_stages",
+             "max_execution_stage_count",
+             "max_execution_stage_capacity",
+             "max_paint_layers",
+             "max_paint_layer_count",
+             "max_paint_layer_capacity",
+             "max_backdrop_pixels",
+             "max_frame_capture_count",
+             "max_frame_capture_pixels",
+             "max_surface_sample_pixels",
+             "max_pass_texture_copy_pixels",
+             "max_refraction_offset_pixels",
+             "max_container_spacing",
+             "max_paint_layer_inflate",
+             "unbounded_texture_copy",
+             "non_deterministic_fallback",
+         }) {
+        auto const* source = json_object_member(*sources, metric);
+        if (source && source->is_object())
+            out.push_back(material_resource_bound_source_from_object(
+                source->as_object(),
+                metric));
+    }
+    return out;
+}
+
 auto material_resource_bounds_from_report(json::Value const& report)
     -> std::optional<MaterialResourceBoundsSummary> {
     if (!json_object_at(report, {"material_plans", "resource_bounds"}))
@@ -840,6 +941,7 @@ auto material_resource_bounds_from_report(json::Value const& report)
         .non_deterministic_fallback =
             resource_bounds_integer_at(report, "non_deterministic_fallback")
                 .value_or(-1),
+        .sources = material_resource_bound_sources_from_report(report),
     };
 }
 
@@ -1732,6 +1834,52 @@ auto material_quality_policy_json(
         manifest_count_json(policy->max_backdrop_pixels));
 }
 
+auto material_resource_bound_source_json(
+        MaterialResourceBoundSource const& source)
+    -> std::string {
+    auto detail = source.detail_json.empty() ? std::string{"null"}
+                                             : source.detail_json;
+    return std::format(
+        "{{\"metric\":{},\"value\":{},\"plan_id\":{},\"kind\":{},"
+        "\"role\":{},\"plan_path\":{},\"source_path\":{},"
+        "\"likely_layer\":{},\"likely_pass\":{},"
+        "\"container\":{{\"mode\":{},\"container_id\":{},"
+        "\"union_id\":{},\"spacing\":{}}},\"detail\":{}}}",
+        json_string(source.metric),
+        budget_ratio(source.value),
+        json_string(source.plan_id),
+        json_string(source.kind),
+        json_string(source.role),
+        json_string(source.plan_path),
+        json_string(source.source_path),
+        json_string(source.likely_layer),
+        json_string(source.likely_pass),
+        json_string(source.container_mode),
+        manifest_count_json(source.container_id),
+        manifest_count_json(source.union_id),
+        budget_ratio(source.container_spacing),
+        detail);
+}
+
+auto material_resource_bound_sources_json(
+        std::vector<MaterialResourceBoundSource> const& sources)
+    -> std::string {
+    auto out = std::string{"{"};
+    auto first = true;
+    for (auto const& source : sources) {
+        if (source.metric.empty())
+            continue;
+        if (!first)
+            out += ",";
+        first = false;
+        out += json_string(source.metric);
+        out += ":";
+        out += material_resource_bound_source_json(source);
+    }
+    out += "}";
+    return out;
+}
+
 auto material_resource_bounds_json(
         std::optional<MaterialResourceBoundsSummary> const& bounds)
     -> std::string {
@@ -1760,7 +1908,7 @@ auto material_resource_bounds_json(
         "\"max_pass_texture_copy_pixels\":{},"
         "\"total_pass_texture_copy_pixels\":{},"
         "\"unbounded_texture_copy\":{},"
-        "\"non_deterministic_fallback\":{}}}",
+        "\"non_deterministic_fallback\":{},\"sources\":{}}}",
         budget_ratio(bounds->max_plan_blur_radius),
         manifest_count_json(bounds->max_plan_sample_taps),
         manifest_count_json(bounds->total_plan_sample_taps),
@@ -1795,7 +1943,8 @@ auto material_resource_bounds_json(
         manifest_count_json(bounds->max_pass_texture_copy_pixels),
         manifest_count_json(bounds->total_pass_texture_copy_pixels),
         manifest_count_json(bounds->unbounded_texture_copy),
-        manifest_count_json(bounds->non_deterministic_fallback));
+        manifest_count_json(bounds->non_deterministic_fallback),
+        material_resource_bound_sources_json(bounds->sources));
 }
 
 auto material_container_group_source_json(
@@ -2091,6 +2240,45 @@ auto verifier_manifest_debug_detail_paths_text(
     return budget_field_list_text(manifest.debug_detail_paths, limit);
 }
 
+auto material_resource_bound_source_text(MaterialResourceBoundSource const& source)
+    -> std::string {
+    auto plan = source.plan_id.empty()
+        ? std::string{}
+        : std::format(" plan={}", source.plan_id);
+    auto at = source.source_path.empty()
+        ? std::string{}
+        : std::format(" path={}", source.source_path);
+    auto pass = source.likely_pass.empty()
+        ? std::string{}
+        : std::format(" pass={}", source.likely_pass);
+    return std::format(
+        "{}={} layer={}",
+        source.metric,
+        budget_number_text(source.value),
+        source.likely_layer.empty() ? std::string{"unknown"}
+                                    : source.likely_layer)
+        + pass
+        + plan
+        + at;
+}
+
+auto material_resource_bound_sources_text(
+        std::vector<MaterialResourceBoundSource> const& sources,
+        std::size_t limit = 5)
+    -> std::string {
+    if (sources.empty())
+        return {};
+    auto parts = std::vector<std::string>{};
+    auto count = std::min(limit, sources.size());
+    for (std::size_t i = 0; i < count; ++i)
+        parts.push_back(material_resource_bound_source_text(sources[i]));
+    auto text = std::views::join_with(parts, std::string_view{"; "})
+        | std::ranges::to<std::string>();
+    if (sources.size() > limit)
+        text += std::format("; +{} more", sources.size() - limit);
+    return text;
+}
+
 auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage)
     -> std::string {
     auto required = coverage.required_field_count > 0
@@ -2169,7 +2357,7 @@ auto material_quality_policy_text(MaterialQualityPolicySummary const& policy)
 
 auto material_resource_bounds_lines(MaterialResourceBoundsSummary const& bounds)
     -> std::vector<std::string> {
-    return {
+    auto lines = std::vector<std::string>{
         std::format(
             "plan: blur={} taps={}/{} budget-blur={} budget-taps={} "
             "kernel={} pass-cap={}",
@@ -2217,6 +2405,11 @@ auto material_resource_bounds_lines(MaterialResourceBoundsSummary const& bounds)
             budget_count(bounds.unbounded_texture_copy),
             budget_count(bounds.non_deterministic_fallback)),
     };
+    if (auto sources = material_resource_bound_sources_text(bounds.sources);
+        !sources.empty()) {
+        lines.push_back("sources: " + sources);
+    }
+    return lines;
 }
 
 auto material_container_group_source_text(MaterialContainerGroupSource const& source)
@@ -2667,7 +2860,8 @@ auto failure_resource_bounds_json(json::Value const& report) -> std::string {
         "\"unbounded_texture_copy\":{},"
         "\"non_deterministic_fallback\":{},"
         "\"max_refraction_offset_pixels\":{},"
-        "\"max_container_spacing\":{},\"max_paint_layer_inflate\":{}}}",
+        "\"max_container_spacing\":{},\"max_paint_layer_inflate\":{},"
+        "\"sources\":{}}}",
         manifest_count_json(bounds->max_plan_sample_taps),
         manifest_count_json(bounds->total_plan_sample_taps),
         manifest_count_json(bounds->max_backdrop_pixels),
@@ -2687,7 +2881,8 @@ auto failure_resource_bounds_json(json::Value const& report) -> std::string {
         manifest_count_json(bounds->non_deterministic_fallback),
         budget_ratio(bounds->max_refraction_offset_pixels),
         budget_ratio(bounds->max_container_spacing),
-        budget_ratio(bounds->max_paint_layer_inflate));
+        budget_ratio(bounds->max_paint_layer_inflate),
+        material_resource_bound_sources_json(bounds->sources));
 }
 
 auto failure_material_context_json(json::Value const& report) -> std::string {

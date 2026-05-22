@@ -306,7 +306,9 @@ the same for resource and quality-policy counters, and
 shadow counts plus maximum blur radius, sample taps, and backdrop pixel limits.
 `material_resource_bounds` reports the pure plan/resource budget maxima,
 runtime pass/stage usage, capture/surface-sampling pixel budgets, paint layer
-capacity, texture-copy bounds, and deterministic fallback counters.
+capacity, texture-copy bounds, deterministic fallback counters, and compact
+source descriptors for the plan/path/layer/pass behind the largest resource
+metrics.
 `material_container_groups` reports grouped surface counts, union/morph groups,
 shared capture, shape-pair analysis, shape-blend execution, group bounds, and
 compact source descriptors that name the container id, plan ids, and bounds
@@ -1744,6 +1746,11 @@ and the raw report records coverage summaries under `resource_bound_coverage`
 and `quality_policy_bound_coverage`. The glass showcase, file explorer, and
 Android artifact manifests require those coverage contracts for the shared
 resource bounds and for every quality-policy field they already guard.
+When a resource guard is tight or fails, inspect
+`material_plans.resource_bound_sources` or the CLI
+`material_resource_bounds.sources` object to see which plan id and JSON path
+produced the relevant sample-tap, texture-copy, capture-pixel, refraction,
+spacing, paint-inflate, or capacity value.
 For manifestless iteration, the equivalent direct CLI field flags are
 `--require-material-budget-coverage-field`,
 `--require-material-resource-coverage-field`, and
@@ -1864,10 +1871,10 @@ artifact details, plus `material_budget` when the verifier report contains
 `artifact_context.material_contract.executor_budget`, plus a compact
 `material_quality_policy` summary of disabled quality-policy effects and
 resolved quality limits, plus compact `material_resource_bounds` for plan,
-capture, runtime pass/stage, paint-layer, texture-copy, and deterministic
-fallback bounds, plus compact `material_container_groups` counters and source
-descriptors for grouped, union, morph, shared-capture, and shape-blend
-diagnostics, plus a compact
+capture, runtime pass/stage, paint-layer, texture-copy, deterministic fallback
+bounds, and the source plan/path behind hot resource maxima, plus compact
+`material_container_groups` counters and source descriptors for grouped, union,
+morph, shared-capture, and shape-blend diagnostics, plus a compact
 `verifier_manifest` object that surfaces the manifest runtime/budget/resource/
 policy bound counts, runtime/debug detail guard paths, exact material executor
 budget bound keys, material resource bound keys, quality-policy bound keys, and their
