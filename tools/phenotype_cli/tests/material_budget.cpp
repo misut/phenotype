@@ -1138,6 +1138,10 @@ int main() {
         "unguarded=19"));
     assert(contains_text(
         verifier_material_budget_coverage_text(report),
+        "guard-key-list=(draw_calls_gte, execution_stage_count_lte, "
+        "upload_utilization_lte)"));
+    assert(contains_text(
+        verifier_material_budget_coverage_text(report),
         "unguarded-sources=(max_backdrop_pixels=4096 pass=resource-budget"));
 
     auto resource_coverage =
@@ -1616,7 +1620,7 @@ int main() {
         "manifest: name=unit-material-gate runtime-details=4 debug-details=3 runtime-bounds=5 pixel-regions=2 budget=3 resource=2 quality=2 required-budget=(draw_calls, execution_stage_count) required-resource=(bounded_texture_copy, max_plan_sample_taps) required-quality=(max_blur_radius, noise_disabled) runtime-detail-paths=(renderer.material_executor_summary.material_draw_status, renderer.material_executor_summary.material_sampled_backdrop_drawn, renderer.material_executor_summary.material_sampled_backdrop_uploaded, renderer.material_executor_summary.material_upload_status) debug-detail-paths=(application.file_explorer.chrome.geometry.titlebar_transparent, application.file_explorer.input.commands.duplicate, platform_capabilities.material_capability_profile) coverage-minimums=(budget=(keys=3 guarded=2 observed=21) resource=(keys=2 guarded=2 observed=2) quality=(keys=2 guarded=2 observed=6)) budget-keys=(execution_stage_count_lte, draw_calls_gte, upload_utilization_lte) resource-keys=(max_plan_sample_taps_lte, require_bounded_texture_copy) quality-keys=(max_blur_radius_lte, require_noise_allowed)"));
     assert(contains_line(
         failure_lines,
-        "coverage: guarded=3/22 observed=22 guard-keys=3 unguarded=19 (active_execution_stage_count, backdrop_copy_count, backdrop_copy_pixels, backdrop_copy_skipped_count, backdrop_copy_utilization, backdrop_execution_stage_count, buffer_capacity_bytes, dropped_execution_stage_count, +11 more)"));
+        "coverage: guarded=3/22 observed=22 guard-keys=3 unguarded=19 (active_execution_stage_count, backdrop_copy_count, backdrop_copy_pixels, backdrop_copy_skipped_count, backdrop_copy_utilization, backdrop_execution_stage_count, buffer_capacity_bytes, dropped_execution_stage_count, +11 more) guard-key-list=(draw_calls_gte, execution_stage_count_lte, upload_utilization_lte)"));
     assert(contains_line(
         failure_lines,
         "unguarded-sources=(max_backdrop_pixels=4096 pass=resource-budget"));

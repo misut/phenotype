@@ -2701,6 +2701,11 @@ auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage
     auto source_text = sources.empty()
         ? std::string{}
         : std::format(" unguarded-sources=({})", sources);
+    auto bound_keys = coverage.manifest_bound_keys.empty()
+        ? std::string{}
+        : std::format(
+            " guard-key-list=({})",
+            budget_field_list_text(coverage.manifest_bound_keys));
     return std::format(
         "guarded={}/{} observed={} guard-keys={} unguarded={} ({})",
         coverage.guarded_observed_field_count,
@@ -2709,6 +2714,7 @@ auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage
         coverage.manifest_bound_key_count,
         coverage.unguarded_observed_field_count,
         budget_field_list_text(coverage.unguarded_observed_fields))
+        + bound_keys
         + source_text
         + required
         + missing;
