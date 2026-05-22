@@ -608,6 +608,9 @@ auto verifier_observation_json(VerifierObservation const& verifier)
     auto const budget = verifier.report
         ? material_budget_from_report(*verifier.report)
         : std::optional<MaterialBudgetSummary>{};
+    auto const quality_policy = verifier.report
+        ? material_quality_policy_from_report(*verifier.report)
+        : std::optional<MaterialQualityPolicySummary>{};
     auto const manifest = verifier.report
         ? verifier_manifest_summary_from_report(*verifier.report)
         : std::optional<VerifierManifestSummary>{};
@@ -625,7 +628,8 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         "{{\"requested\":{},\"executed\":{},\"ok\":{},"
         "\"exit_code\":{},\"timed_out\":{},\"stdout_tail\":{},"
         "\"stderr_tail\":{},\"report_error\":{},"
-        "\"material_budget\":{},\"verifier_manifest\":{},"
+        "\"material_budget\":{},\"material_quality_policy\":{},"
+        "\"verifier_manifest\":{},"
         "\"material_budget_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
         "\"material_budget_bound_results\":{},"
@@ -639,6 +643,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         json_string(verifier.stderr_tail),
         json_string(verifier.report_error),
         material_budget_json(budget),
+        material_quality_policy_json(quality_policy),
         verifier_manifest_summary_json(manifest),
         material_budget_coverage_json(coverage),
         material_budget_bound_summary_json(bound_summary),
@@ -778,6 +783,18 @@ void print_verifier_manifest_summary(VerifierObservation const& verifier) {
         budget_count(manifest->pixel_region_metrics),
         budget_count(manifest->pixel_region_metric_comparisons),
         budget_count(manifest->forbid_pixel_region_colors));
+}
+
+void print_verifier_material_quality_policy(VerifierObservation const& verifier) {
+    if (!verifier.report)
+        return;
+    auto policy = material_quality_policy_from_report(*verifier.report);
+    if (!policy)
+        return;
+
+    std::println(
+        "material quality policy: {}",
+        material_quality_policy_text(*policy));
 }
 
 void print_verifier_material_budget_coverage(
@@ -1083,6 +1100,7 @@ void print_artifact_verify_summary(fs::path const& bundle,
     std::println("{}", cppx::terminal::format_status_frame(lines, false));
     print_verifier_manifest_summary(verifier);
     print_verifier_material_budget_coverage(verifier);
+    print_verifier_material_quality_policy(verifier);
     print_verifier_material_budget_bound_summary(verifier);
     print_verifier_material_budget(verifier);
     print_verifier_failure_summary(verifier);
@@ -1303,6 +1321,7 @@ void print_artifact_observation(ArtifactObservation const& observation) {
         observation.snapshot.material.executor_budget);
     print_verifier_manifest_summary(observation.verifier);
     print_verifier_material_budget_coverage(observation.verifier);
+    print_verifier_material_quality_policy(observation.verifier);
     print_verifier_material_budget_bound_summary(observation.verifier);
     print_verifier_material_budget(observation.verifier);
     print_verifier_failure_summary(observation.verifier);

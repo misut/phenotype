@@ -45,6 +45,15 @@ struct MaterialBudgetSummary {
     std::string backdrop_copy_skip_reason;
 };
 
+struct MaterialQualityPolicySummary {
+    std::int64_t backdrop_sampling_disabled = -1;
+    std::int64_t noise_disabled = -1;
+    std::int64_t shadow_disabled = -1;
+    double max_blur_radius = -1.0;
+    std::int64_t max_sample_taps = -1;
+    std::int64_t max_backdrop_pixels = -1;
+};
+
 struct VerifierManifestSummary {
     std::string name;
     std::int64_t pixel_regions = -1;
@@ -404,6 +413,55 @@ auto material_budget_from_verifier(
     return material_budget_from_verifier(*result);
 }
 
+auto material_quality_policy_from_report(json::Value const& report)
+    -> std::optional<MaterialQualityPolicySummary> {
+    if (!json_object_at(report, {"material_plans", "quality_policy"}))
+        return std::nullopt;
+    return MaterialQualityPolicySummary{
+        .backdrop_sampling_disabled = json_integer_at(
+            report,
+            {"material_plans", "quality_policy",
+             "backdrop_sampling_disabled"}).value_or(-1),
+        .noise_disabled = json_integer_at(
+            report,
+            {"material_plans", "quality_policy", "noise_disabled"})
+            .value_or(-1),
+        .shadow_disabled = json_integer_at(
+            report,
+            {"material_plans", "quality_policy", "shadow_disabled"})
+            .value_or(-1),
+        .max_blur_radius = json_number_at(
+            report,
+            {"material_plans", "quality_policy", "max_blur_radius"})
+            .value_or(-1.0),
+        .max_sample_taps = json_integer_at(
+            report,
+            {"material_plans", "quality_policy", "max_sample_taps"})
+            .value_or(-1),
+        .max_backdrop_pixels = json_integer_at(
+            report,
+            {"material_plans", "quality_policy", "max_backdrop_pixels"})
+            .value_or(-1),
+    };
+}
+
+auto material_quality_policy_from_verifier(
+        cppx::process::CapturedProcessResult const& result)
+    -> std::optional<MaterialQualityPolicySummary> {
+    auto report = verifier_report_from_result(result);
+    if (!report)
+        return std::nullopt;
+    return material_quality_policy_from_report(*report);
+}
+
+auto material_quality_policy_from_verifier(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+    -> std::optional<MaterialQualityPolicySummary> {
+    if (!result)
+        return std::nullopt;
+    return material_quality_policy_from_verifier(*result);
+}
+
 auto material_budget_bound_summary_from_report(json::Value const& report)
     -> std::optional<MaterialBudgetBoundSummary> {
     if (!json_object_at(report, {
@@ -682,6 +740,10 @@ auto budget_ratio(double value) -> std::string {
     return value >= 0.0 ? std::format("{:.6g}", value) : std::string{"null"};
 }
 
+auto budget_number_text(double value) -> std::string {
+    return value >= 0.0 ? std::format("{:.6g}", value) : std::string{"unknown"};
+}
+
 auto budget_optional_number(std::optional<double> value) -> std::string {
     return value ? std::format("{:.6g}", *value) : std::string{"null"};
 }
@@ -771,6 +833,23 @@ auto material_budget_json(std::optional<MaterialBudgetSummary> const& budget)
         json_string(budget->draw_status),
         json_string(budget->backdrop_copy_policy),
         json_string(budget->backdrop_copy_skip_reason));
+}
+
+auto material_quality_policy_json(
+        std::optional<MaterialQualityPolicySummary> const& policy)
+    -> std::string {
+    if (!policy)
+        return "null";
+    return std::format(
+        "{{\"backdrop_sampling_disabled\":{},\"noise_disabled\":{},"
+        "\"shadow_disabled\":{},\"max_blur_radius\":{},"
+        "\"max_sample_taps\":{},\"max_backdrop_pixels\":{}}}",
+        manifest_count_json(policy->backdrop_sampling_disabled),
+        manifest_count_json(policy->noise_disabled),
+        manifest_count_json(policy->shadow_disabled),
+        budget_ratio(policy->max_blur_radius),
+        manifest_count_json(policy->max_sample_taps),
+        manifest_count_json(policy->max_backdrop_pixels));
 }
 
 auto material_budget_coverage_json(
@@ -894,6 +973,19 @@ auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage
         budget_field_list_text(coverage.unguarded_observed_fields))
         + required
         + missing;
+}
+
+auto material_quality_policy_text(MaterialQualityPolicySummary const& policy)
+    -> std::string {
+    return std::format(
+        "disabled: backdrop-sampling={} noise={} shadow={} "
+        "limits: blur={} sample-taps={} backdrop-pixels={}",
+        budget_count(policy.backdrop_sampling_disabled),
+        budget_count(policy.noise_disabled),
+        budget_count(policy.shadow_disabled),
+        budget_number_text(policy.max_blur_radius),
+        budget_count(policy.max_sample_taps),
+        budget_count(policy.max_backdrop_pixels));
 }
 
 auto material_budget_bound_summary_text(MaterialBudgetBoundSummary const& summary)
