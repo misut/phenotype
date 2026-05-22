@@ -975,6 +975,11 @@ def material_failure_context(
             material_plan_summary.get("roles"))
         material_contract["plan_container"] = (
             material_plan_summary.get("container"))
+        container_group_sources = material_plan_summary.get(
+            "container_group_sources")
+        if isinstance(container_group_sources, dict):
+            material_contract["container_group_sources"] = (
+                container_group_sources)
         material_contract["plan_reference_model"] = (
             material_plan_summary.get("reference_model"))
         material_contract["plan_shape"] = material_plan_summary.get("shape")
@@ -1292,6 +1297,71 @@ def material_container_surface_gap(a: JsonObject, b: JsonObject) -> float:
     dx = max(float(b["x"]) - ax2, float(a["x"]) - bx2, 0.0)
     dy = max(float(b["y"]) - ay2, float(a["y"]) - by2, 0.0)
     return math.sqrt(dx * dx + dy * dy)
+
+
+def append_unique_string(values: Any, value: Any) -> None:
+    if isinstance(values, list) and isinstance(value, str) and value:
+        if value not in values:
+            values.append(value)
+
+
+def material_container_group_source(metric: str, group: JsonObject) -> JsonObject:
+    def group_int(key: str) -> int:
+        value = group.get(key)
+        return int(value) if isinstance(value, (int, float)) else 0
+
+    def group_float(key: str) -> float:
+        value = group.get(key)
+        return float(value) if isinstance(value, (int, float)) else 0.0
+
+    source: JsonObject = {
+        "metric": metric,
+        "container_id": group_int("container_id"),
+        "surface_count": group_int("surface_count"),
+        "active_surfaces": group_int("active_surfaces"),
+        "sampled_backdrop_surfaces": group_int("sampled_backdrop_surfaces"),
+        "fallback_surfaces": group_int("fallback_surfaces"),
+        "union_surfaces": group_int("union_surfaces"),
+        "morph_surfaces": group_int("morph_surfaces"),
+        "interactive_surfaces": group_int("interactive_surfaces"),
+        "shared_backdrop_scope_surfaces": group_int(
+            "shared_backdrop_scope_surfaces"),
+        "shared_capture_saved_surfaces": group_int(
+            "shared_capture_saved_surfaces"),
+        "shape_blend_execution": group.get("shape_blend_execution") is True,
+        "shape_blend_execution_surfaces": group_int(
+            "shape_blend_execution_surfaces"),
+        "shape_blend_strength": group_float("shape_blend_strength"),
+        "shape_pair_count": group_int("shape_pair_count"),
+        "blend_candidate_pair_count": group_int("blend_candidate_pair_count"),
+        "union_candidate_pair_count": group_int("union_candidate_pair_count"),
+        "morph_candidate_pair_count": group_int("morph_candidate_pair_count"),
+        "separated_pair_count": group_int("separated_pair_count"),
+        "min_shape_gap": group_float("min_shape_gap"),
+        "max_shape_gap": group_float("max_shape_gap"),
+        "max_blend_distance": group_float("max_blend_distance"),
+        "bounds": {
+            "w": group_float("bounds_width"),
+            "h": group_float("bounds_height"),
+            "area": group_float("bounds_area"),
+        },
+    }
+    for key in ("plan_ids", "roles", "kinds", "plan_paths"):
+        values = group.get(key)
+        if isinstance(values, list):
+            source[key] = [
+                value
+                for value in values[:8]
+                if isinstance(value, str) and value
+            ]
+    return source
+
+
+def material_container_group_source_value(group: JsonObject, key: str) -> float:
+    value = group.get(key)
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    return float(value) if isinstance(value, (int, float)) else 0.0
 
 
 def check_object_field(
@@ -6028,6 +6098,7 @@ def summarize_material_plans(
             "max_group_bounds_area": 0.0,
             "max_shape_blend_strength": 0.0,
         },
+        "container_group_sources": {},
         "reference_model": {
             "technologies": {},
             "layers": {},
@@ -6728,6 +6799,7 @@ def summarize_material_plans(
             if isinstance(container_id, (int, float)) and int(container_id) > 0:
                 cid = int(container_id)
                 group = container_group_accumulators.setdefault(cid, {
+                    "container_id": cid,
                     "surface_count": 0,
                     "active_surfaces": 0,
                     "sampled_backdrop_surfaces": 0,
@@ -6736,9 +6808,18 @@ def summarize_material_plans(
                     "morph_surfaces": 0,
                     "interactive_surfaces": 0,
                     "shared_backdrop_scope_surfaces": 0,
+                    "shared_capture_saved_surfaces": 0,
                     "surfaces": [],
+                    "plan_ids": [],
+                    "roles": [],
+                    "kinds": [],
+                    "plan_paths": [],
                 })
                 group["surface_count"] = int(group["surface_count"]) + 1
+                append_unique_string(group.get("plan_ids"), plan_id)
+                append_unique_string(group.get("roles"), role)
+                append_unique_string(group.get("kinds"), kind)
+                append_unique_string(group.get("plan_paths"), plan_path)
                 surfaces = group.get("surfaces")
                 if isinstance(surfaces, list):
                     surface = material_container_surface_from(
@@ -12300,6 +12381,7 @@ def summarize_material_plans(
             group_summary["shared_backdrop_scope_group_count"] = (
                 int(group_summary["shared_backdrop_scope_group_count"]) + 1)
             shared_surfaces = int(group["shared_backdrop_scope_surfaces"])
+            group["shared_capture_saved_surfaces"] = max(0, shared_surfaces - 1)
             group_summary["shared_capture_surface_count"] = (
                 int(group_summary["shared_capture_surface_count"])
                 + shared_surfaces)
@@ -12318,11 +12400,19 @@ def summarize_material_plans(
             and surface.get("shape_valid") is True
         ]
         group_blend_candidate_pair_count = 0
+        group_union_candidate_pair_count = 0
+        group_morph_candidate_pair_count = 0
+        group_separated_pair_count = 0
         group_min_shape_gap: float | None = None
+        group_max_shape_gap = 0.0
         group_max_blend_distance = 0.0
+        group_source_max_blend_distance = 0.0
+        group_bounds_width = 0.0
+        group_bounds_height = 0.0
         if surfaces:
             group_max_blend = max(
                 float(surface["blend_distance"]) for surface in surfaces)
+            group_source_max_blend_distance = group_max_blend
             group_summary["max_blend_distance"] = max(
                 float(group_summary["max_blend_distance"]),
                 group_max_blend)
@@ -12334,23 +12424,30 @@ def summarize_material_plans(
             max_y = max(
                 float(surface["y"]) + max(0.0, float(surface["h"]))
                 for surface in surfaces)
-            bounds_width = max(0.0, max_x - min_x)
-            bounds_height = max(0.0, max_y - min_y)
+            group_bounds_width = max(0.0, max_x - min_x)
+            group_bounds_height = max(0.0, max_y - min_y)
             group_summary["max_group_bounds_width"] = max(
                 float(group_summary["max_group_bounds_width"]),
-                bounds_width)
+                group_bounds_width)
             group_summary["max_group_bounds_height"] = max(
                 float(group_summary["max_group_bounds_height"]),
-                bounds_height)
+                group_bounds_height)
             group_summary["max_group_bounds_area"] = max(
                 float(group_summary["max_group_bounds_area"]),
-                bounds_width * bounds_height)
+                group_bounds_width * group_bounds_height)
+        group["max_blend_distance"] = max(
+            group_source_max_blend_distance,
+            group_max_blend_distance)
+        group["bounds_width"] = group_bounds_width
+        group["bounds_height"] = group_bounds_height
+        group["bounds_area"] = group_bounds_width * group_bounds_height
         for left, a in enumerate(surfaces):
             for b in surfaces[left + 1:]:
                 gap = material_container_surface_gap(a, b)
                 group_min_shape_gap = (
                     gap if group_min_shape_gap is None
                     else min(group_min_shape_gap, gap))
+                group_max_shape_gap = max(group_max_shape_gap, gap)
                 previous_pairs = int(group_summary["total_shape_pair_count"])
                 group_summary["total_shape_pair_count"] = previous_pairs + 1
                 if previous_pairs == 0:
@@ -12378,15 +12475,28 @@ def summarize_material_plans(
                         int(group_summary["blend_candidate_pair_count"]) + 1)
                     if (a.get("shape_union_expected") is True
                             or b.get("shape_union_expected") is True):
+                        group_union_candidate_pair_count += 1
                         group_summary["union_candidate_pair_count"] = (
                             int(group_summary["union_candidate_pair_count"]) + 1)
                     if (a.get("morph_transitions") is True
                             or b.get("morph_transitions") is True):
+                        group_morph_candidate_pair_count += 1
                         group_summary["morph_candidate_pair_count"] = (
                             int(group_summary["morph_candidate_pair_count"]) + 1)
                 else:
+                    group_separated_pair_count += 1
                     group_summary["separated_pair_count"] = (
                         int(group_summary["separated_pair_count"]) + 1)
+        group["shape_pair_count"] = (
+            group_blend_candidate_pair_count
+            + group_separated_pair_count)
+        group["blend_candidate_pair_count"] = group_blend_candidate_pair_count
+        group["union_candidate_pair_count"] = group_union_candidate_pair_count
+        group["morph_candidate_pair_count"] = group_morph_candidate_pair_count
+        group["separated_pair_count"] = group_separated_pair_count
+        group["min_shape_gap"] = (
+            0.0 if group_min_shape_gap is None else group_min_shape_gap)
+        group["max_shape_gap"] = group_max_shape_gap
         shape_blend_execution = (
             active_surfaces > 1
             and group_blend_candidate_pair_count > 0
@@ -12394,12 +12504,16 @@ def summarize_material_plans(
                  or int(group["morph_surfaces"]) > 0
                  or int(group["shared_backdrop_scope_surfaces"]) > 1
                  or int(group["interactive_surfaces"]) > 0))
+        group["shape_blend_execution"] = shape_blend_execution
+        group["shape_blend_execution_surfaces"] = 0
+        group["shape_blend_strength"] = 0.0
         if shape_blend_execution:
             group_summary["shape_blend_execution_group_count"] = (
                 int(group_summary["shape_blend_execution_group_count"]) + 1)
             group_summary["shape_blend_execution_surface_count"] = (
                 int(group_summary["shape_blend_execution_surface_count"])
                 + active_surfaces)
+            group["shape_blend_execution_surfaces"] = active_surfaces
             if group_min_shape_gap is None:
                 blend_strength = 0.0
             elif group_max_blend_distance <= 0.0:
@@ -12413,9 +12527,33 @@ def summarize_material_plans(
                             0.0,
                             ((group_max_blend_distance - group_min_shape_gap)
                              / group_max_blend_distance))))
+            group["shape_blend_strength"] = blend_strength
             group_summary["max_shape_blend_strength"] = max(
                 float(group_summary["max_shape_blend_strength"]),
                 blend_strength)
+    source_specs = (
+        ("max_group_size", "surface_count", True),
+        ("max_shared_capture_group_surfaces",
+         "shared_backdrop_scope_surfaces",
+         False),
+        ("max_group_bounds_area", "bounds_area", True),
+        ("max_shape_blend_strength", "shape_blend_strength", False),
+    )
+    group_sources: JsonObject = {}
+    groups = list(container_group_accumulators.values())
+    for metric, key, include_zero in source_specs:
+        best_group: JsonObject | None = None
+        best_value = 0.0
+        for group in groups:
+            value = material_container_group_source_value(group, key)
+            if best_group is None or value > best_value:
+                best_group = group
+                best_value = value
+        if best_group is not None and (include_zero or best_value > 0.0):
+            group_sources[metric] = material_container_group_source(
+                metric,
+                best_group)
+    summary["container_group_sources"] = group_sources
     return summary
 
 

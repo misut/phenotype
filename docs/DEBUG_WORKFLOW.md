@@ -308,8 +308,10 @@ shadow counts plus maximum blur radius, sample taps, and backdrop pixel limits.
 runtime pass/stage usage, capture/surface-sampling pixel budgets, paint layer
 capacity, texture-copy bounds, and deterministic fallback counters.
 `material_container_groups` reports grouped surface counts, union/morph groups,
-shared capture, shape-pair analysis, shape-blend execution, and group bounds
-from the same verifier report.
+shared capture, shape-pair analysis, shape-blend execution, group bounds, and
+compact source descriptors that name the container id, plan ids, and bounds
+behind the maximum group-size/shared-capture/bounds/shape-blend counters from
+the same verifier report.
 `material_budget_bound_summary` reports the applied budget bound pass/fail count,
 zero/negative margin source result lists, and tightest result.
 `material_budget_bound_results` provides the compact per-bound
@@ -1863,8 +1865,9 @@ artifact details, plus `material_budget` when the verifier report contains
 `material_quality_policy` summary of disabled quality-policy effects and
 resolved quality limits, plus compact `material_resource_bounds` for plan,
 capture, runtime pass/stage, paint-layer, texture-copy, and deterministic
-fallback bounds, plus compact `material_container_groups` counters for grouped,
-union, morph, shared-capture, and shape-blend diagnostics, plus a compact
+fallback bounds, plus compact `material_container_groups` counters and source
+descriptors for grouped, union, morph, shared-capture, and shape-blend
+diagnostics, plus a compact
 `verifier_manifest` object that surfaces the manifest runtime/budget/resource/
 policy bound counts, runtime/debug detail guard paths, exact material executor
 budget bound keys, material resource bound keys, quality-policy bound keys, and their

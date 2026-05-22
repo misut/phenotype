@@ -364,6 +364,74 @@ auto sample_report() -> json::Value {
           "max_group_bounds_area": 566720,
           "max_shape_blend_strength": 0.6
         },
+        "container_group_sources": {
+          "max_group_size": {
+            "metric": "max_group_size",
+            "container_id": 41,
+            "surface_count": 4,
+            "active_surfaces": 4,
+            "sampled_backdrop_surfaces": 4,
+            "fallback_surfaces": 0,
+            "union_surfaces": 1,
+            "morph_surfaces": 2,
+            "interactive_surfaces": 1,
+            "shared_backdrop_scope_surfaces": 4,
+            "shared_capture_saved_surfaces": 3,
+            "shape_blend_execution": true,
+            "shape_blend_execution_surfaces": 4,
+            "shape_blend_strength": 0.6,
+            "shape_pair_count": 6,
+            "blend_candidate_pair_count": 3,
+            "union_candidate_pair_count": 0,
+            "morph_candidate_pair_count": 3,
+            "separated_pair_count": 3,
+            "min_shape_gap": 8,
+            "max_shape_gap": 656,
+            "max_blend_distance": 28,
+            "bounds": {"w": 472, "h": 1288, "area": 566720},
+            "plan_ids": [
+              "material.toolbar.liquid-glass",
+              "material.content.liquid-glass"
+            ],
+            "roles": ["toolbar", "content"],
+            "kinds": ["regular", "thin"],
+            "plan_paths": [
+              "debug.platform_runtime.details.renderer.material_plans[0]",
+              "debug.platform_runtime.details.renderer.material_plans[1]"
+            ]
+          },
+          "max_group_bounds_area": {
+            "metric": "max_group_bounds_area",
+            "container_id": 41,
+            "surface_count": 4,
+            "active_surfaces": 4,
+            "sampled_backdrop_surfaces": 4,
+            "fallback_surfaces": 0,
+            "union_surfaces": 1,
+            "morph_surfaces": 2,
+            "interactive_surfaces": 1,
+            "shared_backdrop_scope_surfaces": 4,
+            "shared_capture_saved_surfaces": 3,
+            "shape_blend_execution": true,
+            "shape_blend_execution_surfaces": 4,
+            "shape_blend_strength": 0.6,
+            "shape_pair_count": 6,
+            "blend_candidate_pair_count": 3,
+            "union_candidate_pair_count": 0,
+            "morph_candidate_pair_count": 3,
+            "separated_pair_count": 3,
+            "min_shape_gap": 8,
+            "max_shape_gap": 656,
+            "max_blend_distance": 28,
+            "bounds": {"w": 472, "h": 1288, "area": 566720},
+            "plan_ids": ["material.toolbar.liquid-glass"],
+            "roles": ["toolbar"],
+            "kinds": ["regular"],
+            "plan_paths": [
+              "debug.platform_runtime.details.renderer.material_plans[0]"
+            ]
+          }
+        },
         "resource_bound_coverage": {
           "guardable_field_count": 4,
           "observed_field_count": 3,
@@ -839,15 +907,26 @@ int main() {
     assert(container_groups->morph_group_count == 2);
     assert(container_groups->shape_blend_execution_surface_count == 4);
     assert(container_groups->max_group_bounds_area == 566720.0);
+    assert(container_groups->sources.size() == 2);
+    assert(container_groups->sources[0].metric == "max_group_size");
+    assert(container_groups->sources[0].container_id == 41);
+    assert(container_groups->sources[0].plan_ids.size() == 2);
+    assert(container_groups->sources[0].bounds_area == 566720.0);
     assert(contains_text(
         material_container_group_summary_json(container_groups),
         "\"morph_candidate_pair_count\":3"));
+    assert(contains_text(
+        material_container_group_summary_json(container_groups),
+        "\"sources\":{\"max_group_size\":{\"metric\":\"max_group_size\""));
     assert(contains_text(
         material_container_group_summary_text(*container_groups),
         "groups=3 multi=1 union=1 morph=2"));
     assert(contains_text(
         material_container_group_summary_text(*container_groups),
         "gap=8..656 blend-distance=28"));
+    assert(contains_text(
+        material_container_group_summary_text(*container_groups),
+        "sources: max_group_size=cid41 surfaces=4"));
 
     auto quality_policy = material_quality_policy_from_report(report);
     assert(quality_policy);
@@ -1049,6 +1128,9 @@ int main() {
         "\"container_groups\":{\"group_count\":3,\"multi_surface_group_count\":1,\"union_group_count\":1,\"morph_group_count\":2"));
     assert(contains_text(
         failure_json,
+        "\"sources\":{\"max_group_size\":{\"metric\":\"max_group_size\""));
+    assert(contains_text(
+        failure_json,
         "\"by_likely_layer\":{\"material-control\":2,\"platform-runtime\":1}"));
     assert(contains_text(
         failure_json,
@@ -1111,6 +1193,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "container-groups: groups=3 multi=1 union=1 morph=2 interactive=1"));
+    assert(contains_line(
+        failure_lines,
+        "sources: max_group_size=cid41 surfaces=4"));
     assert(contains_line(
         failure_lines,
         "resources: plan-taps=25/50 runtime=8/8/2 stages-dropped=0 paint=6/6/0 copy=1024/2048 unbounded-copy=0 non-deterministic-fallback=0 refraction=3.5 spacing=20 inflate=6"));
