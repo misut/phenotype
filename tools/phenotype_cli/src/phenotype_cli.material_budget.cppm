@@ -5213,8 +5213,17 @@ auto verifier_first_failure_detail_json(json::Value const& report)
     auto const* first_failure = json_object_at(
         report,
         {"failure_summary", "first_failure"});
-    return first_failure ? verifier_failure_detail_json(*first_failure)
-                         : std::string{"null"};
+    if (first_failure)
+        return verifier_failure_detail_json(*first_failure);
+
+    auto const* failures = json_array_at(report, {"failures"});
+    if (!failures)
+        return "null";
+    for (auto const& failure : *failures) {
+        if (failure.is_object())
+            return verifier_failure_detail_json(failure.as_object());
+    }
+    return "null";
 }
 
 auto verifier_failure_summary_json(json::Value const& report)

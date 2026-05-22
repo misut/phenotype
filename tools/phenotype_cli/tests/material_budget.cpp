@@ -1796,7 +1796,12 @@ int main() {
     assert(contains_text(
         minimum_json,
         "\"failure_window\":{\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"limit\":3,\"truncated\":false}"));
-    assert(contains_text(minimum_json, "\"first_failure_detail\":null"));
+    assert(contains_text(
+        minimum_json,
+        "\"first_failure\":null,\"first_failure_detail\":{\"name\":\"material executor budget coverage min_guarded_field_count is satisfied\""));
+    assert(contains_text(
+        minimum_json,
+        "\"first_failure_detail\":{\"name\":\"material executor budget coverage min_guarded_field_count is satisfied\",\"message\":null,\"path\":\"manifest.require_material_executor_budget_coverage.min_guarded_field_count\""));
     assert(contains_text(minimum_json, "\"expected_value\":{\">=\":2}"));
     assert(contains_text(
         minimum_json,
