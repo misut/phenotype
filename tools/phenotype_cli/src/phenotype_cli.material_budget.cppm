@@ -2397,6 +2397,13 @@ auto verifier_bound_pressure_json(json::Value const& report) -> std::string {
         quality.empty() ? std::string{"null"} : quality);
 }
 
+auto verifier_bound_pressure_json(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+        -> std::string {
+    auto report = verifier_report_from_result(result);
+    return report ? verifier_bound_pressure_json(*report) : std::string{"null"};
+}
+
 auto bound_pressure_text(
         std::string_view label,
         std::optional<std::vector<MaterialBudgetBoundResult>> const& results,

@@ -463,6 +463,17 @@ int main() {
     assert(contains_text(executor_json, "\"key\":\"draw_calls_gte\""));
     assert(contains_text(executor_json, "\"margin\":-1"));
 
+    auto pressure_json = verifier_bound_pressure_json(report);
+    assert(contains_text(
+        pressure_json,
+        "\"executor\":{\"state\":\"fail\",\"bound_count\":3,\"pass_count\":2,\"fail_count\":1,\"zero_margin_count\":1,\"negative_margin_count\":1,\"tightest_bound_key\":\"upload_utilization_lte\",\"tightest_bound_margin\":0.9375,\"failed_keys\":[\"draw_calls_gte\"]}"));
+    assert(contains_text(
+        pressure_json,
+        "\"resource\":{\"state\":\"tight\",\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"zero_margin_count\":2,\"negative_margin_count\":0,\"tightest_bound_key\":\"max_plan_sample_taps_lte\",\"tightest_bound_margin\":0,\"failed_keys\":[]}"));
+    assert(contains_text(
+        pressure_json,
+        "\"quality\":{\"state\":\"tight\",\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"zero_margin_count\":2,\"negative_margin_count\":0,\"tightest_bound_key\":\"require_noise_allowed\",\"tightest_bound_margin\":0,\"failed_keys\":[]}"));
+
     auto resource_summary = material_resource_bound_summary_from_report(report);
     auto resource_results = material_resource_bound_results_from_report(report);
     assert(resource_summary);
@@ -612,6 +623,7 @@ int main() {
 
     auto passing_report = json::parse(
         R"json({"failure_summary":{"count":0},"failures":[]})json");
+    assert(verifier_bound_pressure_json(passing_report) == "null");
     assert(verifier_failure_summary_json(passing_report) == "null");
     assert(verifier_failure_summary_lines(passing_report).empty());
 }

@@ -276,7 +276,10 @@ per-bound expected/actual/margin list from the same verifier report.
 `material_resource_bound_summary`/`material_resource_bound_results` and
 `material_quality_policy_bound_summary`/`material_quality_policy_bound_results`
 mirror that compact bound-result shape for resource-budget and quality-policy
-manifest guards.
+manifest guards. `verifier_bound_pressure` groups those three bound families
+into `fail`, `tight`, `pass`, or `unknown` states even when the verifier report
+passes, so automation can spot no-headroom Liquid Glass budgets without waiting
+for a failure summary.
 Both gates also accept the direct material bound guard options used by
 `artifact verify`, so local runs can tighten a resource, quality, or executor
 budget expectation without editing the checked-in manifest.
@@ -299,14 +302,16 @@ whenever a case uses a manifest-backed verifier run, and
 `material_resource_bounds`, `material_resource_bound_summary`,
 `material_resource_bound_results`, `material_quality_policy_bound_summary`,
 `material_quality_policy_bound_results`, `material_budget_bound_summary`, and
-`material_budget_bound_results` when both inputs are present. Failed case JSON
-also includes `verifier_failure_summary` so machine consumers can triage the
-same compact failing paths, failed/tightest bounds, pressure state, and suggested
-actions without parsing verifier stdout; the non-JSON output prints the same
-case-level plans/work/status summary with upload/copy utilization, per-case
-manifest bound summaries, per-case material quality policy, per-case material
-resource bounds, per-case budget coverage, per-case budget bound headroom, and
-the tightest or failed expected-vs-actual budget bound detail when present.
+`material_budget_bound_results` when both inputs are present. It also exposes
+`verifier_bound_pressure` for every parsed verifier report with bound summaries,
+including passing tight budgets. Failed case JSON includes
+`verifier_failure_summary` so machine consumers can triage the same compact
+failing paths, failed/tightest bounds, pressure state, and suggested actions
+without parsing verifier stdout; the non-JSON output prints the same case-level
+plans/work/status summary with upload/copy utilization, per-case manifest bound
+summaries, per-case material quality policy, per-case material resource bounds,
+per-case budget coverage, per-case budget bound headroom, and the tightest or
+failed expected-vs-actual budget bound detail when present.
 Failed cases also print the compact verifier failure summary when the verifier
 report parsed successfully, falling back to the raw report tail only when
 parsing failed.
