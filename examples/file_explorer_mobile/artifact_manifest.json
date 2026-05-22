@@ -609,6 +609,30 @@
       "equals": true
     },
     {
+      "path": "renderer.material_executor_summary.material_sampled_backdrop_upload_required",
+      "equals": true
+    },
+    {
+      "path": "renderer.material_executor_summary.material_sampled_backdrop_draw_required",
+      "equals": true
+    },
+    {
+      "path": "renderer.material_executor_summary.material_sampled_backdrop_uploaded",
+      "equals": true
+    },
+    {
+      "path": "renderer.material_executor_summary.material_sampled_backdrop_drawn",
+      "equals": true
+    },
+    {
+      "path": "renderer.material_executor_summary.material_upload_status",
+      "equals": "uploaded"
+    },
+    {
+      "path": "renderer.material_executor_summary.material_draw_status",
+      "equals": "drawn"
+    },
+    {
       "path": "renderer.material_executor_summary.backdrop_copy_excludes_foreground_text",
       "equals": true
     },

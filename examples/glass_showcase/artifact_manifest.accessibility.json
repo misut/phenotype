@@ -546,6 +546,30 @@
       "equals": false
     },
     {
+      "path": "renderer.material_executor_summary.material_sampled_backdrop_upload_required",
+      "equals": false
+    },
+    {
+      "path": "renderer.material_executor_summary.material_sampled_backdrop_draw_required",
+      "equals": false
+    },
+    {
+      "path": "renderer.material_executor_summary.material_sampled_backdrop_uploaded",
+      "equals": false
+    },
+    {
+      "path": "renderer.material_executor_summary.material_sampled_backdrop_drawn",
+      "equals": false
+    },
+    {
+      "path": "renderer.material_executor_summary.material_upload_status",
+      "equals": "not-needed"
+    },
+    {
+      "path": "renderer.material_executor_summary.material_draw_status",
+      "equals": "not-needed"
+    },
+    {
       "path": "renderer.material_executor_summary.backdrop_copy_policy",
       "equals": "copy_only_when_material_plan_requires_shared_or_next_frame_capture"
     },

@@ -355,11 +355,13 @@ failed expected-vs-actual budget bound detail when present.
 The checked-in desktop and mobile default manifests also pin positive executor
 floors for upload bytes, backdrop-copy pixels, and upload/copy utilization, so
 a file-explorer material capture cannot pass after silently losing the native
-material executor work.
+material executor work. They also assert the sampled upload/draw booleans and
+`uploaded`/`drawn` status strings so a passing capture cannot hide an edge
+status regression behind matching numeric counters.
 The Android manifest mirrors the opposite side of that contract: the
 unsupported-backend fallback must keep sampled executor work, upload bytes,
-backdrop-copy pixels, and shared capture pixels at zero while preserving the
-fallback material plan.
+backdrop-copy pixels, and shared capture pixels at zero, with upload/draw status
+remaining `not-needed`, while preserving the fallback material plan.
 Failed cases also print the compact verifier failure summary when the verifier
 report parsed successfully, falling back to the raw report tail only when
 parsing failed.
