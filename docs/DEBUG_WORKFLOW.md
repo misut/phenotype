@@ -323,12 +323,13 @@ budget expectation without editing the checked-in manifest.
 When a parsed verifier report fails, JSON also includes
 `verifier_failure_summary` with the compact failure count, top likely
 layer/pass, top suggested action, manifest and budget coverage context,
-bound summaries, failed bound results, tightest bound results, bound pressure,
-material resource/quality context, first failure details, and the compact
-failure distribution maps. The non-JSON gate prints the same compact
+bound summaries, failed bound results, tightest bound results, nearest positive
+headroom, bound pressure, material resource/quality context, first failure
+details, and the compact failure distribution maps. The non-JSON gate prints
+the same compact
 `failure_summary` paths, expected/actual values, hints, suggested actions,
-failed/tightest bounds, and pressure line instead of dumping the raw verifier
-JSON tail; use `--json` for the full report.
+failed/tightest bounds, nearest headroom, and pressure line instead of dumping
+the raw verifier JSON tail; use `--json` for the full report.
 `artifact
 verify-file-explorer` owns the shared-model test, desktop/mobile builds,
 deterministic native captures, and uv-managed verifier calls directly. Its case
@@ -344,8 +345,9 @@ whenever a case uses a manifest-backed verifier run, and
 including passing tight budgets, and the non-JSON output prints a per-case
 `material bound pressure` section. Failed case JSON includes
 `verifier_failure_summary` so machine consumers can triage the same compact
-failing paths, failed/tightest bounds, pressure state, and suggested actions
-without parsing verifier stdout; the non-JSON output prints the same case-level
+failing paths, failed/tightest bounds, nearest headroom, pressure state, and
+suggested actions without parsing verifier stdout; the non-JSON output prints
+the same case-level
 plans/work/status summary with upload/copy utilization, per-case manifest bound
 summaries, per-case material quality policy, per-case material resource bounds,
 per-case budget coverage, per-case budget bound headroom, and the tightest or

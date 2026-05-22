@@ -3325,6 +3325,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         "\"artifact_context\":{},\"bound_summaries\":{},"
         "\"failed_bound_results\":{},"
         "\"tightest_bound_results\":{},"
+        "\"nearest_headroom_results\":{},"
         "\"bound_pressure\":{},"
         "\"manifest_context\":{},\"budget_coverage\":{},"
         "\"resource_bound_coverage\":{},"
@@ -3348,6 +3349,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         verifier_bound_summaries_json(report),
         verifier_failed_bound_results_json(report),
         verifier_tightest_bound_results_json(report),
+        verifier_nearest_headroom_results_json(report),
         verifier_bound_pressure_json(report),
         verifier_manifest_context_json(report),
         verifier_material_budget_coverage_json(report),
@@ -3425,6 +3427,10 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto tightest_bounds = verifier_tightest_bound_results_text(report);
         !tightest_bounds.empty()) {
         lines.push_back("  tightest-bounds: " + tightest_bounds);
+    }
+    if (auto headroom = verifier_nearest_headroom_results_text(report);
+        !headroom.empty()) {
+        lines.push_back("  nearest-headroom: " + headroom);
     }
     if (auto pressure = verifier_bound_pressure_text(report);
         !pressure.empty()) {
