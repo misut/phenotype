@@ -401,7 +401,8 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         "\"material_budget\":{},\"verifier_manifest\":{},"
         "\"material_budget_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
-        "\"material_budget_bound_results\":{},\"error\":{}}}",
+        "\"material_budget_bound_results\":{},"
+        "\"verifier_failure_summary\":{},\"error\":{}}}",
         json_string(item.profile),
         json_string(item.mode),
         json_string(item.scenario),
@@ -416,6 +417,7 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         material_budget_coverage_json(item.material_budget_coverage),
         material_budget_bound_summary_json(item.material_budget_bound_summary),
         material_budget_bound_results_json(item.material_budget_bound_results),
+        verifier_failure_summary_json(item.verifier_result),
         json_string(item.error));
 }
 
