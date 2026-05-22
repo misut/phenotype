@@ -2329,6 +2329,83 @@ auto verifier_tightest_bound_results_text(json::Value const& report)
     return text;
 }
 
+struct BoundPressureSource {
+    std::string key;
+    std::string field;
+};
+
+struct BoundPressureMargins {
+    std::int64_t zero_count = 0;
+    std::int64_t negative_count = 0;
+    std::vector<BoundPressureSource> zero_sources;
+    std::vector<BoundPressureSource> negative_sources;
+};
+
+auto bound_pressure_margins(
+        std::optional<std::vector<MaterialBudgetBoundResult>> const& results)
+        -> BoundPressureMargins {
+    auto margins = BoundPressureMargins{};
+    if (!results)
+        return margins;
+
+    for (auto const& result : *results) {
+        if (!result.margin)
+            continue;
+        if (*result.margin == 0.0) {
+            ++margins.zero_count;
+            margins.zero_sources.push_back({
+                .key = result.key,
+                .field = result.field,
+            });
+        } else if (*result.margin < 0.0) {
+            ++margins.negative_count;
+            margins.negative_sources.push_back({
+                .key = result.key,
+                .field = result.field,
+            });
+        }
+    }
+    return margins;
+}
+
+auto bound_pressure_source_json(BoundPressureSource const& source)
+        -> std::string {
+    return std::format(
+        "{{\"key\":{},\"field\":{}}}",
+        json_string(source.key),
+        json_string(source.field));
+}
+
+auto bound_pressure_sources_json(
+        std::vector<BoundPressureSource> const& sources) -> std::string {
+    auto out = std::string{"["};
+    for (auto index = std::size_t{0}; index < sources.size(); ++index) {
+        if (index > 0)
+            out += ",";
+        out += bound_pressure_source_json(sources[index]);
+    }
+    out += "]";
+    return out;
+}
+
+auto bound_pressure_source_text(BoundPressureSource const& source)
+        -> std::string {
+    if (source.field.empty())
+        return source.key;
+    return std::format("{}/{}", source.key, source.field);
+}
+
+auto bound_pressure_sources_text(
+        std::vector<BoundPressureSource> const& sources) -> std::string {
+    auto text = std::string{};
+    for (auto index = std::size_t{0}; index < sources.size(); ++index) {
+        if (index > 0)
+            text += ", ";
+        text += bound_pressure_source_text(sources[index]);
+    }
+    return text;
+}
+
 auto bound_pressure_state(
         std::optional<std::vector<MaterialBudgetBoundResult>> const& results,
         std::optional<MaterialBudgetBoundSummary> const& summary)
@@ -2336,24 +2413,12 @@ auto bound_pressure_state(
     if (!summary)
         return {};
 
-    auto zero_margin_count = std::int64_t{0};
-    auto negative_margin_count = std::int64_t{0};
-    if (results) {
-        for (auto const& result : *results) {
-            if (!result.margin)
-                continue;
-            if (*result.margin == 0.0) {
-                ++zero_margin_count;
-            } else if (*result.margin < 0.0) {
-                ++negative_margin_count;
-            }
-        }
-    }
+    auto margins = bound_pressure_margins(results);
 
     auto state = std::string{"unknown"};
-    if (summary->fail_count > 0 || negative_margin_count > 0) {
+    if (summary->fail_count > 0 || margins.negative_count > 0) {
         state = "fail";
-    } else if (zero_margin_count > 0
+    } else if (margins.zero_count > 0
                || (summary->tightest_bound_margin
                    && *summary->tightest_bound_margin == 0.0)) {
         state = "tight";
@@ -2364,15 +2429,18 @@ auto bound_pressure_state(
     return std::format(
         "{{\"state\":{},\"bound_count\":{},\"pass_count\":{},"
         "\"fail_count\":{},\"zero_margin_count\":{},"
-        "\"negative_margin_count\":{},\"tightest_bound_key\":{},"
+        "\"negative_margin_count\":{},\"zero_margin_sources\":{},"
+        "\"negative_margin_sources\":{},\"tightest_bound_key\":{},"
         "\"tightest_bound_field\":{},\"tightest_bound_margin\":{},"
         "\"failed_keys\":{}}}",
         json_string(state),
         manifest_count_json(summary->bound_count),
         manifest_count_json(summary->pass_count),
         manifest_count_json(summary->fail_count),
-        zero_margin_count,
-        negative_margin_count,
+        margins.zero_count,
+        margins.negative_count,
+        bound_pressure_sources_json(margins.zero_sources),
+        bound_pressure_sources_json(margins.negative_sources),
         json_string(summary->tightest_bound_key),
         json_string(summary->tightest_bound_field),
         budget_optional_number(summary->tightest_bound_margin),
@@ -2414,24 +2482,12 @@ auto bound_pressure_text(
     if (!summary)
         return {};
 
-    auto zero_margin_count = std::int64_t{0};
-    auto negative_margin_count = std::int64_t{0};
-    if (results) {
-        for (auto const& result : *results) {
-            if (!result.margin)
-                continue;
-            if (*result.margin == 0.0) {
-                ++zero_margin_count;
-            } else if (*result.margin < 0.0) {
-                ++negative_margin_count;
-            }
-        }
-    }
+    auto margins = bound_pressure_margins(results);
 
     auto state = std::string{"unknown"};
-    if (summary->fail_count > 0 || negative_margin_count > 0) {
+    if (summary->fail_count > 0 || margins.negative_count > 0) {
         state = "fail";
-    } else if (zero_margin_count > 0
+    } else if (margins.zero_count > 0
                || (summary->tightest_bound_margin
                    && *summary->tightest_bound_margin == 0.0)) {
         state = "tight";
@@ -2446,11 +2502,21 @@ auto bound_pressure_text(
         budget_count(summary->pass_count),
         budget_count(summary->bound_count),
         budget_count(summary->fail_count),
-        zero_margin_count,
-        negative_margin_count,
+        margins.zero_count,
+        margins.negative_count,
         summary->tightest_bound_key.empty() ? "<none>" : summary->tightest_bound_key,
         summary->tightest_bound_field.empty() ? "<none>" : summary->tightest_bound_field,
         budget_optional_number(summary->tightest_bound_margin));
+    if (!margins.zero_sources.empty()) {
+        text += std::format(
+            ",zero-sources=({})",
+            bound_pressure_sources_text(margins.zero_sources));
+    }
+    if (!margins.negative_sources.empty()) {
+        text += std::format(
+            ",negative-sources=({})",
+            bound_pressure_sources_text(margins.negative_sources));
+    }
     if (!summary->failed_keys.empty()) {
         text += std::format(
             ",failed=({})",

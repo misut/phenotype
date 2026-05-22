@@ -153,7 +153,8 @@ receipt. For material gates it now includes manifest context, material budget
 coverage, budget/resource/quality bound summaries, failed bound results,
 tightest bound results, and `bound_pressure`, which classifies each bound group
 as `fail`, `tight`, `pass`, or `unknown`, counts zero/negative margins, and
-names the tightest bound key/field. The CLI JSON envelopes and non-JSON gate
+names the zero/negative margin source key/field lists plus the tightest bound
+key/field. The CLI JSON envelopes and non-JSON gate
 output also expose the grouped `verifier_bound_pressure` outside failure
 summaries whenever a parsed report has bound summaries, so automation and local
 triage can distinguish a hard budget failure from a passing Liquid Glass budget
