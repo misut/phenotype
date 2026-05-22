@@ -3607,7 +3607,8 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
 
     return std::format(
         "{{\"label\":{},\"coverage_family\":{},\"minimum_field\":{},"
-        "\"path\":{},\"expected\":{},\"expected_operator\":{},"
+        "\"name\":{},\"message\":{},\"path\":{},"
+        "\"expected\":{},\"expected_operator\":{},"
         "\"expected_count\":{},\"actual\":{},\"actual_count\":{},"
         "\"counted_array_key\":{},\"counted_values\":{},"
         "\"counted_value_count\":{},"
@@ -3622,6 +3623,8 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
         json_string(label),
         json_string(family),
         json_string(field),
+        json_object_failure_string_json(failure, "name"),
+        json_object_failure_string_json(failure, "message"),
         json_object_failure_string_json(failure, "path"),
         json_object_value_or_null(failure, "expected"),
         coverage_minimum_expected_operator_json(failure),
