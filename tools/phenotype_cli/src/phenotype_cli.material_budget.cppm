@@ -1711,7 +1711,7 @@ auto verifier_failure_summary_json(json::Value const& report)
     return std::format(
         "{{\"count\":{},\"top_likely_layer\":{},"
         "\"top_likely_pass\":{},\"top_suggested_action\":{},"
-        "\"by_likely_layer\":{},\"by_likely_pass\":{},"
+        "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_path\":{},"
         "\"by_suggested_action\":{},\"first_failure\":{},"
         "\"failures\":{},\"truncated\":{}}}",
         count,
@@ -1730,6 +1730,9 @@ auto verifier_failure_summary_json(json::Value const& report)
         failure_json_value_or_null(
             report,
             {"failure_summary", "by_likely_pass"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "by_path"}),
         failure_json_value_or_null(
             report,
             {"failure_summary", "by_suggested_action"}),
@@ -1785,6 +1788,13 @@ auto verifier_failure_summary_lines(json::Value const& report)
             {"failure_summary", "by_likely_pass"});
         !by_pass.empty()) {
         lines.push_back("  by-pass: " + by_pass);
+    }
+    if (auto by_path = compact_failure_count_map_text(
+            report,
+            {"failure_summary", "by_path"},
+            3);
+        !by_path.empty()) {
+        lines.push_back("  by-path: " + by_path);
     }
     if (auto by_action = compact_failure_count_map_text(
             report,

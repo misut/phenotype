@@ -255,6 +255,12 @@ auto sample_report() -> json::Value {
           "material-executor": 2,
           "sampled-backdrop": 1
         },
+        "by_path": {
+          "material.plans[2].semantic": 1,
+          "window.material.executor_budget.upload_utilization": 2,
+          "window.material.resource_bounds.unbounded_texture_copy": 1,
+          "window.pixel_regions.toolbarGlass": 1
+        },
         "by_suggested_action": {
           "record a semantic material plan before capture": 1,
           "reduce backdrop sample taps before raising the guard": 2,
@@ -425,6 +431,9 @@ int main() {
         "\"by_likely_pass\":{\"material-executor\":2,\"sampled-backdrop\":1}"));
     assert(contains_text(
         failure_json,
+        "\"by_path\":{\"material.plans[2].semantic\":1,\"window.material.executor_budget.upload_utilization\":2,\"window.material.resource_bounds.unbounded_texture_copy\":1,\"window.pixel_regions.toolbarGlass\":1}"));
+    assert(contains_text(
+        failure_json,
         "\"by_suggested_action\":{\"record a semantic material plan before capture\":1,\"reduce backdrop sample taps before raising the guard\":2,\"tighten resource bounds before capture\":1}"));
     assert(contains_text(
         failure_json,
@@ -448,6 +457,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "by-pass: material-executor=2, sampled-backdrop=1"));
+    assert(contains_line(
+        failure_lines,
+        "by-path: window.material.executor_budget.upload_utilization=2, material.plans[2].semantic=1, window.material.resource_bounds.unbounded_texture_copy=1, +1 more"));
     assert(contains_line(
         failure_lines,
         "by-action: reduce backdrop sample taps before raising the guard=2, record a semantic material plan before capture=1, +1 more"));
