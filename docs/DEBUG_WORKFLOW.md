@@ -143,8 +143,9 @@ Without `--json`, the same command prints short `snapshot material budget` and
 `material budget coverage` summaries when those counters are available. It also
 prints the tightest budget bound detail, or failed bound details when a bound
 fails, so local triage can see plan, stage, tap, upload/copy utilization, draw,
-backdrop-copy status, budget-bound coverage, and the nearest/failing
-expected-vs-actual comparison without opening the full report.
+backdrop-copy status, budget-bound coverage, the nearest/failing
+expected-vs-actual comparison, and compact verifier failure paths, hints, and
+suggested actions without opening the full report.
 
 When debugging the CLI/native input-output boundary itself, first check the
 pure contract surface:
@@ -1219,9 +1220,10 @@ upload/draw/copy status strings. It also carries active/dropped stage counts,
 max sample taps, upload/copy utilization, frame-capture bounds, and readiness
 booleans so CI logs can explain which semantic/runtime contract surface drifted
 before opening the full bundle.
-The default `phenotype artifact verify` output prints a compact subset of this
-failure summary for local triage. Use `--json` when a tool or follow-up prompt
-needs the complete `failures[]` and `failure_summary.artifact_context` payload.
+The default `phenotype artifact verify` and non-JSON `phenotype observe`
+outputs print a compact subset of this failure summary for local triage. Use
+`--json` when a tool or follow-up prompt needs the complete `failures[]` and
+`failure_summary.artifact_context` payload.
 On native backends, also inspect
 `debug.platform_runtime.details.renderer.accessibility_display_options`; it
 records whether the frame used live system settings, deterministic fallback
