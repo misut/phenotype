@@ -2268,6 +2268,12 @@
     "require_bounded_texture_copy": true,
     "require_deterministic_fallback": true
   },
+  "require_material_executor_budget": {
+    "upload_utilization_gte": 0.0,
+    "upload_utilization_lte": 1.0,
+    "backdrop_copy_utilization_gte": 0.0,
+    "backdrop_copy_utilization_lte": 1.0
+  },
   "require_material_quality_policy": {
     "require_backdrop_sampling_allowed": true,
     "require_noise_allowed": true,

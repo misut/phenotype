@@ -28,6 +28,7 @@ struct FileExplorerArtifactCase {
     std::optional<cppx::process::CapturedProcessResult> verifier_result;
     std::optional<ArtifactSummary> artifact;
     std::optional<MaterialBudgetSummary> material_budget;
+    std::optional<VerifierManifestSummary> verifier_manifest;
     bool ok = false;
     std::string error;
 };
@@ -393,7 +394,8 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         "{{\"profile\":{},\"mode\":{},\"scenario\":{},"
         "\"artifact_reason\":{},\"artifact_dir\":{},\"ok\":{},"
         "\"run_result\":{},\"verifier\":{},\"artifact\":{},"
-        "\"material_budget\":{},\"error\":{}}}",
+        "\"material_budget\":{},\"verifier_manifest\":{},"
+        "\"error\":{}}}",
         json_string(item.profile),
         json_string(item.mode),
         json_string(item.scenario),
@@ -404,6 +406,7 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         process_result_detail_json(item.verifier_result),
         artifact,
         material_budget_json(item.material_budget),
+        verifier_manifest_summary_json(item.verifier_manifest),
         json_string(item.error));
 }
 
@@ -499,6 +502,35 @@ void print_material_budget_summary(
     }
 }
 
+void print_verifier_manifest_summary(
+        std::span<FileExplorerArtifactCase const> cases) {
+    auto has_manifest = std::ranges::any_of(
+        cases,
+        [](FileExplorerArtifactCase const& item) {
+            return item.verifier_manifest.has_value();
+        });
+    if (!has_manifest)
+        return;
+
+    std::println("verifier manifests:");
+    for (auto const& item : cases) {
+        if (!item.verifier_manifest)
+            continue;
+        auto const& manifest = *item.verifier_manifest;
+        std::println(
+            "  {}: name={} runtime-bounds={} budget-bounds={} "
+            "pixel-regions={} metrics={} comparisons={} forbidden-colors={}",
+            case_label(item),
+            manifest.name,
+            budget_count(manifest.runtime_numeric_bounds),
+            budget_count(manifest.material_executor_budget_bounds),
+            budget_count(manifest.pixel_regions),
+            budget_count(manifest.pixel_region_metrics),
+            budget_count(manifest.pixel_region_metric_comparisons),
+            budget_count(manifest.forbid_pixel_region_colors));
+    }
+}
+
 void print_file_explorer_gate(
         FileExplorerArtifactGateSummary const& summary) {
     auto lines = std::vector<cppx::terminal::StatusLine>{
@@ -535,6 +567,7 @@ void print_file_explorer_gate(
     });
     std::println("phenotype artifact verify-file-explorer");
     std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    print_verifier_manifest_summary(summary.cases);
     print_material_budget_summary(summary.cases);
     if (!summary.error.empty()) {
         std::println("{}",
@@ -662,7 +695,11 @@ auto run_file_explorer_case(fs::path const& root,
         return item;
     }
     item.verifier_result = std::move(*verifier);
-    item.material_budget = material_budget_from_verifier(*item.verifier_result);
+    if (auto verifier_report = verifier_report_from_result(item.verifier_result)) {
+        item.material_budget = material_budget_from_report(*verifier_report);
+        item.verifier_manifest =
+            verifier_manifest_summary_from_report(*verifier_report);
+    }
     item.ok = item.artifact
         && item.artifact->snapshot_json
         && !item.verifier_result->timed_out
