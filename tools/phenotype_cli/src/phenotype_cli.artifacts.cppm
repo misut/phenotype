@@ -1048,6 +1048,173 @@ auto verifier_report_status_text(VerifierObservation const& verifier)
     return "no stdout";
 }
 
+auto compact_number_text(double value) -> std::string {
+    auto text = std::format("{:.6g}", value);
+    if (text == "-0")
+        return "0";
+    return text;
+}
+
+auto truncate_text(std::string text, std::size_t max_size = 160)
+        -> std::string {
+    if (text.size() <= max_size)
+        return text;
+    if (max_size <= 3)
+        return text.substr(0, max_size);
+    text.resize(max_size - 3);
+    text += "...";
+    return text;
+}
+
+auto compact_json_value_text(json::Value const& value,
+                             int depth = 0) -> std::string {
+    if (value.is_null())
+        return "null";
+    if (value.is_string())
+        return truncate_text(value.as_string());
+    if (value.is_bool())
+        return value.as_bool() ? "true" : "false";
+    if (value.is_number())
+        return compact_number_text(value.as_float());
+    if (value.is_array()) {
+        if (depth > 0)
+            return std::format("[{} items]", value.as_array().size());
+        auto text = std::string{"["};
+        auto index = std::size_t{0};
+        for (auto const& item : value.as_array()) {
+            if (index >= 4)
+                break;
+            if (index > 0)
+                text += ", ";
+            text += compact_json_value_text(item, depth + 1);
+            ++index;
+        }
+        if (value.as_array().size() > index)
+            text += std::format(", +{} more", value.as_array().size() - index);
+        text += "]";
+        return truncate_text(std::move(text));
+    }
+    if (value.is_object()) {
+        if (depth > 0)
+            return std::format("{{{} fields}}", value.as_object().size());
+        auto text = std::string{"{"};
+        auto index = std::size_t{0};
+        for (auto const& [key, item] : value.as_object()) {
+            if (index >= 4)
+                break;
+            if (index > 0)
+                text += ", ";
+            text += std::format(
+                "{}: {}",
+                key,
+                compact_json_value_text(item, depth + 1));
+            ++index;
+        }
+        if (value.as_object().size() > index)
+            text += std::format(", +{} more", value.as_object().size() - index);
+        text += "}";
+        return truncate_text(std::move(text));
+    }
+    return "<unknown>";
+}
+
+auto json_object_compact_text(json::Object const& object,
+                              std::string_view key) -> std::string {
+    auto const* value = json_object_member(object, key);
+    return value ? compact_json_value_text(*value) : std::string{};
+}
+
+auto json_object_string_or_empty(json::Object const& object,
+                                 std::string_view key) -> std::string {
+    auto const* value = json_object_member(object, key);
+    return value && value->is_string() ? value->as_string() : std::string{};
+}
+
+void print_verifier_failure_detail(json::Object const& failure) {
+    auto name = json_object_string_or_empty(failure, "name");
+    if (name.empty())
+        name = json_object_string_or_empty(failure, "message");
+    if (name.empty())
+        name = "unnamed verifier failure";
+    std::println("  - {}", truncate_text(std::move(name), 180));
+
+    auto location_parts = std::vector<std::string>{};
+    if (auto path = json_object_string_or_empty(failure, "path");
+        !path.empty()) {
+        location_parts.push_back(std::format("path={}", path));
+    }
+    if (auto region = json_object_string_or_empty(failure, "region");
+        !region.empty()) {
+        location_parts.push_back(std::format("region={}", region));
+    }
+    if (auto layer = json_object_string_or_empty(failure, "likely_layer");
+        !layer.empty()) {
+        location_parts.push_back(std::format("layer={}", layer));
+    }
+    if (auto pass = json_object_string_or_empty(failure, "likely_pass");
+        !pass.empty()) {
+        location_parts.push_back(std::format("pass={}", pass));
+    }
+    if (!location_parts.empty())
+        std::println("    {}", comma_join(location_parts));
+
+    auto expected = json_object_compact_text(failure, "expected");
+    auto actual = json_object_compact_text(failure, "actual");
+    if (!expected.empty() || !actual.empty()) {
+        std::println(
+            "    expected={} actual={}",
+            expected.empty() ? "<unspecified>" : expected,
+            actual.empty() ? "<unspecified>" : actual);
+    }
+    if (auto hint = json_object_string_or_empty(failure, "hint");
+        !hint.empty()) {
+        std::println("    hint: {}", truncate_text(std::move(hint), 220));
+    }
+    if (auto action = json_object_string_or_empty(failure, "suggested_action");
+        !action.empty()) {
+        std::println("    action: {}", truncate_text(std::move(action), 220));
+    }
+}
+
+void print_verifier_failure_summary(VerifierObservation const& verifier) {
+    if (!verifier.report)
+        return;
+    auto count = json_integer_at(*verifier.report, {"failure_summary", "count"})
+        .value_or(0);
+    if (count <= 0)
+        return;
+
+    auto top_layer = json_string_at(
+        *verifier.report,
+        {"failure_summary", "top_likely_layer"}).value_or("<unknown>");
+    auto top_pass = json_string_at(
+        *verifier.report,
+        {"failure_summary", "top_likely_pass"}).value_or("<unknown>");
+    std::println(
+        "verifier failures: count={} top-layer={} top-pass={}",
+        count,
+        top_layer,
+        top_pass);
+
+    auto const* failures = json_array_at(*verifier.report, {"failures"});
+    if (!failures)
+        return;
+    auto printed = std::size_t{0};
+    for (auto const& failure : *failures) {
+        if (printed >= 3)
+            break;
+        if (!failure.is_object())
+            continue;
+        print_verifier_failure_detail(failure.as_object());
+        ++printed;
+    }
+    if (static_cast<std::int64_t>(printed) < count) {
+        std::println(
+            "  ... +{} more failures; rerun with --json for the full report",
+            count - static_cast<std::int64_t>(printed));
+    }
+}
+
 void print_verifier_tail(std::string_view label, std::string const& tail) {
     if (tail.empty())
         return;
@@ -1083,6 +1250,7 @@ void print_artifact_verify_summary(fs::path const& bundle,
     print_verifier_material_budget_coverage(verifier);
     print_verifier_material_budget_bound_summary(verifier);
     print_verifier_material_budget(verifier);
+    print_verifier_failure_summary(verifier);
 
     if (!verifier.ok) {
         if (!verifier.report)
