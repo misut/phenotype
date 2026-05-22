@@ -125,11 +125,12 @@ the verifier's compact `artifact_context.material_contract.executor_budget`
 under `verifier.material_budget` when present. Manifest-backed verifier runs
 also expose `verifier.verifier_manifest` with the manifest name, pixel-region
 counts, runtime numeric bound count, material executor budget bound count, and
-the exact material executor budget bound keys/fields. When both summaries are
+the exact material executor budget bound keys/fields, material resource bound
+keys/fields, and quality-policy bound keys/fields. When both summaries are
 present, `verifier.material_budget_coverage` lists the observed budget fields,
-which observed fields are guarded by manifest bounds, and which observed
-fields are still unguarded. This keeps coverage drift visible without opening
-the full verifier report. `verifier.material_quality_policy` mirrors the
+which observed fields are guarded by manifest bounds, and which observed fields
+are still unguarded. This keeps coverage drift visible without opening the full
+verifier report. `verifier.material_quality_policy` mirrors the
 verifier's compact quality-policy summary, including disabled backdrop sampling,
 noise, and shadow counts plus maximum blur radius, sample taps, and backdrop
 pixel limits. `verifier.material_resource_bounds` mirrors the verifier's
@@ -245,9 +246,11 @@ expected platform, accessibility display policy, and the same compact material
 budget concepts that `phenotype observe` exposes under
 `snapshot.material.executor_budget`. It also exposes a compact
 `verifier_manifest` summary with the verifier manifest name, pixel-region
-counts, runtime numeric bound count, and material executor budget bound count,
-so local glass gates can show which manifest budget expectations were applied
-without embedding the full verifier report. JSON also includes
+counts, runtime numeric bound count, material executor budget bound count,
+material resource bound count, quality-policy bound count, and the exact
+manifest guard keys/fields, so local glass gates can show which manifest budget
+and policy expectations were applied without embedding the full verifier report.
+JSON also includes
 `material_budget_coverage`, which separates manifest-guarded observed budget
 fields from observed-but-unguarded fields, and
 `material_quality_policy`, which reports disabled backdrop sampling, noise, and
@@ -1725,8 +1728,9 @@ artifact details, plus `material_budget` when the verifier report contains
 resolved quality limits, plus compact `material_resource_bounds` for plan,
 capture, runtime pass/stage, paint-layer, texture-copy, and deterministic
 fallback bounds, plus a compact
-`verifier_manifest` object that surfaces the manifest runtime/budget bound
-counts, exact material executor budget bound keys, and budget field names
+`verifier_manifest` object that surfaces the manifest runtime/budget/resource/
+policy bound counts, exact material executor budget bound keys, material
+resource bound keys, quality-policy bound keys, and their normalized field names
 applied by the verifier, plus `material_budget_coverage` showing guarded and
 unguarded observed budget fields, plus `material_budget_bound_summary` showing
 the budget bound pass/fail count and tightest margin, plus

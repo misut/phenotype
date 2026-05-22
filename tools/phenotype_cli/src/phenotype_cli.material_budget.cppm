@@ -102,7 +102,13 @@ struct VerifierManifestSummary {
     std::int64_t material_executor_budget_bounds = -1;
     std::vector<std::string> material_executor_budget_bound_keys;
     std::vector<std::string> material_executor_budget_fields;
+    std::int64_t material_resource_bounds = -1;
+    std::vector<std::string> material_resource_bound_keys;
+    std::vector<std::string> material_resource_bound_fields;
     std::vector<std::string> material_executor_budget_coverage_required_fields;
+    std::int64_t material_quality_policy_bounds = -1;
+    std::vector<std::string> material_quality_policy_bound_keys;
+    std::vector<std::string> material_quality_policy_fields;
 };
 
 struct MaterialBudgetCoverageSummary {
@@ -418,11 +424,29 @@ auto verifier_manifest_summary_from_report(json::Value const& report)
         .material_executor_budget_fields = json_string_array_at(
             report,
             {"manifest", "material_executor_budget_fields"}),
+        .material_resource_bounds = json_integer_at(
+            report,
+            {"manifest", "material_resource_bounds"}).value_or(-1),
+        .material_resource_bound_keys = json_string_array_at(
+            report,
+            {"manifest", "material_resource_bound_keys"}),
+        .material_resource_bound_fields = json_string_array_at(
+            report,
+            {"manifest", "material_resource_bound_fields"}),
         .material_executor_budget_coverage_required_fields =
             json_string_array_at(
                 report,
                 {"manifest",
                  "material_executor_budget_coverage_required_fields"}),
+        .material_quality_policy_bounds = json_integer_at(
+            report,
+            {"manifest", "material_quality_policy_bounds"}).value_or(-1),
+        .material_quality_policy_bound_keys = json_string_array_at(
+            report,
+            {"manifest", "material_quality_policy_bound_keys"}),
+        .material_quality_policy_fields = json_string_array_at(
+            report,
+            {"manifest", "material_quality_policy_fields"}),
     };
 }
 
@@ -1689,7 +1713,13 @@ auto verifier_manifest_summary_json(
         "\"material_executor_budget_bounds\":{},"
         "\"material_executor_budget_bound_keys\":{},"
         "\"material_executor_budget_fields\":{},"
-        "\"material_executor_budget_coverage_required_fields\":{}}}",
+        "\"material_resource_bounds\":{},"
+        "\"material_resource_bound_keys\":{},"
+        "\"material_resource_bound_fields\":{},"
+        "\"material_executor_budget_coverage_required_fields\":{},"
+        "\"material_quality_policy_bounds\":{},"
+        "\"material_quality_policy_bound_keys\":{},"
+        "\"material_quality_policy_fields\":{}}}",
         json_string(manifest->name),
         manifest_count_json(manifest->pixel_regions),
         manifest_count_json(manifest->pixel_region_metrics),
@@ -1699,8 +1729,14 @@ auto verifier_manifest_summary_json(
         manifest_count_json(manifest->material_executor_budget_bounds),
         string_array_json(manifest->material_executor_budget_bound_keys),
         string_array_json(manifest->material_executor_budget_fields),
+        manifest_count_json(manifest->material_resource_bounds),
+        string_array_json(manifest->material_resource_bound_keys),
+        string_array_json(manifest->material_resource_bound_fields),
         string_array_json(
-            manifest->material_executor_budget_coverage_required_fields));
+            manifest->material_executor_budget_coverage_required_fields),
+        manifest_count_json(manifest->material_quality_policy_bounds),
+        string_array_json(manifest->material_quality_policy_bound_keys),
+        string_array_json(manifest->material_quality_policy_fields));
 }
 
 } // namespace phenotype_cli::material_budget
