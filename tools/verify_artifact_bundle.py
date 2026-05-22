@@ -13832,7 +13832,8 @@ def material_bound_result(
         key: str,
         field: str,
         kind: str,
-        expected: int | float) -> JsonObject:
+        expected: int | float,
+        sources: Any = None) -> JsonObject:
     value = source.get(field)
     actual = (
         value
@@ -13861,7 +13862,21 @@ def material_bound_result(
     }
     if margin is not None:
         result["margin"] = margin
+    bound_source = material_bound_source_for_field(sources, field)
+    if bound_source is not None:
+        result["source"] = bound_source
     return result
+
+
+def material_bound_source_for_field(
+        sources: Any,
+        field: str) -> JsonObject | None:
+    if not isinstance(sources, dict):
+        return None
+    source = sources.get(field)
+    if isinstance(source, dict):
+        return dict(source)
+    return None
 
 
 def check_material_resource_bounds_requirements(
@@ -13871,6 +13886,7 @@ def check_material_resource_bounds_requirements(
     bounds = summary.get("resource_bounds")
     if not isinstance(bounds, dict):
         bounds = {}
+    sources = summary.get("resource_bound_sources")
     base_path = "debug.platform_runtime.details.renderer.material_plans#resource_bounds"
     field_map = {
         "max_plan_blur_radius_lte": "max_plan_blur_radius",
@@ -13951,7 +13967,8 @@ def check_material_resource_bounds_requirements(
                 spec_field,
                 summary_field,
                 "lte",
-                spec[spec_field]))
+                spec[spec_field],
+                sources))
     for spec_field, summary_field in min_field_map.items():
         if spec_field in spec:
             results.append(material_bound_result(
@@ -13959,21 +13976,24 @@ def check_material_resource_bounds_requirements(
                 spec_field,
                 summary_field,
                 "gte",
-                spec[spec_field]))
+                spec[spec_field],
+                sources))
     if spec.get("require_bounded_texture_copy") is True:
         results.append(material_bound_result(
             bounds,
             "require_bounded_texture_copy",
             "unbounded_texture_copy",
             "equals",
-            0))
+            0,
+            sources))
     if spec.get("require_deterministic_fallback") is True:
         results.append(material_bound_result(
             bounds,
             "require_deterministic_fallback",
             "non_deterministic_fallback",
             "equals",
-            0))
+            0,
+            sources))
     summary["resource_bound_results"] = results
     summary["resource_bound_summary"] = material_executor_budget_bound_summary(
         results)
@@ -14029,8 +14049,12 @@ def check_material_executor_budget_requirements(
         else None)
     if not isinstance(budget, dict):
         budget = {}
+    sources = (
+        material_contract.get("executor_budget_sources")
+        if isinstance(material_contract, dict)
+        else None)
     base_path = "artifact_context.material_contract.executor_budget"
-    results = material_executor_budget_bound_results(budget, spec)
+    results = material_executor_budget_bound_results(budget, spec, sources)
     if isinstance(material_contract, dict):
         material_contract["executor_budget_bound_results"] = results
         material_contract["executor_budget_bound_summary"] = (
@@ -14154,7 +14178,8 @@ def material_executor_budget_numeric_value(
 def material_executor_budget_bound_result(
         budget: JsonObject,
         key: str,
-        expected: int | float) -> JsonObject:
+        expected: int | float,
+        sources: Any = None) -> JsonObject:
     field = material_executor_budget_field_from_key(key)
     kind = material_executor_budget_bound_kind(key)
     actual = material_executor_budget_numeric_value(budget, field)
@@ -14181,16 +14206,20 @@ def material_executor_budget_bound_result(
     }
     if margin is not None:
         result["margin"] = margin
+    source = material_bound_source_for_field(sources, field)
+    if source is not None:
+        result["source"] = source
     return result
 
 
 def material_executor_budget_bound_results(
         budget: JsonObject,
-        spec: Any) -> list[JsonObject]:
+        spec: Any,
+        sources: Any = None) -> list[JsonObject]:
     if not isinstance(spec, dict):
         return []
     return [
-        material_executor_budget_bound_result(budget, key, expected)
+        material_executor_budget_bound_result(budget, key, expected, sources)
         for key, expected in sorted(spec.items())
     ]
 
@@ -15738,6 +15767,7 @@ def check_material_quality_policy_requirements(
     policy = summary.get("quality_policy")
     if not isinstance(policy, dict):
         policy = {}
+    sources = summary.get("quality_policy_sources")
     base_path = "debug.platform_runtime.details.renderer.material_plans#quality_policy"
     field_map = {
         "max_blur_radius_lte": "max_blur_radius",
@@ -15752,7 +15782,8 @@ def check_material_quality_policy_requirements(
                 spec_field,
                 summary_field,
                 "lte",
-                spec[spec_field]))
+                spec[spec_field],
+                sources))
 
     required_allowed = {
         "require_backdrop_sampling_allowed": "backdrop_sampling_disabled",
@@ -15766,7 +15797,8 @@ def check_material_quality_policy_requirements(
                 spec_field,
                 summary_field,
                 "equals",
-                0))
+                0,
+                sources))
     summary["quality_policy_bound_results"] = results
     summary["quality_policy_bound_summary"] = material_executor_budget_bound_summary(
         results)
