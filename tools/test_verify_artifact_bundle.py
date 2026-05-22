@@ -2971,6 +2971,44 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(report["ok"])
 
+    def test_manifest_reports_runtime_detail_guard_paths(self) -> None:
+        manifest = {
+            "name": "runtime-detail-guards",
+            "require_runtime_details": [
+                {
+                    "path": (
+                        "renderer.material_executor_summary."
+                        "material_sampled_backdrop_uploaded"
+                    ),
+                    "equals": True,
+                },
+                {
+                    "path": (
+                        "renderer.material_executor_summary."
+                        "material_upload_status"
+                    ),
+                    "equals": "uploaded",
+                },
+            ],
+        }
+
+        code, report = self.run_verifier(
+            snapshot(sampled_material_plan(sample_taps=13)),
+            manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["manifest"]["runtime_details"], 2)
+        self.assertEqual(
+            report["manifest"]["runtime_detail_paths"],
+            [
+                (
+                    "renderer.material_executor_summary."
+                    "material_sampled_backdrop_uploaded"
+                ),
+                "renderer.material_executor_summary.material_upload_status",
+            ])
+
     def test_command_descriptor_mismatch_points_to_material_command(self) -> None:
         plan = material_plan()
         descriptor = plan["command_descriptor"]
