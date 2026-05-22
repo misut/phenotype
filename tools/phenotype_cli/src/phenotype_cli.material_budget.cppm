@@ -3425,6 +3425,17 @@ auto coverage_minimum_actual_text(json::Value const& value) -> std::string {
         | std::ranges::to<std::string>();
 }
 
+auto coverage_minimum_unguarded_source_details_json(
+        json::Object const& actual,
+        std::size_t limit = 3) -> std::string {
+    auto const* sources = json_object_member(
+        actual,
+        "unguarded_observed_sources");
+    return sources && sources->is_object()
+        ? missing_field_source_details_json(sources->as_object(), limit)
+        : std::string{"null"};
+}
+
 auto compact_failure_actual_text(json::Object const& failure) -> std::string {
     auto const* actual = json_object_member(failure, "actual");
     if (!actual)
@@ -3518,9 +3529,10 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
         "{{\"label\":{},\"coverage_family\":{},\"minimum_field\":{},"
         "\"path\":{},\"expected\":{},\"actual\":{},\"actual_count\":{},"
         "\"bound_keys\":{},\"guarded_fields\":{},\"observed_fields\":{},"
-        "\"unguarded_observed_fields\":{},\"actual_text\":{},\"text\":{},"
-        "\"likely_layer\":{},\"likely_pass\":{},\"hint\":{},"
-        "\"suggested_action\":{}}}",
+        "\"unguarded_observed_fields\":{},"
+        "\"unguarded_observed_source_details\":{},"
+        "\"actual_text\":{},\"text\":{},\"likely_layer\":{},"
+        "\"likely_pass\":{},\"hint\":{},\"suggested_action\":{}}}",
         json_string(label),
         json_string(family),
         json_string(field),
@@ -3532,6 +3544,7 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
         json_object_value_or_null(actual_object, "guarded_fields"),
         json_object_value_or_null(actual_object, "observed_fields"),
         json_object_value_or_null(actual_object, "unguarded_observed_fields"),
+        coverage_minimum_unguarded_source_details_json(actual_object),
         json_string(actual_text),
         json_string(failure_coverage_minimum_text(failure)),
         json_object_failure_string_json(failure, "likely_layer"),

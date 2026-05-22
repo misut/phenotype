@@ -1647,6 +1647,9 @@ int main() {
         "\"actual_count\":1,\"bound_keys\":[\"draw_calls_gte\"],\"guarded_fields\":[\"draw_calls\"],\"observed_fields\":null,\"unguarded_observed_fields\":[\"planned_frame_capture_pixels\"]"));
     assert(contains_text(
         failure_json,
+        "\"unguarded_observed_source_details\":{\"entries\":[{\"field\":\"planned_frame_capture_pixels\",\"metric\":\"planned_frame_capture_pixels\",\"value\":0,\"source_path\":\"debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels\",\"likely_pass\":\"material-executor\""));
+    assert(contains_text(
+        failure_json,
         "\"unguarded_observed_fields\":[\"planned_frame_capture_pixels\"]"));
     assert(contains_text(
         failure_json,
@@ -1821,6 +1824,9 @@ int main() {
     assert(contains_text(
         minimum_json,
         "\"label\":\"budget.min_guarded_field_count\",\"coverage_family\":\"budget\",\"minimum_field\":\"min_guarded_field_count\""));
+    assert(contains_text(
+        minimum_json,
+        "\"unguarded_observed_source_details\":{\"entries\":[{\"field\":\"planned_frame_capture_pixels\",\"metric\":\"planned_frame_capture_pixels\",\"value\":0,\"source_path\":\"debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels\",\"likely_pass\":\"material-executor\""));
     assert(count_text(
         minimum_json,
         "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":\"budget.min_guarded_field_count\"")
