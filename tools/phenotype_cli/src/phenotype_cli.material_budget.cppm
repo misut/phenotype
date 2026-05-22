@@ -2959,12 +2959,19 @@ auto bound_pressure_source_text(BoundPressureSource const& source)
 }
 
 auto bound_pressure_sources_text(
-        std::vector<BoundPressureSource> const& sources) -> std::string {
+        std::vector<BoundPressureSource> const& sources,
+        std::size_t limit = 4) -> std::string {
     auto text = std::string{};
-    for (auto index = std::size_t{0}; index < sources.size(); ++index) {
+    auto count = std::min(limit, sources.size());
+    for (auto index = std::size_t{0}; index < count; ++index) {
         if (index > 0)
             text += ", ";
         text += bound_pressure_source_text(sources[index]);
+    }
+    if (sources.size() > count) {
+        if (!text.empty())
+            text += ", ";
+        text += std::format("+{} more", sources.size() - count);
     }
     return text;
 }

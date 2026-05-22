@@ -153,13 +153,13 @@ receipt. For material gates it now includes manifest context, material budget
 coverage, budget/resource/quality bound summaries, failed bound results,
 tightest bound results, and `bound_pressure`, which classifies each bound group
 as `fail`, `tight`, `pass`, or `unknown`, counts zero/negative margins, and
-names the zero/negative margin source key/field lists with their
+names compact zero/negative margin source key/field lists with their
 expected/actual/margin evidence plus the tightest bound key/field and full
-tightest bound result. The CLI JSON envelopes and non-JSON gate
-output also expose the grouped `verifier_bound_pressure` outside failure
-summaries whenever a parsed report has bound summaries, so automation and local
-triage can distinguish a hard budget failure from a passing Liquid Glass budget
-that has no headroom left.
+tightest bound result. The CLI JSON envelopes keep the full grouped
+`verifier_bound_pressure` source arrays, while non-JSON gate output uses a
+bounded source list so local triage can distinguish a hard budget failure from a
+passing Liquid Glass budget that has no headroom left without burying the rest
+of the receipt.
 The glass showcase and file explorer manifests use that visibility to pin
 standard-mode positive executor floors for upload bytes, backdrop-copy pixels,
 upload/copy utilization, and uploaded/drawn status strings. The glass
