@@ -192,8 +192,8 @@ reporting, `phenotype_cli.artifacts` owns artifact summary, uv-managed verifier
 invocation, snapshot/material observation including compact executor budget
 visibility, and likely-layer suggestions,
 `phenotype_cli.material_budget` owns shared verifier budget, manifest summary,
-and budget coverage parsing, JSON, and human count/status/utilization
-formatting for material artifact gates,
+budget coverage, and compact failure distribution/first-failure parsing, JSON,
+and human count/status/utilization formatting for material artifact gates,
 `phenotype_cli.contracts` owns the pure theme/IO contract commands,
 `phenotype_cli.file_explorer` owns file explorer observation, chrome/native
 window control, and drive JSON, `phenotype_cli.icons` owns icon/SVG command

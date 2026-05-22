@@ -247,9 +247,36 @@ auto sample_report() -> json::Value {
       },
       "failure_summary": {
         "count": 4,
+        "by_likely_layer": {
+          "material-control": 2,
+          "platform-runtime": 1
+        },
+        "by_likely_pass": {
+          "material-executor": 2,
+          "sampled-backdrop": 1
+        },
+        "by_suggested_action": {
+          "record a semantic material plan before capture": 1,
+          "reduce backdrop sample taps before raising the guard": 2,
+          "tighten resource bounds before capture": 1
+        },
         "top_likely_layer": "material-control",
         "top_likely_pass": "sampled-backdrop",
-        "top_suggested_action": "reduce backdrop sample taps before raising the guard"
+        "top_suggested_action": "reduce backdrop sample taps before raising the guard",
+        "first_failure": {
+          "name": "pixel_region_tint_mismatch",
+          "path": "window.material.executor_budget.upload_utilization",
+          "expected": {
+            "max": {
+              "upload_utilization": 1
+            }
+          },
+          "actual": 1.25,
+          "likely_layer": "material-control",
+          "likely_pass": "sampled-backdrop",
+          "hint": "keep upload utilization under the manifest guard",
+          "suggested_action": "reduce backdrop sample taps before raising the guard"
+        }
       },
       "failures": [
         {
@@ -392,6 +419,18 @@ int main() {
         "\"top_suggested_action\":\"reduce backdrop sample taps before raising the guard\""));
     assert(contains_text(
         failure_json,
+        "\"by_likely_layer\":{\"material-control\":2,\"platform-runtime\":1}"));
+    assert(contains_text(
+        failure_json,
+        "\"by_likely_pass\":{\"material-executor\":2,\"sampled-backdrop\":1}"));
+    assert(contains_text(
+        failure_json,
+        "\"by_suggested_action\":{\"record a semantic material plan before capture\":1,\"reduce backdrop sample taps before raising the guard\":2,\"tighten resource bounds before capture\":1}"));
+    assert(contains_text(
+        failure_json,
+        "\"first_failure\":{\"actual\":1.25"));
+    assert(contains_text(
+        failure_json,
         "\"name\":\"pixel_region_tint_mismatch\""));
     assert(contains_text(failure_json, "\"actual\":\"1.25\""));
     assert(contains_text(failure_json, "\"truncated\":true"));
@@ -400,6 +439,18 @@ int main() {
     assert(contains_line(
         failure_lines,
         "verifier failures: count=4 top-layer=material-control top-pass=sampled-backdrop"));
+    assert(contains_line(
+        failure_lines,
+        "top-action: reduce backdrop sample taps before raising the guard"));
+    assert(contains_line(
+        failure_lines,
+        "by-layer: material-control=2, platform-runtime=1"));
+    assert(contains_line(
+        failure_lines,
+        "by-pass: material-executor=2, sampled-backdrop=1"));
+    assert(contains_line(
+        failure_lines,
+        "by-action: reduce backdrop sample taps before raising the guard=2, record a semantic material plan before capture=1, +1 more"));
     assert(contains_line(failure_lines, "pixel_region_tint_mismatch"));
     assert(contains_line(
         failure_lines,
