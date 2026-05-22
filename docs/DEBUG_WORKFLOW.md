@@ -1745,9 +1745,10 @@ counter. Coverage guard failures also copy those descriptors into
 `actual.missing_field_sources` for required fields that are observed but not yet
 bounded, so the failing check itself names the runtime or material-plan source
 behind the missing guard. CLI non-JSON failure summaries print the same data as a
-compact `missing-field-sources` line for the first few verifier failures, so a
+compact aggregate `coverage-missing-sources` line and repeat it on the relevant
+`missing-field-sources` detail line for the first few verifier failures, so a
 local run can show the relevant field, pass, and path without rerunning with
-`--json`. They also include
+`--json` or depending on failure order. They also include
 `artifact_context.material_contract.executor_budget_bound_results` and
 `executor_budget_bound_summary`; resource and quality guards mirror the same
 shape under `material_plans.resource_bound_results` /

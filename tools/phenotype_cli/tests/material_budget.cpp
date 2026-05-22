@@ -1522,6 +1522,12 @@ int main() {
     assert(contains_text(
         failure_json,
         "\"missing_field_sources\":\"max_frame_capture_pixels=4096 pass=resource-budget"));
+    assert(contains_text(
+        failure_json,
+        "\"quality_policy_bound_coverage\":{\"guardable_field_count\":6"));
+    assert(contains_text(
+        failure_json,
+        "\"missing_field_sources\":\"max_frame_capture_pixels=4096 pass=resource-budget path=debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels\""));
     assert(contains_text(failure_json, "\"truncated\":true"));
 
     auto failure_lines = verifier_failure_summary_lines(report);
@@ -1564,6 +1570,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "quality-coverage: guarded=2/6 observed=6 guard-keys=2 required=2/2 observed-required=2/2"));
+    assert(contains_line(
+        failure_lines,
+        "coverage-missing-sources: max_frame_capture_pixels=4096 pass=resource-budget path=debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels"));
     assert(contains_line(
         failure_lines,
         "budget-sources: draw_calls=2 layer=platform-runtime pass=material-executor key=material_draw_calls"));
