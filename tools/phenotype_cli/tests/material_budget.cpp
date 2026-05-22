@@ -1621,6 +1621,54 @@ int main() {
         failure_lines,
         "... +1 more failures; rerun with --json for the full report"));
 
+    auto minimum_report = json::parse(
+        R"json({
+          "failure_summary": {
+            "count": 1,
+            "top_likely_layer": "artifact-manifest",
+            "top_likely_pass": "material-executor"
+          },
+          "failures": [
+            {
+              "name": "material executor budget coverage min_guarded_field_count is satisfied",
+              "path": "manifest.require_material_executor_budget_coverage.min_guarded_field_count",
+              "likely_layer": "artifact-manifest",
+              "likely_pass": "material-executor",
+              "expected": {
+                ">=": 2
+              },
+              "actual": {
+                "count": 1,
+                "bound_keys": [
+                  "draw_calls_gte"
+                ],
+                "guarded_fields": [
+                  "draw_calls"
+                ],
+                "unguarded_observed_fields": [
+                  "planned_frame_capture_pixels"
+                ],
+                "unguarded_observed_sources": {
+                  "planned_frame_capture_pixels": {
+                    "metric": "planned_frame_capture_pixels",
+                    "value": 0,
+                    "source_path": "debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels",
+                    "likely_pass": "material-executor"
+                  }
+                }
+              }
+            }
+          ]
+        })json");
+    auto minimum_json = verifier_failure_summary_json(minimum_report);
+    assert(contains_text(
+        minimum_json,
+        "\"actual\":\"count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)\""));
+    auto minimum_lines = verifier_failure_summary_lines(minimum_report);
+    assert(contains_line(
+        minimum_lines,
+        "actual=count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)"));
+
     auto passing_report = json::parse(
         R"json({"failure_summary":{"count":0},"failures":[]})json");
     assert(verifier_tightest_bound_results_json(passing_report) == "null");
