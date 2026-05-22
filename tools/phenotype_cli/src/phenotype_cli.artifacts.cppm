@@ -608,11 +608,15 @@ auto verifier_observation_json(VerifierObservation const& verifier)
     auto const budget = verifier.report
         ? material_budget_from_report(*verifier.report)
         : std::optional<MaterialBudgetSummary>{};
+    auto const manifest = verifier.report
+        ? verifier_manifest_summary_from_report(*verifier.report)
+        : std::optional<VerifierManifestSummary>{};
     return std::format(
         "{{\"requested\":{},\"executed\":{},\"ok\":{},"
         "\"exit_code\":{},\"timed_out\":{},\"stdout_tail\":{},"
         "\"stderr_tail\":{},\"report_error\":{},"
-        "\"material_budget\":{},\"report\":{}}}",
+        "\"material_budget\":{},\"verifier_manifest\":{},"
+        "\"report\":{}}}",
         verifier.requested ? "true" : "false",
         verifier.executed ? "true" : "false",
         verifier.ok ? "true" : "false",
@@ -622,6 +626,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         json_string(verifier.stderr_tail),
         json_string(verifier.report_error),
         material_budget_json(budget),
+        verifier_manifest_summary_json(manifest),
         json_report_or_null(verifier.report));
 }
 
@@ -737,6 +742,25 @@ void print_verifier_material_budget(VerifierObservation const& verifier) {
         budget_bool_text(budget->backdrop_copy_required),
         budget->backdrop_copy_policy,
         budget->backdrop_copy_skip_reason);
+}
+
+void print_verifier_manifest_summary(VerifierObservation const& verifier) {
+    if (!verifier.report)
+        return;
+    auto manifest = verifier_manifest_summary_from_report(*verifier.report);
+    if (!manifest)
+        return;
+
+    std::println(
+        "verifier manifest: name={} runtime-bounds={} budget-bounds={} "
+        "pixel-regions={} metrics={} comparisons={} forbidden-colors={}",
+        manifest->name,
+        budget_count(manifest->runtime_numeric_bounds),
+        budget_count(manifest->material_executor_budget_bounds),
+        budget_count(manifest->pixel_regions),
+        budget_count(manifest->pixel_region_metrics),
+        budget_count(manifest->pixel_region_metric_comparisons),
+        budget_count(manifest->forbid_pixel_region_colors));
 }
 
 auto first_positional_or_error(cppx::cli::Invocation const& invocation,
@@ -1144,6 +1168,7 @@ void print_artifact_observation(ArtifactObservation const& observation) {
     std::println("{}", cppx::terminal::format_status_frame(lines, false));
     print_snapshot_material_budget(
         observation.snapshot.material.executor_budget);
+    print_verifier_manifest_summary(observation.verifier);
     print_verifier_material_budget(observation.verifier);
     if (!observation.suggested_actions.empty()) {
         std::println("suggestions:");

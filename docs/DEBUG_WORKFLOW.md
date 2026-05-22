@@ -122,13 +122,16 @@ reasons, a compact `snapshot.material.executor_budget` copied from
 layer/pass hints. Supplying `--manifest` or `--verify` also runs the
 uv-managed verifier, embeds its JSON report in the same envelope, and mirrors
 the verifier's compact `artifact_context.material_contract.executor_budget`
-under `verifier.material_budget` when present. Use this as the first artifact
-triage command when a CI log or local bundle needs one machine-readable
-explanation before deeper pixel-contract debugging.
+under `verifier.material_budget` when present. Manifest-backed verifier runs
+also expose `verifier.verifier_manifest` with the manifest name, pixel-region
+counts, runtime numeric bound count, and material executor budget bound count.
+Use this as the first artifact triage command when a CI log or local bundle
+needs one machine-readable explanation before deeper pixel-contract debugging.
 Without `--json`, the same command prints short `snapshot material budget` and
-`verifier material budget` blocks when those counters are available, so local
-triage can see plan, stage, tap, upload/copy utilization, draw, and
-backdrop-copy status without opening the full report.
+`verifier material budget` blocks plus a one-line `verifier manifest` summary
+when those counters are available, so local triage can see plan, stage, tap,
+upload/copy utilization, draw, and backdrop-copy status without opening the
+full report.
 
 When debugging the CLI/native input-output boundary itself, first check the
 pure contract surface:
