@@ -107,10 +107,19 @@ struct VerifierManifestSummary {
     std::vector<std::string> material_resource_bound_fields;
     std::vector<std::string> material_resource_bound_coverage_required_fields;
     std::vector<std::string> material_executor_budget_coverage_required_fields;
+    std::int64_t material_executor_budget_coverage_min_bound_key_count = -1;
+    std::int64_t material_executor_budget_coverage_min_guarded_field_count = -1;
+    std::int64_t material_executor_budget_coverage_min_observed_field_count = -1;
+    std::int64_t material_resource_bound_coverage_min_bound_key_count = -1;
+    std::int64_t material_resource_bound_coverage_min_guarded_field_count = -1;
+    std::int64_t material_resource_bound_coverage_min_observed_field_count = -1;
     std::int64_t material_quality_policy_bounds = -1;
     std::vector<std::string> material_quality_policy_bound_keys;
     std::vector<std::string> material_quality_policy_fields;
     std::vector<std::string> material_quality_policy_coverage_required_fields;
+    std::int64_t material_quality_policy_coverage_min_bound_key_count = -1;
+    std::int64_t material_quality_policy_coverage_min_guarded_field_count = -1;
+    std::int64_t material_quality_policy_coverage_min_observed_field_count = -1;
 };
 
 struct MaterialBudgetCoverageSummary {
@@ -486,6 +495,42 @@ auto verifier_manifest_summary_from_report(json::Value const& report)
                 report,
                 {"manifest",
                  "material_executor_budget_coverage_required_fields"}),
+        .material_executor_budget_coverage_min_bound_key_count =
+            json_integer_at(
+                report,
+                {"manifest",
+                 "material_executor_budget_coverage_min_bound_key_count"})
+                .value_or(-1),
+        .material_executor_budget_coverage_min_guarded_field_count =
+            json_integer_at(
+                report,
+                {"manifest",
+                 "material_executor_budget_coverage_min_guarded_field_count"})
+                .value_or(-1),
+        .material_executor_budget_coverage_min_observed_field_count =
+            json_integer_at(
+                report,
+                {"manifest",
+                 "material_executor_budget_coverage_min_observed_field_count"})
+                .value_or(-1),
+        .material_resource_bound_coverage_min_bound_key_count =
+            json_integer_at(
+                report,
+                {"manifest",
+                 "material_resource_bound_coverage_min_bound_key_count"})
+                .value_or(-1),
+        .material_resource_bound_coverage_min_guarded_field_count =
+            json_integer_at(
+                report,
+                {"manifest",
+                 "material_resource_bound_coverage_min_guarded_field_count"})
+                .value_or(-1),
+        .material_resource_bound_coverage_min_observed_field_count =
+            json_integer_at(
+                report,
+                {"manifest",
+                 "material_resource_bound_coverage_min_observed_field_count"})
+                .value_or(-1),
         .material_quality_policy_bounds = json_integer_at(
             report,
             {"manifest", "material_quality_policy_bounds"}).value_or(-1),
@@ -500,6 +545,24 @@ auto verifier_manifest_summary_from_report(json::Value const& report)
                 report,
                 {"manifest",
                  "material_quality_policy_coverage_required_fields"}),
+        .material_quality_policy_coverage_min_bound_key_count =
+            json_integer_at(
+                report,
+                {"manifest",
+                 "material_quality_policy_coverage_min_bound_key_count"})
+                .value_or(-1),
+        .material_quality_policy_coverage_min_guarded_field_count =
+            json_integer_at(
+                report,
+                {"manifest",
+                 "material_quality_policy_coverage_min_guarded_field_count"})
+                .value_or(-1),
+        .material_quality_policy_coverage_min_observed_field_count =
+            json_integer_at(
+                report,
+                {"manifest",
+                 "material_quality_policy_coverage_min_observed_field_count"})
+                .value_or(-1),
     };
 }
 
@@ -1097,6 +1160,43 @@ auto budget_count(std::int64_t value) -> std::string {
 
 auto manifest_count_json(std::int64_t value) -> std::string {
     return value >= 0 ? std::format("{}", value) : std::string{"null"};
+}
+
+auto verifier_manifest_coverage_minimums_text(
+        VerifierManifestSummary const& manifest) -> std::string {
+    auto groups = std::vector<std::string>{};
+    auto append_group = [&](std::string_view name,
+                            std::int64_t min_bound_keys,
+                            std::int64_t min_guarded_fields,
+                            std::int64_t min_observed_fields) {
+        if (min_bound_keys < 0
+            && min_guarded_fields < 0
+            && min_observed_fields < 0)
+            return;
+        groups.push_back(std::format(
+            "{}=(keys={} guarded={} observed={})",
+            name,
+            budget_count(min_bound_keys),
+            budget_count(min_guarded_fields),
+            budget_count(min_observed_fields)));
+    };
+    append_group(
+        "budget",
+        manifest.material_executor_budget_coverage_min_bound_key_count,
+        manifest.material_executor_budget_coverage_min_guarded_field_count,
+        manifest.material_executor_budget_coverage_min_observed_field_count);
+    append_group(
+        "resource",
+        manifest.material_resource_bound_coverage_min_bound_key_count,
+        manifest.material_resource_bound_coverage_min_guarded_field_count,
+        manifest.material_resource_bound_coverage_min_observed_field_count);
+    append_group(
+        "quality",
+        manifest.material_quality_policy_coverage_min_bound_key_count,
+        manifest.material_quality_policy_coverage_min_guarded_field_count,
+        manifest.material_quality_policy_coverage_min_observed_field_count);
+    return std::views::join_with(groups, std::string_view{" "})
+        | std::ranges::to<std::string>();
 }
 
 auto budget_ratio(double value) -> std::string {
@@ -2994,6 +3094,9 @@ auto verifier_manifest_context_text(json::Value const& report) -> std::string {
             budget_field_list_text(
                 manifest->material_quality_policy_coverage_required_fields));
     }
+    auto minimums = verifier_manifest_coverage_minimums_text(*manifest);
+    if (!minimums.empty())
+        text += std::format(" coverage-minimums=({})", minimums);
     if (!manifest->material_executor_budget_bound_keys.empty()) {
         text += std::format(
             " budget-keys=({})",
@@ -3327,10 +3430,19 @@ auto verifier_manifest_summary_json(
         "\"material_resource_bound_fields\":{},"
         "\"material_resource_bound_coverage_required_fields\":{},"
         "\"material_executor_budget_coverage_required_fields\":{},"
+        "\"material_executor_budget_coverage_min_bound_key_count\":{},"
+        "\"material_executor_budget_coverage_min_guarded_field_count\":{},"
+        "\"material_executor_budget_coverage_min_observed_field_count\":{},"
+        "\"material_resource_bound_coverage_min_bound_key_count\":{},"
+        "\"material_resource_bound_coverage_min_guarded_field_count\":{},"
+        "\"material_resource_bound_coverage_min_observed_field_count\":{},"
         "\"material_quality_policy_bounds\":{},"
         "\"material_quality_policy_bound_keys\":{},"
         "\"material_quality_policy_fields\":{},"
-        "\"material_quality_policy_coverage_required_fields\":{}}}",
+        "\"material_quality_policy_coverage_required_fields\":{},"
+        "\"material_quality_policy_coverage_min_bound_key_count\":{},"
+        "\"material_quality_policy_coverage_min_guarded_field_count\":{},"
+        "\"material_quality_policy_coverage_min_observed_field_count\":{}}}",
         json_string(manifest->name),
         manifest_count_json(manifest->pixel_regions),
         manifest_count_json(manifest->pixel_region_metrics),
@@ -3347,11 +3459,29 @@ auto verifier_manifest_summary_json(
             manifest->material_resource_bound_coverage_required_fields),
         string_array_json(
             manifest->material_executor_budget_coverage_required_fields),
+        manifest_count_json(
+            manifest->material_executor_budget_coverage_min_bound_key_count),
+        manifest_count_json(
+            manifest->material_executor_budget_coverage_min_guarded_field_count),
+        manifest_count_json(
+            manifest->material_executor_budget_coverage_min_observed_field_count),
+        manifest_count_json(
+            manifest->material_resource_bound_coverage_min_bound_key_count),
+        manifest_count_json(
+            manifest->material_resource_bound_coverage_min_guarded_field_count),
+        manifest_count_json(
+            manifest->material_resource_bound_coverage_min_observed_field_count),
         manifest_count_json(manifest->material_quality_policy_bounds),
         string_array_json(manifest->material_quality_policy_bound_keys),
         string_array_json(manifest->material_quality_policy_fields),
         string_array_json(
-            manifest->material_quality_policy_coverage_required_fields));
+            manifest->material_quality_policy_coverage_required_fields),
+        manifest_count_json(
+            manifest->material_quality_policy_coverage_min_bound_key_count),
+        manifest_count_json(
+            manifest->material_quality_policy_coverage_min_guarded_field_count),
+        manifest_count_json(
+            manifest->material_quality_policy_coverage_min_observed_field_count));
 }
 
 } // namespace phenotype_cli::material_budget

@@ -4028,6 +4028,18 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         material_quality_policy_coverage.get("required_fields", [])
         if isinstance(material_quality_policy_coverage, dict)
         else [])
+    material_executor_budget_coverage_minimums = (
+        material_executor_budget_coverage
+        if isinstance(material_executor_budget_coverage, dict)
+        else {})
+    material_resource_bound_coverage_minimums = (
+        material_resource_bound_coverage
+        if isinstance(material_resource_bound_coverage, dict)
+        else {})
+    material_quality_policy_coverage_minimums = (
+        material_quality_policy_coverage
+        if isinstance(material_quality_policy_coverage, dict)
+        else {})
 
     has_direct_bounds = any((
         material_executor_budget_keys,
@@ -4059,11 +4071,38 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
                 material_resource_bound_coverage_required_fields),
             "material_executor_budget_coverage_required_fields": (
                 material_executor_budget_coverage_required_fields),
+            "material_executor_budget_coverage_min_bound_key_count": (
+                material_executor_budget_coverage_minimums.get(
+                    "min_bound_key_count")),
+            "material_executor_budget_coverage_min_guarded_field_count": (
+                material_executor_budget_coverage_minimums.get(
+                    "min_guarded_field_count")),
+            "material_executor_budget_coverage_min_observed_field_count": (
+                material_executor_budget_coverage_minimums.get(
+                    "min_observed_field_count")),
+            "material_resource_bound_coverage_min_bound_key_count": (
+                material_resource_bound_coverage_minimums.get(
+                    "min_bound_key_count")),
+            "material_resource_bound_coverage_min_guarded_field_count": (
+                material_resource_bound_coverage_minimums.get(
+                    "min_guarded_field_count")),
+            "material_resource_bound_coverage_min_observed_field_count": (
+                material_resource_bound_coverage_minimums.get(
+                    "min_observed_field_count")),
             "material_quality_policy_bounds": len(material_quality_policy_keys),
             "material_quality_policy_bound_keys": material_quality_policy_keys,
             "material_quality_policy_fields": material_quality_policy_fields,
             "material_quality_policy_coverage_required_fields": (
                 material_quality_policy_coverage_required_fields),
+            "material_quality_policy_coverage_min_bound_key_count": (
+                material_quality_policy_coverage_minimums.get(
+                    "min_bound_key_count")),
+            "material_quality_policy_coverage_min_guarded_field_count": (
+                material_quality_policy_coverage_minimums.get(
+                    "min_guarded_field_count")),
+            "material_quality_policy_coverage_min_observed_field_count": (
+                material_quality_policy_coverage_minimums.get(
+                    "min_observed_field_count")),
         }
     if manifest_path is not None:
         report.check("manifest schema is valid", True, str(manifest_path))
