@@ -206,7 +206,11 @@ and where those counters came from. Coverage guard failures also include
 failing check points at the source descriptor without requiring a separate
 coverage-summary join; CLI non-JSON failure summaries render the same descriptors
 as an aggregate `coverage-missing-sources` line and as compact
-`missing-field-sources` lines for the first few failures. The
+`missing-field-sources` lines for the first few failures. Raw coverage minimum
+count failures now carry `actual.count` plus the active bound keys, guarded or
+observed fields, and unguarded observed source descriptors when those explain a
+guarded-field shortfall, so verifier JSON can explain why a floor was missed
+without opening the full coverage object. The
 checked-in glass showcase, file
 explorer, and Android artifact manifests now opt into those resource and
 quality-policy coverage contracts.

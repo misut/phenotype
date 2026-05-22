@@ -3777,6 +3777,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             coverage["unguarded_observed_field_count"],
             len(coverage["unguarded_observed_fields"]))
+        self.assertEqual(
+            coverage["bound_keys"],
+            ["max_plan_sample_taps_lte"])
         self.assertIn(
             "max_frame_capture_pixels",
             coverage["unguarded_observed_fields"])
@@ -3810,6 +3813,29 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertIn(
             "material resource bound coverage min_bound_key_count is satisfied",
             failures)
+        minimum = failures[
+            "material resource bound coverage min_bound_key_count is satisfied"]
+        self.assertEqual(minimum["actual"]["count"], 1)
+        self.assertEqual(
+            minimum["actual"]["bound_keys"],
+            ["max_plan_sample_taps_lte"])
+        self.assertEqual(
+            minimum["actual"]["guarded_fields"],
+            ["max_plan_sample_taps"])
+        minimum = failures[
+            "material resource bound coverage min_guarded_field_count "
+            "is satisfied"]
+        self.assertEqual(minimum["actual"]["count"], 1)
+        self.assertEqual(
+            minimum["actual"]["guarded_fields"],
+            ["max_plan_sample_taps"])
+        self.assertIn(
+            "max_frame_capture_pixels",
+            minimum["actual"]["unguarded_observed_fields"])
+        self.assertIn(
+            "resource_budget.max_frame_capture_pixels",
+            minimum["actual"]["unguarded_observed_sources"]
+            ["max_frame_capture_pixels"]["source_path"])
 
     def test_material_resource_bound_result_failure_is_llm_actionable(self) -> None:
         manifest = {
@@ -5024,6 +5050,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             coverage["unguarded_observed_field_count"],
             len(coverage["unguarded_observed_fields"]))
+        self.assertEqual(
+            coverage["bound_keys"],
+            ["max_blur_radius_lte"])
         self.assertIn(
             "max_sample_taps",
             coverage["unguarded_observed_fields"])
@@ -5058,6 +5087,29 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "material quality policy coverage min_guarded_field_count "
             "is satisfied",
             failures)
+        minimum = failures[
+            "material quality policy coverage min_bound_key_count is satisfied"]
+        self.assertEqual(minimum["actual"]["count"], 1)
+        self.assertEqual(
+            minimum["actual"]["bound_keys"],
+            ["max_blur_radius_lte"])
+        self.assertEqual(
+            minimum["actual"]["guarded_fields"],
+            ["max_blur_radius"])
+        minimum = failures[
+            "material quality policy coverage min_guarded_field_count "
+            "is satisfied"]
+        self.assertEqual(minimum["actual"]["count"], 1)
+        self.assertEqual(
+            minimum["actual"]["guarded_fields"],
+            ["max_blur_radius"])
+        self.assertIn(
+            "max_sample_taps",
+            minimum["actual"]["unguarded_observed_fields"])
+        self.assertIn(
+            "quality_policy.max_sample_taps",
+            minimum["actual"]["unguarded_observed_sources"]
+            ["max_sample_taps"]["source_path"])
 
     def test_material_quality_policy_bound_result_failure_is_llm_actionable(
             self) -> None:
@@ -5382,6 +5434,30 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "material executor budget coverage min_bound_key_count "
             "is satisfied",
             failures)
+        minimum = failures[
+            "material executor budget coverage min_bound_key_count "
+            "is satisfied"]
+        self.assertEqual(minimum["actual"]["count"], 1)
+        self.assertEqual(
+            minimum["actual"]["bound_keys"],
+            ["draw_calls_gte"])
+        self.assertEqual(
+            minimum["actual"]["guarded_fields"],
+            ["draw_calls"])
+        minimum = failures[
+            "material executor budget coverage min_guarded_field_count "
+            "is satisfied"]
+        self.assertEqual(minimum["actual"]["count"], 1)
+        self.assertEqual(
+            minimum["actual"]["guarded_fields"],
+            ["draw_calls"])
+        self.assertIn(
+            "planned_frame_capture_pixels",
+            minimum["actual"]["unguarded_observed_fields"])
+        self.assertIn(
+            "material_executor_summary.planned_frame_capture_pixels",
+            minimum["actual"]["unguarded_observed_sources"]
+            ["planned_frame_capture_pixels"]["source_path"])
 
     def test_cli_can_require_material_executor_budget_bounds_without_manifest(
             self) -> None:
@@ -5503,7 +5579,13 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "material executor budget coverage min_bound_key_count "
             "is satisfied"]
         self.assertEqual(failure["expected"], {">=": 2})
-        self.assertEqual(failure["actual"], 1)
+        self.assertEqual(failure["actual"]["count"], 1)
+        self.assertEqual(
+            failure["actual"]["bound_keys"],
+            ["draw_calls_gte"])
+        self.assertEqual(
+            failure["actual"]["guarded_fields"],
+            ["draw_calls"])
         self.assertEqual(
             report["manifest"][
                 "material_executor_budget_coverage_min_bound_key_count"],
