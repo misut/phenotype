@@ -3277,6 +3277,71 @@ auto failure_missing_field_sources_text(json::Object const& failure,
     return sources ? missing_field_sources_text(*sources, limit) : std::string{};
 }
 
+auto coverage_minimum_actual_fields_text(
+        json::Object const& actual,
+        std::string_view key,
+        std::string_view label) -> std::string {
+    auto fields = json_object_string_array(actual, key);
+    if (fields.empty())
+        return {};
+    return std::format("{}=({})", label, budget_field_list_text(fields, 6));
+}
+
+auto coverage_minimum_actual_text(json::Value const& value) -> std::string {
+    if (!value.is_object())
+        return {};
+    auto const& actual = value.as_object();
+    auto const count = json_object_integer(actual, "count");
+    if (!count)
+        return {};
+
+    auto parts = std::vector<std::string>{std::format("count={}", *count)};
+    for (auto const& [key, label] : {
+             std::pair{std::string_view{"bound_keys"},
+                       std::string_view{"bound-keys"}},
+             std::pair{std::string_view{"guarded_fields"},
+                       std::string_view{"guarded"}},
+             std::pair{std::string_view{"observed_fields"},
+                       std::string_view{"observed"}},
+             std::pair{std::string_view{"unguarded_observed_fields"},
+                       std::string_view{"unguarded"}},
+         }) {
+        if (auto fields = coverage_minimum_actual_fields_text(
+                actual,
+                key,
+                label);
+            !fields.empty()) {
+            parts.push_back(std::move(fields));
+        }
+    }
+
+    auto const* sources = json_object_member(
+        actual,
+        "unguarded_observed_sources");
+    if (sources && sources->is_object()) {
+        if (auto text = missing_field_sources_text(sources->as_object());
+            !text.empty()) {
+            parts.push_back("sources=(" + text + ")");
+        }
+    }
+    return std::views::join_with(parts, std::string_view{" "})
+        | std::ranges::to<std::string>();
+}
+
+auto compact_failure_actual_text(json::Object const& failure) -> std::string {
+    auto const* actual = json_object_member(failure, "actual");
+    if (!actual)
+        return {};
+    if (auto text = coverage_minimum_actual_text(*actual); !text.empty())
+        return text;
+    return compact_failure_json_text(*actual);
+}
+
+auto compact_failure_actual_text_json(json::Object const& failure)
+        -> std::string {
+    return failure_optional_string_json(compact_failure_actual_text(failure));
+}
+
 auto verifier_missing_field_sources_text(json::Value const& report,
                                          std::size_t limit = 5)
         -> std::string {
@@ -4744,7 +4809,7 @@ auto verifier_failure_detail_lines(json::Object const& failure)
     }
 
     auto expected = json_object_compact_failure_text(failure, "expected");
-    auto actual = json_object_compact_failure_text(failure, "actual");
+    auto actual = compact_failure_actual_text(failure);
     if (!expected.empty() || !actual.empty()) {
         lines.push_back(std::format(
             "    expected={} actual={}",
@@ -4783,7 +4848,7 @@ auto verifier_failure_detail_json(json::Object const& failure)
         json_object_failure_string_json(failure, "likely_layer"),
         json_object_failure_string_json(failure, "likely_pass"),
         json_object_compact_failure_text_json(failure, "expected"),
-        json_object_compact_failure_text_json(failure, "actual"),
+        compact_failure_actual_text_json(failure),
         failure_optional_string_json(
             failure_missing_field_sources_text(failure)),
         json_object_failure_string_json(failure, "hint"),
