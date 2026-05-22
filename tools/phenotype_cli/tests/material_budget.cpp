@@ -1617,6 +1617,9 @@ int main() {
     assert(contains_text(
         failure_json,
         "\"missing_field_source_details\":{\"entries\":[{\"field\":\"max_frame_capture_pixels\""));
+    assert(contains_text(
+        failure_json,
+        "\"field\":\"max_frame_capture_pixels\",\"metric\":\"max_frame_capture_pixels\",\"value\":4096,\"source_path\":\"debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels\",\"likely_pass\":\"resource-budget\""));
     assert(count_text(
         failure_json,
         "\"missing_field_source_details\":{\"entries\":[{\"field\":\"max_frame_capture_pixels\"")
@@ -1917,6 +1920,9 @@ int main() {
     assert(contains_text(
         many_missing_json,
         "\"missing_field_source_details\":{\"entries\":[{\"field\":\"a\""));
+    assert(contains_text(
+        many_missing_json,
+        "\"field\":\"a\",\"metric\":\"a\",\"value\":1,\"source_path\":\"debug.a\",\"likely_pass\":\"resource-budget\""));
     assert(contains_text(
         many_missing_json,
         "\"text\":\"a=1 pass=resource-budget path=debug.a\""));

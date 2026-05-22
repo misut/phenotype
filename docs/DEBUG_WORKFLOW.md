@@ -1754,10 +1754,12 @@ non-JSON output also prints `coverage-missing-sources-window` or
 truncation fields, so local logs expose the same bounded-list shape as compact
 JSON. Compact JSON also publishes
 `missing_field_source_details.entries[]` with the field, raw source descriptor,
-rendered text, and total/shown/omitted/limit/truncated counts; the same
-structured object is repeated on each compact `failures[]` detail that has
-missing-field sources, so automation can consume either the aggregate or the
-printed failure window without reparsing the compact string. Compact
+flattened metric, value, source path, likely pass, rendered text, and
+total/shown/omitted/limit/truncated counts; the raw source descriptor remains
+under `source`. The same structured object is repeated on each compact
+`failures[]` detail that has missing-field sources, so automation can consume
+either the aggregate or the printed failure window without reparsing the compact
+string or reopening the raw descriptor. Compact
 `failures[]` details keep
 the human-rendered `expected` and `actual` strings for quick scanning and also
 include raw `expected_value` and `actual_value` JSON values for the same printed
