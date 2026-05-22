@@ -279,8 +279,10 @@ mirror that compact bound-result shape for resource-budget and quality-policy
 manifest guards. `verifier_bound_pressure` groups those three bound families
 into `fail`, `tight`, `pass`, or `unknown` states even when the verifier report
 passes, so automation can spot no-headroom Liquid Glass budgets without waiting
-for a failure summary. Non-JSON output prints the same grouped pressure line
-after the budget/resource/quality bound summaries.
+for a failure summary. Its zero/negative source lists carry the same bound
+operator, expected, actual, pass/fail, and margin evidence as bound results.
+Non-JSON output prints the same grouped pressure line after the
+budget/resource/quality bound summaries.
 Both gates also accept the direct material bound guard options used by
 `artifact verify`, so local runs can tighten a resource, quality, or executor
 budget expectation without editing the checked-in manifest.
@@ -1660,10 +1662,11 @@ The summaries report pass/fail counts, failed keys, and the tightest bound
 margin so local CLI output can show headroom without scanning the full
 `checks` array. Compact failure summaries additionally classify each bound group
 as `fail`, `tight`, `pass`, or `unknown` and count zero/negative margins in
-`bound_pressure`, including the zero/negative margin source key/field lists and
-the tightest bound key/field so no-headroom budgets point directly at the
-responsible verifier fields. This separates hard failures from budgets that are
-passing with no headroom.
+`bound_pressure`, including the zero/negative margin source key/field lists with
+their bound operator, expected value, actual value, pass/fail state, and margin,
+plus the tightest bound key/field. This separates hard failures from budgets
+that are passing with no headroom while keeping the responsible verifier fields
+and values visible in the compact output.
 Whenever material plans are present, the verifier also cross-checks executor
 counts, including `material_executor_summary.container_groups.*`, against
 `renderer.material_plans#summary`: `plan_count`,
