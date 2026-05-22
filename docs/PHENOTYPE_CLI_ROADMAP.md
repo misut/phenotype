@@ -191,12 +191,13 @@ explorer, and Android artifact manifests now opt into those resource and
 quality-policy coverage contracts.
 
 Grouped Liquid Glass diagnostics are now compact at the CLI edge as well: raw
-`material_plans.container_groups` counters for grouped surfaces, union/morph
-groups, shared capture, shape-pair analysis, shape-blend execution, and group
-bounds are mirrored as `material_container_groups` in the glass showcase, file
-explorer, and observe JSON envelopes and printed in non-JSON output. This keeps
-the Apple-style container/morph contract visible without opening the full
-verifier report.
+`material_plans.container_groups` counters and
+`material_plans.container_group_sources` descriptors for grouped surfaces,
+union/morph groups, shared capture, shape-pair analysis, shape-blend execution,
+and group bounds are mirrored as `material_container_groups` in the glass
+showcase, file explorer, and observe JSON envelopes and printed in non-JSON
+output. This keeps the Apple-style container/morph contract visible without
+opening the full verifier report.
 
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, package-owned SVG app icons,

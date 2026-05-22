@@ -3292,6 +3292,16 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["container_groups"]["union_group_count"],
             1)
+        group_sources = report["material_plans"]["container_group_sources"]
+        self.assertEqual(
+            group_sources["max_group_size"]["container_id"],
+            41)
+        self.assertEqual(
+            group_sources["max_group_size"]["plan_ids"],
+            ["material.regular.liquid-glass"])
+        self.assertEqual(
+            group_sources["max_group_bounds_area"]["bounds"]["area"],
+            240.0 * 96.0)
 
     def test_surface_role_mismatch_points_to_material_contract(self) -> None:
         plan = material_plan()
