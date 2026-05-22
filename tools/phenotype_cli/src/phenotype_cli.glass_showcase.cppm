@@ -435,8 +435,8 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
     };
     std::println("phenotype artifact verify-glass-showcase");
     std::println("{}", cppx::terminal::format_status_frame(lines, false));
-    if (auto verifier_report =
-            verifier_report_from_result(summary.verifier_result)) {
+    auto verifier_report = verifier_report_from_result(summary.verifier_result);
+    if (verifier_report) {
         auto budget = material_budget_from_report(*verifier_report);
         auto manifest = verifier_manifest_summary_from_report(*verifier_report);
         if (manifest) {
@@ -471,6 +471,8 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
                 std::println("  {}", line);
             }
         }
+        for (auto const& line : verifier_failure_summary_lines(*verifier_report))
+            std::println("{}", line);
     }
     if (auto budget = material_budget_from_verifier(summary.verifier_result)) {
         std::println("material budget:");
@@ -522,6 +524,7 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
     if (summary.verifier_result
         && (summary.verifier_result->timed_out
             || summary.verifier_result->exit_code != 0)
+        && !verifier_report
         && !summary.verifier_result->stdout_text.empty()) {
         std::println("verifier report tail:");
         std::println("{}", output_tail(summary.verifier_result->stdout_text));
