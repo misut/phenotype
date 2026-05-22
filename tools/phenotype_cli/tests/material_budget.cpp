@@ -244,7 +244,49 @@ auto sample_report() -> json::Value {
             "margin": 0
           }
         ]
-      }
+      },
+      "failure_summary": {
+        "count": 4,
+        "top_likely_layer": "material-control",
+        "top_likely_pass": "sampled-backdrop",
+        "top_suggested_action": "reduce backdrop sample taps before raising the guard"
+      },
+      "failures": [
+        {
+          "name": "pixel_region_tint_mismatch",
+          "path": "window.material.executor_budget.upload_utilization",
+          "region": "toolbarGlass",
+          "likely_layer": "material-control",
+          "likely_pass": "sampled-backdrop",
+          "expected": {
+            "max": {
+              "upload_utilization": 1
+            },
+            "samples": [
+              "toolbar",
+              "sidebar"
+            ]
+          },
+          "actual": 1.25,
+          "hint": "keep upload utilization under the manifest guard",
+          "suggested_action": "reduce backdrop sample taps before raising the guard"
+        },
+        {
+          "message": "fallback material rendered without semantic plan",
+          "path": "material.plans[2].semantic",
+          "actual": null,
+          "suggested_action": "record a semantic material plan before capture"
+        },
+        {
+          "name": "resource_bound_failed",
+          "region": "contentGlass",
+          "expected": false,
+          "actual": true
+        },
+        {
+          "name": "extra_failure_not_printed"
+        }
+      ]
     })json");
 }
 
@@ -336,4 +378,45 @@ int main() {
     assert(contains_line(
         material_budget_bound_detail_lines(quality_results, quality_summary),
         "tightest: pass require_noise_allowed"));
+
+    auto failure_json = verifier_failure_summary_json(report);
+    assert(contains_text(failure_json, "\"count\":4"));
+    assert(contains_text(
+        failure_json,
+        "\"top_likely_layer\":\"material-control\""));
+    assert(contains_text(
+        failure_json,
+        "\"top_likely_pass\":\"sampled-backdrop\""));
+    assert(contains_text(
+        failure_json,
+        "\"top_suggested_action\":\"reduce backdrop sample taps before raising the guard\""));
+    assert(contains_text(
+        failure_json,
+        "\"name\":\"pixel_region_tint_mismatch\""));
+    assert(contains_text(failure_json, "\"actual\":\"1.25\""));
+    assert(contains_text(failure_json, "\"truncated\":true"));
+
+    auto failure_lines = verifier_failure_summary_lines(report);
+    assert(contains_line(
+        failure_lines,
+        "verifier failures: count=4 top-layer=material-control top-pass=sampled-backdrop"));
+    assert(contains_line(failure_lines, "pixel_region_tint_mismatch"));
+    assert(contains_line(
+        failure_lines,
+        "path=window.material.executor_budget.upload_utilization,region=toolbarGlass,layer=material-control,pass=sampled-backdrop"));
+    assert(contains_line(failure_lines, "actual=1.25"));
+    assert(contains_line(
+        failure_lines,
+        "hint: keep upload utilization under the manifest guard"));
+    assert(contains_line(
+        failure_lines,
+        "action: reduce backdrop sample taps before raising the guard"));
+    assert(contains_line(
+        failure_lines,
+        "... +1 more failures; rerun with --json for the full report"));
+
+    auto passing_report = json::parse(
+        R"json({"failure_summary":{"count":0},"failures":[]})json");
+    assert(verifier_failure_summary_json(passing_report) == "null");
+    assert(verifier_failure_summary_lines(passing_report).empty());
 }
