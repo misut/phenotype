@@ -1683,7 +1683,13 @@ int main() {
         "coverage-missing-sources: max_frame_capture_pixels=4096 pass=resource-budget path=debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels"));
     assert(contains_line(
         failure_lines,
+        "coverage-missing-sources-window: shown=1/1 omitted=0 limit=5 truncated=false"));
+    assert(contains_line(
+        failure_lines,
         "coverage-minimum-failures: budget.min_guarded_field_count expected={>=: 2} actual=count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)"));
+    assert(contains_line(
+        failure_lines,
+        "coverage-minimum-failures-window: shown=1/1 omitted=0 limit=5 truncated=false"));
     assert(contains_line(
         failure_lines,
         "budget-sources: draw_calls=2 layer=platform-runtime pass=material-executor key=material_draw_calls"));
@@ -1861,6 +1867,11 @@ int main() {
     assert(!contains_text(
         many_minimum_json,
         "\"label\":\"quality.min_bound_key_count\""));
+    auto many_minimum_lines =
+        verifier_failure_summary_lines(many_minimum_report);
+    assert(contains_line(
+        many_minimum_lines,
+        "coverage-minimum-failures-window: shown=5/6 omitted=1 limit=5 truncated=true"));
 
     auto many_missing_report = json::parse(
         R"json({
@@ -1901,6 +1912,11 @@ int main() {
         many_missing_json,
         "\"total_count\":6,\"shown_count\":3,\"omitted_count\":3,\"truncated\":true"));
     assert(!contains_text(many_missing_json, "\"field\":\"f\""));
+    auto many_missing_lines =
+        verifier_failure_summary_lines(many_missing_report);
+    assert(contains_line(
+        many_missing_lines,
+        "coverage-missing-sources-window: shown=5/6 omitted=1 limit=5 truncated=true"));
 
     auto passing_report = json::parse(
         R"json({"failure_summary":{"count":0},"failures":[]})json");
