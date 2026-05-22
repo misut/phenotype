@@ -3343,10 +3343,11 @@ auto missing_field_source_detail_entries_json(
     }
     out += std::format(
         "],\"total_count\":{},\"shown_count\":{},\"omitted_count\":{},"
-        "\"truncated\":{}}}",
+        "\"limit\":{},\"truncated\":{}}}",
         entries.size(),
         count,
         entries.size() - count,
+        limit,
         entries.size() > count ? "true" : "false");
     return out;
 }
@@ -3522,10 +3523,11 @@ auto coverage_minimum_failure_detail_entries_json(
     }
     out += std::format(
         "],\"total_count\":{},\"shown_count\":{},\"omitted_count\":{},"
-        "\"truncated\":{}}}",
+        "\"limit\":{},\"truncated\":{}}}",
         entries.size(),
         count,
         entries.size() - count,
+        limit,
         entries.size() > count ? "true" : "false");
     return out;
 }
