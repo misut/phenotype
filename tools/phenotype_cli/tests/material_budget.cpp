@@ -503,6 +503,9 @@ int main() {
         "\"material_contract\":{\"semantic_material_nodes\":3,\"renderer_plan_contract_version\":42,\"renderer_plan_count\":3,\"renderer_plans_present\":true,\"resolved_plan_count\":3,\"executor_budget\":{\"plan_count\":3,\"sampled_backdrop_instance_count\":2,\"fallback_instance_count\":0,\"draw_calls\":2,\"total_sample_taps\":50,\"upload_utilization\":0.0625,\"backdrop_copy_utilization\":0.25,\"pipeline_ready\":true,\"backdrop_source_ready\":true,\"upload_status\":\"uploaded\",\"draw_status\":\"drawn\",\"backdrop_copy_policy\":\"bounded\",\"backdrop_copy_skip_reason\":\"none\"},\"fallback_paths\":{\"unsupported-backend\":1},\"pass_executors\":{\"color-fill\":1,\"sampled-backdrop\":2},\"decision_first_blockers\":{\"reduced-transparency\":1,\"unsupported-backend\":1},\"reference_material_policies\":{\"standard-material\":1,\"system-adaptive\":2},\"reference_accessibility_responses\":{\"increase-contrast\":1,\"reduce-transparency\":2},\"reference_performance_responses\":{\"bounded-backdrop\":2,\"deterministic-fallback\":1},\"decision_reduced_transparency\":false,\"decision_increase_contrast\":true,\"decision_reduce_motion\":false,\"app_probe_contract_name\":\"glass_showcase_material_probe_contract\",\"app_probe_reference_technology\":\"liquid-glass\"}"));
     assert(contains_text(
         failure_json,
+        "\"bound_summaries\":{\"executor\":{\"bound_count\":3,\"pass_count\":2,\"fail_count\":1,\"tightest_bound_key\":\"upload_utilization_lte\",\"tightest_bound_field\":\"upload_utilization\",\"tightest_bound_margin\":0.9375,\"failed_keys\":[\"draw_calls_gte\"]},\"resource\":{\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"tightest_bound_key\":\"max_plan_sample_taps_lte\",\"tightest_bound_field\":\"max_plan_sample_taps\",\"tightest_bound_margin\":0,\"failed_keys\":[]},\"quality\":{\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"tightest_bound_key\":\"require_noise_allowed\",\"tightest_bound_field\":\"noise_disabled\",\"tightest_bound_margin\":0,\"failed_keys\":[]}}"));
+    assert(contains_text(
+        failure_json,
         "\"by_likely_layer\":{\"material-control\":2,\"platform-runtime\":1}"));
     assert(contains_text(
         failure_json,
@@ -535,6 +538,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "context: platform=test backend=synthetic semantic-nodes=3 renderer-plans=3 resolved-plans=3 executor=plans=3,sampled=2,fallback=0,draws=2,taps=50,upload=uploaded,draw=drawn,backdrop=bounded fallbacks=unsupported-backend=1 blockers=reduced-transparency=1, unsupported-backend=1 pass-executors=sampled-backdrop=2, color-fill=1 ref-policy=system-adaptive=2, standard-material=1 a11y=reduce-transparency=2, increase-contrast=1 perf=bounded-backdrop=2, deterministic-fallback=1 reduced-transparency=false increase-contrast=true reduce-motion=false probe=liquid-glass"));
+    assert(contains_line(
+        failure_lines,
+        "bounds: executor=2/3,fail=1,tightest=upload_utilization_lte,failed=(draw_calls_gte); resource=2/2,fail=0,tightest=max_plan_sample_taps_lte; quality=2/2,fail=0,tightest=require_noise_allowed"));
     assert(contains_line(
         failure_lines,
         "by-layer: material-control=2, platform-runtime=1"));

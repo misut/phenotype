@@ -1993,6 +1993,74 @@ auto failure_artifact_context_line(json::Value const& report) -> std::string {
     return text;
 }
 
+auto verifier_bound_summaries_json(json::Value const& report) -> std::string {
+    auto executor = material_budget_bound_summary_from_report(report);
+    auto resource = material_resource_bound_summary_from_report(report);
+    auto quality = material_quality_policy_bound_summary_from_report(report);
+    if (!executor && !resource && !quality)
+        return "null";
+
+    return std::format(
+        "{{\"executor\":{},\"resource\":{},\"quality\":{}}}",
+        material_budget_bound_summary_json(executor),
+        material_budget_bound_summary_json(resource),
+        material_budget_bound_summary_json(quality));
+}
+
+auto compact_bound_summary_text(
+        std::string_view label,
+        std::optional<MaterialBudgetBoundSummary> const& summary)
+        -> std::string {
+    if (!summary)
+        return {};
+
+    auto text = std::format(
+        "{}={}/{},fail={}",
+        label,
+        budget_count(summary->pass_count),
+        budget_count(summary->bound_count),
+        budget_count(summary->fail_count));
+    if (!summary->tightest_bound_key.empty()) {
+        text += std::format(",tightest={}", summary->tightest_bound_key);
+    }
+    if (!summary->failed_keys.empty()) {
+        text += std::format(
+            ",failed=({})",
+            budget_field_list_text(summary->failed_keys));
+    }
+    return text;
+}
+
+auto verifier_bound_summaries_text(json::Value const& report) -> std::string {
+    auto parts = std::vector<std::string>{};
+    if (auto executor = compact_bound_summary_text(
+            "executor",
+            material_budget_bound_summary_from_report(report));
+        !executor.empty()) {
+        parts.push_back(std::move(executor));
+    }
+    if (auto resource = compact_bound_summary_text(
+            "resource",
+            material_resource_bound_summary_from_report(report));
+        !resource.empty()) {
+        parts.push_back(std::move(resource));
+    }
+    if (auto quality = compact_bound_summary_text(
+            "quality",
+            material_quality_policy_bound_summary_from_report(report));
+        !quality.empty()) {
+        parts.push_back(std::move(quality));
+    }
+
+    auto text = std::string{};
+    for (auto const& part : parts) {
+        if (!text.empty())
+            text += "; ";
+        text += part;
+    }
+    return text;
+}
+
 auto verifier_failure_detail_lines(json::Object const& failure)
         -> std::vector<std::string> {
     auto lines = std::vector<std::string>{};
@@ -2094,7 +2162,7 @@ auto verifier_failure_summary_json(json::Value const& report)
     return std::format(
         "{{\"count\":{},\"top_likely_layer\":{},"
         "\"top_likely_pass\":{},\"top_suggested_action\":{},"
-        "\"artifact_context\":{},"
+        "\"artifact_context\":{},\"bound_summaries\":{},"
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
         "\"by_path\":{},"
         "\"by_suggested_action\":{},\"first_failure\":{},"
@@ -2110,6 +2178,7 @@ auto verifier_failure_summary_json(json::Value const& report)
             report,
             {"failure_summary", "top_suggested_action"}).value_or("")),
         failure_artifact_context_json(report),
+        verifier_bound_summaries_json(report),
         failure_json_value_or_null(
             report,
             {"failure_summary", "by_likely_layer"}),
@@ -2169,6 +2238,10 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto context = failure_artifact_context_line(report);
         !context.empty()) {
         lines.push_back("  context: " + context);
+    }
+    if (auto bounds = verifier_bound_summaries_text(report);
+        !bounds.empty()) {
+        lines.push_back("  bounds: " + bounds);
     }
     if (auto by_layer = compact_failure_count_map_text(
             report,
