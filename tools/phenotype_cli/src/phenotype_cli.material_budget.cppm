@@ -54,6 +54,44 @@ struct MaterialQualityPolicySummary {
     std::int64_t max_backdrop_pixels = -1;
 };
 
+struct MaterialResourceBoundsSummary {
+    double max_plan_blur_radius = -1.0;
+    std::int64_t max_plan_sample_taps = -1;
+    std::int64_t total_plan_sample_taps = -1;
+    double max_budget_blur_radius = -1.0;
+    std::int64_t max_sample_taps = -1;
+    std::int64_t max_sampling_kernel_radius = -1;
+    std::int64_t max_pass_count = -1;
+    std::int64_t max_execution_stages = -1;
+    std::int64_t max_paint_layers = -1;
+    std::int64_t max_backdrop_pixels = -1;
+    std::int64_t max_frame_capture_count = -1;
+    std::int64_t max_frame_capture_pixels = -1;
+    std::int64_t total_surface_sample_pixels = -1;
+    std::int64_t max_surface_sample_pixels = -1;
+    double max_refraction_offset_pixels = -1.0;
+    double max_container_spacing = -1.0;
+    double max_paint_layer_inflate = -1.0;
+    std::int64_t total_runtime_passes = -1;
+    std::int64_t active_runtime_passes = -1;
+    std::int64_t backdrop_runtime_passes = -1;
+    std::int64_t total_execution_stages = -1;
+    std::int64_t active_execution_stages = -1;
+    std::int64_t backdrop_execution_stages = -1;
+    std::int64_t dropped_execution_stages = -1;
+    std::int64_t max_execution_stage_count = -1;
+    std::int64_t max_execution_stage_capacity = -1;
+    std::int64_t total_paint_layers = -1;
+    std::int64_t active_paint_layers = -1;
+    std::int64_t dropped_paint_layers = -1;
+    std::int64_t max_paint_layer_count = -1;
+    std::int64_t max_paint_layer_capacity = -1;
+    std::int64_t max_pass_texture_copy_pixels = -1;
+    std::int64_t total_pass_texture_copy_pixels = -1;
+    std::int64_t unbounded_texture_copy = -1;
+    std::int64_t non_deterministic_fallback = -1;
+};
+
 struct VerifierManifestSummary {
     std::string name;
     std::int64_t pixel_regions = -1;
@@ -462,6 +500,144 @@ auto material_quality_policy_from_verifier(
     return material_quality_policy_from_verifier(*result);
 }
 
+auto resource_bounds_integer_at(json::Value const& report,
+                                std::string_view key)
+    -> std::optional<std::int64_t> {
+    return json_integer_at(report, {"material_plans", "resource_bounds", key});
+}
+
+auto resource_bounds_number_at(json::Value const& report,
+                               std::string_view key) -> std::optional<double> {
+    return json_number_at(report, {"material_plans", "resource_bounds", key});
+}
+
+auto material_resource_bounds_from_report(json::Value const& report)
+    -> std::optional<MaterialResourceBoundsSummary> {
+    if (!json_object_at(report, {"material_plans", "resource_bounds"}))
+        return std::nullopt;
+    return MaterialResourceBoundsSummary{
+        .max_plan_blur_radius =
+            resource_bounds_number_at(report, "max_plan_blur_radius")
+                .value_or(-1.0),
+        .max_plan_sample_taps =
+            resource_bounds_integer_at(report, "max_plan_sample_taps")
+                .value_or(-1),
+        .total_plan_sample_taps =
+            resource_bounds_integer_at(report, "total_plan_sample_taps")
+                .value_or(-1),
+        .max_budget_blur_radius =
+            resource_bounds_number_at(report, "max_budget_blur_radius")
+                .value_or(-1.0),
+        .max_sample_taps =
+            resource_bounds_integer_at(report, "max_sample_taps").value_or(-1),
+        .max_sampling_kernel_radius =
+            resource_bounds_integer_at(report, "max_sampling_kernel_radius")
+                .value_or(-1),
+        .max_pass_count =
+            resource_bounds_integer_at(report, "max_pass_count").value_or(-1),
+        .max_execution_stages =
+            resource_bounds_integer_at(report, "max_execution_stages")
+                .value_or(-1),
+        .max_paint_layers =
+            resource_bounds_integer_at(report, "max_paint_layers").value_or(-1),
+        .max_backdrop_pixels =
+            resource_bounds_integer_at(report, "max_backdrop_pixels")
+                .value_or(-1),
+        .max_frame_capture_count =
+            resource_bounds_integer_at(report, "max_frame_capture_count")
+                .value_or(-1),
+        .max_frame_capture_pixels =
+            resource_bounds_integer_at(report, "max_frame_capture_pixels")
+                .value_or(-1),
+        .total_surface_sample_pixels =
+            resource_bounds_integer_at(report, "total_surface_sample_pixels")
+                .value_or(-1),
+        .max_surface_sample_pixels =
+            resource_bounds_integer_at(report, "max_surface_sample_pixels")
+                .value_or(-1),
+        .max_refraction_offset_pixels =
+            resource_bounds_number_at(report, "max_refraction_offset_pixels")
+                .value_or(-1.0),
+        .max_container_spacing =
+            resource_bounds_number_at(report, "max_container_spacing")
+                .value_or(-1.0),
+        .max_paint_layer_inflate =
+            resource_bounds_number_at(report, "max_paint_layer_inflate")
+                .value_or(-1.0),
+        .total_runtime_passes =
+            resource_bounds_integer_at(report, "total_runtime_passes")
+                .value_or(-1),
+        .active_runtime_passes =
+            resource_bounds_integer_at(report, "active_runtime_passes")
+                .value_or(-1),
+        .backdrop_runtime_passes =
+            resource_bounds_integer_at(report, "backdrop_runtime_passes")
+                .value_or(-1),
+        .total_execution_stages =
+            resource_bounds_integer_at(report, "total_execution_stages")
+                .value_or(-1),
+        .active_execution_stages =
+            resource_bounds_integer_at(report, "active_execution_stages")
+                .value_or(-1),
+        .backdrop_execution_stages =
+            resource_bounds_integer_at(report, "backdrop_execution_stages")
+                .value_or(-1),
+        .dropped_execution_stages =
+            resource_bounds_integer_at(report, "dropped_execution_stages")
+                .value_or(-1),
+        .max_execution_stage_count =
+            resource_bounds_integer_at(report, "max_execution_stage_count")
+                .value_or(-1),
+        .max_execution_stage_capacity =
+            resource_bounds_integer_at(report, "max_execution_stage_capacity")
+                .value_or(-1),
+        .total_paint_layers =
+            resource_bounds_integer_at(report, "total_paint_layers")
+                .value_or(-1),
+        .active_paint_layers =
+            resource_bounds_integer_at(report, "active_paint_layers")
+                .value_or(-1),
+        .dropped_paint_layers =
+            resource_bounds_integer_at(report, "dropped_paint_layers")
+                .value_or(-1),
+        .max_paint_layer_count =
+            resource_bounds_integer_at(report, "max_paint_layer_count")
+                .value_or(-1),
+        .max_paint_layer_capacity =
+            resource_bounds_integer_at(report, "max_paint_layer_capacity")
+                .value_or(-1),
+        .max_pass_texture_copy_pixels =
+            resource_bounds_integer_at(report, "max_pass_texture_copy_pixels")
+                .value_or(-1),
+        .total_pass_texture_copy_pixels =
+            resource_bounds_integer_at(report, "total_pass_texture_copy_pixels")
+                .value_or(-1),
+        .unbounded_texture_copy =
+            resource_bounds_integer_at(report, "unbounded_texture_copy")
+                .value_or(-1),
+        .non_deterministic_fallback =
+            resource_bounds_integer_at(report, "non_deterministic_fallback")
+                .value_or(-1),
+    };
+}
+
+auto material_resource_bounds_from_verifier(
+        cppx::process::CapturedProcessResult const& result)
+    -> std::optional<MaterialResourceBoundsSummary> {
+    auto report = verifier_report_from_result(result);
+    if (!report)
+        return std::nullopt;
+    return material_resource_bounds_from_report(*report);
+}
+
+auto material_resource_bounds_from_verifier(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+    -> std::optional<MaterialResourceBoundsSummary> {
+    if (!result)
+        return std::nullopt;
+    return material_resource_bounds_from_verifier(*result);
+}
+
 auto material_budget_bound_summary_from_report(json::Value const& report)
     -> std::optional<MaterialBudgetBoundSummary> {
     if (!json_object_at(report, {
@@ -852,6 +1028,72 @@ auto material_quality_policy_json(
         manifest_count_json(policy->max_backdrop_pixels));
 }
 
+auto material_resource_bounds_json(
+        std::optional<MaterialResourceBoundsSummary> const& bounds)
+    -> std::string {
+    if (!bounds)
+        return "null";
+    return std::format(
+        "{{\"max_plan_blur_radius\":{},\"max_plan_sample_taps\":{},"
+        "\"total_plan_sample_taps\":{},\"max_budget_blur_radius\":{},"
+        "\"max_sample_taps\":{},\"max_sampling_kernel_radius\":{},"
+        "\"max_pass_count\":{},\"max_execution_stages\":{},"
+        "\"max_paint_layers\":{},\"max_backdrop_pixels\":{},"
+        "\"max_frame_capture_count\":{},\"max_frame_capture_pixels\":{},"
+        "\"total_surface_sample_pixels\":{},"
+        "\"max_surface_sample_pixels\":{},"
+        "\"max_refraction_offset_pixels\":{},"
+        "\"max_container_spacing\":{},\"max_paint_layer_inflate\":{},"
+        "\"total_runtime_passes\":{},\"active_runtime_passes\":{},"
+        "\"backdrop_runtime_passes\":{},\"total_execution_stages\":{},"
+        "\"active_execution_stages\":{},\"backdrop_execution_stages\":{},"
+        "\"dropped_execution_stages\":{},"
+        "\"max_execution_stage_count\":{},"
+        "\"max_execution_stage_capacity\":{},"
+        "\"total_paint_layers\":{},\"active_paint_layers\":{},"
+        "\"dropped_paint_layers\":{},\"max_paint_layer_count\":{},"
+        "\"max_paint_layer_capacity\":{},"
+        "\"max_pass_texture_copy_pixels\":{},"
+        "\"total_pass_texture_copy_pixels\":{},"
+        "\"unbounded_texture_copy\":{},"
+        "\"non_deterministic_fallback\":{}}}",
+        budget_ratio(bounds->max_plan_blur_radius),
+        manifest_count_json(bounds->max_plan_sample_taps),
+        manifest_count_json(bounds->total_plan_sample_taps),
+        budget_ratio(bounds->max_budget_blur_radius),
+        manifest_count_json(bounds->max_sample_taps),
+        manifest_count_json(bounds->max_sampling_kernel_radius),
+        manifest_count_json(bounds->max_pass_count),
+        manifest_count_json(bounds->max_execution_stages),
+        manifest_count_json(bounds->max_paint_layers),
+        manifest_count_json(bounds->max_backdrop_pixels),
+        manifest_count_json(bounds->max_frame_capture_count),
+        manifest_count_json(bounds->max_frame_capture_pixels),
+        manifest_count_json(bounds->total_surface_sample_pixels),
+        manifest_count_json(bounds->max_surface_sample_pixels),
+        budget_ratio(bounds->max_refraction_offset_pixels),
+        budget_ratio(bounds->max_container_spacing),
+        budget_ratio(bounds->max_paint_layer_inflate),
+        manifest_count_json(bounds->total_runtime_passes),
+        manifest_count_json(bounds->active_runtime_passes),
+        manifest_count_json(bounds->backdrop_runtime_passes),
+        manifest_count_json(bounds->total_execution_stages),
+        manifest_count_json(bounds->active_execution_stages),
+        manifest_count_json(bounds->backdrop_execution_stages),
+        manifest_count_json(bounds->dropped_execution_stages),
+        manifest_count_json(bounds->max_execution_stage_count),
+        manifest_count_json(bounds->max_execution_stage_capacity),
+        manifest_count_json(bounds->total_paint_layers),
+        manifest_count_json(bounds->active_paint_layers),
+        manifest_count_json(bounds->dropped_paint_layers),
+        manifest_count_json(bounds->max_paint_layer_count),
+        manifest_count_json(bounds->max_paint_layer_capacity),
+        manifest_count_json(bounds->max_pass_texture_copy_pixels),
+        manifest_count_json(bounds->total_pass_texture_copy_pixels),
+        manifest_count_json(bounds->unbounded_texture_copy),
+        manifest_count_json(bounds->non_deterministic_fallback));
+}
+
 auto material_budget_coverage_json(
         std::optional<MaterialBudgetCoverageSummary> const& coverage)
     -> std::string {
@@ -986,6 +1228,58 @@ auto material_quality_policy_text(MaterialQualityPolicySummary const& policy)
         budget_number_text(policy.max_blur_radius),
         budget_count(policy.max_sample_taps),
         budget_count(policy.max_backdrop_pixels));
+}
+
+auto material_resource_bounds_lines(MaterialResourceBoundsSummary const& bounds)
+    -> std::vector<std::string> {
+    return {
+        std::format(
+            "plan: blur={} taps={}/{} budget-blur={} budget-taps={} "
+            "kernel={} pass-cap={}",
+            budget_number_text(bounds.max_plan_blur_radius),
+            budget_count(bounds.max_plan_sample_taps),
+            budget_count(bounds.total_plan_sample_taps),
+            budget_number_text(bounds.max_budget_blur_radius),
+            budget_count(bounds.max_sample_taps),
+            budget_count(bounds.max_sampling_kernel_radius),
+            budget_count(bounds.max_pass_count)),
+        std::format(
+            "capture: backdrop-pixels={} frame-capture={}/{} px "
+            "surface-sample={}/{} px copy={}/{} px",
+            budget_count(bounds.max_backdrop_pixels),
+            budget_count(bounds.max_frame_capture_count),
+            budget_count(bounds.max_frame_capture_pixels),
+            budget_count(bounds.max_surface_sample_pixels),
+            budget_count(bounds.total_surface_sample_pixels),
+            budget_count(bounds.max_pass_texture_copy_pixels),
+            budget_count(bounds.total_pass_texture_copy_pixels)),
+        std::format(
+            "execution: runtime-passes={}/{}/{} stages={}/{}/{} "
+            "dropped={} max-stage={}/{}",
+            budget_count(bounds.total_runtime_passes),
+            budget_count(bounds.active_runtime_passes),
+            budget_count(bounds.backdrop_runtime_passes),
+            budget_count(bounds.total_execution_stages),
+            budget_count(bounds.active_execution_stages),
+            budget_count(bounds.backdrop_execution_stages),
+            budget_count(bounds.dropped_execution_stages),
+            budget_count(bounds.max_execution_stage_count),
+            budget_count(bounds.max_execution_stage_capacity)),
+        std::format(
+            "paint/safety: layers={}/{} dropped={} max-layer={}/{} "
+            "refraction={} spacing={} inflate={} unbounded-copy={} "
+            "non-deterministic-fallback={}",
+            budget_count(bounds.total_paint_layers),
+            budget_count(bounds.active_paint_layers),
+            budget_count(bounds.dropped_paint_layers),
+            budget_count(bounds.max_paint_layer_count),
+            budget_count(bounds.max_paint_layer_capacity),
+            budget_number_text(bounds.max_refraction_offset_pixels),
+            budget_number_text(bounds.max_container_spacing),
+            budget_number_text(bounds.max_paint_layer_inflate),
+            budget_count(bounds.unbounded_texture_copy),
+            budget_count(bounds.non_deterministic_fallback)),
+    };
 }
 
 auto material_budget_bound_summary_text(MaterialBudgetBoundSummary const& summary)
