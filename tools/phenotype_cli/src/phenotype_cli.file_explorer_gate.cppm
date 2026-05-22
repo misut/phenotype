@@ -505,6 +505,7 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         "\"material_budget_bound_summary\":{},"
         "\"material_budget_bound_results\":{},"
         "\"verifier_tightest_bound_results\":{},"
+        "\"verifier_nearest_headroom_results\":{},"
         "\"verifier_bound_pressure\":{},"
         "\"verifier_failure_summary\":{},\"error\":{}}}",
         json_string(item.profile),
@@ -532,6 +533,7 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         material_budget_bound_summary_json(item.material_budget_bound_summary),
         material_budget_bound_results_json(item.material_budget_bound_results),
         verifier_tightest_bound_results_json(item.verifier_result),
+        verifier_nearest_headroom_results_json(item.verifier_result),
         verifier_bound_pressure_json(item.verifier_result),
         verifier_failure_summary_json(item.verifier_result),
         json_string(item.error));
@@ -891,6 +893,27 @@ void print_material_tightest_bound_results(
     }
 }
 
+void print_material_nearest_headroom_results(
+        std::span<FileExplorerArtifactCase const> cases) {
+    auto has_headroom = std::ranges::any_of(
+        cases,
+        [](FileExplorerArtifactCase const& item) {
+            return !verifier_nearest_headroom_results_text(
+                item.verifier_result).empty();
+        });
+    if (!has_headroom)
+        return;
+
+    std::println("material nearest headroom:");
+    for (auto const& item : cases) {
+        auto headroom = verifier_nearest_headroom_results_text(
+            item.verifier_result);
+        if (headroom.empty())
+            continue;
+        std::println("  {}: {}", case_label(item), headroom);
+    }
+}
+
 void print_file_explorer_gate(
         FileExplorerArtifactGateSummary const& summary) {
     auto lines = std::vector<cppx::terminal::StatusLine>{
@@ -937,6 +960,7 @@ void print_file_explorer_gate(
     print_material_quality_policy_bound_summary(summary.cases);
     print_material_budget_bound_summary(summary.cases);
     print_material_tightest_bound_results(summary.cases);
+    print_material_nearest_headroom_results(summary.cases);
     print_material_bound_pressure(summary.cases);
     print_material_budget_summary(summary.cases);
     if (!summary.error.empty()) {

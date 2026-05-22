@@ -418,6 +418,9 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
     auto tightest_bound_results = verifier_report
         ? verifier_tightest_bound_results_json(*verifier_report)
         : std::string{"null"};
+    auto nearest_headroom_results = verifier_report
+        ? verifier_nearest_headroom_results_json(*verifier_report)
+        : std::string{"null"};
     auto bound_pressure = verifier_report
         ? verifier_bound_pressure_json(*verifier_report)
         : std::string{"null"};
@@ -441,6 +444,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         "\"material_budget_bound_summary\":{},"
         "\"material_budget_bound_results\":{},"
         "\"verifier_tightest_bound_results\":{},"
+        "\"verifier_nearest_headroom_results\":{},"
         "\"verifier_bound_pressure\":{},"
         "\"verifier_failure_summary\":{},\"error\":{}}}",
         summary.ok ? "true" : "false",
@@ -471,6 +475,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         material_budget_bound_summary_json(bound_summary),
         material_budget_bound_results_json(bound_results),
         tightest_bound_results,
+        nearest_headroom_results,
         bound_pressure,
         failure_summary,
         json_string(summary.error));
@@ -614,6 +619,11 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
                 verifier_tightest_bound_results_text(*verifier_report);
             !tightest.empty()) {
             std::println("material tightest bounds: {}", tightest);
+        }
+        if (auto headroom =
+                verifier_nearest_headroom_results_text(*verifier_report);
+            !headroom.empty()) {
+            std::println("material nearest headroom: {}", headroom);
         }
         if (auto pressure = verifier_bound_pressure_text(*verifier_report);
             !pressure.empty()) {
