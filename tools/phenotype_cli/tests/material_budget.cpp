@@ -1216,6 +1216,43 @@ int main() {
     assert(contains_text(
         material_budget_bound_result_text(sourced_bound),
         "source=upload_utilization path=debug.platform_runtime.details.renderer.material_executor_summary.material_upload_bytes pass=material-executor"));
+    auto sourced_pressure_source =
+        bound_pressure_source_from_result(sourced_bound);
+    assert(sourced_pressure_source.source_metric == "upload_utilization");
+    auto sourced_pressure_json =
+        bound_pressure_source_json(sourced_pressure_source);
+    assert(contains_text(sourced_pressure_json, "\"source\":{"));
+    assert(contains_text(
+        sourced_pressure_json,
+        "\"source_path\":\"debug.platform_runtime.details.renderer.material_executor_summary.material_upload_bytes\""));
+    assert(contains_text(
+        bound_pressure_source_text(sourced_pressure_source),
+        "source=upload_utilization path=debug.platform_runtime.details.renderer.material_executor_summary.material_upload_bytes pass=material-executor"));
+    auto sourced_pressure_summary = MaterialBudgetBoundSummary{
+        .bound_count = 1,
+        .pass_count = 1,
+        .fail_count = 0,
+        .zero_margin_count = 1,
+        .negative_margin_count = 0,
+        .tightest_bound_key = "upload_utilization_lte",
+        .tightest_bound_field = "upload_utilization",
+        .tightest_bound_margin = 0.9375,
+        .zero_margin_sources = {sourced_bound},
+        .tightest_bound_result = sourced_bound,
+    };
+    auto no_bound_results =
+        std::optional<std::vector<MaterialBudgetBoundResult>>{};
+    auto sourced_pressure_summary_opt =
+        std::optional<MaterialBudgetBoundSummary>{sourced_pressure_summary};
+    assert(contains_text(
+        bound_pressure_state(no_bound_results, sourced_pressure_summary_opt),
+        "\"source\":{"));
+    assert(contains_text(
+        bound_pressure_text(
+            "executor",
+            no_bound_results,
+            sourced_pressure_summary_opt),
+        "source=upload_utilization path=debug.platform_runtime.details.renderer.material_executor_summary.material_upload_bytes pass=material-executor"));
 
     auto pressure_json = verifier_bound_pressure_json(report);
     auto tightest_json = verifier_tightest_bound_results_json(report);
