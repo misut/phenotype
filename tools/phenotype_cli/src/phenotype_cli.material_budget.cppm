@@ -152,10 +152,12 @@ struct MaterialBoundCoverageSummary {
     std::int64_t covered_required_field_count = -1;
     std::int64_t observed_required_field_count = -1;
     std::int64_t bound_key_count = -1;
+    std::int64_t unguarded_observed_field_count = -1;
     std::vector<std::string> missing_guarded_fields;
     std::vector<std::string> missing_observed_fields;
     std::vector<std::string> observed_fields;
     std::vector<std::string> guarded_fields;
+    std::vector<std::string> unguarded_observed_fields;
     std::vector<std::string> required_fields;
 };
 
@@ -1102,6 +1104,14 @@ auto material_budget_coverage_summary(
 
 auto material_bound_coverage_from_object(json::Object const& coverage)
     -> MaterialBoundCoverageSummary {
+    auto observed_fields = json_object_string_array(coverage, "observed_fields");
+    auto guarded_fields = json_object_string_array(coverage, "guarded_fields");
+    auto guarded_lookup = sorted_unique(guarded_fields);
+    auto unguarded_observed_fields = std::vector<std::string>{};
+    for (auto const& field : sorted_unique(observed_fields)) {
+        if (!contains_field(guarded_lookup, field))
+            unguarded_observed_fields.push_back(field);
+    }
     return MaterialBoundCoverageSummary{
         .guardable_field_count = json_object_integer(
             coverage,
@@ -1124,18 +1134,17 @@ auto material_bound_coverage_from_object(json::Object const& coverage)
         .bound_key_count = json_object_integer(
             coverage,
             "bound_key_count").value_or(-1),
+        .unguarded_observed_field_count =
+            static_cast<std::int64_t>(unguarded_observed_fields.size()),
         .missing_guarded_fields = json_object_string_array(
             coverage,
             "missing_guarded_fields"),
         .missing_observed_fields = json_object_string_array(
             coverage,
             "missing_observed_fields"),
-        .observed_fields = json_object_string_array(
-            coverage,
-            "observed_fields"),
-        .guarded_fields = json_object_string_array(
-            coverage,
-            "guarded_fields"),
+        .observed_fields = std::move(observed_fields),
+        .guarded_fields = std::move(guarded_fields),
+        .unguarded_observed_fields = std::move(unguarded_observed_fields),
         .required_fields = json_object_string_array(
             coverage,
             "required_fields"),
@@ -1434,10 +1443,10 @@ auto material_bound_coverage_json(
         "\"guarded_field_count\":{},\"required_field_count\":{},"
         "\"covered_required_field_count\":{},"
         "\"observed_required_field_count\":{},"
-        "\"bound_key_count\":{},"
+        "\"bound_key_count\":{},\"unguarded_observed_field_count\":{},"
         "\"missing_guarded_fields\":{},\"missing_observed_fields\":{},"
         "\"observed_fields\":{},\"guarded_fields\":{},"
-        "\"required_fields\":{}}}",
+        "\"unguarded_observed_fields\":{},\"required_fields\":{}}}",
         manifest_count_json(coverage->guardable_field_count),
         manifest_count_json(coverage->observed_field_count),
         manifest_count_json(coverage->guarded_field_count),
@@ -1445,10 +1454,12 @@ auto material_bound_coverage_json(
         manifest_count_json(coverage->covered_required_field_count),
         manifest_count_json(coverage->observed_required_field_count),
         manifest_count_json(coverage->bound_key_count),
+        manifest_count_json(coverage->unguarded_observed_field_count),
         string_array_json(coverage->missing_guarded_fields),
         string_array_json(coverage->missing_observed_fields),
         string_array_json(coverage->observed_fields),
         string_array_json(coverage->guarded_fields),
+        string_array_json(coverage->unguarded_observed_fields),
         string_array_json(coverage->required_fields));
 }
 
@@ -1590,6 +1601,12 @@ auto material_bound_coverage_text(MaterialBoundCoverageSummary const& coverage)
         : std::format(
             " missing-observed=({})",
             budget_field_list_text(coverage.missing_observed_fields));
+    auto unguarded = coverage.unguarded_observed_field_count > 0
+        ? std::format(
+            " unguarded={} ({})",
+            coverage.unguarded_observed_field_count,
+            budget_field_list_text(coverage.unguarded_observed_fields))
+        : std::string{};
     return std::format(
         "guarded={}/{} observed={} guard-keys={}",
         coverage.guarded_field_count,
@@ -1597,6 +1614,7 @@ auto material_bound_coverage_text(MaterialBoundCoverageSummary const& coverage)
         coverage.observed_field_count,
         coverage.bound_key_count)
         + required
+        + unguarded
         + missing_guarded
         + missing_observed;
 }

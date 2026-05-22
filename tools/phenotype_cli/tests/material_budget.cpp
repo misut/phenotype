@@ -649,14 +649,19 @@ int main() {
     assert(resource_coverage->observed_field_count == 3);
     assert(resource_coverage->covered_required_field_count == 2);
     assert(resource_coverage->observed_required_field_count == 2);
+    assert(resource_coverage->unguarded_observed_field_count == 1);
+    assert(resource_coverage->unguarded_observed_fields.size() == 1);
     assert(resource_coverage->missing_guarded_fields.empty());
     assert(resource_coverage->missing_observed_fields.empty());
+    assert(contains_text(
+        material_bound_coverage_json(resource_coverage),
+        "\"unguarded_observed_fields\":[\"max_frame_capture_pixels\"]"));
     assert(contains_text(
         material_bound_coverage_json(resource_coverage),
         "\"required_fields\":[\"bounded_texture_copy\",\"max_plan_sample_taps\"]"));
     assert(contains_text(
         material_bound_coverage_text(*resource_coverage),
-        "required=2/2 observed-required=2/2"));
+        "unguarded=1 (max_frame_capture_pixels)"));
 
     auto quality_coverage =
         material_quality_policy_coverage_from_report(report);
@@ -666,7 +671,8 @@ int main() {
     assert(quality_coverage->guarded_field_count == 2);
     assert(contains_text(
         material_bound_coverage_text(*quality_coverage),
-        "guarded=2/6 observed=6 guard-keys=2"));
+        "unguarded=4 (backdrop_sampling_disabled, max_backdrop_pixels, "
+        "max_sample_taps, shadow_disabled)"));
 
     auto resource_bounds = material_resource_bounds_from_report(report);
     assert(resource_bounds);
