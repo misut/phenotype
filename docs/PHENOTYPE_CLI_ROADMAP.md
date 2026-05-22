@@ -160,10 +160,11 @@ output also expose the grouped `verifier_bound_pressure` outside failure
 summaries whenever a parsed report has bound summaries, so automation and local
 triage can distinguish a hard budget failure from a passing Liquid Glass budget
 that has no headroom left.
-The glass showcase manifests use that visibility to pin standard-mode positive
-executor floors for upload bytes, backdrop-copy pixels, and upload/copy
-utilization, while the accessibility manifest pins the reduced-transparency
-fallback path to zero upload bytes and zero upload/copy utilization.
+The glass showcase and file explorer manifests use that visibility to pin
+standard-mode positive executor floors for upload bytes, backdrop-copy pixels,
+and upload/copy utilization, while the glass accessibility manifest pins the
+reduced-transparency fallback path to zero upload bytes and zero upload/copy
+utilization.
 
 Verifier bound summaries now carry the same source evidence directly:
 zero/negative margin counts, zero/negative source result arrays, and the full
