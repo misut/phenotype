@@ -1741,7 +1741,10 @@ reports also include
 `unguarded_observed_sources` in budget/resource/quality coverage summaries when
 an observed-but-unguarded field has a source descriptor, so a coverage warning can
 point directly at the runtime key or material plan path that introduced the
-counter. They also include
+counter. Coverage guard failures also copy those descriptors into
+`actual.missing_field_sources` for required fields that are observed but not yet
+bounded, so the failing check itself names the runtime or material-plan source
+behind the missing guard. They also include
 `artifact_context.material_contract.executor_budget_bound_results` and
 `executor_budget_bound_summary`; resource and quality guards mirror the same
 shape under `material_plans.resource_bound_results` /

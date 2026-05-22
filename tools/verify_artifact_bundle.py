@@ -14306,15 +14306,21 @@ def check_material_executor_budget_coverage_requirements(
     required_fields = coverage["required_fields"]
     missing_guarded = coverage["missing_required_fields"]
     missing_observed = coverage["missing_observed_fields"]
+    missing_guarded_sources = material_coverage_sources_for_fields(
+        coverage.get("unguarded_observed_sources"),
+        missing_guarded)
+    missing_guarded_actual: JsonObject = {
+        "guarded_fields": coverage["manifest_fields"],
+        "missing_fields": missing_guarded,
+    }
+    if missing_guarded_sources:
+        missing_guarded_actual["missing_field_sources"] = missing_guarded_sources
     report.check(
         "material executor budget coverage guards required fields",
         not missing_guarded,
         path="manifest.require_material_executor_budget",
         expected={"required_fields": required_fields},
-        actual={
-            "guarded_fields": coverage["manifest_fields"],
-            "missing_fields": missing_guarded,
-        },
+        actual=missing_guarded_actual,
         likely_layer="artifact-manifest",
         likely_pass="material-executor",
         hint=(
@@ -14471,15 +14477,21 @@ def check_material_bound_coverage_requirements(
     required_fields = coverage["required_fields"]
     missing_guarded = coverage["missing_guarded_fields"]
     missing_observed = coverage["missing_observed_fields"]
+    missing_guarded_sources = material_coverage_sources_for_fields(
+        coverage.get("unguarded_observed_sources"),
+        missing_guarded)
+    missing_guarded_actual: JsonObject = {
+        "guarded_fields": coverage["guarded_fields"],
+        "missing_fields": missing_guarded,
+    }
+    if missing_guarded_sources:
+        missing_guarded_actual["missing_field_sources"] = missing_guarded_sources
     report.check(
         f"material {label} coverage guards required fields",
         not missing_guarded,
         path=f"manifest.{bound_manifest_key}",
         expected={"required_fields": required_fields},
-        actual={
-            "guarded_fields": coverage["guarded_fields"],
-            "missing_fields": missing_guarded,
-        },
+        actual=missing_guarded_actual,
         likely_layer="artifact-manifest",
         likely_pass=likely_pass,
         hint=(

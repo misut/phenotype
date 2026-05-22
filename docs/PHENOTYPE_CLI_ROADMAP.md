@@ -201,7 +201,10 @@ verifier JSON and CLI JSON/non-JSON coverage summaries identify unguarded
 observed budget/resource/quality fields and preserve source descriptors for
 those unguarded fields when the verifier can trace them, so a passing gate can
 still show which observed counters have not yet been promoted to manifest guards
-and where those counters came from. The
+and where those counters came from. Coverage guard failures also include
+`actual.missing_field_sources` for observed-but-unguarded required fields, so the
+failing check points at the source descriptor without requiring a separate
+coverage-summary join. The
 checked-in glass showcase, file
 explorer, and Android artifact manifests now opt into those resource and
 quality-policy coverage contracts.
