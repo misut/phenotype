@@ -211,7 +211,7 @@ window lines describe
 `coverage-missing-sources-window` / `coverage-minimum-failures-window` with
 shown, total, omitted, limit, and truncation fields. Compact JSON mirrors
 that aggregate as `missing_field_source_details.entries[]` with raw source
-descriptors, rendered text, and total/shown/omitted/truncated counts, and each
+descriptors, rendered text, and total/shown/omitted/limit/truncated counts, and each
 compact `failures[]` detail with missing-field sources now repeats the same
 structured object for the printed failure window. Automation can consume
 missing-guard sources without string parsing. Compact `failures[]` details keep
@@ -238,8 +238,8 @@ coverage minimum failures separately from the first few detailed failures, so
 floor shortfalls stay visible even when failure ordering changes. Compact JSON
 also exposes structured `coverage_minimum_failure_details.entries[]` with raw
 expected/actual objects and rendered `actual_text`, plus `total_count`,
-`shown_count`, `omitted_count`, and `truncated` metadata so automation can tell
-when the compact list was shortened without string parsing. Each compact
+`shown_count`, `omitted_count`, `limit`, and `truncated` metadata so automation
+can tell when the compact list was shortened without string parsing. Each compact
 `failures[]` detail that represents a coverage-minimum failure repeats the same
 structured object for the printed failure window, so automation can consume the
 local detail without joining it back to the aggregate list. Resource and quality

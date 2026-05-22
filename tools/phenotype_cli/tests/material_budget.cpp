@@ -1626,7 +1626,7 @@ int main() {
         "\"text\":\"max_frame_capture_pixels=4096 pass=resource-budget path=debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels\""));
     assert(contains_text(
         failure_json,
-        "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"truncated\":false"));
+        "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"limit\":5,\"truncated\":false"));
     assert(contains_text(
         failure_json,
         "\"coverage_minimum_failures\":\"budget.min_guarded_field_count expected={>=: 2} actual=count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)\""));
@@ -1644,7 +1644,7 @@ int main() {
         "\"actual_text\":\"count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)\""));
     assert(contains_text(
         failure_json,
-        "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"truncated\":false"));
+        "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"limit\":5,\"truncated\":false"));
     assert(contains_text(failure_json, "\"truncated\":true"));
 
     auto failure_lines = verifier_failure_summary_lines(report);
@@ -1818,7 +1818,7 @@ int main() {
         "\"expected\":{\">=\":2},\"actual\":{\"bound_keys\":[\"draw_calls_gte\"],\"count\":1,\"guarded_fields\":[\"draw_calls\"]"));
     assert(contains_text(
         minimum_json,
-        "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"truncated\":false"));
+        "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"limit\":5,\"truncated\":false"));
     auto minimum_lines = verifier_failure_summary_lines(minimum_report);
     assert(contains_line(
         minimum_lines,
@@ -1871,14 +1871,14 @@ int main() {
         verifier_failure_summary_json(many_minimum_report);
     assert(contains_text(
         many_minimum_json,
-        "\"total_count\":6,\"shown_count\":5,\"omitted_count\":1,\"truncated\":true"));
+        "\"total_count\":6,\"shown_count\":5,\"omitted_count\":1,\"limit\":5,\"truncated\":true"));
     assert(count_text(
         many_minimum_json,
         "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":")
         >= 4);
     assert(contains_text(
         many_minimum_json,
-        "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"truncated\":false"));
+        "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"limit\":1,\"truncated\":false"));
     assert(!contains_text(
         many_minimum_json,
         "\"label\":\"quality.min_bound_key_count\""));
@@ -1922,10 +1922,10 @@ int main() {
         "\"text\":\"a=1 pass=resource-budget path=debug.a\""));
     assert(contains_text(
         many_missing_json,
-        "\"total_count\":6,\"shown_count\":5,\"omitted_count\":1,\"truncated\":true"));
+        "\"total_count\":6,\"shown_count\":5,\"omitted_count\":1,\"limit\":5,\"truncated\":true"));
     assert(contains_text(
         many_missing_json,
-        "\"total_count\":6,\"shown_count\":3,\"omitted_count\":3,\"truncated\":true"));
+        "\"total_count\":6,\"shown_count\":3,\"omitted_count\":3,\"limit\":3,\"truncated\":true"));
     assert(!contains_text(many_missing_json, "\"field\":\"f\""));
     auto many_missing_lines =
         verifier_failure_summary_lines(many_missing_report);

@@ -1754,10 +1754,11 @@ non-JSON output also prints `coverage-missing-sources-window` or
 truncation fields, so local logs expose the same bounded-list shape as compact
 JSON. Compact JSON also publishes
 `missing_field_source_details.entries[]` with the field, raw source descriptor,
-rendered text, and total/shown/omitted/truncated counts; the same structured
-object is repeated on each compact `failures[]` detail that has missing-field
-sources, so automation can consume either the aggregate or the printed failure
-window without reparsing the compact string. Compact `failures[]` details keep
+rendered text, and total/shown/omitted/limit/truncated counts; the same
+structured object is repeated on each compact `failures[]` detail that has
+missing-field sources, so automation can consume either the aggregate or the
+printed failure window without reparsing the compact string. Compact
+`failures[]` details keep
 the human-rendered `expected` and `actual` strings for quick scanning and also
 include raw `expected_value` and `actual_value` JSON values for the same printed
 failure window, so automation does not need to reopen the full verifier report
@@ -1782,12 +1783,12 @@ when available, and the failure summary repeats coverage minimum failures in a
 the first few printed details. Compact JSON also keeps those failures under
 `coverage_minimum_failure_details.entries[]` with raw `expected`/`actual`
 objects plus the rendered `actual_text`; `total_count`, `shown_count`,
-`omitted_count`, and `truncated` record how much of that structured list is
-visible in the compact envelope, so automation can consume the same guard
-breadth context without reparsing the human string. Each compact `failures[]`
-detail that represents a coverage-minimum failure repeats the same structured
-object for the printed failure window, so local automation can consume the
-per-failure detail directly. This lets a local run identify missing guard
+`omitted_count`, `limit`, and `truncated` record how much of that structured
+list is visible in the compact envelope, so automation can consume the same
+guard breadth context without reparsing the human string. Each compact
+`failures[]` detail that represents a coverage-minimum failure repeats the same
+structured object for the printed failure window, so local automation can
+consume the per-failure detail directly. This lets a local run identify missing guard
 breadth directly.
 The same verifier reports also include
 `artifact_context.material_contract.executor_budget_bound_results` and
