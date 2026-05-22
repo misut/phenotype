@@ -5115,7 +5115,8 @@ auto verifier_failure_detail_json(json::Object const& failure)
     return std::format(
         "{{\"name\":{},\"message\":{},\"path\":{},\"region\":{},"
         "\"likely_layer\":{},\"likely_pass\":{},\"expected\":{},"
-        "\"actual\":{},\"missing_field_sources\":{},"
+        "\"expected_value\":{},\"actual\":{},\"actual_value\":{},"
+        "\"missing_field_sources\":{},"
         "\"missing_field_source_details\":{},"
         "\"coverage_minimum_failure_details\":{},"
         "\"hint\":{},\"suggested_action\":{}}}",
@@ -5126,7 +5127,9 @@ auto verifier_failure_detail_json(json::Object const& failure)
         json_object_failure_string_json(failure, "likely_layer"),
         json_object_failure_string_json(failure, "likely_pass"),
         json_object_compact_failure_text_json(failure, "expected"),
+        json_object_value_or_null(failure, "expected"),
         compact_failure_actual_text_json(failure),
+        json_object_value_or_null(failure, "actual"),
         failure_optional_string_json(
             failure_missing_field_sources_text(failure)),
         failure_missing_field_source_details_json(failure),
