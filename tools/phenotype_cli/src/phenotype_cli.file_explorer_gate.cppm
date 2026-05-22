@@ -644,7 +644,16 @@ void print_file_explorer_gate(
                      item.mode.empty() ? "<none>" : item.mode,
                      item.scenario.empty() ? "default" : item.scenario,
                      path_string(item.artifact_dir));
-        if (item.verifier_result && !item.verifier_result->stdout_text.empty()) {
+        auto verifier_report = verifier_report_from_result(item.verifier_result);
+        if (verifier_report) {
+            for (auto const& line :
+                 verifier_failure_summary_lines(*verifier_report)) {
+                std::println("{}", line);
+            }
+        }
+        if (item.verifier_result
+            && !verifier_report
+            && !item.verifier_result->stdout_text.empty()) {
             std::println("verifier report tail:");
             std::println("{}", output_tail(item.verifier_result->stdout_text));
         }

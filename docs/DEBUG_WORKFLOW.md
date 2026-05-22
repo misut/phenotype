@@ -243,6 +243,9 @@ fields from observed-but-unguarded fields, and
 `material_budget_bound_summary`, which reports the applied budget bound
 pass/fail count and tightest margin. `material_budget_bound_results` provides
 the compact per-bound expected/actual/margin list from the same verifier report.
+When a parsed verifier report fails, the non-JSON gate prints the compact
+`failure_summary` paths, expected/actual values, hints, and suggested actions
+instead of dumping the raw verifier JSON tail; use `--json` for the full report.
 `artifact
 verify-file-explorer` owns the shared-model test, desktop/mobile builds,
 deterministic native captures, and uv-managed verifier calls directly. Its case
@@ -254,7 +257,9 @@ whenever a case uses a manifest-backed verifier run, and
 output prints the same case-level plans/work/status summary with upload/copy
 utilization, per-case manifest bound summaries, per-case budget coverage,
 per-case budget bound headroom, and the tightest or failed expected-vs-actual
-budget bound detail when present.
+budget bound detail when present. Failed cases also print the compact verifier
+failure summary when the verifier report parsed successfully, falling back to
+the raw report tail only when parsing failed.
 Both commands are local
 verification commands, not default PR CI jobs.
 
@@ -1703,7 +1708,8 @@ comparison, and exits non-zero when an invariant fails.
 The non-JSON command prints the same material budget in a short
 plans/work/status block with upload/copy utilization, a one-line verifier
 manifest summary, a one-line material budget coverage summary, a one-line
-material budget bounds summary, and the nearest or failed bound comparison.
+material budget bounds summary, the nearest or failed bound comparison, and
+compact verifier failure summaries for failed parsed reports.
 The legacy
 `tools/verify_glass_showcase_artifact.sh` wrapper delegates to the same CLI
 command for local compatibility.
