@@ -287,6 +287,9 @@ material executor budget bound count, material resource bound count,
 quality-policy bound count, and the exact manifest guard keys/fields plus
 coverage minimums, so local glass gates can show which manifest status, budget,
 and policy expectations were applied without embedding the full verifier report.
+Non-JSON output prints a compact `runtime-detail-paths` list beside the
+manifest counts so status-string guards are visible without rerunning with
+`--json`.
 JSON also includes
 `material_budget_coverage`, which separates manifest-guarded observed budget
 fields from observed-but-unguarded fields, and

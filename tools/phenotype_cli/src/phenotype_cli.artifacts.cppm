@@ -837,6 +837,11 @@ void print_verifier_manifest_summary(VerifierObservation const& verifier) {
         budget_count(manifest->pixel_region_metrics),
         budget_count(manifest->pixel_region_metric_comparisons),
         budget_count(manifest->forbid_pixel_region_colors));
+    if (auto runtime_paths =
+            verifier_manifest_runtime_detail_paths_text(*manifest);
+        !runtime_paths.empty()) {
+        std::println("  runtime-detail-paths: {}", runtime_paths);
+    }
     if (auto minimums = verifier_manifest_coverage_minimums_text(*manifest);
         !minimums.empty()) {
         std::println("  coverage-minimums: {}", minimums);
