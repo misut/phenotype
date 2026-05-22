@@ -606,6 +606,21 @@ int main() {
     assert(contains_text(
         manifest_json,
         R"("runtime_detail_paths":["renderer.material_executor_summary.material_draw_status")"));
+    auto pressure_sources = std::vector<BoundPressureSource>{
+        {.key = "a", .field = "field_a", .bound = "lte",
+         .expected = 1.0, .actual = 1.0, .ok = true, .margin = 0.0},
+        {.key = "b", .field = "field_b", .bound = "lte",
+         .expected = 2.0, .actual = 2.0, .ok = true, .margin = 0.0},
+        {.key = "c", .field = "field_c", .bound = "lte",
+         .expected = 3.0, .actual = 3.0, .ok = true, .margin = 0.0},
+        {.key = "d", .field = "field_d", .bound = "lte",
+         .expected = 4.0, .actual = 4.0, .ok = true, .margin = 0.0},
+        {.key = "e", .field = "field_e", .bound = "lte",
+         .expected = 5.0, .actual = 5.0, .ok = true, .margin = 0.0},
+    };
+    assert(contains_text(
+        bound_pressure_sources_text(pressure_sources),
+        "+1 more"));
 
     auto budget = material_budget_from_report(report);
     assert(budget);
