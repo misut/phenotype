@@ -1470,6 +1470,7 @@ void print_artifact_observation(ArtifactObservation const& observation) {
     print_verifier_material_budget_coverage(observation.verifier);
     print_verifier_material_budget_bound_summary(observation.verifier);
     print_verifier_material_budget(observation.verifier);
+    print_verifier_failure_summary(observation.verifier);
     if (!observation.suggested_actions.empty()) {
         std::println("suggestions:");
         for (auto const& suggestion : observation.suggested_actions)
