@@ -359,6 +359,9 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         ? verifier_manifest_summary_from_report(*verifier_report)
         : std::optional<VerifierManifestSummary>{};
     auto coverage = material_budget_coverage_summary(budget, verifier_manifest);
+    auto bound_summary = verifier_report
+        ? material_budget_bound_summary_from_report(*verifier_report)
+        : std::optional<MaterialBudgetBoundSummary>{};
     return std::format(
         "{{\"schema_version\":1,\"command\":\"artifact verify-glass-showcase\","
         "\"ok\":{},\"accessibility\":{},\"example_root\":{},"
@@ -368,7 +371,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         "\"build\":{},\"run_result\":{},\"verifier\":{},"
         "\"artifact\":{},\"material_budget\":{},"
         "\"verifier_manifest\":{},\"material_budget_coverage\":{},"
-        "\"error\":{}}}",
+        "\"material_budget_bound_summary\":{},\"error\":{}}}",
         summary.ok ? "true" : "false",
         summary.accessibility ? "true" : "false",
         json_string(path_string(summary.example_root)),
@@ -386,6 +389,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         material_budget_json(budget),
         verifier_manifest_summary_json(verifier_manifest),
         material_budget_coverage_json(coverage),
+        material_budget_bound_summary_json(bound_summary),
         json_string(summary.error));
 }
 
@@ -448,6 +452,12 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
             std::println(
                 "material budget coverage: {}",
                 material_budget_coverage_text(*coverage));
+        }
+        if (auto bound_summary =
+                material_budget_bound_summary_from_report(*verifier_report)) {
+            std::println(
+                "material budget bounds: {}",
+                material_budget_bound_summary_text(*bound_summary));
         }
     }
     if (auto budget = material_budget_from_verifier(summary.verifier_result)) {

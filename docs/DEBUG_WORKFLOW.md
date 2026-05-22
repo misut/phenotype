@@ -129,7 +129,10 @@ the exact material executor budget bound keys/fields. When both summaries are
 present, `verifier.material_budget_coverage` lists the observed budget fields,
 which observed fields are guarded by manifest bounds, and which observed
 fields are still unguarded. This keeps coverage drift visible without opening
-the full verifier report.
+the full verifier report. `verifier.material_budget_bound_summary` adds the
+actual bound result summary, including pass/fail counts, failed bound keys, and
+the tightest remaining margin across the applied material executor budget
+bounds.
 Use this as the first artifact triage command when a CI log or local bundle
 needs one machine-readable explanation before deeper pixel-contract debugging.
 Without `--json`, the same command prints short `snapshot material budget` and
@@ -226,16 +229,19 @@ counts, runtime numeric bound count, and material executor budget bound count,
 so local glass gates can show which manifest budget expectations were applied
 without embedding the full verifier report. JSON also includes
 `material_budget_coverage`, which separates manifest-guarded observed budget
-fields from observed-but-unguarded fields. `artifact
+fields from observed-but-unguarded fields, and
+`material_budget_bound_summary`, which reports the applied budget bound
+pass/fail count and tightest margin. `artifact
 verify-file-explorer` owns the shared-model test, desktop/mobile builds,
 deterministic native captures, and uv-managed verifier calls directly. Its case
 JSON includes `material_budget` whenever the verifier report contains
 `artifact_context.material_contract.executor_budget`, `verifier_manifest`
 whenever a case uses a manifest-backed verifier run, and
-`material_budget_coverage` when both inputs are present; the non-JSON output
-prints the same case-level plans/work/status summary with upload/copy
-utilization, per-case manifest bound summaries, and per-case budget coverage
-when present. Both commands are local
+`material_budget_coverage` and `material_budget_bound_summary` when both inputs
+are present; the non-JSON output prints the same case-level plans/work/status
+summary with upload/copy utilization, per-case manifest bound summaries,
+per-case budget coverage, and per-case budget bound headroom when present.
+Both commands are local
 verification commands, not default PR CI jobs.
 
 For file explorer workflow debugging that does not need a native window, use
@@ -1553,7 +1559,13 @@ bound set or at `artifact_context.material_contract.executor_budget`. The glass
 showcase and file explorer manifests require `upload_utilization` and
 `backdrop_copy_utilization` to be guarded by four total bound keys and require
 the compact executor budget to keep reporting all 22 currently guardable
-fields.
+fields. Verifier reports also include
+`artifact_context.material_contract.executor_budget_bound_results` and
+`executor_budget_bound_summary`; each result records the bound key, field,
+operator, expected value, actual value, pass/fail state, and numeric margin.
+The summary reports pass/fail counts, failed keys, and the tightest bound
+margin so local CLI output can show headroom without scanning the full
+`checks` array.
 Whenever material plans are present, the verifier also cross-checks executor
 counts, including `material_executor_summary.container_groups.*`, against
 `renderer.material_plans#summary`: `plan_count`,
@@ -1661,10 +1673,13 @@ artifact details, plus `material_budget` when the verifier report contains
 `verifier_manifest` object that surfaces the manifest runtime/budget bound
 counts, exact material executor budget bound keys, and budget field names
 applied by the verifier, plus `material_budget_coverage` showing guarded and
-unguarded observed budget fields, and exits non-zero when an invariant fails.
+unguarded observed budget fields, plus `material_budget_bound_summary` showing
+the budget bound pass/fail count and tightest margin, and exits non-zero when
+an invariant fails.
 The non-JSON command prints the same material budget in a short
 plans/work/status block with upload/copy utilization, a one-line verifier
-manifest summary, and a one-line material budget coverage summary.
+manifest summary, a one-line material budget coverage summary, and a one-line
+material budget bounds summary.
 The legacy
 `tools/verify_glass_showcase_artifact.sh` wrapper delegates to the same CLI
 command for local compatibility.
