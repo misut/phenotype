@@ -78,6 +78,16 @@ struct MaterialBudgetCoverageSummary {
     std::vector<std::string> manifest_bound_keys;
 };
 
+struct MaterialBudgetBoundSummary {
+    std::int64_t bound_count = -1;
+    std::int64_t pass_count = -1;
+    std::int64_t fail_count = -1;
+    std::string tightest_bound_key;
+    std::string tightest_bound_field;
+    std::optional<double> tightest_bound_margin;
+    std::vector<std::string> failed_keys;
+};
+
 auto trim_copy(std::string_view text) -> std::string {
     auto first = text.find_first_not_of(" \t\r\n");
     if (first == std::string_view::npos)
@@ -362,6 +372,61 @@ auto material_budget_from_verifier(
     return material_budget_from_verifier(*result);
 }
 
+auto material_budget_bound_summary_from_report(json::Value const& report)
+    -> std::optional<MaterialBudgetBoundSummary> {
+    if (!json_object_at(report, {
+            "artifact_context",
+            "material_contract",
+            "executor_budget_bound_summary",
+        })) {
+        return std::nullopt;
+    }
+    return MaterialBudgetBoundSummary{
+        .bound_count = json_integer_at(
+            report,
+            {"artifact_context",
+             "material_contract",
+             "executor_budget_bound_summary",
+             "bound_count"}).value_or(-1),
+        .pass_count = json_integer_at(
+            report,
+            {"artifact_context",
+             "material_contract",
+             "executor_budget_bound_summary",
+             "pass_count"}).value_or(-1),
+        .fail_count = json_integer_at(
+            report,
+            {"artifact_context",
+             "material_contract",
+             "executor_budget_bound_summary",
+             "fail_count"}).value_or(-1),
+        .tightest_bound_key = json_string_at(
+            report,
+            {"artifact_context",
+             "material_contract",
+             "executor_budget_bound_summary",
+             "tightest_bound_key"}).value_or(""),
+        .tightest_bound_field = json_string_at(
+            report,
+            {"artifact_context",
+             "material_contract",
+             "executor_budget_bound_summary",
+             "tightest_bound_field"}).value_or(""),
+        .tightest_bound_margin = json_number_at(
+            report,
+            {"artifact_context",
+             "material_contract",
+             "executor_budget_bound_summary",
+             "tightest_bound_margin"}),
+        .failed_keys = json_string_array_at(
+            report,
+            {"artifact_context",
+             "material_contract",
+             "executor_budget_bound_summary",
+             "failed_keys"}),
+    };
+}
+
 auto sorted_unique(std::vector<std::string> values) -> std::vector<std::string> {
     std::ranges::sort(values);
     auto last = std::ranges::unique(values);
@@ -556,6 +621,10 @@ auto budget_ratio(double value) -> std::string {
     return value >= 0.0 ? std::format("{:.6g}", value) : std::string{"null"};
 }
 
+auto budget_optional_number(std::optional<double> value) -> std::string {
+    return value ? std::format("{:.6g}", *value) : std::string{"null"};
+}
+
 auto budget_utilization_text(double value) -> std::string {
     return value >= 0.0
         ? std::format("{:.1f}%", value * 100.0)
@@ -678,6 +747,24 @@ auto material_budget_coverage_json(
         string_array_json(coverage->manifest_bound_keys));
 }
 
+auto material_budget_bound_summary_json(
+        std::optional<MaterialBudgetBoundSummary> const& summary)
+    -> std::string {
+    if (!summary)
+        return "null";
+    return std::format(
+        "{{\"bound_count\":{},\"pass_count\":{},\"fail_count\":{},"
+        "\"tightest_bound_key\":{},\"tightest_bound_field\":{},"
+        "\"tightest_bound_margin\":{},\"failed_keys\":{}}}",
+        manifest_count_json(summary->bound_count),
+        manifest_count_json(summary->pass_count),
+        manifest_count_json(summary->fail_count),
+        json_string(summary->tightest_bound_key),
+        json_string(summary->tightest_bound_field),
+        budget_optional_number(summary->tightest_bound_margin),
+        string_array_json(summary->failed_keys));
+}
+
 auto budget_field_list_text(std::vector<std::string> const& fields,
                             std::size_t limit = 8) -> std::string {
     if (fields.empty())
@@ -717,6 +804,26 @@ auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage
         budget_field_list_text(coverage.unguarded_observed_fields))
         + required
         + missing;
+}
+
+auto material_budget_bound_summary_text(MaterialBudgetBoundSummary const& summary)
+    -> std::string {
+    auto tightest = !summary.tightest_bound_key.empty()
+        ? std::format(
+            " tightest={} margin={}",
+            summary.tightest_bound_key,
+            budget_optional_number(summary.tightest_bound_margin))
+        : std::string{};
+    auto failed = summary.failed_keys.empty()
+        ? std::string{}
+        : std::format(" failed=({})", budget_field_list_text(summary.failed_keys));
+    return std::format(
+        "passed={}/{} failed={}",
+        budget_count(summary.pass_count),
+        budget_count(summary.bound_count),
+        budget_count(summary.fail_count))
+        + tightest
+        + failed;
 }
 
 auto verifier_manifest_summary_json(

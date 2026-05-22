@@ -12907,55 +12907,35 @@ def check_material_executor_budget_requirements(
     if not isinstance(budget, dict):
         budget = {}
     base_path = "artifact_context.material_contract.executor_budget"
-    for spec_field, expected in spec.items():
-        if spec_field.endswith("_lte"):
-            summary_field = spec_field[:-4]
-            actual = budget.get(summary_field)
-            report.check(
-                f"material executor budget {summary_field} is within limit",
-                isinstance(actual, (int, float)) and not isinstance(actual, bool)
-                and float(actual) <= float(expected),
-                path=f"{base_path}.{summary_field}",
-                expected={"<=": expected},
-                actual=actual,
-                likely_layer="platform-runtime",
-                likely_pass="material-executor",
-                hint=(
-                    "Inspect renderer.material_executor_summary and the "
-                    "derived executor budget in artifact_context."))
-        elif spec_field.endswith("_gte"):
-            summary_field = spec_field[:-4]
-            actual = budget.get(summary_field)
-            report.check(
-                f"material executor budget {summary_field} meets floor",
-                isinstance(actual, (int, float)) and not isinstance(actual, bool)
-                and float(actual) >= float(expected),
-                path=f"{base_path}.{summary_field}",
-                expected={">=": expected},
-                actual=actual,
-                likely_layer="platform-runtime",
-                likely_pass="material-executor",
-                hint=(
-                    "Inspect renderer.material_executor_summary and the "
-                    "derived executor budget in artifact_context."))
-        elif spec_field.endswith("_equals"):
-            summary_field = spec_field[:-7]
-            actual = budget.get(summary_field)
-            matches = (
-                isinstance(actual, (int, float))
-                and not isinstance(actual, bool)
-                and numbers_close(actual, expected))
-            report.check(
-                f"material executor budget {summary_field} equals expectation",
-                matches,
-                path=f"{base_path}.{summary_field}",
-                expected=expected,
-                actual=actual,
-                likely_layer="platform-runtime",
-                likely_pass="material-executor",
-                hint=(
-                    "Inspect renderer.material_executor_summary and the "
-                    "derived executor budget in artifact_context."))
+    results = material_executor_budget_bound_results(budget, spec)
+    if isinstance(material_contract, dict):
+        material_contract["executor_budget_bound_results"] = results
+        material_contract["executor_budget_bound_summary"] = (
+            material_executor_budget_bound_summary(results))
+    for result in results:
+        summary_field = result["field"]
+        kind = result["bound"]
+        expected = result["expected"]
+        actual = result.get("actual")
+        if kind == "lte":
+            name = f"material executor budget {summary_field} is within limit"
+        elif kind == "gte":
+            name = f"material executor budget {summary_field} meets floor"
+        else:
+            name = (
+                f"material executor budget {summary_field} "
+                "equals expectation")
+        report.check(
+            name,
+            result["ok"] is True,
+            path=f"{base_path}.{summary_field}",
+            expected=material_executor_budget_bound_expected(kind, expected),
+            actual=actual,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "Inspect renderer.material_executor_summary and the "
+                "derived executor budget in artifact_context."))
 
 
 def material_executor_budget_observed_fields(budget: Any) -> list[str]:
@@ -12978,6 +12958,106 @@ def material_executor_budget_guarded_fields(spec: Any) -> list[str]:
         if material_executor_budget_field_from_key(key)
         in MATERIAL_EXECUTOR_BUDGET_FIELDS
     })
+
+
+def material_executor_budget_bound_kind(key: str) -> str:
+    for suffix, kind in (
+            ("_lte", "lte"),
+            ("_gte", "gte"),
+            ("_equals", "equals")):
+        if key.endswith(suffix):
+            return kind
+    return ""
+
+
+def material_executor_budget_bound_expected(kind: str, expected: Any) -> Any:
+    if kind == "lte":
+        return {"<=": expected}
+    if kind == "gte":
+        return {">=": expected}
+    return expected
+
+
+def material_executor_budget_numeric_value(
+        budget: JsonObject,
+        field: str) -> int | float | None:
+    value = budget.get(field)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    return None
+
+
+def material_executor_budget_bound_result(
+        budget: JsonObject,
+        key: str,
+        expected: int | float) -> JsonObject:
+    field = material_executor_budget_field_from_key(key)
+    kind = material_executor_budget_bound_kind(key)
+    actual = material_executor_budget_numeric_value(budget, field)
+    margin: float | None = None
+    if actual is None:
+        ok = False
+    elif kind == "lte":
+        margin = float(expected) - float(actual)
+        ok = margin >= 0.0
+    elif kind == "gte":
+        margin = float(actual) - float(expected)
+        ok = margin >= 0.0
+    else:
+        delta = abs(float(actual) - float(expected))
+        margin = 0.0 if numbers_close(actual, expected) else -delta
+        ok = margin >= 0.0
+    result: JsonObject = {
+        "key": key,
+        "field": field,
+        "bound": kind,
+        "expected": expected,
+        "actual": actual,
+        "ok": ok,
+    }
+    if margin is not None:
+        result["margin"] = margin
+    return result
+
+
+def material_executor_budget_bound_results(
+        budget: JsonObject,
+        spec: Any) -> list[JsonObject]:
+    if not isinstance(spec, dict):
+        return []
+    return [
+        material_executor_budget_bound_result(budget, key, expected)
+        for key, expected in sorted(spec.items())
+    ]
+
+
+def material_executor_budget_bound_summary(
+        results: list[JsonObject]) -> JsonObject:
+    failed_keys = [
+        result["key"]
+        for result in results
+        if result.get("ok") is not True
+    ]
+    numeric_results = [
+        result for result in results
+        if isinstance(result.get("margin"), (int, float))
+        and not isinstance(result.get("margin"), bool)
+    ]
+    tightest = (
+        min(numeric_results, key=lambda result: abs(float(result["margin"])))
+        if numeric_results
+        else None)
+    summary: JsonObject = {
+        "bound_count": len(results),
+        "pass_count": len(results) - len(failed_keys),
+        "fail_count": len(failed_keys),
+        "failed_keys": failed_keys,
+    }
+    if isinstance(tightest, dict):
+        summary["tightest_bound_key"] = tightest.get("key")
+        summary["tightest_bound_field"] = tightest.get("field")
+        summary["tightest_bound_margin"] = tightest.get("margin")
+    return summary
 
 
 def check_material_executor_budget_coverage_requirements(
