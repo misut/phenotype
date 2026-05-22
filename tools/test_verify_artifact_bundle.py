@@ -3302,6 +3302,16 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             group_sources["max_group_bounds_area"]["bounds"]["area"],
             240.0 * 96.0)
+        resource_sources = report["material_plans"]["resource_bound_sources"]
+        self.assertEqual(
+            resource_sources["max_plan_sample_taps"]["plan_id"],
+            "material.regular.liquid-glass")
+        self.assertEqual(
+            resource_sources["max_plan_sample_taps"]["source_path"],
+            "debug.platform_runtime.details.renderer.material_plans[0].sample_taps")
+        self.assertEqual(
+            resource_sources["max_pass_texture_copy_pixels"]["likely_pass"],
+            "backdrop-sample-blur")
 
     def test_surface_role_mismatch_points_to_material_contract(self) -> None:
         plan = material_plan()
