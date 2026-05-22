@@ -3586,7 +3586,20 @@ auto coverage_minimum_counted_values_json(json::Object const& actual,
     return json_object_value_or_null(actual, key);
 }
 
-auto coverage_minimum_failure_detail_json(json::Object const& failure)
+auto coverage_minimum_failure_position_json(
+        std::optional<std::size_t> failure_index) -> std::string {
+    return failure_index ? std::to_string(*failure_index) : std::string{"null"};
+}
+
+auto coverage_minimum_failure_number_json(
+        std::optional<std::size_t> failure_index) -> std::string {
+    return failure_index ? std::to_string(*failure_index + 1)
+                         : std::string{"null"};
+}
+
+auto coverage_minimum_failure_detail_json(
+        json::Object const& failure,
+        std::optional<std::size_t> failure_index = std::nullopt)
         -> std::string {
     auto path = json_object_failure_string(failure, "path");
     auto family = coverage_minimum_failure_family(path);
@@ -3608,6 +3621,7 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
     return std::format(
         "{{\"label\":{},\"coverage_family\":{},\"minimum_field\":{},"
         "\"name\":{},\"message\":{},\"path\":{},"
+        "\"failure_index\":{},\"failure_number\":{},"
         "\"expected\":{},\"expected_operator\":{},"
         "\"expected_count\":{},\"actual\":{},\"actual_count\":{},"
         "\"counted_array_key\":{},\"counted_values\":{},"
@@ -3626,6 +3640,8 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
         json_object_failure_string_json(failure, "name"),
         json_object_failure_string_json(failure, "message"),
         json_object_failure_string_json(failure, "path"),
+        coverage_minimum_failure_position_json(failure_index),
+        coverage_minimum_failure_number_json(failure_index),
         json_object_value_or_null(failure, "expected"),
         coverage_minimum_expected_operator_json(failure),
         coverage_minimum_expected_count_json(failure),
@@ -3717,12 +3733,18 @@ auto verifier_coverage_minimum_failure_details_json(
 
     auto entries = std::vector<std::string>{};
     auto seen = std::set<std::string>{};
+    auto failure_index = std::size_t{0};
     for (auto const& failure : *failures) {
+        auto const current_index = failure_index++;
         if (!failure.is_object())
             continue;
-        auto detail = coverage_minimum_failure_detail_json(failure.as_object());
-        if (detail.empty() || !seen.insert(detail).second)
+        auto const& failure_object = failure.as_object();
+        auto key = coverage_minimum_failure_detail_json(failure_object);
+        if (key.empty() || !seen.insert(key).second)
             continue;
+        auto detail = coverage_minimum_failure_detail_json(
+            failure_object,
+            current_index);
         entries.push_back(std::move(detail));
     }
     return coverage_minimum_failure_detail_entries_json(entries, limit);

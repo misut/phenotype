@@ -241,7 +241,8 @@ also exposes structured `coverage_minimum_failure_details.entries[]` with raw
 expected/actual objects, rendered `actual_text`, flattened `expected_operator`,
 `expected_count`, raw verifier `name`/`message`,
 `coverage_family`/`minimum_field` values, `actual_count`, and `shortfall_count`
-for at-least count floors, plus the active field arrays and direct
+for at-least count floors, original `failures[]` position through
+`failure_index`/`failure_number`, plus the active field arrays and direct
 `bound_key_count`, `guarded_field_count`, `observed_field_count`, and
 `unguarded_observed_field_count` values. The same object identifies the array
 that actually backs `actual_count` through `counted_array_key`, `counted_values`,

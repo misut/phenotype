@@ -1835,6 +1835,9 @@ int main() {
         "\"name\":\"material executor budget coverage min_guarded_field_count is satisfied\",\"message\":null,\"path\":\"manifest.require_material_executor_budget_coverage.min_guarded_field_count\""));
     assert(contains_text(
         minimum_json,
+        "\"failure_index\":0,\"failure_number\":1,\"expected\":{\">=\":2}"));
+    assert(contains_text(
+        minimum_json,
         "\"expected\":{\">=\":2},\"expected_operator\":\">=\",\"expected_count\":2"));
     assert(contains_text(
         minimum_json,
@@ -1915,6 +1918,9 @@ int main() {
     assert(contains_text(
         many_minimum_json,
         "\"name\":null,\"message\":\"resource guard coverage needs another bounded field\",\"path\":\"manifest.require_material_resource_bound_coverage.min_guarded_field_count\""));
+    assert(contains_text(
+        many_minimum_json,
+        "\"message\":\"resource guard coverage needs another bounded field\",\"path\":\"manifest.require_material_resource_bound_coverage.min_guarded_field_count\",\"failure_index\":4,\"failure_number\":5"));
     assert(contains_text(
         many_minimum_json,
         "\"counted_array_key\":\"bound_keys\",\"counted_values\":[\"draw_calls_gte\"],\"counted_value_count\":1"));
