@@ -4472,6 +4472,36 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             ["executor_budget"])
         self.assertEqual(budget["upload_utilization"], 1.0)
         self.assertEqual(budget["backdrop_copy_utilization"], 0.0)
+        results = (
+            report["artifact_context"]
+            ["material_contract"]
+            ["executor_budget_bound_results"])
+        self.assertEqual(
+            [item["key"] for item in results],
+            [
+                "backdrop_copy_utilization_lte",
+                "draw_calls_gte",
+                "max_sample_taps_equals",
+                "upload_utilization_gte",
+                "upload_utilization_lte",
+            ])
+        by_key = {item["key"]: item for item in results}
+        self.assertEqual(
+            by_key["upload_utilization_lte"]["field"],
+            "upload_utilization")
+        self.assertEqual(by_key["upload_utilization_lte"]["bound"], "lte")
+        self.assertEqual(by_key["upload_utilization_lte"]["expected"], 1.0)
+        self.assertEqual(by_key["upload_utilization_lte"]["actual"], 1.0)
+        self.assertTrue(by_key["upload_utilization_lte"]["ok"])
+        self.assertEqual(by_key["upload_utilization_lte"]["margin"], 0.0)
+        summary = (
+            report["artifact_context"]
+            ["material_contract"]
+            ["executor_budget_bound_summary"])
+        self.assertEqual(summary["bound_count"], 5)
+        self.assertEqual(summary["pass_count"], 5)
+        self.assertEqual(summary["fail_count"], 0)
+        self.assertEqual(summary["failed_keys"], [])
 
     def test_material_executor_budget_bound_failure_is_llm_actionable(
             self) -> None:
@@ -4504,6 +4534,22 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertIn(
             "executor_budget",
             report["failure_summary"]["artifact_context"]["material_contract"])
+        results = (
+            report["artifact_context"]
+            ["material_contract"]
+            ["executor_budget_bound_results"])
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["key"], "upload_utilization_lte")
+        self.assertFalse(results[0]["ok"])
+        self.assertEqual(results[0]["margin"], -0.5)
+        summary = (
+            report["artifact_context"]
+            ["material_contract"]
+            ["executor_budget_bound_summary"])
+        self.assertEqual(summary["bound_count"], 1)
+        self.assertEqual(summary["pass_count"], 0)
+        self.assertEqual(summary["fail_count"], 1)
+        self.assertEqual(summary["failed_keys"], ["upload_utilization_lte"])
 
     def test_runtime_numeric_bound_failure_is_llm_actionable(self) -> None:
         manifest = {
