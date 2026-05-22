@@ -2720,6 +2720,96 @@ auto verifier_tightest_bound_results_text(
                   : std::string{};
 }
 
+auto nearest_positive_headroom_result(
+        std::optional<std::vector<MaterialBudgetBoundResult>> const& results)
+        -> std::optional<MaterialBudgetBoundResult> {
+    if (!results)
+        return std::nullopt;
+
+    auto const* nearest = static_cast<MaterialBudgetBoundResult const*>(nullptr);
+    for (auto const& result : *results) {
+        if (result.ok && !*result.ok)
+            continue;
+        if (!result.margin || *result.margin <= 0.0)
+            continue;
+        if (!nearest || *result.margin < *nearest->margin)
+            nearest = &result;
+    }
+    return nearest ? std::optional<MaterialBudgetBoundResult>{*nearest}
+                   : std::nullopt;
+}
+
+auto verifier_nearest_headroom_results_json(json::Value const& report)
+        -> std::string {
+    auto executor = nearest_positive_headroom_result(
+        material_budget_bound_results_from_report(report));
+    auto resource = nearest_positive_headroom_result(
+        material_resource_bound_results_from_report(report));
+    auto quality = nearest_positive_headroom_result(
+        material_quality_policy_bound_results_from_report(report));
+    if (!executor && !resource && !quality)
+        return "null";
+
+    return std::format(
+        "{{\"executor\":{},\"resource\":{},\"quality\":{}}}",
+        executor ? material_budget_bound_result_json(*executor)
+                 : std::string{"null"},
+        resource ? material_budget_bound_result_json(*resource)
+                 : std::string{"null"},
+        quality ? material_budget_bound_result_json(*quality)
+                : std::string{"null"});
+}
+
+auto verifier_nearest_headroom_results_json(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+        -> std::string {
+    auto report = verifier_report_from_result(result);
+    return report ? verifier_nearest_headroom_results_json(*report)
+                  : std::string{"null"};
+}
+
+auto verifier_nearest_headroom_results_text(json::Value const& report)
+        -> std::string {
+    auto parts = std::vector<std::string>{};
+    if (auto executor = compact_tightest_bound_result_text(
+            "executor",
+            nearest_positive_headroom_result(
+                material_budget_bound_results_from_report(report)));
+        !executor.empty()) {
+        parts.push_back(std::move(executor));
+    }
+    if (auto resource = compact_tightest_bound_result_text(
+            "resource",
+            nearest_positive_headroom_result(
+                material_resource_bound_results_from_report(report)));
+        !resource.empty()) {
+        parts.push_back(std::move(resource));
+    }
+    if (auto quality = compact_tightest_bound_result_text(
+            "quality",
+            nearest_positive_headroom_result(
+                material_quality_policy_bound_results_from_report(report)));
+        !quality.empty()) {
+        parts.push_back(std::move(quality));
+    }
+
+    auto text = std::string{};
+    for (auto const& part : parts) {
+        if (!text.empty())
+            text += "; ";
+        text += part;
+    }
+    return text;
+}
+
+auto verifier_nearest_headroom_results_text(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+        -> std::string {
+    auto report = verifier_report_from_result(result);
+    return report ? verifier_nearest_headroom_results_text(*report)
+                  : std::string{};
+}
+
 struct BoundPressureSource {
     std::string key;
     std::string field;
