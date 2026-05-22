@@ -5267,6 +5267,21 @@ auto verifier_failure_summary_json(
     return report ? verifier_failure_summary_json(*report) : std::string{"null"};
 }
 
+auto failure_window_line(std::int64_t total,
+                         std::size_t shown,
+                         std::size_t limit) -> std::string {
+    auto omitted = total > static_cast<std::int64_t>(shown)
+        ? total - static_cast<std::int64_t>(shown)
+        : std::int64_t{0};
+    return std::format(
+        "failure-window: shown={}/{} omitted={} limit={} truncated={}",
+        shown,
+        total,
+        omitted,
+        limit,
+        omitted > 0 ? "true" : "false");
+}
+
 auto verifier_failure_summary_lines(json::Value const& report)
         -> std::vector<std::string> {
     auto lines = std::vector<std::string>{};
@@ -5392,19 +5407,27 @@ auto verifier_failure_summary_lines(json::Value const& report)
         lines.push_back("  by-action: " + by_action);
     }
 
+    auto const detail_limit = std::size_t{3};
     auto const* failures = json_array_at(report, {"failures"});
-    if (!failures)
-        return lines;
+    auto detail_lines = std::vector<std::string>{};
     auto printed = std::size_t{0};
-    for (auto const& failure : *failures) {
-        if (printed >= 3)
-            break;
-        if (!failure.is_object())
-            continue;
-        auto detail_lines = verifier_failure_detail_lines(failure.as_object());
-        lines.insert(lines.end(), detail_lines.begin(), detail_lines.end());
-        ++printed;
+    if (failures) {
+        for (auto const& failure : *failures) {
+            if (printed >= detail_limit)
+                break;
+            if (!failure.is_object())
+                continue;
+            auto failure_lines =
+                verifier_failure_detail_lines(failure.as_object());
+            detail_lines.insert(
+                detail_lines.end(),
+                failure_lines.begin(),
+                failure_lines.end());
+            ++printed;
+        }
     }
+    lines.push_back("  " + failure_window_line(count, printed, detail_limit));
+    lines.insert(lines.end(), detail_lines.begin(), detail_lines.end());
     if (static_cast<std::int64_t>(printed) < count) {
         lines.push_back(std::format(
             "  ... +{} more failures; rerun with --json for the full report",
