@@ -4458,6 +4458,17 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "upload_utilization_lte": 1.0,
                 "backdrop_copy_utilization_lte": 0.0,
             },
+            "require_material_executor_budget_coverage": {
+                "required_fields": [
+                    "backdrop_copy_utilization",
+                    "draw_calls",
+                    "max_sample_taps",
+                    "upload_utilization",
+                ],
+                "min_bound_key_count": 5,
+                "min_guarded_field_count": 4,
+                "min_observed_field_count": 21,
+            },
         }
         code, report = self.run_verifier(
             snapshot(sampled_material_plan(sample_taps=13)),
@@ -4466,6 +4477,23 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(report["ok"])
         self.assertEqual(report["manifest"]["material_executor_budget_bounds"], 5)
+        self.assertEqual(
+            report["manifest"]["material_executor_budget_fields"],
+            [
+                "backdrop_copy_utilization",
+                "draw_calls",
+                "max_sample_taps",
+                "upload_utilization",
+            ])
+        self.assertEqual(
+            report["manifest"]
+            ["material_executor_budget_coverage_required_fields"],
+            [
+                "backdrop_copy_utilization",
+                "draw_calls",
+                "max_sample_taps",
+                "upload_utilization",
+            ])
         budget = (
             report["artifact_context"]
             ["material_contract"]
