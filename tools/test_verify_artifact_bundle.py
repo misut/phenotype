@@ -5156,6 +5156,36 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             ["executor_budget"])
         self.assertEqual(budget["upload_utilization"], 1.0)
         self.assertEqual(budget["backdrop_copy_utilization"], 0.0)
+        coverage = (
+            report["artifact_context"]
+            ["material_contract"]
+            ["executor_budget_coverage"])
+        self.assertEqual(coverage["manifest_bound_key_count"], 5)
+        self.assertEqual(coverage["manifest_field_count"], 4)
+        self.assertEqual(coverage["required_field_count"], 4)
+        self.assertEqual(coverage["covered_required_field_count"], 4)
+        self.assertEqual(coverage["missing_required_fields"], [])
+        self.assertEqual(coverage["missing_observed_fields"], [])
+        self.assertEqual(
+            coverage["required_fields"],
+            [
+                "backdrop_copy_utilization",
+                "draw_calls",
+                "max_sample_taps",
+                "upload_utilization",
+            ])
+        self.assertEqual(
+            coverage["manifest_bound_keys"],
+            [
+                "backdrop_copy_utilization_lte",
+                "draw_calls_gte",
+                "max_sample_taps_equals",
+                "upload_utilization_gte",
+                "upload_utilization_lte",
+            ])
+        for field in coverage["required_fields"]:
+            self.assertIn(field, coverage["observed_fields"])
+            self.assertIn(field, coverage["guarded_observed_fields"])
         results = (
             report["artifact_context"]
             ["material_contract"]

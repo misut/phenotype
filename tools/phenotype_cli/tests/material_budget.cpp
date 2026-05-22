@@ -142,48 +142,129 @@ auto sample_report() -> json::Value {
             "backdrop_copy_policy": "bounded",
             "backdrop_copy_skip_reason": "none"
           },
-	          "executor_budget_bound_summary": {
-	            "bound_count": 3,
-	            "pass_count": 2,
-	            "fail_count": 1,
-	            "zero_margin_count": 1,
-	            "negative_margin_count": 1,
-	            "zero_margin_sources": [
-	              {
-	                "key": "execution_stage_count_lte",
-	                "field": "execution_stage_count",
-	                "bound": "lte",
-	                "expected": 8,
-	                "actual": 8,
-	                "ok": true,
-	                "margin": 0
-	              }
-	            ],
-	            "negative_margin_sources": [
-	              {
-	                "key": "draw_calls_gte",
-	                "field": "draw_calls",
-	                "bound": "gte",
-	                "expected": 3,
-	                "actual": 2,
-	                "ok": false,
-	                "margin": -1
-	              }
-	            ],
-	            "tightest_bound_key": "upload_utilization_lte",
-	            "tightest_bound_field": "upload_utilization",
-	            "tightest_bound_margin": 0.9375,
-	            "tightest_bound_result": {
-	              "key": "upload_utilization_lte",
-	              "field": "upload_utilization",
-	              "bound": "lte",
-	              "expected": 1,
-	              "actual": 0.0625,
-	              "ok": true,
-	              "margin": 0.9375
-	            },
-	            "failed_keys": ["draw_calls_gte"]
-	          },
+          "executor_budget_coverage": {
+            "guardable_field_count": 22,
+            "observed_field_count": 22,
+            "guarded_observed_field_count": 3,
+            "unguarded_observed_field_count": 19,
+            "required_field_count": 2,
+            "covered_required_field_count": 2,
+            "missing_required_field_count": 0,
+            "manifest_field_count": 3,
+            "manifest_bound_key_count": 3,
+            "observed_fields": [
+              "active_execution_stage_count",
+              "backdrop_copy_count",
+              "backdrop_copy_pixels",
+              "backdrop_copy_skipped_count",
+              "backdrop_copy_utilization",
+              "backdrop_execution_stage_count",
+              "buffer_capacity_bytes",
+              "draw_calls",
+              "dropped_execution_stage_count",
+              "execution_stage_count",
+              "fallback_instance_count",
+              "material_instance_count",
+              "max_backdrop_pixels",
+              "max_sample_taps",
+              "plan_count",
+              "planned_frame_capture_count",
+              "planned_frame_capture_pixels",
+              "planned_surface_sample_pixels",
+              "sampled_backdrop_instance_count",
+              "total_sample_taps",
+              "upload_bytes",
+              "upload_utilization"
+            ],
+            "guarded_observed_fields": [
+              "draw_calls",
+              "execution_stage_count",
+              "upload_utilization"
+            ],
+            "unguarded_observed_fields": [
+              "active_execution_stage_count",
+              "backdrop_copy_count",
+              "backdrop_copy_pixels",
+              "backdrop_copy_skipped_count",
+              "backdrop_copy_utilization",
+              "backdrop_execution_stage_count",
+              "buffer_capacity_bytes",
+              "dropped_execution_stage_count",
+              "fallback_instance_count",
+              "material_instance_count",
+              "max_backdrop_pixels",
+              "max_sample_taps",
+              "plan_count",
+              "planned_frame_capture_count",
+              "planned_frame_capture_pixels",
+              "planned_surface_sample_pixels",
+              "sampled_backdrop_instance_count",
+              "total_sample_taps",
+              "upload_bytes"
+            ],
+            "required_fields": [
+              "draw_calls",
+              "execution_stage_count"
+            ],
+            "covered_required_fields": [
+              "draw_calls",
+              "execution_stage_count"
+            ],
+            "missing_required_fields": [],
+            "missing_observed_fields": [],
+            "manifest_fields": [
+              "draw_calls",
+              "execution_stage_count",
+              "upload_utilization"
+            ],
+            "manifest_bound_keys": [
+              "draw_calls_gte",
+              "execution_stage_count_lte",
+              "upload_utilization_lte"
+            ]
+          },
+          "executor_budget_bound_summary": {
+            "bound_count": 3,
+            "pass_count": 2,
+            "fail_count": 1,
+            "zero_margin_count": 1,
+            "negative_margin_count": 1,
+            "zero_margin_sources": [
+              {
+                "key": "execution_stage_count_lte",
+                "field": "execution_stage_count",
+                "bound": "lte",
+                "expected": 8,
+                "actual": 8,
+                "ok": true,
+                "margin": 0
+              }
+            ],
+            "negative_margin_sources": [
+              {
+                "key": "draw_calls_gte",
+                "field": "draw_calls",
+                "bound": "gte",
+                "expected": 3,
+                "actual": 2,
+                "ok": false,
+                "margin": -1
+              }
+            ],
+            "tightest_bound_key": "upload_utilization_lte",
+            "tightest_bound_field": "upload_utilization",
+            "tightest_bound_margin": 0.9375,
+            "tightest_bound_result": {
+              "key": "upload_utilization_lte",
+              "field": "upload_utilization",
+              "bound": "lte",
+              "expected": 1,
+              "actual": 0.0625,
+              "ok": true,
+              "margin": 0.9375
+            },
+            "failed_keys": ["draw_calls_gte"]
+          },
           "executor_budget_bound_results": [
             {
               "key": "execution_stage_count_lte",
@@ -696,6 +777,19 @@ int main() {
     assert(contains_text(
         material_budget_coverage_text(*coverage),
         "required=2/2"));
+    auto raw_coverage = material_budget_coverage_from_report(report);
+    assert(raw_coverage);
+    assert(raw_coverage->guarded_observed_field_count == 3);
+    assert(raw_coverage->unguarded_observed_field_count == 19);
+    assert(raw_coverage->manifest_bound_key_count == 3);
+    assert(raw_coverage->manifest_bound_keys.size() == 3);
+    assert(contains_text(
+        verifier_material_budget_coverage_json(report),
+        "\"manifest_bound_keys\":[\"draw_calls_gte\","
+        "\"execution_stage_count_lte\",\"upload_utilization_lte\"]"));
+    assert(contains_text(
+        verifier_material_budget_coverage_text(report),
+        "unguarded=19"));
 
     auto resource_coverage =
         material_resource_bound_coverage_from_report(report);

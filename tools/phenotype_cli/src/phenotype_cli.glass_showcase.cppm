@@ -402,7 +402,12 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
     auto verifier_manifest = verifier_report
         ? verifier_manifest_summary_from_report(*verifier_report)
         : std::optional<VerifierManifestSummary>{};
-    auto coverage = material_budget_coverage_summary(budget, verifier_manifest);
+    auto coverage = verifier_report
+        ? material_budget_coverage_from_report_or_summary(
+            *verifier_report,
+            budget,
+            verifier_manifest)
+        : std::optional<MaterialBudgetCoverageSummary>{};
     auto resource_bound_coverage = verifier_report
         ? material_resource_bound_coverage_from_report(*verifier_report)
         : std::optional<MaterialBoundCoverageSummary>{};
@@ -561,7 +566,10 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
             }
         }
         if (auto coverage =
-                material_budget_coverage_summary(budget, manifest)) {
+                material_budget_coverage_from_report_or_summary(
+                    *verifier_report,
+                    budget,
+                    manifest)) {
             std::println(
                 "material budget coverage: {}",
                 material_budget_coverage_text(*coverage));
