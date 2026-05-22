@@ -1536,6 +1536,15 @@ auto budget_field_list_text(std::vector<std::string> const& fields,
     return text;
 }
 
+auto verifier_manifest_runtime_detail_paths_text(
+        VerifierManifestSummary const& manifest,
+        std::size_t limit = 6)
+        -> std::string {
+    if (manifest.runtime_detail_paths.empty())
+        return {};
+    return budget_field_list_text(manifest.runtime_detail_paths, limit);
+}
+
 auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage)
     -> std::string {
     auto required = coverage.required_field_count > 0
@@ -3209,6 +3218,11 @@ auto verifier_manifest_context_text(json::Value const& report) -> std::string {
             " required-quality=({})",
             budget_field_list_text(
                 manifest->material_quality_policy_coverage_required_fields));
+    }
+    if (auto runtime_paths =
+            verifier_manifest_runtime_detail_paths_text(*manifest);
+        !runtime_paths.empty()) {
+        text += std::format(" runtime-detail-paths=({})", runtime_paths);
     }
     auto minimums = verifier_manifest_coverage_minimums_text(*manifest);
     if (!minimums.empty())
