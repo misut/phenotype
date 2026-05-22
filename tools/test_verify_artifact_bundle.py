@@ -4897,6 +4897,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             material_contract["backdrop"]["frosting_responses"],
             {"not-sampled": 1})
+        self.assertEqual(
+            material_contract["plan_reference_model"]["accessibility_responses"],
+            {"standard": 1})
+        self.assertEqual(
+            material_contract["plan_reference_model"]["performance_responses"],
+            {"deterministic-fallback": 1})
         self.assertEqual(material_contract["plan_shape"]["rounded"], 1)
         self.assertEqual(
             material_contract["decision_first_blockers"],
