@@ -1869,7 +1869,8 @@ auto verifier_failure_summary_json(json::Value const& report)
         "{{\"count\":{},\"top_likely_layer\":{},"
         "\"top_likely_pass\":{},\"top_suggested_action\":{},"
         "\"artifact_context\":{},"
-        "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_path\":{},"
+        "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
+        "\"by_path\":{},"
         "\"by_suggested_action\":{},\"first_failure\":{},"
         "\"failures\":{},\"truncated\":{}}}",
         count,
@@ -1889,6 +1890,9 @@ auto verifier_failure_summary_json(json::Value const& report)
         failure_json_value_or_null(
             report,
             {"failure_summary", "by_likely_pass"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "by_region"}),
         failure_json_value_or_null(
             report,
             {"failure_summary", "by_path"}),
@@ -1951,6 +1955,13 @@ auto verifier_failure_summary_lines(json::Value const& report)
             {"failure_summary", "by_likely_pass"});
         !by_pass.empty()) {
         lines.push_back("  by-pass: " + by_pass);
+    }
+    if (auto by_region = compact_failure_count_map_text(
+            report,
+            {"failure_summary", "by_region"},
+            3);
+        !by_region.empty()) {
+        lines.push_back("  by-region: " + by_region);
     }
     if (auto by_path = compact_failure_count_map_text(
             report,

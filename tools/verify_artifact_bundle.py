@@ -802,6 +802,7 @@ class Report:
         if isinstance(failures, list):
             by_layer: JsonObject = {}
             by_pass: JsonObject = {}
+            by_region: JsonObject = {}
             by_path: JsonObject = {}
             by_action: JsonObject = {}
             for failure in failures:
@@ -813,6 +814,9 @@ class Report:
                 likely_pass = failure.get("likely_pass")
                 if isinstance(likely_pass, str) and likely_pass:
                     by_pass[likely_pass] = by_pass.get(likely_pass, 0) + 1
+                region = failure.get("region")
+                if isinstance(region, str) and region:
+                    by_region[region] = by_region.get(region, 0) + 1
                 path = failure.get("path")
                 if isinstance(path, str) and path:
                     by_path[path] = by_path.get(path, 0) + 1
@@ -823,6 +827,7 @@ class Report:
                 "count": len(failures),
                 "by_likely_layer": by_layer,
                 "by_likely_pass": by_pass,
+                "by_region": by_region,
                 "by_path": by_path,
                 "by_suggested_action": by_action,
             }
