@@ -45,6 +45,16 @@ struct MaterialBudgetSummary {
     std::string backdrop_copy_skip_reason;
 };
 
+struct VerifierManifestSummary {
+    std::string name;
+    std::int64_t pixel_regions = -1;
+    std::int64_t pixel_region_metrics = -1;
+    std::int64_t pixel_region_metric_comparisons = -1;
+    std::int64_t forbid_pixel_region_colors = -1;
+    std::int64_t runtime_numeric_bounds = -1;
+    std::int64_t material_executor_budget_bounds = -1;
+};
+
 auto trim_copy(std::string_view text) -> std::string {
     auto first = text.find_first_not_of(" \t\r\n");
     if (first == std::string_view::npos)
@@ -80,6 +90,22 @@ auto parse_verifier_json(std::string_view text) -> std::optional<json::Value> {
         end = begin;
     }
     return std::nullopt;
+}
+
+auto verifier_report_from_result(
+        cppx::process::CapturedProcessResult const& result)
+    -> std::optional<json::Value> {
+    if (result.stdout_text.empty())
+        return std::nullopt;
+    return parse_verifier_json(result.stdout_text);
+}
+
+auto verifier_report_from_result(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+    -> std::optional<json::Value> {
+    if (!result)
+        return std::nullopt;
+    return verifier_report_from_result(*result);
 }
 
 auto json_number_at(json::Value const& value,
@@ -229,12 +255,55 @@ auto material_budget_from_report(json::Value const& report)
 auto material_budget_from_verifier(
         cppx::process::CapturedProcessResult const& result)
     -> std::optional<MaterialBudgetSummary> {
-    if (result.stdout_text.empty())
-        return std::nullopt;
-    auto report = parse_verifier_json(result.stdout_text);
+    auto report = verifier_report_from_result(result);
     if (!report)
         return std::nullopt;
     return material_budget_from_report(*report);
+}
+
+auto verifier_manifest_summary_from_report(json::Value const& report)
+    -> std::optional<VerifierManifestSummary> {
+    if (!json_object_at(report, {"manifest"}))
+        return std::nullopt;
+    return VerifierManifestSummary{
+        .name = json_string_at(report, {"manifest", "name"})
+            .value_or("unknown"),
+        .pixel_regions = json_integer_at(
+            report,
+            {"manifest", "pixel_regions"}).value_or(-1),
+        .pixel_region_metrics = json_integer_at(
+            report,
+            {"manifest", "pixel_region_metrics"}).value_or(-1),
+        .pixel_region_metric_comparisons = json_integer_at(
+            report,
+            {"manifest", "pixel_region_metric_comparisons"}).value_or(-1),
+        .forbid_pixel_region_colors = json_integer_at(
+            report,
+            {"manifest", "forbid_pixel_region_colors"}).value_or(-1),
+        .runtime_numeric_bounds = json_integer_at(
+            report,
+            {"manifest", "runtime_numeric_bounds"}).value_or(-1),
+        .material_executor_budget_bounds = json_integer_at(
+            report,
+            {"manifest", "material_executor_budget_bounds"}).value_or(-1),
+    };
+}
+
+auto verifier_manifest_summary_from_verifier(
+        cppx::process::CapturedProcessResult const& result)
+    -> std::optional<VerifierManifestSummary> {
+    auto report = verifier_report_from_result(result);
+    if (!report)
+        return std::nullopt;
+    return verifier_manifest_summary_from_report(*report);
+}
+
+auto verifier_manifest_summary_from_verifier(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+    -> std::optional<VerifierManifestSummary> {
+    if (!result)
+        return std::nullopt;
+    return verifier_manifest_summary_from_verifier(*result);
 }
 
 auto material_budget_from_verifier(
@@ -247,6 +316,10 @@ auto material_budget_from_verifier(
 
 auto budget_count(std::int64_t value) -> std::string {
     return value >= 0 ? std::format("{}", value) : std::string{"unknown"};
+}
+
+auto manifest_count_json(std::int64_t value) -> std::string {
+    return value >= 0 ? std::format("{}", value) : std::string{"null"};
 }
 
 auto budget_ratio(double value) -> std::string {
@@ -338,6 +411,27 @@ auto material_budget_json(std::optional<MaterialBudgetSummary> const& budget)
         json_string(budget->draw_status),
         json_string(budget->backdrop_copy_policy),
         json_string(budget->backdrop_copy_skip_reason));
+}
+
+auto verifier_manifest_summary_json(
+        std::optional<VerifierManifestSummary> const& manifest)
+    -> std::string {
+    if (!manifest)
+        return "null";
+    return std::format(
+        "{{\"name\":{},\"pixel_regions\":{},"
+        "\"pixel_region_metrics\":{},"
+        "\"pixel_region_metric_comparisons\":{},"
+        "\"forbid_pixel_region_colors\":{},"
+        "\"runtime_numeric_bounds\":{},"
+        "\"material_executor_budget_bounds\":{}}}",
+        json_string(manifest->name),
+        manifest_count_json(manifest->pixel_regions),
+        manifest_count_json(manifest->pixel_region_metrics),
+        manifest_count_json(manifest->pixel_region_metric_comparisons),
+        manifest_count_json(manifest->forbid_pixel_region_colors),
+        manifest_count_json(manifest->runtime_numeric_bounds),
+        manifest_count_json(manifest->material_executor_budget_bounds));
 }
 
 } // namespace phenotype_cli::material_budget

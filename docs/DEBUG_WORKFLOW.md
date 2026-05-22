@@ -219,10 +219,11 @@ without embedding the full verifier report. `artifact
 verify-file-explorer` owns the shared-model test, desktop/mobile builds,
 deterministic native captures, and uv-managed verifier calls directly. Its case
 JSON includes `material_budget` whenever the verifier report contains
-`artifact_context.material_contract.executor_budget`, and the non-JSON output
-prints the same case-level plans/work/status summary with upload/copy
-utilization. Both commands are local verification commands, not default PR CI
-jobs.
+`artifact_context.material_contract.executor_budget` and `verifier_manifest`
+whenever a case uses a manifest-backed verifier run; the non-JSON output prints
+the same case-level plans/work/status summary with upload/copy utilization and
+per-case manifest bound summaries when present. Both commands are local
+verification commands, not default PR CI jobs.
 
 For file explorer workflow debugging that does not need a native window, use
 the deterministic drive command:
@@ -1528,9 +1529,9 @@ artifact budget rather than a raw runtime path. It supports numeric
 `artifact_context.material_contract.executor_budget`, including
 `upload_utilization`, `backdrop_copy_utilization`, stage counts, sample taps,
 upload bytes/capacity, backdrop copy pixels, and frame-capture bounds. The
-glass showcase manifests require both utilization ratios to stay between 0 and
-1 so a hidden buffer/copy overrun is reported as a material-executor budget
-failure before reading the full runtime JSON.
+glass showcase and file explorer manifests require both utilization ratios to
+stay between 0 and 1 so a hidden buffer/copy overrun is reported as a
+material-executor budget failure before reading the full runtime JSON.
 Whenever material plans are present, the verifier also cross-checks executor
 counts, including `material_executor_summary.container_groups.*`, against
 `renderer.material_plans#summary`: `plan_count`,
