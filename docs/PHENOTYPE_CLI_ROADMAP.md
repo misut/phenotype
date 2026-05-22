@@ -173,7 +173,9 @@ The raw verifier JSON also includes `resource_bound_coverage` and
 `require_material_resource_bound_coverage` or
 `require_material_quality_policy_coverage`. Those contracts use the same
 required-field and minimum-count grammar as executor budget coverage, but guard
-the material plan resource and legibility policy surfaces directly.
+the material plan resource and legibility policy surfaces directly. The checked-in
+glass showcase, file explorer, and Android artifact manifests now opt into those
+resource and quality-policy coverage contracts.
 
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, package-owned SVG app icons,
