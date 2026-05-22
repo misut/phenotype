@@ -71,6 +71,17 @@ auto append_verifier_arg(std::vector<std::string>& args,
     args.push_back(std::move(value));
 }
 
+void append_repeatable_verifier_arg(
+        std::vector<std::string>& args,
+        cppx::cli::Invocation const& invocation,
+        std::string_view name) {
+    for (auto const& value : invocation.values(name)) {
+        auto option = std::string{"--"};
+        option += name;
+        append_verifier_arg(args, std::move(option), value);
+    }
+}
+
 auto append_required_label(std::vector<std::string>& args,
                            std::string value) {
     append_verifier_arg(args, "--require-label", std::move(value));
@@ -264,7 +275,8 @@ auto file_explorer_verifier_args(fs::path const& root,
                                  fs::path const& bundle,
                                  std::string_view profile,
                                  std::string_view mode,
-                                 std::string_view scenario)
+                                 std::string_view scenario,
+                                 cppx::cli::Invocation const& invocation)
     -> std::expected<std::vector<std::string>, std::string> {
     auto args = file_explorer_base_verifier_args(bundle);
     auto const has_scenario = !scenario.empty() && scenario != "default";
@@ -327,6 +339,18 @@ auto file_explorer_verifier_args(fs::path const& root,
         append_file_explorer_scenario_requirements(args, profile, scenario);
     if (!scenario_extra)
         return std::unexpected{scenario_extra.error()};
+    append_repeatable_verifier_arg(
+        args,
+        invocation,
+        "require-material-budget-bound");
+    append_repeatable_verifier_arg(
+        args,
+        invocation,
+        "require-material-resource-bound");
+    append_repeatable_verifier_arg(
+        args,
+        invocation,
+        "require-material-quality-bound");
     return args;
 }
 
@@ -809,7 +833,8 @@ auto run_file_explorer_case(fs::path const& root,
                             std::string scenario,
                             fs::path artifact_dir,
                             std::string accessibility_display,
-                            std::chrono::milliseconds settle)
+                            std::chrono::milliseconds settle,
+                            cppx::cli::Invocation const& invocation)
     -> std::expected<FileExplorerArtifactCase, std::string> {
     auto const scenario_active = !scenario.empty() && scenario != "default";
     auto item = FileExplorerArtifactCase{
@@ -878,7 +903,8 @@ auto run_file_explorer_case(fs::path const& root,
         item.artifact_dir,
         item.profile,
         item.mode,
-        item.scenario);
+        item.scenario,
+        invocation);
     if (!verifier_args) {
         item.error = verifier_args.error();
         return item;
@@ -1082,7 +1108,8 @@ export int run_artifact_verify_file_explorer(
                 "default",
                 *dir,
                 accessibility_display,
-                settle);
+                settle,
+                invocation);
             if (!item) {
                 summary.error = item.error();
                 return emit_file_explorer_gate(summary, invocation, 2);
@@ -1123,7 +1150,8 @@ export int run_artifact_verify_file_explorer(
                 scenario,
                 *dir,
                 accessibility_display,
-                settle);
+                settle,
+                invocation);
             if (!item) {
                 summary.error = item.error();
                 return emit_file_explorer_gate(summary, invocation, 2);
@@ -1177,7 +1205,8 @@ export int run_artifact_verify_file_explorer(
             "default",
             *default_dir,
             accessibility_display,
-            settle);
+            settle,
+            invocation);
         if (!default_item) {
             summary.error = default_item.error();
             return emit_file_explorer_gate(summary, invocation, 2);
@@ -1217,7 +1246,8 @@ export int run_artifact_verify_file_explorer(
                 scenario,
                 *dir,
                 accessibility_display,
-                settle);
+                settle,
+                invocation);
             if (!item) {
                 summary.error = item.error();
                 return emit_file_explorer_gate(summary, invocation, 2);
