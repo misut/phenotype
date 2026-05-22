@@ -2404,6 +2404,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         manifest: dict[str, object] | None = None,
         write_frame: bool = False,
         frame_writer=None,
+        extra_args: list[str] | None = None,
     ) -> tuple[int, dict[str, object]]:
         with tempfile.TemporaryDirectory() as raw_dir:
             bundle = Path(raw_dir)
@@ -2422,6 +2423,8 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 manifest_path = bundle / "artifact_manifest.json"
                 manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
                 args.extend(["--manifest", str(manifest_path)])
+            if extra_args:
+                args.extend(extra_args)
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
                 code = verifier.main(args)
@@ -3593,6 +3596,36 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["expected"], {"<=": 0})
         self.assertEqual(failure["actual"], 25)
 
+    def test_cli_can_require_material_resource_bounds_without_manifest(
+            self) -> None:
+        code, report = self.run_verifier(
+            snapshot(sampled_material_plan(sample_taps=25)),
+            extra_args=[
+                "--require-material-resource-bound",
+                "max_plan_sample_taps_lte=25",
+                "--require-material-resource-bound",
+                "require_bounded_texture_copy=true",
+            ])
+
+        self.assertEqual(code, 0)
+        self.assertIsNone(report["manifest"]["path"])
+        self.assertEqual(report["manifest"]["material_resource_bounds"], 2)
+        self.assertEqual(
+            report["manifest"]["material_resource_bound_keys"],
+            [
+                "max_plan_sample_taps_lte",
+                "require_bounded_texture_copy",
+            ])
+        summary = report["material_plans"]["resource_bound_summary"]
+        self.assertEqual(summary["bound_count"], 2)
+        self.assertEqual(summary["fail_count"], 0)
+        results = {
+            item["key"]: item
+            for item in report["material_plans"]["resource_bound_results"]
+        }
+        self.assertEqual(results["max_plan_sample_taps_lte"]["actual"], 25)
+        self.assertTrue(results["require_bounded_texture_copy"]["ok"])
+
     def test_manifest_can_require_execution_stage_summary(self) -> None:
         manifest = {
             "require_material_plan_summary": {
@@ -4580,6 +4613,27 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["expected"], {"<=": 1.0})
         self.assertEqual(failure["actual"], 36.0)
 
+    def test_cli_material_quality_bound_failure_is_llm_actionable(
+            self) -> None:
+        code, report = self.run_verifier(
+            snapshot(material_plan()),
+            extra_args=[
+                "--require-material-quality-bound",
+                "max_blur_radius_lte=1.0",
+            ])
+
+        self.assertEqual(code, 1)
+        self.assertIsNone(report["manifest"]["path"])
+        self.assertEqual(report["manifest"]["material_quality_policy_bounds"], 1)
+        summary = report["material_plans"]["quality_policy_bound_summary"]
+        self.assertEqual(summary["bound_count"], 1)
+        self.assertEqual(summary["fail_count"], 1)
+        result = report["material_plans"]["quality_policy_bound_results"][0]
+        self.assertEqual(result["key"], "max_blur_radius_lte")
+        self.assertEqual(result["expected"], 1.0)
+        self.assertEqual(result["actual"], 36.0)
+        self.assertEqual(result["margin"], -35.0)
+
     def test_manifest_can_require_runtime_numeric_bounds(self) -> None:
         manifest = {
             "require_runtime_numeric_bounds": [
@@ -4681,6 +4735,41 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(summary["pass_count"], 5)
         self.assertEqual(summary["fail_count"], 0)
         self.assertEqual(summary["failed_keys"], [])
+
+    def test_cli_can_require_material_executor_budget_bounds_without_manifest(
+            self) -> None:
+        code, report = self.run_verifier(
+            snapshot(sampled_material_plan(sample_taps=13)),
+            extra_args=[
+                "--require-material-budget-bound",
+                "draw_calls_gte=1",
+                "--require-material-budget-bound",
+                "max_sample_taps_equals=13",
+            ])
+
+        self.assertEqual(code, 0)
+        self.assertIsNone(report["manifest"]["path"])
+        self.assertEqual(report["manifest"]["material_executor_budget_bounds"], 2)
+        self.assertEqual(
+            report["manifest"]["material_executor_budget_bound_keys"],
+            [
+                "draw_calls_gte",
+                "max_sample_taps_equals",
+            ])
+        summary = (
+            report["artifact_context"]
+            ["material_contract"]
+            ["executor_budget_bound_summary"])
+        self.assertEqual(summary["bound_count"], 2)
+        self.assertEqual(summary["fail_count"], 0)
+        results = {
+            item["key"]: item
+            for item in report["artifact_context"]
+            ["material_contract"]
+            ["executor_budget_bound_results"]
+        }
+        self.assertEqual(results["draw_calls_gte"]["actual"], 1)
+        self.assertEqual(results["max_sample_taps_equals"]["actual"], 13)
 
     def test_material_executor_budget_bound_failure_is_llm_actionable(
             self) -> None:
