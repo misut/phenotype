@@ -131,16 +131,6 @@ struct MaterialBudgetCoverageSummary {
     std::vector<std::string> manifest_bound_keys;
 };
 
-struct MaterialBudgetBoundSummary {
-    std::int64_t bound_count = -1;
-    std::int64_t pass_count = -1;
-    std::int64_t fail_count = -1;
-    std::string tightest_bound_key;
-    std::string tightest_bound_field;
-    std::optional<double> tightest_bound_margin;
-    std::vector<std::string> failed_keys;
-};
-
 struct MaterialBudgetBoundResult {
     std::string key;
     std::string field;
@@ -149,6 +139,21 @@ struct MaterialBudgetBoundResult {
     std::optional<double> actual;
     std::optional<bool> ok;
     std::optional<double> margin;
+};
+
+struct MaterialBudgetBoundSummary {
+    std::int64_t bound_count = -1;
+    std::int64_t pass_count = -1;
+    std::int64_t fail_count = -1;
+    std::int64_t zero_margin_count = -1;
+    std::int64_t negative_margin_count = -1;
+    std::string tightest_bound_key;
+    std::string tightest_bound_field;
+    std::optional<double> tightest_bound_margin;
+    std::vector<MaterialBudgetBoundResult> zero_margin_sources;
+    std::vector<MaterialBudgetBoundResult> negative_margin_sources;
+    std::optional<MaterialBudgetBoundResult> tightest_bound_result;
+    std::vector<std::string> failed_keys;
 };
 
 auto trim_copy(std::string_view text) -> std::string {
@@ -683,18 +688,16 @@ auto material_resource_bounds_from_verifier(
     return material_resource_bounds_from_verifier(*result);
 }
 
-auto material_bound_summary_from_object(json::Object const& object)
-    -> MaterialBudgetBoundSummary {
-    return MaterialBudgetBoundSummary{
-        .bound_count = json_object_integer(object, "bound_count").value_or(-1),
-        .pass_count = json_object_integer(object, "pass_count").value_or(-1),
-        .fail_count = json_object_integer(object, "fail_count").value_or(-1),
-        .tightest_bound_key = json_object_string(object, "tightest_bound_key"),
-        .tightest_bound_field =
-            json_object_string(object, "tightest_bound_field"),
-        .tightest_bound_margin =
-            json_object_number(object, "tightest_bound_margin"),
-        .failed_keys = json_object_string_array(object, "failed_keys"),
+auto material_bound_result_from_object(json::Object const& object)
+    -> MaterialBudgetBoundResult {
+    return MaterialBudgetBoundResult{
+        .key = json_object_string(object, "key"),
+        .field = json_object_string(object, "field"),
+        .bound = json_object_string(object, "bound"),
+        .expected = json_object_number(object, "expected"),
+        .actual = json_object_number(object, "actual"),
+        .ok = json_object_bool(object, "ok"),
+        .margin = json_object_number(object, "margin"),
     };
 }
 
@@ -705,18 +708,52 @@ auto material_bound_results_from_array(json::Array const& results)
     for (auto const& item : results) {
         if (!item.is_object())
             continue;
-        auto const& object = item.as_object();
-        out.push_back(MaterialBudgetBoundResult{
-            .key = json_object_string(object, "key"),
-            .field = json_object_string(object, "field"),
-            .bound = json_object_string(object, "bound"),
-            .expected = json_object_number(object, "expected"),
-            .actual = json_object_number(object, "actual"),
-            .ok = json_object_bool(object, "ok"),
-            .margin = json_object_number(object, "margin"),
-        });
+        out.push_back(material_bound_result_from_object(item.as_object()));
     }
     return out;
+}
+
+auto material_bound_results_from_member(json::Object const& object,
+                                        std::string_view key)
+    -> std::vector<MaterialBudgetBoundResult> {
+    auto const* found = json_object_member(object, key);
+    if (!found || !found->is_array())
+        return {};
+    return material_bound_results_from_array(found->as_array());
+}
+
+auto material_bound_result_from_member(json::Object const& object,
+                                       std::string_view key)
+    -> std::optional<MaterialBudgetBoundResult> {
+    auto const* found = json_object_member(object, key);
+    if (!found || !found->is_object())
+        return std::nullopt;
+    return material_bound_result_from_object(found->as_object());
+}
+
+auto material_bound_summary_from_object(json::Object const& object)
+    -> MaterialBudgetBoundSummary {
+    return MaterialBudgetBoundSummary{
+        .bound_count = json_object_integer(object, "bound_count").value_or(-1),
+        .pass_count = json_object_integer(object, "pass_count").value_or(-1),
+        .fail_count = json_object_integer(object, "fail_count").value_or(-1),
+        .zero_margin_count =
+            json_object_integer(object, "zero_margin_count").value_or(-1),
+        .negative_margin_count =
+            json_object_integer(object, "negative_margin_count").value_or(-1),
+        .tightest_bound_key = json_object_string(object, "tightest_bound_key"),
+        .tightest_bound_field =
+            json_object_string(object, "tightest_bound_field"),
+        .tightest_bound_margin =
+            json_object_number(object, "tightest_bound_margin"),
+        .zero_margin_sources =
+            material_bound_results_from_member(object, "zero_margin_sources"),
+        .negative_margin_sources =
+            material_bound_results_from_member(object, "negative_margin_sources"),
+        .tightest_bound_result =
+            material_bound_result_from_member(object, "tightest_bound_result"),
+        .failed_keys = json_object_string_array(object, "failed_keys"),
+    };
 }
 
 auto material_budget_bound_summary_from_report(json::Value const& report)
@@ -1190,24 +1227,6 @@ auto material_budget_coverage_json(
         string_array_json(coverage->manifest_bound_keys));
 }
 
-auto material_budget_bound_summary_json(
-        std::optional<MaterialBudgetBoundSummary> const& summary)
-    -> std::string {
-    if (!summary)
-        return "null";
-    return std::format(
-        "{{\"bound_count\":{},\"pass_count\":{},\"fail_count\":{},"
-        "\"tightest_bound_key\":{},\"tightest_bound_field\":{},"
-        "\"tightest_bound_margin\":{},\"failed_keys\":{}}}",
-        manifest_count_json(summary->bound_count),
-        manifest_count_json(summary->pass_count),
-        manifest_count_json(summary->fail_count),
-        json_string(summary->tightest_bound_key),
-        json_string(summary->tightest_bound_field),
-        budget_optional_number(summary->tightest_bound_margin),
-        string_array_json(summary->failed_keys));
-}
-
 auto material_budget_bound_result_json(MaterialBudgetBoundResult const& result)
     -> std::string {
     return std::format(
@@ -1223,18 +1242,57 @@ auto material_budget_bound_result_json(MaterialBudgetBoundResult const& result)
 }
 
 auto material_budget_bound_results_json(
+        std::vector<MaterialBudgetBoundResult> const& results)
+    -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < results.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += material_budget_bound_result_json(results[i]);
+    }
+    out += "]";
+    return out;
+}
+
+auto material_budget_bound_results_json(
         std::optional<std::vector<MaterialBudgetBoundResult>> const& results)
     -> std::string {
     if (!results)
         return "null";
-    auto out = std::string{"["};
-    for (std::size_t i = 0; i < results->size(); ++i) {
-        if (i > 0)
-            out += ",";
-        out += material_budget_bound_result_json((*results)[i]);
-    }
-    out += "]";
-    return out;
+    return material_budget_bound_results_json(*results);
+}
+
+auto optional_bound_result_json(
+        std::optional<MaterialBudgetBoundResult> const& result)
+        -> std::string {
+    return result ? material_budget_bound_result_json(*result)
+                  : std::string{"null"};
+}
+
+auto material_budget_bound_summary_json(
+        std::optional<MaterialBudgetBoundSummary> const& summary)
+    -> std::string {
+    if (!summary)
+        return "null";
+    return std::format(
+        "{{\"bound_count\":{},\"pass_count\":{},\"fail_count\":{},"
+        "\"zero_margin_count\":{},\"negative_margin_count\":{},"
+        "\"zero_margin_sources\":{},\"negative_margin_sources\":{},"
+        "\"tightest_bound_key\":{},\"tightest_bound_field\":{},"
+        "\"tightest_bound_margin\":{},\"tightest_bound_result\":{},"
+        "\"failed_keys\":{}}}",
+        manifest_count_json(summary->bound_count),
+        manifest_count_json(summary->pass_count),
+        manifest_count_json(summary->fail_count),
+        manifest_count_json(summary->zero_margin_count),
+        manifest_count_json(summary->negative_margin_count),
+        material_budget_bound_results_json(summary->zero_margin_sources),
+        material_budget_bound_results_json(summary->negative_margin_sources),
+        json_string(summary->tightest_bound_key),
+        json_string(summary->tightest_bound_field),
+        budget_optional_number(summary->tightest_bound_margin),
+        optional_bound_result_json(summary->tightest_bound_result),
+        string_array_json(summary->failed_keys));
 }
 
 auto budget_field_list_text(std::vector<std::string> const& fields,
@@ -1354,11 +1412,19 @@ auto material_budget_bound_summary_text(MaterialBudgetBoundSummary const& summar
     auto failed = summary.failed_keys.empty()
         ? std::string{}
         : std::format(" failed=({})", budget_field_list_text(summary.failed_keys));
+    auto pressure = summary.zero_margin_count >= 0
+            || summary.negative_margin_count >= 0
+        ? std::format(
+            " zero={} negative={}",
+            budget_count(summary.zero_margin_count),
+            budget_count(summary.negative_margin_count))
+        : std::string{};
     return std::format(
         "passed={}/{} failed={}",
         budget_count(summary.pass_count),
         budget_count(summary.bound_count),
         budget_count(summary.fail_count))
+        + pressure
         + tightest
         + failed;
 }
@@ -1402,40 +1468,91 @@ auto material_budget_bound_detail_lines(
         std::optional<MaterialBudgetBoundSummary> const& summary)
     -> std::vector<std::string> {
     auto lines = std::vector<std::string>{};
-    if (!results || results->empty())
-        return lines;
-
     auto rendered_keys = std::vector<std::string>{};
-    auto const failed_limit = std::size_t{8};
-    for (auto const& result : *results) {
-        if (!result.ok || *result.ok)
-            continue;
-        if (rendered_keys.size() >= failed_limit)
-            continue;
-        lines.push_back("failed: " + material_budget_bound_result_text(result));
-        rendered_keys.push_back(result.key);
+    if (results && !results->empty()) {
+        auto const failed_limit = std::size_t{8};
+        for (auto const& result : *results) {
+            if (!result.ok || *result.ok)
+                continue;
+            if (rendered_keys.size() >= failed_limit)
+                continue;
+            lines.push_back("failed: " + material_budget_bound_result_text(result));
+            rendered_keys.push_back(result.key);
+        }
+        auto const failed_count = std::ranges::count_if(
+            *results,
+            [](MaterialBudgetBoundResult const& result) {
+                return result.ok && !*result.ok;
+            });
+        if (static_cast<std::size_t>(failed_count) > failed_limit) {
+            lines.push_back(std::format(
+                "+{} more failed bounds",
+                static_cast<std::size_t>(failed_count) - failed_limit));
+        }
     }
-    auto const failed_count = std::ranges::count_if(
-        *results,
-        [](MaterialBudgetBoundResult const& result) {
-            return result.ok && !*result.ok;
-        });
-    if (static_cast<std::size_t>(failed_count) > failed_limit) {
-        lines.push_back(std::format(
-            "+{} more failed bounds",
-            static_cast<std::size_t>(failed_count) - failed_limit));
+
+    auto append_summary_sources = [&](std::string_view label,
+                                      auto const& sources) {
+        auto const source_limit = std::size_t{3};
+        auto rendered = std::size_t{0};
+        auto omitted = std::size_t{0};
+        for (auto const& source : sources) {
+            if (contains_field(rendered_keys, source.key))
+                continue;
+            if (rendered >= source_limit) {
+                ++omitted;
+                continue;
+            }
+            lines.push_back(std::format(
+                "{}: {}",
+                label,
+                material_budget_bound_result_text(source)));
+            rendered_keys.push_back(source.key);
+            ++rendered;
+        }
+        if (omitted > 0) {
+            lines.push_back(std::format(
+                "+{} more {} bounds",
+                omitted,
+                label));
+        }
+    };
+    if (summary) {
+        append_summary_sources(
+            "negative",
+            summary->negative_margin_sources);
     }
 
     if (summary && !summary->tightest_bound_key.empty()
         && !contains_field(rendered_keys, summary->tightest_bound_key)) {
-        if (auto const* tightest = material_budget_bound_result_by_key(
-                *results,
-                summary->tightest_bound_key)) {
+        if (summary->tightest_bound_result) {
             lines.push_back(
-                "tightest: " + material_budget_bound_result_text(*tightest));
+                "tightest: "
+                + material_budget_bound_result_text(
+                    *summary->tightest_bound_result));
+        } else if (results) {
+            if (auto const* tightest = material_budget_bound_result_by_key(
+                    *results,
+                    summary->tightest_bound_key)) {
+                lines.push_back(
+                    "tightest: " + material_budget_bound_result_text(*tightest));
+            }
         }
+    } else if (summary && summary->tightest_bound_result
+               && !contains_field(
+                   rendered_keys,
+                   summary->tightest_bound_result->key)) {
+        lines.push_back(
+            "tightest: "
+            + material_budget_bound_result_text(
+                *summary->tightest_bound_result));
     }
-    if (lines.empty()) {
+    if (summary) {
+        append_summary_sources(
+            "zero",
+            summary->zero_margin_sources);
+    }
+    if (lines.empty() && results && !results->empty()) {
         lines.push_back(
             "first: " + material_budget_bound_result_text(results->front()));
     }
@@ -2107,6 +2224,12 @@ auto compact_bound_summary_text(
     if (!summary->tightest_bound_key.empty()) {
         text += std::format(",tightest={}", summary->tightest_bound_key);
     }
+    if (summary->zero_margin_count >= 0 || summary->negative_margin_count >= 0) {
+        text += std::format(
+            ",zero={},negative={}",
+            budget_count(summary->zero_margin_count),
+            budget_count(summary->negative_margin_count));
+    }
     if (!summary->failed_keys.empty()) {
         text += std::format(
             ",failed=({})",
@@ -2247,7 +2370,11 @@ auto tightest_bound_result(
         std::optional<std::vector<MaterialBudgetBoundResult>> const& results,
         std::optional<MaterialBudgetBoundSummary> const& summary)
         -> std::optional<MaterialBudgetBoundResult> {
-    if (!results || !summary || summary->tightest_bound_key.empty())
+    if (!summary)
+        return std::nullopt;
+    if (summary->tightest_bound_result)
+        return summary->tightest_bound_result;
+    if (!results || summary->tightest_bound_key.empty())
         return std::nullopt;
     auto const* result = material_budget_bound_result_by_key(
         *results,
@@ -2359,10 +2486,41 @@ auto bound_pressure_source_from_result(MaterialBudgetBoundResult const& result)
     };
 }
 
+auto bound_pressure_sources_from_results(
+        std::vector<MaterialBudgetBoundResult> const& results)
+        -> std::vector<BoundPressureSource> {
+    auto sources = std::vector<BoundPressureSource>{};
+    sources.reserve(results.size());
+    for (auto const& result : results) {
+        sources.push_back(bound_pressure_source_from_result(result));
+    }
+    return sources;
+}
+
 auto bound_pressure_margins(
-        std::optional<std::vector<MaterialBudgetBoundResult>> const& results)
+        std::optional<std::vector<MaterialBudgetBoundResult>> const& results,
+        std::optional<MaterialBudgetBoundSummary> const& summary)
         -> BoundPressureMargins {
     auto margins = BoundPressureMargins{};
+    if (summary
+        && (summary->zero_margin_count >= 0
+            || summary->negative_margin_count >= 0
+            || !summary->zero_margin_sources.empty()
+            || !summary->negative_margin_sources.empty())) {
+        margins.zero_count = summary->zero_margin_count >= 0
+            ? summary->zero_margin_count
+            : static_cast<std::int64_t>(summary->zero_margin_sources.size());
+        margins.negative_count = summary->negative_margin_count >= 0
+            ? summary->negative_margin_count
+            : static_cast<std::int64_t>(
+                summary->negative_margin_sources.size());
+        margins.zero_sources =
+            bound_pressure_sources_from_results(summary->zero_margin_sources);
+        margins.negative_sources =
+            bound_pressure_sources_from_results(
+                summary->negative_margin_sources);
+        return margins;
+    }
     if (!results)
         return margins;
 
@@ -2447,7 +2605,7 @@ auto bound_pressure_state(
     if (!summary)
         return {};
 
-    auto margins = bound_pressure_margins(results);
+    auto margins = bound_pressure_margins(results, summary);
     auto tightest = tightest_bound_result(results, summary);
 
     auto state = std::string{"unknown"};
@@ -2519,7 +2677,7 @@ auto bound_pressure_text(
     if (!summary)
         return {};
 
-    auto margins = bound_pressure_margins(results);
+    auto margins = bound_pressure_margins(results, summary);
     auto tightest = tightest_bound_result(results, summary);
 
     auto state = std::string{"unknown"};

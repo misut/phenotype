@@ -164,7 +164,10 @@ that has no headroom left.
 Verifier bound summaries now carry the same source evidence directly:
 zero/negative margin counts, zero/negative source result arrays, and the full
 tightest bound result are present in the raw verifier JSON before the CLI derives
-its grouped pressure view.
+its grouped pressure view. The CLI preserves those fields in
+`material_budget_bound_summary`, `material_resource_bound_summary`, and
+`material_quality_policy_bound_summary` JSON envelopes, so automation can inspect
+the raw summary or the grouped pressure view without losing bound-source detail.
 
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, package-owned SVG app icons,
