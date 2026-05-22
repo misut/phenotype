@@ -30,6 +30,12 @@ struct FileExplorerArtifactCase {
     std::optional<MaterialBudgetSummary> material_budget;
     std::optional<MaterialQualityPolicySummary> material_quality_policy;
     std::optional<MaterialResourceBoundsSummary> material_resource_bounds;
+    std::optional<MaterialBudgetBoundSummary> material_resource_bound_summary;
+    std::optional<std::vector<MaterialBudgetBoundResult>>
+        material_resource_bound_results;
+    std::optional<MaterialBudgetBoundSummary> material_quality_policy_bound_summary;
+    std::optional<std::vector<MaterialBudgetBoundResult>>
+        material_quality_policy_bound_results;
     std::optional<VerifierManifestSummary> verifier_manifest;
     std::optional<MaterialBudgetCoverageSummary> material_budget_coverage;
     std::optional<MaterialBudgetBoundSummary> material_budget_bound_summary;
@@ -402,6 +408,10 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         "\"run_result\":{},\"verifier\":{},\"artifact\":{},"
         "\"material_budget\":{},\"material_quality_policy\":{},"
         "\"material_resource_bounds\":{},"
+        "\"material_resource_bound_summary\":{},"
+        "\"material_resource_bound_results\":{},"
+        "\"material_quality_policy_bound_summary\":{},"
+        "\"material_quality_policy_bound_results\":{},"
         "\"verifier_manifest\":{},"
         "\"material_budget_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
@@ -419,6 +429,12 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         material_budget_json(item.material_budget),
         material_quality_policy_json(item.material_quality_policy),
         material_resource_bounds_json(item.material_resource_bounds),
+        material_budget_bound_summary_json(item.material_resource_bound_summary),
+        material_budget_bound_results_json(item.material_resource_bound_results),
+        material_budget_bound_summary_json(
+            item.material_quality_policy_bound_summary),
+        material_budget_bound_results_json(
+            item.material_quality_policy_bound_results),
         verifier_manifest_summary_json(item.verifier_manifest),
         material_budget_coverage_json(item.material_budget_coverage),
         material_budget_bound_summary_json(item.material_budget_bound_summary),
@@ -642,6 +658,60 @@ void print_material_budget_bound_summary(
     }
 }
 
+void print_material_resource_bound_summary(
+        std::span<FileExplorerArtifactCase const> cases) {
+    auto has_bound_summary = std::ranges::any_of(
+        cases,
+        [](FileExplorerArtifactCase const& item) {
+            return item.material_resource_bound_summary.has_value();
+        });
+    if (!has_bound_summary)
+        return;
+
+    std::println("material resource bound results:");
+    for (auto const& item : cases) {
+        if (!item.material_resource_bound_summary)
+            continue;
+        std::println(
+            "  {}: {}",
+            case_label(item),
+            material_budget_bound_summary_text(
+                *item.material_resource_bound_summary));
+        for (auto const& line : material_budget_bound_detail_lines(
+                 item.material_resource_bound_results,
+                 item.material_resource_bound_summary)) {
+            std::println("    {}", line);
+        }
+    }
+}
+
+void print_material_quality_policy_bound_summary(
+        std::span<FileExplorerArtifactCase const> cases) {
+    auto has_bound_summary = std::ranges::any_of(
+        cases,
+        [](FileExplorerArtifactCase const& item) {
+            return item.material_quality_policy_bound_summary.has_value();
+        });
+    if (!has_bound_summary)
+        return;
+
+    std::println("material quality policy bounds:");
+    for (auto const& item : cases) {
+        if (!item.material_quality_policy_bound_summary)
+            continue;
+        std::println(
+            "  {}: {}",
+            case_label(item),
+            material_budget_bound_summary_text(
+                *item.material_quality_policy_bound_summary));
+        for (auto const& line : material_budget_bound_detail_lines(
+                 item.material_quality_policy_bound_results,
+                 item.material_quality_policy_bound_summary)) {
+            std::println("    {}", line);
+        }
+    }
+}
+
 void print_file_explorer_gate(
         FileExplorerArtifactGateSummary const& summary) {
     auto lines = std::vector<cppx::terminal::StatusLine>{
@@ -682,6 +752,8 @@ void print_file_explorer_gate(
     print_material_budget_coverage_summary(summary.cases);
     print_material_quality_policy_summary(summary.cases);
     print_material_resource_bounds_summary(summary.cases);
+    print_material_resource_bound_summary(summary.cases);
+    print_material_quality_policy_bound_summary(summary.cases);
     print_material_budget_bound_summary(summary.cases);
     print_material_budget_summary(summary.cases);
     if (!summary.error.empty()) {
@@ -825,6 +897,14 @@ auto run_file_explorer_case(fs::path const& root,
             material_quality_policy_from_report(*verifier_report);
         item.material_resource_bounds =
             material_resource_bounds_from_report(*verifier_report);
+        item.material_resource_bound_summary =
+            material_resource_bound_summary_from_report(*verifier_report);
+        item.material_resource_bound_results =
+            material_resource_bound_results_from_report(*verifier_report);
+        item.material_quality_policy_bound_summary =
+            material_quality_policy_bound_summary_from_report(*verifier_report);
+        item.material_quality_policy_bound_results =
+            material_quality_policy_bound_results_from_report(*verifier_report);
         item.verifier_manifest =
             verifier_manifest_summary_from_report(*verifier_report);
         item.material_budget_coverage = material_budget_coverage_summary(

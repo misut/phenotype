@@ -12816,6 +12816,43 @@ def check_material_plan_summary_requirements(
                 hint=hint)
 
 
+def material_bound_result(
+        source: JsonObject,
+        key: str,
+        field: str,
+        kind: str,
+        expected: int | float) -> JsonObject:
+    value = source.get(field)
+    actual = (
+        value
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+        else None)
+    margin: float | None = None
+    if actual is None:
+        ok = False
+    elif kind == "lte":
+        margin = float(expected) - float(actual)
+        ok = margin >= 0.0
+    elif kind == "gte":
+        margin = float(actual) - float(expected)
+        ok = margin >= 0.0
+    else:
+        delta = abs(float(actual) - float(expected))
+        margin = 0.0 if numbers_close(actual, expected) else -delta
+        ok = margin >= 0.0
+    result: JsonObject = {
+        "key": key,
+        "field": field,
+        "bound": kind,
+        "expected": expected,
+        "actual": actual,
+        "ok": ok,
+    }
+    if margin is not None:
+        result["margin"] = margin
+    return result
+
+
 def check_material_resource_bounds_requirements(
         summary: JsonObject,
         spec: JsonObject,
@@ -12862,20 +12899,6 @@ def check_material_resource_bounds_requirements(
         "max_paint_layer_inflate_lte": "max_paint_layer_inflate",
         "max_refraction_offset_pixels_lte": "max_refraction_offset_pixels",
     }
-    for spec_field, summary_field in field_map.items():
-        if spec_field not in spec:
-            continue
-        actual = bounds.get(summary_field)
-        expected = spec[spec_field]
-        report.check(
-            f"material resource bound {summary_field} is within limit",
-            isinstance(actual, (int, float)) and not isinstance(actual, bool)
-            and float(actual) <= float(expected),
-            path=f"{base_path}.{summary_field}",
-            expected={"<=": expected},
-            actual=actual,
-            likely_layer="platform-runtime",
-            hint="Inspect MaterialResourceBudget in the resolved material plans.")
     min_field_map = {
         "max_plan_sample_taps_gte": "max_plan_sample_taps",
         "total_plan_sample_taps_gte": "total_plan_sample_taps",
@@ -12909,42 +12932,79 @@ def check_material_resource_bounds_requirements(
         "max_paint_layer_inflate_gte": "max_paint_layer_inflate",
         "max_refraction_offset_pixels_gte": "max_refraction_offset_pixels",
     }
+    results: list[JsonObject] = []
+    for spec_field, summary_field in field_map.items():
+        if spec_field in spec:
+            results.append(material_bound_result(
+                bounds,
+                spec_field,
+                summary_field,
+                "lte",
+                spec[spec_field]))
     for spec_field, summary_field in min_field_map.items():
-        if spec_field not in spec:
-            continue
-        actual = bounds.get(summary_field)
-        expected = spec[spec_field]
-        report.check(
-            f"material resource bound {summary_field} meets floor",
-            isinstance(actual, (int, float)) and not isinstance(actual, bool)
-            and float(actual) >= float(expected),
-            path=f"{base_path}.{summary_field}",
-            expected={">=": expected},
-            actual=actual,
-            likely_layer="platform-runtime",
-            hint=(
-                "Inspect MaterialPlan.sample_taps and "
-                "renderer.material_plans[].passes in the resolved plans."))
+        if spec_field in spec:
+            results.append(material_bound_result(
+                bounds,
+                spec_field,
+                summary_field,
+                "gte",
+                spec[spec_field]))
     if spec.get("require_bounded_texture_copy") is True:
-        actual = bounds.get("unbounded_texture_copy")
-        report.check(
-            "material resource bound requires bounded texture copies",
-            actual == 0,
-            path=f"{base_path}.unbounded_texture_copy",
-            expected=0,
-            actual=actual,
-            likely_layer="platform-runtime",
-            hint="MaterialResourceBudget.bounded_texture_copy must stay true for every plan.")
+        results.append(material_bound_result(
+            bounds,
+            "require_bounded_texture_copy",
+            "unbounded_texture_copy",
+            "equals",
+            0))
     if spec.get("require_deterministic_fallback") is True:
-        actual = bounds.get("non_deterministic_fallback")
+        results.append(material_bound_result(
+            bounds,
+            "require_deterministic_fallback",
+            "non_deterministic_fallback",
+            "equals",
+            0))
+    summary["resource_bound_results"] = results
+    summary["resource_bound_summary"] = material_executor_budget_bound_summary(
+        results)
+    for result in results:
+        summary_field = result["field"]
+        kind = result["bound"]
+        expected = result["expected"]
+        actual = result.get("actual")
+        if kind == "lte":
+            name = f"material resource bound {summary_field} is within limit"
+            expected_value = {"<=": expected}
+            hint = "Inspect MaterialResourceBudget in the resolved material plans."
+        elif kind == "gte":
+            name = f"material resource bound {summary_field} meets floor"
+            expected_value = {">=": expected}
+            hint = (
+                "Inspect MaterialPlan.sample_taps and "
+                "renderer.material_plans[].passes in the resolved plans.")
+        elif result["key"] == "require_bounded_texture_copy":
+            name = "material resource bound requires bounded texture copies"
+            expected_value = expected
+            hint = (
+                "MaterialResourceBudget.bounded_texture_copy must stay true "
+                "for every plan.")
+        elif result["key"] == "require_deterministic_fallback":
+            name = "material resource bound requires deterministic fallback"
+            expected_value = expected
+            hint = (
+                "MaterialResourceBudget.deterministic_fallback must stay true "
+                "for every plan.")
+        else:
+            name = f"material resource bound {summary_field} equals expectation"
+            expected_value = expected
+            hint = "Inspect MaterialResourceBudget in the resolved material plans."
         report.check(
-            "material resource bound requires deterministic fallback",
-            actual == 0,
-            path=f"{base_path}.non_deterministic_fallback",
-            expected=0,
+            name,
+            result["ok"] is True,
+            path=f"{base_path}.{summary_field}",
+            expected=expected_value,
             actual=actual,
             likely_layer="platform-runtime",
-            hint="MaterialResourceBudget.deterministic_fallback must stay true for every plan.")
+            hint=hint)
 
 
 def check_material_executor_budget_requirements(
@@ -14458,20 +14518,15 @@ def check_material_quality_policy_requirements(
         "max_sample_taps_lte": "max_sample_taps",
         "max_backdrop_pixels_lte": "max_backdrop_pixels",
     }
+    results: list[JsonObject] = []
     for spec_field, summary_field in field_map.items():
-        if spec_field not in spec:
-            continue
-        actual = policy.get(summary_field)
-        expected = spec[spec_field]
-        report.check(
-            f"material quality policy {summary_field} is within limit",
-            isinstance(actual, (int, float)) and not isinstance(actual, bool)
-            and float(actual) <= float(expected),
-            path=f"{base_path}.{summary_field}",
-            expected={"<=": expected},
-            actual=actual,
-            likely_layer="material-plan",
-            hint="Inspect MaterialPlan.quality_policy in the resolved plans.")
+        if spec_field in spec:
+            results.append(material_bound_result(
+                policy,
+                spec_field,
+                summary_field,
+                "lte",
+                spec[spec_field]))
 
     required_allowed = {
         "require_backdrop_sampling_allowed": "backdrop_sampling_disabled",
@@ -14479,17 +14534,39 @@ def check_material_quality_policy_requirements(
         "require_shadow_allowed": "shadow_disabled",
     }
     for spec_field, summary_field in required_allowed.items():
-        if spec.get(spec_field) is not True:
-            continue
-        actual = policy.get(summary_field)
+        if spec.get(spec_field) is True:
+            results.append(material_bound_result(
+                policy,
+                spec_field,
+                summary_field,
+                "equals",
+                0))
+    summary["quality_policy_bound_results"] = results
+    summary["quality_policy_bound_summary"] = material_executor_budget_bound_summary(
+        results)
+    for result in results:
+        summary_field = result["field"]
+        kind = result["bound"]
+        expected = result["expected"]
+        actual = result.get("actual")
+        if kind == "lte":
+            name = f"material quality policy {summary_field} is within limit"
+            expected_value = {"<=": expected}
+            hint = "Inspect MaterialPlan.quality_policy in the resolved plans."
+        else:
+            name = f"material quality policy {summary_field} is zero"
+            expected_value = expected
+            hint = (
+                "Inspect MaterialPlan.quality_policy and the backend "
+                "MaterialEnvironment.")
         report.check(
-            f"material quality policy {summary_field} is zero",
-            actual == 0,
+            name,
+            result["ok"] is True,
             path=f"{base_path}.{summary_field}",
-            expected=0,
+            expected=expected_value,
             actual=actual,
             likely_layer="material-plan",
-            hint="Inspect MaterialPlan.quality_policy and the backend MaterialEnvironment.")
+            hint=hint)
 
 
 def check_material_semantic_runtime_match(

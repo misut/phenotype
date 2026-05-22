@@ -3537,6 +3537,61 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "total_runtime_passes",
                 "total_surface_sample_pixels",
             ])
+        resource_results = report["material_plans"]["resource_bound_results"]
+        self.assertEqual(len(resource_results), 44)
+        by_key = {item["key"]: item for item in resource_results}
+        self.assertEqual(
+            by_key["max_plan_sample_taps_lte"]["field"],
+            "max_plan_sample_taps")
+        self.assertEqual(by_key["max_plan_sample_taps_lte"]["bound"], "lte")
+        self.assertEqual(by_key["max_plan_sample_taps_lte"]["expected"], 25)
+        self.assertEqual(by_key["max_plan_sample_taps_lte"]["actual"], 25)
+        self.assertTrue(by_key["max_plan_sample_taps_lte"]["ok"])
+        self.assertEqual(by_key["max_plan_sample_taps_lte"]["margin"], 0.0)
+        self.assertEqual(
+            report["material_plans"]["resource_bound_summary"],
+            {
+                "bound_count": 44,
+                "pass_count": 44,
+                "fail_count": 0,
+                "failed_keys": [],
+                "tightest_bound_key": "max_plan_sample_taps_lte",
+                "tightest_bound_field": "max_plan_sample_taps",
+                "tightest_bound_margin": 0.0,
+            })
+
+    def test_material_resource_bound_result_failure_is_llm_actionable(self) -> None:
+        manifest = {
+            "require_material_resource_bounds": {
+                "max_plan_sample_taps_lte": 0,
+            }
+        }
+        code, report = self.run_verifier(
+            snapshot(sampled_material_plan(sample_taps=25)),
+            manifest)
+
+        self.assertEqual(code, 1)
+        summary = report["material_plans"]["resource_bound_summary"]
+        self.assertEqual(summary["bound_count"], 1)
+        self.assertEqual(summary["fail_count"], 1)
+        self.assertEqual(summary["failed_keys"], ["max_plan_sample_taps_lte"])
+        result = report["material_plans"]["resource_bound_results"][0]
+        self.assertEqual(result["field"], "max_plan_sample_taps")
+        self.assertEqual(result["bound"], "lte")
+        self.assertEqual(result["expected"], 0)
+        self.assertEqual(result["actual"], 25)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["margin"], -25.0)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material resource bound max_plan_sample_taps is within limit"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans"
+            "#resource_bounds.max_plan_sample_taps")
+        self.assertEqual(failure["expected"], {"<=": 0})
+        self.assertEqual(failure["actual"], 25)
 
     def test_manifest_can_require_execution_stage_summary(self) -> None:
         manifest = {
@@ -4467,6 +4522,63 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "noise_disabled",
                 "shadow_disabled",
             ])
+        quality_results = report["material_plans"]["quality_policy_bound_results"]
+        self.assertEqual(len(quality_results), 6)
+        by_key = {item["key"]: item for item in quality_results}
+        self.assertEqual(
+            by_key["max_backdrop_pixels_lte"]["field"],
+            "max_backdrop_pixels")
+        self.assertEqual(by_key["max_backdrop_pixels_lte"]["bound"], "lte")
+        self.assertEqual(
+            by_key["max_backdrop_pixels_lte"]["expected"],
+            4_000_000)
+        self.assertEqual(
+            by_key["max_backdrop_pixels_lte"]["actual"],
+            4_000_000)
+        self.assertTrue(by_key["max_backdrop_pixels_lte"]["ok"])
+        self.assertEqual(
+            report["material_plans"]["quality_policy_bound_summary"],
+            {
+                "bound_count": 6,
+                "pass_count": 6,
+                "fail_count": 0,
+                "failed_keys": [],
+                "tightest_bound_key": "max_blur_radius_lte",
+                "tightest_bound_field": "max_blur_radius",
+                "tightest_bound_margin": 0.0,
+            })
+
+    def test_material_quality_policy_bound_result_failure_is_llm_actionable(
+            self) -> None:
+        manifest = {
+            "require_material_quality_policy": {
+                "max_blur_radius_lte": 1.0,
+            },
+        }
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 1)
+        summary = report["material_plans"]["quality_policy_bound_summary"]
+        self.assertEqual(summary["bound_count"], 1)
+        self.assertEqual(summary["fail_count"], 1)
+        self.assertEqual(summary["failed_keys"], ["max_blur_radius_lte"])
+        result = report["material_plans"]["quality_policy_bound_results"][0]
+        self.assertEqual(result["field"], "max_blur_radius")
+        self.assertEqual(result["bound"], "lte")
+        self.assertEqual(result["expected"], 1.0)
+        self.assertEqual(result["actual"], 36.0)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["margin"], -35.0)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material quality policy max_blur_radius is within limit"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans"
+            "#quality_policy.max_blur_radius")
+        self.assertEqual(failure["expected"], {"<=": 1.0})
+        self.assertEqual(failure["actual"], 36.0)
 
     def test_manifest_can_require_runtime_numeric_bounds(self) -> None:
         manifest = {

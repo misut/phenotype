@@ -361,6 +361,18 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
     auto resource_bounds = verifier_report
         ? material_resource_bounds_from_report(*verifier_report)
         : std::optional<MaterialResourceBoundsSummary>{};
+    auto resource_bound_summary = verifier_report
+        ? material_resource_bound_summary_from_report(*verifier_report)
+        : std::optional<MaterialBudgetBoundSummary>{};
+    auto resource_bound_results = verifier_report
+        ? material_resource_bound_results_from_report(*verifier_report)
+        : std::optional<std::vector<MaterialBudgetBoundResult>>{};
+    auto quality_policy_bound_summary = verifier_report
+        ? material_quality_policy_bound_summary_from_report(*verifier_report)
+        : std::optional<MaterialBudgetBoundSummary>{};
+    auto quality_policy_bound_results = verifier_report
+        ? material_quality_policy_bound_results_from_report(*verifier_report)
+        : std::optional<std::vector<MaterialBudgetBoundResult>>{};
     auto verifier_manifest = verifier_report
         ? verifier_manifest_summary_from_report(*verifier_report)
         : std::optional<VerifierManifestSummary>{};
@@ -384,6 +396,10 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         "\"artifact\":{},\"material_budget\":{},"
         "\"material_quality_policy\":{},"
         "\"material_resource_bounds\":{},"
+        "\"material_resource_bound_summary\":{},"
+        "\"material_resource_bound_results\":{},"
+        "\"material_quality_policy_bound_summary\":{},"
+        "\"material_quality_policy_bound_results\":{},"
         "\"verifier_manifest\":{},\"material_budget_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
         "\"material_budget_bound_results\":{},"
@@ -405,6 +421,10 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         material_budget_json(budget),
         material_quality_policy_json(quality_policy),
         material_resource_bounds_json(resource_bounds),
+        material_budget_bound_summary_json(resource_bound_summary),
+        material_budget_bound_results_json(resource_bound_results),
+        material_budget_bound_summary_json(quality_policy_bound_summary),
+        material_budget_bound_results_json(quality_policy_bound_results),
         verifier_manifest_summary_json(verifier_manifest),
         material_budget_coverage_json(coverage),
         material_budget_bound_summary_json(bound_summary),
@@ -484,6 +504,34 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
             std::println("material resource bounds:");
             for (auto const& line : material_resource_bounds_lines(
                      *resource_bounds)) {
+                std::println("  {}", line);
+            }
+        }
+        if (auto resource_bound_summary =
+                material_resource_bound_summary_from_report(*verifier_report)) {
+            std::println(
+                "material resource bound results: {}",
+                material_budget_bound_summary_text(*resource_bound_summary));
+            auto resource_bound_results =
+                material_resource_bound_results_from_report(*verifier_report);
+            for (auto const& line : material_budget_bound_detail_lines(
+                     resource_bound_results,
+                     resource_bound_summary)) {
+                std::println("  {}", line);
+            }
+        }
+        if (auto quality_policy_bound_summary =
+                material_quality_policy_bound_summary_from_report(
+                    *verifier_report)) {
+            std::println(
+                "material quality policy bounds: {}",
+                material_budget_bound_summary_text(*quality_policy_bound_summary));
+            auto quality_policy_bound_results =
+                material_quality_policy_bound_results_from_report(
+                    *verifier_report);
+            for (auto const& line : material_budget_bound_detail_lines(
+                     quality_policy_bound_results,
+                     quality_policy_bound_summary)) {
                 std::println("  {}", line);
             }
         }
