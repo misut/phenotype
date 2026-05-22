@@ -64,7 +64,19 @@ auto sample_report() -> json::Value {
         ]
       },
       "artifact_context": {
+        "platform": "test",
+        "backend": "synthetic",
         "material_contract": {
+          "semantic_material_nodes": 3,
+          "renderer_plan_contract_version": 42,
+          "renderer_plan_count": 3,
+          "renderer_plans_present": true,
+          "resolved_plan_count": 3,
+          "decision_reduced_transparency": false,
+          "decision_increase_contrast": true,
+          "decision_reduce_motion": false,
+          "app_probe_contract_name": "glass_showcase_material_probe_contract",
+          "app_probe_reference_technology": "liquid-glass",
           "executor_budget": {
             "plan_count": 3,
             "material_instance_count": 3,
@@ -282,6 +294,22 @@ auto sample_report() -> json::Value {
           "likely_pass": "sampled-backdrop",
           "hint": "keep upload utilization under the manifest guard",
           "suggested_action": "reduce backdrop sample taps before raising the guard"
+        },
+        "artifact_context": {
+          "platform": "test",
+          "backend": "synthetic",
+          "material_contract": {
+            "semantic_material_nodes": 3,
+            "renderer_plan_contract_version": 42,
+            "renderer_plan_count": 3,
+            "renderer_plans_present": true,
+            "resolved_plan_count": 3,
+            "decision_reduced_transparency": false,
+            "decision_increase_contrast": true,
+            "decision_reduce_motion": false,
+            "app_probe_contract_name": "glass_showcase_material_probe_contract",
+            "app_probe_reference_technology": "liquid-glass"
+          }
         }
       },
       "failures": [
@@ -425,6 +453,12 @@ int main() {
         "\"top_suggested_action\":\"reduce backdrop sample taps before raising the guard\""));
     assert(contains_text(
         failure_json,
+        "\"artifact_context\":{\"platform\":\"test\",\"backend\":\"synthetic\""));
+    assert(contains_text(
+        failure_json,
+        "\"material_contract\":{\"semantic_material_nodes\":3,\"renderer_plan_contract_version\":42,\"renderer_plan_count\":3,\"renderer_plans_present\":true,\"resolved_plan_count\":3,\"decision_reduced_transparency\":false,\"decision_increase_contrast\":true,\"decision_reduce_motion\":false,\"app_probe_contract_name\":\"glass_showcase_material_probe_contract\",\"app_probe_reference_technology\":\"liquid-glass\"}"));
+    assert(contains_text(
+        failure_json,
         "\"by_likely_layer\":{\"material-control\":2,\"platform-runtime\":1}"));
     assert(contains_text(
         failure_json,
@@ -451,6 +485,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "top-action: reduce backdrop sample taps before raising the guard"));
+    assert(contains_line(
+        failure_lines,
+        "context: platform=test backend=synthetic semantic-nodes=3 renderer-plans=3 resolved-plans=3 reduced-transparency=false increase-contrast=true reduce-motion=false probe=liquid-glass"));
     assert(contains_line(
         failure_lines,
         "by-layer: material-control=2, platform-runtime=1"));

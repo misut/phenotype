@@ -1571,6 +1571,163 @@ auto failure_json_value_or_null(json::Value const& report,
     return value ? json::emit(*value) : std::string{"null"};
 }
 
+auto failure_artifact_context_json(json::Value const& report) -> std::string {
+    if (!json_object_at(report, {"failure_summary", "artifact_context"}))
+        return "null";
+
+    return std::format(
+        "{{\"platform\":{},\"backend\":{},\"material_contract\":{{"
+        "\"semantic_material_nodes\":{},"
+        "\"renderer_plan_contract_version\":{},"
+        "\"renderer_plan_count\":{},"
+        "\"renderer_plans_present\":{},"
+        "\"resolved_plan_count\":{},"
+        "\"decision_reduced_transparency\":{},"
+        "\"decision_increase_contrast\":{},"
+        "\"decision_reduce_motion\":{},"
+        "\"app_probe_contract_name\":{},"
+        "\"app_probe_reference_technology\":{}}}}}",
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "platform"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "backend"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "semantic_material_nodes"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "renderer_plan_contract_version"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "renderer_plan_count"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "renderer_plans_present"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "resolved_plan_count"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "decision_reduced_transparency"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "decision_increase_contrast"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "decision_reduce_motion"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "app_probe_contract_name"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "app_probe_reference_technology"}));
+}
+
+auto failure_context_text_value(json::Value const& report,
+                                std::initializer_list<std::string_view> path)
+        -> std::string {
+    auto const* value = json_at(report, path);
+    if (!value)
+        return {};
+    return compact_failure_json_text(*value);
+}
+
+void append_failure_context_part(std::vector<std::string>& parts,
+                                 std::string_view label,
+                                 std::string value) {
+    if (value.empty())
+        return;
+    parts.push_back(std::format("{}={}", label, std::move(value)));
+}
+
+auto failure_artifact_context_line(json::Value const& report) -> std::string {
+    if (!json_object_at(report, {"failure_summary", "artifact_context"}))
+        return {};
+
+    auto parts = std::vector<std::string>{};
+    append_failure_context_part(
+        parts,
+        "platform",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "platform"}));
+    append_failure_context_part(
+        parts,
+        "backend",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "backend"}));
+    append_failure_context_part(
+        parts,
+        "semantic-nodes",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "semantic_material_nodes"}));
+    append_failure_context_part(
+        parts,
+        "renderer-plans",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "renderer_plan_count"}));
+    append_failure_context_part(
+        parts,
+        "resolved-plans",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "resolved_plan_count"}));
+    append_failure_context_part(
+        parts,
+        "reduced-transparency",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "decision_reduced_transparency"}));
+    append_failure_context_part(
+        parts,
+        "increase-contrast",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "decision_increase_contrast"}));
+    append_failure_context_part(
+        parts,
+        "reduce-motion",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "decision_reduce_motion"}));
+    append_failure_context_part(
+        parts,
+        "probe",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "app_probe_reference_technology"}));
+
+    auto text = std::string{};
+    for (auto const& part : parts) {
+        if (!text.empty())
+            text += " ";
+        text += part;
+    }
+    return text;
+}
+
 auto compact_failure_count_map_text(
         json::Value const& report,
         std::initializer_list<std::string_view> path,
@@ -1711,6 +1868,7 @@ auto verifier_failure_summary_json(json::Value const& report)
     return std::format(
         "{{\"count\":{},\"top_likely_layer\":{},"
         "\"top_likely_pass\":{},\"top_suggested_action\":{},"
+        "\"artifact_context\":{},"
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_path\":{},"
         "\"by_suggested_action\":{},\"first_failure\":{},"
         "\"failures\":{},\"truncated\":{}}}",
@@ -1724,6 +1882,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         failure_optional_string_json(json_string_at(
             report,
             {"failure_summary", "top_suggested_action"}).value_or("")),
+        failure_artifact_context_json(report),
         failure_json_value_or_null(
             report,
             {"failure_summary", "by_likely_layer"}),
@@ -1776,6 +1935,10 @@ auto verifier_failure_summary_lines(json::Value const& report)
         lines.push_back("  top-action: " + truncate_failure_text(
             std::move(top_action),
             220));
+    }
+    if (auto context = failure_artifact_context_line(report);
+        !context.empty()) {
+        lines.push_back("  context: " + context);
     }
     if (auto by_layer = compact_failure_count_map_text(
             report,
