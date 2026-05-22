@@ -214,11 +214,14 @@ guarded-field shortfall; CLI compact failure details render the same shape as
 verifier JSON and non-JSON output can explain why a floor was missed without
 opening the full coverage object. The compact failure summary also aggregates
 coverage minimum failures separately from the first few detailed failures, so
-floor shortfalls stay visible even when failure ordering changes. Resource and
-quality coverage summaries preserve the active `bound_keys` array and repeat it
-as `guard-key-list=(...)` in compact text, and executor budget coverage compact
-text repeats `manifest_bound_keys` the same way, so guard breadth and the
-concrete manifest keys stay attached. The
+floor shortfalls stay visible even when failure ordering changes. Compact JSON
+also exposes structured `coverage_minimum_failure_details.entries[]` with raw
+expected/actual objects and rendered `actual_text`, so automation can inspect
+the same guard breadth context without string parsing. Resource and quality
+coverage summaries preserve the active `bound_keys` array and repeat it as
+`guard-key-list=(...)` in compact text, and executor budget coverage compact text
+repeats `manifest_bound_keys` the same way, so guard breadth and the concrete
+manifest keys stay attached. The
 checked-in glass showcase, file
 explorer, and Android artifact manifests now opt into those resource and
 quality-policy coverage contracts.
