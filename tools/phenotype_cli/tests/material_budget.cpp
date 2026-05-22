@@ -586,6 +586,59 @@ auto sample_report() -> json::Value {
           "max_sample_taps": 25,
           "max_backdrop_pixels": 4096
         },
+        "quality_policy_sources": {
+          "max_blur_radius": {
+            "metric": "max_blur_radius",
+            "value": 36,
+            "plan_id": "material.toolbar.liquid-glass",
+            "kind": "regular",
+            "role": "toolbar",
+            "plan_path": "debug.platform_runtime.details.renderer.material_plans[0]",
+            "source_path": "debug.platform_runtime.details.renderer.material_plans[0].quality_policy.max_blur_radius",
+            "likely_layer": "material-blur-pass",
+            "likely_pass": "quality-policy",
+            "container": {
+              "mode": "union",
+              "container_id": 41,
+              "union_id": 7,
+              "spacing": 20
+            }
+          },
+          "max_sample_taps": {
+            "metric": "max_sample_taps",
+            "value": 25,
+            "plan_id": "material.toolbar.liquid-glass",
+            "kind": "regular",
+            "role": "toolbar",
+            "plan_path": "debug.platform_runtime.details.renderer.material_plans[0]",
+            "source_path": "debug.platform_runtime.details.renderer.material_plans[0].quality_policy.max_sample_taps",
+            "likely_layer": "material-blur-pass",
+            "likely_pass": "quality-policy",
+            "container": {
+              "mode": "union",
+              "container_id": 41,
+              "union_id": 7,
+              "spacing": 20
+            }
+          },
+          "max_backdrop_pixels": {
+            "metric": "max_backdrop_pixels",
+            "value": 4096,
+            "plan_id": "material.content.liquid-glass",
+            "kind": "thin",
+            "role": "content",
+            "plan_path": "debug.platform_runtime.details.renderer.material_plans[1]",
+            "source_path": "debug.platform_runtime.details.renderer.material_plans[1].quality_policy.max_backdrop_pixels",
+            "likely_layer": "material-blur-pass",
+            "likely_pass": "quality-policy",
+            "container": {
+              "mode": "union",
+              "container_id": 41,
+              "union_id": 7,
+              "spacing": 20
+            }
+          }
+        },
         "quality_policy_bound_coverage": {
           "guardable_field_count": 6,
           "observed_field_count": 6,
@@ -1002,9 +1055,21 @@ int main() {
     assert(quality_policy);
     assert(quality_policy->noise_disabled == 0);
     assert(quality_policy->max_blur_radius == 36.0);
+    assert(quality_policy->sources.size() == 3);
+    assert(quality_policy->sources[0].metric == "max_blur_radius");
+    assert(quality_policy->sources[0].source_path
+        == "debug.platform_runtime.details.renderer.material_plans[0]"
+           ".quality_policy.max_blur_radius");
+    assert(quality_policy->sources[2].metric == "max_backdrop_pixels");
     assert(contains_text(
         material_quality_policy_text(*quality_policy),
         "noise=0"));
+    assert(contains_text(
+        material_quality_policy_json(quality_policy),
+        "\"sources\":{\"max_blur_radius\":{\"metric\":\"max_blur_radius\""));
+    assert(contains_text(
+        material_quality_policy_text(*quality_policy),
+        "sources: max_blur_radius=36 layer=material-blur-pass"));
 
     auto executor_summary = material_budget_bound_summary_from_report(report);
     assert(executor_summary);
@@ -1196,6 +1261,9 @@ int main() {
     assert(contains_text(
         failure_json,
         "\"sources\":{\"max_plan_sample_taps\":{\"metric\":\"max_plan_sample_taps\""));
+    assert(contains_text(
+        failure_json,
+        "\"quality_policy\":{\"backdrop_sampling_disabled\":0,\"noise_disabled\":0,\"shadow_disabled\":0,\"max_blur_radius\":36,\"max_sample_taps\":25,\"max_backdrop_pixels\":4096,\"sources\":{\"max_blur_radius\":{\"metric\":\"max_blur_radius\""));
     assert(contains_text(
         failure_json,
         "\"container_groups\":{\"group_count\":3,\"multi_surface_group_count\":1,\"union_group_count\":1,\"morph_group_count\":2"));

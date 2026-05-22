@@ -142,7 +142,9 @@ resource and legibility-policy guard fields are observed and bounded without
 opening the raw report. `verifier.material_quality_policy` mirrors the
 verifier's compact quality-policy summary, including disabled backdrop sampling,
 noise, and shadow counts plus maximum blur radius, sample taps, and backdrop
-pixel limits. `verifier.material_resource_bounds` mirrors the verifier's compact
+pixel limits, and its `sources` object preserves the plan id, JSON path, likely
+layer/pass, and container identity behind those observed quality-policy values.
+`verifier.material_resource_bounds` mirrors the verifier's compact
 `material_plans.resource_bounds` summary, including pure plan blur/tap
 limits, capture and surface-sampling pixel bounds, runtime pass/stage counts,
 paint-layer counts, copy bounds, and deterministic fallback safety counters.
@@ -1751,6 +1753,11 @@ When a resource guard is tight or fails, inspect
 `material_resource_bounds.sources` object to see which plan id and JSON path
 produced the relevant sample-tap, texture-copy, capture-pixel, refraction,
 spacing, paint-inflate, or capacity value.
+When a quality-policy guard is tight or fails, inspect
+`material_plans.quality_policy_sources` or the CLI
+`material_quality_policy.sources` object to see which plan id and JSON path
+produced the observed blur, sample-tap, backdrop-pixel, backdrop-sampling,
+noise, or shadow policy value.
 For manifestless iteration, the equivalent direct CLI field flags are
 `--require-material-budget-coverage-field`,
 `--require-material-resource-coverage-field`, and
@@ -1815,7 +1822,10 @@ many pixels the backend actually copied in a frame.
 The verifier also serializes `material_plans.quality_policy_bound_summary` and
 `material_plans.quality_policy_bound_results` for every applied quality-policy
 guard, with the same expected/actual/pass/fail/margin fields used by material
-budget and resource bound results.
+budget and resource bound results. The companion
+`material_plans.quality_policy_sources` object points each quality-policy
+maximum or disabled-effect counter back to the responsible plan path, and the
+CLI keeps those descriptors under compact `material_quality_policy.sources`.
 On macOS this budget is intentionally larger than the generic 4M fallback
 because the native edge adapter probes Metal support and advertises a bounded
 16M backdrop-copy budget for Retina-sized windows. The artifact still proves the

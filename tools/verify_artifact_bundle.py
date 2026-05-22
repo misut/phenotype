@@ -985,6 +985,11 @@ def material_failure_context(
         if isinstance(resource_bound_sources, dict):
             material_contract["resource_bound_sources"] = (
                 resource_bound_sources)
+        quality_policy_sources = material_plan_summary.get(
+            "quality_policy_sources")
+        if isinstance(quality_policy_sources, dict):
+            material_contract["quality_policy_sources"] = (
+                quality_policy_sources)
         material_contract["plan_reference_model"] = (
             material_plan_summary.get("reference_model"))
         material_contract["plan_shape"] = material_plan_summary.get("shape")
@@ -1429,6 +1434,76 @@ def update_material_resource_bound_source(
             or isinstance(existing_value, bool)
             or float(value) > float(existing_value)):
         sources[metric] = material_resource_bound_source(
+            metric,
+            value,
+            plan,
+            plan_path,
+            source_path,
+            likely_layer=likely_layer,
+            likely_pass=likely_pass,
+            detail=detail)
+
+
+def material_quality_policy_source(
+        metric: str,
+        value: int | float,
+        plan: JsonObject,
+        plan_path: str,
+        source_path: str,
+        *,
+        likely_layer: str,
+        likely_pass: str = "quality-policy",
+        detail: JsonObject | None = None) -> JsonObject:
+    source: JsonObject = {
+        "metric": metric,
+        "value": value,
+        "plan_path": plan_path,
+        "source_path": source_path,
+        "likely_layer": likely_layer,
+    }
+    if likely_pass:
+        source["likely_pass"] = likely_pass
+    for key in ("plan_id", "kind", "role"):
+        if isinstance(plan.get(key), str):
+            source[key] = plan[key]
+    container = plan.get("container")
+    if isinstance(container, dict):
+        source["container"] = {
+            key: container.get(key)
+            for key in ("mode", "container_id", "union_id", "spacing")
+            if key in container
+        }
+    if isinstance(detail, dict) and detail:
+        source["detail"] = detail
+    return source
+
+
+def update_material_quality_policy_source(
+        summary: JsonObject,
+        metric: str,
+        value: Any,
+        plan: JsonObject,
+        plan_path: str,
+        source_path: str,
+        *,
+        likely_layer: str,
+        likely_pass: str = "quality-policy",
+        detail: JsonObject | None = None) -> None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return
+    sources = summary.get("quality_policy_sources")
+    if not isinstance(sources, dict):
+        sources = {}
+        summary["quality_policy_sources"] = sources
+    existing = sources.get(metric)
+    existing_value = (
+        existing.get("value")
+        if isinstance(existing, dict)
+        else None)
+    if (not isinstance(existing_value, (int, float))
+            or isinstance(existing_value, bool)
+            or float(value) > float(existing_value)):
+        sources[metric] = material_quality_policy_source(
             metric,
             value,
             plan,
@@ -6483,6 +6558,7 @@ def summarize_material_plans(
             "max_sample_taps": 0,
             "max_backdrop_pixels": 0,
         },
+        "quality_policy_sources": {},
     }
     container_group_accumulators: dict[int, JsonObject] = {}
 
@@ -10285,15 +10361,28 @@ def summarize_material_plans(
                     hint="Quality policy booleans must stay explicit.")
                 if enabled is False:
                     quality_summary = summary["quality_policy"]
+                    metric = ""
                     if key == "allow_backdrop_sampling":
+                        metric = "backdrop_sampling_disabled"
                         quality_summary["backdrop_sampling_disabled"] = int(
                             quality_summary["backdrop_sampling_disabled"]) + 1
                     elif key == "allow_noise":
+                        metric = "noise_disabled"
                         quality_summary["noise_disabled"] = int(
                             quality_summary["noise_disabled"]) + 1
                     elif key == "allow_shadow":
+                        metric = "shadow_disabled"
                         quality_summary["shadow_disabled"] = int(
                             quality_summary["shadow_disabled"]) + 1
+                    if metric:
+                        update_material_quality_policy_source(
+                            summary,
+                            metric,
+                            quality_summary[metric],
+                            plan,
+                            plan_path,
+                            f"{plan_path}.quality_policy.{key}",
+                            likely_layer=likely_layer)
             for key in MATERIAL_QUALITY_POLICY_NUMBER_FIELDS:
                 policy_limit = check_number_field(
                     report,
@@ -10321,6 +10410,14 @@ def summarize_material_plans(
                         quality_summary["max_blur_radius"] = max(
                             float(quality_summary["max_blur_radius"]),
                             float(policy_limit))
+                        update_material_quality_policy_source(
+                            summary,
+                            "max_blur_radius",
+                            quality_summary["max_blur_radius"],
+                            plan,
+                            plan_path,
+                            f"{plan_path}.quality_policy.{key}",
+                            likely_layer=likely_layer)
                     elif key == "max_sample_taps":
                         report.check(
                             "material quality policy sample taps respect engine cap",
@@ -10337,10 +10434,26 @@ def summarize_material_plans(
                         quality_summary["max_sample_taps"] = max(
                             int(quality_summary["max_sample_taps"]),
                             int(policy_limit))
+                        update_material_quality_policy_source(
+                            summary,
+                            "max_sample_taps",
+                            quality_summary["max_sample_taps"],
+                            plan,
+                            plan_path,
+                            f"{plan_path}.quality_policy.{key}",
+                            likely_layer=likely_layer)
                     elif key == "max_backdrop_pixels":
                         quality_summary["max_backdrop_pixels"] = max(
                             int(quality_summary["max_backdrop_pixels"]),
                             int(policy_limit))
+                        update_material_quality_policy_source(
+                            summary,
+                            "max_backdrop_pixels",
+                            quality_summary["max_backdrop_pixels"],
+                            plan,
+                            plan_path,
+                            f"{plan_path}.quality_policy.{key}",
+                            likely_layer=likely_layer)
 
         resource_budget = check_object_field(
             report,

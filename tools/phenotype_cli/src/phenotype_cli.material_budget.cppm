@@ -45,6 +45,23 @@ struct MaterialBudgetSummary {
     std::string backdrop_copy_skip_reason;
 };
 
+struct MaterialQualityPolicySource {
+    std::string metric;
+    double value = -1.0;
+    std::string plan_id;
+    std::string kind;
+    std::string role;
+    std::string plan_path;
+    std::string source_path;
+    std::string likely_layer;
+    std::string likely_pass;
+    std::string container_mode;
+    std::int64_t container_id = -1;
+    std::int64_t union_id = -1;
+    double container_spacing = -1.0;
+    std::string detail_json;
+};
+
 struct MaterialQualityPolicySummary {
     std::int64_t backdrop_sampling_disabled = -1;
     std::int64_t noise_disabled = -1;
@@ -52,6 +69,7 @@ struct MaterialQualityPolicySummary {
     double max_blur_radius = -1.0;
     std::int64_t max_sample_taps = -1;
     std::int64_t max_backdrop_pixels = -1;
+    std::vector<MaterialQualityPolicySource> sources;
 };
 
 struct MaterialResourceBoundSource {
@@ -691,6 +709,76 @@ auto material_budget_from_verifier(
     return material_budget_from_verifier(*result);
 }
 
+auto material_quality_policy_source_from_object(
+        json::Object const& object,
+        std::string_view fallback_metric)
+    -> MaterialQualityPolicySource {
+    auto container_mode = std::string{};
+    auto container_id = std::int64_t{-1};
+    auto union_id = std::int64_t{-1};
+    auto container_spacing = -1.0;
+    if (auto const* container = json_object_member(object, "container");
+        container && container->is_object()) {
+        auto const& container_object = container->as_object();
+        container_mode = json_object_string(container_object, "mode");
+        container_id =
+            json_object_integer(container_object, "container_id").value_or(-1);
+        union_id =
+            json_object_integer(container_object, "union_id").value_or(-1);
+        container_spacing =
+            json_object_number(container_object, "spacing").value_or(-1.0);
+    }
+    auto detail_json = std::string{};
+    if (auto const* detail = json_object_member(object, "detail");
+        detail && detail->is_object()) {
+        detail_json = json::emit(*detail);
+    }
+    auto metric = json_object_string(object, "metric");
+    if (metric.empty())
+        metric = std::string{fallback_metric};
+    return MaterialQualityPolicySource{
+        .metric = std::move(metric),
+        .value = json_object_number(object, "value").value_or(-1.0),
+        .plan_id = json_object_string(object, "plan_id"),
+        .kind = json_object_string(object, "kind"),
+        .role = json_object_string(object, "role"),
+        .plan_path = json_object_string(object, "plan_path"),
+        .source_path = json_object_string(object, "source_path"),
+        .likely_layer = json_object_string(object, "likely_layer"),
+        .likely_pass = json_object_string(object, "likely_pass"),
+        .container_mode = std::move(container_mode),
+        .container_id = container_id,
+        .union_id = union_id,
+        .container_spacing = container_spacing,
+        .detail_json = std::move(detail_json),
+    };
+}
+
+auto material_quality_policy_sources_from_report(json::Value const& report)
+    -> std::vector<MaterialQualityPolicySource> {
+    auto out = std::vector<MaterialQualityPolicySource>{};
+    auto const* sources = json_object_at(
+        report,
+        {"material_plans", "quality_policy_sources"});
+    if (!sources)
+        return out;
+    for (auto const& metric : {
+             "backdrop_sampling_disabled",
+             "noise_disabled",
+             "shadow_disabled",
+             "max_blur_radius",
+             "max_sample_taps",
+             "max_backdrop_pixels",
+         }) {
+        auto const* source = json_object_member(*sources, metric);
+        if (source && source->is_object())
+            out.push_back(material_quality_policy_source_from_object(
+                source->as_object(),
+                metric));
+    }
+    return out;
+}
+
 auto material_quality_policy_from_report(json::Value const& report)
     -> std::optional<MaterialQualityPolicySummary> {
     if (!json_object_at(report, {"material_plans", "quality_policy"}))
@@ -720,6 +808,7 @@ auto material_quality_policy_from_report(json::Value const& report)
             report,
             {"material_plans", "quality_policy", "max_backdrop_pixels"})
             .value_or(-1),
+        .sources = material_quality_policy_sources_from_report(report),
     };
 }
 
@@ -1817,6 +1906,52 @@ auto material_budget_json(std::optional<MaterialBudgetSummary> const& budget)
         json_string(budget->backdrop_copy_skip_reason));
 }
 
+auto material_quality_policy_source_json(
+        MaterialQualityPolicySource const& source)
+    -> std::string {
+    auto detail = source.detail_json.empty() ? std::string{"null"}
+                                             : source.detail_json;
+    return std::format(
+        "{{\"metric\":{},\"value\":{},\"plan_id\":{},\"kind\":{},"
+        "\"role\":{},\"plan_path\":{},\"source_path\":{},"
+        "\"likely_layer\":{},\"likely_pass\":{},"
+        "\"container\":{{\"mode\":{},\"container_id\":{},"
+        "\"union_id\":{},\"spacing\":{}}},\"detail\":{}}}",
+        json_string(source.metric),
+        budget_ratio(source.value),
+        json_string(source.plan_id),
+        json_string(source.kind),
+        json_string(source.role),
+        json_string(source.plan_path),
+        json_string(source.source_path),
+        json_string(source.likely_layer),
+        json_string(source.likely_pass),
+        json_string(source.container_mode),
+        manifest_count_json(source.container_id),
+        manifest_count_json(source.union_id),
+        budget_ratio(source.container_spacing),
+        detail);
+}
+
+auto material_quality_policy_sources_json(
+        std::vector<MaterialQualityPolicySource> const& sources)
+    -> std::string {
+    auto out = std::string{"{"};
+    auto first = true;
+    for (auto const& source : sources) {
+        if (source.metric.empty())
+            continue;
+        if (!first)
+            out += ",";
+        first = false;
+        out += json_string(source.metric);
+        out += ":";
+        out += material_quality_policy_source_json(source);
+    }
+    out += "}";
+    return out;
+}
+
 auto material_quality_policy_json(
         std::optional<MaterialQualityPolicySummary> const& policy)
     -> std::string {
@@ -1825,13 +1960,15 @@ auto material_quality_policy_json(
     return std::format(
         "{{\"backdrop_sampling_disabled\":{},\"noise_disabled\":{},"
         "\"shadow_disabled\":{},\"max_blur_radius\":{},"
-        "\"max_sample_taps\":{},\"max_backdrop_pixels\":{}}}",
+        "\"max_sample_taps\":{},\"max_backdrop_pixels\":{},"
+        "\"sources\":{}}}",
         manifest_count_json(policy->backdrop_sampling_disabled),
         manifest_count_json(policy->noise_disabled),
         manifest_count_json(policy->shadow_disabled),
         budget_ratio(policy->max_blur_radius),
         manifest_count_json(policy->max_sample_taps),
-        manifest_count_json(policy->max_backdrop_pixels));
+        manifest_count_json(policy->max_backdrop_pixels),
+        material_quality_policy_sources_json(policy->sources));
 }
 
 auto material_resource_bound_source_json(
@@ -2342,9 +2479,49 @@ auto material_bound_coverage_text(MaterialBoundCoverageSummary const& coverage)
         + missing_observed;
 }
 
+auto material_quality_policy_source_text(
+        MaterialQualityPolicySource const& source)
+    -> std::string {
+    auto plan = source.plan_id.empty()
+        ? std::string{}
+        : std::format(" plan={}", source.plan_id);
+    auto at = source.source_path.empty()
+        ? std::string{}
+        : std::format(" path={}", source.source_path);
+    auto pass = source.likely_pass.empty()
+        ? std::string{}
+        : std::format(" pass={}", source.likely_pass);
+    return std::format(
+        "{}={} layer={}",
+        source.metric,
+        budget_number_text(source.value),
+        source.likely_layer.empty() ? std::string{"unknown"}
+                                    : source.likely_layer)
+        + pass
+        + plan
+        + at;
+}
+
+auto material_quality_policy_sources_text(
+        std::vector<MaterialQualityPolicySource> const& sources,
+        std::size_t limit = 5)
+    -> std::string {
+    if (sources.empty())
+        return {};
+    auto parts = std::vector<std::string>{};
+    auto count = std::min(limit, sources.size());
+    for (std::size_t i = 0; i < count; ++i)
+        parts.push_back(material_quality_policy_source_text(sources[i]));
+    auto text = std::views::join_with(parts, std::string_view{"; "})
+        | std::ranges::to<std::string>();
+    if (sources.size() > limit)
+        text += std::format("; +{} more", sources.size() - limit);
+    return text;
+}
+
 auto material_quality_policy_text(MaterialQualityPolicySummary const& policy)
     -> std::string {
-    return std::format(
+    auto text = std::format(
         "disabled: backdrop-sampling={} noise={} shadow={} "
         "limits: blur={} sample-taps={} backdrop-pixels={}",
         budget_count(policy.backdrop_sampling_disabled),
@@ -2353,6 +2530,11 @@ auto material_quality_policy_text(MaterialQualityPolicySummary const& policy)
         budget_number_text(policy.max_blur_radius),
         budget_count(policy.max_sample_taps),
         budget_count(policy.max_backdrop_pixels));
+    if (auto sources = material_quality_policy_sources_text(policy.sources);
+        !sources.empty()) {
+        text += std::format(" sources: {}", sources);
+    }
+    return text;
 }
 
 auto material_resource_bounds_lines(MaterialResourceBoundsSummary const& bounds)

@@ -2511,6 +2511,13 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["actual"], 40.0)
         self.assertEqual(failure["likely_pass"], "quality-policy")
         self.assertIn("material_max_blur_radius", failure["hint"])
+        sources = report["artifact_context"]["material_contract"][
+            "quality_policy_sources"]
+        self.assertEqual(sources["max_blur_radius"]["value"], 40.0)
+        self.assertEqual(
+            sources["max_blur_radius"]["source_path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".quality_policy.max_blur_radius")
 
     def test_material_resource_budget_over_engine_cap_is_llm_actionable(self) -> None:
         plan = material_plan()
@@ -3312,6 +3319,17 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             resource_sources["max_pass_texture_copy_pixels"]["likely_pass"],
             "backdrop-sample-blur")
+        quality_sources = report["material_plans"]["quality_policy_sources"]
+        self.assertEqual(
+            quality_sources["max_blur_radius"]["source_path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".quality_policy.max_blur_radius")
+        self.assertEqual(
+            quality_sources["max_sample_taps"]["value"],
+            25)
+        self.assertEqual(
+            quality_sources["max_backdrop_pixels"]["likely_pass"],
+            "quality-policy")
 
     def test_surface_role_mismatch_points_to_material_contract(self) -> None:
         plan = material_plan()
