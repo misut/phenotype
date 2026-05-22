@@ -3301,8 +3301,32 @@ auto failure_missing_field_sources_text(json::Object const& failure,
     return sources ? missing_field_sources_text(*sources, limit) : std::string{};
 }
 
-auto missing_field_source_detail_json(std::string_view field,
-                                      json::Value const& value) -> std::string {
+auto missing_field_source_failure_context_json(
+        json::Object const* failure,
+        std::optional<std::size_t> failure_index) -> std::string {
+    if (!failure && !failure_index)
+        return {};
+
+    return std::format(
+        ",\"failure_index\":{},\"failure_number\":{},"
+        "\"failure_path\":{},\"failure_name\":{},\"failure_message\":{}",
+        failure_index ? std::to_string(*failure_index) : std::string{"null"},
+        failure_index ? std::to_string(*failure_index + 1)
+                      : std::string{"null"},
+        failure ? json_object_failure_string_json(*failure, "path")
+                : std::string{"null"},
+        failure ? json_object_failure_string_json(*failure, "name")
+                : std::string{"null"},
+        failure ? json_object_failure_string_json(*failure, "message")
+                : std::string{"null"});
+}
+
+auto missing_field_source_detail_json(
+        std::string_view field,
+        json::Value const& value,
+        json::Object const* failure = nullptr,
+        std::optional<std::size_t> failure_index = std::nullopt)
+        -> std::string {
     if (!value.is_object())
         return {};
 
@@ -3313,14 +3337,16 @@ auto missing_field_source_detail_json(std::string_view field,
     auto const& source = value.as_object();
     return std::format(
         "{{\"field\":{},\"metric\":{},\"value\":{},"
-        "\"source_path\":{},\"likely_pass\":{},\"source\":{},\"text\":{}}}",
+        "\"source_path\":{},\"likely_pass\":{},\"source\":{},\"text\":{}"
+        "{}}}",
         json_string(field),
         json_object_failure_string_json(source, "metric"),
         json_object_value_or_null(source, "value"),
         json_object_failure_string_json(source, "source_path"),
         json_object_failure_string_json(source, "likely_pass"),
         json::emit(value),
-        json_string(text));
+        json_string(text),
+        missing_field_source_failure_context_json(failure, failure_index));
 }
 
 auto missing_field_source_detail_entries(json::Object const& sources)
@@ -3804,17 +3830,25 @@ auto verifier_missing_field_source_details_json(json::Value const& report,
 
     auto entries = std::vector<std::string>{};
     auto seen = std::set<std::string>{};
+    auto failure_index = std::size_t{0};
     for (auto const& failure : *failures) {
+        auto const current_index = failure_index++;
         if (!failure.is_object())
             continue;
+        auto const& failure_object = failure.as_object();
         auto const* sources =
-            failure_missing_field_sources_object(failure.as_object());
+            failure_missing_field_sources_object(failure_object);
         if (!sources)
             continue;
         for (auto const& [field, value] : *sources) {
-            auto detail = missing_field_source_detail_json(field, value);
-            if (detail.empty() || !seen.insert(detail).second)
+            auto key = missing_field_source_detail_json(field, value);
+            if (key.empty() || !seen.insert(key).second)
                 continue;
+            auto detail = missing_field_source_detail_json(
+                field,
+                value,
+                &failure_object,
+                current_index);
             entries.push_back(std::move(detail));
         }
     }

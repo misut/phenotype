@@ -212,8 +212,9 @@ window lines describe
 shown, total, omitted, limit, and truncation fields. Compact JSON mirrors
 that aggregate as `missing_field_source_details.entries[]` with raw source
 descriptors, flattened metric/value/source-path/pass fields, rendered text, and
-total/shown/omitted/limit/truncated counts, and each compact `failures[]`
-detail with missing-field sources now repeats the same
+source failure context (`failure_index`, `failure_number`, failure path, and
+failure name/message) plus total/shown/omitted/limit/truncated counts, and each
+compact `failures[]` detail with missing-field sources now repeats the same
 structured object for the printed failure window. Automation can consume
 missing-guard sources without string parsing. Compact `failures[]` details keep
 the human-rendered `expected` and `actual` strings for quick scanning and also
