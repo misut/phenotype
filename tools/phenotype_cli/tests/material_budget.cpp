@@ -1714,6 +1714,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "by-action: reduce backdrop sample taps before raising the guard=2, record a semantic material plan before capture=1, +1 more"));
+    assert(contains_line(
+        failure_lines,
+        "failure-window: shown=3/4 omitted=1 limit=3 truncated=true"));
     assert(contains_line(failure_lines, "pixel_region_tint_mismatch"));
     assert(contains_line(
         failure_lines,
@@ -1796,6 +1799,9 @@ int main() {
         minimum_json,
         "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"truncated\":false"));
     auto minimum_lines = verifier_failure_summary_lines(minimum_report);
+    assert(contains_line(
+        minimum_lines,
+        "failure-window: shown=1/1 omitted=0 limit=3 truncated=false"));
     assert(contains_line(
         minimum_lines,
         "actual=count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)"));

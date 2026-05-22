@@ -218,7 +218,8 @@ failure window, so automation can recover typed values without opening the full
 verifier report. The compact summary also includes `failure_window` metadata
 with total, shown, omitted, limit, and truncation fields, so automation can see
 how much of `failures[]` is present without recomputing it from the array
-length. Coverage minimum count failures
+length. Non-JSON output prints the same window as a `failure-window` line before
+the detailed failures. Coverage minimum count failures
 now carry `actual.count` plus the active bound keys, guarded or
 observed fields, and unguarded observed source descriptors when those explain a
 guarded-field shortfall; CLI compact failure details render the same shape as

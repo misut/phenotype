@@ -1760,7 +1760,9 @@ failure window, so automation does not need to reopen the full verifier report
 just to recover typed values. The same compact summary includes
 `failure_window` metadata with total, shown, omitted, limit, and truncation
 fields, so consumers can tell exactly how much of `failures[]` is visible
-without recomputing it from the array length. Minimum-count failures include
+without recomputing it from the array length. Non-JSON output prints the same
+window as a `failure-window` line before the detailed failures. Minimum-count
+failures include
 their own context: failed bound-key, guarded-field, and
 observed-field floors report
 `actual.count` plus the currently guarded or observed field lists, and
