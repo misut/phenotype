@@ -15,15 +15,30 @@ struct MaterialBudgetSummary {
     std::int64_t sampled_backdrop_instance_count = -1;
     std::int64_t fallback_instance_count = -1;
     std::int64_t execution_stage_count = -1;
+    std::int64_t active_execution_stage_count = -1;
     std::int64_t backdrop_execution_stage_count = -1;
+    std::int64_t dropped_execution_stage_count = -1;
     std::int64_t draw_calls = -1;
     std::int64_t total_sample_taps = -1;
+    std::int64_t max_sample_taps = -1;
     std::int64_t upload_bytes = -1;
     std::int64_t buffer_capacity_bytes = -1;
+    double upload_utilization = -1.0;
     std::int64_t backdrop_copy_count = -1;
     std::int64_t backdrop_copy_pixels = -1;
     std::int64_t max_backdrop_pixels = -1;
+    double backdrop_copy_utilization = -1.0;
+    std::int64_t planned_frame_capture_count = -1;
+    std::int64_t planned_frame_capture_pixels = -1;
     std::int64_t planned_surface_sample_pixels = -1;
+    std::optional<bool> pipeline_ready;
+    std::optional<bool> backdrop_source_ready;
+    std::optional<bool> upload_required;
+    std::optional<bool> draw_required;
+    std::optional<bool> uploaded;
+    std::optional<bool> drawn;
+    std::optional<bool> backdrop_copy_required;
+    std::int64_t backdrop_copy_skipped_count = -1;
     std::string upload_status;
     std::string draw_status;
     std::string backdrop_copy_policy;
@@ -67,6 +82,55 @@ auto parse_verifier_json(std::string_view text) -> std::optional<json::Value> {
     return std::nullopt;
 }
 
+auto json_number_at(json::Value const& value,
+                    std::initializer_list<std::string_view> path)
+    -> std::optional<double> {
+    auto const* found = json_at(value, path);
+    if (!found || !found->is_number())
+        return std::nullopt;
+    return found->as_float();
+}
+
+auto budget_integer_at(json::Value const& report, std::string_view key)
+    -> std::optional<std::int64_t> {
+    return json_integer_at(report, {
+        "artifact_context",
+        "material_contract",
+        "executor_budget",
+        key,
+    });
+}
+
+auto budget_number_at(json::Value const& report, std::string_view key)
+    -> std::optional<double> {
+    return json_number_at(report, {
+        "artifact_context",
+        "material_contract",
+        "executor_budget",
+        key,
+    });
+}
+
+auto budget_bool_at(json::Value const& report, std::string_view key)
+    -> std::optional<bool> {
+    return json_bool_at(report, {
+        "artifact_context",
+        "material_contract",
+        "executor_budget",
+        key,
+    });
+}
+
+auto budget_string_at(json::Value const& report, std::string_view key)
+    -> std::optional<std::string> {
+    return json_string_at(report, {
+        "artifact_context",
+        "material_contract",
+        "executor_budget",
+        key,
+    });
+}
+
 auto material_budget_from_report(json::Value const& report)
     -> std::optional<MaterialBudgetSummary> {
     auto prefix = std::initializer_list<std::string_view>{
@@ -78,78 +142,87 @@ auto material_budget_from_report(json::Value const& report)
         return std::nullopt;
 
     return MaterialBudgetSummary{
-        .plan_count = json_integer_at(
+        .plan_count = budget_integer_at(report, "plan_count").value_or(-1),
+        .material_instance_count = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "plan_count"}).value_or(-1),
-        .material_instance_count = json_integer_at(
+            "material_instance_count").value_or(-1),
+        .sampled_backdrop_instance_count = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "material_instance_count"}).value_or(-1),
-        .sampled_backdrop_instance_count = json_integer_at(
+            "sampled_backdrop_instance_count").value_or(-1),
+        .fallback_instance_count = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "sampled_backdrop_instance_count"}).value_or(-1),
-        .fallback_instance_count = json_integer_at(
+            "fallback_instance_count").value_or(-1),
+        .execution_stage_count = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "fallback_instance_count"}).value_or(-1),
-        .execution_stage_count = json_integer_at(
+            "execution_stage_count").value_or(-1),
+        .active_execution_stage_count = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "execution_stage_count"}).value_or(-1),
-        .backdrop_execution_stage_count = json_integer_at(
+            "active_execution_stage_count").value_or(-1),
+        .backdrop_execution_stage_count = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "backdrop_execution_stage_count"}).value_or(-1),
-        .draw_calls = json_integer_at(
+            "backdrop_execution_stage_count").value_or(-1),
+        .dropped_execution_stage_count = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "draw_calls"}).value_or(-1),
-        .total_sample_taps = json_integer_at(
+            "dropped_execution_stage_count").value_or(-1),
+        .draw_calls = budget_integer_at(report, "draw_calls").value_or(-1),
+        .total_sample_taps = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "total_sample_taps"}).value_or(-1),
-        .upload_bytes = json_integer_at(
+            "total_sample_taps").value_or(-1),
+        .max_sample_taps = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "upload_bytes"}).value_or(-1),
-        .buffer_capacity_bytes = json_integer_at(
+            "max_sample_taps").value_or(-1),
+        .upload_bytes = budget_integer_at(report, "upload_bytes").value_or(-1),
+        .buffer_capacity_bytes = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "buffer_capacity_bytes"}).value_or(-1),
-        .backdrop_copy_count = json_integer_at(
+            "buffer_capacity_bytes").value_or(-1),
+        .upload_utilization = budget_number_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "backdrop_copy_count"}).value_or(-1),
-        .backdrop_copy_pixels = json_integer_at(
+            "upload_utilization").value_or(-1.0),
+        .backdrop_copy_count = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "backdrop_copy_pixels"}).value_or(-1),
-        .max_backdrop_pixels = json_integer_at(
+            "backdrop_copy_count").value_or(-1),
+        .backdrop_copy_pixels = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "max_backdrop_pixels"}).value_or(-1),
-        .planned_surface_sample_pixels = json_integer_at(
+            "backdrop_copy_pixels").value_or(-1),
+        .max_backdrop_pixels = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "planned_surface_sample_pixels"}).value_or(-1),
-        .upload_status = json_string_at(
+            "max_backdrop_pixels").value_or(-1),
+        .backdrop_copy_utilization = budget_number_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "upload_status"}).value_or("unknown"),
-        .draw_status = json_string_at(
+            "backdrop_copy_utilization").value_or(-1.0),
+        .planned_frame_capture_count = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "draw_status"}).value_or("unknown"),
-        .backdrop_copy_policy = json_string_at(
+            "planned_frame_capture_count").value_or(-1),
+        .planned_frame_capture_pixels = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "backdrop_copy_policy"}).value_or("unknown"),
-        .backdrop_copy_skip_reason = json_string_at(
+            "planned_frame_capture_pixels").value_or(-1),
+        .planned_surface_sample_pixels = budget_integer_at(
             report,
-            {"artifact_context", "material_contract", "executor_budget",
-             "backdrop_copy_skip_reason"}).value_or("unknown"),
+            "planned_surface_sample_pixels").value_or(-1),
+        .pipeline_ready = budget_bool_at(report, "pipeline_ready"),
+        .backdrop_source_ready = budget_bool_at(
+            report,
+            "backdrop_source_ready"),
+        .upload_required = budget_bool_at(report, "upload_required"),
+        .draw_required = budget_bool_at(report, "draw_required"),
+        .uploaded = budget_bool_at(report, "uploaded"),
+        .drawn = budget_bool_at(report, "drawn"),
+        .backdrop_copy_required = budget_bool_at(
+            report,
+            "backdrop_copy_required"),
+        .backdrop_copy_skipped_count = budget_integer_at(
+            report,
+            "backdrop_copy_skipped_count").value_or(-1),
+        .upload_status = budget_string_at(report, "upload_status")
+            .value_or("unknown"),
+        .draw_status = budget_string_at(report, "draw_status")
+            .value_or("unknown"),
+        .backdrop_copy_policy = budget_string_at(
+            report,
+            "backdrop_copy_policy").value_or("unknown"),
+        .backdrop_copy_skip_reason = budget_string_at(
+            report,
+            "backdrop_copy_skip_reason").value_or("unknown"),
     };
 }
 
@@ -176,6 +249,22 @@ auto budget_count(std::int64_t value) -> std::string {
     return value >= 0 ? std::format("{}", value) : std::string{"unknown"};
 }
 
+auto budget_ratio(double value) -> std::string {
+    return value >= 0.0 ? std::format("{:.6g}", value) : std::string{"null"};
+}
+
+auto budget_bool(std::optional<bool> value) -> std::string {
+    if (!value)
+        return "null";
+    return *value ? "true" : "false";
+}
+
+auto budget_bool_text(std::optional<bool> value) -> std::string {
+    if (!value)
+        return "unknown";
+    return *value ? "true" : "false";
+}
+
 auto material_budget_json(std::optional<MaterialBudgetSummary> const& budget)
     -> std::string {
     if (!budget)
@@ -184,27 +273,51 @@ auto material_budget_json(std::optional<MaterialBudgetSummary> const& budget)
         "{{\"plan_count\":{},\"material_instance_count\":{},"
         "\"sampled_backdrop_instance_count\":{},"
         "\"fallback_instance_count\":{},\"execution_stage_count\":{},"
-        "\"backdrop_execution_stage_count\":{},\"draw_calls\":{},"
-        "\"total_sample_taps\":{},\"upload_bytes\":{},"
-        "\"buffer_capacity_bytes\":{},\"backdrop_copy_count\":{},"
+        "\"active_execution_stage_count\":{},"
+        "\"backdrop_execution_stage_count\":{},"
+        "\"dropped_execution_stage_count\":{},\"draw_calls\":{},"
+        "\"total_sample_taps\":{},\"max_sample_taps\":{},"
+        "\"upload_bytes\":{},\"buffer_capacity_bytes\":{},"
+        "\"upload_utilization\":{},\"backdrop_copy_count\":{},"
         "\"backdrop_copy_pixels\":{},\"max_backdrop_pixels\":{},"
-        "\"planned_surface_sample_pixels\":{},\"upload_status\":{},"
-        "\"draw_status\":{},\"backdrop_copy_policy\":{},"
-        "\"backdrop_copy_skip_reason\":{}}}",
+        "\"backdrop_copy_utilization\":{},"
+        "\"planned_frame_capture_count\":{},"
+        "\"planned_frame_capture_pixels\":{},"
+        "\"planned_surface_sample_pixels\":{},\"pipeline_ready\":{},"
+        "\"backdrop_source_ready\":{},\"upload_required\":{},"
+        "\"draw_required\":{},\"uploaded\":{},\"drawn\":{},"
+        "\"backdrop_copy_required\":{},\"backdrop_copy_skipped_count\":{},"
+        "\"upload_status\":{},\"draw_status\":{},"
+        "\"backdrop_copy_policy\":{},\"backdrop_copy_skip_reason\":{}}}",
         budget->plan_count,
         budget->material_instance_count,
         budget->sampled_backdrop_instance_count,
         budget->fallback_instance_count,
         budget->execution_stage_count,
+        budget->active_execution_stage_count,
         budget->backdrop_execution_stage_count,
+        budget->dropped_execution_stage_count,
         budget->draw_calls,
         budget->total_sample_taps,
+        budget->max_sample_taps,
         budget->upload_bytes,
         budget->buffer_capacity_bytes,
+        budget_ratio(budget->upload_utilization),
         budget->backdrop_copy_count,
         budget->backdrop_copy_pixels,
         budget->max_backdrop_pixels,
+        budget_ratio(budget->backdrop_copy_utilization),
+        budget->planned_frame_capture_count,
+        budget->planned_frame_capture_pixels,
         budget->planned_surface_sample_pixels,
+        budget_bool(budget->pipeline_ready),
+        budget_bool(budget->backdrop_source_ready),
+        budget_bool(budget->upload_required),
+        budget_bool(budget->draw_required),
+        budget_bool(budget->uploaded),
+        budget_bool(budget->drawn),
+        budget_bool(budget->backdrop_copy_required),
+        budget->backdrop_copy_skipped_count,
         json_string(budget->upload_status),
         json_string(budget->draw_status),
         json_string(budget->backdrop_copy_policy),

@@ -469,21 +469,28 @@ void print_material_budget_summary(
             continue;
         auto const& budget = *item.material_budget;
         std::println(
-            "  {}: plans={} sampled={} fallback={} stages={} "
-            "backdrop-stages={} taps={} copy={}/{} px",
+            "  {}: plans={} sampled={} fallback={} stages={} active={} "
+            "backdrop-stages={} dropped={} taps={} max-taps={} copy={}/{} px",
             case_label(item),
             budget_count(budget.plan_count),
             budget_count(budget.sampled_backdrop_instance_count),
             budget_count(budget.fallback_instance_count),
             budget_count(budget.execution_stage_count),
+            budget_count(budget.active_execution_stage_count),
             budget_count(budget.backdrop_execution_stage_count),
+            budget_count(budget.dropped_execution_stage_count),
             budget_count(budget.total_sample_taps),
+            budget_count(budget.max_sample_taps),
             budget_count(budget.backdrop_copy_pixels),
             budget_count(budget.max_backdrop_pixels));
         std::println(
-            "    status: upload={} draw={} copy-policy={} skip={}",
+            "    status: upload={} draw={} uploaded={} drawn={} "
+            "copy-required={} copy-policy={} skip={}",
             budget.upload_status,
             budget.draw_status,
+            budget_bool_text(budget.uploaded),
+            budget_bool_text(budget.drawn),
+            budget_bool_text(budget.backdrop_copy_required),
             budget.backdrop_copy_policy,
             budget.backdrop_copy_skip_reason);
     }

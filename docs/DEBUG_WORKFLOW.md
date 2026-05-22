@@ -1177,8 +1177,10 @@ renderer material plan contract version, resolved plan count, fallback paths,
 pass executors, first decision blockers, accessibility decision counts, and
 `material_contract.executor_budget`. That executor budget mirrors the runtime
 draw/copy/upload counters, sampled tap totals, frame-copy pixel budget, and
-upload/draw/copy status strings so CI logs can explain which semantic/runtime
-contract surface drifted before opening the full bundle.
+upload/draw/copy status strings. It also carries active/dropped stage counts,
+max sample taps, upload/copy utilization, frame-capture bounds, and readiness
+booleans so CI logs can explain which semantic/runtime contract surface drifted
+before opening the full bundle.
 On native backends, also inspect
 `debug.platform_runtime.details.renderer.accessibility_display_options`; it
 records whether the frame used live system settings, deterministic fallback
