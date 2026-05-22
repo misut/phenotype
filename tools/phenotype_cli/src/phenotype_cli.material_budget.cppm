@@ -3531,6 +3531,28 @@ auto coverage_minimum_expected_count_json(json::Object const& failure)
     return "null";
 }
 
+auto coverage_minimum_shortfall_count_json(json::Object const& failure,
+                                           json::Object const& actual)
+        -> std::string {
+    auto const* expected = json_object_member(failure, "expected");
+    if (!expected || !expected->is_object())
+        return "null";
+
+    auto expected_count = std::optional<double>{};
+    auto expects_at_least = false;
+    for (auto const& [op, value] : expected->as_object()) {
+        if (value.is_number()) {
+            expects_at_least = op == ">=";
+            expected_count = value.as_float();
+            break;
+        }
+    }
+    auto actual_count = json_object_number(actual, "count");
+    if (!expects_at_least || !expected_count || !actual_count)
+        return "null";
+    return budget_optional_number(std::max(*expected_count - *actual_count, 0.0));
+}
+
 auto coverage_minimum_failure_detail_json(json::Object const& failure)
         -> std::string {
     auto path = json_object_failure_string(failure, "path");
@@ -3553,6 +3575,7 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
         "{{\"label\":{},\"coverage_family\":{},\"minimum_field\":{},"
         "\"path\":{},\"expected\":{},\"expected_operator\":{},"
         "\"expected_count\":{},\"actual\":{},\"actual_count\":{},"
+        "\"shortfall_count\":{},"
         "\"bound_keys\":{},\"guarded_fields\":{},\"observed_fields\":{},"
         "\"unguarded_observed_fields\":{},"
         "\"unguarded_observed_source_details\":{},"
@@ -3567,6 +3590,7 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
         coverage_minimum_expected_count_json(failure),
         json_object_value_or_null(failure, "actual"),
         json_object_value_or_null(actual_object, "count"),
+        coverage_minimum_shortfall_count_json(failure, actual_object),
         json_object_value_or_null(actual_object, "bound_keys"),
         json_object_value_or_null(actual_object, "guarded_fields"),
         json_object_value_or_null(actual_object, "observed_fields"),

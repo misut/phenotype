@@ -1785,8 +1785,8 @@ when available, and the failure summary repeats coverage minimum failures in a
 the first few printed details. Compact JSON also keeps those failures under
 `coverage_minimum_failure_details.entries[]` with raw `expected`/`actual`
 objects plus flattened `expected_operator`, `expected_count`,
-`coverage_family`, `minimum_field`, `actual_count`, and the active
-bound/guarded/observed field arrays. Guarded-field shortfalls also publish
+`coverage_family`, `minimum_field`, `actual_count`, `shortfall_count`, and the
+active bound/guarded/observed field arrays. Guarded-field shortfalls also publish
 `unguarded_observed_source_details` with the same flattened
 field/metric/value/source-path/pass shape as missing-field sources. The rendered
 `actual_text` stays beside those fields for humans; `total_count`, `shown_count`,
