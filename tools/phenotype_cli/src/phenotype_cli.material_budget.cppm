@@ -2061,6 +2061,21 @@ auto verifier_bound_summaries_text(json::Value const& report) -> std::string {
     return text;
 }
 
+auto verifier_material_budget_coverage_json(json::Value const& report)
+        -> std::string {
+    return material_budget_coverage_json(material_budget_coverage_summary(
+        material_budget_from_report(report),
+        verifier_manifest_summary_from_report(report)));
+}
+
+auto verifier_material_budget_coverage_text(json::Value const& report)
+        -> std::string {
+    auto coverage = material_budget_coverage_summary(
+        material_budget_from_report(report),
+        verifier_manifest_summary_from_report(report));
+    return coverage ? material_budget_coverage_text(*coverage) : std::string{};
+}
+
 auto verifier_failure_detail_lines(json::Object const& failure)
         -> std::vector<std::string> {
     auto lines = std::vector<std::string>{};
@@ -2163,6 +2178,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         "{{\"count\":{},\"top_likely_layer\":{},"
         "\"top_likely_pass\":{},\"top_suggested_action\":{},"
         "\"artifact_context\":{},\"bound_summaries\":{},"
+        "\"budget_coverage\":{},"
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
         "\"by_path\":{},"
         "\"by_suggested_action\":{},\"first_failure\":{},"
@@ -2179,6 +2195,7 @@ auto verifier_failure_summary_json(json::Value const& report)
             {"failure_summary", "top_suggested_action"}).value_or("")),
         failure_artifact_context_json(report),
         verifier_bound_summaries_json(report),
+        verifier_material_budget_coverage_json(report),
         failure_json_value_or_null(
             report,
             {"failure_summary", "by_likely_layer"}),
@@ -2242,6 +2259,10 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto bounds = verifier_bound_summaries_text(report);
         !bounds.empty()) {
         lines.push_back("  bounds: " + bounds);
+    }
+    if (auto coverage = verifier_material_budget_coverage_text(report);
+        !coverage.empty()) {
+        lines.push_back("  coverage: " + coverage);
     }
     if (auto by_layer = compact_failure_count_map_text(
             report,

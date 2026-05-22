@@ -506,6 +506,9 @@ int main() {
         "\"bound_summaries\":{\"executor\":{\"bound_count\":3,\"pass_count\":2,\"fail_count\":1,\"tightest_bound_key\":\"upload_utilization_lte\",\"tightest_bound_field\":\"upload_utilization\",\"tightest_bound_margin\":0.9375,\"failed_keys\":[\"draw_calls_gte\"]},\"resource\":{\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"tightest_bound_key\":\"max_plan_sample_taps_lte\",\"tightest_bound_field\":\"max_plan_sample_taps\",\"tightest_bound_margin\":0,\"failed_keys\":[]},\"quality\":{\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"tightest_bound_key\":\"require_noise_allowed\",\"tightest_bound_field\":\"noise_disabled\",\"tightest_bound_margin\":0,\"failed_keys\":[]}}"));
     assert(contains_text(
         failure_json,
+        "\"budget_coverage\":{\"guardable_field_count\":22,\"observed_field_count\":22,\"guarded_observed_field_count\":3,\"unguarded_observed_field_count\":19,\"required_field_count\":2,\"covered_required_field_count\":2,\"missing_required_field_count\":0,\"manifest_field_count\":3,\"manifest_bound_key_count\":3"));
+    assert(contains_text(
+        failure_json,
         "\"by_likely_layer\":{\"material-control\":2,\"platform-runtime\":1}"));
     assert(contains_text(
         failure_json,
@@ -541,6 +544,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "bounds: executor=2/3,fail=1,tightest=upload_utilization_lte,failed=(draw_calls_gte); resource=2/2,fail=0,tightest=max_plan_sample_taps_lte; quality=2/2,fail=0,tightest=require_noise_allowed"));
+    assert(contains_line(
+        failure_lines,
+        "coverage: guarded=3/22 observed=22 guard-keys=3 unguarded=19 (active_execution_stage_count, backdrop_copy_count, backdrop_copy_pixels, backdrop_copy_skipped_count, backdrop_copy_utilization, backdrop_execution_stage_count, buffer_capacity_bytes, dropped_execution_stage_count, +11 more) required=2/2"));
     assert(contains_line(
         failure_lines,
         "by-layer: material-control=2, platform-runtime=1"));
