@@ -1788,7 +1788,11 @@ objects plus flattened `expected_operator`, `expected_count`,
 `coverage_family`, `minimum_field`, `actual_count`, `shortfall_count`, and the
 active bound/guarded/observed field arrays plus direct
 `bound_key_count`, `guarded_field_count`, `observed_field_count`, and
-`unguarded_observed_field_count` values. Guarded-field shortfalls also publish
+`unguarded_observed_field_count` values. They also identify the array that backs
+`actual_count` through `counted_array_key`, `counted_values`, and
+`counted_value_count`, so a tool can tell whether the floor was counting bound
+keys, guarded fields, or observed fields without remapping `minimum_field`.
+Guarded-field shortfalls also publish
 `unguarded_observed_source_details` with the same flattened
 field/metric/value/source-path/pass shape as missing-field sources. The rendered
 `actual_text` stays beside those fields for humans; `total_count`, `shown_count`,

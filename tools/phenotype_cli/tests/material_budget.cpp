@@ -1647,7 +1647,7 @@ int main() {
         "\"actual\":{\"bound_keys\":[\"draw_calls_gte\"],\"count\":1,\"guarded_fields\":[\"draw_calls\"]"));
     assert(contains_text(
         failure_json,
-        "\"actual_count\":1,\"shortfall_count\":1,\"bound_keys\":[\"draw_calls_gte\"],\"guarded_fields\":[\"draw_calls\"],\"observed_fields\":null,\"unguarded_observed_fields\":[\"planned_frame_capture_pixels\"]"));
+        "\"actual_count\":1,\"counted_array_key\":\"guarded_fields\",\"counted_values\":[\"draw_calls\"],\"counted_value_count\":1,\"shortfall_count\":1,\"bound_keys\":[\"draw_calls_gte\"],\"guarded_fields\":[\"draw_calls\"],\"observed_fields\":null,\"unguarded_observed_fields\":[\"planned_frame_capture_pixels\"]"));
     assert(contains_text(
         failure_json,
         "\"unguarded_observed_source_details\":{\"entries\":[{\"field\":\"planned_frame_capture_pixels\",\"metric\":\"planned_frame_capture_pixels\",\"value\":0,\"source_path\":\"debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels\",\"likely_pass\":\"material-executor\""));
@@ -1842,7 +1842,7 @@ int main() {
         "\"expected_count\":2,\"actual\":{\"bound_keys\":[\"draw_calls_gte\"],\"count\":1,\"guarded_fields\":[\"draw_calls\"]"));
     assert(contains_text(
         minimum_json,
-        "\"actual_count\":1,\"shortfall_count\":1,\"bound_keys\":[\"draw_calls_gte\"]"));
+        "\"actual_count\":1,\"counted_array_key\":\"guarded_fields\",\"counted_values\":[\"draw_calls\"],\"counted_value_count\":1,\"shortfall_count\":1,\"bound_keys\":[\"draw_calls_gte\"]"));
     assert(contains_text(
         minimum_json,
         "\"bound_key_count\":1,\"guarded_field_count\":1,\"observed_field_count\":null,\"unguarded_observed_field_count\":1"));
@@ -1905,6 +1905,12 @@ int main() {
     assert(contains_text(
         many_minimum_json,
         "\"label\":\"resource.min_guarded_field_count\",\"coverage_family\":\"resource\",\"minimum_field\":\"min_guarded_field_count\""));
+    assert(contains_text(
+        many_minimum_json,
+        "\"counted_array_key\":\"bound_keys\",\"counted_values\":[\"draw_calls_gte\"],\"counted_value_count\":1"));
+    assert(contains_text(
+        many_minimum_json,
+        "\"counted_array_key\":\"observed_fields\",\"counted_values\":[\"draw_calls\"],\"counted_value_count\":1"));
     assert(contains_text(
         many_minimum_json,
         "\"bound_key_count\":null,\"guarded_field_count\":1,\"observed_field_count\":null,\"unguarded_observed_field_count\":null"));
