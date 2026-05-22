@@ -580,6 +580,11 @@ void print_material_budget_bound_summary(
             case_label(item),
             material_budget_bound_summary_text(
                 *item.material_budget_bound_summary));
+        for (auto const& line : material_budget_bound_detail_lines(
+                 item.material_budget_bound_results,
+                 item.material_budget_bound_summary)) {
+            std::println("    {}", line);
+        }
     }
 }
 

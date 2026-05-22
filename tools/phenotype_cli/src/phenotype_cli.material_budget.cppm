@@ -916,6 +916,85 @@ auto material_budget_bound_summary_text(MaterialBudgetBoundSummary const& summar
         + failed;
 }
 
+auto material_budget_bound_expected_text(MaterialBudgetBoundResult const& result)
+    -> std::string {
+    auto op = std::string{"=="};
+    if (result.bound == "lte") {
+        op = "<=";
+    } else if (result.bound == "gte") {
+        op = ">=";
+    }
+    return op + budget_optional_number(result.expected);
+}
+
+auto material_budget_bound_result_text(MaterialBudgetBoundResult const& result)
+    -> std::string {
+    auto status = result.ok ? (*result.ok ? "pass" : "fail") : "unknown";
+    return std::format(
+        "{} {} actual={} expected{} margin={}",
+        status,
+        result.key,
+        budget_optional_number(result.actual),
+        material_budget_bound_expected_text(result),
+        budget_optional_number(result.margin));
+}
+
+auto material_budget_bound_result_by_key(
+        std::vector<MaterialBudgetBoundResult> const& results,
+        std::string_view key) -> MaterialBudgetBoundResult const* {
+    auto found = std::ranges::find_if(
+        results,
+        [key](MaterialBudgetBoundResult const& result) {
+            return result.key == key;
+        });
+    return found == results.end() ? nullptr : &*found;
+}
+
+auto material_budget_bound_detail_lines(
+        std::optional<std::vector<MaterialBudgetBoundResult>> const& results,
+        std::optional<MaterialBudgetBoundSummary> const& summary)
+    -> std::vector<std::string> {
+    auto lines = std::vector<std::string>{};
+    if (!results || results->empty())
+        return lines;
+
+    auto rendered_keys = std::vector<std::string>{};
+    auto const failed_limit = std::size_t{8};
+    for (auto const& result : *results) {
+        if (!result.ok || *result.ok)
+            continue;
+        if (rendered_keys.size() >= failed_limit)
+            continue;
+        lines.push_back("failed: " + material_budget_bound_result_text(result));
+        rendered_keys.push_back(result.key);
+    }
+    auto const failed_count = std::ranges::count_if(
+        *results,
+        [](MaterialBudgetBoundResult const& result) {
+            return result.ok && !*result.ok;
+        });
+    if (static_cast<std::size_t>(failed_count) > failed_limit) {
+        lines.push_back(std::format(
+            "+{} more failed bounds",
+            static_cast<std::size_t>(failed_count) - failed_limit));
+    }
+
+    if (summary && !summary->tightest_bound_key.empty()
+        && !contains_field(rendered_keys, summary->tightest_bound_key)) {
+        if (auto const* tightest = material_budget_bound_result_by_key(
+                *results,
+                summary->tightest_bound_key)) {
+            lines.push_back(
+                "tightest: " + material_budget_bound_result_text(*tightest));
+        }
+    }
+    if (lines.empty()) {
+        lines.push_back(
+            "first: " + material_budget_bound_result_text(results->front()));
+    }
+    return lines;
+}
+
 auto verifier_manifest_summary_json(
         std::optional<VerifierManifestSummary> const& manifest)
     -> std::string {

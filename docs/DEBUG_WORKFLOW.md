@@ -140,10 +140,11 @@ Use this as the first artifact triage command when a CI log or local bundle
 needs one machine-readable explanation before deeper pixel-contract debugging.
 Without `--json`, the same command prints short `snapshot material budget` and
 `verifier material budget` blocks plus one-line `verifier manifest` and
-`material budget coverage` summaries when those counters are available, so
-local triage can see plan, stage, tap, upload/copy utilization, draw,
-backdrop-copy status, and budget-bound coverage without opening the full
-report.
+`material budget coverage` summaries when those counters are available. It also
+prints the tightest budget bound detail, or failed bound details when a bound
+fails, so local triage can see plan, stage, tap, upload/copy utilization, draw,
+backdrop-copy status, budget-bound coverage, and the nearest/failing
+expected-vs-actual comparison without opening the full report.
 
 When debugging the CLI/native input-output boundary itself, first check the
 pure contract surface:
@@ -245,8 +246,9 @@ whenever a case uses a manifest-backed verifier run, and
 `material_budget_coverage`, `material_budget_bound_summary`, and
 `material_budget_bound_results` when both inputs are present; the non-JSON
 output prints the same case-level plans/work/status summary with upload/copy
-utilization, per-case manifest bound summaries, per-case budget coverage, and
-per-case budget bound headroom when present.
+utilization, per-case manifest bound summaries, per-case budget coverage,
+per-case budget bound headroom, and the tightest or failed expected-vs-actual
+budget bound detail when present.
 Both commands are local
 verification commands, not default PR CI jobs.
 
@@ -1689,8 +1691,8 @@ the budget bound pass/fail count and tightest margin, plus
 comparison, and exits non-zero when an invariant fails.
 The non-JSON command prints the same material budget in a short
 plans/work/status block with upload/copy utilization, a one-line verifier
-manifest summary, a one-line material budget coverage summary, and a one-line
-material budget bounds summary.
+manifest summary, a one-line material budget coverage summary, a one-line
+material budget bounds summary, and the nearest or failed bound comparison.
 The legacy
 `tools/verify_glass_showcase_artifact.sh` wrapper delegates to the same CLI
 command for local compatibility.
