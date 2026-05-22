@@ -2329,6 +2329,158 @@ auto verifier_tightest_bound_results_text(json::Value const& report)
     return text;
 }
 
+auto bound_pressure_state(
+        std::optional<std::vector<MaterialBudgetBoundResult>> const& results,
+        std::optional<MaterialBudgetBoundSummary> const& summary)
+        -> std::string {
+    if (!summary)
+        return {};
+
+    auto zero_margin_count = std::int64_t{0};
+    auto negative_margin_count = std::int64_t{0};
+    if (results) {
+        for (auto const& result : *results) {
+            if (!result.margin)
+                continue;
+            if (*result.margin == 0.0) {
+                ++zero_margin_count;
+            } else if (*result.margin < 0.0) {
+                ++negative_margin_count;
+            }
+        }
+    }
+
+    auto state = std::string{"unknown"};
+    if (summary->fail_count > 0 || negative_margin_count > 0) {
+        state = "fail";
+    } else if (zero_margin_count > 0
+               || (summary->tightest_bound_margin
+                   && *summary->tightest_bound_margin == 0.0)) {
+        state = "tight";
+    } else if (summary->pass_count >= 0) {
+        state = "pass";
+    }
+
+    return std::format(
+        "{{\"state\":{},\"bound_count\":{},\"pass_count\":{},"
+        "\"fail_count\":{},\"zero_margin_count\":{},"
+        "\"negative_margin_count\":{},\"tightest_bound_key\":{},"
+        "\"tightest_bound_margin\":{},\"failed_keys\":{}}}",
+        json_string(state),
+        manifest_count_json(summary->bound_count),
+        manifest_count_json(summary->pass_count),
+        manifest_count_json(summary->fail_count),
+        zero_margin_count,
+        negative_margin_count,
+        json_string(summary->tightest_bound_key),
+        budget_optional_number(summary->tightest_bound_margin),
+        string_array_json(summary->failed_keys));
+}
+
+auto verifier_bound_pressure_json(json::Value const& report) -> std::string {
+    auto executor = bound_pressure_state(
+        material_budget_bound_results_from_report(report),
+        material_budget_bound_summary_from_report(report));
+    auto resource = bound_pressure_state(
+        material_resource_bound_results_from_report(report),
+        material_resource_bound_summary_from_report(report));
+    auto quality = bound_pressure_state(
+        material_quality_policy_bound_results_from_report(report),
+        material_quality_policy_bound_summary_from_report(report));
+    if (executor.empty() && resource.empty() && quality.empty())
+        return "null";
+
+    return std::format(
+        "{{\"executor\":{},\"resource\":{},\"quality\":{}}}",
+        executor.empty() ? std::string{"null"} : executor,
+        resource.empty() ? std::string{"null"} : resource,
+        quality.empty() ? std::string{"null"} : quality);
+}
+
+auto bound_pressure_text(
+        std::string_view label,
+        std::optional<std::vector<MaterialBudgetBoundResult>> const& results,
+        std::optional<MaterialBudgetBoundSummary> const& summary)
+        -> std::string {
+    if (!summary)
+        return {};
+
+    auto zero_margin_count = std::int64_t{0};
+    auto negative_margin_count = std::int64_t{0};
+    if (results) {
+        for (auto const& result : *results) {
+            if (!result.margin)
+                continue;
+            if (*result.margin == 0.0) {
+                ++zero_margin_count;
+            } else if (*result.margin < 0.0) {
+                ++negative_margin_count;
+            }
+        }
+    }
+
+    auto state = std::string{"unknown"};
+    if (summary->fail_count > 0 || negative_margin_count > 0) {
+        state = "fail";
+    } else if (zero_margin_count > 0
+               || (summary->tightest_bound_margin
+                   && *summary->tightest_bound_margin == 0.0)) {
+        state = "tight";
+    } else if (summary->pass_count >= 0) {
+        state = "pass";
+    }
+
+    auto text = std::format(
+        "{}={},pass={}/{},fail={},zero={},negative={},tightest-margin={}",
+        label,
+        state,
+        budget_count(summary->pass_count),
+        budget_count(summary->bound_count),
+        budget_count(summary->fail_count),
+        zero_margin_count,
+        negative_margin_count,
+        budget_optional_number(summary->tightest_bound_margin));
+    if (!summary->failed_keys.empty()) {
+        text += std::format(
+            ",failed=({})",
+            budget_field_list_text(summary->failed_keys));
+    }
+    return text;
+}
+
+auto verifier_bound_pressure_text(json::Value const& report) -> std::string {
+    auto parts = std::vector<std::string>{};
+    if (auto executor = bound_pressure_text(
+            "executor",
+            material_budget_bound_results_from_report(report),
+            material_budget_bound_summary_from_report(report));
+        !executor.empty()) {
+        parts.push_back(std::move(executor));
+    }
+    if (auto resource = bound_pressure_text(
+            "resource",
+            material_resource_bound_results_from_report(report),
+            material_resource_bound_summary_from_report(report));
+        !resource.empty()) {
+        parts.push_back(std::move(resource));
+    }
+    if (auto quality = bound_pressure_text(
+            "quality",
+            material_quality_policy_bound_results_from_report(report),
+            material_quality_policy_bound_summary_from_report(report));
+        !quality.empty()) {
+        parts.push_back(std::move(quality));
+    }
+
+    auto text = std::string{};
+    for (auto const& part : parts) {
+        if (!text.empty())
+            text += "; ";
+        text += part;
+    }
+    return text;
+}
+
 auto verifier_material_budget_coverage_json(json::Value const& report)
         -> std::string {
     return material_budget_coverage_json(material_budget_coverage_summary(
@@ -2494,6 +2646,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         "\"artifact_context\":{},\"bound_summaries\":{},"
         "\"failed_bound_results\":{},"
         "\"tightest_bound_results\":{},"
+        "\"bound_pressure\":{},"
         "\"manifest_context\":{},\"budget_coverage\":{},"
         "\"material_context\":{},"
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
@@ -2514,6 +2667,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         verifier_bound_summaries_json(report),
         verifier_failed_bound_results_json(report),
         verifier_tightest_bound_results_json(report),
+        verifier_bound_pressure_json(report),
         verifier_manifest_context_json(report),
         verifier_material_budget_coverage_json(report),
         failure_material_context_json(report),
@@ -2588,6 +2742,10 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto tightest_bounds = verifier_tightest_bound_results_text(report);
         !tightest_bounds.empty()) {
         lines.push_back("  tightest-bounds: " + tightest_bounds);
+    }
+    if (auto pressure = verifier_bound_pressure_text(report);
+        !pressure.empty()) {
+        lines.push_back("  pressure: " + pressure);
     }
     if (auto manifest = verifier_manifest_context_text(report);
         !manifest.empty()) {
