@@ -1587,6 +1587,9 @@ int main() {
         "\"first_failure\":{\"actual\":1.25"));
     assert(contains_text(
         failure_json,
+        "\"failure_window\":{\"total_count\":4,\"shown_count\":3,\"omitted_count\":1,\"limit\":3,\"truncated\":true}"));
+    assert(contains_text(
+        failure_json,
         "\"name\":\"pixel_region_tint_mismatch\""));
     assert(contains_text(failure_json, "\"actual\":\"1.25\""));
     assert(contains_text(
@@ -1772,6 +1775,9 @@ int main() {
     assert(contains_text(
         minimum_json,
         "\"actual\":\"count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)\""));
+    assert(contains_text(
+        minimum_json,
+        "\"failure_window\":{\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"limit\":3,\"truncated\":false}"));
     assert(contains_text(minimum_json, "\"expected_value\":{\">=\":2}"));
     assert(contains_text(
         minimum_json,

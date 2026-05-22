@@ -1757,7 +1757,10 @@ window without reparsing the compact string. Compact `failures[]` details keep
 the human-rendered `expected` and `actual` strings for quick scanning and also
 include raw `expected_value` and `actual_value` JSON values for the same printed
 failure window, so automation does not need to reopen the full verifier report
-just to recover typed values. Minimum-count failures include
+just to recover typed values. The same compact summary includes
+`failure_window` metadata with total, shown, omitted, limit, and truncation
+fields, so consumers can tell exactly how much of `failures[]` is visible
+without recomputing it from the array length. Minimum-count failures include
 their own context: failed bound-key, guarded-field, and
 observed-field floors report
 `actual.count` plus the currently guarded or observed field lists, and
