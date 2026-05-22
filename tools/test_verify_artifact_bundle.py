@@ -3780,6 +3780,13 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertIn(
             "max_frame_capture_pixels",
             coverage["unguarded_observed_fields"])
+        sources = coverage["unguarded_observed_sources"]
+        self.assertEqual(
+            sources["max_frame_capture_pixels"]["metric"],
+            "max_frame_capture_pixels")
+        self.assertIn(
+            "resource_budget.max_frame_capture_pixels",
+            sources["max_frame_capture_pixels"]["source_path"])
         failures = {
             item["name"]: item
             for item in report["failures"]
@@ -5012,6 +5019,13 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertIn(
             "noise_disabled",
             coverage["unguarded_observed_fields"])
+        sources = coverage["unguarded_observed_sources"]
+        self.assertEqual(
+            sources["max_sample_taps"]["metric"],
+            "max_sample_taps")
+        self.assertIn(
+            "quality_policy.max_sample_taps",
+            sources["max_sample_taps"]["source_path"])
         failures = {
             item["name"]: item
             for item in report["failures"]
@@ -5242,6 +5256,13 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         for field in coverage["required_fields"]:
             self.assertIn(field, coverage["observed_fields"])
             self.assertIn(field, coverage["guarded_observed_fields"])
+        sources = coverage["unguarded_observed_sources"]
+        self.assertEqual(
+            sources["planned_frame_capture_pixels"]["metric"],
+            "planned_frame_capture_pixels")
+        self.assertIn(
+            "material_executor_summary.planned_frame_capture_pixels",
+            sources["planned_frame_capture_pixels"]["source_path"])
         results = (
             report["artifact_context"]
             ["material_contract"]

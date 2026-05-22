@@ -198,8 +198,10 @@ manifests opt into `require_material_resource_bound_coverage` or
 required-field and minimum-count grammar as executor budget coverage, but guard
 the material plan resource and legibility policy surfaces directly. The raw
 verifier JSON and CLI JSON/non-JSON coverage summaries identify unguarded
-observed budget/resource/quality fields, so a passing gate can still show which
-observed counters have not yet been promoted to manifest guards. The
+observed budget/resource/quality fields and preserve source descriptors for
+those unguarded fields when the verifier can trace them, so a passing gate can
+still show which observed counters have not yet been promoted to manifest guards
+and where those counters came from. The
 checked-in glass showcase, file
 explorer, and Android artifact manifests now opt into those resource and
 quality-policy coverage contracts.
