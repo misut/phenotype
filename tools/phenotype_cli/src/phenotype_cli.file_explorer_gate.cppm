@@ -30,6 +30,7 @@ struct FileExplorerArtifactCase {
     std::optional<MaterialBudgetSummary> material_budget;
     std::optional<MaterialQualityPolicySummary> material_quality_policy;
     std::optional<MaterialResourceBoundsSummary> material_resource_bounds;
+    std::optional<MaterialContainerGroupSummary> material_container_groups;
     std::optional<MaterialBudgetBoundSummary> material_resource_bound_summary;
     std::optional<std::vector<MaterialBudgetBoundResult>>
         material_resource_bound_results;
@@ -494,6 +495,7 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         "\"run_result\":{},\"verifier\":{},\"artifact\":{},"
         "\"material_budget\":{},\"material_quality_policy\":{},"
         "\"material_resource_bounds\":{},"
+        "\"material_container_groups\":{},"
         "\"material_resource_bound_summary\":{},"
         "\"material_resource_bound_results\":{},"
         "\"material_quality_policy_bound_summary\":{},"
@@ -520,6 +522,7 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         material_budget_json(item.material_budget),
         material_quality_policy_json(item.material_quality_policy),
         material_resource_bounds_json(item.material_resource_bounds),
+        material_container_group_summary_json(item.material_container_groups),
         material_budget_bound_summary_json(item.material_resource_bound_summary),
         material_budget_bound_results_json(item.material_resource_bound_results),
         material_budget_bound_summary_json(
@@ -805,6 +808,28 @@ void print_material_budget_bound_summary(
     }
 }
 
+void print_material_container_group_summary(
+        std::span<FileExplorerArtifactCase const> cases) {
+    auto has_groups = std::ranges::any_of(
+        cases,
+        [](FileExplorerArtifactCase const& item) {
+            return item.material_container_groups.has_value();
+        });
+    if (!has_groups)
+        return;
+
+    std::println("material container groups:");
+    for (auto const& item : cases) {
+        if (!item.material_container_groups)
+            continue;
+        std::println(
+            "  {}: {}",
+            case_label(item),
+            material_container_group_summary_text(
+                *item.material_container_groups));
+    }
+}
+
 void print_material_resource_bound_summary(
         std::span<FileExplorerArtifactCase const> cases) {
     auto has_bound_summary = std::ranges::any_of(
@@ -962,6 +987,7 @@ void print_file_explorer_gate(
     print_material_quality_policy_coverage_summary(summary.cases);
     print_material_quality_policy_summary(summary.cases);
     print_material_resource_bounds_summary(summary.cases);
+    print_material_container_group_summary(summary.cases);
     print_material_resource_bound_summary(summary.cases);
     print_material_quality_policy_bound_summary(summary.cases);
     print_material_budget_bound_summary(summary.cases);
@@ -1112,6 +1138,8 @@ auto run_file_explorer_case(fs::path const& root,
             material_quality_policy_from_report(*verifier_report);
         item.material_resource_bounds =
             material_resource_bounds_from_report(*verifier_report);
+        item.material_container_groups =
+            material_container_group_summary_from_report(*verifier_report);
         item.material_resource_bound_summary =
             material_resource_bound_summary_from_report(*verifier_report);
         item.material_resource_bound_results =

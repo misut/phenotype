@@ -247,6 +247,36 @@ auto sample_report() -> json::Value {
           "unbounded_texture_copy": 0,
           "non_deterministic_fallback": 0
         },
+        "container_groups": {
+          "group_count": 3,
+          "multi_surface_group_count": 1,
+          "union_group_count": 1,
+          "morph_group_count": 2,
+          "interactive_group_count": 1,
+          "shared_backdrop_scope_group_count": 3,
+          "shared_capture_surface_count": 6,
+          "shared_capture_saved_surface_count": 3,
+          "max_shared_capture_group_surfaces": 4,
+          "shape_blend_execution_group_count": 1,
+          "shape_blend_execution_surface_count": 4,
+          "fallback_mixed_group_count": 0,
+          "max_group_size": 4,
+          "max_active_surfaces": 4,
+          "max_sampled_backdrop_surfaces": 4,
+          "max_fallback_surfaces": 0,
+          "total_shape_pair_count": 6,
+          "blend_candidate_pair_count": 3,
+          "union_candidate_pair_count": 0,
+          "morph_candidate_pair_count": 3,
+          "separated_pair_count": 3,
+          "min_shape_gap": 8,
+          "max_shape_gap": 656,
+          "max_blend_distance": 28,
+          "max_group_bounds_width": 472,
+          "max_group_bounds_height": 1288,
+          "max_group_bounds_area": 566720,
+          "max_shape_blend_strength": 0.6
+        },
         "resource_bound_coverage": {
           "guardable_field_count": 4,
           "observed_field_count": 3,
@@ -692,6 +722,24 @@ int main() {
     assert(resource_bounds->unbounded_texture_copy == 0);
     assert(material_resource_bounds_lines(*resource_bounds).size() == 4);
 
+    auto container_groups = material_container_group_summary_from_report(report);
+    assert(container_groups);
+    assert(container_groups->group_count == 3);
+    assert(container_groups->multi_surface_group_count == 1);
+    assert(container_groups->union_group_count == 1);
+    assert(container_groups->morph_group_count == 2);
+    assert(container_groups->shape_blend_execution_surface_count == 4);
+    assert(container_groups->max_group_bounds_area == 566720.0);
+    assert(contains_text(
+        material_container_group_summary_json(container_groups),
+        "\"morph_candidate_pair_count\":3"));
+    assert(contains_text(
+        material_container_group_summary_text(*container_groups),
+        "groups=3 multi=1 union=1 morph=2"));
+    assert(contains_text(
+        material_container_group_summary_text(*container_groups),
+        "gap=8..656 blend-distance=28"));
+
     auto quality_policy = material_quality_policy_from_report(report);
     assert(quality_policy);
     assert(quality_policy->noise_disabled == 0);
@@ -886,7 +934,10 @@ int main() {
         "\"quality_policy_bound_coverage\":{\"guardable_field_count\":6,\"observed_field_count\":6,\"guarded_field_count\":2,\"required_field_count\":2,\"covered_required_field_count\":2,\"observed_required_field_count\":2,\"bound_key_count\":2"));
     assert(contains_text(
         failure_json,
-        "\"material_context\":{\"resource_bounds\":{\"max_plan_sample_taps\":25,\"total_plan_sample_taps\":50,\"max_backdrop_pixels\":4096,\"max_frame_capture_count\":1,\"max_frame_capture_pixels\":4096,\"total_surface_sample_pixels\":2048,\"total_execution_stages\":8,\"active_execution_stages\":8,\"backdrop_execution_stages\":2,\"dropped_execution_stages\":0,\"total_paint_layers\":6,\"active_paint_layers\":6,\"dropped_paint_layers\":0,\"max_pass_texture_copy_pixels\":1024,\"total_pass_texture_copy_pixels\":2048,\"unbounded_texture_copy\":0,\"non_deterministic_fallback\":0,\"max_refraction_offset_pixels\":3.5,\"max_container_spacing\":20,\"max_paint_layer_inflate\":6},\"quality_policy\":{\"backdrop_sampling_disabled\":0,\"noise_disabled\":0,\"shadow_disabled\":0,\"max_blur_radius\":36,\"max_sample_taps\":25,\"max_backdrop_pixels\":4096}}"));
+        "\"material_context\":{\"resource_bounds\":{\"max_plan_sample_taps\":25,\"total_plan_sample_taps\":50,\"max_backdrop_pixels\":4096"));
+    assert(contains_text(
+        failure_json,
+        "\"container_groups\":{\"group_count\":3,\"multi_surface_group_count\":1,\"union_group_count\":1,\"morph_group_count\":2"));
     assert(contains_text(
         failure_json,
         "\"by_likely_layer\":{\"material-control\":2,\"platform-runtime\":1}"));
@@ -948,6 +999,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "quality-coverage: guarded=2/6 observed=6 guard-keys=2 required=2/2 observed-required=2/2"));
+    assert(contains_line(
+        failure_lines,
+        "container-groups: groups=3 multi=1 union=1 morph=2 interactive=1"));
     assert(contains_line(
         failure_lines,
         "resources: plan-taps=25/50 runtime=8/8/2 stages-dropped=0 paint=6/6/0 copy=1024/2048 unbounded-copy=0 non-deterministic-fallback=0 refraction=3.5 spacing=20 inflate=6"));
