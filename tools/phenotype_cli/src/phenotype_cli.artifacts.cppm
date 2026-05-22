@@ -639,6 +639,9 @@ auto verifier_observation_json(VerifierObservation const& verifier)
     auto const failure_summary = verifier.report
         ? verifier_failure_summary_json(*verifier.report)
         : std::string{"null"};
+    auto const bound_pressure = verifier.report
+        ? verifier_bound_pressure_json(*verifier.report)
+        : std::string{"null"};
     return std::format(
         "{{\"requested\":{},\"executed\":{},\"ok\":{},"
         "\"exit_code\":{},\"timed_out\":{},\"stdout_tail\":{},"
@@ -653,6 +656,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         "\"material_budget_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
         "\"material_budget_bound_results\":{},"
+        "\"verifier_bound_pressure\":{},"
         "\"verifier_failure_summary\":{},\"report\":{}}}",
         verifier.requested ? "true" : "false",
         verifier.executed ? "true" : "false",
@@ -673,6 +677,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         material_budget_coverage_json(coverage),
         material_budget_bound_summary_json(bound_summary),
         material_budget_bound_results_json(bound_results),
+        bound_pressure,
         failure_summary,
         json_report_or_null(verifier.report));
 }

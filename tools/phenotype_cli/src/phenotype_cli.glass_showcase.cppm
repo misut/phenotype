@@ -398,6 +398,9 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
     auto failure_summary = verifier_report
         ? verifier_failure_summary_json(*verifier_report)
         : std::string{"null"};
+    auto bound_pressure = verifier_report
+        ? verifier_bound_pressure_json(*verifier_report)
+        : std::string{"null"};
     return std::format(
         "{{\"schema_version\":1,\"command\":\"artifact verify-glass-showcase\","
         "\"ok\":{},\"accessibility\":{},\"example_root\":{},"
@@ -415,6 +418,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         "\"verifier_manifest\":{},\"material_budget_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
         "\"material_budget_bound_results\":{},"
+        "\"verifier_bound_pressure\":{},"
         "\"verifier_failure_summary\":{},\"error\":{}}}",
         summary.ok ? "true" : "false",
         summary.accessibility ? "true" : "false",
@@ -441,6 +445,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         material_budget_coverage_json(coverage),
         material_budget_bound_summary_json(bound_summary),
         material_budget_bound_results_json(bound_results),
+        bound_pressure,
         failure_summary,
         json_string(summary.error));
 }
