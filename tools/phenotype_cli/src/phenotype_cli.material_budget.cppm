@@ -5181,6 +5181,9 @@ auto verifier_failure_summary_json(json::Value const& report)
     auto truncated = count > static_cast<std::int64_t>(printable_count)
         ? "true"
         : "false";
+    auto omitted_count = count > static_cast<std::int64_t>(printable_count)
+        ? count - static_cast<std::int64_t>(printable_count)
+        : std::int64_t{0};
     return std::format(
         "{{\"count\":{},\"top_likely_layer\":{},"
         "\"top_likely_pass\":{},\"top_suggested_action\":{},"
@@ -5200,6 +5203,8 @@ auto verifier_failure_summary_json(json::Value const& report)
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
         "\"by_path\":{},"
         "\"by_suggested_action\":{},\"first_failure\":{},"
+        "\"failure_window\":{{\"total_count\":{},\"shown_count\":{},"
+        "\"omitted_count\":{},\"limit\":{},\"truncated\":{}}},"
         "\"failures\":{},\"truncated\":{}}}",
         count,
         failure_optional_string_json(json_string_at(
@@ -5246,6 +5251,11 @@ auto verifier_failure_summary_json(json::Value const& report)
         failure_json_value_or_null(
             report,
             {"failure_summary", "first_failure"}),
+        count,
+        printable_count,
+        omitted_count,
+        limit,
+        truncated,
         verifier_failure_details_json(report, limit),
         truncated);
 }

@@ -215,7 +215,10 @@ missing-guard sources without string parsing. Compact `failures[]` details keep
 the human-rendered `expected` and `actual` strings for quick scanning and also
 include raw `expected_value` and `actual_value` JSON values for the same printed
 failure window, so automation can recover typed values without opening the full
-verifier report. Coverage minimum count failures
+verifier report. The compact summary also includes `failure_window` metadata
+with total, shown, omitted, limit, and truncation fields, so automation can see
+how much of `failures[]` is present without recomputing it from the array
+length. Coverage minimum count failures
 now carry `actual.count` plus the active bound keys, guarded or
 observed fields, and unguarded observed source descriptors when those explain a
 guarded-field shortfall; CLI compact failure details render the same shape as
