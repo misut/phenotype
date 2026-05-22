@@ -86,6 +86,16 @@ void append_repeatable_verifier_arg(
     }
 }
 
+void append_verifier_option_arg(std::vector<std::string>& args,
+                                cppx::cli::Invocation const& invocation,
+                                std::string_view name) {
+    if (auto value = invocation.value(name)) {
+        auto option = std::string{"--"};
+        option += name;
+        append_verifier_arg(args, std::move(option), std::string{*value});
+    }
+}
+
 auto append_required_label(std::vector<std::string>& args,
                            std::string value) {
     append_verifier_arg(args, "--require-label", std::move(value));
@@ -351,6 +361,18 @@ auto file_explorer_verifier_args(fs::path const& root,
         args,
         invocation,
         "require-material-budget-coverage-field");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-budget-coverage-min-bound-keys");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-budget-coverage-min-guarded-fields");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-budget-coverage-min-observed-fields");
     append_repeatable_verifier_arg(
         args,
         invocation,
@@ -359,6 +381,18 @@ auto file_explorer_verifier_args(fs::path const& root,
         args,
         invocation,
         "require-material-resource-coverage-field");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-resource-coverage-min-bound-keys");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-resource-coverage-min-guarded-fields");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-resource-coverage-min-observed-fields");
     append_repeatable_verifier_arg(
         args,
         invocation,
@@ -367,6 +401,18 @@ auto file_explorer_verifier_args(fs::path const& root,
         args,
         invocation,
         "require-material-quality-coverage-field");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-quality-coverage-min-bound-keys");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-quality-coverage-min-guarded-fields");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-quality-coverage-min-observed-fields");
     return args;
 }
 

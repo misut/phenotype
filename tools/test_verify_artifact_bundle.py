@@ -3752,6 +3752,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "bounded_texture_copy",
                 "--require-material-resource-coverage-field",
                 "max_plan_sample_taps",
+                "--require-material-resource-coverage-min-bound-keys",
+                "2",
+                "--require-material-resource-coverage-min-guarded-fields",
+                "2",
+                "--require-material-resource-coverage-min-observed-fields",
+                "2",
             ])
 
         self.assertEqual(code, 0)
@@ -3781,6 +3787,8 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "bounded_texture_copy",
                 "--require-material-resource-coverage-field",
                 "max_plan_sample_taps",
+                "--require-material-resource-coverage-min-bound-keys",
+                "2",
             ])
 
         self.assertEqual(code, 1)
@@ -3802,6 +3810,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             failure["actual"]["missing_fields"],
             ["bounded_texture_copy"])
+        self.assertIn(
+            "material resource bound coverage min_bound_key_count is satisfied",
+            failures)
 
     def test_manifest_can_require_execution_stage_summary(self) -> None:
         manifest = {
@@ -4921,6 +4932,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "max_blur_radius",
                 "--require-material-quality-coverage-field",
                 "noise_disabled",
+                "--require-material-quality-coverage-min-bound-keys",
+                "2",
+                "--require-material-quality-coverage-min-guarded-fields",
+                "2",
+                "--require-material-quality-coverage-min-observed-fields",
+                "2",
             ])
 
         self.assertEqual(code, 0)
@@ -5108,6 +5125,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "draw_calls",
                 "--require-material-budget-coverage-field",
                 "max_sample_taps",
+                "--require-material-budget-coverage-min-bound-keys",
+                "2",
+                "--require-material-budget-coverage-min-guarded-fields",
+                "2",
+                "--require-material-budget-coverage-min-observed-fields",
+                "2",
             ])
 
         self.assertEqual(code, 0)
@@ -5119,6 +5142,51 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "draw_calls",
                 "max_sample_taps",
             ])
+
+    def test_cli_can_require_material_executor_budget_coverage_minimum_only(
+            self) -> None:
+        code, report = self.run_verifier(
+            snapshot(sampled_material_plan(sample_taps=13)),
+            extra_args=[
+                "--require-material-budget-coverage-min-observed-fields",
+                "2",
+            ])
+
+        self.assertEqual(code, 0)
+        self.assertIsNone(report["manifest"]["path"])
+        self.assertEqual(
+            report["manifest"]
+            ["material_executor_budget_coverage_required_fields"],
+            [])
+
+    def test_cli_material_executor_budget_coverage_minimum_keeps_manifest_floor(
+            self) -> None:
+        manifest = {
+            "require_material_executor_budget": {
+                "draw_calls_gte": 1,
+            },
+            "require_material_executor_budget_coverage": {
+                "min_bound_key_count": 2,
+            },
+        }
+        code, report = self.run_verifier(
+            snapshot(sampled_material_plan(sample_taps=13)),
+            manifest,
+            extra_args=[
+                "--require-material-budget-coverage-min-bound-keys",
+                "1",
+            ])
+
+        self.assertEqual(code, 1)
+        failures = {
+            item["name"]: item
+            for item in report["failures"]
+        }
+        failure = failures[
+            "material executor budget coverage min_bound_key_count "
+            "is satisfied"]
+        self.assertEqual(failure["expected"], {">=": 2})
+        self.assertEqual(failure["actual"], 1)
 
     def test_material_executor_budget_bound_failure_is_llm_actionable(
             self) -> None:

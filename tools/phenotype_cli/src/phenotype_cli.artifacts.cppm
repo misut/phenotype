@@ -1078,16 +1078,52 @@ auto artifact_verify_args(fs::path const& bundle,
         args,
         invocation,
         "require-material-budget-coverage-field");
+    append_option_arg(
+        args,
+        invocation,
+        "require-material-budget-coverage-min-bound-keys");
+    append_option_arg(
+        args,
+        invocation,
+        "require-material-budget-coverage-min-guarded-fields");
+    append_option_arg(
+        args,
+        invocation,
+        "require-material-budget-coverage-min-observed-fields");
     append_repeatable_arg(args, invocation, "require-material-resource-bound");
     append_repeatable_arg(
         args,
         invocation,
         "require-material-resource-coverage-field");
+    append_option_arg(
+        args,
+        invocation,
+        "require-material-resource-coverage-min-bound-keys");
+    append_option_arg(
+        args,
+        invocation,
+        "require-material-resource-coverage-min-guarded-fields");
+    append_option_arg(
+        args,
+        invocation,
+        "require-material-resource-coverage-min-observed-fields");
     append_repeatable_arg(args, invocation, "require-material-quality-bound");
     append_repeatable_arg(
         args,
         invocation,
         "require-material-quality-coverage-field");
+    append_option_arg(
+        args,
+        invocation,
+        "require-material-quality-coverage-min-bound-keys");
+    append_option_arg(
+        args,
+        invocation,
+        "require-material-quality-coverage-min-guarded-fields");
+    append_option_arg(
+        args,
+        invocation,
+        "require-material-quality-coverage-min-observed-fields");
     append_repeatable_arg(args, invocation, "require-capability");
     append_repeatable_arg(args, invocation, "require-runtime-detail");
     append_repeatable_arg(args, invocation, "require-debug-detail");
@@ -1399,7 +1435,16 @@ auto observe_artifact(fs::path bundle,
         || !invocation.values("require-material-quality-bound").empty()
         || !invocation.values("require-material-budget-coverage-field").empty()
         || !invocation.values("require-material-resource-coverage-field").empty()
-        || !invocation.values("require-material-quality-coverage-field").empty();
+        || !invocation.values("require-material-quality-coverage-field").empty()
+        || invocation.value("require-material-budget-coverage-min-bound-keys").has_value()
+        || invocation.value("require-material-budget-coverage-min-guarded-fields").has_value()
+        || invocation.value("require-material-budget-coverage-min-observed-fields").has_value()
+        || invocation.value("require-material-resource-coverage-min-bound-keys").has_value()
+        || invocation.value("require-material-resource-coverage-min-guarded-fields").has_value()
+        || invocation.value("require-material-resource-coverage-min-observed-fields").has_value()
+        || invocation.value("require-material-quality-coverage-min-bound-keys").has_value()
+        || invocation.value("require-material-quality-coverage-min-guarded-fields").has_value()
+        || invocation.value("require-material-quality-coverage-min-observed-fields").has_value();
     observation.verifier.requested = verifier_requested;
     if (verifier_requested) {
         if (auto verifier = capture_artifact_verifier(
