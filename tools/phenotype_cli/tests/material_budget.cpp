@@ -509,6 +509,9 @@ int main() {
         "\"failed_bound_results\":{\"executor\":[{\"key\":\"draw_calls_gte\",\"field\":\"draw_calls\",\"bound\":\"gte\",\"expected\":3,\"actual\":2,\"ok\":false,\"margin\":-1}],\"resource\":[],\"quality\":[]}"));
     assert(contains_text(
         failure_json,
+        "\"tightest_bound_results\":{\"executor\":{\"key\":\"upload_utilization_lte\",\"field\":\"upload_utilization\",\"bound\":\"lte\",\"expected\":1,\"actual\":0.0625,\"ok\":true,\"margin\":0.9375},\"resource\":{\"key\":\"max_plan_sample_taps_lte\",\"field\":\"max_plan_sample_taps\",\"bound\":\"lte\",\"expected\":25,\"actual\":25,\"ok\":true,\"margin\":0},\"quality\":{\"key\":\"require_noise_allowed\",\"field\":\"noise_disabled\",\"bound\":\"equals\",\"expected\":0,\"actual\":0,\"ok\":true,\"margin\":0}}"));
+    assert(contains_text(
+        failure_json,
         "\"manifest_context\":{\"name\":\"unit-material-gate\",\"pixel_regions\":2,\"pixel_region_metrics\":3,\"pixel_region_metric_comparisons\":4,\"forbid_pixel_region_colors\":1,\"runtime_numeric_bounds\":5,\"material_executor_budget_bounds\":3,\"material_executor_budget_bound_keys\":[\"execution_stage_count_lte\",\"draw_calls_gte\",\"upload_utilization_lte\"],\"material_executor_budget_fields\":[\"draw_calls\",\"execution_stage_count\",\"upload_utilization\"],\"material_resource_bounds\":2,\"material_resource_bound_keys\":[\"max_plan_sample_taps_lte\",\"require_bounded_texture_copy\"],\"material_resource_bound_fields\":[\"max_plan_sample_taps\",\"unbounded_texture_copy\"],\"material_executor_budget_coverage_required_fields\":[\"draw_calls\",\"execution_stage_count\"],\"material_quality_policy_bounds\":2,\"material_quality_policy_bound_keys\":[\"max_blur_radius_lte\",\"require_noise_allowed\"],\"material_quality_policy_fields\":[\"max_blur_radius\",\"noise_disabled\"]}"));
     assert(contains_text(
         failure_json,
@@ -556,6 +559,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "failed-bounds: executor=fail draw_calls_gte actual=2 expected>=3 margin=-1"));
+    assert(contains_line(
+        failure_lines,
+        "tightest-bounds: executor=pass upload_utilization_lte actual=0.0625 expected<=1 margin=0.9375; resource=pass max_plan_sample_taps_lte actual=25 expected<=25 margin=0; quality=pass require_noise_allowed actual=0 expected==0 margin=0"));
     assert(contains_line(
         failure_lines,
         "manifest: name=unit-material-gate runtime=5 pixel-regions=2 budget=3 resource=2 quality=2 required-budget=(draw_calls, execution_stage_count) budget-keys=(execution_stage_count_lte, draw_calls_gte, upload_utilization_lte) resource-keys=(max_plan_sample_taps_lte, require_bounded_texture_copy) quality-keys=(max_blur_radius_lte, require_noise_allowed)"));
