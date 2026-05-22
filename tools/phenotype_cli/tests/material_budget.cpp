@@ -1600,6 +1600,9 @@ int main() {
     assert(contains_text(
         failure_json,
         "\"actual_text\":\"count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)\""));
+    assert(contains_text(
+        failure_json,
+        "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"truncated\":false"));
     assert(contains_text(failure_json, "\"truncated\":true"));
 
     auto failure_lines = verifier_failure_summary_lines(report);
@@ -1745,10 +1748,62 @@ int main() {
     assert(contains_text(
         minimum_json,
         "\"expected\":{\">=\":2},\"actual\":{\"bound_keys\":[\"draw_calls_gte\"],\"count\":1,\"guarded_fields\":[\"draw_calls\"]"));
+    assert(contains_text(
+        minimum_json,
+        "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"truncated\":false"));
     auto minimum_lines = verifier_failure_summary_lines(minimum_report);
     assert(contains_line(
         minimum_lines,
         "actual=count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)"));
+
+    auto many_minimum_report = json::parse(
+        R"json({
+          "failure_summary": {
+            "count": 6,
+            "top_likely_layer": "artifact-manifest",
+            "top_likely_pass": "material-executor"
+          },
+          "failures": [
+            {
+              "path": "manifest.require_material_executor_budget_coverage.min_bound_key_count",
+              "expected": {">=": 2},
+              "actual": {"count": 1, "bound_keys": ["draw_calls_gte"]}
+            },
+            {
+              "path": "manifest.require_material_executor_budget_coverage.min_guarded_field_count",
+              "expected": {">=": 2},
+              "actual": {"count": 1, "guarded_fields": ["draw_calls"]}
+            },
+            {
+              "path": "manifest.require_material_executor_budget_coverage.min_observed_field_count",
+              "expected": {">=": 2},
+              "actual": {"count": 1, "observed_fields": ["draw_calls"]}
+            },
+            {
+              "path": "manifest.require_material_resource_bound_coverage.min_bound_key_count",
+              "expected": {">=": 2},
+              "actual": {"count": 1, "bound_keys": ["max_plan_sample_taps_lte"]}
+            },
+            {
+              "path": "manifest.require_material_resource_bound_coverage.min_guarded_field_count",
+              "expected": {">=": 2},
+              "actual": {"count": 1, "guarded_fields": ["max_plan_sample_taps"]}
+            },
+            {
+              "path": "manifest.require_material_quality_policy_coverage.min_bound_key_count",
+              "expected": {">=": 2},
+              "actual": {"count": 1, "bound_keys": ["max_blur_radius_lte"]}
+            }
+          ]
+        })json");
+    auto many_minimum_json =
+        verifier_failure_summary_json(many_minimum_report);
+    assert(contains_text(
+        many_minimum_json,
+        "\"total_count\":6,\"shown_count\":5,\"omitted_count\":1,\"truncated\":true"));
+    assert(!contains_text(
+        many_minimum_json,
+        "\"label\":\"quality.min_bound_key_count\""));
 
     auto passing_report = json::parse(
         R"json({"failure_summary":{"count":0},"failures":[]})json");
