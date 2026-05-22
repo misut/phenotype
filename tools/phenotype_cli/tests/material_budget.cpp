@@ -112,15 +112,48 @@ auto sample_report() -> json::Value {
             "backdrop_copy_policy": "bounded",
             "backdrop_copy_skip_reason": "none"
           },
-          "executor_budget_bound_summary": {
-            "bound_count": 3,
-            "pass_count": 2,
-            "fail_count": 1,
-            "tightest_bound_key": "upload_utilization_lte",
-            "tightest_bound_field": "upload_utilization",
-            "tightest_bound_margin": 0.9375,
-            "failed_keys": ["draw_calls_gte"]
-          },
+	          "executor_budget_bound_summary": {
+	            "bound_count": 3,
+	            "pass_count": 2,
+	            "fail_count": 1,
+	            "zero_margin_count": 1,
+	            "negative_margin_count": 1,
+	            "zero_margin_sources": [
+	              {
+	                "key": "execution_stage_count_lte",
+	                "field": "execution_stage_count",
+	                "bound": "lte",
+	                "expected": 8,
+	                "actual": 8,
+	                "ok": true,
+	                "margin": 0
+	              }
+	            ],
+	            "negative_margin_sources": [
+	              {
+	                "key": "draw_calls_gte",
+	                "field": "draw_calls",
+	                "bound": "gte",
+	                "expected": 3,
+	                "actual": 2,
+	                "ok": false,
+	                "margin": -1
+	              }
+	            ],
+	            "tightest_bound_key": "upload_utilization_lte",
+	            "tightest_bound_field": "upload_utilization",
+	            "tightest_bound_margin": 0.9375,
+	            "tightest_bound_result": {
+	              "key": "upload_utilization_lte",
+	              "field": "upload_utilization",
+	              "bound": "lte",
+	              "expected": 1,
+	              "actual": 0.0625,
+	              "ok": true,
+	              "margin": 0.9375
+	            },
+	            "failed_keys": ["draw_calls_gte"]
+	          },
           "executor_budget_bound_results": [
             {
               "key": "execution_stage_count_lte",
@@ -190,15 +223,47 @@ auto sample_report() -> json::Value {
           "unbounded_texture_copy": 0,
           "non_deterministic_fallback": 0
         },
-        "resource_bound_summary": {
-          "bound_count": 2,
-          "pass_count": 2,
-          "fail_count": 0,
-          "tightest_bound_key": "max_plan_sample_taps_lte",
-          "tightest_bound_field": "max_plan_sample_taps",
-          "tightest_bound_margin": 0,
-          "failed_keys": []
-        },
+	        "resource_bound_summary": {
+	          "bound_count": 2,
+	          "pass_count": 2,
+	          "fail_count": 0,
+	          "zero_margin_count": 2,
+	          "negative_margin_count": 0,
+	          "zero_margin_sources": [
+	            {
+	              "key": "max_plan_sample_taps_lte",
+	              "field": "max_plan_sample_taps",
+	              "bound": "lte",
+	              "expected": 25,
+	              "actual": 25,
+	              "ok": true,
+	              "margin": 0
+	            },
+	            {
+	              "key": "require_bounded_texture_copy",
+	              "field": "unbounded_texture_copy",
+	              "bound": "equals",
+	              "expected": 0,
+	              "actual": 0,
+	              "ok": true,
+	              "margin": 0
+	            }
+	          ],
+	          "negative_margin_sources": [],
+	          "tightest_bound_key": "max_plan_sample_taps_lte",
+	          "tightest_bound_field": "max_plan_sample_taps",
+	          "tightest_bound_margin": 0,
+	          "tightest_bound_result": {
+	            "key": "max_plan_sample_taps_lte",
+	            "field": "max_plan_sample_taps",
+	            "bound": "lte",
+	            "expected": 25,
+	            "actual": 25,
+	            "ok": true,
+	            "margin": 0
+	          },
+	          "failed_keys": []
+	        },
         "resource_bound_results": [
           {
             "key": "max_plan_sample_taps_lte",
@@ -227,15 +292,47 @@ auto sample_report() -> json::Value {
           "max_sample_taps": 25,
           "max_backdrop_pixels": 4096
         },
-        "quality_policy_bound_summary": {
-          "bound_count": 2,
-          "pass_count": 2,
-          "fail_count": 0,
-          "tightest_bound_key": "require_noise_allowed",
-          "tightest_bound_field": "noise_disabled",
-          "tightest_bound_margin": 0,
-          "failed_keys": []
-        },
+	        "quality_policy_bound_summary": {
+	          "bound_count": 2,
+	          "pass_count": 2,
+	          "fail_count": 0,
+	          "zero_margin_count": 2,
+	          "negative_margin_count": 0,
+	          "zero_margin_sources": [
+	            {
+	              "key": "max_blur_radius_lte",
+	              "field": "max_blur_radius",
+	              "bound": "lte",
+	              "expected": 36,
+	              "actual": 36,
+	              "ok": true,
+	              "margin": 0
+	            },
+	            {
+	              "key": "require_noise_allowed",
+	              "field": "noise_disabled",
+	              "bound": "equals",
+	              "expected": 0,
+	              "actual": 0,
+	              "ok": true,
+	              "margin": 0
+	            }
+	          ],
+	          "negative_margin_sources": [],
+	          "tightest_bound_key": "require_noise_allowed",
+	          "tightest_bound_field": "noise_disabled",
+	          "tightest_bound_margin": 0,
+	          "tightest_bound_result": {
+	            "key": "require_noise_allowed",
+	            "field": "noise_disabled",
+	            "bound": "equals",
+	            "expected": 0,
+	            "actual": 0,
+	            "ok": true,
+	            "margin": 0
+	          },
+	          "failed_keys": []
+	        },
         "quality_policy_bound_results": [
           {
             "key": "max_blur_radius_lte",
@@ -448,6 +545,16 @@ int main() {
     assert(executor_summary);
     assert(executor_summary->bound_count == 3);
     assert(executor_summary->fail_count == 1);
+    assert(executor_summary->zero_margin_count == 1);
+    assert(executor_summary->negative_margin_count == 1);
+    assert(executor_summary->zero_margin_sources.size() == 1);
+    assert(executor_summary->zero_margin_sources[0].key
+        == "execution_stage_count_lte");
+    assert(executor_summary->negative_margin_sources.size() == 1);
+    assert(executor_summary->negative_margin_sources[0].key == "draw_calls_gte");
+    assert(executor_summary->tightest_bound_result);
+    assert(executor_summary->tightest_bound_result->key
+        == "upload_utilization_lte");
     assert(executor_summary->failed_keys.size() == 1);
     assert(executor_summary->failed_keys[0] == "draw_calls_gte");
 
@@ -462,6 +569,20 @@ int main() {
     auto executor_json = material_budget_bound_results_json(executor_results);
     assert(contains_text(executor_json, "\"key\":\"draw_calls_gte\""));
     assert(contains_text(executor_json, "\"margin\":-1"));
+    auto executor_summary_json =
+        material_budget_bound_summary_json(executor_summary);
+    assert(contains_text(
+        executor_summary_json,
+        "\"zero_margin_sources\":[{\"key\":\"execution_stage_count_lte\""));
+    assert(contains_text(
+        executor_summary_json,
+        "\"negative_margin_sources\":[{\"key\":\"draw_calls_gte\""));
+    assert(contains_text(
+        executor_summary_json,
+        "\"tightest_bound_result\":{\"key\":\"upload_utilization_lte\""));
+    assert(contains_text(
+        material_budget_bound_summary_text(*executor_summary),
+        "zero=1 negative=1"));
 
     auto pressure_json = verifier_bound_pressure_json(report);
     assert(contains_text(
@@ -482,6 +603,12 @@ int main() {
     assert(resource_summary);
     assert(resource_results);
     assert(resource_summary->bound_count == 2);
+    assert(resource_summary->zero_margin_count == 2);
+    assert(resource_summary->negative_margin_count == 0);
+    assert(resource_summary->zero_margin_sources.size() == 2);
+    assert(resource_summary->tightest_bound_result);
+    assert(resource_summary->tightest_bound_result->key
+        == "max_plan_sample_taps_lte");
     assert(resource_results->size() == 2);
     assert(contains_line(
         material_budget_bound_detail_lines(resource_results, resource_summary),
@@ -494,6 +621,10 @@ int main() {
     assert(quality_summary);
     assert(quality_results);
     assert(quality_summary->tightest_bound_key == "require_noise_allowed");
+    assert(quality_summary->zero_margin_count == 2);
+    assert(quality_summary->tightest_bound_result);
+    assert(quality_summary->tightest_bound_result->key
+        == "require_noise_allowed");
     assert(contains_line(
         material_budget_bound_detail_lines(quality_results, quality_summary),
         "tightest: pass require_noise_allowed"));
@@ -517,7 +648,22 @@ int main() {
         "\"material_contract\":{\"semantic_material_nodes\":3,\"renderer_plan_contract_version\":42,\"renderer_plan_count\":3,\"renderer_plans_present\":true,\"resolved_plan_count\":3,\"executor_budget\":{\"plan_count\":3,\"sampled_backdrop_instance_count\":2,\"fallback_instance_count\":0,\"draw_calls\":2,\"total_sample_taps\":50,\"upload_utilization\":0.0625,\"backdrop_copy_utilization\":0.25,\"pipeline_ready\":true,\"backdrop_source_ready\":true,\"upload_status\":\"uploaded\",\"draw_status\":\"drawn\",\"backdrop_copy_policy\":\"bounded\",\"backdrop_copy_skip_reason\":\"none\"},\"fallback_paths\":{\"unsupported-backend\":1},\"pass_executors\":{\"color-fill\":1,\"sampled-backdrop\":2},\"decision_first_blockers\":{\"reduced-transparency\":1,\"unsupported-backend\":1},\"reference_material_policies\":{\"standard-material\":1,\"system-adaptive\":2},\"reference_accessibility_responses\":{\"increase-contrast\":1,\"reduce-transparency\":2},\"reference_performance_responses\":{\"bounded-backdrop\":2,\"deterministic-fallback\":1},\"decision_reduced_transparency\":false,\"decision_increase_contrast\":true,\"decision_reduce_motion\":false,\"app_probe_contract_name\":\"glass_showcase_material_probe_contract\",\"app_probe_reference_technology\":\"liquid-glass\"}"));
     assert(contains_text(
         failure_json,
-        "\"bound_summaries\":{\"executor\":{\"bound_count\":3,\"pass_count\":2,\"fail_count\":1,\"tightest_bound_key\":\"upload_utilization_lte\",\"tightest_bound_field\":\"upload_utilization\",\"tightest_bound_margin\":0.9375,\"failed_keys\":[\"draw_calls_gte\"]},\"resource\":{\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"tightest_bound_key\":\"max_plan_sample_taps_lte\",\"tightest_bound_field\":\"max_plan_sample_taps\",\"tightest_bound_margin\":0,\"failed_keys\":[]},\"quality\":{\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"tightest_bound_key\":\"require_noise_allowed\",\"tightest_bound_field\":\"noise_disabled\",\"tightest_bound_margin\":0,\"failed_keys\":[]}}"));
+        "\"bound_summaries\":{\"executor\":{\"bound_count\":3,\"pass_count\":2,\"fail_count\":1,\"zero_margin_count\":1,\"negative_margin_count\":1"));
+    assert(contains_text(
+        failure_json,
+        "\"zero_margin_sources\":[{\"key\":\"execution_stage_count_lte\",\"field\":\"execution_stage_count\""));
+    assert(contains_text(
+        failure_json,
+        "\"negative_margin_sources\":[{\"key\":\"draw_calls_gte\",\"field\":\"draw_calls\""));
+    assert(contains_text(
+        failure_json,
+        "\"tightest_bound_result\":{\"key\":\"upload_utilization_lte\",\"field\":\"upload_utilization\""));
+    assert(contains_text(
+        failure_json,
+        "\"resource\":{\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"zero_margin_count\":2,\"negative_margin_count\":0"));
+    assert(contains_text(
+        failure_json,
+        "\"quality\":{\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"zero_margin_count\":2,\"negative_margin_count\":0"));
     assert(contains_text(
         failure_json,
         "\"failed_bound_results\":{\"executor\":[{\"key\":\"draw_calls_gte\",\"field\":\"draw_calls\",\"bound\":\"gte\",\"expected\":3,\"actual\":2,\"ok\":false,\"margin\":-1}],\"resource\":[],\"quality\":[]}"));
@@ -572,7 +718,7 @@ int main() {
         "context: platform=test backend=synthetic semantic-nodes=3 renderer-plans=3 resolved-plans=3 executor=plans=3,sampled=2,fallback=0,draws=2,taps=50,upload=uploaded,draw=drawn,backdrop=bounded fallbacks=unsupported-backend=1 blockers=reduced-transparency=1, unsupported-backend=1 pass-executors=sampled-backdrop=2, color-fill=1 ref-policy=system-adaptive=2, standard-material=1 a11y=reduce-transparency=2, increase-contrast=1 perf=bounded-backdrop=2, deterministic-fallback=1 reduced-transparency=false increase-contrast=true reduce-motion=false probe=liquid-glass"));
     assert(contains_line(
         failure_lines,
-        "bounds: executor=2/3,fail=1,tightest=upload_utilization_lte,failed=(draw_calls_gte); resource=2/2,fail=0,tightest=max_plan_sample_taps_lte; quality=2/2,fail=0,tightest=require_noise_allowed"));
+        "bounds: executor=2/3,fail=1,tightest=upload_utilization_lte,zero=1,negative=1,failed=(draw_calls_gte); resource=2/2,fail=0,tightest=max_plan_sample_taps_lte,zero=2,negative=0; quality=2/2,fail=0,tightest=require_noise_allowed,zero=2,negative=0"));
     assert(contains_line(
         failure_lines,
         "failed-bounds: executor=fail draw_calls_gte actual=2 expected>=3 margin=-1"));

@@ -141,6 +141,8 @@ paint-layer counts, copy bounds, and deterministic fallback safety counters.
 including pass/fail counts, failed bound keys, zero/negative margin counts and
 source result lists, the tightest remaining margin, and the full tightest bound
 result across the applied material executor budget bounds.
+The C++ CLI envelope preserves those raw summary detail fields instead of
+requiring JSON consumers to rederive them from `verifier_bound_pressure`.
 `verifier.material_budget_bound_results` mirrors the compact per-bound key,
 field, operator, expected value, actual value, pass/fail state, and margin so
 JSON consumers can compare every material budget constraint without scanning the
