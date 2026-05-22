@@ -274,6 +274,7 @@ struct MaterialBoundCoverageSummary {
     std::vector<std::string> unguarded_observed_fields;
     std::string unguarded_observed_sources_json;
     std::vector<std::string> required_fields;
+    std::vector<std::string> bound_keys;
 };
 
 struct MaterialBudgetBoundResult {
@@ -1860,6 +1861,9 @@ auto material_bound_coverage_from_object(json::Object const& coverage)
         .required_fields = json_object_string_array(
             coverage,
             "required_fields"),
+        .bound_keys = sorted_unique(json_object_string_array(
+            coverage,
+            "bound_keys")),
     };
 }
 
@@ -2420,7 +2424,8 @@ auto material_bound_coverage_json(
         "\"guarded_field_count\":{},\"required_field_count\":{},"
         "\"covered_required_field_count\":{},"
         "\"observed_required_field_count\":{},"
-        "\"bound_key_count\":{},\"unguarded_observed_field_count\":{},"
+        "\"bound_key_count\":{},\"bound_keys\":{},"
+        "\"unguarded_observed_field_count\":{},"
         "\"missing_guarded_fields\":{},\"missing_observed_fields\":{},"
         "\"observed_fields\":{},\"guarded_fields\":{},"
         "\"unguarded_observed_fields\":{},\"required_fields\":{}",
@@ -2431,6 +2436,7 @@ auto material_bound_coverage_json(
         manifest_count_json(coverage->covered_required_field_count),
         manifest_count_json(coverage->observed_required_field_count),
         manifest_count_json(coverage->bound_key_count),
+        string_array_json(coverage->bound_keys),
         manifest_count_json(coverage->unguarded_observed_field_count),
         string_array_json(coverage->missing_guarded_fields),
         string_array_json(coverage->missing_observed_fields),
@@ -2734,6 +2740,11 @@ auto material_bound_coverage_text(MaterialBoundCoverageSummary const& coverage)
             coverage.unguarded_observed_field_count,
             budget_field_list_text(coverage.unguarded_observed_fields))
         : std::string{};
+    auto bound_keys = coverage.bound_keys.empty()
+        ? std::string{}
+        : std::format(
+            " guard-key-list=({})",
+            budget_field_list_text(coverage.bound_keys));
     auto sources = coverage_source_map_text(
         coverage.unguarded_observed_sources_json);
     auto source_text = sources.empty()
@@ -2746,6 +2757,7 @@ auto material_bound_coverage_text(MaterialBoundCoverageSummary const& coverage)
         coverage.observed_field_count,
         coverage.bound_key_count)
         + required
+        + bound_keys
         + unguarded
         + source_text
         + missing_guarded

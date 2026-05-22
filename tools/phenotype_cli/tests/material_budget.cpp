@@ -570,7 +570,11 @@ auto sample_report() -> json::Value {
             "bounded_texture_copy",
             "max_plan_sample_taps"
           ],
-          "bound_key_count": 2
+          "bound_key_count": 2,
+          "bound_keys": [
+            "max_plan_sample_taps_lte",
+            "require_bounded_texture_copy"
+          ]
         },
 	        "resource_bound_summary": {
 	          "bound_count": 2,
@@ -739,7 +743,11 @@ auto sample_report() -> json::Value {
             "max_blur_radius",
             "noise_disabled"
           ],
-          "bound_key_count": 2
+          "bound_key_count": 2,
+          "bound_keys": [
+            "max_blur_radius_lte",
+            "require_noise_allowed"
+          ]
         },
 	        "quality_policy_bound_summary": {
 	          "bound_count": 2,
@@ -1136,6 +1144,9 @@ int main() {
         material_resource_bound_coverage_from_report(report);
     assert(resource_coverage);
     assert(resource_coverage->bound_key_count == 2);
+    assert(resource_coverage->bound_keys.size() == 2);
+    assert(resource_coverage->bound_keys[0] == "max_plan_sample_taps_lte");
+    assert(resource_coverage->bound_keys[1] == "require_bounded_texture_copy");
     assert(resource_coverage->guarded_field_count == 2);
     assert(resource_coverage->observed_field_count == 3);
     assert(resource_coverage->covered_required_field_count == 2);
@@ -1146,6 +1157,10 @@ int main() {
     assert(resource_coverage->missing_observed_fields.empty());
     assert(contains_text(
         material_bound_coverage_json(resource_coverage),
+        "\"bound_keys\":[\"max_plan_sample_taps_lte\","
+        "\"require_bounded_texture_copy\"]"));
+    assert(contains_text(
+        material_bound_coverage_json(resource_coverage),
         "\"unguarded_observed_fields\":[\"max_frame_capture_pixels\"]"));
     assert(contains_text(
         material_bound_coverage_json(resource_coverage),
@@ -1153,6 +1168,10 @@ int main() {
     assert(contains_text(
         material_bound_coverage_json(resource_coverage),
         "\"required_fields\":[\"bounded_texture_copy\",\"max_plan_sample_taps\"]"));
+    assert(contains_text(
+        material_bound_coverage_text(*resource_coverage),
+        "guard-key-list=(max_plan_sample_taps_lte, "
+        "require_bounded_texture_copy)"));
     assert(contains_text(
         material_bound_coverage_text(*resource_coverage),
         "unguarded=1 (max_frame_capture_pixels)"));
@@ -1166,10 +1185,20 @@ int main() {
     assert(quality_coverage->guardable_field_count == 6);
     assert(quality_coverage->observed_field_count == 6);
     assert(quality_coverage->guarded_field_count == 2);
+    assert(quality_coverage->bound_keys.size() == 2);
+    assert(quality_coverage->bound_keys[0] == "max_blur_radius_lte");
+    assert(quality_coverage->bound_keys[1] == "require_noise_allowed");
+    assert(contains_text(
+        material_bound_coverage_json(quality_coverage),
+        "\"bound_keys\":[\"max_blur_radius_lte\","
+        "\"require_noise_allowed\"]"));
     assert(contains_text(
         material_bound_coverage_text(*quality_coverage),
         "unguarded=4 (backdrop_sampling_disabled, max_backdrop_pixels, "
         "max_sample_taps, shadow_disabled)"));
+    assert(contains_text(
+        material_bound_coverage_text(*quality_coverage),
+        "guard-key-list=(max_blur_radius_lte, require_noise_allowed)"));
     assert(contains_text(
         material_bound_coverage_json(quality_coverage),
         "\"unguarded_observed_sources\":{\"max_sample_taps\""));
