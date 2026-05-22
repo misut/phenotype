@@ -2243,6 +2243,92 @@ auto verifier_failed_bound_results_text(json::Value const& report)
     return text;
 }
 
+auto tightest_bound_result(
+        std::optional<std::vector<MaterialBudgetBoundResult>> const& results,
+        std::optional<MaterialBudgetBoundSummary> const& summary)
+        -> std::optional<MaterialBudgetBoundResult> {
+    if (!results || !summary || summary->tightest_bound_key.empty())
+        return std::nullopt;
+    auto const* result = material_budget_bound_result_by_key(
+        *results,
+        summary->tightest_bound_key);
+    return result ? std::optional<MaterialBudgetBoundResult>{*result}
+                  : std::nullopt;
+}
+
+auto verifier_tightest_bound_results_json(json::Value const& report)
+        -> std::string {
+    auto executor = tightest_bound_result(
+        material_budget_bound_results_from_report(report),
+        material_budget_bound_summary_from_report(report));
+    auto resource = tightest_bound_result(
+        material_resource_bound_results_from_report(report),
+        material_resource_bound_summary_from_report(report));
+    auto quality = tightest_bound_result(
+        material_quality_policy_bound_results_from_report(report),
+        material_quality_policy_bound_summary_from_report(report));
+    if (!executor && !resource && !quality)
+        return "null";
+
+    return std::format(
+        "{{\"executor\":{},\"resource\":{},\"quality\":{}}}",
+        executor ? material_budget_bound_result_json(*executor)
+                 : std::string{"null"},
+        resource ? material_budget_bound_result_json(*resource)
+                 : std::string{"null"},
+        quality ? material_budget_bound_result_json(*quality)
+                : std::string{"null"});
+}
+
+auto compact_tightest_bound_result_text(
+        std::string_view label,
+        std::optional<MaterialBudgetBoundResult> const& result)
+        -> std::string {
+    return result
+        ? std::format(
+            "{}={}",
+            label,
+            material_budget_bound_result_text(*result))
+        : std::string{};
+}
+
+auto verifier_tightest_bound_results_text(json::Value const& report)
+        -> std::string {
+    auto parts = std::vector<std::string>{};
+    if (auto executor = compact_tightest_bound_result_text(
+            "executor",
+            tightest_bound_result(
+                material_budget_bound_results_from_report(report),
+                material_budget_bound_summary_from_report(report)));
+        !executor.empty()) {
+        parts.push_back(std::move(executor));
+    }
+    if (auto resource = compact_tightest_bound_result_text(
+            "resource",
+            tightest_bound_result(
+                material_resource_bound_results_from_report(report),
+                material_resource_bound_summary_from_report(report)));
+        !resource.empty()) {
+        parts.push_back(std::move(resource));
+    }
+    if (auto quality = compact_tightest_bound_result_text(
+            "quality",
+            tightest_bound_result(
+                material_quality_policy_bound_results_from_report(report),
+                material_quality_policy_bound_summary_from_report(report)));
+        !quality.empty()) {
+        parts.push_back(std::move(quality));
+    }
+
+    auto text = std::string{};
+    for (auto const& part : parts) {
+        if (!text.empty())
+            text += "; ";
+        text += part;
+    }
+    return text;
+}
+
 auto verifier_material_budget_coverage_json(json::Value const& report)
         -> std::string {
     return material_budget_coverage_json(material_budget_coverage_summary(
@@ -2407,6 +2493,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         "\"top_likely_pass\":{},\"top_suggested_action\":{},"
         "\"artifact_context\":{},\"bound_summaries\":{},"
         "\"failed_bound_results\":{},"
+        "\"tightest_bound_results\":{},"
         "\"manifest_context\":{},\"budget_coverage\":{},"
         "\"material_context\":{},"
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
@@ -2426,6 +2513,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         failure_artifact_context_json(report),
         verifier_bound_summaries_json(report),
         verifier_failed_bound_results_json(report),
+        verifier_tightest_bound_results_json(report),
         verifier_manifest_context_json(report),
         verifier_material_budget_coverage_json(report),
         failure_material_context_json(report),
@@ -2496,6 +2584,10 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto failed_bounds = verifier_failed_bound_results_text(report);
         !failed_bounds.empty()) {
         lines.push_back("  failed-bounds: " + failed_bounds);
+    }
+    if (auto tightest_bounds = verifier_tightest_bound_results_text(report);
+        !tightest_bounds.empty()) {
+        lines.push_back("  tightest-bounds: " + tightest_bounds);
     }
     if (auto manifest = verifier_manifest_context_text(report);
         !manifest.empty()) {
