@@ -89,7 +89,7 @@ The initial scope is intentionally narrow:
   intentionally local-only by default because native capture can be slow on CI;
   `tools/verify_glass_showcase_artifact.sh` and
   `tools/verify_glass_showcase_accessibility_artifact.sh` are compatibility
-  wrappers that build and delegate to this command.
+  wrappers that rebuild stale CLI binaries and delegate to this command.
 - `phenotype artifact verify-file-explorer` runs the local desktop/mobile file
   explorer contract gate from the CLI surface. It runs the shared model tests,
   builds the selected native examples, captures deterministic artifacts, and
@@ -103,7 +103,7 @@ The initial scope is intentionally narrow:
   `--profile`, repeated `--view-mode`, and repeated `--scenario` options for
   faster local iteration before running the full gate;
   `tools/verify_file_explorer_artifacts.sh` is a thin compatibility wrapper
-  that builds and delegates to this command.
+  that rebuilds stale CLI binaries and delegates to this command.
 - `phenotype theme resolve` runs the same pure theme preference resolver used
   by examples without importing the native `phenotype` package. It accepts
   explicit OS snapshot fields and app overrides, then reports the effective
