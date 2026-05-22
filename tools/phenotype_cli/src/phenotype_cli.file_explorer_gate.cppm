@@ -38,6 +38,10 @@ struct FileExplorerArtifactCase {
         material_quality_policy_bound_results;
     std::optional<VerifierManifestSummary> verifier_manifest;
     std::optional<MaterialBudgetCoverageSummary> material_budget_coverage;
+    std::optional<MaterialBoundCoverageSummary>
+        material_resource_bound_coverage;
+    std::optional<MaterialBoundCoverageSummary>
+        material_quality_policy_coverage;
     std::optional<MaterialBudgetBoundSummary> material_budget_bound_summary;
     std::optional<std::vector<MaterialBudgetBoundResult>>
         material_budget_bound_results;
@@ -438,6 +442,8 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         "\"material_quality_policy_bound_results\":{},"
         "\"verifier_manifest\":{},"
         "\"material_budget_coverage\":{},"
+        "\"material_resource_bound_coverage\":{},"
+        "\"material_quality_policy_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
         "\"material_budget_bound_results\":{},"
         "\"verifier_bound_pressure\":{},"
@@ -462,6 +468,8 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
             item.material_quality_policy_bound_results),
         verifier_manifest_summary_json(item.verifier_manifest),
         material_budget_coverage_json(item.material_budget_coverage),
+        material_bound_coverage_json(item.material_resource_bound_coverage),
+        material_bound_coverage_json(item.material_quality_policy_coverage),
         material_budget_bound_summary_json(item.material_budget_bound_summary),
         material_budget_bound_results_json(item.material_budget_bound_results),
         verifier_bound_pressure_json(item.verifier_result),
@@ -612,6 +620,47 @@ void print_material_budget_coverage_summary(
             case_label(item),
             material_budget_coverage_text(*item.material_budget_coverage));
     }
+}
+
+void print_material_bound_coverage_summary(
+        std::span<FileExplorerArtifactCase const> cases,
+        std::string_view title,
+        std::optional<MaterialBoundCoverageSummary>
+            FileExplorerArtifactCase::*member) {
+    auto has_coverage = std::ranges::any_of(
+        cases,
+        [member](FileExplorerArtifactCase const& item) {
+            return (item.*member).has_value();
+        });
+    if (!has_coverage)
+        return;
+
+    std::println("{}:", title);
+    for (auto const& item : cases) {
+        auto const& coverage = item.*member;
+        if (!coverage)
+            continue;
+        std::println(
+            "  {}: {}",
+            case_label(item),
+            material_bound_coverage_text(*coverage));
+    }
+}
+
+void print_material_resource_bound_coverage_summary(
+        std::span<FileExplorerArtifactCase const> cases) {
+    print_material_bound_coverage_summary(
+        cases,
+        "material resource bound coverage",
+        &FileExplorerArtifactCase::material_resource_bound_coverage);
+}
+
+void print_material_quality_policy_coverage_summary(
+        std::span<FileExplorerArtifactCase const> cases) {
+    print_material_bound_coverage_summary(
+        cases,
+        "material quality policy coverage",
+        &FileExplorerArtifactCase::material_quality_policy_coverage);
 }
 
 void print_material_quality_policy_summary(
@@ -795,6 +844,8 @@ void print_file_explorer_gate(
     std::println("{}", cppx::terminal::format_status_frame(lines, false));
     print_verifier_manifest_summary(summary.cases);
     print_material_budget_coverage_summary(summary.cases);
+    print_material_resource_bound_coverage_summary(summary.cases);
+    print_material_quality_policy_coverage_summary(summary.cases);
     print_material_quality_policy_summary(summary.cases);
     print_material_resource_bounds_summary(summary.cases);
     print_material_resource_bound_summary(summary.cases);
@@ -958,6 +1009,10 @@ auto run_file_explorer_case(fs::path const& root,
         item.material_budget_coverage = material_budget_coverage_summary(
             item.material_budget,
             item.verifier_manifest);
+        item.material_resource_bound_coverage =
+            material_resource_bound_coverage_from_report(*verifier_report);
+        item.material_quality_policy_coverage =
+            material_quality_policy_coverage_from_report(*verifier_report);
         item.material_budget_bound_summary =
             material_budget_bound_summary_from_report(*verifier_report);
         item.material_budget_bound_results =
