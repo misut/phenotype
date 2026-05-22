@@ -4040,6 +4040,10 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         material_quality_policy_coverage
         if isinstance(material_quality_policy_coverage, dict)
         else {})
+    runtime_detail_paths = sorted(
+        entry["path"]
+        for entry in runtime_details
+        if isinstance(entry, dict) and isinstance(entry.get("path"), str))
 
     has_direct_bounds = any((
         material_executor_budget_keys,
@@ -4059,6 +4063,8 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
                 manifest.get("pixel_region_metric_comparisons", []) or []),
             "forbid_pixel_region_colors": len(
                 manifest.get("forbid_pixel_region_colors", []) or []),
+            "runtime_details": len(runtime_details),
+            "runtime_detail_paths": runtime_detail_paths,
             "runtime_numeric_bounds": len(
                 manifest.get("require_runtime_numeric_bounds", []) or []),
             "material_executor_budget_bounds": len(material_executor_budget_keys),

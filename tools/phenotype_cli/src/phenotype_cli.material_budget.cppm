@@ -98,6 +98,8 @@ struct VerifierManifestSummary {
     std::int64_t pixel_region_metrics = -1;
     std::int64_t pixel_region_metric_comparisons = -1;
     std::int64_t forbid_pixel_region_colors = -1;
+    std::int64_t runtime_details = -1;
+    std::vector<std::string> runtime_detail_paths;
     std::int64_t runtime_numeric_bounds = -1;
     std::int64_t material_executor_budget_bounds = -1;
     std::vector<std::string> material_executor_budget_bound_keys;
@@ -464,6 +466,12 @@ auto verifier_manifest_summary_from_report(json::Value const& report)
         .forbid_pixel_region_colors = json_integer_at(
             report,
             {"manifest", "forbid_pixel_region_colors"}).value_or(-1),
+        .runtime_details = json_integer_at(
+            report,
+            {"manifest", "runtime_details"}).value_or(-1),
+        .runtime_detail_paths = json_string_array_at(
+            report,
+            {"manifest", "runtime_detail_paths"}),
         .runtime_numeric_bounds = json_integer_at(
             report,
             {"manifest", "runtime_numeric_bounds"}).value_or(-1),
@@ -3175,8 +3183,10 @@ auto verifier_manifest_context_text(json::Value const& report) -> std::string {
         return {};
 
     auto text = std::format(
-        "name={} runtime={} pixel-regions={} budget={} resource={} quality={}",
+        "name={} runtime-details={} runtime-bounds={} pixel-regions={} "
+        "budget={} resource={} quality={}",
         manifest->name,
+        budget_count(manifest->runtime_details),
         budget_count(manifest->runtime_numeric_bounds),
         budget_count(manifest->pixel_regions),
         budget_count(manifest->material_executor_budget_bounds),
@@ -3533,6 +3543,8 @@ auto verifier_manifest_summary_json(
         "\"pixel_region_metrics\":{},"
         "\"pixel_region_metric_comparisons\":{},"
         "\"forbid_pixel_region_colors\":{},"
+        "\"runtime_details\":{},"
+        "\"runtime_detail_paths\":{},"
         "\"runtime_numeric_bounds\":{},"
         "\"material_executor_budget_bounds\":{},"
         "\"material_executor_budget_bound_keys\":{},"
@@ -3560,6 +3572,8 @@ auto verifier_manifest_summary_json(
         manifest_count_json(manifest->pixel_region_metrics),
         manifest_count_json(manifest->pixel_region_metric_comparisons),
         manifest_count_json(manifest->forbid_pixel_region_colors),
+        manifest_count_json(manifest->runtime_details),
+        string_array_json(manifest->runtime_detail_paths),
         manifest_count_json(manifest->runtime_numeric_bounds),
         manifest_count_json(manifest->material_executor_budget_bounds),
         string_array_json(manifest->material_executor_budget_bound_keys),

@@ -524,10 +524,12 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
         auto manifest = verifier_manifest_summary_from_report(*verifier_report);
         if (manifest) {
             std::println(
-                "verifier manifest: name={} runtime-bounds={} "
-                "budget-bounds={} resource-bounds={} quality-policy-bounds={} "
-                "pixel-regions={} metrics={} comparisons={} forbidden-colors={}",
+                "verifier manifest: name={} runtime-details={} "
+                "runtime-bounds={} budget-bounds={} resource-bounds={} "
+                "quality-policy-bounds={} pixel-regions={} metrics={} "
+                "comparisons={} forbidden-colors={}",
                 manifest->name,
+                budget_count(manifest->runtime_details),
                 budget_count(manifest->runtime_numeric_bounds),
                 budget_count(manifest->material_executor_budget_bounds),
                 budget_count(manifest->material_resource_bounds),

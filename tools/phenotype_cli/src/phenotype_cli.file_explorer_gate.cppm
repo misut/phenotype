@@ -647,11 +647,12 @@ void print_verifier_manifest_summary(
             continue;
         auto const& manifest = *item.verifier_manifest;
         std::println(
-            "  {}: name={} runtime-bounds={} budget-bounds={} "
-            "resource-bounds={} quality-policy-bounds={} pixel-regions={} "
-            "metrics={} comparisons={} forbidden-colors={}",
+            "  {}: name={} runtime-details={} runtime-bounds={} "
+            "budget-bounds={} resource-bounds={} quality-policy-bounds={} "
+            "pixel-regions={} metrics={} comparisons={} forbidden-colors={}",
             case_label(item),
             manifest.name,
+            budget_count(manifest.runtime_details),
             budget_count(manifest.runtime_numeric_bounds),
             budget_count(manifest.material_executor_budget_bounds),
             budget_count(manifest.material_resource_bounds),
