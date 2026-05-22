@@ -1185,6 +1185,38 @@ int main() {
         material_budget_bound_summary_text(*executor_summary),
         "zero=1 negative=1"));
 
+    auto sourced_bound_json = json::parse(R"json({
+      "key": "upload_utilization_lte",
+      "field": "upload_utilization",
+      "bound": "lte",
+      "expected": 1,
+      "actual": 0.0625,
+      "ok": true,
+      "margin": 0.9375,
+      "source": {
+        "metric": "upload_utilization",
+        "value": 0.0625,
+        "source_key": "upload_utilization",
+        "source_path": "debug.platform_runtime.details.renderer.material_executor_summary.material_upload_bytes",
+        "likely_layer": "platform-runtime",
+        "likely_pass": "material-executor"
+      }
+    })json");
+    auto sourced_bound =
+        material_bound_result_from_object(sourced_bound_json.as_object());
+    assert(sourced_bound.source_metric == "upload_utilization");
+    assert(sourced_bound.source_key == "upload_utilization");
+    assert(sourced_bound.source_likely_pass == "material-executor");
+    auto sourced_bound_compact_json =
+        material_budget_bound_result_json(sourced_bound);
+    assert(contains_text(sourced_bound_compact_json, "\"source\":{"));
+    assert(contains_text(
+        sourced_bound_compact_json,
+        "\"metric\":\"upload_utilization\""));
+    assert(contains_text(
+        material_budget_bound_result_text(sourced_bound),
+        "source=upload_utilization path=debug.platform_runtime.details.renderer.material_executor_summary.material_upload_bytes pass=material-executor"));
+
     auto pressure_json = verifier_bound_pressure_json(report);
     auto tightest_json = verifier_tightest_bound_results_json(report);
     assert(contains_text(

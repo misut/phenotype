@@ -166,7 +166,9 @@ requiring JSON consumers to rederive them from `verifier_bound_pressure`.
 `verifier.material_budget_bound_results` mirrors the compact per-bound key,
 field, operator, expected value, actual value, pass/fail state, and margin so
 JSON consumers can compare every material budget constraint without scanning the
-full report. `verifier.material_resource_bound_summary` and
+full report. When source descriptors are available, each bound result also keeps
+the source metric, runtime key/path, or material plan path that produced the
+observed value. `verifier.material_resource_bound_summary` and
 `verifier.material_resource_bound_results` expose the same expected/actual/margin
 shape for `require_material_resource_bounds`;
 `verifier.material_quality_policy_bound_summary` and

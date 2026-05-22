@@ -3644,6 +3644,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(by_key["max_plan_sample_taps_lte"]["actual"], 25)
         self.assertTrue(by_key["max_plan_sample_taps_lte"]["ok"])
         self.assertEqual(by_key["max_plan_sample_taps_lte"]["margin"], 0.0)
+        self.assertEqual(
+            by_key["max_plan_sample_taps_lte"]["source"]["metric"],
+            "max_plan_sample_taps")
+        self.assertTrue(
+            by_key["max_plan_sample_taps_lte"]["source"]
+            ["source_path"].endswith(".sample_taps"))
         summary = report["material_plans"]["resource_bound_summary"]
         self.assertEqual(summary["bound_count"], 44)
         self.assertEqual(summary["pass_count"], 44)
@@ -3812,6 +3818,8 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(result["actual"], 25)
         self.assertFalse(result["ok"])
         self.assertEqual(result["margin"], -25.0)
+        self.assertEqual(result["source"]["metric"], "max_plan_sample_taps")
+        self.assertTrue(result["source"]["source_path"].endswith(".sample_taps"))
         self.assertEqual(summary["negative_margin_count"], 1)
         self.assertEqual(summary["negative_margin_sources"], [result])
         self.assertEqual(summary["tightest_bound_result"], result)
@@ -4881,6 +4889,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             by_key["max_backdrop_pixels_lte"]["actual"],
             4_000_000)
         self.assertTrue(by_key["max_backdrop_pixels_lte"]["ok"])
+        self.assertEqual(
+            by_key["max_blur_radius_lte"]["source"]["metric"],
+            "max_blur_radius")
+        self.assertTrue(
+            by_key["max_blur_radius_lte"]["source"]
+            ["source_path"].endswith(".quality_policy.max_blur_radius"))
         summary = report["material_plans"]["quality_policy_bound_summary"]
         self.assertEqual(summary["bound_count"], 6)
         self.assertEqual(summary["pass_count"], 6)
@@ -5036,6 +5050,10 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(result["actual"], 36.0)
         self.assertFalse(result["ok"])
         self.assertEqual(result["margin"], -35.0)
+        self.assertEqual(result["source"]["metric"], "max_blur_radius")
+        self.assertTrue(
+            result["source"]["source_path"].endswith(
+                ".quality_policy.max_blur_radius"))
         self.assertEqual(summary["negative_margin_count"], 1)
         self.assertEqual(summary["negative_margin_sources"], [result])
         self.assertEqual(summary["tightest_bound_result"], result)
@@ -5246,6 +5264,14 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(by_key["upload_utilization_lte"]["actual"], 1.0)
         self.assertTrue(by_key["upload_utilization_lte"]["ok"])
         self.assertEqual(by_key["upload_utilization_lte"]["margin"], 0.0)
+        self.assertEqual(
+            by_key["upload_utilization_lte"]["source"]["metric"],
+            "upload_utilization")
+        self.assertEqual(
+            by_key["upload_utilization_lte"]["source"]["detail"]
+            ["numerator_path"],
+            "debug.platform_runtime.details.renderer"
+            ".material_executor_summary.material_upload_bytes")
         summary = (
             report["artifact_context"]
             ["material_contract"]
@@ -5445,6 +5471,15 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(results[0]["key"], "upload_utilization_lte")
         self.assertFalse(results[0]["ok"])
         self.assertEqual(results[0]["margin"], -0.5)
+        self.assertEqual(results[0]["source"]["metric"], "upload_utilization")
+        self.assertEqual(
+            results[0]["source"]["source_path"],
+            "debug.platform_runtime.details.renderer"
+            ".material_executor_summary.material_upload_bytes")
+        self.assertEqual(
+            results[0]["source"]["detail"]["denominator_path"],
+            "debug.platform_runtime.details.renderer"
+            ".material_executor_summary.material_buffer_capacity_bytes")
         summary = (
             report["artifact_context"]
             ["material_contract"]

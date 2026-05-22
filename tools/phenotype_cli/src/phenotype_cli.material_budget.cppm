@@ -282,6 +282,12 @@ struct MaterialBudgetBoundResult {
     std::optional<double> actual;
     std::optional<bool> ok;
     std::optional<double> margin;
+    std::string source_metric;
+    std::string source_key;
+    std::string source_path;
+    std::string source_likely_layer;
+    std::string source_likely_pass;
+    std::string source_json;
 };
 
 struct MaterialBudgetBoundSummary {
@@ -1326,14 +1332,39 @@ auto material_container_group_summary_from_verifier(
 
 auto material_bound_result_from_object(json::Object const& object)
     -> MaterialBudgetBoundResult {
+    auto source_metric = std::string{};
+    auto source_key = std::string{};
+    auto source_path = std::string{};
+    auto source_likely_layer = std::string{};
+    auto source_likely_pass = std::string{};
+    auto source_json = std::string{};
+    if (auto const* source = json_object_member(object, "source");
+        source && source->is_object()) {
+        auto const& source_object = source->as_object();
+        source_metric = json_object_string(source_object, "metric");
+        source_key = json_object_string(source_object, "source_key");
+        source_path = json_object_string(source_object, "source_path");
+        source_likely_layer = json_object_string(source_object, "likely_layer");
+        source_likely_pass = json_object_string(source_object, "likely_pass");
+        source_json = json::emit(*source);
+    }
+    auto field = json_object_string(object, "field");
+    if (source_metric.empty())
+        source_metric = field;
     return MaterialBudgetBoundResult{
         .key = json_object_string(object, "key"),
-        .field = json_object_string(object, "field"),
+        .field = std::move(field),
         .bound = json_object_string(object, "bound"),
         .expected = json_object_number(object, "expected"),
         .actual = json_object_number(object, "actual"),
         .ok = json_object_bool(object, "ok"),
         .margin = json_object_number(object, "margin"),
+        .source_metric = std::move(source_metric),
+        .source_key = std::move(source_key),
+        .source_path = std::move(source_path),
+        .source_likely_layer = std::move(source_likely_layer),
+        .source_likely_pass = std::move(source_likely_pass),
+        .source_json = std::move(source_json),
     };
 }
 
@@ -2390,9 +2421,9 @@ auto material_bound_coverage_json(
 
 auto material_budget_bound_result_json(MaterialBudgetBoundResult const& result)
     -> std::string {
-    return std::format(
+    auto out = std::format(
         "{{\"key\":{},\"field\":{},\"bound\":{},\"expected\":{},"
-        "\"actual\":{},\"ok\":{},\"margin\":{}}}",
+        "\"actual\":{},\"ok\":{},\"margin\":{}",
         json_string(result.key),
         json_string(result.field),
         json_string(result.bound),
@@ -2400,6 +2431,12 @@ auto material_budget_bound_result_json(MaterialBudgetBoundResult const& result)
         budget_optional_number(result.actual),
         budget_bool(result.ok),
         budget_optional_number(result.margin));
+    if (!result.source_json.empty()) {
+        out += ",\"source\":";
+        out += result.source_json;
+    }
+    out += "}";
+    return out;
 }
 
 auto material_budget_bound_results_json(
@@ -2861,13 +2898,24 @@ auto material_budget_bound_expected_text(MaterialBudgetBoundResult const& result
 auto material_budget_bound_result_text(MaterialBudgetBoundResult const& result)
     -> std::string {
     auto status = result.ok ? (*result.ok ? "pass" : "fail") : "unknown";
+    auto source = std::string{};
+    if (!result.source_json.empty()) {
+        source = std::format(
+            " source={}",
+            result.source_metric.empty() ? result.field : result.source_metric);
+        if (!result.source_path.empty())
+            source += std::format(" path={}", result.source_path);
+        if (!result.source_likely_pass.empty())
+            source += std::format(" pass={}", result.source_likely_pass);
+    }
     return std::format(
-        "{} {} actual={} expected{} margin={}",
+        "{} {} actual={} expected{} margin={}{}",
         status,
         result.key,
         budget_optional_number(result.actual),
         material_budget_bound_expected_text(result),
-        budget_optional_number(result.margin));
+        budget_optional_number(result.margin),
+        source);
 }
 
 auto material_budget_bound_result_by_key(
