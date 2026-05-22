@@ -55,6 +55,7 @@ struct VerifierManifestSummary {
     std::int64_t material_executor_budget_bounds = -1;
     std::vector<std::string> material_executor_budget_bound_keys;
     std::vector<std::string> material_executor_budget_fields;
+    std::vector<std::string> material_executor_budget_coverage_required_fields;
 };
 
 struct MaterialBudgetCoverageSummary {
@@ -62,11 +63,17 @@ struct MaterialBudgetCoverageSummary {
     std::int64_t observed_field_count = 0;
     std::int64_t guarded_observed_field_count = 0;
     std::int64_t unguarded_observed_field_count = 0;
+    std::int64_t required_field_count = 0;
+    std::int64_t covered_required_field_count = 0;
+    std::int64_t missing_required_field_count = 0;
     std::int64_t manifest_field_count = 0;
     std::int64_t manifest_bound_key_count = 0;
     std::vector<std::string> observed_fields;
     std::vector<std::string> guarded_observed_fields;
     std::vector<std::string> unguarded_observed_fields;
+    std::vector<std::string> required_fields;
+    std::vector<std::string> covered_required_fields;
+    std::vector<std::string> missing_required_fields;
     std::vector<std::string> manifest_fields;
     std::vector<std::string> manifest_bound_keys;
 };
@@ -322,6 +329,11 @@ auto verifier_manifest_summary_from_report(json::Value const& report)
         .material_executor_budget_fields = json_string_array_at(
             report,
             {"manifest", "material_executor_budget_fields"}),
+        .material_executor_budget_coverage_required_fields =
+            json_string_array_at(
+                report,
+                {"manifest",
+                 "material_executor_budget_coverage_required_fields"}),
     };
 }
 
@@ -481,6 +493,8 @@ auto material_budget_coverage_summary(
     auto manifest_fields = sorted_unique(manifest->material_executor_budget_fields);
     auto manifest_bound_keys = sorted_unique(
         manifest->material_executor_budget_bound_keys);
+    auto required_fields = sorted_unique(
+        manifest->material_executor_budget_coverage_required_fields);
     auto guarded = std::vector<std::string>{};
     auto unguarded = std::vector<std::string>{};
     for (auto const& field : observed) {
@@ -488,6 +502,15 @@ auto material_budget_coverage_summary(
             guarded.push_back(field);
         } else {
             unguarded.push_back(field);
+        }
+    }
+    auto covered_required = std::vector<std::string>{};
+    auto missing_required = std::vector<std::string>{};
+    for (auto const& field : required_fields) {
+        if (contains_field(guarded, field)) {
+            covered_required.push_back(field);
+        } else {
+            missing_required.push_back(field);
         }
     }
 
@@ -502,11 +525,20 @@ auto material_budget_coverage_summary(
             static_cast<std::int64_t>(guarded.size()),
         .unguarded_observed_field_count =
             static_cast<std::int64_t>(unguarded.size()),
+        .required_field_count =
+            static_cast<std::int64_t>(required_fields.size()),
+        .covered_required_field_count =
+            static_cast<std::int64_t>(covered_required.size()),
+        .missing_required_field_count =
+            static_cast<std::int64_t>(missing_required.size()),
         .manifest_field_count = static_cast<std::int64_t>(manifest_fields.size()),
         .manifest_bound_key_count = bound_key_count,
         .observed_fields = std::move(observed),
         .guarded_observed_fields = std::move(guarded),
         .unguarded_observed_fields = std::move(unguarded),
+        .required_fields = std::move(required_fields),
+        .covered_required_fields = std::move(covered_required),
+        .missing_required_fields = std::move(missing_required),
         .manifest_fields = std::move(manifest_fields),
         .manifest_bound_keys = std::move(manifest_bound_keys),
     };
@@ -620,19 +652,28 @@ auto material_budget_coverage_json(
         "{{\"guardable_field_count\":{},\"observed_field_count\":{},"
         "\"guarded_observed_field_count\":{},"
         "\"unguarded_observed_field_count\":{},"
+        "\"required_field_count\":{},\"covered_required_field_count\":{},"
+        "\"missing_required_field_count\":{},"
         "\"manifest_field_count\":{},\"manifest_bound_key_count\":{},"
         "\"observed_fields\":{},\"guarded_observed_fields\":{},"
-        "\"unguarded_observed_fields\":{},\"manifest_fields\":{},"
-        "\"manifest_bound_keys\":{}}}",
+        "\"unguarded_observed_fields\":{},\"required_fields\":{},"
+        "\"covered_required_fields\":{},\"missing_required_fields\":{},"
+        "\"manifest_fields\":{},\"manifest_bound_keys\":{}}}",
         coverage->guardable_field_count,
         coverage->observed_field_count,
         coverage->guarded_observed_field_count,
         coverage->unguarded_observed_field_count,
+        coverage->required_field_count,
+        coverage->covered_required_field_count,
+        coverage->missing_required_field_count,
         coverage->manifest_field_count,
         coverage->manifest_bound_key_count,
         string_array_json(coverage->observed_fields),
         string_array_json(coverage->guarded_observed_fields),
         string_array_json(coverage->unguarded_observed_fields),
+        string_array_json(coverage->required_fields),
+        string_array_json(coverage->covered_required_fields),
+        string_array_json(coverage->missing_required_fields),
         string_array_json(coverage->manifest_fields),
         string_array_json(coverage->manifest_bound_keys));
 }
@@ -655,6 +696,17 @@ auto budget_field_list_text(std::vector<std::string> const& fields,
 
 auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage)
     -> std::string {
+    auto required = coverage.required_field_count > 0
+        ? std::format(
+            " required={}/{}",
+            coverage.covered_required_field_count,
+            coverage.required_field_count)
+        : std::string{};
+    auto missing = coverage.missing_required_fields.empty()
+        ? std::string{}
+        : std::format(
+            " missing-required=({})",
+            budget_field_list_text(coverage.missing_required_fields));
     return std::format(
         "guarded={}/{} observed={} guard-keys={} unguarded={} ({})",
         coverage.guarded_observed_field_count,
@@ -662,7 +714,9 @@ auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage
         coverage.observed_field_count,
         coverage.manifest_bound_key_count,
         coverage.unguarded_observed_field_count,
-        budget_field_list_text(coverage.unguarded_observed_fields));
+        budget_field_list_text(coverage.unguarded_observed_fields))
+        + required
+        + missing;
 }
 
 auto verifier_manifest_summary_json(
@@ -678,7 +732,8 @@ auto verifier_manifest_summary_json(
         "\"runtime_numeric_bounds\":{},"
         "\"material_executor_budget_bounds\":{},"
         "\"material_executor_budget_bound_keys\":{},"
-        "\"material_executor_budget_fields\":{}}}",
+        "\"material_executor_budget_fields\":{},"
+        "\"material_executor_budget_coverage_required_fields\":{}}}",
         json_string(manifest->name),
         manifest_count_json(manifest->pixel_regions),
         manifest_count_json(manifest->pixel_region_metrics),
@@ -687,7 +742,9 @@ auto verifier_manifest_summary_json(
         manifest_count_json(manifest->runtime_numeric_bounds),
         manifest_count_json(manifest->material_executor_budget_bounds),
         string_array_json(manifest->material_executor_budget_bound_keys),
-        string_array_json(manifest->material_executor_budget_fields));
+        string_array_json(manifest->material_executor_budget_fields),
+        string_array_json(
+            manifest->material_executor_budget_coverage_required_fields));
 }
 
 } // namespace phenotype_cli::material_budget

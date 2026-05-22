@@ -1545,6 +1545,15 @@ upload bytes/capacity, backdrop copy pixels, and frame-capture bounds. The
 glass showcase and file explorer manifests require both utilization ratios to
 stay between 0 and 1 so a hidden buffer/copy overrun is reported as a
 material-executor budget failure before reading the full runtime JSON.
+Use `require_material_executor_budget_coverage` next to those bounds when the
+manifest must fail if important compact budget fields stop being guarded. It
+supports `required_fields`, `min_bound_key_count`, `min_guarded_field_count`,
+and `min_observed_field_count`; failures point either at the manifest budget
+bound set or at `artifact_context.material_contract.executor_budget`. The glass
+showcase and file explorer manifests require `upload_utilization` and
+`backdrop_copy_utilization` to be guarded by four total bound keys and require
+the compact executor budget to keep reporting all 22 currently guardable
+fields.
 Whenever material plans are present, the verifier also cross-checks executor
 counts, including `material_executor_summary.container_groups.*`, against
 `renderer.material_plans#summary`: `plan_count`,

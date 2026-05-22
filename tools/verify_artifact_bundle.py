@@ -118,6 +118,33 @@ ALLOWED_MATERIAL_STAGE_EXECUTORS = {
     "standard-fill",
 }
 
+MATERIAL_EXECUTOR_BUDGET_FIELDS = {
+    "active_execution_stage_count",
+    "backdrop_copy_count",
+    "backdrop_copy_pixels",
+    "backdrop_copy_skipped_count",
+    "backdrop_copy_utilization",
+    "backdrop_execution_stage_count",
+    "buffer_capacity_bytes",
+    "draw_calls",
+    "dropped_execution_stage_count",
+    "execution_stage_count",
+    "fallback_instance_count",
+    "material_instance_count",
+    "max_backdrop_pixels",
+    "max_sample_taps",
+    "plan_count",
+    "planned_frame_capture_count",
+    "planned_frame_capture_pixels",
+    "planned_surface_sample_pixels",
+    "sampled_backdrop_instance_count",
+    "total_sample_taps",
+    "upload_bytes",
+    "upload_utilization",
+}
+
+MATERIAL_EXECUTOR_BUDGET_SUFFIXES = ("_lte", "_gte", "_equals")
+
 ALLOWED_MATERIAL_PAINT_LAYER_NAMES = {
     "fallback-edge-highlight",
     "fallback-shadow",
@@ -3437,35 +3464,10 @@ def material_executor_budget_spec_from_manifest(value: Any) -> JsonObject | None
         return None
     if not isinstance(value, dict):
         raise ValueError("require_material_executor_budget must be an object")
-    number_fields = {
-        "plan_count",
-        "material_instance_count",
-        "sampled_backdrop_instance_count",
-        "fallback_instance_count",
-        "execution_stage_count",
-        "active_execution_stage_count",
-        "backdrop_execution_stage_count",
-        "dropped_execution_stage_count",
-        "draw_calls",
-        "total_sample_taps",
-        "max_sample_taps",
-        "upload_bytes",
-        "buffer_capacity_bytes",
-        "upload_utilization",
-        "backdrop_copy_count",
-        "backdrop_copy_pixels",
-        "max_backdrop_pixels",
-        "backdrop_copy_utilization",
-        "planned_frame_capture_count",
-        "planned_frame_capture_pixels",
-        "planned_surface_sample_pixels",
-        "backdrop_copy_skipped_count",
-    }
-    suffixes = ("_lte", "_gte", "_equals")
     allowed = {
         f"{field}{suffix}"
-        for field in number_fields
-        for suffix in suffixes
+        for field in MATERIAL_EXECUTOR_BUDGET_FIELDS
+        for suffix in MATERIAL_EXECUTOR_BUDGET_SUFFIXES
     }
     unknown = sorted(set(value) - allowed)
     if unknown:
@@ -3481,8 +3483,48 @@ def material_executor_budget_spec_from_manifest(value: Any) -> JsonObject | None
     return spec
 
 
+def material_executor_budget_coverage_spec_from_manifest(
+        value: Any) -> JsonObject | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(
+            "require_material_executor_budget_coverage must be an object")
+    allowed = {
+        "required_fields",
+        "min_bound_key_count",
+        "min_guarded_field_count",
+        "min_observed_field_count",
+    }
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise ValueError(
+            "unknown require_material_executor_budget_coverage keys: "
+            + ", ".join(unknown))
+    spec: JsonObject = {}
+    required_fields = list_of_strings(value, "required_fields")
+    unknown_fields = sorted(
+        set(required_fields) - MATERIAL_EXECUTOR_BUDGET_FIELDS)
+    if unknown_fields:
+        raise ValueError(
+            "require_material_executor_budget_coverage.required_fields "
+            "contains unknown budget fields: "
+            + ", ".join(unknown_fields))
+    if required_fields:
+        spec["required_fields"] = sorted(set(required_fields))
+    for field in (
+            "min_bound_key_count",
+            "min_guarded_field_count",
+            "min_observed_field_count"):
+        if field in value:
+            spec[field] = non_negative_int(
+                value[field],
+                f"require_material_executor_budget_coverage.{field}")
+    return spec
+
+
 def material_executor_budget_field_from_key(key: str) -> str:
-    for suffix in ("_lte", "_gte", "_equals"):
+    for suffix in MATERIAL_EXECUTOR_BUDGET_SUFFIXES:
         if key.endswith(suffix):
             return key[:-len(suffix)]
     return key
@@ -3537,6 +3579,7 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         return False
     assert isinstance(manifest, dict)
 
+    material_executor_budget_coverage: JsonObject | None = None
     try:
         if args.expect_platform is None:
             expect_platform = manifest.get("expect_platform")
@@ -3581,6 +3624,13 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         if material_executor_budget is not None:
             args.require_material_plan = True
             args.require_material_executor_budget = material_executor_budget
+        material_executor_budget_coverage = (
+            material_executor_budget_coverage_spec_from_manifest(
+                manifest.get("require_material_executor_budget_coverage")))
+        if material_executor_budget_coverage is not None:
+            args.require_material_plan = True
+            args.require_material_executor_budget_coverage = (
+                material_executor_budget_coverage)
         material_quality_policy = material_quality_policy_spec_from_manifest(
             manifest.get("require_material_quality_policy"))
         if material_quality_policy is not None:
@@ -3647,6 +3697,10 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         material_executor_budget_field_from_key(key)
         for key in material_executor_budget_keys
     })
+    material_executor_budget_coverage_required_fields = (
+        material_executor_budget_coverage.get("required_fields", [])
+        if isinstance(material_executor_budget_coverage, dict)
+        else [])
 
     report.data["manifest"] = {
         "path": str(manifest_path),
@@ -3662,6 +3716,8 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         "material_executor_budget_bounds": len(material_executor_budget_keys),
         "material_executor_budget_bound_keys": material_executor_budget_keys,
         "material_executor_budget_fields": material_executor_budget_fields,
+        "material_executor_budget_coverage_required_fields": (
+            material_executor_budget_coverage_required_fields),
     }
     report.check("manifest schema is valid", True, str(manifest_path))
     return True
@@ -12902,6 +12958,97 @@ def check_material_executor_budget_requirements(
                     "derived executor budget in artifact_context."))
 
 
+def material_executor_budget_observed_fields(budget: Any) -> list[str]:
+    if not isinstance(budget, dict):
+        return []
+    return sorted(
+        key
+        for key, value in budget.items()
+        if key in MATERIAL_EXECUTOR_BUDGET_FIELDS
+        and isinstance(value, (int, float))
+        and not isinstance(value, bool))
+
+
+def material_executor_budget_guarded_fields(spec: Any) -> list[str]:
+    if not isinstance(spec, dict):
+        return []
+    return sorted({
+        material_executor_budget_field_from_key(key)
+        for key in spec
+        if material_executor_budget_field_from_key(key)
+        in MATERIAL_EXECUTOR_BUDGET_FIELDS
+    })
+
+
+def check_material_executor_budget_coverage_requirements(
+        artifact_context: JsonObject,
+        budget_spec: Any,
+        coverage_spec: JsonObject,
+        report: Report) -> None:
+    material_contract = artifact_context.get("material_contract")
+    budget = (
+        material_contract.get("executor_budget")
+        if isinstance(material_contract, dict)
+        else None)
+    observed_fields = material_executor_budget_observed_fields(budget)
+    guarded_fields = material_executor_budget_guarded_fields(budget_spec)
+    required_fields = coverage_spec.get("required_fields", [])
+    if not isinstance(required_fields, list):
+        required_fields = []
+    missing_guarded = sorted(set(required_fields) - set(guarded_fields))
+    missing_observed = sorted(set(required_fields) - set(observed_fields))
+    report.check(
+        "material executor budget coverage guards required fields",
+        not missing_guarded,
+        path="manifest.require_material_executor_budget",
+        expected={"required_fields": required_fields},
+        actual={
+            "guarded_fields": guarded_fields,
+            "missing_fields": missing_guarded,
+        },
+        likely_layer="artifact-manifest",
+        likely_pass="material-executor",
+        hint=(
+            "Add *_lte, *_gte, or *_equals bounds for every field named by "
+            "require_material_executor_budget_coverage.required_fields."))
+    report.check(
+        "material executor budget coverage observes required fields",
+        not missing_observed,
+        path="artifact_context.material_contract.executor_budget",
+        expected={"required_fields": required_fields},
+        actual={
+            "observed_fields": observed_fields,
+            "missing_fields": missing_observed,
+        },
+        likely_layer="platform-runtime",
+        likely_pass="material-executor",
+        hint=(
+            "Keep renderer.material_executor_summary and the derived compact "
+            "executor budget in sync with the manifest coverage contract."))
+    minimums = (
+        (
+            "min_bound_key_count",
+            len(budget_spec) if isinstance(budget_spec, dict) else 0),
+        ("min_guarded_field_count", len(guarded_fields)),
+        ("min_observed_field_count", len(observed_fields)),
+    )
+    for field, actual in minimums:
+        expected = coverage_spec.get(field)
+        if expected is None:
+            continue
+        report.check(
+            f"material executor budget coverage {field} is satisfied",
+            actual >= expected,
+            path=f"manifest.require_material_executor_budget_coverage.{field}",
+            expected={">=": expected},
+            actual=actual,
+            likely_layer="artifact-manifest",
+            likely_pass="material-executor",
+            hint=(
+                "Update the manifest coverage contract only after checking "
+                "whether the compact executor budget lost important fields."))
+
+
 def check_material_container_group_summary_contract(
         summary: JsonObject,
         group_summary: Any,
@@ -14862,6 +15009,16 @@ def verify(args: argparse.Namespace) -> int:
             report.data["artifact_context"],
             material_executor_budget_spec,
             report)
+    material_executor_budget_coverage_spec = getattr(
+        args,
+        "require_material_executor_budget_coverage",
+        None)
+    if isinstance(material_executor_budget_coverage_spec, dict):
+        check_material_executor_budget_coverage_requirements(
+            report.data["artifact_context"],
+            material_executor_budget_spec,
+            material_executor_budget_coverage_spec,
+            report)
 
     full_labels: list[str] = []
     walk_labels(semantic_tree, full_labels)
@@ -15366,6 +15523,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         require_material_plan_summary=None,
         require_material_resource_bounds=None,
         require_material_executor_budget=None,
+        require_material_executor_budget_coverage=None,
         require_material_quality_policy=None,
         require_runtime_numeric_bound=[],
         require_pixel_region_metric_comparison=[],

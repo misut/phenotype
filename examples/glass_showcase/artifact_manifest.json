@@ -467,6 +467,15 @@
     "backdrop_copy_utilization_gte": 0.0,
     "backdrop_copy_utilization_lte": 1.0
   },
+  "require_material_executor_budget_coverage": {
+    "required_fields": [
+      "backdrop_copy_utilization",
+      "upload_utilization"
+    ],
+    "min_bound_key_count": 4,
+    "min_guarded_field_count": 2,
+    "min_observed_field_count": 22
+  },
   "require_material_quality_policy": {
     "require_backdrop_sampling_allowed": true,
     "require_noise_allowed": true,
