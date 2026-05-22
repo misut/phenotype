@@ -679,11 +679,23 @@ auto glass_verifier_args(fs::path const& bundle,
     append_repeatable_verifier_arg(
         args,
         invocation,
+        "require-material-budget-coverage-field");
+    append_repeatable_verifier_arg(
+        args,
+        invocation,
         "require-material-resource-bound");
     append_repeatable_verifier_arg(
         args,
         invocation,
+        "require-material-resource-coverage-field");
+    append_repeatable_verifier_arg(
+        args,
+        invocation,
         "require-material-quality-bound");
+    append_repeatable_verifier_arg(
+        args,
+        invocation,
+        "require-material-quality-coverage-field");
     return args;
 }
 

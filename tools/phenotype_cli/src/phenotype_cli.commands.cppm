@@ -253,18 +253,36 @@ auto spec() -> cppx::cli::CommandSpec {
                              .value_name = "key=json",
                              .description =
                                  "Require a material executor budget bound"},
+                            {.name = "require-material-budget-coverage-field",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "field",
+                             .description =
+                                 "Require a bounded observed budget field"},
                             {.name = "require-material-resource-bound",
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "key=json",
                              .description =
                                  "Require a material resource budget bound"},
+                            {.name = "require-material-resource-coverage-field",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "field",
+                             .description =
+                                 "Require a bounded observed resource field"},
                             {.name = "require-material-quality-bound",
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "key=json",
                              .description =
                                  "Require a material quality policy bound"},
+                            {.name = "require-material-quality-coverage-field",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "field",
+                             .description =
+                                 "Require a bounded observed quality-policy field"},
                             {.name = "require-capability",
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
@@ -326,18 +344,36 @@ auto spec() -> cppx::cli::CommandSpec {
                              .value_name = "key=json",
                              .description =
                                  "Require a material executor budget bound"},
+                            {.name = "require-material-budget-coverage-field",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "field",
+                             .description =
+                                 "Require a bounded observed budget field"},
                             {.name = "require-material-resource-bound",
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "key=json",
                              .description =
                                  "Require a material resource budget bound"},
+                            {.name = "require-material-resource-coverage-field",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "field",
+                             .description =
+                                 "Require a bounded observed resource field"},
                             {.name = "require-material-quality-bound",
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "key=json",
                              .description =
                                  "Require a material quality policy bound"},
+                            {.name = "require-material-quality-coverage-field",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "field",
+                             .description =
+                                 "Require a bounded observed quality-policy field"},
                             {.name = "accessibility-display",
                              .arity = cppx::cli::OptionArity::one,
                              .value_name = "flags",
@@ -391,18 +427,36 @@ auto spec() -> cppx::cli::CommandSpec {
                              .value_name = "key=json",
                              .description =
                                  "Require a material executor budget bound"},
+                            {.name = "require-material-budget-coverage-field",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "field",
+                             .description =
+                                 "Require a bounded observed budget field"},
                             {.name = "require-material-resource-bound",
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "key=json",
                              .description =
                                  "Require a material resource budget bound"},
+                            {.name = "require-material-resource-coverage-field",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "field",
+                             .description =
+                                 "Require a bounded observed resource field"},
                             {.name = "require-material-quality-bound",
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "key=json",
                              .description =
                                  "Require a material quality policy bound"},
+                            {.name = "require-material-quality-coverage-field",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "field",
+                             .description =
+                                 "Require a bounded observed quality-policy field"},
                         },
                         .examples = {
                             "phenotype artifact verify-file-explorer",
@@ -454,18 +508,36 @@ auto spec() -> cppx::cli::CommandSpec {
                      .value_name = "key=json",
                      .description =
                          "Require a material executor budget bound; implies --verify"},
+                    {.name = "require-material-budget-coverage-field",
+                     .arity = cppx::cli::OptionArity::one,
+                     .repeatable = true,
+                     .value_name = "field",
+                     .description =
+                         "Require a bounded observed budget field; implies --verify"},
                     {.name = "require-material-resource-bound",
                      .arity = cppx::cli::OptionArity::one,
                      .repeatable = true,
                      .value_name = "key=json",
                      .description =
                          "Require a material resource budget bound; implies --verify"},
+                    {.name = "require-material-resource-coverage-field",
+                     .arity = cppx::cli::OptionArity::one,
+                     .repeatable = true,
+                     .value_name = "field",
+                     .description =
+                         "Require a bounded observed resource field; implies --verify"},
                     {.name = "require-material-quality-bound",
                      .arity = cppx::cli::OptionArity::one,
                      .repeatable = true,
                      .value_name = "key=json",
                      .description =
                          "Require a material quality policy bound; implies --verify"},
+                    {.name = "require-material-quality-coverage-field",
+                     .arity = cppx::cli::OptionArity::one,
+                     .repeatable = true,
+                     .value_name = "field",
+                     .description =
+                         "Require a bounded observed quality-policy field; implies --verify"},
                 },
                 .category = "runtime",
                 .positional_name = "bundle",
