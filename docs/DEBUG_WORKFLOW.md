@@ -1763,7 +1763,9 @@ The same verifier reports also include
 `executor_budget_bound_summary`; resource and quality guards mirror the same
 shape under `material_plans.resource_bound_results` /
 `resource_bound_summary` and `material_plans.quality_policy_bound_results` /
-`quality_policy_bound_summary`. Each result records the bound key, field,
+`quality_policy_bound_summary`. Resource and quality coverage summaries preserve
+the active bound key list as `bound_keys`, and CLI compact coverage text repeats
+that list as `guard-key-list=(...)`. Each result records the bound key, field,
 operator, expected value, actual value, pass/fail state, and numeric margin.
 The summaries report pass/fail counts, failed keys, zero/negative margin sources,
 and the tightest bound result so local CLI output can show headroom without
