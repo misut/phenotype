@@ -13651,10 +13651,13 @@ def material_bound_coverage_summary(
         required_fields = []
     missing_guarded = sorted(set(required_fields) - set(guarded_fields))
     missing_observed = sorted(set(required_fields) - set(observed_fields))
+    unguarded_observed_fields = sorted(
+        set(observed_fields) - set(guarded_fields))
     return {
         "guardable_field_count": len(allowed_fields),
         "observed_field_count": len(observed_fields),
         "guarded_field_count": len(guarded_fields),
+        "unguarded_observed_field_count": len(unguarded_observed_fields),
         "required_field_count": len(required_fields),
         "covered_required_field_count": (
             len(required_fields) - len(missing_guarded)),
@@ -13664,6 +13667,7 @@ def material_bound_coverage_summary(
         "missing_observed_fields": missing_observed,
         "observed_fields": observed_fields,
         "guarded_fields": guarded_fields,
+        "unguarded_observed_fields": unguarded_observed_fields,
         "required_fields": required_fields,
         "bound_key_count": len(bound_spec) if isinstance(bound_spec, dict) else 0,
     }

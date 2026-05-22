@@ -293,6 +293,8 @@ manifest counts so status-string guards are visible without rerunning with
 JSON also includes
 `material_budget_coverage`, which separates manifest-guarded observed budget
 fields from observed-but-unguarded fields, and
+`material_resource_bound_coverage`/`material_quality_policy_coverage`, which do
+the same for resource and quality-policy counters, and
 `material_quality_policy`, which reports disabled backdrop sampling, noise, and
 shadow counts plus maximum blur radius, sample taps, and backdrop pixel limits.
 `material_resource_bounds` reports the pure plan/resource budget maxima,
@@ -1858,7 +1860,8 @@ bound keys, material resource bound keys, quality-policy bound keys, and their
 normalized field names applied by the verifier, plus the required coverage
 minimums for budget, resource, and quality-policy bounds, plus
 `material_budget_coverage` showing
-guarded and unguarded observed budget fields, plus `material_budget_bound_summary`
+guarded and unguarded observed budget fields, plus resource/quality coverage
+objects showing unguarded observed policy fields, plus `material_budget_bound_summary`
 showing the budget bound pass/fail count and tightest margin, plus
 `material_budget_bound_results` listing each compact expected/actual/margin
 comparison, plus resource-bound and quality-policy bound summaries/results with
