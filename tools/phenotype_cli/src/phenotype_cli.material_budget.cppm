@@ -2145,6 +2145,104 @@ auto verifier_bound_summaries_text(json::Value const& report) -> std::string {
     return text;
 }
 
+auto failed_bound_results(
+        std::optional<std::vector<MaterialBudgetBoundResult>> const& results)
+        -> std::vector<MaterialBudgetBoundResult> {
+    auto failed = std::vector<MaterialBudgetBoundResult>{};
+    if (!results)
+        return failed;
+    for (auto const& result : *results) {
+        if (result.ok && !*result.ok)
+            failed.push_back(result);
+    }
+    return failed;
+}
+
+auto failed_bound_results_json(
+        std::vector<MaterialBudgetBoundResult> const& results)
+        -> std::string {
+    auto out = std::string{"["};
+    for (auto index = std::size_t{0}; index < results.size(); ++index) {
+        if (index > 0)
+            out += ",";
+        out += material_budget_bound_result_json(results[index]);
+    }
+    out += "]";
+    return out;
+}
+
+auto verifier_failed_bound_results_json(json::Value const& report)
+        -> std::string {
+    auto executor = failed_bound_results(
+        material_budget_bound_results_from_report(report));
+    auto resource = failed_bound_results(
+        material_resource_bound_results_from_report(report));
+    auto quality = failed_bound_results(
+        material_quality_policy_bound_results_from_report(report));
+    if (executor.empty() && resource.empty() && quality.empty())
+        return "null";
+
+    return std::format(
+        "{{\"executor\":{},\"resource\":{},\"quality\":{}}}",
+        failed_bound_results_json(executor),
+        failed_bound_results_json(resource),
+        failed_bound_results_json(quality));
+}
+
+auto compact_failed_bound_results_text(
+        std::string_view label,
+        std::vector<MaterialBudgetBoundResult> const& results)
+        -> std::string {
+    if (results.empty())
+        return {};
+
+    auto const limit = std::size_t{3};
+    auto count = std::min(limit, results.size());
+    auto text = std::format("{}=", label);
+    for (auto index = std::size_t{0}; index < count; ++index) {
+        if (index > 0)
+            text += " | ";
+        text += material_budget_bound_result_text(results[index]);
+    }
+    if (results.size() > count)
+        text += std::format(" | +{} more", results.size() - count);
+    return text;
+}
+
+auto verifier_failed_bound_results_text(json::Value const& report)
+        -> std::string {
+    auto parts = std::vector<std::string>{};
+    if (auto executor = compact_failed_bound_results_text(
+            "executor",
+            failed_bound_results(
+                material_budget_bound_results_from_report(report)));
+        !executor.empty()) {
+        parts.push_back(std::move(executor));
+    }
+    if (auto resource = compact_failed_bound_results_text(
+            "resource",
+            failed_bound_results(
+                material_resource_bound_results_from_report(report)));
+        !resource.empty()) {
+        parts.push_back(std::move(resource));
+    }
+    if (auto quality = compact_failed_bound_results_text(
+            "quality",
+            failed_bound_results(
+                material_quality_policy_bound_results_from_report(report)));
+        !quality.empty()) {
+        parts.push_back(std::move(quality));
+    }
+
+    auto text = std::string{};
+    for (auto const& part : parts) {
+        if (!text.empty())
+            text += "; ";
+        text += part;
+    }
+    return text;
+}
+
 auto verifier_material_budget_coverage_json(json::Value const& report)
         -> std::string {
     return material_budget_coverage_json(material_budget_coverage_summary(
@@ -2308,6 +2406,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         "{{\"count\":{},\"top_likely_layer\":{},"
         "\"top_likely_pass\":{},\"top_suggested_action\":{},"
         "\"artifact_context\":{},\"bound_summaries\":{},"
+        "\"failed_bound_results\":{},"
         "\"manifest_context\":{},\"budget_coverage\":{},"
         "\"material_context\":{},"
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
@@ -2326,6 +2425,7 @@ auto verifier_failure_summary_json(json::Value const& report)
             {"failure_summary", "top_suggested_action"}).value_or("")),
         failure_artifact_context_json(report),
         verifier_bound_summaries_json(report),
+        verifier_failed_bound_results_json(report),
         verifier_manifest_context_json(report),
         verifier_material_budget_coverage_json(report),
         failure_material_context_json(report),
@@ -2392,6 +2492,10 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto bounds = verifier_bound_summaries_text(report);
         !bounds.empty()) {
         lines.push_back("  bounds: " + bounds);
+    }
+    if (auto failed_bounds = verifier_failed_bound_results_text(report);
+        !failed_bounds.empty()) {
+        lines.push_back("  failed-bounds: " + failed_bounds);
     }
     if (auto manifest = verifier_manifest_context_text(report);
         !manifest.empty()) {
