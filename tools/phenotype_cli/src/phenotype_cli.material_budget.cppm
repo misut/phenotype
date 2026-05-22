@@ -1571,6 +1571,76 @@ auto failure_json_value_or_null(json::Value const& report,
     return value ? json::emit(*value) : std::string{"null"};
 }
 
+auto failure_executor_budget_json(json::Value const& report) -> std::string {
+    if (!json_object_at(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget"})) {
+        return "null";
+    }
+
+    return std::format(
+        "{{\"plan_count\":{},\"sampled_backdrop_instance_count\":{},"
+        "\"fallback_instance_count\":{},\"draw_calls\":{},"
+        "\"total_sample_taps\":{},\"upload_utilization\":{},"
+        "\"backdrop_copy_utilization\":{},\"pipeline_ready\":{},"
+        "\"backdrop_source_ready\":{},\"upload_status\":{},"
+        "\"draw_status\":{},\"backdrop_copy_policy\":{},"
+        "\"backdrop_copy_skip_reason\":{}}}",
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "plan_count"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "sampled_backdrop_instance_count"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "fallback_instance_count"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "draw_calls"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "total_sample_taps"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "upload_utilization"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "backdrop_copy_utilization"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "pipeline_ready"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "backdrop_source_ready"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "upload_status"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "draw_status"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "backdrop_copy_policy"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "backdrop_copy_skip_reason"}));
+}
+
 auto failure_artifact_context_json(json::Value const& report) -> std::string {
     if (!json_object_at(report, {"failure_summary", "artifact_context"}))
         return "null";
@@ -1582,6 +1652,7 @@ auto failure_artifact_context_json(json::Value const& report) -> std::string {
         "\"renderer_plan_count\":{},"
         "\"renderer_plans_present\":{},"
         "\"resolved_plan_count\":{},"
+        "\"executor_budget\":{},"
         "\"fallback_paths\":{},"
         "\"pass_executors\":{},"
         "\"decision_first_blockers\":{},"
@@ -1619,6 +1690,7 @@ auto failure_artifact_context_json(json::Value const& report) -> std::string {
             report,
             {"failure_summary", "artifact_context", "material_contract",
              "resolved_plan_count"}),
+        failure_executor_budget_json(report),
         failure_json_value_or_null(
             report,
             {"failure_summary", "artifact_context", "material_contract",
@@ -1721,6 +1793,81 @@ void append_failure_context_part(std::vector<std::string>& parts,
     parts.push_back(std::format("{}={}", label, std::move(value)));
 }
 
+auto failure_executor_context_text(json::Value const& report) -> std::string {
+    if (!json_object_at(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget"})) {
+        return {};
+    }
+
+    auto parts = std::vector<std::string>{};
+    append_failure_context_part(
+        parts,
+        "plans",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "plan_count"}));
+    append_failure_context_part(
+        parts,
+        "sampled",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "sampled_backdrop_instance_count"}));
+    append_failure_context_part(
+        parts,
+        "fallback",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "fallback_instance_count"}));
+    append_failure_context_part(
+        parts,
+        "draws",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "draw_calls"}));
+    append_failure_context_part(
+        parts,
+        "taps",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "total_sample_taps"}));
+    append_failure_context_part(
+        parts,
+        "upload",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "upload_status"}));
+    append_failure_context_part(
+        parts,
+        "draw",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "draw_status"}));
+    append_failure_context_part(
+        parts,
+        "backdrop",
+        failure_context_text_value(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget", "backdrop_copy_policy"}));
+
+    auto text = std::string{};
+    for (auto const& part : parts) {
+        if (!text.empty())
+            text += ",";
+        text += part;
+    }
+    return text;
+}
+
 auto failure_artifact_context_line(json::Value const& report) -> std::string {
     if (!json_object_at(report, {"failure_summary", "artifact_context"}))
         return {};
@@ -1759,6 +1906,10 @@ auto failure_artifact_context_line(json::Value const& report) -> std::string {
             report,
             {"failure_summary", "artifact_context", "material_contract",
              "resolved_plan_count"}));
+    append_failure_context_part(
+        parts,
+        "executor",
+        failure_executor_context_text(report));
     append_failure_context_part(
         parts,
         "fallbacks",
