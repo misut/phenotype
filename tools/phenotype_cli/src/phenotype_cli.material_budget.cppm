@@ -1582,6 +1582,9 @@ auto failure_artifact_context_json(json::Value const& report) -> std::string {
         "\"renderer_plan_count\":{},"
         "\"renderer_plans_present\":{},"
         "\"resolved_plan_count\":{},"
+        "\"fallback_paths\":{},"
+        "\"pass_executors\":{},"
+        "\"decision_first_blockers\":{},"
         "\"decision_reduced_transparency\":{},"
         "\"decision_increase_contrast\":{},"
         "\"decision_reduce_motion\":{},"
@@ -1616,6 +1619,18 @@ auto failure_artifact_context_json(json::Value const& report) -> std::string {
         failure_json_value_or_null(
             report,
             {"failure_summary", "artifact_context", "material_contract",
+             "fallback_paths"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "pass_executors"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "decision_first_blockers"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
              "decision_reduced_transparency"}),
         failure_json_value_or_null(
             report,
@@ -1633,6 +1648,45 @@ auto failure_artifact_context_json(json::Value const& report) -> std::string {
             report,
             {"failure_summary", "artifact_context", "material_contract",
              "app_probe_reference_technology"}));
+}
+
+auto compact_failure_count_map_text(
+        json::Value const& report,
+        std::initializer_list<std::string_view> path,
+        std::size_t limit = 4)
+        -> std::string {
+    auto const* object = json_object_at(report, path);
+    if (!object)
+        return {};
+
+    auto entries = std::vector<std::pair<std::string, std::int64_t>>{};
+    for (auto const& [key, value] : *object) {
+        if (!value.is_number())
+            continue;
+        entries.emplace_back(key, value.as_integer());
+    }
+    if (entries.empty())
+        return {};
+
+    std::ranges::sort(entries, [](auto const& left, auto const& right) {
+        if (left.second != right.second)
+            return left.second > right.second;
+        return left.first < right.first;
+    });
+
+    auto text = std::string{};
+    auto count = std::min(limit, entries.size());
+    for (auto index = std::size_t{0}; index < count; ++index) {
+        if (!text.empty())
+            text += ", ";
+        text += std::format(
+            "{}={}",
+            truncate_failure_text(entries[index].first, 72),
+            entries[index].second);
+    }
+    if (entries.size() > count)
+        text += std::format(", +{} more", entries.size() - count);
+    return text;
 }
 
 auto failure_context_text_value(json::Value const& report,
@@ -1692,6 +1746,27 @@ auto failure_artifact_context_line(json::Value const& report) -> std::string {
              "resolved_plan_count"}));
     append_failure_context_part(
         parts,
+        "fallbacks",
+        compact_failure_count_map_text(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "fallback_paths"}));
+    append_failure_context_part(
+        parts,
+        "blockers",
+        compact_failure_count_map_text(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "decision_first_blockers"}));
+    append_failure_context_part(
+        parts,
+        "pass-executors",
+        compact_failure_count_map_text(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "pass_executors"}));
+    append_failure_context_part(
+        parts,
         "reduced-transparency",
         failure_context_text_value(
             report,
@@ -1725,45 +1800,6 @@ auto failure_artifact_context_line(json::Value const& report) -> std::string {
             text += " ";
         text += part;
     }
-    return text;
-}
-
-auto compact_failure_count_map_text(
-        json::Value const& report,
-        std::initializer_list<std::string_view> path,
-        std::size_t limit = 4)
-        -> std::string {
-    auto const* object = json_object_at(report, path);
-    if (!object)
-        return {};
-
-    auto entries = std::vector<std::pair<std::string, std::int64_t>>{};
-    for (auto const& [key, value] : *object) {
-        if (!value.is_number())
-            continue;
-        entries.emplace_back(key, value.as_integer());
-    }
-    if (entries.empty())
-        return {};
-
-    std::ranges::sort(entries, [](auto const& left, auto const& right) {
-        if (left.second != right.second)
-            return left.second > right.second;
-        return left.first < right.first;
-    });
-
-    auto text = std::string{};
-    auto count = std::min(limit, entries.size());
-    for (auto index = std::size_t{0}; index < count; ++index) {
-        if (!text.empty())
-            text += ", ";
-        text += std::format(
-            "{}={}",
-            truncate_failure_text(entries[index].first, 72),
-            entries[index].second);
-    }
-    if (entries.size() > count)
-        text += std::format(", +{} more", entries.size() - count);
     return text;
 }
 
