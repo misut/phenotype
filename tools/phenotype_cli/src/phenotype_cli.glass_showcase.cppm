@@ -35,6 +35,17 @@ void append_repeatable_verifier_arg(
     }
 }
 
+void append_verifier_option_arg(std::vector<std::string>& args,
+                                cppx::cli::Invocation const& invocation,
+                                std::string_view name) {
+    if (auto value = invocation.value(name)) {
+        auto option = std::string{"--"};
+        option += name;
+        args.push_back(std::move(option));
+        args.push_back(std::string{*value});
+    }
+}
+
 auto trim_copy(std::string_view text) -> std::string {
     auto first = text.find_first_not_of(" \t\r\n");
     if (first == std::string_view::npos)
@@ -680,6 +691,18 @@ auto glass_verifier_args(fs::path const& bundle,
         args,
         invocation,
         "require-material-budget-coverage-field");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-budget-coverage-min-bound-keys");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-budget-coverage-min-guarded-fields");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-budget-coverage-min-observed-fields");
     append_repeatable_verifier_arg(
         args,
         invocation,
@@ -688,6 +711,18 @@ auto glass_verifier_args(fs::path const& bundle,
         args,
         invocation,
         "require-material-resource-coverage-field");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-resource-coverage-min-bound-keys");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-resource-coverage-min-guarded-fields");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-resource-coverage-min-observed-fields");
     append_repeatable_verifier_arg(
         args,
         invocation,
@@ -696,6 +731,18 @@ auto glass_verifier_args(fs::path const& bundle,
         args,
         invocation,
         "require-material-quality-coverage-field");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-quality-coverage-min-bound-keys");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-quality-coverage-min-guarded-fields");
+    append_verifier_option_arg(
+        args,
+        invocation,
+        "require-material-quality-coverage-min-observed-fields");
     return args;
 }
 

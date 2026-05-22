@@ -183,8 +183,12 @@ For one-off budget probes that do not need a manifest file, pass direct guards t
 `--require-material-budget-coverage-field field`,
 `--require-material-resource-coverage-field field`, or
 `--require-material-quality-coverage-field field` when the ad-hoc probe must
-also prove the guarded fields are still observed by runtime telemetry. These
-options use the same key and field names and emit the same bound
+also prove the guarded fields are still observed by runtime telemetry. Add
+`--require-material-*-coverage-min-bound-keys`,
+`--require-material-*-coverage-min-guarded-fields`, or
+`--require-material-*-coverage-min-observed-fields` when the probe needs the
+same breadth checks as a manifest coverage contract. These options use the same
+key, field, and minimum-count meanings and emit the same bound
 summary/result/coverage objects as the manifest fields.
 
 When debugging the CLI/native input-output boundary itself, first check the
@@ -1705,8 +1709,11 @@ For manifestless iteration, the equivalent direct CLI field flags are
 `--require-material-budget-coverage-field`,
 `--require-material-resource-coverage-field`, and
 `--require-material-quality-coverage-field`; repeat them next to direct bound
-guards to require specific executor, resource, or quality-policy fields without
-creating a temporary manifest.
+guards to require specific executor, resource, or quality-policy fields. Use the
+matching `--require-material-*-coverage-min-bound-keys`,
+`--require-material-*-coverage-min-guarded-fields`, and
+`--require-material-*-coverage-min-observed-fields` flags to enforce coverage
+breadth without creating a temporary manifest.
 Whenever material plans are present, the verifier also cross-checks executor
 counts, including `material_executor_summary.container_groups.*`, against
 `renderer.material_plans#summary`: `plan_count`,

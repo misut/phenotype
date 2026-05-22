@@ -3714,14 +3714,49 @@ def merge_bound_coverage_specs(
     for spec in (base, overrides):
         if spec is None:
             continue
-        merged.update(spec)
+        for key, value in spec.items():
+            if key not in (
+                    "required_fields",
+                    "min_bound_key_count",
+                    "min_guarded_field_count",
+                    "min_observed_field_count"):
+                merged[key] = value
         required_fields.update(
             field
             for field in spec.get("required_fields", [])
             if isinstance(field, str))
+        for field in (
+                "min_bound_key_count",
+                "min_guarded_field_count",
+                "min_observed_field_count"):
+            value = spec.get(field)
+            if isinstance(value, int):
+                previous = merged.get(field)
+                if not isinstance(previous, int) or value > previous:
+                    merged[field] = value
     if required_fields:
         merged["required_fields"] = sorted(required_fields)
     return merged
+
+
+def bound_coverage_cli_spec_from_args(
+        required_fields: list[str],
+        min_bound_key_count: int | None,
+        min_guarded_field_count: int | None,
+        min_observed_field_count: int | None,
+        parser: Callable[[Any], JsonObject | None]) -> JsonObject | None:
+    value: JsonObject = {}
+    if required_fields:
+        value["required_fields"] = required_fields
+    if min_bound_key_count is not None:
+        value["min_bound_key_count"] = min_bound_key_count
+    if min_guarded_field_count is not None:
+        value["min_guarded_field_count"] = min_guarded_field_count
+    if min_observed_field_count is not None:
+        value["min_observed_field_count"] = min_observed_field_count
+    if not value:
+        return None
+    return parser(value)
 
 
 def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
@@ -3853,12 +3888,14 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
                 cli_material_quality_policy)
             args.require_material_quality_policy = material_quality_policy
 
-        if args.require_material_resource_coverage_field:
-            cli_material_resource_bound_coverage = (
-                material_resource_bound_coverage_spec_from_manifest({
-                    "required_fields":
-                        args.require_material_resource_coverage_field,
-                }))
+        cli_material_resource_bound_coverage = (
+            bound_coverage_cli_spec_from_args(
+                args.require_material_resource_coverage_field,
+                args.require_material_resource_coverage_min_bound_keys,
+                args.require_material_resource_coverage_min_guarded_fields,
+                args.require_material_resource_coverage_min_observed_fields,
+                material_resource_bound_coverage_spec_from_manifest))
+        if cli_material_resource_bound_coverage is not None:
             args.require_material_plan = True
             material_resource_bound_coverage = merge_bound_coverage_specs(
                 material_resource_bound_coverage,
@@ -3866,12 +3903,14 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
             args.require_material_resource_bound_coverage = (
                 material_resource_bound_coverage)
 
-        if args.require_material_budget_coverage_field:
-            cli_material_executor_budget_coverage = (
-                material_executor_budget_coverage_spec_from_manifest({
-                    "required_fields":
-                        args.require_material_budget_coverage_field,
-                }))
+        cli_material_executor_budget_coverage = (
+            bound_coverage_cli_spec_from_args(
+                args.require_material_budget_coverage_field,
+                args.require_material_budget_coverage_min_bound_keys,
+                args.require_material_budget_coverage_min_guarded_fields,
+                args.require_material_budget_coverage_min_observed_fields,
+                material_executor_budget_coverage_spec_from_manifest))
+        if cli_material_executor_budget_coverage is not None:
             args.require_material_plan = True
             material_executor_budget_coverage = merge_bound_coverage_specs(
                 material_executor_budget_coverage,
@@ -3879,12 +3918,14 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
             args.require_material_executor_budget_coverage = (
                 material_executor_budget_coverage)
 
-        if args.require_material_quality_coverage_field:
-            cli_material_quality_policy_coverage = (
-                material_quality_policy_coverage_spec_from_manifest({
-                    "required_fields":
-                        args.require_material_quality_coverage_field,
-                }))
+        cli_material_quality_policy_coverage = (
+            bound_coverage_cli_spec_from_args(
+                args.require_material_quality_coverage_field,
+                args.require_material_quality_coverage_min_bound_keys,
+                args.require_material_quality_coverage_min_guarded_fields,
+                args.require_material_quality_coverage_min_observed_fields,
+                material_quality_policy_coverage_spec_from_manifest))
+        if cli_material_quality_policy_coverage is not None:
             args.require_material_plan = True
             material_quality_policy_coverage = merge_bound_coverage_specs(
                 material_quality_policy_coverage,
@@ -3992,9 +4033,9 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         material_executor_budget_keys,
         material_resource_bound_keys,
         material_quality_policy_keys,
-        material_executor_budget_coverage_required_fields,
-        material_resource_bound_coverage_required_fields,
-        material_quality_policy_coverage_required_fields,
+        material_executor_budget_coverage is not None,
+        material_resource_bound_coverage is not None,
+        material_quality_policy_coverage is not None,
     ))
     if manifest_path is not None or has_direct_bounds:
         report.data["manifest"] = {
@@ -16177,6 +16218,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "Require a compact material executor budget field to be guarded "
             "by a bound and observed in the verifier report. Repeatable."))
     parser.add_argument(
+        "--require-material-budget-coverage-min-bound-keys",
+        type=int,
+        default=None,
+        metavar="COUNT",
+        help="Require at least this many material executor budget bounds.")
+    parser.add_argument(
+        "--require-material-budget-coverage-min-guarded-fields",
+        type=int,
+        default=None,
+        metavar="COUNT",
+        help="Require at least this many guarded executor budget fields.")
+    parser.add_argument(
+        "--require-material-budget-coverage-min-observed-fields",
+        type=int,
+        default=None,
+        metavar="COUNT",
+        help="Require at least this many observed executor budget fields.")
+    parser.add_argument(
         "--require-material-resource-bound",
         action="append",
         default=[],
@@ -16194,6 +16253,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "Require a material resource field to be guarded by a bound and "
             "observed in the verifier report. Repeatable."))
     parser.add_argument(
+        "--require-material-resource-coverage-min-bound-keys",
+        type=int,
+        default=None,
+        metavar="COUNT",
+        help="Require at least this many material resource bounds.")
+    parser.add_argument(
+        "--require-material-resource-coverage-min-guarded-fields",
+        type=int,
+        default=None,
+        metavar="COUNT",
+        help="Require at least this many guarded material resource fields.")
+    parser.add_argument(
+        "--require-material-resource-coverage-min-observed-fields",
+        type=int,
+        default=None,
+        metavar="COUNT",
+        help="Require at least this many observed material resource fields.")
+    parser.add_argument(
         "--require-material-quality-bound",
         action="append",
         default=[],
@@ -16209,6 +16286,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help=(
             "Require a material quality-policy field to be guarded by a bound "
             "and observed in the verifier report. Repeatable."))
+    parser.add_argument(
+        "--require-material-quality-coverage-min-bound-keys",
+        type=int,
+        default=None,
+        metavar="COUNT",
+        help="Require at least this many material quality-policy bounds.")
+    parser.add_argument(
+        "--require-material-quality-coverage-min-guarded-fields",
+        type=int,
+        default=None,
+        metavar="COUNT",
+        help="Require at least this many guarded quality-policy fields.")
+    parser.add_argument(
+        "--require-material-quality-coverage-min-observed-fields",
+        type=int,
+        default=None,
+        metavar="COUNT",
+        help="Require at least this many observed quality-policy fields.")
     parser.add_argument(
         "--require-capability",
         action="append",
