@@ -470,7 +470,8 @@ void print_material_budget_summary(
         auto const& budget = *item.material_budget;
         std::println(
             "  {}: plans={} sampled={} fallback={} stages={} active={} "
-            "backdrop-stages={} dropped={} taps={} max-taps={} copy={}/{} px",
+            "backdrop-stages={} dropped={} taps={} max-taps={} "
+            "upload-util={} copy={}/{} px copy-util={}",
             case_label(item),
             budget_count(budget.plan_count),
             budget_count(budget.sampled_backdrop_instance_count),
@@ -481,8 +482,10 @@ void print_material_budget_summary(
             budget_count(budget.dropped_execution_stage_count),
             budget_count(budget.total_sample_taps),
             budget_count(budget.max_sample_taps),
+            budget_utilization_text(budget.upload_utilization),
             budget_count(budget.backdrop_copy_pixels),
-            budget_count(budget.max_backdrop_pixels));
+            budget_count(budget.max_backdrop_pixels),
+            budget_utilization_text(budget.backdrop_copy_utilization));
         std::println(
             "    status: upload={} draw={} uploaded={} drawn={} "
             "copy-required={} copy-policy={} skip={}",

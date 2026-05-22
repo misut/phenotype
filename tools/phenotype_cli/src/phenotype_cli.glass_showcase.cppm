@@ -429,14 +429,17 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
             budget_count(budget->dropped_execution_stage_count));
         std::println(
             "  work: draw-calls={} taps={} max-taps={} upload={}/{} bytes "
-            "copy={}/{} px frame-capture={}/{} px surface-sample={} px",
+            "upload-util={} copy={}/{} px copy-util={} "
+            "frame-capture={}/{} px surface-sample={} px",
             budget_count(budget->draw_calls),
             budget_count(budget->total_sample_taps),
             budget_count(budget->max_sample_taps),
             budget_count(budget->upload_bytes),
             budget_count(budget->buffer_capacity_bytes),
+            budget_utilization_text(budget->upload_utilization),
             budget_count(budget->backdrop_copy_pixels),
             budget_count(budget->max_backdrop_pixels),
+            budget_utilization_text(budget->backdrop_copy_utilization),
             budget_count(budget->planned_frame_capture_count),
             budget_count(budget->planned_frame_capture_pixels),
             budget_count(budget->planned_surface_sample_pixels));
