@@ -1786,7 +1786,8 @@ the first few printed details. Compact JSON also keeps those failures under
 `coverage_minimum_failure_details.entries[]` with raw `expected`/`actual`
 objects plus flattened `expected_operator`, `expected_count`,
 raw verifier `name`/`message`, `coverage_family`, `minimum_field`,
-`actual_count`, `shortfall_count`, and the active bound/guarded/observed field
+`actual_count`, `shortfall_count`, original `failures[]` position through
+`failure_index`/`failure_number`, and the active bound/guarded/observed field
 arrays plus direct
 `bound_key_count`, `guarded_field_count`, `observed_field_count`, and
 `unguarded_observed_field_count` values. They also identify the array that backs
