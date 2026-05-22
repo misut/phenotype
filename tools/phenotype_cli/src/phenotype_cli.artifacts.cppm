@@ -802,6 +802,13 @@ void print_verifier_material_budget_bound_summary(
     std::println(
         "material budget bounds: {}",
         material_budget_bound_summary_text(*bound_summary));
+    auto bound_results =
+        material_budget_bound_results_from_report(*verifier.report);
+    for (auto const& line : material_budget_bound_detail_lines(
+             bound_results,
+             bound_summary)) {
+        std::println("  {}", line);
+    }
 }
 
 auto first_positional_or_error(cppx::cli::Invocation const& invocation,

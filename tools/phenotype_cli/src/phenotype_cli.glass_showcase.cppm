@@ -463,6 +463,13 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
             std::println(
                 "material budget bounds: {}",
                 material_budget_bound_summary_text(*bound_summary));
+            auto bound_results =
+                material_budget_bound_results_from_report(*verifier_report);
+            for (auto const& line : material_budget_bound_detail_lines(
+                     bound_results,
+                     bound_summary)) {
+                std::println("  {}", line);
+            }
         }
     }
     if (auto budget = material_budget_from_verifier(summary.verifier_result)) {
