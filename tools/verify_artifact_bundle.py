@@ -13248,16 +13248,31 @@ def material_executor_budget_bound_summary(
         min(numeric_results, key=lambda result: abs(float(result["margin"])))
         if numeric_results
         else None)
+    zero_margin_sources = [
+        dict(result)
+        for result in numeric_results
+        if float(result["margin"]) == 0.0
+    ]
+    negative_margin_sources = [
+        dict(result)
+        for result in numeric_results
+        if float(result["margin"]) < 0.0
+    ]
     summary: JsonObject = {
         "bound_count": len(results),
         "pass_count": len(results) - len(failed_keys),
         "fail_count": len(failed_keys),
+        "zero_margin_count": len(zero_margin_sources),
+        "negative_margin_count": len(negative_margin_sources),
+        "zero_margin_sources": zero_margin_sources,
+        "negative_margin_sources": negative_margin_sources,
         "failed_keys": failed_keys,
     }
     if isinstance(tightest, dict):
         summary["tightest_bound_key"] = tightest.get("key")
         summary["tightest_bound_field"] = tightest.get("field")
         summary["tightest_bound_margin"] = tightest.get("margin")
+        summary["tightest_bound_result"] = dict(tightest)
     return summary
 
 
