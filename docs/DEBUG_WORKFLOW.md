@@ -1876,7 +1876,8 @@ and verifies `examples/glass_showcase/artifact_manifest.accessibility.json`.
 That manifest requires platform capabilities and renderer runtime details to
 show the override, every material plan to fall back through
 `reduced-transparency`, and the runtime executor summary to contain only
-fallback material work.
+fallback material work with zero sampled draw calls, zero backdrop-copy pixels,
+zero upload bytes, and zero upload/copy utilization.
 
 The standard and accessibility gates are local acceptance checks for PR work.
 Run them before changing material rendering, artifact manifests, or verifier
@@ -1884,8 +1885,11 @@ expectations. The standard manifest pins the sampled-backdrop capture and
 surface-sampling envelope close to current macOS observations: single-pass frame
 capture and pass texture copies must stay below 2,000,000 pixels, the largest
 sampled surface must stay below 900,000 pixels, and total sampled surface area
-must stay below 4,500,000 pixels. PR CI deliberately does not run the slow macOS
-glass showcase capture; docs-only and tools-only PRs avoid the root C++ test
+must stay below 4,500,000 pixels. It also pins a positive executor floor for
+material upload bytes, backdrop-copy pixels, and upload/copy utilization so a
+passing capture can no longer silently degrade to a no-op material executor.
+PR CI deliberately does not run the slow macOS glass showcase capture; docs-only
+and tools-only PRs avoid the root C++ test
 matrix, docs changes run the docs WASI build, and tooling changes run the
 verifier's Python contract checks. Shared model-only file explorer and glass
 showcase changes run their targeted shared-package tests plus CLI JSON smoke
