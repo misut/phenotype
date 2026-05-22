@@ -1641,6 +1641,9 @@ int main() {
         "\"label\":\"budget.min_guarded_field_count\",\"coverage_family\":\"budget\",\"minimum_field\":\"min_guarded_field_count\""));
     assert(contains_text(
         failure_json,
+        "\"expected\":{\">=\":2},\"expected_operator\":\">=\",\"expected_count\":2"));
+    assert(contains_text(
+        failure_json,
         "\"actual\":{\"bound_keys\":[\"draw_calls_gte\"],\"count\":1,\"guarded_fields\":[\"draw_calls\"]"));
     assert(contains_text(
         failure_json,
@@ -1826,6 +1829,9 @@ int main() {
         "\"label\":\"budget.min_guarded_field_count\",\"coverage_family\":\"budget\",\"minimum_field\":\"min_guarded_field_count\""));
     assert(contains_text(
         minimum_json,
+        "\"expected\":{\">=\":2},\"expected_operator\":\">=\",\"expected_count\":2"));
+    assert(contains_text(
+        minimum_json,
         "\"unguarded_observed_source_details\":{\"entries\":[{\"field\":\"planned_frame_capture_pixels\",\"metric\":\"planned_frame_capture_pixels\",\"value\":0,\"source_path\":\"debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels\",\"likely_pass\":\"material-executor\""));
     assert(count_text(
         minimum_json,
@@ -1833,7 +1839,7 @@ int main() {
         >= 2);
     assert(contains_text(
         minimum_json,
-        "\"expected\":{\">=\":2},\"actual\":{\"bound_keys\":[\"draw_calls_gte\"],\"count\":1,\"guarded_fields\":[\"draw_calls\"]"));
+        "\"expected_count\":2,\"actual\":{\"bound_keys\":[\"draw_calls_gte\"],\"count\":1,\"guarded_fields\":[\"draw_calls\"]"));
     assert(contains_text(
         minimum_json,
         "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"limit\":5,\"truncated\":false"));
