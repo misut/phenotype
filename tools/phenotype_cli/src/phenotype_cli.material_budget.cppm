@@ -2160,6 +2160,52 @@ auto verifier_material_budget_coverage_text(json::Value const& report)
     return coverage ? material_budget_coverage_text(*coverage) : std::string{};
 }
 
+auto verifier_manifest_summary_json(
+        std::optional<VerifierManifestSummary> const& manifest)
+    -> std::string;
+
+auto verifier_manifest_context_json(json::Value const& report) -> std::string {
+    return verifier_manifest_summary_json(
+        verifier_manifest_summary_from_report(report));
+}
+
+auto verifier_manifest_context_text(json::Value const& report) -> std::string {
+    auto manifest = verifier_manifest_summary_from_report(report);
+    if (!manifest)
+        return {};
+
+    auto text = std::format(
+        "name={} runtime={} pixel-regions={} budget={} resource={} quality={}",
+        manifest->name,
+        budget_count(manifest->runtime_numeric_bounds),
+        budget_count(manifest->pixel_regions),
+        budget_count(manifest->material_executor_budget_bounds),
+        budget_count(manifest->material_resource_bounds),
+        budget_count(manifest->material_quality_policy_bounds));
+    if (!manifest->material_executor_budget_coverage_required_fields.empty()) {
+        text += std::format(
+            " required-budget=({})",
+            budget_field_list_text(
+                manifest->material_executor_budget_coverage_required_fields));
+    }
+    if (!manifest->material_executor_budget_bound_keys.empty()) {
+        text += std::format(
+            " budget-keys=({})",
+            budget_field_list_text(manifest->material_executor_budget_bound_keys));
+    }
+    if (!manifest->material_resource_bound_keys.empty()) {
+        text += std::format(
+            " resource-keys=({})",
+            budget_field_list_text(manifest->material_resource_bound_keys));
+    }
+    if (!manifest->material_quality_policy_bound_keys.empty()) {
+        text += std::format(
+            " quality-keys=({})",
+            budget_field_list_text(manifest->material_quality_policy_bound_keys));
+    }
+    return text;
+}
+
 auto verifier_failure_detail_lines(json::Object const& failure)
         -> std::vector<std::string> {
     auto lines = std::vector<std::string>{};
@@ -2262,7 +2308,8 @@ auto verifier_failure_summary_json(json::Value const& report)
         "{{\"count\":{},\"top_likely_layer\":{},"
         "\"top_likely_pass\":{},\"top_suggested_action\":{},"
         "\"artifact_context\":{},\"bound_summaries\":{},"
-        "\"budget_coverage\":{},\"material_context\":{},"
+        "\"manifest_context\":{},\"budget_coverage\":{},"
+        "\"material_context\":{},"
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
         "\"by_path\":{},"
         "\"by_suggested_action\":{},\"first_failure\":{},"
@@ -2279,6 +2326,7 @@ auto verifier_failure_summary_json(json::Value const& report)
             {"failure_summary", "top_suggested_action"}).value_or("")),
         failure_artifact_context_json(report),
         verifier_bound_summaries_json(report),
+        verifier_manifest_context_json(report),
         verifier_material_budget_coverage_json(report),
         failure_material_context_json(report),
         failure_json_value_or_null(
@@ -2344,6 +2392,10 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto bounds = verifier_bound_summaries_text(report);
         !bounds.empty()) {
         lines.push_back("  bounds: " + bounds);
+    }
+    if (auto manifest = verifier_manifest_context_text(report);
+        !manifest.empty()) {
+        lines.push_back("  manifest: " + manifest);
     }
     if (auto coverage = verifier_material_budget_coverage_text(report);
         !coverage.empty()) {
