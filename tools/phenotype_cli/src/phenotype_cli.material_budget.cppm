@@ -1641,6 +1641,59 @@ auto failure_executor_budget_json(json::Value const& report) -> std::string {
              "executor_budget", "backdrop_copy_skip_reason"}));
 }
 
+auto failure_resource_bounds_json(json::Value const& report) -> std::string {
+    auto bounds = material_resource_bounds_from_report(report);
+    if (!bounds)
+        return "null";
+    return std::format(
+        "{{\"max_plan_sample_taps\":{},\"total_plan_sample_taps\":{},"
+        "\"max_backdrop_pixels\":{},\"max_frame_capture_count\":{},"
+        "\"max_frame_capture_pixels\":{},"
+        "\"total_surface_sample_pixels\":{},"
+        "\"total_execution_stages\":{},\"active_execution_stages\":{},"
+        "\"backdrop_execution_stages\":{},\"dropped_execution_stages\":{},"
+        "\"total_paint_layers\":{},\"active_paint_layers\":{},"
+        "\"dropped_paint_layers\":{},"
+        "\"max_pass_texture_copy_pixels\":{},"
+        "\"total_pass_texture_copy_pixels\":{},"
+        "\"unbounded_texture_copy\":{},"
+        "\"non_deterministic_fallback\":{},"
+        "\"max_refraction_offset_pixels\":{},"
+        "\"max_container_spacing\":{},\"max_paint_layer_inflate\":{}}}",
+        manifest_count_json(bounds->max_plan_sample_taps),
+        manifest_count_json(bounds->total_plan_sample_taps),
+        manifest_count_json(bounds->max_backdrop_pixels),
+        manifest_count_json(bounds->max_frame_capture_count),
+        manifest_count_json(bounds->max_frame_capture_pixels),
+        manifest_count_json(bounds->total_surface_sample_pixels),
+        manifest_count_json(bounds->total_execution_stages),
+        manifest_count_json(bounds->active_execution_stages),
+        manifest_count_json(bounds->backdrop_execution_stages),
+        manifest_count_json(bounds->dropped_execution_stages),
+        manifest_count_json(bounds->total_paint_layers),
+        manifest_count_json(bounds->active_paint_layers),
+        manifest_count_json(bounds->dropped_paint_layers),
+        manifest_count_json(bounds->max_pass_texture_copy_pixels),
+        manifest_count_json(bounds->total_pass_texture_copy_pixels),
+        manifest_count_json(bounds->unbounded_texture_copy),
+        manifest_count_json(bounds->non_deterministic_fallback),
+        budget_ratio(bounds->max_refraction_offset_pixels),
+        budget_ratio(bounds->max_container_spacing),
+        budget_ratio(bounds->max_paint_layer_inflate));
+}
+
+auto failure_material_context_json(json::Value const& report) -> std::string {
+    auto resource = failure_resource_bounds_json(report);
+    auto quality = material_quality_policy_json(
+        material_quality_policy_from_report(report));
+    if (resource == "null" && quality == "null")
+        return "null";
+    return std::format(
+        "{{\"resource_bounds\":{},\"quality_policy\":{}}}",
+        resource,
+        quality);
+}
+
 auto failure_artifact_context_json(json::Value const& report) -> std::string {
     if (!json_object_at(report, {"failure_summary", "artifact_context"}))
         return "null";
@@ -1993,6 +2046,37 @@ auto failure_artifact_context_line(json::Value const& report) -> std::string {
     return text;
 }
 
+auto failure_resource_bounds_line(json::Value const& report) -> std::string {
+    auto bounds = material_resource_bounds_from_report(report);
+    if (!bounds)
+        return {};
+    return std::format(
+        "plan-taps={}/{} runtime={}/{}/{} stages-dropped={} "
+        "paint={}/{}/{} copy={}/{} unbounded-copy={} "
+        "non-deterministic-fallback={} refraction={} spacing={} inflate={}",
+        budget_count(bounds->max_plan_sample_taps),
+        budget_count(bounds->total_plan_sample_taps),
+        budget_count(bounds->total_execution_stages),
+        budget_count(bounds->active_execution_stages),
+        budget_count(bounds->backdrop_execution_stages),
+        budget_count(bounds->dropped_execution_stages),
+        budget_count(bounds->total_paint_layers),
+        budget_count(bounds->active_paint_layers),
+        budget_count(bounds->dropped_paint_layers),
+        budget_count(bounds->max_pass_texture_copy_pixels),
+        budget_count(bounds->total_pass_texture_copy_pixels),
+        budget_count(bounds->unbounded_texture_copy),
+        budget_count(bounds->non_deterministic_fallback),
+        budget_number_text(bounds->max_refraction_offset_pixels),
+        budget_number_text(bounds->max_container_spacing),
+        budget_number_text(bounds->max_paint_layer_inflate));
+}
+
+auto failure_quality_policy_line(json::Value const& report) -> std::string {
+    auto policy = material_quality_policy_from_report(report);
+    return policy ? material_quality_policy_text(*policy) : std::string{};
+}
+
 auto verifier_bound_summaries_json(json::Value const& report) -> std::string {
     auto executor = material_budget_bound_summary_from_report(report);
     auto resource = material_resource_bound_summary_from_report(report);
@@ -2178,7 +2262,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         "{{\"count\":{},\"top_likely_layer\":{},"
         "\"top_likely_pass\":{},\"top_suggested_action\":{},"
         "\"artifact_context\":{},\"bound_summaries\":{},"
-        "\"budget_coverage\":{},"
+        "\"budget_coverage\":{},\"material_context\":{},"
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
         "\"by_path\":{},"
         "\"by_suggested_action\":{},\"first_failure\":{},"
@@ -2196,6 +2280,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         failure_artifact_context_json(report),
         verifier_bound_summaries_json(report),
         verifier_material_budget_coverage_json(report),
+        failure_material_context_json(report),
         failure_json_value_or_null(
             report,
             {"failure_summary", "by_likely_layer"}),
@@ -2263,6 +2348,14 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto coverage = verifier_material_budget_coverage_text(report);
         !coverage.empty()) {
         lines.push_back("  coverage: " + coverage);
+    }
+    if (auto resources = failure_resource_bounds_line(report);
+        !resources.empty()) {
+        lines.push_back("  resources: " + resources);
+    }
+    if (auto quality = failure_quality_policy_line(report);
+        !quality.empty()) {
+        lines.push_back("  quality: " + quality);
     }
     if (auto by_layer = compact_failure_count_map_text(
             report,
