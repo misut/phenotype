@@ -614,6 +614,9 @@ auto verifier_observation_json(VerifierObservation const& verifier)
     auto const resource_bounds = verifier.report
         ? material_resource_bounds_from_report(*verifier.report)
         : std::optional<MaterialResourceBoundsSummary>{};
+    auto const container_groups = verifier.report
+        ? material_container_group_summary_from_report(*verifier.report)
+        : std::optional<MaterialContainerGroupSummary>{};
     auto const resource_bound_summary = verifier.report
         ? material_resource_bound_summary_from_report(*verifier.report)
         : std::optional<MaterialBudgetBoundSummary>{};
@@ -660,6 +663,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         "\"stderr_tail\":{},\"report_error\":{},"
         "\"material_budget\":{},\"material_quality_policy\":{},"
         "\"material_resource_bounds\":{},"
+        "\"material_container_groups\":{},"
         "\"material_resource_bound_summary\":{},"
         "\"material_resource_bound_results\":{},"
         "\"material_quality_policy_bound_summary\":{},"
@@ -685,6 +689,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         material_budget_json(budget),
         material_quality_policy_json(quality_policy),
         material_resource_bounds_json(resource_bounds),
+        material_container_group_summary_json(container_groups),
         material_budget_bound_summary_json(resource_bound_summary),
         material_budget_bound_results_json(resource_bound_results),
         material_budget_bound_summary_json(quality_policy_bound_summary),
@@ -870,6 +875,19 @@ void print_verifier_material_resource_bounds(VerifierObservation const& verifier
     std::println("material resource bounds:");
     for (auto const& line : material_resource_bounds_lines(*bounds))
         std::println("  {}", line);
+}
+
+void print_verifier_material_container_groups(
+        VerifierObservation const& verifier) {
+    if (!verifier.report)
+        return;
+    auto groups = material_container_group_summary_from_report(*verifier.report);
+    if (!groups)
+        return;
+
+    std::println(
+        "material container groups: {}",
+        material_container_group_summary_text(*groups));
 }
 
 void print_material_bound_results(std::string_view label,
@@ -1325,6 +1343,7 @@ void print_artifact_verify_summary(fs::path const& bundle,
     print_verifier_material_quality_policy_coverage(verifier);
     print_verifier_material_quality_policy(verifier);
     print_verifier_material_resource_bounds(verifier);
+    print_verifier_material_container_groups(verifier);
     print_verifier_material_resource_bound_summary(verifier);
     print_verifier_material_quality_policy_bound_summary(verifier);
     print_verifier_material_budget_bound_summary(verifier);
@@ -1570,6 +1589,7 @@ void print_artifact_observation(ArtifactObservation const& observation) {
     print_verifier_material_quality_policy_coverage(observation.verifier);
     print_verifier_material_quality_policy(observation.verifier);
     print_verifier_material_resource_bounds(observation.verifier);
+    print_verifier_material_container_groups(observation.verifier);
     print_verifier_material_resource_bound_summary(observation.verifier);
     print_verifier_material_quality_policy_bound_summary(observation.verifier);
     print_verifier_material_budget_bound_summary(observation.verifier);

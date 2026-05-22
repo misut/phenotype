@@ -92,6 +92,37 @@ struct MaterialResourceBoundsSummary {
     std::int64_t non_deterministic_fallback = -1;
 };
 
+struct MaterialContainerGroupSummary {
+    std::int64_t group_count = -1;
+    std::int64_t multi_surface_group_count = -1;
+    std::int64_t union_group_count = -1;
+    std::int64_t morph_group_count = -1;
+    std::int64_t interactive_group_count = -1;
+    std::int64_t shared_backdrop_scope_group_count = -1;
+    std::int64_t shared_capture_surface_count = -1;
+    std::int64_t shared_capture_saved_surface_count = -1;
+    std::int64_t max_shared_capture_group_surfaces = -1;
+    std::int64_t shape_blend_execution_group_count = -1;
+    std::int64_t shape_blend_execution_surface_count = -1;
+    std::int64_t fallback_mixed_group_count = -1;
+    std::int64_t max_group_size = -1;
+    std::int64_t max_active_surfaces = -1;
+    std::int64_t max_sampled_backdrop_surfaces = -1;
+    std::int64_t max_fallback_surfaces = -1;
+    std::int64_t total_shape_pair_count = -1;
+    std::int64_t blend_candidate_pair_count = -1;
+    std::int64_t union_candidate_pair_count = -1;
+    std::int64_t morph_candidate_pair_count = -1;
+    std::int64_t separated_pair_count = -1;
+    double min_shape_gap = -1.0;
+    double max_shape_gap = -1.0;
+    double max_blend_distance = -1.0;
+    double max_group_bounds_width = -1.0;
+    double max_group_bounds_height = -1.0;
+    double max_group_bounds_area = -1.0;
+    double max_shape_blend_strength = -1.0;
+};
+
 struct VerifierManifestSummary {
     std::string name;
     std::int64_t pixel_regions = -1;
@@ -788,6 +819,103 @@ auto material_resource_bounds_from_verifier(
     return material_resource_bounds_from_verifier(*result);
 }
 
+auto material_container_group_summary_from_object(json::Object const& object)
+    -> MaterialContainerGroupSummary {
+    return MaterialContainerGroupSummary{
+        .group_count = json_object_integer(object, "group_count").value_or(-1),
+        .multi_surface_group_count =
+            json_object_integer(object, "multi_surface_group_count").value_or(-1),
+        .union_group_count =
+            json_object_integer(object, "union_group_count").value_or(-1),
+        .morph_group_count =
+            json_object_integer(object, "morph_group_count").value_or(-1),
+        .interactive_group_count =
+            json_object_integer(object, "interactive_group_count").value_or(-1),
+        .shared_backdrop_scope_group_count = json_object_integer(
+            object,
+            "shared_backdrop_scope_group_count").value_or(-1),
+        .shared_capture_surface_count =
+            json_object_integer(object, "shared_capture_surface_count").value_or(-1),
+        .shared_capture_saved_surface_count = json_object_integer(
+            object,
+            "shared_capture_saved_surface_count").value_or(-1),
+        .max_shared_capture_group_surfaces = json_object_integer(
+            object,
+            "max_shared_capture_group_surfaces").value_or(-1),
+        .shape_blend_execution_group_count = json_object_integer(
+            object,
+            "shape_blend_execution_group_count").value_or(-1),
+        .shape_blend_execution_surface_count = json_object_integer(
+            object,
+            "shape_blend_execution_surface_count").value_or(-1),
+        .fallback_mixed_group_count =
+            json_object_integer(object, "fallback_mixed_group_count").value_or(-1),
+        .max_group_size =
+            json_object_integer(object, "max_group_size").value_or(-1),
+        .max_active_surfaces =
+            json_object_integer(object, "max_active_surfaces").value_or(-1),
+        .max_sampled_backdrop_surfaces = json_object_integer(
+            object,
+            "max_sampled_backdrop_surfaces").value_or(-1),
+        .max_fallback_surfaces =
+            json_object_integer(object, "max_fallback_surfaces").value_or(-1),
+        .total_shape_pair_count =
+            json_object_integer(object, "total_shape_pair_count").value_or(-1),
+        .blend_candidate_pair_count = json_object_integer(
+            object,
+            "blend_candidate_pair_count").value_or(-1),
+        .union_candidate_pair_count = json_object_integer(
+            object,
+            "union_candidate_pair_count").value_or(-1),
+        .morph_candidate_pair_count = json_object_integer(
+            object,
+            "morph_candidate_pair_count").value_or(-1),
+        .separated_pair_count =
+            json_object_integer(object, "separated_pair_count").value_or(-1),
+        .min_shape_gap =
+            json_object_number(object, "min_shape_gap").value_or(-1.0),
+        .max_shape_gap =
+            json_object_number(object, "max_shape_gap").value_or(-1.0),
+        .max_blend_distance =
+            json_object_number(object, "max_blend_distance").value_or(-1.0),
+        .max_group_bounds_width =
+            json_object_number(object, "max_group_bounds_width").value_or(-1.0),
+        .max_group_bounds_height =
+            json_object_number(object, "max_group_bounds_height").value_or(-1.0),
+        .max_group_bounds_area =
+            json_object_number(object, "max_group_bounds_area").value_or(-1.0),
+        .max_shape_blend_strength =
+            json_object_number(object, "max_shape_blend_strength").value_or(-1.0),
+    };
+}
+
+auto material_container_group_summary_from_report(json::Value const& report)
+    -> std::optional<MaterialContainerGroupSummary> {
+    auto const* summary = json_object_at(
+        report,
+        {"material_plans", "container_groups"});
+    if (!summary)
+        return std::nullopt;
+    return material_container_group_summary_from_object(*summary);
+}
+
+auto material_container_group_summary_from_verifier(
+        cppx::process::CapturedProcessResult const& result)
+    -> std::optional<MaterialContainerGroupSummary> {
+    auto report = verifier_report_from_result(result);
+    if (!report)
+        return std::nullopt;
+    return material_container_group_summary_from_report(*report);
+}
+
+auto material_container_group_summary_from_verifier(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+    -> std::optional<MaterialContainerGroupSummary> {
+    if (!result)
+        return std::nullopt;
+    return material_container_group_summary_from_verifier(*result);
+}
+
 auto material_bound_result_from_object(json::Object const& object)
     -> MaterialBudgetBoundResult {
     return MaterialBudgetBoundResult{
@@ -1410,6 +1538,61 @@ auto material_resource_bounds_json(
         manifest_count_json(bounds->non_deterministic_fallback));
 }
 
+auto material_container_group_summary_json(
+        std::optional<MaterialContainerGroupSummary> const& summary)
+    -> std::string {
+    if (!summary)
+        return "null";
+    return std::format(
+        "{{\"group_count\":{},\"multi_surface_group_count\":{},"
+        "\"union_group_count\":{},\"morph_group_count\":{},"
+        "\"interactive_group_count\":{},"
+        "\"shared_backdrop_scope_group_count\":{},"
+        "\"shared_capture_surface_count\":{},"
+        "\"shared_capture_saved_surface_count\":{},"
+        "\"max_shared_capture_group_surfaces\":{},"
+        "\"shape_blend_execution_group_count\":{},"
+        "\"shape_blend_execution_surface_count\":{},"
+        "\"fallback_mixed_group_count\":{},\"max_group_size\":{},"
+        "\"max_active_surfaces\":{},\"max_sampled_backdrop_surfaces\":{},"
+        "\"max_fallback_surfaces\":{},\"total_shape_pair_count\":{},"
+        "\"blend_candidate_pair_count\":{},"
+        "\"union_candidate_pair_count\":{},"
+        "\"morph_candidate_pair_count\":{},\"separated_pair_count\":{},"
+        "\"min_shape_gap\":{},\"max_shape_gap\":{},"
+        "\"max_blend_distance\":{},\"max_group_bounds_width\":{},"
+        "\"max_group_bounds_height\":{},\"max_group_bounds_area\":{},"
+        "\"max_shape_blend_strength\":{}}}",
+        manifest_count_json(summary->group_count),
+        manifest_count_json(summary->multi_surface_group_count),
+        manifest_count_json(summary->union_group_count),
+        manifest_count_json(summary->morph_group_count),
+        manifest_count_json(summary->interactive_group_count),
+        manifest_count_json(summary->shared_backdrop_scope_group_count),
+        manifest_count_json(summary->shared_capture_surface_count),
+        manifest_count_json(summary->shared_capture_saved_surface_count),
+        manifest_count_json(summary->max_shared_capture_group_surfaces),
+        manifest_count_json(summary->shape_blend_execution_group_count),
+        manifest_count_json(summary->shape_blend_execution_surface_count),
+        manifest_count_json(summary->fallback_mixed_group_count),
+        manifest_count_json(summary->max_group_size),
+        manifest_count_json(summary->max_active_surfaces),
+        manifest_count_json(summary->max_sampled_backdrop_surfaces),
+        manifest_count_json(summary->max_fallback_surfaces),
+        manifest_count_json(summary->total_shape_pair_count),
+        manifest_count_json(summary->blend_candidate_pair_count),
+        manifest_count_json(summary->union_candidate_pair_count),
+        manifest_count_json(summary->morph_candidate_pair_count),
+        manifest_count_json(summary->separated_pair_count),
+        budget_ratio(summary->min_shape_gap),
+        budget_ratio(summary->max_shape_gap),
+        budget_ratio(summary->max_blend_distance),
+        budget_ratio(summary->max_group_bounds_width),
+        budget_ratio(summary->max_group_bounds_height),
+        budget_ratio(summary->max_group_bounds_area),
+        budget_ratio(summary->max_shape_blend_strength));
+}
+
 auto material_budget_coverage_json(
         std::optional<MaterialBudgetCoverageSummary> const& coverage)
     -> std::string {
@@ -1694,6 +1877,44 @@ auto material_resource_bounds_lines(MaterialResourceBoundsSummary const& bounds)
             budget_count(bounds.unbounded_texture_copy),
             budget_count(bounds.non_deterministic_fallback)),
     };
+}
+
+auto material_container_group_summary_text(
+        MaterialContainerGroupSummary const& summary)
+    -> std::string {
+    return std::format(
+        "groups={} multi={} union={} morph={} interactive={} shared={} "
+        "saved-capture={}/{} shape-blend={}/{} mixed-fallback={} "
+        "surfaces: max={} active={} sampled={} fallback={} "
+        "pairs: total={} blend={} union={} morph={} separated={} "
+        "gap={}..{} blend-distance={} bounds={}x{} area={} strength={}",
+        budget_count(summary.group_count),
+        budget_count(summary.multi_surface_group_count),
+        budget_count(summary.union_group_count),
+        budget_count(summary.morph_group_count),
+        budget_count(summary.interactive_group_count),
+        budget_count(summary.shared_backdrop_scope_group_count),
+        budget_count(summary.shared_capture_saved_surface_count),
+        budget_count(summary.shared_capture_surface_count),
+        budget_count(summary.shape_blend_execution_group_count),
+        budget_count(summary.shape_blend_execution_surface_count),
+        budget_count(summary.fallback_mixed_group_count),
+        budget_count(summary.max_group_size),
+        budget_count(summary.max_active_surfaces),
+        budget_count(summary.max_sampled_backdrop_surfaces),
+        budget_count(summary.max_fallback_surfaces),
+        budget_count(summary.total_shape_pair_count),
+        budget_count(summary.blend_candidate_pair_count),
+        budget_count(summary.union_candidate_pair_count),
+        budget_count(summary.morph_candidate_pair_count),
+        budget_count(summary.separated_pair_count),
+        budget_number_text(summary.min_shape_gap),
+        budget_number_text(summary.max_shape_gap),
+        budget_number_text(summary.max_blend_distance),
+        budget_number_text(summary.max_group_bounds_width),
+        budget_number_text(summary.max_group_bounds_height),
+        budget_number_text(summary.max_group_bounds_area),
+        budget_number_text(summary.max_shape_blend_strength));
 }
 
 auto material_budget_bound_summary_text(MaterialBudgetBoundSummary const& summary)
@@ -2098,12 +2319,16 @@ auto failure_material_context_json(json::Value const& report) -> std::string {
     auto resource = failure_resource_bounds_json(report);
     auto quality = material_quality_policy_json(
         material_quality_policy_from_report(report));
-    if (resource == "null" && quality == "null")
+    auto container_groups = material_container_group_summary_json(
+        material_container_group_summary_from_report(report));
+    if (resource == "null" && quality == "null" && container_groups == "null")
         return "null";
     return std::format(
-        "{{\"resource_bounds\":{},\"quality_policy\":{}}}",
+        "{{\"resource_bounds\":{},\"quality_policy\":{},"
+        "\"container_groups\":{}}}",
         resource,
-        quality);
+        quality,
+        container_groups);
 }
 
 auto failure_artifact_context_json(json::Value const& report) -> std::string {
@@ -3214,6 +3439,35 @@ auto verifier_material_quality_policy_coverage_text(json::Value const& report)
     return coverage ? material_bound_coverage_text(*coverage) : std::string{};
 }
 
+auto verifier_material_container_groups_json(json::Value const& report)
+    -> std::string {
+    return material_container_group_summary_json(
+        material_container_group_summary_from_report(report));
+}
+
+auto verifier_material_container_groups_json(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+    -> std::string {
+    auto report = verifier_report_from_result(result);
+    return report ? verifier_material_container_groups_json(*report)
+                  : std::string{"null"};
+}
+
+auto verifier_material_container_groups_text(json::Value const& report)
+    -> std::string {
+    auto summary = material_container_group_summary_from_report(report);
+    return summary ? material_container_group_summary_text(*summary)
+                   : std::string{};
+}
+
+auto verifier_material_container_groups_text(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+    -> std::string {
+    auto report = verifier_report_from_result(result);
+    return report ? verifier_material_container_groups_text(*report)
+                  : std::string{};
+}
+
 auto verifier_manifest_summary_json(
         std::optional<VerifierManifestSummary> const& manifest)
     -> std::string;
@@ -3512,6 +3766,10 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto coverage = verifier_material_quality_policy_coverage_text(report);
         !coverage.empty()) {
         lines.push_back("  quality-coverage: " + coverage);
+    }
+    if (auto container_groups = verifier_material_container_groups_text(report);
+        !container_groups.empty()) {
+        lines.push_back("  container-groups: " + container_groups);
     }
     if (auto resources = failure_resource_bounds_line(report);
         !resources.empty()) {

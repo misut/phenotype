@@ -139,10 +139,14 @@ resource and legibility-policy guard fields are observed and bounded without
 opening the raw report. `verifier.material_quality_policy` mirrors the
 verifier's compact quality-policy summary, including disabled backdrop sampling,
 noise, and shadow counts plus maximum blur radius, sample taps, and backdrop
-pixel limits. `verifier.material_resource_bounds` mirrors the verifier's
-compact `material_plans.resource_bounds` summary, including pure plan blur/tap
+pixel limits. `verifier.material_resource_bounds` mirrors the verifier's compact
+`material_plans.resource_bounds` summary, including pure plan blur/tap
 limits, capture and surface-sampling pixel bounds, runtime pass/stage counts,
 paint-layer counts, copy bounds, and deterministic fallback safety counters.
+`verifier.material_container_groups` mirrors grouped, union, morph,
+shared-capture, shape-pair, and shape-blend counters from
+`material_plans.container_groups`, so container failures can be triaged without
+opening the raw report.
 `verifier.material_budget_bound_summary` adds the actual bound result summary,
 including pass/fail counts, failed bound keys, zero/negative margin counts and
 source result lists, the tightest remaining margin, and the full tightest bound
@@ -300,6 +304,9 @@ shadow counts plus maximum blur radius, sample taps, and backdrop pixel limits.
 `material_resource_bounds` reports the pure plan/resource budget maxima,
 runtime pass/stage usage, capture/surface-sampling pixel budgets, paint layer
 capacity, texture-copy bounds, and deterministic fallback counters.
+`material_container_groups` reports grouped surface counts, union/morph groups,
+shared capture, shape-pair analysis, shape-blend execution, and group bounds
+from the same verifier report.
 `material_budget_bound_summary` reports the applied budget bound pass/fail count,
 zero/negative margin source result lists, and tightest result.
 `material_budget_bound_results` provides the compact per-bound
@@ -1853,7 +1860,8 @@ artifact details, plus `material_budget` when the verifier report contains
 `material_quality_policy` summary of disabled quality-policy effects and
 resolved quality limits, plus compact `material_resource_bounds` for plan,
 capture, runtime pass/stage, paint-layer, texture-copy, and deterministic
-fallback bounds, plus a compact
+fallback bounds, plus compact `material_container_groups` counters for grouped,
+union, morph, shared-capture, and shape-blend diagnostics, plus a compact
 `verifier_manifest` object that surfaces the manifest runtime/budget/resource/
 policy bound counts, runtime detail guard paths, exact material executor budget
 bound keys, material resource bound keys, quality-policy bound keys, and their

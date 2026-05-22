@@ -384,6 +384,9 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
     auto resource_bounds = verifier_report
         ? material_resource_bounds_from_report(*verifier_report)
         : std::optional<MaterialResourceBoundsSummary>{};
+    auto container_groups = verifier_report
+        ? material_container_group_summary_from_report(*verifier_report)
+        : std::optional<MaterialContainerGroupSummary>{};
     auto resource_bound_summary = verifier_report
         ? material_resource_bound_summary_from_report(*verifier_report)
         : std::optional<MaterialBudgetBoundSummary>{};
@@ -434,6 +437,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         "\"artifact\":{},\"material_budget\":{},"
         "\"material_quality_policy\":{},"
         "\"material_resource_bounds\":{},"
+        "\"material_container_groups\":{},"
         "\"material_resource_bound_summary\":{},"
         "\"material_resource_bound_results\":{},"
         "\"material_quality_policy_bound_summary\":{},"
@@ -464,6 +468,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         material_budget_json(budget),
         material_quality_policy_json(quality_policy),
         material_resource_bounds_json(resource_bounds),
+        material_container_group_summary_json(container_groups),
         material_budget_bound_summary_json(resource_bound_summary),
         material_budget_bound_results_json(resource_bound_results),
         material_budget_bound_summary_json(quality_policy_bound_summary),
@@ -580,6 +585,12 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
                      *resource_bounds)) {
                 std::println("  {}", line);
             }
+        }
+        if (auto container_groups =
+                material_container_group_summary_from_report(*verifier_report)) {
+            std::println(
+                "material container groups: {}",
+                material_container_group_summary_text(*container_groups));
         }
         if (auto resource_bound_summary =
                 material_resource_bound_summary_from_report(*verifier_report)) {
