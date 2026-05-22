@@ -611,6 +611,9 @@ auto verifier_observation_json(VerifierObservation const& verifier)
     auto const quality_policy = verifier.report
         ? material_quality_policy_from_report(*verifier.report)
         : std::optional<MaterialQualityPolicySummary>{};
+    auto const resource_bounds = verifier.report
+        ? material_resource_bounds_from_report(*verifier.report)
+        : std::optional<MaterialResourceBoundsSummary>{};
     auto const manifest = verifier.report
         ? verifier_manifest_summary_from_report(*verifier.report)
         : std::optional<VerifierManifestSummary>{};
@@ -629,6 +632,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         "\"exit_code\":{},\"timed_out\":{},\"stdout_tail\":{},"
         "\"stderr_tail\":{},\"report_error\":{},"
         "\"material_budget\":{},\"material_quality_policy\":{},"
+        "\"material_resource_bounds\":{},"
         "\"verifier_manifest\":{},"
         "\"material_budget_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
@@ -644,6 +648,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         json_string(verifier.report_error),
         material_budget_json(budget),
         material_quality_policy_json(quality_policy),
+        material_resource_bounds_json(resource_bounds),
         verifier_manifest_summary_json(manifest),
         material_budget_coverage_json(coverage),
         material_budget_bound_summary_json(bound_summary),
@@ -795,6 +800,18 @@ void print_verifier_material_quality_policy(VerifierObservation const& verifier)
     std::println(
         "material quality policy: {}",
         material_quality_policy_text(*policy));
+}
+
+void print_verifier_material_resource_bounds(VerifierObservation const& verifier) {
+    if (!verifier.report)
+        return;
+    auto bounds = material_resource_bounds_from_report(*verifier.report);
+    if (!bounds)
+        return;
+
+    std::println("material resource bounds:");
+    for (auto const& line : material_resource_bounds_lines(*bounds))
+        std::println("  {}", line);
 }
 
 void print_verifier_material_budget_coverage(
@@ -1101,6 +1118,7 @@ void print_artifact_verify_summary(fs::path const& bundle,
     print_verifier_manifest_summary(verifier);
     print_verifier_material_budget_coverage(verifier);
     print_verifier_material_quality_policy(verifier);
+    print_verifier_material_resource_bounds(verifier);
     print_verifier_material_budget_bound_summary(verifier);
     print_verifier_material_budget(verifier);
     print_verifier_failure_summary(verifier);
@@ -1322,6 +1340,7 @@ void print_artifact_observation(ArtifactObservation const& observation) {
     print_verifier_manifest_summary(observation.verifier);
     print_verifier_material_budget_coverage(observation.verifier);
     print_verifier_material_quality_policy(observation.verifier);
+    print_verifier_material_resource_bounds(observation.verifier);
     print_verifier_material_budget_bound_summary(observation.verifier);
     print_verifier_material_budget(observation.verifier);
     print_verifier_failure_summary(observation.verifier);

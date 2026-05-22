@@ -358,6 +358,9 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
     auto quality_policy = verifier_report
         ? material_quality_policy_from_report(*verifier_report)
         : std::optional<MaterialQualityPolicySummary>{};
+    auto resource_bounds = verifier_report
+        ? material_resource_bounds_from_report(*verifier_report)
+        : std::optional<MaterialResourceBoundsSummary>{};
     auto verifier_manifest = verifier_report
         ? verifier_manifest_summary_from_report(*verifier_report)
         : std::optional<VerifierManifestSummary>{};
@@ -380,6 +383,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         "\"build\":{},\"run_result\":{},\"verifier\":{},"
         "\"artifact\":{},\"material_budget\":{},"
         "\"material_quality_policy\":{},"
+        "\"material_resource_bounds\":{},"
         "\"verifier_manifest\":{},\"material_budget_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
         "\"material_budget_bound_results\":{},"
@@ -400,6 +404,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         artifact,
         material_budget_json(budget),
         material_quality_policy_json(quality_policy),
+        material_resource_bounds_json(resource_bounds),
         verifier_manifest_summary_json(verifier_manifest),
         material_budget_coverage_json(coverage),
         material_budget_bound_summary_json(bound_summary),
@@ -473,6 +478,14 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
             std::println(
                 "material quality policy: {}",
                 material_quality_policy_text(*quality_policy));
+        }
+        if (auto resource_bounds =
+                material_resource_bounds_from_report(*verifier_report)) {
+            std::println("material resource bounds:");
+            for (auto const& line : material_resource_bounds_lines(
+                     *resource_bounds)) {
+                std::println("  {}", line);
+            }
         }
         if (auto bound_summary =
                 material_budget_bound_summary_from_report(*verifier_report)) {
