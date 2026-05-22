@@ -320,6 +320,24 @@ auto spec() -> cppx::cli::CommandSpec {
                              .arity = cppx::cli::OptionArity::one,
                              .value_name = "name",
                              .description = "Expected platform name"},
+                            {.name = "require-material-budget-bound",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "key=json",
+                             .description =
+                                 "Require a material executor budget bound"},
+                            {.name = "require-material-resource-bound",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "key=json",
+                             .description =
+                                 "Require a material resource budget bound"},
+                            {.name = "require-material-quality-bound",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "key=json",
+                             .description =
+                                 "Require a material quality policy bound"},
                             {.name = "accessibility-display",
                              .arity = cppx::cli::OptionArity::one,
                              .value_name = "flags",
@@ -367,6 +385,24 @@ auto spec() -> cppx::cli::CommandSpec {
                             .value_name = "name",
                             .description =
                                 "Startup or desktop chrome scenario to capture; startup aliases default"},
+                            {.name = "require-material-budget-bound",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "key=json",
+                             .description =
+                                 "Require a material executor budget bound"},
+                            {.name = "require-material-resource-bound",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "key=json",
+                             .description =
+                                 "Require a material resource budget bound"},
+                            {.name = "require-material-quality-bound",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "key=json",
+                             .description =
+                                 "Require a material quality policy bound"},
                         },
                         .examples = {
                             "phenotype artifact verify-file-explorer",

@@ -23,6 +23,18 @@ using phenotype_cli::common::absolute_path_string;
 using namespace phenotype_cli::material_budget;
 using namespace phenotype_cli::runtime;
 
+void append_repeatable_verifier_arg(
+        std::vector<std::string>& args,
+        cppx::cli::Invocation const& invocation,
+        std::string_view name) {
+    for (auto const& value : invocation.values(name)) {
+        auto option = std::string{"--"};
+        option += name;
+        args.push_back(std::move(option));
+        args.push_back(value);
+    }
+}
+
 auto trim_copy(std::string_view text) -> std::string {
     auto first = text.find_first_not_of(" \t\r\n");
     if (first == std::string_view::npos)
@@ -477,11 +489,13 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
         if (manifest) {
             std::println(
                 "verifier manifest: name={} runtime-bounds={} "
-                "budget-bounds={} pixel-regions={} metrics={} "
-                "comparisons={} forbidden-colors={}",
+                "budget-bounds={} resource-bounds={} quality-policy-bounds={} "
+                "pixel-regions={} metrics={} comparisons={} forbidden-colors={}",
                 manifest->name,
                 budget_count(manifest->runtime_numeric_bounds),
                 budget_count(manifest->material_executor_budget_bounds),
+                budget_count(manifest->material_resource_bounds),
+                budget_count(manifest->material_quality_policy_bounds),
                 budget_count(manifest->pixel_regions),
                 budget_count(manifest->pixel_region_metrics),
                 budget_count(manifest->pixel_region_metric_comparisons),
@@ -610,9 +624,10 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
 
 auto glass_verifier_args(fs::path const& bundle,
                          fs::path const& manifest,
-                         std::string_view expect_platform)
+                         std::string_view expect_platform,
+                         cppx::cli::Invocation const& invocation)
     -> std::vector<std::string> {
-    return {
+    auto args = std::vector<std::string>{
         "exec",
         "--",
         "uv",
@@ -626,10 +641,24 @@ auto glass_verifier_args(fs::path const& bundle,
         "--expect-platform",
         std::string{expect_platform},
     };
+    append_repeatable_verifier_arg(
+        args,
+        invocation,
+        "require-material-budget-bound");
+    append_repeatable_verifier_arg(
+        args,
+        invocation,
+        "require-material-resource-bound");
+    append_repeatable_verifier_arg(
+        args,
+        invocation,
+        "require-material-quality-bound");
+    return args;
 }
 
 auto run_glass_verifier(fs::path const& root,
-                        GlassArtifactGateSummary const& summary)
+                        GlassArtifactGateSummary const& summary,
+                        cppx::cli::Invocation const& invocation)
     -> std::expected<cppx::process::CapturedProcessResult,
                      cppx::process::process_error> {
     auto spec = cppx::process::ProcessSpec{
@@ -637,7 +666,8 @@ auto run_glass_verifier(fs::path const& root,
         .args = glass_verifier_args(
             summary.artifact_dir,
             summary.manifest,
-            summary.expect_platform),
+            summary.expect_platform,
+            invocation),
         .cwd = root,
         .timeout = std::chrono::minutes{5},
         .env_overrides = {
@@ -804,7 +834,7 @@ export int run_artifact_verify_glass_showcase(
         return emit_glass_gate(summary, invocation, code);
     }
 
-    auto verifier = run_glass_verifier(*root, summary);
+    auto verifier = run_glass_verifier(*root, summary, invocation);
     if (!verifier) {
         summary.error = std::format(
             "failed to run mise/uv verifier: {}",

@@ -276,6 +276,9 @@ per-bound expected/actual/margin list from the same verifier report.
 `material_quality_policy_bound_summary`/`material_quality_policy_bound_results`
 mirror that compact bound-result shape for resource-budget and quality-policy
 manifest guards.
+Both gates also accept the direct material bound guard options used by
+`artifact verify`, so local runs can tighten a resource, quality, or executor
+budget expectation without editing the checked-in manifest.
 When a parsed verifier report fails, JSON also includes
 `verifier_failure_summary` with the compact failure count, top likely
 layer/pass, top suggested action, and first failure details. The non-JSON gate
