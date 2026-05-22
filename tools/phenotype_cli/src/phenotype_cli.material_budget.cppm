@@ -2346,6 +2346,19 @@ struct BoundPressureMargins {
     std::vector<BoundPressureSource> negative_sources;
 };
 
+auto bound_pressure_source_from_result(MaterialBudgetBoundResult const& result)
+        -> BoundPressureSource {
+    return BoundPressureSource{
+        .key = result.key,
+        .field = result.field,
+        .bound = result.bound,
+        .expected = result.expected,
+        .actual = result.actual,
+        .ok = result.ok,
+        .margin = result.margin,
+    };
+}
+
 auto bound_pressure_margins(
         std::optional<std::vector<MaterialBudgetBoundResult>> const& results)
         -> BoundPressureMargins {
@@ -2358,26 +2371,12 @@ auto bound_pressure_margins(
             continue;
         if (*result.margin == 0.0) {
             ++margins.zero_count;
-            margins.zero_sources.push_back({
-                .key = result.key,
-                .field = result.field,
-                .bound = result.bound,
-                .expected = result.expected,
-                .actual = result.actual,
-                .ok = result.ok,
-                .margin = result.margin,
-            });
+            margins.zero_sources.push_back(
+                bound_pressure_source_from_result(result));
         } else if (*result.margin < 0.0) {
             ++margins.negative_count;
-            margins.negative_sources.push_back({
-                .key = result.key,
-                .field = result.field,
-                .bound = result.bound,
-                .expected = result.expected,
-                .actual = result.actual,
-                .ok = result.ok,
-                .margin = result.margin,
-            });
+            margins.negative_sources.push_back(
+                bound_pressure_source_from_result(result));
         }
     }
     return margins;
@@ -2449,6 +2448,7 @@ auto bound_pressure_state(
         return {};
 
     auto margins = bound_pressure_margins(results);
+    auto tightest = tightest_bound_result(results, summary);
 
     auto state = std::string{"unknown"};
     if (summary->fail_count > 0 || margins.negative_count > 0) {
@@ -2467,7 +2467,7 @@ auto bound_pressure_state(
         "\"negative_margin_count\":{},\"zero_margin_sources\":{},"
         "\"negative_margin_sources\":{},\"tightest_bound_key\":{},"
         "\"tightest_bound_field\":{},\"tightest_bound_margin\":{},"
-        "\"failed_keys\":{}}}",
+        "\"tightest_bound_result\":{},\"failed_keys\":{}}}",
         json_string(state),
         manifest_count_json(summary->bound_count),
         manifest_count_json(summary->pass_count),
@@ -2479,6 +2479,8 @@ auto bound_pressure_state(
         json_string(summary->tightest_bound_key),
         json_string(summary->tightest_bound_field),
         budget_optional_number(summary->tightest_bound_margin),
+        tightest ? material_budget_bound_result_json(*tightest)
+                 : std::string{"null"},
         string_array_json(summary->failed_keys));
 }
 
@@ -2518,6 +2520,7 @@ auto bound_pressure_text(
         return {};
 
     auto margins = bound_pressure_margins(results);
+    auto tightest = tightest_bound_result(results, summary);
 
     auto state = std::string{"unknown"};
     if (summary->fail_count > 0 || margins.negative_count > 0) {
@@ -2542,6 +2545,12 @@ auto bound_pressure_text(
         summary->tightest_bound_key.empty() ? "<none>" : summary->tightest_bound_key,
         summary->tightest_bound_field.empty() ? "<none>" : summary->tightest_bound_field,
         budget_optional_number(summary->tightest_bound_margin));
+    if (tightest) {
+        text += std::format(
+            ",tightest-result=({})",
+            bound_pressure_source_text(
+                bound_pressure_source_from_result(*tightest)));
+    }
     if (!margins.zero_sources.empty()) {
         text += std::format(
             ",zero-sources=({})",

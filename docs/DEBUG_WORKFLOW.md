@@ -281,6 +281,8 @@ into `fail`, `tight`, `pass`, or `unknown` states even when the verifier report
 passes, so automation can spot no-headroom Liquid Glass budgets without waiting
 for a failure summary. Its zero/negative source lists carry the same bound
 operator, expected, actual, pass/fail, and margin evidence as bound results.
+The tightest bound also carries its full result object, so passing budgets with
+thin but non-zero headroom are inspectable without opening raw verifier JSON.
 Non-JSON output prints the same grouped pressure line after the
 budget/resource/quality bound summaries.
 Both gates also accept the direct material bound guard options used by
@@ -1664,9 +1666,9 @@ margin so local CLI output can show headroom without scanning the full
 as `fail`, `tight`, `pass`, or `unknown` and count zero/negative margins in
 `bound_pressure`, including the zero/negative margin source key/field lists with
 their bound operator, expected value, actual value, pass/fail state, and margin,
-plus the tightest bound key/field. This separates hard failures from budgets
-that are passing with no headroom while keeping the responsible verifier fields
-and values visible in the compact output.
+plus the tightest bound key/field and full tightest bound result. This separates
+hard failures from budgets that are passing with no headroom while keeping the
+responsible verifier fields and values visible in the compact output.
 Whenever material plans are present, the verifier also cross-checks executor
 counts, including `material_executor_summary.container_groups.*`, against
 `renderer.material_plans#summary`: `plan_count`,
