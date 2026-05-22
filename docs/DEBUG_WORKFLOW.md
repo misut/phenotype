@@ -135,6 +135,11 @@ are still unguarded. This keeps coverage drift visible without opening the full
 verifier report. The raw verifier report stores the same executor-budget
 coverage summary next to `artifact_context.material_contract.executor_budget`,
 so raw JSON consumers do not need to rederive guarded/unguarded budget fields.
+It also stores `executor_budget_sources` next to the compact budget, with the
+raw runtime key/path behind each numeric budget field and numerator/denominator
+detail for utilization ratios. The CLI mirrors those descriptors under
+`verifier.material_budget.sources`, so a compact budget or bound failure can be
+traced to the renderer summary path that produced the value.
 The same envelope now preserves
 `verifier.material_resource_bound_coverage` and
 `verifier.material_quality_policy_coverage`, so JSON consumers can see whether
@@ -1711,6 +1716,12 @@ backdrop stages, dropped stages, draw calls, sample taps, max taps, and
 backdrop copies. This makes hidden buffer/copy overruns or unexpected execution
 growth show up as material-executor budget failures before reading the full
 runtime JSON.
+When an executor-budget guard is tight or fails, inspect
+`artifact_context.material_contract.executor_budget_sources` or the CLI
+`material_budget.sources` object to see which renderer summary key/path produced
+the compact budget value. Utilization sources include both numerator and
+denominator paths, which keeps upload and backdrop-copy ratios debuggable
+without recomputing them from the raw report.
 Use `require_material_executor_budget_coverage` next to those bounds when the
 manifest must fail if important compact budget fields stop being guarded. It
 supports `required_fields`, `min_bound_key_count`, `min_guarded_field_count`,
