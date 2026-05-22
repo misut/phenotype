@@ -3648,6 +3648,14 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(coverage["missing_guarded_fields"], [])
         self.assertEqual(coverage["missing_observed_fields"], [])
         self.assertEqual(
+            coverage["unguarded_observed_fields"],
+            sorted(
+                set(coverage["observed_fields"])
+                - set(coverage["guarded_fields"])))
+        self.assertEqual(
+            coverage["unguarded_observed_field_count"],
+            len(coverage["unguarded_observed_fields"]))
+        self.assertEqual(
             coverage["required_fields"],
             [
                 "bounded_texture_copy",
@@ -3700,6 +3708,17 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             coverage["missing_guarded_fields"],
             ["max_frame_capture_pixels"])
         self.assertEqual(coverage["missing_observed_fields"], [])
+        self.assertEqual(
+            coverage["unguarded_observed_fields"],
+            sorted(
+                set(coverage["observed_fields"])
+                - set(coverage["guarded_fields"])))
+        self.assertEqual(
+            coverage["unguarded_observed_field_count"],
+            len(coverage["unguarded_observed_fields"]))
+        self.assertIn(
+            "max_frame_capture_pixels",
+            coverage["unguarded_observed_fields"])
         failures = {
             item["name"]: item
             for item in report["failures"]
@@ -4866,6 +4885,14 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(coverage["missing_guarded_fields"], [])
         self.assertEqual(coverage["missing_observed_fields"], [])
         self.assertEqual(
+            coverage["unguarded_observed_fields"],
+            sorted(
+                set(coverage["observed_fields"])
+                - set(coverage["guarded_fields"])))
+        self.assertEqual(
+            coverage["unguarded_observed_field_count"],
+            len(coverage["unguarded_observed_fields"]))
+        self.assertEqual(
             report["manifest"][
                 "material_quality_policy_coverage_required_fields"],
             coverage["required_fields"])
@@ -4905,6 +4932,17 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             coverage["missing_guarded_fields"],
             ["noise_disabled"])
         self.assertEqual(coverage["missing_observed_fields"], [])
+        self.assertEqual(
+            coverage["unguarded_observed_fields"],
+            sorted(
+                set(coverage["observed_fields"])
+                - set(coverage["guarded_fields"])))
+        self.assertEqual(
+            coverage["unguarded_observed_field_count"],
+            len(coverage["unguarded_observed_fields"]))
+        self.assertIn(
+            "noise_disabled",
+            coverage["unguarded_observed_fields"])
         failures = {
             item["name"]: item
             for item in report["failures"]

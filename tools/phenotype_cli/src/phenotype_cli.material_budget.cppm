@@ -1112,6 +1112,19 @@ auto material_bound_coverage_from_object(json::Object const& coverage)
         if (!contains_field(guarded_lookup, field))
             unguarded_observed_fields.push_back(field);
     }
+    auto const* raw_unguarded_observed = json_object_member(
+        coverage,
+        "unguarded_observed_fields");
+    if (raw_unguarded_observed && raw_unguarded_observed->is_array()) {
+        unguarded_observed_fields = json_object_string_array(
+            coverage,
+            "unguarded_observed_fields");
+    }
+    auto unguarded_observed_field_count = json_object_integer(
+        coverage,
+        "unguarded_observed_field_count")
+            .value_or(static_cast<std::int64_t>(
+                unguarded_observed_fields.size()));
     return MaterialBoundCoverageSummary{
         .guardable_field_count = json_object_integer(
             coverage,
@@ -1134,8 +1147,7 @@ auto material_bound_coverage_from_object(json::Object const& coverage)
         .bound_key_count = json_object_integer(
             coverage,
             "bound_key_count").value_or(-1),
-        .unguarded_observed_field_count =
-            static_cast<std::int64_t>(unguarded_observed_fields.size()),
+        .unguarded_observed_field_count = unguarded_observed_field_count,
         .missing_guarded_fields = json_object_string_array(
             coverage,
             "missing_guarded_fields"),

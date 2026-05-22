@@ -256,6 +256,7 @@ auto sample_report() -> json::Value {
           "observed_required_field_count": 2,
           "missing_guarded_fields": [],
           "missing_observed_fields": [],
+          "unguarded_observed_field_count": 1,
           "observed_fields": [
             "bounded_texture_copy",
             "max_frame_capture_pixels",
@@ -264,6 +265,9 @@ auto sample_report() -> json::Value {
           "guarded_fields": [
             "bounded_texture_copy",
             "max_plan_sample_taps"
+          ],
+          "unguarded_observed_fields": [
+            "max_frame_capture_pixels"
           ],
           "required_fields": [
             "bounded_texture_copy",
@@ -349,6 +353,7 @@ auto sample_report() -> json::Value {
           "observed_required_field_count": 2,
           "missing_guarded_fields": [],
           "missing_observed_fields": [],
+          "unguarded_observed_field_count": 4,
           "observed_fields": [
             "backdrop_sampling_disabled",
             "max_backdrop_pixels",
@@ -360,6 +365,12 @@ auto sample_report() -> json::Value {
           "guarded_fields": [
             "max_blur_radius",
             "noise_disabled"
+          ],
+          "unguarded_observed_fields": [
+            "backdrop_sampling_disabled",
+            "max_backdrop_pixels",
+            "max_sample_taps",
+            "shadow_disabled"
           ],
           "required_fields": [
             "max_blur_radius",
