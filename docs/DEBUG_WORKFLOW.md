@@ -151,10 +151,13 @@ full report. `verifier.material_resource_bound_summary` and
 shape for `require_material_resource_bounds`;
 `verifier.material_quality_policy_bound_summary` and
 `verifier.material_quality_policy_bound_results` do the same for
-`require_material_quality_policy`. `verifier.verifier_failure_summary` carries
-the same compact
-failure count, top likely layer/pass, top suggested action, and first failure
-details that the text output prints when the parsed verifier report fails.
+`require_material_quality_policy`. The raw verifier report can also enforce
+manifest coverage contracts for resource and quality-policy bounds; those
+coverage summaries live under `material_plans.resource_bound_coverage` and
+`material_plans.quality_policy_bound_coverage`.
+`verifier.verifier_failure_summary` carries the same compact failure count, top
+likely layer/pass, top suggested action, and first failure details that the text
+output prints when the parsed verifier report fails.
 Use this as the first artifact triage command when a CI log or local bundle
 needs one machine-readable explanation before deeper pixel-contract debugging.
 Without `--json`, the same command prints short `snapshot material budget` and
@@ -1674,6 +1677,16 @@ their bound operator, expected value, actual value, pass/fail state, and margin,
 plus the tightest bound key/field and full tightest bound result. This separates
 hard failures from budgets that are passing with no headroom while keeping the
 responsible verifier fields and values visible in the compact output.
+Use `require_material_resource_bound_coverage` and
+`require_material_quality_policy_coverage` next to resource and quality-policy
+bounds when the manifest must prove that important Liquid Glass resource and
+legibility guard fields are both observed and bounded. They use the same
+`required_fields`, `min_bound_key_count`, `min_guarded_field_count`, and
+`min_observed_field_count` grammar as executor budget coverage. Failures point
+at the missing manifest bound set or the missing
+`material_plans.resource_bounds` / `material_plans.quality_policy` telemetry,
+and the raw report records coverage summaries under `resource_bound_coverage`
+and `quality_policy_bound_coverage`.
 Whenever material plans are present, the verifier also cross-checks executor
 counts, including `material_executor_summary.container_groups.*`, against
 `renderer.material_plans#summary`: `plan_count`,
