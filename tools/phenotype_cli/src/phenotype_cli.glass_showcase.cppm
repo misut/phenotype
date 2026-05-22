@@ -418,26 +418,36 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
     if (auto budget = material_budget_from_verifier(summary.verifier_result)) {
         std::println("material budget:");
         std::println(
-            "  plans: {} sampled={} fallback={} stages={} backdrop-stages={}",
+            "  plans: {} sampled={} fallback={} stages={} active={} "
+            "backdrop-stages={} dropped={}",
             budget_count(budget->plan_count),
             budget_count(budget->sampled_backdrop_instance_count),
             budget_count(budget->fallback_instance_count),
             budget_count(budget->execution_stage_count),
-            budget_count(budget->backdrop_execution_stage_count));
+            budget_count(budget->active_execution_stage_count),
+            budget_count(budget->backdrop_execution_stage_count),
+            budget_count(budget->dropped_execution_stage_count));
         std::println(
-            "  work: draw-calls={} taps={} upload={}/{} bytes "
-            "copy={}/{} px surface-sample={} px",
+            "  work: draw-calls={} taps={} max-taps={} upload={}/{} bytes "
+            "copy={}/{} px frame-capture={}/{} px surface-sample={} px",
             budget_count(budget->draw_calls),
             budget_count(budget->total_sample_taps),
+            budget_count(budget->max_sample_taps),
             budget_count(budget->upload_bytes),
             budget_count(budget->buffer_capacity_bytes),
             budget_count(budget->backdrop_copy_pixels),
             budget_count(budget->max_backdrop_pixels),
+            budget_count(budget->planned_frame_capture_count),
+            budget_count(budget->planned_frame_capture_pixels),
             budget_count(budget->planned_surface_sample_pixels));
         std::println(
-            "  status: upload={} draw={} copy-policy={} skip={}",
+            "  status: upload={} draw={} uploaded={} drawn={} "
+            "copy-required={} copy-policy={} skip={}",
             budget->upload_status,
             budget->draw_status,
+            budget_bool_text(budget->uploaded),
+            budget_bool_text(budget->drawn),
+            budget_bool_text(budget->backdrop_copy_required),
             budget->backdrop_copy_policy,
             budget->backdrop_copy_skip_reason);
     }

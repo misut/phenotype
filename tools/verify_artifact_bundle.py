@@ -1034,6 +1034,8 @@ def material_executor_budget_context(
             "active_execution_stage_count"),
         "backdrop_execution_stage_count": executor_summary.get(
             "backdrop_execution_stage_count"),
+        "dropped_execution_stage_count": executor_summary.get(
+            "dropped_execution_stage_count"),
         "draw_calls": executor_summary.get("material_draw_calls"),
         "total_sample_taps": executor_summary.get(
             "material_total_sample_taps"),
