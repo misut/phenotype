@@ -1591,6 +1591,10 @@ int main() {
     assert(contains_text(failure_json, "\"actual\":\"1.25\""));
     assert(contains_text(
         failure_json,
+        "\"expected_value\":{\"max\":{\"upload_utilization\":1},\"samples\":[\"toolbar\",\"sidebar\"]}"));
+    assert(contains_text(failure_json, "\"actual_value\":1.25"));
+    assert(contains_text(
+        failure_json,
         "\"missing_field_sources\":\"max_frame_capture_pixels=4096 pass=resource-budget"));
     assert(contains_text(
         failure_json,
@@ -1768,6 +1772,10 @@ int main() {
     assert(contains_text(
         minimum_json,
         "\"actual\":\"count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)\""));
+    assert(contains_text(minimum_json, "\"expected_value\":{\">=\":2}"));
+    assert(contains_text(
+        minimum_json,
+        "\"actual_value\":{\"bound_keys\":[\"draw_calls_gte\"],\"count\":1,\"guarded_fields\":[\"draw_calls\"]"));
     assert(contains_text(
         minimum_json,
         "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":\"budget.min_guarded_field_count\""));

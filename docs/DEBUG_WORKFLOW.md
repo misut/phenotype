@@ -1753,7 +1753,11 @@ local run can show the relevant field, pass, and path without rerunning with
 rendered text, and total/shown/omitted/truncated counts; the same structured
 object is repeated on each compact `failures[]` detail that has missing-field
 sources, so automation can consume either the aggregate or the printed failure
-window without reparsing the compact string. Minimum-count failures include
+window without reparsing the compact string. Compact `failures[]` details keep
+the human-rendered `expected` and `actual` strings for quick scanning and also
+include raw `expected_value` and `actual_value` JSON values for the same printed
+failure window, so automation does not need to reopen the full verifier report
+just to recover typed values. Minimum-count failures include
 their own context: failed bound-key, guarded-field, and
 observed-field floors report
 `actual.count` plus the currently guarded or observed field lists, and

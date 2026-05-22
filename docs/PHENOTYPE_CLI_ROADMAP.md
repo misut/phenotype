@@ -211,7 +211,11 @@ that aggregate as `missing_field_source_details.entries[]` with raw source
 descriptors, rendered text, and total/shown/omitted/truncated counts, and each
 compact `failures[]` detail with missing-field sources now repeats the same
 structured object for the printed failure window. Automation can consume
-missing-guard sources without string parsing. Coverage minimum count failures
+missing-guard sources without string parsing. Compact `failures[]` details keep
+the human-rendered `expected` and `actual` strings for quick scanning and also
+include raw `expected_value` and `actual_value` JSON values for the same printed
+failure window, so automation can recover typed values without opening the full
+verifier report. Coverage minimum count failures
 now carry `actual.count` plus the active bound keys, guarded or
 observed fields, and unguarded observed source descriptors when those explain a
 guarded-field shortfall; CLI compact failure details render the same shape as
