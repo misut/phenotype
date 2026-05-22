@@ -3218,52 +3218,100 @@ auto json_object_compact_failure_text_json(json::Object const& object,
     return failure_optional_string_json(text);
 }
 
-auto failure_missing_field_sources_text(json::Object const& failure,
-                                        std::size_t limit = 3)
-        -> std::string {
+auto missing_field_source_text(std::string_view field,
+                               json::Object const& source) -> std::string {
+    auto text = std::string{field};
+    if (auto number = json_object_number(source, "value")) {
+        text += "=";
+        text += budget_number_text(*number);
+    }
+    if (auto pass = json_object_string(source, "likely_pass");
+        !pass.empty()) {
+        text += " pass=";
+        text += pass;
+    }
+    if (auto path = json_object_string(source, "source_path");
+        !path.empty()) {
+        text += " path=";
+        text += path;
+    }
+    return text;
+}
+
+auto failure_missing_field_sources_object(json::Object const& failure)
+        -> json::Object const* {
     auto const* actual = json_object_member(failure, "actual");
     if (!actual || !actual->is_object())
-        return {};
-    auto const* sources_value = json_object_member(
+        return nullptr;
+    auto const* sources = json_object_member(
         actual->as_object(),
         "missing_field_sources");
-    if (!sources_value || !sources_value->is_object())
-        return {};
+    return sources && sources->is_object() ? &sources->as_object() : nullptr;
+}
 
-    auto const& sources = sources_value->as_object();
+auto missing_field_sources_text(json::Object const& sources,
+                                std::size_t limit = 3)
+        -> std::string {
     auto parts = std::vector<std::string>{};
-    auto printed = std::size_t{0};
     for (auto const& [field, value] : sources) {
-        if (printed >= limit)
+        if (parts.size() >= limit)
             break;
         if (!value.is_object())
             continue;
-        auto const& source = value.as_object();
-        auto text = std::string{field};
-        if (auto number = json_object_number(source, "value")) {
-            text += "=";
-            text += budget_number_text(*number);
-        }
-        if (auto pass = json_object_string(source, "likely_pass");
-            !pass.empty()) {
-            text += " pass=";
-            text += pass;
-        }
-        if (auto path = json_object_string(source, "source_path");
-            !path.empty()) {
-            text += " path=";
-            text += path;
-        }
-        parts.push_back(std::move(text));
-        ++printed;
+        parts.push_back(missing_field_source_text(field, value.as_object()));
     }
     if (parts.empty())
         return {};
 
     auto text = std::views::join_with(parts, std::string_view{"; "})
         | std::ranges::to<std::string>();
-    if (sources.size() > printed)
-        text += std::format("; +{} more", sources.size() - printed);
+    if (sources.size() > parts.size())
+        text += std::format("; +{} more", sources.size() - parts.size());
+    return text;
+}
+
+auto failure_missing_field_sources_text(json::Object const& failure,
+                                        std::size_t limit = 3)
+        -> std::string {
+    auto const* sources = failure_missing_field_sources_object(failure);
+    return sources ? missing_field_sources_text(*sources, limit) : std::string{};
+}
+
+auto verifier_missing_field_sources_text(json::Value const& report,
+                                         std::size_t limit = 5)
+        -> std::string {
+    auto const* failures = json_array_at(report, {"failures"});
+    if (!failures)
+        return {};
+
+    auto entries = std::vector<std::string>{};
+    auto seen = std::set<std::string>{};
+    for (auto const& failure : *failures) {
+        if (!failure.is_object())
+            continue;
+        auto const* sources =
+            failure_missing_field_sources_object(failure.as_object());
+        if (!sources)
+            continue;
+        for (auto const& [field, value] : *sources) {
+            if (!value.is_object())
+                continue;
+            auto text = missing_field_source_text(field, value.as_object());
+            if (text.empty() || !seen.insert(text).second)
+                continue;
+            entries.push_back(std::move(text));
+        }
+    }
+    if (entries.empty())
+        return {};
+
+    auto count = std::min(limit, entries.size());
+    auto selected = std::vector<std::string>{entries.begin(),
+                                            entries.begin() + count};
+    auto text = std::views::join_with(selected, std::string_view{"; "})
+        | std::ranges::to<std::string>();
+    if (entries.size() > count)
+        text += std::format("; +{} more", entries.size() - count);
     return text;
 }
 
@@ -4796,6 +4844,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         "\"manifest_context\":{},\"budget_coverage\":{},"
         "\"resource_bound_coverage\":{},"
         "\"quality_policy_bound_coverage\":{},"
+        "\"missing_field_sources\":{},"
         "\"material_context\":{},"
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
         "\"by_path\":{},"
@@ -4821,6 +4870,8 @@ auto verifier_failure_summary_json(json::Value const& report)
         verifier_material_budget_coverage_json(report),
         verifier_material_resource_bound_coverage_json(report),
         verifier_material_quality_policy_coverage_json(report),
+        failure_optional_string_json(
+            verifier_missing_field_sources_text(report)),
         failure_material_context_json(report),
         failure_json_value_or_null(
             report,
@@ -4917,6 +4968,10 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto coverage = verifier_material_quality_policy_coverage_text(report);
         !coverage.empty()) {
         lines.push_back("  quality-coverage: " + coverage);
+    }
+    if (auto sources = verifier_missing_field_sources_text(report);
+        !sources.empty()) {
+        lines.push_back("  coverage-missing-sources: " + sources);
     }
     if (auto sources = verifier_material_budget_sources_text(report);
         !sources.empty()) {
