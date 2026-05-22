@@ -506,6 +506,9 @@ int main() {
         "\"bound_summaries\":{\"executor\":{\"bound_count\":3,\"pass_count\":2,\"fail_count\":1,\"tightest_bound_key\":\"upload_utilization_lte\",\"tightest_bound_field\":\"upload_utilization\",\"tightest_bound_margin\":0.9375,\"failed_keys\":[\"draw_calls_gte\"]},\"resource\":{\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"tightest_bound_key\":\"max_plan_sample_taps_lte\",\"tightest_bound_field\":\"max_plan_sample_taps\",\"tightest_bound_margin\":0,\"failed_keys\":[]},\"quality\":{\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"tightest_bound_key\":\"require_noise_allowed\",\"tightest_bound_field\":\"noise_disabled\",\"tightest_bound_margin\":0,\"failed_keys\":[]}}"));
     assert(contains_text(
         failure_json,
+        "\"failed_bound_results\":{\"executor\":[{\"key\":\"draw_calls_gte\",\"field\":\"draw_calls\",\"bound\":\"gte\",\"expected\":3,\"actual\":2,\"ok\":false,\"margin\":-1}],\"resource\":[],\"quality\":[]}"));
+    assert(contains_text(
+        failure_json,
         "\"manifest_context\":{\"name\":\"unit-material-gate\",\"pixel_regions\":2,\"pixel_region_metrics\":3,\"pixel_region_metric_comparisons\":4,\"forbid_pixel_region_colors\":1,\"runtime_numeric_bounds\":5,\"material_executor_budget_bounds\":3,\"material_executor_budget_bound_keys\":[\"execution_stage_count_lte\",\"draw_calls_gte\",\"upload_utilization_lte\"],\"material_executor_budget_fields\":[\"draw_calls\",\"execution_stage_count\",\"upload_utilization\"],\"material_resource_bounds\":2,\"material_resource_bound_keys\":[\"max_plan_sample_taps_lte\",\"require_bounded_texture_copy\"],\"material_resource_bound_fields\":[\"max_plan_sample_taps\",\"unbounded_texture_copy\"],\"material_executor_budget_coverage_required_fields\":[\"draw_calls\",\"execution_stage_count\"],\"material_quality_policy_bounds\":2,\"material_quality_policy_bound_keys\":[\"max_blur_radius_lte\",\"require_noise_allowed\"],\"material_quality_policy_fields\":[\"max_blur_radius\",\"noise_disabled\"]}"));
     assert(contains_text(
         failure_json,
@@ -550,6 +553,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "bounds: executor=2/3,fail=1,tightest=upload_utilization_lte,failed=(draw_calls_gte); resource=2/2,fail=0,tightest=max_plan_sample_taps_lte; quality=2/2,fail=0,tightest=require_noise_allowed"));
+    assert(contains_line(
+        failure_lines,
+        "failed-bounds: executor=fail draw_calls_gte actual=2 expected>=3 margin=-1"));
     assert(contains_line(
         failure_lines,
         "manifest: name=unit-material-gate runtime=5 pixel-regions=2 budget=3 resource=2 quality=2 required-budget=(draw_calls, execution_stage_count) budget-keys=(execution_stage_count_lte, draw_calls_gte, upload_utilization_lte) resource-keys=(max_plan_sample_taps_lte, require_bounded_texture_copy) quality-keys=(max_blur_radius_lte, require_noise_allowed)"));
