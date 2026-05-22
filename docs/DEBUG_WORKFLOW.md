@@ -1750,9 +1750,11 @@ compact aggregate `coverage-missing-sources` line and repeat it on the relevant
 local run can show the relevant field, pass, and path without rerunning with
 `--json` or depending on failure order. Compact JSON also publishes
 `missing_field_source_details.entries[]` with the field, raw source descriptor,
-rendered text, and total/shown/omitted/truncated counts, so automation can
-consume the aggregate without reparsing the compact string. Minimum-count
-failures include their own context: failed bound-key, guarded-field, and
+rendered text, and total/shown/omitted/truncated counts; the same structured
+object is repeated on each compact `failures[]` detail that has missing-field
+sources, so automation can consume either the aggregate or the printed failure
+window without reparsing the compact string. Minimum-count failures include
+their own context: failed bound-key, guarded-field, and
 observed-field floors report
 `actual.count` plus the currently guarded or observed field lists, and
 guarded-field floor failures include `actual.unguarded_observed_sources` when
