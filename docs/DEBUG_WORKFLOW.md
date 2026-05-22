@@ -1748,7 +1748,11 @@ behind the missing guard. CLI non-JSON failure summaries print the same data as 
 compact aggregate `coverage-missing-sources` line and repeat it on the relevant
 `missing-field-sources` detail line for the first few verifier failures, so a
 local run can show the relevant field, pass, and path without rerunning with
-`--json` or depending on failure order. Compact JSON also publishes
+`--json` or depending on failure order. When either aggregate is present,
+non-JSON output also prints `coverage-missing-sources-window` or
+`coverage-minimum-failures-window` with shown, total, omitted, limit, and
+truncation fields, so local logs expose the same bounded-list shape as compact
+JSON. Compact JSON also publishes
 `missing_field_source_details.entries[]` with the field, raw source descriptor,
 rendered text, and total/shown/omitted/truncated counts; the same structured
 object is repeated on each compact `failures[]` detail that has missing-field

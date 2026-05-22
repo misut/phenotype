@@ -3542,6 +3542,24 @@ auto failure_coverage_minimum_failure_details_json(
     return coverage_minimum_failure_detail_entries_json(entries, limit);
 }
 
+auto compact_detail_window_text(std::string_view label,
+                                std::size_t total,
+                                std::size_t limit) -> std::string {
+    if (total == 0)
+        return {};
+
+    auto shown = std::min(limit, total);
+    auto omitted = total - shown;
+    return std::format(
+        "{}: shown={}/{} omitted={} limit={} truncated={}",
+        label,
+        shown,
+        total,
+        omitted,
+        limit,
+        omitted > 0 ? "true" : "false");
+}
+
 auto verifier_coverage_minimum_failure_details_json(
         json::Value const& report,
         std::size_t limit = 5) -> std::string {
@@ -3562,9 +3580,8 @@ auto verifier_coverage_minimum_failure_details_json(
     return coverage_minimum_failure_detail_entries_json(entries, limit);
 }
 
-auto verifier_coverage_minimum_failures_text(json::Value const& report,
-                                             std::size_t limit = 5)
-        -> std::string {
+auto verifier_coverage_minimum_failure_text_entries(
+        json::Value const& report) -> std::vector<std::string> {
     auto const* failures = json_array_at(report, {"failures"});
     if (!failures)
         return {};
@@ -3579,6 +3596,22 @@ auto verifier_coverage_minimum_failures_text(json::Value const& report,
             continue;
         entries.push_back(std::move(text));
     }
+    return entries;
+}
+
+auto verifier_coverage_minimum_failure_window_text(
+        json::Value const& report,
+        std::size_t limit = 5) -> std::string {
+    return compact_detail_window_text(
+        "coverage-minimum-failures-window",
+        verifier_coverage_minimum_failure_text_entries(report).size(),
+        limit);
+}
+
+auto verifier_coverage_minimum_failures_text(json::Value const& report,
+                                             std::size_t limit = 5)
+        -> std::string {
+    auto entries = verifier_coverage_minimum_failure_text_entries(report);
     if (entries.empty())
         return {};
 
@@ -3618,9 +3651,8 @@ auto verifier_missing_field_source_details_json(json::Value const& report,
     return missing_field_source_detail_entries_json(entries, limit);
 }
 
-auto verifier_missing_field_sources_text(json::Value const& report,
-                                         std::size_t limit = 5)
-        -> std::string {
+auto verifier_missing_field_source_text_entries(json::Value const& report)
+        -> std::vector<std::string> {
     auto const* failures = json_array_at(report, {"failures"});
     if (!failures)
         return {};
@@ -3643,6 +3675,22 @@ auto verifier_missing_field_sources_text(json::Value const& report,
             entries.push_back(std::move(text));
         }
     }
+    return entries;
+}
+
+auto verifier_missing_field_source_window_text(json::Value const& report,
+                                               std::size_t limit = 5)
+        -> std::string {
+    return compact_detail_window_text(
+        "coverage-missing-sources-window",
+        verifier_missing_field_source_text_entries(report).size(),
+        limit);
+}
+
+auto verifier_missing_field_sources_text(json::Value const& report,
+                                         std::size_t limit = 5)
+        -> std::string {
+    auto entries = verifier_missing_field_source_text_entries(report);
     if (entries.empty())
         return {};
 
@@ -5352,10 +5400,18 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto sources = verifier_missing_field_sources_text(report);
         !sources.empty()) {
         lines.push_back("  coverage-missing-sources: " + sources);
+        if (auto window = verifier_missing_field_source_window_text(report);
+            !window.empty()) {
+            lines.push_back("  " + window);
+        }
     }
     if (auto minimums = verifier_coverage_minimum_failures_text(report);
         !minimums.empty()) {
         lines.push_back("  coverage-minimum-failures: " + minimums);
+        if (auto window = verifier_coverage_minimum_failure_window_text(report);
+            !window.empty()) {
+            lines.push_back("  " + window);
+        }
     }
     if (auto sources = verifier_material_budget_sources_text(report);
         !sources.empty()) {
