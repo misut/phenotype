@@ -650,12 +650,13 @@ void print_verifier_manifest_summary(
             continue;
         auto const& manifest = *item.verifier_manifest;
         std::println(
-            "  {}: name={} runtime-details={} runtime-bounds={} "
+            "  {}: name={} runtime-details={} debug-details={} runtime-bounds={} "
             "budget-bounds={} resource-bounds={} quality-policy-bounds={} "
             "pixel-regions={} metrics={} comparisons={} forbidden-colors={}",
             case_label(item),
             manifest.name,
             budget_count(manifest.runtime_details),
+            budget_count(manifest.debug_details),
             budget_count(manifest.runtime_numeric_bounds),
             budget_count(manifest.material_executor_budget_bounds),
             budget_count(manifest.material_resource_bounds),
@@ -668,6 +669,11 @@ void print_verifier_manifest_summary(
                 verifier_manifest_runtime_detail_paths_text(manifest);
             !runtime_paths.empty()) {
             std::println("    runtime-detail-paths: {}", runtime_paths);
+        }
+        if (auto debug_paths =
+                verifier_manifest_debug_detail_paths_text(manifest);
+            !debug_paths.empty()) {
+            std::println("    debug-detail-paths: {}", debug_paths);
         }
         if (auto minimums = verifier_manifest_coverage_minimums_text(manifest);
             !minimums.empty()) {

@@ -35,6 +35,12 @@ auto sample_report() -> json::Value {
           "renderer.material_executor_summary.material_sampled_backdrop_uploaded",
           "renderer.material_executor_summary.material_upload_status"
         ],
+        "debug_details": 3,
+        "debug_detail_paths": [
+          "application.file_explorer.chrome.geometry.titlebar_transparent",
+          "application.file_explorer.input.commands.duplicate",
+          "platform_capabilities.material_capability_profile"
+        ],
         "runtime_numeric_bounds": 5,
         "material_executor_budget_bounds": 3,
         "material_executor_budget_bound_keys": [
@@ -618,6 +624,8 @@ int main() {
     assert(manifest->name == "unit-material-gate");
     assert(manifest->runtime_details == 4);
     assert(manifest->runtime_detail_paths.size() == 4);
+    assert(manifest->debug_details == 3);
+    assert(manifest->debug_detail_paths.size() == 3);
     assert(manifest->material_executor_budget_bounds == 3);
     assert(manifest->material_resource_bounds == 2);
     assert(manifest->material_quality_policy_bounds == 2);
@@ -642,11 +650,18 @@ int main() {
     assert(contains_text(
         verifier_manifest_runtime_detail_paths_text(*manifest),
         "renderer.material_executor_summary.material_draw_status"));
+    assert(contains_text(
+        verifier_manifest_debug_detail_paths_text(*manifest),
+        "application.file_explorer.chrome.geometry.titlebar_transparent"));
     auto manifest_json = verifier_manifest_summary_json(manifest);
     assert(contains_text(manifest_json, R"("runtime_details":4)"));
+    assert(contains_text(manifest_json, R"("debug_details":3)"));
     assert(contains_text(
         manifest_json,
         R"("runtime_detail_paths":["renderer.material_executor_summary.material_draw_status")"));
+    assert(contains_text(
+        manifest_json,
+        R"("debug_detail_paths":["application.file_explorer.chrome.geometry.titlebar_transparent")"));
     auto pressure_sources = std::vector<BoundPressureSource>{
         {.key = "a", .field = "field_a", .bound = "lte",
          .expected = 1.0, .actual = 1.0, .ok = true, .margin = 0.0},
@@ -989,7 +1004,7 @@ int main() {
         "pressure: executor=fail,pass=2/3,fail=1,zero=1,negative=1,tightest=upload_utilization_lte,field=upload_utilization,tightest-margin=0.9375,tightest-result=(pass upload_utilization_lte/upload_utilization actual=0.0625 expected<=1 margin=0.9375),zero-sources=(pass execution_stage_count_lte/execution_stage_count actual=8 expected<=8 margin=0),negative-sources=(fail draw_calls_gte/draw_calls actual=2 expected>=3 margin=-1),failed=(draw_calls_gte); resource=tight,pass=2/2,fail=0,zero=2,negative=0,tightest=max_plan_sample_taps_lte,field=max_plan_sample_taps,tightest-margin=0,tightest-result=(pass max_plan_sample_taps_lte/max_plan_sample_taps actual=25 expected<=25 margin=0),zero-sources=(pass max_plan_sample_taps_lte/max_plan_sample_taps actual=25 expected<=25 margin=0, pass require_bounded_texture_copy/unbounded_texture_copy actual=0 expected==0 margin=0); quality=tight,pass=2/2,fail=0,zero=2,negative=0,tightest=require_noise_allowed,field=noise_disabled,tightest-margin=0,tightest-result=(pass require_noise_allowed/noise_disabled actual=0 expected==0 margin=0),zero-sources=(pass max_blur_radius_lte/max_blur_radius actual=36 expected<=36 margin=0, pass require_noise_allowed/noise_disabled actual=0 expected==0 margin=0)"));
     assert(contains_line(
         failure_lines,
-        "manifest: name=unit-material-gate runtime-details=4 runtime-bounds=5 pixel-regions=2 budget=3 resource=2 quality=2 required-budget=(draw_calls, execution_stage_count) required-resource=(bounded_texture_copy, max_plan_sample_taps) required-quality=(max_blur_radius, noise_disabled) runtime-detail-paths=(renderer.material_executor_summary.material_draw_status, renderer.material_executor_summary.material_sampled_backdrop_drawn, renderer.material_executor_summary.material_sampled_backdrop_uploaded, renderer.material_executor_summary.material_upload_status) coverage-minimums=(budget=(keys=3 guarded=2 observed=21) resource=(keys=2 guarded=2 observed=2) quality=(keys=2 guarded=2 observed=6)) budget-keys=(execution_stage_count_lte, draw_calls_gte, upload_utilization_lte) resource-keys=(max_plan_sample_taps_lte, require_bounded_texture_copy) quality-keys=(max_blur_radius_lte, require_noise_allowed)"));
+        "manifest: name=unit-material-gate runtime-details=4 debug-details=3 runtime-bounds=5 pixel-regions=2 budget=3 resource=2 quality=2 required-budget=(draw_calls, execution_stage_count) required-resource=(bounded_texture_copy, max_plan_sample_taps) required-quality=(max_blur_radius, noise_disabled) runtime-detail-paths=(renderer.material_executor_summary.material_draw_status, renderer.material_executor_summary.material_sampled_backdrop_drawn, renderer.material_executor_summary.material_sampled_backdrop_uploaded, renderer.material_executor_summary.material_upload_status) debug-detail-paths=(application.file_explorer.chrome.geometry.titlebar_transparent, application.file_explorer.input.commands.duplicate, platform_capabilities.material_capability_profile) coverage-minimums=(budget=(keys=3 guarded=2 observed=21) resource=(keys=2 guarded=2 observed=2) quality=(keys=2 guarded=2 observed=6)) budget-keys=(execution_stage_count_lte, draw_calls_gte, upload_utilization_lte) resource-keys=(max_plan_sample_taps_lte, require_bounded_texture_copy) quality-keys=(max_blur_radius_lte, require_noise_allowed)"));
     assert(contains_line(
         failure_lines,
         "coverage: guarded=3/22 observed=22 guard-keys=3 unguarded=19 (active_execution_stage_count, backdrop_copy_count, backdrop_copy_pixels, backdrop_copy_skipped_count, backdrop_copy_utilization, backdrop_execution_stage_count, buffer_capacity_bytes, dropped_execution_stage_count, +11 more) required=2/2"));

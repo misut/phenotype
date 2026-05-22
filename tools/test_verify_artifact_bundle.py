@@ -2990,6 +2990,16 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                     "equals": "uploaded",
                 },
             ],
+            "require_debug_details": [
+                {
+                    "path": "input_debug.source",
+                    "equals": "test",
+                },
+                {
+                    "path": "platform_capabilities.platform",
+                    "equals": "test",
+                },
+            ],
         }
 
         code, report = self.run_verifier(
@@ -2999,6 +3009,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(report["ok"])
         self.assertEqual(report["manifest"]["runtime_details"], 2)
+        self.assertEqual(report["manifest"]["debug_details"], 2)
         self.assertEqual(
             report["manifest"]["runtime_detail_paths"],
             [
@@ -3007,6 +3018,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                     "material_sampled_backdrop_uploaded"
                 ),
                 "renderer.material_executor_summary.material_upload_status",
+            ])
+        self.assertEqual(
+            report["manifest"]["debug_detail_paths"],
+            [
+                "input_debug.source",
+                "platform_capabilities.platform",
             ])
 
     def test_command_descriptor_mismatch_points_to_material_command(self) -> None:
