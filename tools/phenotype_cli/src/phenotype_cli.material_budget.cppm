@@ -2365,7 +2365,8 @@ auto bound_pressure_state(
         "{{\"state\":{},\"bound_count\":{},\"pass_count\":{},"
         "\"fail_count\":{},\"zero_margin_count\":{},"
         "\"negative_margin_count\":{},\"tightest_bound_key\":{},"
-        "\"tightest_bound_margin\":{},\"failed_keys\":{}}}",
+        "\"tightest_bound_field\":{},\"tightest_bound_margin\":{},"
+        "\"failed_keys\":{}}}",
         json_string(state),
         manifest_count_json(summary->bound_count),
         manifest_count_json(summary->pass_count),
@@ -2373,6 +2374,7 @@ auto bound_pressure_state(
         zero_margin_count,
         negative_margin_count,
         json_string(summary->tightest_bound_key),
+        json_string(summary->tightest_bound_field),
         budget_optional_number(summary->tightest_bound_margin),
         string_array_json(summary->failed_keys));
 }
@@ -2438,7 +2440,7 @@ auto bound_pressure_text(
     }
 
     auto text = std::format(
-        "{}={},pass={}/{},fail={},zero={},negative={},tightest-margin={}",
+        "{}={},pass={}/{},fail={},zero={},negative={},tightest={},field={},tightest-margin={}",
         label,
         state,
         budget_count(summary->pass_count),
@@ -2446,6 +2448,8 @@ auto bound_pressure_text(
         budget_count(summary->fail_count),
         zero_margin_count,
         negative_margin_count,
+        summary->tightest_bound_key.empty() ? "<none>" : summary->tightest_bound_key,
+        summary->tightest_bound_field.empty() ? "<none>" : summary->tightest_bound_field,
         budget_optional_number(summary->tightest_bound_margin));
     if (!summary->failed_keys.empty()) {
         text += std::format(

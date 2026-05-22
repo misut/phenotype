@@ -1660,8 +1660,9 @@ The summaries report pass/fail counts, failed keys, and the tightest bound
 margin so local CLI output can show headroom without scanning the full
 `checks` array. Compact failure summaries additionally classify each bound group
 as `fail`, `tight`, `pass`, or `unknown` and count zero/negative margins in
-`bound_pressure`, which separates hard failures from budgets that are passing
-with no headroom.
+`bound_pressure`, including the tightest bound key and field so no-headroom
+budgets point directly at the responsible verifier field. This separates hard
+failures from budgets that are passing with no headroom.
 Whenever material plans are present, the verifier also cross-checks executor
 counts, including `material_executor_summary.container_groups.*`, against
 `renderer.material_plans#summary`: `plan_count`,
