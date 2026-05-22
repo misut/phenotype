@@ -2332,6 +2332,11 @@ auto verifier_tightest_bound_results_text(json::Value const& report)
 struct BoundPressureSource {
     std::string key;
     std::string field;
+    std::string bound;
+    std::optional<double> expected;
+    std::optional<double> actual;
+    std::optional<bool> ok;
+    std::optional<double> margin;
 };
 
 struct BoundPressureMargins {
@@ -2356,12 +2361,22 @@ auto bound_pressure_margins(
             margins.zero_sources.push_back({
                 .key = result.key,
                 .field = result.field,
+                .bound = result.bound,
+                .expected = result.expected,
+                .actual = result.actual,
+                .ok = result.ok,
+                .margin = result.margin,
             });
         } else if (*result.margin < 0.0) {
             ++margins.negative_count;
             margins.negative_sources.push_back({
                 .key = result.key,
                 .field = result.field,
+                .bound = result.bound,
+                .expected = result.expected,
+                .actual = result.actual,
+                .ok = result.ok,
+                .margin = result.margin,
             });
         }
     }
@@ -2371,9 +2386,15 @@ auto bound_pressure_margins(
 auto bound_pressure_source_json(BoundPressureSource const& source)
         -> std::string {
     return std::format(
-        "{{\"key\":{},\"field\":{}}}",
+        "{{\"key\":{},\"field\":{},\"bound\":{},\"expected\":{},"
+        "\"actual\":{},\"ok\":{},\"margin\":{}}}",
         json_string(source.key),
-        json_string(source.field));
+        json_string(source.field),
+        json_string(source.bound),
+        budget_optional_number(source.expected),
+        budget_optional_number(source.actual),
+        budget_bool(source.ok),
+        budget_optional_number(source.margin));
 }
 
 auto bound_pressure_sources_json(
@@ -2390,9 +2411,23 @@ auto bound_pressure_sources_json(
 
 auto bound_pressure_source_text(BoundPressureSource const& source)
         -> std::string {
-    if (source.field.empty())
-        return source.key;
-    return std::format("{}/{}", source.key, source.field);
+    auto op = std::string{"=="};
+    if (source.bound == "lte") {
+        op = "<=";
+    } else if (source.bound == "gte") {
+        op = ">=";
+    }
+    auto status = source.ok ? (*source.ok ? "pass" : "fail") : "unknown";
+    auto target = source.field.empty()
+        ? source.key
+        : std::format("{}/{}", source.key, source.field);
+    return std::format(
+        "{} {} actual={} expected{} margin={}",
+        status,
+        target,
+        budget_optional_number(source.actual),
+        op + budget_optional_number(source.expected),
+        budget_optional_number(source.margin));
 }
 
 auto bound_pressure_sources_text(
