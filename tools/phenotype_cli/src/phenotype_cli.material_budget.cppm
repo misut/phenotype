@@ -3507,23 +3507,9 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
         json_object_failure_string_json(failure, "suggested_action"));
 }
 
-auto verifier_coverage_minimum_failure_details_json(
-        json::Value const& report,
-        std::size_t limit = 5) -> std::string {
-    auto const* failures = json_array_at(report, {"failures"});
-    if (!failures)
-        return "null";
-
-    auto entries = std::vector<std::string>{};
-    auto seen = std::set<std::string>{};
-    for (auto const& failure : *failures) {
-        if (!failure.is_object())
-            continue;
-        auto detail = coverage_minimum_failure_detail_json(failure.as_object());
-        if (detail.empty() || !seen.insert(detail).second)
-            continue;
-        entries.push_back(std::move(detail));
-    }
+auto coverage_minimum_failure_detail_entries_json(
+        std::vector<std::string> const& entries,
+        std::size_t limit) -> std::string {
     if (entries.empty())
         return "null";
 
@@ -3542,6 +3528,38 @@ auto verifier_coverage_minimum_failure_details_json(
         entries.size() - count,
         entries.size() > count ? "true" : "false");
     return out;
+}
+
+auto failure_coverage_minimum_failure_details_json(
+        json::Object const& failure,
+        std::size_t limit = 1) -> std::string {
+    auto detail = coverage_minimum_failure_detail_json(failure);
+    if (detail.empty())
+        return "null";
+
+    auto entries = std::vector<std::string>{};
+    entries.push_back(std::move(detail));
+    return coverage_minimum_failure_detail_entries_json(entries, limit);
+}
+
+auto verifier_coverage_minimum_failure_details_json(
+        json::Value const& report,
+        std::size_t limit = 5) -> std::string {
+    auto const* failures = json_array_at(report, {"failures"});
+    if (!failures)
+        return "null";
+
+    auto entries = std::vector<std::string>{};
+    auto seen = std::set<std::string>{};
+    for (auto const& failure : *failures) {
+        if (!failure.is_object())
+            continue;
+        auto detail = coverage_minimum_failure_detail_json(failure.as_object());
+        if (detail.empty() || !seen.insert(detail).second)
+            continue;
+        entries.push_back(std::move(detail));
+    }
+    return coverage_minimum_failure_detail_entries_json(entries, limit);
 }
 
 auto verifier_coverage_minimum_failures_text(json::Value const& report,
@@ -5099,6 +5117,7 @@ auto verifier_failure_detail_json(json::Object const& failure)
         "\"likely_layer\":{},\"likely_pass\":{},\"expected\":{},"
         "\"actual\":{},\"missing_field_sources\":{},"
         "\"missing_field_source_details\":{},"
+        "\"coverage_minimum_failure_details\":{},"
         "\"hint\":{},\"suggested_action\":{}}}",
         json_object_failure_string_json(failure, "name"),
         json_object_failure_string_json(failure, "message"),
@@ -5111,6 +5130,7 @@ auto verifier_failure_detail_json(json::Object const& failure)
         failure_optional_string_json(
             failure_missing_field_sources_text(failure)),
         failure_missing_field_source_details_json(failure),
+        failure_coverage_minimum_failure_details_json(failure),
         json_object_failure_string_json(failure, "hint"),
         json_object_failure_string_json(failure, "suggested_action"));
 }
