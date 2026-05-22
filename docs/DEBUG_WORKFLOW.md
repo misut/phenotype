@@ -124,7 +124,7 @@ uv-managed verifier, embeds its JSON report in the same envelope, and mirrors
 the verifier's compact `artifact_context.material_contract.executor_budget`
 under `verifier.material_budget` when present. Manifest-backed verifier runs
 also expose `verifier.verifier_manifest` with the manifest name, pixel-region
-counts, runtime detail guard count and paths, runtime numeric bound count,
+counts, runtime/debug detail guard counts and paths, runtime numeric bound count,
 material executor budget bound count, and the exact material executor budget
 bound keys/fields, material resource bound keys/fields, quality-policy bound
 keys/fields, and any coverage minimums for bound-key, guarded-field, and
@@ -286,14 +286,14 @@ expected platform, accessibility display policy, and the same compact material
 budget concepts that `phenotype observe` exposes under
 `snapshot.material.executor_budget`. It also exposes a compact
 `verifier_manifest` summary with the verifier manifest name, pixel-region
-counts, runtime detail guard count and paths, runtime numeric bound count,
+counts, runtime/debug detail guard counts and paths, runtime numeric bound count,
 material executor budget bound count, material resource bound count,
 quality-policy bound count, and the exact manifest guard keys/fields plus
 coverage minimums, so local glass gates can show which manifest status, budget,
 and policy expectations were applied without embedding the full verifier report.
-Non-JSON output prints a compact `runtime-detail-paths` list beside the
-manifest counts so status-string guards are visible without rerunning with
-`--json`.
+Non-JSON output prints compact `runtime-detail-paths` and `debug-detail-paths`
+lists beside the manifest counts so status-string and application-debug guards
+are visible without rerunning with `--json`.
 JSON also includes
 `material_budget_coverage`, which separates manifest-guarded observed budget
 fields from observed-but-unguarded fields, and
@@ -1863,8 +1863,8 @@ capture, runtime pass/stage, paint-layer, texture-copy, and deterministic
 fallback bounds, plus compact `material_container_groups` counters for grouped,
 union, morph, shared-capture, and shape-blend diagnostics, plus a compact
 `verifier_manifest` object that surfaces the manifest runtime/budget/resource/
-policy bound counts, runtime detail guard paths, exact material executor budget
-bound keys, material resource bound keys, quality-policy bound keys, and their
+policy bound counts, runtime/debug detail guard paths, exact material executor
+budget bound keys, material resource bound keys, quality-policy bound keys, and their
 normalized field names applied by the verifier, plus the required coverage
 minimums for budget, resource, and quality-policy bounds, plus
 `material_budget_coverage` showing

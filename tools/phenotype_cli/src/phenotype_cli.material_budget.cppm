@@ -131,6 +131,8 @@ struct VerifierManifestSummary {
     std::int64_t forbid_pixel_region_colors = -1;
     std::int64_t runtime_details = -1;
     std::vector<std::string> runtime_detail_paths;
+    std::int64_t debug_details = -1;
+    std::vector<std::string> debug_detail_paths;
     std::int64_t runtime_numeric_bounds = -1;
     std::int64_t material_executor_budget_bounds = -1;
     std::vector<std::string> material_executor_budget_bound_keys;
@@ -505,6 +507,12 @@ auto verifier_manifest_summary_from_report(json::Value const& report)
         .runtime_detail_paths = json_string_array_at(
             report,
             {"manifest", "runtime_detail_paths"}),
+        .debug_details = json_integer_at(
+            report,
+            {"manifest", "debug_details"}).value_or(-1),
+        .debug_detail_paths = json_string_array_at(
+            report,
+            {"manifest", "debug_detail_paths"}),
         .runtime_numeric_bounds = json_integer_at(
             report,
             {"manifest", "runtime_numeric_bounds"}).value_or(-1),
@@ -1749,6 +1757,15 @@ auto verifier_manifest_runtime_detail_paths_text(
     if (manifest.runtime_detail_paths.empty())
         return {};
     return budget_field_list_text(manifest.runtime_detail_paths, limit);
+}
+
+auto verifier_manifest_debug_detail_paths_text(
+        VerifierManifestSummary const& manifest,
+        std::size_t limit = 6)
+        -> std::string {
+    if (manifest.debug_detail_paths.empty())
+        return {};
+    return budget_field_list_text(manifest.debug_detail_paths, limit);
 }
 
 auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage)
@@ -3483,10 +3500,11 @@ auto verifier_manifest_context_text(json::Value const& report) -> std::string {
         return {};
 
     auto text = std::format(
-        "name={} runtime-details={} runtime-bounds={} pixel-regions={} "
+        "name={} runtime-details={} debug-details={} runtime-bounds={} pixel-regions={} "
         "budget={} resource={} quality={}",
         manifest->name,
         budget_count(manifest->runtime_details),
+        budget_count(manifest->debug_details),
         budget_count(manifest->runtime_numeric_bounds),
         budget_count(manifest->pixel_regions),
         budget_count(manifest->material_executor_budget_bounds),
@@ -3514,6 +3532,11 @@ auto verifier_manifest_context_text(json::Value const& report) -> std::string {
             verifier_manifest_runtime_detail_paths_text(*manifest);
         !runtime_paths.empty()) {
         text += std::format(" runtime-detail-paths=({})", runtime_paths);
+    }
+    if (auto debug_paths =
+            verifier_manifest_debug_detail_paths_text(*manifest);
+        !debug_paths.empty()) {
+        text += std::format(" debug-detail-paths=({})", debug_paths);
     }
     auto minimums = verifier_manifest_coverage_minimums_text(*manifest);
     if (!minimums.empty())
@@ -3854,6 +3877,8 @@ auto verifier_manifest_summary_json(
         "\"forbid_pixel_region_colors\":{},"
         "\"runtime_details\":{},"
         "\"runtime_detail_paths\":{},"
+        "\"debug_details\":{},"
+        "\"debug_detail_paths\":{},"
         "\"runtime_numeric_bounds\":{},"
         "\"material_executor_budget_bounds\":{},"
         "\"material_executor_budget_bound_keys\":{},"
@@ -3883,6 +3908,8 @@ auto verifier_manifest_summary_json(
         manifest_count_json(manifest->forbid_pixel_region_colors),
         manifest_count_json(manifest->runtime_details),
         string_array_json(manifest->runtime_detail_paths),
+        manifest_count_json(manifest->debug_details),
+        string_array_json(manifest->debug_detail_paths),
         manifest_count_json(manifest->runtime_numeric_bounds),
         manifest_count_json(manifest->material_executor_budget_bounds),
         string_array_json(manifest->material_executor_budget_bound_keys),
