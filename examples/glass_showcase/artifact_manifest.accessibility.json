@@ -427,6 +427,38 @@
     "require_bounded_texture_copy": true,
     "require_deterministic_fallback": true
   },
+  "require_material_resource_bound_coverage": {
+    "required_fields": [
+      "active_execution_stages",
+      "active_runtime_passes",
+      "backdrop_execution_stages",
+      "backdrop_runtime_passes",
+      "bounded_texture_copy",
+      "deterministic_fallback",
+      "dropped_execution_stages",
+      "max_backdrop_pixels",
+      "max_budget_blur_radius",
+      "max_container_spacing",
+      "max_execution_stage_capacity",
+      "max_execution_stage_count",
+      "max_execution_stages",
+      "max_frame_capture_count",
+      "max_frame_capture_pixels",
+      "max_pass_count",
+      "max_pass_texture_copy_pixels",
+      "max_plan_blur_radius",
+      "max_plan_sample_taps",
+      "max_sample_taps",
+      "max_sampling_kernel_radius",
+      "max_surface_sample_pixels",
+      "total_execution_stages",
+      "total_runtime_passes",
+      "total_surface_sample_pixels"
+    ],
+    "min_bound_key_count": 47,
+    "min_guarded_field_count": 27,
+    "min_observed_field_count": 25
+  },
   "require_material_executor_budget": {
     "execution_stage_count_equals": 51,
     "active_execution_stage_count_equals": 51,
@@ -466,6 +498,18 @@
     "max_blur_radius_lte": 36.0,
     "max_sample_taps_lte": 25,
     "max_backdrop_pixels_lte": 16777216
+  },
+  "require_material_quality_policy_coverage": {
+    "required_fields": [
+      "backdrop_sampling_disabled",
+      "max_backdrop_pixels",
+      "max_blur_radius",
+      "max_sample_taps",
+      "shadow_disabled"
+    ],
+    "min_bound_key_count": 5,
+    "min_guarded_field_count": 5,
+    "min_observed_field_count": 5
   },
   "require_capabilities": [
     "material_backdrop_blur",

@@ -1686,7 +1686,9 @@ legibility guard fields are both observed and bounded. They use the same
 at the missing manifest bound set or the missing
 `material_plans.resource_bounds` / `material_plans.quality_policy` telemetry,
 and the raw report records coverage summaries under `resource_bound_coverage`
-and `quality_policy_bound_coverage`.
+and `quality_policy_bound_coverage`. The glass showcase, file explorer, and
+Android artifact manifests require those coverage contracts for the shared
+resource bounds and for every quality-policy field they already guard.
 Whenever material plans are present, the verifier also cross-checks executor
 counts, including `material_executor_summary.container_groups.*`, against
 `renderer.material_plans#summary`: `plan_count`,
