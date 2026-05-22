@@ -632,7 +632,12 @@ auto verifier_observation_json(VerifierObservation const& verifier)
     auto const manifest = verifier.report
         ? verifier_manifest_summary_from_report(*verifier.report)
         : std::optional<VerifierManifestSummary>{};
-    auto const coverage = material_budget_coverage_summary(budget, manifest);
+    auto const coverage = verifier.report
+        ? material_budget_coverage_from_report_or_summary(
+            *verifier.report,
+            budget,
+            manifest)
+        : std::optional<MaterialBudgetCoverageSummary>{};
     auto const resource_bound_coverage = verifier.report
         ? material_resource_bound_coverage_from_report(*verifier.report)
         : std::optional<MaterialBoundCoverageSummary>{};
@@ -933,7 +938,10 @@ void print_verifier_material_budget_coverage(
         return;
     auto budget = material_budget_from_report(*verifier.report);
     auto manifest = verifier_manifest_summary_from_report(*verifier.report);
-    auto coverage = material_budget_coverage_summary(budget, manifest);
+    auto coverage = material_budget_coverage_from_report_or_summary(
+        *verifier.report,
+        budget,
+        manifest);
     if (!coverage)
         return;
 

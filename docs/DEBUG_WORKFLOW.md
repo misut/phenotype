@@ -132,7 +132,10 @@ observed-field counts. When both summaries are
 present, `verifier.material_budget_coverage` lists the observed budget fields,
 which observed fields are guarded by manifest bounds, and which observed fields
 are still unguarded. This keeps coverage drift visible without opening the full
-verifier report. The same envelope now preserves
+verifier report. The raw verifier report stores the same executor-budget
+coverage summary next to `artifact_context.material_contract.executor_budget`,
+so raw JSON consumers do not need to rederive guarded/unguarded budget fields.
+The same envelope now preserves
 `verifier.material_resource_bound_coverage` and
 `verifier.material_quality_policy_coverage`, so JSON consumers can see whether
 resource and legibility-policy guard fields are observed and bounded without

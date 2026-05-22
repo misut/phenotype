@@ -1156,9 +1156,11 @@ auto run_file_explorer_case(fs::path const& root,
             material_quality_policy_bound_results_from_report(*verifier_report);
         item.verifier_manifest =
             verifier_manifest_summary_from_report(*verifier_report);
-        item.material_budget_coverage = material_budget_coverage_summary(
-            item.material_budget,
-            item.verifier_manifest);
+        item.material_budget_coverage =
+            material_budget_coverage_from_report_or_summary(
+                *verifier_report,
+                item.material_budget,
+                item.verifier_manifest);
         item.material_resource_bound_coverage =
             material_resource_bound_coverage_from_report(*verifier_report);
         item.material_quality_policy_coverage =

@@ -13420,6 +13420,47 @@ def material_executor_budget_guarded_fields(spec: Any) -> list[str]:
     })
 
 
+def material_executor_budget_coverage_summary(
+        budget: Any,
+        budget_spec: Any,
+        coverage_spec: JsonObject) -> JsonObject:
+    observed_fields = material_executor_budget_observed_fields(budget)
+    guarded_fields = material_executor_budget_guarded_fields(budget_spec)
+    required_fields = coverage_spec.get("required_fields", [])
+    if not isinstance(required_fields, list):
+        required_fields = []
+    missing_guarded = sorted(set(required_fields) - set(guarded_fields))
+    missing_observed = sorted(set(required_fields) - set(observed_fields))
+    unguarded_observed_fields = sorted(
+        set(observed_fields) - set(guarded_fields))
+    covered_required_fields = sorted(
+        set(required_fields) - set(missing_guarded))
+    manifest_bound_keys = (
+        sorted(budget_spec.keys()) if isinstance(budget_spec, dict) else [])
+    return {
+        "guardable_field_count": len(MATERIAL_EXECUTOR_BUDGET_FIELDS),
+        "observed_field_count": len(observed_fields),
+        "guarded_observed_field_count": len(
+            sorted(set(observed_fields) & set(guarded_fields))),
+        "unguarded_observed_field_count": len(unguarded_observed_fields),
+        "required_field_count": len(required_fields),
+        "covered_required_field_count": len(covered_required_fields),
+        "missing_required_field_count": len(missing_guarded),
+        "manifest_field_count": len(guarded_fields),
+        "manifest_bound_key_count": len(manifest_bound_keys),
+        "observed_fields": observed_fields,
+        "guarded_observed_fields": sorted(
+            set(observed_fields) & set(guarded_fields)),
+        "unguarded_observed_fields": unguarded_observed_fields,
+        "required_fields": sorted(required_fields),
+        "covered_required_fields": covered_required_fields,
+        "missing_required_fields": missing_guarded,
+        "missing_observed_fields": missing_observed,
+        "manifest_fields": guarded_fields,
+        "manifest_bound_keys": manifest_bound_keys,
+    }
+
+
 def material_executor_budget_bound_kind(key: str) -> str:
     for suffix, kind in (
             ("_lte", "lte"),
@@ -13545,20 +13586,22 @@ def check_material_executor_budget_coverage_requirements(
         material_contract.get("executor_budget")
         if isinstance(material_contract, dict)
         else None)
-    observed_fields = material_executor_budget_observed_fields(budget)
-    guarded_fields = material_executor_budget_guarded_fields(budget_spec)
-    required_fields = coverage_spec.get("required_fields", [])
-    if not isinstance(required_fields, list):
-        required_fields = []
-    missing_guarded = sorted(set(required_fields) - set(guarded_fields))
-    missing_observed = sorted(set(required_fields) - set(observed_fields))
+    coverage = material_executor_budget_coverage_summary(
+        budget,
+        budget_spec,
+        coverage_spec)
+    if isinstance(material_contract, dict):
+        material_contract["executor_budget_coverage"] = coverage
+    required_fields = coverage["required_fields"]
+    missing_guarded = coverage["missing_required_fields"]
+    missing_observed = coverage["missing_observed_fields"]
     report.check(
         "material executor budget coverage guards required fields",
         not missing_guarded,
         path="manifest.require_material_executor_budget",
         expected={"required_fields": required_fields},
         actual={
-            "guarded_fields": guarded_fields,
+            "guarded_fields": coverage["manifest_fields"],
             "missing_fields": missing_guarded,
         },
         likely_layer="artifact-manifest",
@@ -13572,7 +13615,7 @@ def check_material_executor_budget_coverage_requirements(
         path="artifact_context.material_contract.executor_budget",
         expected={"required_fields": required_fields},
         actual={
-            "observed_fields": observed_fields,
+            "observed_fields": coverage["observed_fields"],
             "missing_fields": missing_observed,
         },
         likely_layer="platform-runtime",
@@ -13583,9 +13626,9 @@ def check_material_executor_budget_coverage_requirements(
     minimums = (
         (
             "min_bound_key_count",
-            len(budget_spec) if isinstance(budget_spec, dict) else 0),
-        ("min_guarded_field_count", len(guarded_fields)),
-        ("min_observed_field_count", len(observed_fields)),
+            coverage["manifest_bound_key_count"]),
+        ("min_guarded_field_count", coverage["manifest_field_count"]),
+        ("min_observed_field_count", coverage["observed_field_count"]),
     )
     for field, actual in minimums:
         expected = coverage_spec.get(field)

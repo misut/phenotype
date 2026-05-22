@@ -174,15 +174,18 @@ its grouped pressure view. The CLI preserves those fields in
 `material_budget_bound_summary`, `material_resource_bound_summary`, and
 `material_quality_policy_bound_summary` JSON envelopes, so automation can inspect
 the raw summary or the grouped pressure view without losing bound-source detail.
-The raw verifier JSON and the CLI compact envelopes also include
-`resource_bound_coverage` and `quality_policy_bound_coverage` summaries when manifests opt into
-`require_material_resource_bound_coverage` or
+The raw verifier JSON now stores executor budget coverage next to
+`artifact_context.material_contract.executor_budget`, and the CLI compact
+envelopes prefer that summary before falling back to their legacy derivation.
+Raw verifier JSON and CLI compact envelopes also include
+`resource_bound_coverage` and `quality_policy_bound_coverage` summaries when
+manifests opt into `require_material_resource_bound_coverage` or
 `require_material_quality_policy_coverage`. Those contracts use the same
 required-field and minimum-count grammar as executor budget coverage, but guard
 the material plan resource and legibility policy surfaces directly. The raw
-verifier JSON and CLI JSON/non-JSON coverage summaries also identify unguarded
-observed resource/quality fields, so a passing gate can still show which
-observed policy counters have not yet been promoted to manifest guards. The
+verifier JSON and CLI JSON/non-JSON coverage summaries identify unguarded
+observed budget/resource/quality fields, so a passing gate can still show which
+observed counters have not yet been promoted to manifest guards. The
 checked-in glass showcase, file
 explorer, and Android artifact manifests now opt into those resource and
 quality-policy coverage contracts.
