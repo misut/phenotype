@@ -13,6 +13,19 @@ auto contains_text(std::string_view haystack, std::string_view needle) -> bool {
     return haystack.find(needle) != std::string_view::npos;
 }
 
+auto count_text(std::string_view haystack, std::string_view needle)
+        -> std::size_t {
+    auto count = std::size_t{0};
+    auto offset = std::size_t{0};
+    while (true) {
+        auto found = haystack.find(needle, offset);
+        if (found == std::string_view::npos)
+            return count;
+        ++count;
+        offset = found + needle.size();
+    }
+}
+
 auto contains_line(std::vector<std::string> const& lines,
                    std::string_view needle) -> bool {
     return std::ranges::any_of(lines, [&](std::string const& line) {
@@ -1588,6 +1601,10 @@ int main() {
     assert(contains_text(
         failure_json,
         "\"missing_field_source_details\":{\"entries\":[{\"field\":\"max_frame_capture_pixels\""));
+    assert(count_text(
+        failure_json,
+        "\"missing_field_source_details\":{\"entries\":[{\"field\":\"max_frame_capture_pixels\"")
+        >= 2);
     assert(contains_text(
         failure_json,
         "\"text\":\"max_frame_capture_pixels=4096 pass=resource-budget path=debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels\""));
@@ -1849,6 +1866,9 @@ int main() {
     assert(contains_text(
         many_missing_json,
         "\"total_count\":6,\"shown_count\":5,\"omitted_count\":1,\"truncated\":true"));
+    assert(contains_text(
+        many_missing_json,
+        "\"total_count\":6,\"shown_count\":3,\"omitted_count\":3,\"truncated\":true"));
     assert(!contains_text(many_missing_json, "\"field\":\"f\""));
 
     auto passing_report = json::parse(

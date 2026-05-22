@@ -3317,6 +3317,56 @@ auto missing_field_source_detail_json(std::string_view field,
         json_string(text));
 }
 
+auto missing_field_source_detail_entries(json::Object const& sources)
+        -> std::vector<std::string> {
+    auto entries = std::vector<std::string>{};
+    for (auto const& [field, value] : sources) {
+        auto detail = missing_field_source_detail_json(field, value);
+        if (!detail.empty())
+            entries.push_back(std::move(detail));
+    }
+    return entries;
+}
+
+auto missing_field_source_detail_entries_json(
+        std::vector<std::string> const& entries,
+        std::size_t limit) -> std::string {
+    if (entries.empty())
+        return "null";
+
+    auto count = std::min(limit, entries.size());
+    auto out = std::string{"{\"entries\":["};
+    for (auto index = std::size_t{0}; index < count; ++index) {
+        if (index > 0)
+            out += ",";
+        out += entries[index];
+    }
+    out += std::format(
+        "],\"total_count\":{},\"shown_count\":{},\"omitted_count\":{},"
+        "\"truncated\":{}}}",
+        entries.size(),
+        count,
+        entries.size() - count,
+        entries.size() > count ? "true" : "false");
+    return out;
+}
+
+auto missing_field_source_details_json(json::Object const& sources,
+                                       std::size_t limit = 3)
+        -> std::string {
+    return missing_field_source_detail_entries_json(
+        missing_field_source_detail_entries(sources),
+        limit);
+}
+
+auto failure_missing_field_source_details_json(json::Object const& failure,
+                                               std::size_t limit = 3)
+        -> std::string {
+    auto const* sources = failure_missing_field_sources_object(failure);
+    return sources ? missing_field_source_details_json(*sources, limit)
+                   : std::string{"null"};
+}
+
 auto coverage_minimum_actual_fields_text(
         json::Object const& actual,
         std::string_view key,
@@ -3547,24 +3597,7 @@ auto verifier_missing_field_source_details_json(json::Value const& report,
             entries.push_back(std::move(detail));
         }
     }
-    if (entries.empty())
-        return "null";
-
-    auto count = std::min(limit, entries.size());
-    auto out = std::string{"{\"entries\":["};
-    for (auto index = std::size_t{0}; index < count; ++index) {
-        if (index > 0)
-            out += ",";
-        out += entries[index];
-    }
-    out += std::format(
-        "],\"total_count\":{},\"shown_count\":{},\"omitted_count\":{},"
-        "\"truncated\":{}}}",
-        entries.size(),
-        count,
-        entries.size() - count,
-        entries.size() > count ? "true" : "false");
-    return out;
+    return missing_field_source_detail_entries_json(entries, limit);
 }
 
 auto verifier_missing_field_sources_text(json::Value const& report,
@@ -5065,6 +5098,7 @@ auto verifier_failure_detail_json(json::Object const& failure)
         "{{\"name\":{},\"message\":{},\"path\":{},\"region\":{},"
         "\"likely_layer\":{},\"likely_pass\":{},\"expected\":{},"
         "\"actual\":{},\"missing_field_sources\":{},"
+        "\"missing_field_source_details\":{},"
         "\"hint\":{},\"suggested_action\":{}}}",
         json_object_failure_string_json(failure, "name"),
         json_object_failure_string_json(failure, "message"),
@@ -5076,6 +5110,7 @@ auto verifier_failure_detail_json(json::Object const& failure)
         compact_failure_actual_text_json(failure),
         failure_optional_string_json(
             failure_missing_field_sources_text(failure)),
+        failure_missing_field_source_details_json(failure),
         json_object_failure_string_json(failure, "hint"),
         json_object_failure_string_json(failure, "suggested_action"));
 }
