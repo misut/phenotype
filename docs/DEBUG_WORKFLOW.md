@@ -301,15 +301,19 @@ expected/actual/margin list from the same verifier report.
 `material_resource_bound_summary`/`material_resource_bound_results` and
 `material_quality_policy_bound_summary`/`material_quality_policy_bound_results`
 mirror that compact bound-result shape for resource-budget and quality-policy
-manifest guards. `verifier_bound_pressure` groups those three bound families
-into `fail`, `tight`, `pass`, or `unknown` states even when the verifier report
-passes, so automation can spot no-headroom Liquid Glass budgets without waiting
-for a failure summary. Its zero/negative source lists carry the same bound
-operator, expected, actual, pass/fail, and margin evidence as bound results.
-The tightest bound also carries its full result object, so passing budgets with
-thin but non-zero headroom are inspectable without opening raw verifier JSON.
-Non-JSON output prints the same grouped pressure line after the
-budget/resource/quality bound summaries.
+manifest guards. `verifier_tightest_bound_results` lifts the executor,
+resource, and quality-policy tightest result objects into the top-level compact
+CLI envelope, so automation can read the smallest remaining margin without
+walking each summary or opening the raw verifier report. `verifier_bound_pressure`
+groups those three bound families into `fail`, `tight`, `pass`, or `unknown`
+states even when the verifier report passes, so automation can spot no-headroom
+Liquid Glass budgets without waiting for a failure summary. Its zero/negative
+source lists carry the same bound operator, expected, actual, pass/fail, and
+margin evidence as bound results. The tightest bound also carries its full
+result object, so passing budgets with thin but non-zero headroom are inspectable
+without opening raw verifier JSON. Non-JSON output prints the same direct
+tightest-bound line and grouped pressure line after the budget/resource/quality
+bound summaries.
 Both gates also accept the direct material bound guard options used by
 `artifact verify`, so local runs can tighten a resource, quality, or executor
 budget expectation without editing the checked-in manifest.
@@ -1838,15 +1842,16 @@ guarded and unguarded observed budget fields, plus `material_budget_bound_summar
 showing the budget bound pass/fail count and tightest margin, plus
 `material_budget_bound_results` listing each compact expected/actual/margin
 comparison, plus resource-bound and quality-policy bound summaries/results with
-the same compact expected/actual/margin comparison shape, plus compact
+the same compact expected/actual/margin comparison shape, plus direct
+`verifier_tightest_bound_results`, plus compact
 `verifier_failure_summary` metadata when the parsed
 verifier report fails, and exits non-zero when an invariant fails.
 The non-JSON command prints the same material budget in a short
 plans/work/status block with upload/copy utilization, a one-line verifier
 manifest summary, a one-line material budget coverage summary, a one-line
 material budget bounds summary, resource-bound and quality-policy bound summaries,
-the nearest or failed bound comparison, and compact verifier failure summaries for
-failed parsed reports.
+the nearest or failed bound comparison, a direct tightest-bound line, and compact
+verifier failure summaries for failed parsed reports.
 The legacy
 `tools/verify_glass_showcase_artifact.sh` wrapper delegates to the same CLI
 command for local compatibility.

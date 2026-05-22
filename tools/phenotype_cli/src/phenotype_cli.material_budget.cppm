@@ -2655,6 +2655,14 @@ auto verifier_tightest_bound_results_json(json::Value const& report)
                 : std::string{"null"});
 }
 
+auto verifier_tightest_bound_results_json(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+        -> std::string {
+    auto report = verifier_report_from_result(result);
+    return report ? verifier_tightest_bound_results_json(*report)
+                  : std::string{"null"};
+}
+
 auto compact_tightest_bound_result_text(
         std::string_view label,
         std::optional<MaterialBudgetBoundResult> const& result)
@@ -2702,6 +2710,14 @@ auto verifier_tightest_bound_results_text(json::Value const& report)
         text += part;
     }
     return text;
+}
+
+auto verifier_tightest_bound_results_text(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+        -> std::string {
+    auto report = verifier_report_from_result(result);
+    return report ? verifier_tightest_bound_results_text(*report)
+                  : std::string{};
 }
 
 struct BoundPressureSource {
