@@ -1629,6 +1629,9 @@ int main() {
         "\"text\":\"max_frame_capture_pixels=4096 pass=resource-budget path=debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels\""));
     assert(contains_text(
         failure_json,
+        "\"failure_index\":2,\"failure_number\":3,\"failure_path\":null,\"failure_name\":\"material resource bound coverage guards required fields\",\"failure_message\":null"));
+    assert(contains_text(
+        failure_json,
         "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"limit\":5,\"truncated\":false"));
     assert(contains_text(
         failure_json,
@@ -1956,6 +1959,7 @@ int main() {
           "failures": [
             {
               "path": "manifest.require_material_resource_bound_coverage.required_fields",
+              "name": "material resource bound coverage guards required fields",
               "expected": ["a", "b", "c", "d", "e", "f"],
               "actual": {
                 "missing_fields": ["a", "b", "c", "d", "e", "f"],
@@ -1981,6 +1985,9 @@ int main() {
     assert(contains_text(
         many_missing_json,
         "\"text\":\"a=1 pass=resource-budget path=debug.a\""));
+    assert(contains_text(
+        many_missing_json,
+        "\"failure_index\":0,\"failure_number\":1,\"failure_path\":\"manifest.require_material_resource_bound_coverage.required_fields\",\"failure_name\":\"material resource bound coverage guards required fields\",\"failure_message\":null"));
     assert(contains_text(
         many_missing_json,
         "\"total_count\":6,\"shown_count\":5,\"omitted_count\":1,\"limit\":5,\"truncated\":true"));
