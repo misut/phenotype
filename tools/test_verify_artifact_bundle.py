@@ -3575,6 +3575,97 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             by_key["max_plan_sample_taps_lte"])
         self.assertEqual(summary["negative_margin_sources"], [])
 
+    def test_manifest_can_require_material_resource_bound_coverage(
+            self) -> None:
+        manifest = {
+            "require_material_resource_bounds": {
+                "max_plan_sample_taps_lte": 25,
+                "max_frame_capture_pixels_lte": 320 * 240,
+                "require_bounded_texture_copy": True,
+                "require_deterministic_fallback": True,
+            },
+            "require_material_resource_bound_coverage": {
+                "required_fields": [
+                    "bounded_texture_copy",
+                    "deterministic_fallback",
+                    "max_frame_capture_pixels",
+                    "max_plan_sample_taps",
+                ],
+                "min_bound_key_count": 4,
+                "min_guarded_field_count": 4,
+                "min_observed_field_count": 4,
+            },
+        }
+        code, report = self.run_verifier(
+            snapshot(sampled_material_plan(sample_taps=25)),
+            manifest)
+
+        self.assertEqual(code, 0)
+        coverage = report["material_plans"]["resource_bound_coverage"]
+        self.assertEqual(coverage["bound_key_count"], 4)
+        self.assertEqual(coverage["guarded_field_count"], 4)
+        self.assertEqual(coverage["required_field_count"], 4)
+        self.assertEqual(coverage["covered_required_field_count"], 4)
+        self.assertEqual(coverage["observed_required_field_count"], 4)
+        self.assertEqual(coverage["missing_guarded_fields"], [])
+        self.assertEqual(coverage["missing_observed_fields"], [])
+        self.assertEqual(
+            coverage["required_fields"],
+            [
+                "bounded_texture_copy",
+                "deterministic_fallback",
+                "max_frame_capture_pixels",
+                "max_plan_sample_taps",
+            ])
+        for field in coverage["required_fields"]:
+            self.assertIn(field, coverage["guarded_fields"])
+            self.assertIn(field, coverage["observed_fields"])
+        self.assertEqual(
+            report["manifest"][
+                "material_resource_bound_coverage_required_fields"],
+            coverage["required_fields"])
+
+    def test_material_resource_bound_coverage_failure_is_llm_actionable(
+            self) -> None:
+        manifest = {
+            "require_material_resource_bounds": {
+                "max_plan_sample_taps_lte": 25,
+            },
+            "require_material_resource_bound_coverage": {
+                "required_fields": [
+                    "max_frame_capture_pixels",
+                    "max_plan_sample_taps",
+                ],
+                "min_bound_key_count": 2,
+                "min_guarded_field_count": 2,
+            },
+        }
+        code, report = self.run_verifier(
+            snapshot(sampled_material_plan(sample_taps=25)),
+            manifest)
+
+        self.assertEqual(code, 1)
+        coverage = report["material_plans"]["resource_bound_coverage"]
+        self.assertEqual(
+            coverage["missing_guarded_fields"],
+            ["max_frame_capture_pixels"])
+        self.assertEqual(coverage["missing_observed_fields"], [])
+        failures = {
+            item["name"]: item
+            for item in report["failures"]
+        }
+        failure = failures[
+            "material resource bound coverage guards required fields"]
+        self.assertEqual(
+            failure["path"],
+            "manifest.require_material_resource_bounds")
+        self.assertEqual(
+            failure["actual"]["missing_fields"],
+            ["max_frame_capture_pixels"])
+        self.assertIn(
+            "material resource bound coverage min_bound_key_count is satisfied",
+            failures)
+
     def test_material_resource_bound_result_failure_is_llm_actionable(self) -> None:
         manifest = {
             "require_material_resource_bounds": {
@@ -4612,6 +4703,87 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             zero_sources["max_blur_radius_lte"],
             by_key["max_blur_radius_lte"])
         self.assertEqual(summary["negative_margin_sources"], [])
+
+    def test_manifest_can_require_material_quality_policy_coverage(
+            self) -> None:
+        manifest = {
+            "require_material_quality_policy": {
+                "require_backdrop_sampling_allowed": True,
+                "require_noise_allowed": True,
+                "require_shadow_allowed": True,
+                "max_blur_radius_lte": 36.0,
+                "max_sample_taps_lte": 25,
+                "max_backdrop_pixels_lte": 4_000_000,
+            },
+            "require_material_quality_policy_coverage": {
+                "required_fields": [
+                    "backdrop_sampling_disabled",
+                    "max_backdrop_pixels",
+                    "max_blur_radius",
+                    "max_sample_taps",
+                    "noise_disabled",
+                    "shadow_disabled",
+                ],
+                "min_bound_key_count": 6,
+                "min_guarded_field_count": 6,
+                "min_observed_field_count": 6,
+            },
+        }
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 0)
+        coverage = report["material_plans"]["quality_policy_bound_coverage"]
+        self.assertEqual(coverage["bound_key_count"], 6)
+        self.assertEqual(coverage["guarded_field_count"], 6)
+        self.assertEqual(coverage["observed_field_count"], 6)
+        self.assertEqual(coverage["covered_required_field_count"], 6)
+        self.assertEqual(coverage["observed_required_field_count"], 6)
+        self.assertEqual(coverage["missing_guarded_fields"], [])
+        self.assertEqual(coverage["missing_observed_fields"], [])
+        self.assertEqual(
+            report["manifest"][
+                "material_quality_policy_coverage_required_fields"],
+            coverage["required_fields"])
+
+    def test_material_quality_policy_coverage_failure_is_llm_actionable(
+            self) -> None:
+        manifest = {
+            "require_material_quality_policy": {
+                "max_blur_radius_lte": 36.0,
+            },
+            "require_material_quality_policy_coverage": {
+                "required_fields": [
+                    "max_blur_radius",
+                    "noise_disabled",
+                ],
+                "min_bound_key_count": 2,
+                "min_guarded_field_count": 2,
+            },
+        }
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 1)
+        coverage = report["material_plans"]["quality_policy_bound_coverage"]
+        self.assertEqual(
+            coverage["missing_guarded_fields"],
+            ["noise_disabled"])
+        self.assertEqual(coverage["missing_observed_fields"], [])
+        failures = {
+            item["name"]: item
+            for item in report["failures"]
+        }
+        failure = failures[
+            "material quality policy coverage guards required fields"]
+        self.assertEqual(
+            failure["path"],
+            "manifest.require_material_quality_policy")
+        self.assertEqual(
+            failure["actual"]["missing_fields"],
+            ["noise_disabled"])
+        self.assertIn(
+            "material quality policy coverage min_guarded_field_count "
+            "is satisfied",
+            failures)
 
     def test_material_quality_policy_bound_result_failure_is_llm_actionable(
             self) -> None:

@@ -13,7 +13,7 @@ import math
 from pathlib import Path
 import struct
 import sys
-from typing import Any
+from typing import Any, Callable
 
 
 JsonObject = dict[str, Any]
@@ -3365,96 +3365,102 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
     return spec
 
 
+MATERIAL_RESOURCE_BOUND_NUMBER_KEYS = {
+    "max_plan_blur_radius_lte",
+    "max_plan_sample_taps_lte",
+    "max_plan_sample_taps_gte",
+    "total_plan_sample_taps_lte",
+    "total_plan_sample_taps_gte",
+    "max_budget_blur_radius_lte",
+    "max_sample_taps_lte",
+    "max_sampling_kernel_radius_lte",
+    "max_sampling_kernel_radius_gte",
+    "max_pass_count_lte",
+    "max_backdrop_pixels_lte",
+    "max_frame_capture_count_lte",
+    "max_frame_capture_count_gte",
+    "max_frame_capture_pixels_lte",
+    "max_frame_capture_pixels_gte",
+    "total_surface_sample_pixels_lte",
+    "total_surface_sample_pixels_gte",
+    "max_surface_sample_pixels_lte",
+    "max_surface_sample_pixels_gte",
+    "max_container_spacing_lte",
+    "max_container_spacing_gte",
+    "max_pass_texture_copy_pixels_lte",
+    "max_pass_texture_copy_pixels_gte",
+    "total_pass_texture_copy_pixels_lte",
+    "total_pass_texture_copy_pixels_gte",
+    "total_runtime_passes_lte",
+    "total_runtime_passes_gte",
+    "active_runtime_passes_lte",
+    "active_runtime_passes_gte",
+    "backdrop_runtime_passes_lte",
+    "backdrop_runtime_passes_gte",
+    "total_execution_stages_lte",
+    "total_execution_stages_gte",
+    "active_execution_stages_lte",
+    "active_execution_stages_gte",
+    "backdrop_execution_stages_lte",
+    "backdrop_execution_stages_gte",
+    "dropped_execution_stages_lte",
+    "dropped_execution_stages_gte",
+    "max_execution_stage_count_lte",
+    "max_execution_stage_count_gte",
+    "max_execution_stage_capacity_lte",
+    "max_execution_stage_capacity_gte",
+    "max_execution_stages_lte",
+    "max_execution_stages_gte",
+    "total_paint_layers_lte",
+    "total_paint_layers_gte",
+    "active_paint_layers_lte",
+    "active_paint_layers_gte",
+    "dropped_paint_layers_lte",
+    "dropped_paint_layers_gte",
+    "shadow_paint_layers_lte",
+    "shadow_paint_layers_gte",
+    "fill_paint_layers_lte",
+    "fill_paint_layers_gte",
+    "edge_paint_layers_lte",
+    "edge_paint_layers_gte",
+    "max_paint_layer_count_lte",
+    "max_paint_layer_count_gte",
+    "max_paint_layers_lte",
+    "max_paint_layers_gte",
+    "max_paint_layer_capacity_lte",
+    "max_paint_layer_capacity_gte",
+    "max_paint_layer_inflate_lte",
+    "max_paint_layer_inflate_gte",
+    "max_refraction_offset_pixels_lte",
+    "max_refraction_offset_pixels_gte",
+}
+
+MATERIAL_RESOURCE_BOUND_BOOL_KEYS = {
+    "require_bounded_texture_copy",
+    "require_deterministic_fallback",
+}
+
+MATERIAL_RESOURCE_BOUND_KEYS = (
+    MATERIAL_RESOURCE_BOUND_NUMBER_KEYS | MATERIAL_RESOURCE_BOUND_BOOL_KEYS)
+
+
 def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None:
     if value is None:
         return None
     if not isinstance(value, dict):
         raise ValueError("require_material_resource_bounds must be an object")
-    number_fields = {
-        "max_plan_blur_radius_lte",
-        "max_plan_sample_taps_lte",
-        "max_plan_sample_taps_gte",
-        "total_plan_sample_taps_lte",
-        "total_plan_sample_taps_gte",
-        "max_budget_blur_radius_lte",
-        "max_sample_taps_lte",
-        "max_sampling_kernel_radius_lte",
-        "max_sampling_kernel_radius_gte",
-        "max_pass_count_lte",
-        "max_backdrop_pixels_lte",
-        "max_frame_capture_count_lte",
-        "max_frame_capture_count_gte",
-        "max_frame_capture_pixels_lte",
-        "max_frame_capture_pixels_gte",
-        "total_surface_sample_pixels_lte",
-        "total_surface_sample_pixels_gte",
-        "max_surface_sample_pixels_lte",
-        "max_surface_sample_pixels_gte",
-        "max_container_spacing_lte",
-        "max_container_spacing_gte",
-        "max_pass_texture_copy_pixels_lte",
-        "max_pass_texture_copy_pixels_gte",
-        "total_pass_texture_copy_pixels_lte",
-        "total_pass_texture_copy_pixels_gte",
-        "total_runtime_passes_lte",
-        "total_runtime_passes_gte",
-        "active_runtime_passes_lte",
-        "active_runtime_passes_gte",
-        "backdrop_runtime_passes_lte",
-        "backdrop_runtime_passes_gte",
-        "total_execution_stages_lte",
-        "total_execution_stages_gte",
-        "active_execution_stages_lte",
-        "active_execution_stages_gte",
-        "backdrop_execution_stages_lte",
-        "backdrop_execution_stages_gte",
-        "dropped_execution_stages_lte",
-        "dropped_execution_stages_gte",
-        "max_execution_stage_count_lte",
-        "max_execution_stage_count_gte",
-        "max_execution_stage_capacity_lte",
-        "max_execution_stage_capacity_gte",
-        "max_execution_stages_lte",
-        "max_execution_stages_gte",
-        "total_paint_layers_lte",
-        "total_paint_layers_gte",
-        "active_paint_layers_lte",
-        "active_paint_layers_gte",
-        "dropped_paint_layers_lte",
-        "dropped_paint_layers_gte",
-        "shadow_paint_layers_lte",
-        "shadow_paint_layers_gte",
-        "fill_paint_layers_lte",
-        "fill_paint_layers_gte",
-        "edge_paint_layers_lte",
-        "edge_paint_layers_gte",
-        "max_paint_layer_count_lte",
-        "max_paint_layer_count_gte",
-        "max_paint_layers_lte",
-        "max_paint_layers_gte",
-        "max_paint_layer_capacity_lte",
-        "max_paint_layer_capacity_gte",
-        "max_paint_layer_inflate_lte",
-        "max_paint_layer_inflate_gte",
-        "max_refraction_offset_pixels_lte",
-        "max_refraction_offset_pixels_gte",
-    }
-    bool_fields = {
-        "require_bounded_texture_copy",
-        "require_deterministic_fallback",
-    }
-    unknown = sorted(set(value) - number_fields - bool_fields)
+    unknown = sorted(set(value) - MATERIAL_RESOURCE_BOUND_KEYS)
     if unknown:
         raise ValueError(
             "unknown require_material_resource_bounds keys: "
             + ", ".join(unknown))
     spec: JsonObject = {}
-    for field in number_fields:
+    for field in MATERIAL_RESOURCE_BOUND_NUMBER_KEYS:
         if field in value:
             spec[field] = non_negative_number(
                 value[field],
                 f"require_material_resource_bounds.{field}")
-    for field in bool_fields:
+    for field in MATERIAL_RESOURCE_BOUND_BOOL_KEYS:
         if field in value:
             item = value[field]
             if not isinstance(item, bool):
@@ -3561,33 +3567,49 @@ def material_quality_policy_field_from_key(key: str) -> str:
     return key
 
 
+MATERIAL_RESOURCE_BOUND_FIELDS = sorted({
+    material_resource_bound_field_from_key(key)
+    for key in MATERIAL_RESOURCE_BOUND_KEYS
+})
+
+MATERIAL_QUALITY_POLICY_NUMBER_KEYS = {
+    "max_blur_radius_lte",
+    "max_sample_taps_lte",
+    "max_backdrop_pixels_lte",
+}
+
+MATERIAL_QUALITY_POLICY_BOOL_KEYS = {
+    "require_backdrop_sampling_allowed",
+    "require_noise_allowed",
+    "require_shadow_allowed",
+}
+
+MATERIAL_QUALITY_POLICY_KEYS = (
+    MATERIAL_QUALITY_POLICY_NUMBER_KEYS | MATERIAL_QUALITY_POLICY_BOOL_KEYS)
+
+MATERIAL_QUALITY_POLICY_FIELDS = sorted({
+    material_quality_policy_field_from_key(key)
+    for key in MATERIAL_QUALITY_POLICY_KEYS
+})
+
+
 def material_quality_policy_spec_from_manifest(value: Any) -> JsonObject | None:
     if value is None:
         return None
     if not isinstance(value, dict):
         raise ValueError("require_material_quality_policy must be an object")
-    number_fields = {
-        "max_blur_radius_lte",
-        "max_sample_taps_lte",
-        "max_backdrop_pixels_lte",
-    }
-    bool_fields = {
-        "require_backdrop_sampling_allowed",
-        "require_noise_allowed",
-        "require_shadow_allowed",
-    }
-    unknown = sorted(set(value) - number_fields - bool_fields)
+    unknown = sorted(set(value) - MATERIAL_QUALITY_POLICY_KEYS)
     if unknown:
         raise ValueError(
             "unknown require_material_quality_policy keys: "
             + ", ".join(unknown))
     spec: JsonObject = {}
-    for field in number_fields:
+    for field in MATERIAL_QUALITY_POLICY_NUMBER_KEYS:
         if field in value:
             spec[field] = non_negative_number(
                 value[field],
                 f"require_material_quality_policy.{field}")
-    for field in bool_fields:
+    for field in MATERIAL_QUALITY_POLICY_BOOL_KEYS:
         if field in value:
             item = value[field]
             if not isinstance(item, bool):
@@ -3595,6 +3617,61 @@ def material_quality_policy_spec_from_manifest(value: Any) -> JsonObject | None:
                     f"require_material_quality_policy.{field} must be a boolean")
             spec[field] = item
     return spec
+
+
+def material_bound_coverage_spec_from_manifest(
+        value: Any,
+        manifest_key: str,
+        allowed_fields: list[str]) -> JsonObject | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{manifest_key} must be an object")
+    allowed = {
+        "required_fields",
+        "min_bound_key_count",
+        "min_guarded_field_count",
+        "min_observed_field_count",
+    }
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise ValueError(
+            f"unknown {manifest_key} keys: "
+            + ", ".join(unknown))
+    spec: JsonObject = {}
+    required_fields = list_of_strings(value, "required_fields")
+    unknown_fields = sorted(set(required_fields) - set(allowed_fields))
+    if unknown_fields:
+        raise ValueError(
+            f"{manifest_key}.required_fields contains unknown fields: "
+            + ", ".join(unknown_fields))
+    if required_fields:
+        spec["required_fields"] = sorted(set(required_fields))
+    for field in (
+            "min_bound_key_count",
+            "min_guarded_field_count",
+            "min_observed_field_count"):
+        if field in value:
+            spec[field] = non_negative_int(
+                value[field],
+                f"{manifest_key}.{field}")
+    return spec
+
+
+def material_resource_bound_coverage_spec_from_manifest(
+        value: Any) -> JsonObject | None:
+    return material_bound_coverage_spec_from_manifest(
+        value,
+        "require_material_resource_bound_coverage",
+        MATERIAL_RESOURCE_BOUND_FIELDS)
+
+
+def material_quality_policy_coverage_spec_from_manifest(
+        value: Any) -> JsonObject | None:
+    return material_bound_coverage_spec_from_manifest(
+        value,
+        "require_material_quality_policy_coverage",
+        MATERIAL_QUALITY_POLICY_FIELDS)
 
 
 def bound_cli_specs_from_args(values: list[str], option_name: str) -> JsonObject:
@@ -3647,9 +3724,11 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         manifest = loaded_manifest
 
     material_resource_bounds: JsonObject | None = None
+    material_resource_bound_coverage: JsonObject | None = None
     material_executor_budget: JsonObject | None = None
     material_executor_budget_coverage: JsonObject | None = None
     material_quality_policy: JsonObject | None = None
+    material_quality_policy_coverage: JsonObject | None = None
     try:
         if args.expect_platform is None:
             expect_platform = manifest.get("expect_platform")
@@ -3689,6 +3768,13 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         if material_resource_bounds is not None:
             args.require_material_plan = True
             args.require_material_resource_bounds = material_resource_bounds
+        material_resource_bound_coverage = (
+            material_resource_bound_coverage_spec_from_manifest(
+                manifest.get("require_material_resource_bound_coverage")))
+        if material_resource_bound_coverage is not None:
+            args.require_material_plan = True
+            args.require_material_resource_bound_coverage = (
+                material_resource_bound_coverage)
         material_executor_budget = material_executor_budget_spec_from_manifest(
             manifest.get("require_material_executor_budget"))
         if material_executor_budget is not None:
@@ -3706,6 +3792,13 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         if material_quality_policy is not None:
             args.require_material_plan = True
             args.require_material_quality_policy = material_quality_policy
+        material_quality_policy_coverage = (
+            material_quality_policy_coverage_spec_from_manifest(
+                manifest.get("require_material_quality_policy_coverage")))
+        if material_quality_policy_coverage is not None:
+            args.require_material_plan = True
+            args.require_material_quality_policy_coverage = (
+                material_quality_policy_coverage)
 
         cli_material_resource_bounds = material_resource_bounds_spec_from_manifest(
             bound_cli_specs_from_args(
@@ -3818,6 +3911,10 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         material_executor_budget_coverage.get("required_fields", [])
         if isinstance(material_executor_budget_coverage, dict)
         else [])
+    material_resource_bound_coverage_required_fields = (
+        material_resource_bound_coverage.get("required_fields", [])
+        if isinstance(material_resource_bound_coverage, dict)
+        else [])
     material_quality_policy_value = (
         material_quality_policy
         if isinstance(material_quality_policy, dict)
@@ -3827,6 +3924,10 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         material_quality_policy_field_from_key(key)
         for key in material_quality_policy_keys
     })
+    material_quality_policy_coverage_required_fields = (
+        material_quality_policy_coverage.get("required_fields", [])
+        if isinstance(material_quality_policy_coverage, dict)
+        else [])
 
     has_direct_bounds = any((
         material_executor_budget_keys,
@@ -3851,11 +3952,15 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
             "material_resource_bounds": len(material_resource_bound_keys),
             "material_resource_bound_keys": material_resource_bound_keys,
             "material_resource_bound_fields": material_resource_bound_fields,
+            "material_resource_bound_coverage_required_fields": (
+                material_resource_bound_coverage_required_fields),
             "material_executor_budget_coverage_required_fields": (
                 material_executor_budget_coverage_required_fields),
             "material_quality_policy_bounds": len(material_quality_policy_keys),
             "material_quality_policy_bound_keys": material_quality_policy_keys,
             "material_quality_policy_fields": material_quality_policy_fields,
+            "material_quality_policy_coverage_required_fields": (
+                material_quality_policy_coverage_required_fields),
         }
     if manifest_path is not None:
         report.check("manifest schema is valid", True, str(manifest_path))
@@ -13345,6 +13450,159 @@ def check_material_executor_budget_coverage_requirements(
                 "whether the compact executor budget lost important fields."))
 
 
+def material_bound_guarded_fields(
+        spec: Any,
+        allowed_fields: list[str],
+        field_from_key: Callable[[str], str]) -> list[str]:
+    if not isinstance(spec, dict):
+        return []
+    allowed = set(allowed_fields)
+    return sorted({
+        field
+        for field in (
+            field_from_key(key)
+            for key in spec
+        )
+        if field in allowed
+    })
+
+
+def material_bound_observed_fields(
+        source: Any,
+        allowed_fields: list[str],
+        aliases: dict[str, str] | None = None) -> list[str]:
+    if not isinstance(source, dict):
+        return []
+    aliases = aliases or {}
+    observed: list[str] = []
+    for field in allowed_fields:
+        source_field = aliases.get(field, field)
+        value = source.get(source_field)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            observed.append(field)
+    return sorted(observed)
+
+
+def material_bound_coverage_summary(
+        source: Any,
+        bound_spec: Any,
+        coverage_spec: JsonObject,
+        allowed_fields: list[str],
+        field_from_key: Callable[[str], str],
+        aliases: dict[str, str] | None = None) -> JsonObject:
+    observed_fields = material_bound_observed_fields(
+        source,
+        allowed_fields,
+        aliases)
+    guarded_fields = material_bound_guarded_fields(
+        bound_spec,
+        allowed_fields,
+        field_from_key)
+    required_fields = coverage_spec.get("required_fields", [])
+    if not isinstance(required_fields, list):
+        required_fields = []
+    missing_guarded = sorted(set(required_fields) - set(guarded_fields))
+    missing_observed = sorted(set(required_fields) - set(observed_fields))
+    return {
+        "guardable_field_count": len(allowed_fields),
+        "observed_field_count": len(observed_fields),
+        "guarded_field_count": len(guarded_fields),
+        "required_field_count": len(required_fields),
+        "covered_required_field_count": (
+            len(required_fields) - len(missing_guarded)),
+        "observed_required_field_count": (
+            len(required_fields) - len(missing_observed)),
+        "missing_guarded_fields": missing_guarded,
+        "missing_observed_fields": missing_observed,
+        "observed_fields": observed_fields,
+        "guarded_fields": guarded_fields,
+        "required_fields": required_fields,
+        "bound_key_count": len(bound_spec) if isinstance(bound_spec, dict) else 0,
+    }
+
+
+def check_material_bound_coverage_requirements(
+        *,
+        label: str,
+        summary: JsonObject,
+        summary_key: str,
+        source_key: str,
+        bound_spec: Any,
+        coverage_spec: JsonObject,
+        allowed_fields: list[str],
+        field_from_key: Callable[[str], str],
+        bound_manifest_key: str,
+        coverage_manifest_key: str,
+        observed_path: str,
+        likely_layer: str,
+        likely_pass: str,
+        aliases: dict[str, str] | None = None,
+        report: Report) -> None:
+    source = summary.get(source_key)
+    if not isinstance(source, dict):
+        source = {}
+    coverage = material_bound_coverage_summary(
+        source,
+        bound_spec,
+        coverage_spec,
+        allowed_fields,
+        field_from_key,
+        aliases)
+    summary[summary_key] = coverage
+    required_fields = coverage["required_fields"]
+    missing_guarded = coverage["missing_guarded_fields"]
+    missing_observed = coverage["missing_observed_fields"]
+    report.check(
+        f"material {label} coverage guards required fields",
+        not missing_guarded,
+        path=f"manifest.{bound_manifest_key}",
+        expected={"required_fields": required_fields},
+        actual={
+            "guarded_fields": coverage["guarded_fields"],
+            "missing_fields": missing_guarded,
+        },
+        likely_layer="artifact-manifest",
+        likely_pass=likely_pass,
+        hint=(
+            f"Add bounds under {bound_manifest_key} for every field named by "
+            f"{coverage_manifest_key}.required_fields."))
+    report.check(
+        f"material {label} coverage observes required fields",
+        not missing_observed,
+        path=observed_path,
+        expected={"required_fields": required_fields},
+        actual={
+            "observed_fields": coverage["observed_fields"],
+            "missing_fields": missing_observed,
+        },
+        likely_layer=likely_layer,
+        likely_pass=likely_pass,
+        hint=(
+            f"Keep material_plans.{source_key} populated with every field named "
+            f"by {coverage_manifest_key}.required_fields."))
+    minimums = (
+        ("min_bound_key_count", coverage["bound_key_count"]),
+        ("min_guarded_field_count", coverage["guarded_field_count"]),
+        ("min_observed_field_count", coverage["observed_field_count"]),
+    )
+    for field, actual in minimums:
+        expected = coverage_spec.get(field)
+        if expected is None:
+            continue
+        report.check(
+            f"material {label} coverage {field} is satisfied",
+            actual >= expected,
+            path=f"manifest.{coverage_manifest_key}.{field}",
+            expected={">=": expected},
+            actual=actual,
+            likely_layer="artifact-manifest",
+            likely_pass=likely_pass,
+            hint=(
+                "Update the coverage contract only after checking whether "
+                "important Liquid Glass resource or quality guard fields were "
+                "removed."))
+
+
 def check_material_container_group_summary_contract(
         summary: JsonObject,
         group_summary: Any,
@@ -15277,6 +15535,34 @@ def verify(args: argparse.Namespace) -> int:
                     material_plan_summary,
                     material_resource_bounds_spec,
                     report)
+            material_resource_bound_coverage_spec = getattr(
+                args,
+                "require_material_resource_bound_coverage",
+                None)
+            if isinstance(material_resource_bound_coverage_spec, dict):
+                check_material_bound_coverage_requirements(
+                    label="resource bound",
+                    summary=material_plan_summary,
+                    summary_key="resource_bound_coverage",
+                    source_key="resource_bounds",
+                    bound_spec=material_resource_bounds_spec,
+                    coverage_spec=material_resource_bound_coverage_spec,
+                    allowed_fields=MATERIAL_RESOURCE_BOUND_FIELDS,
+                    field_from_key=material_resource_bound_field_from_key,
+                    bound_manifest_key="require_material_resource_bounds",
+                    coverage_manifest_key=(
+                        "require_material_resource_bound_coverage"),
+                    observed_path=(
+                        "debug.platform_runtime.details.renderer"
+                        ".material_plans#resource_bounds"),
+                    likely_layer="platform-runtime",
+                    likely_pass="resource-budget",
+                    aliases={
+                        "bounded_texture_copy": "unbounded_texture_copy",
+                        "deterministic_fallback": (
+                            "non_deterministic_fallback"),
+                    },
+                    report=report)
             material_quality_policy_spec = getattr(
                 args,
                 "require_material_quality_policy",
@@ -15286,6 +15572,29 @@ def verify(args: argparse.Namespace) -> int:
                     material_plan_summary,
                     material_quality_policy_spec,
                     report)
+            material_quality_policy_coverage_spec = getattr(
+                args,
+                "require_material_quality_policy_coverage",
+                None)
+            if isinstance(material_quality_policy_coverage_spec, dict):
+                check_material_bound_coverage_requirements(
+                    label="quality policy",
+                    summary=material_plan_summary,
+                    summary_key="quality_policy_bound_coverage",
+                    source_key="quality_policy",
+                    bound_spec=material_quality_policy_spec,
+                    coverage_spec=material_quality_policy_coverage_spec,
+                    allowed_fields=MATERIAL_QUALITY_POLICY_FIELDS,
+                    field_from_key=material_quality_policy_field_from_key,
+                    bound_manifest_key="require_material_quality_policy",
+                    coverage_manifest_key=(
+                        "require_material_quality_policy_coverage"),
+                    observed_path=(
+                        "debug.platform_runtime.details.renderer"
+                        ".material_plans#quality_policy"),
+                    likely_layer="material-plan",
+                    likely_pass="quality-policy",
+                    report=report)
     if args.require_material_semantic_runtime_match:
         report.check(
             "material semantic/runtime summary is available",
@@ -15860,9 +16169,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.set_defaults(
         require_material_plan_summary=None,
         require_material_resource_bounds=None,
+        require_material_resource_bound_coverage=None,
         require_material_executor_budget=None,
         require_material_executor_budget_coverage=None,
         require_material_quality_policy=None,
+        require_material_quality_policy_coverage=None,
         require_runtime_numeric_bound=[],
         require_pixel_region_metric_comparison=[],
         forbid_pixel_region_color=[],

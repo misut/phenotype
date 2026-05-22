@@ -168,6 +168,12 @@ its grouped pressure view. The CLI preserves those fields in
 `material_budget_bound_summary`, `material_resource_bound_summary`, and
 `material_quality_policy_bound_summary` JSON envelopes, so automation can inspect
 the raw summary or the grouped pressure view without losing bound-source detail.
+The raw verifier JSON also includes `resource_bound_coverage` and
+`quality_policy_bound_coverage` summaries when manifests opt into
+`require_material_resource_bound_coverage` or
+`require_material_quality_policy_coverage`. Those contracts use the same
+required-field and minimum-count grammar as executor budget coverage, but guard
+the material plan resource and legibility policy surfaces directly.
 
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, package-owned SVG app icons,
