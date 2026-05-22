@@ -3310,9 +3310,15 @@ auto missing_field_source_detail_json(std::string_view field,
     if (text.empty())
         return {};
 
+    auto const& source = value.as_object();
     return std::format(
-        "{{\"field\":{},\"source\":{},\"text\":{}}}",
+        "{{\"field\":{},\"metric\":{},\"value\":{},"
+        "\"source_path\":{},\"likely_pass\":{},\"source\":{},\"text\":{}}}",
         json_string(field),
+        json_object_failure_string_json(source, "metric"),
+        json_object_value_or_null(source, "value"),
+        json_object_failure_string_json(source, "source_path"),
+        json_object_failure_string_json(source, "likely_pass"),
         json::emit(value),
         json_string(text));
 }
