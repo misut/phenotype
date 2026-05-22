@@ -1518,6 +1518,15 @@ remapped to `MaterialPlan.foreground`. Use
 paths. Each entry names a path under `debug.platform_runtime.details` and can
 provide `equals`, `gte`, and/or `lte`; failures report the exact path plus the
 likely `material-executor` pass when the path targets the executor summary.
+Use `require_material_executor_budget` when a material gate needs the compact
+artifact budget rather than a raw runtime path. It supports numeric
+`*_lte`/`*_gte`/`*_equals` keys for fields under
+`artifact_context.material_contract.executor_budget`, including
+`upload_utilization`, `backdrop_copy_utilization`, stage counts, sample taps,
+upload bytes/capacity, backdrop copy pixels, and frame-capture bounds. The
+glass showcase manifests require both utilization ratios to stay between 0 and
+1 so a hidden buffer/copy overrun is reported as a material-executor budget
+failure before reading the full runtime JSON.
 Whenever material plans are present, the verifier also cross-checks executor
 counts, including `material_executor_summary.container_groups.*`, against
 `renderer.material_plans#summary`: `plan_count`,
