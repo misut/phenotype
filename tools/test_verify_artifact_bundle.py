@@ -3509,6 +3509,34 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["resource_bounds"][
                 "total_surface_sample_pixels"],
             240 * 96)
+        self.assertEqual(report["manifest"]["material_resource_bounds"], 44)
+        self.assertEqual(
+            report["manifest"]["material_resource_bound_fields"],
+            [
+                "active_execution_stages",
+                "active_runtime_passes",
+                "backdrop_execution_stages",
+                "backdrop_runtime_passes",
+                "dropped_execution_stages",
+                "max_execution_stage_capacity",
+                "max_execution_stage_count",
+                "max_execution_stages",
+                "max_frame_capture_count",
+                "max_frame_capture_pixels",
+                "max_paint_layer_capacity",
+                "max_paint_layer_inflate",
+                "max_paint_layers",
+                "max_pass_texture_copy_pixels",
+                "max_plan_sample_taps",
+                "max_sampling_kernel_radius",
+                "max_surface_sample_pixels",
+                "total_execution_stages",
+                "total_paint_layers",
+                "total_pass_texture_copy_pixels",
+                "total_plan_sample_taps",
+                "total_runtime_passes",
+                "total_surface_sample_pixels",
+            ])
 
     def test_manifest_can_require_execution_stage_summary(self) -> None:
         manifest = {
@@ -4428,6 +4456,17 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["quality_policy"]["max_backdrop_pixels"],
             4_000_000)
+        self.assertEqual(report["manifest"]["material_quality_policy_bounds"], 6)
+        self.assertEqual(
+            report["manifest"]["material_quality_policy_fields"],
+            [
+                "backdrop_sampling_disabled",
+                "max_backdrop_pixels",
+                "max_blur_radius",
+                "max_sample_taps",
+                "noise_disabled",
+                "shadow_disabled",
+            ])
 
     def test_manifest_can_require_runtime_numeric_bounds(self) -> None:
         manifest = {

@@ -3530,6 +3530,32 @@ def material_executor_budget_field_from_key(key: str) -> str:
     return key
 
 
+def material_resource_bound_field_from_key(key: str) -> str:
+    mapped = {
+        "require_bounded_texture_copy": "bounded_texture_copy",
+        "require_deterministic_fallback": "deterministic_fallback",
+    }
+    if key in mapped:
+        return mapped[key]
+    for suffix in ("_lte", "_gte"):
+        if key.endswith(suffix):
+            return key[:-len(suffix)]
+    return key
+
+
+def material_quality_policy_field_from_key(key: str) -> str:
+    mapped = {
+        "require_backdrop_sampling_allowed": "backdrop_sampling_disabled",
+        "require_noise_allowed": "noise_disabled",
+        "require_shadow_allowed": "shadow_disabled",
+    }
+    if key in mapped:
+        return mapped[key]
+    if key.endswith("_lte"):
+        return key[:-4]
+    return key
+
+
 def material_quality_policy_spec_from_manifest(value: Any) -> JsonObject | None:
     if value is None:
         return None
@@ -3579,7 +3605,9 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         return False
     assert isinstance(manifest, dict)
 
+    material_resource_bounds: JsonObject | None = None
     material_executor_budget_coverage: JsonObject | None = None
+    material_quality_policy: JsonObject | None = None
     try:
         if args.expect_platform is None:
             expect_platform = manifest.get("expect_platform")
@@ -3697,10 +3725,28 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         material_executor_budget_field_from_key(key)
         for key in material_executor_budget_keys
     })
+    material_resource_bounds_value = (
+        material_resource_bounds
+        if isinstance(material_resource_bounds, dict)
+        else {})
+    material_resource_bound_keys = sorted(material_resource_bounds_value.keys())
+    material_resource_bound_fields = sorted({
+        material_resource_bound_field_from_key(key)
+        for key in material_resource_bound_keys
+    })
     material_executor_budget_coverage_required_fields = (
         material_executor_budget_coverage.get("required_fields", [])
         if isinstance(material_executor_budget_coverage, dict)
         else [])
+    material_quality_policy_value = (
+        material_quality_policy
+        if isinstance(material_quality_policy, dict)
+        else {})
+    material_quality_policy_keys = sorted(material_quality_policy_value.keys())
+    material_quality_policy_fields = sorted({
+        material_quality_policy_field_from_key(key)
+        for key in material_quality_policy_keys
+    })
 
     report.data["manifest"] = {
         "path": str(manifest_path),
@@ -3716,8 +3762,14 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         "material_executor_budget_bounds": len(material_executor_budget_keys),
         "material_executor_budget_bound_keys": material_executor_budget_keys,
         "material_executor_budget_fields": material_executor_budget_fields,
+        "material_resource_bounds": len(material_resource_bound_keys),
+        "material_resource_bound_keys": material_resource_bound_keys,
+        "material_resource_bound_fields": material_resource_bound_fields,
         "material_executor_budget_coverage_required_fields": (
             material_executor_budget_coverage_required_fields),
+        "material_quality_policy_bounds": len(material_quality_policy_keys),
+        "material_quality_policy_bound_keys": material_quality_policy_keys,
+        "material_quality_policy_fields": material_quality_policy_fields,
     }
     report.check("manifest schema is valid", True, str(manifest_path))
     return True
