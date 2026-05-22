@@ -194,7 +194,9 @@ mise exec -- exon build
 `artifact verify` runs the uv-managed reference verifier from the repository
 root. The default output prints a compact status frame plus verifier manifest,
 material budget coverage, budget bound headroom, and material execution budget
-summaries; `--json` forwards the raw verifier JSON report for machine
+summaries. When verification fails, it also prints a compact verifier failure
+summary with the first failing paths, expected/actual values, hints, and
+suggested actions. `--json` forwards the raw verifier JSON report for machine
 consumers. This keeps Python managed by `mise`/`uv` while moving the
 developer-facing entry point under the CLI.
 
@@ -1217,6 +1219,9 @@ upload/draw/copy status strings. It also carries active/dropped stage counts,
 max sample taps, upload/copy utilization, frame-capture bounds, and readiness
 booleans so CI logs can explain which semantic/runtime contract surface drifted
 before opening the full bundle.
+The default `phenotype artifact verify` output prints a compact subset of this
+failure summary for local triage. Use `--json` when a tool or follow-up prompt
+needs the complete `failures[]` and `failure_summary.artifact_context` payload.
 On native backends, also inspect
 `debug.platform_runtime.details.renderer.accessibility_display_options`; it
 records whether the frame used live system settings, deterministic fallback
