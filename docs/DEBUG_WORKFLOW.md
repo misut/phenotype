@@ -132,7 +132,10 @@ fields are still unguarded. This keeps coverage drift visible without opening
 the full verifier report. `verifier.material_budget_bound_summary` adds the
 actual bound result summary, including pass/fail counts, failed bound keys, and
 the tightest remaining margin across the applied material executor budget
-bounds.
+bounds. `verifier.material_budget_bound_results` mirrors the compact per-bound
+key, field, operator, expected value, actual value, pass/fail state, and margin
+so JSON consumers can compare every material budget constraint without scanning
+the full report.
 Use this as the first artifact triage command when a CI log or local bundle
 needs one machine-readable explanation before deeper pixel-contract debugging.
 Without `--json`, the same command prints short `snapshot material budget` and
@@ -231,16 +234,19 @@ without embedding the full verifier report. JSON also includes
 `material_budget_coverage`, which separates manifest-guarded observed budget
 fields from observed-but-unguarded fields, and
 `material_budget_bound_summary`, which reports the applied budget bound
-pass/fail count and tightest margin. `artifact
+pass/fail count and tightest margin. `material_budget_bound_results` provides
+the compact per-bound expected/actual/margin list from the same verifier report.
+`artifact
 verify-file-explorer` owns the shared-model test, desktop/mobile builds,
 deterministic native captures, and uv-managed verifier calls directly. Its case
 JSON includes `material_budget` whenever the verifier report contains
 `artifact_context.material_contract.executor_budget`, `verifier_manifest`
 whenever a case uses a manifest-backed verifier run, and
-`material_budget_coverage` and `material_budget_bound_summary` when both inputs
-are present; the non-JSON output prints the same case-level plans/work/status
-summary with upload/copy utilization, per-case manifest bound summaries,
-per-case budget coverage, and per-case budget bound headroom when present.
+`material_budget_coverage`, `material_budget_bound_summary`, and
+`material_budget_bound_results` when both inputs are present; the non-JSON
+output prints the same case-level plans/work/status summary with upload/copy
+utilization, per-case manifest bound summaries, per-case budget coverage, and
+per-case budget bound headroom when present.
 Both commands are local
 verification commands, not default PR CI jobs.
 
@@ -1674,8 +1680,9 @@ artifact details, plus `material_budget` when the verifier report contains
 counts, exact material executor budget bound keys, and budget field names
 applied by the verifier, plus `material_budget_coverage` showing guarded and
 unguarded observed budget fields, plus `material_budget_bound_summary` showing
-the budget bound pass/fail count and tightest margin, and exits non-zero when
-an invariant fails.
+the budget bound pass/fail count and tightest margin, plus
+`material_budget_bound_results` listing each compact expected/actual/margin
+comparison, and exits non-zero when an invariant fails.
 The non-JSON command prints the same material budget in a short
 plans/work/status block with upload/copy utilization, a one-line verifier
 manifest summary, a one-line material budget coverage summary, and a one-line

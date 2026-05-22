@@ -615,13 +615,17 @@ auto verifier_observation_json(VerifierObservation const& verifier)
     auto const bound_summary = verifier.report
         ? material_budget_bound_summary_from_report(*verifier.report)
         : std::optional<MaterialBudgetBoundSummary>{};
+    auto const bound_results = verifier.report
+        ? material_budget_bound_results_from_report(*verifier.report)
+        : std::optional<std::vector<MaterialBudgetBoundResult>>{};
     return std::format(
         "{{\"requested\":{},\"executed\":{},\"ok\":{},"
         "\"exit_code\":{},\"timed_out\":{},\"stdout_tail\":{},"
         "\"stderr_tail\":{},\"report_error\":{},"
         "\"material_budget\":{},\"verifier_manifest\":{},"
         "\"material_budget_coverage\":{},"
-        "\"material_budget_bound_summary\":{},\"report\":{}}}",
+        "\"material_budget_bound_summary\":{},"
+        "\"material_budget_bound_results\":{},\"report\":{}}}",
         verifier.requested ? "true" : "false",
         verifier.executed ? "true" : "false",
         verifier.ok ? "true" : "false",
@@ -634,6 +638,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         verifier_manifest_summary_json(manifest),
         material_budget_coverage_json(coverage),
         material_budget_bound_summary_json(bound_summary),
+        material_budget_bound_results_json(bound_results),
         json_report_or_null(verifier.report));
 }
 

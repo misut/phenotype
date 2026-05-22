@@ -88,6 +88,16 @@ struct MaterialBudgetBoundSummary {
     std::vector<std::string> failed_keys;
 };
 
+struct MaterialBudgetBoundResult {
+    std::string key;
+    std::string field;
+    std::string bound;
+    std::optional<double> expected;
+    std::optional<double> actual;
+    std::optional<bool> ok;
+    std::optional<double> margin;
+};
+
 auto trim_copy(std::string_view text) -> std::string {
     auto first = text.find_first_not_of(" \t\r\n");
     if (first == std::string_view::npos)
@@ -162,6 +172,28 @@ auto json_string_array_at(json::Value const& value,
             out.push_back(item.as_string());
     }
     return out;
+}
+
+auto json_object_number(json::Object const& object, std::string_view key)
+    -> std::optional<double> {
+    auto const* found = json_object_member(object, key);
+    if (!found || !found->is_number())
+        return std::nullopt;
+    return found->as_float();
+}
+
+auto json_object_bool(json::Object const& object, std::string_view key)
+    -> std::optional<bool> {
+    auto const* found = json_object_member(object, key);
+    if (!found || !found->is_bool())
+        return std::nullopt;
+    return found->as_bool();
+}
+
+auto json_object_string(json::Object const& object, std::string_view key)
+    -> std::string {
+    auto const* found = json_object_member(object, key);
+    return found && found->is_string() ? found->as_string() : std::string{};
 }
 
 auto budget_integer_at(json::Value const& report, std::string_view key)
@@ -425,6 +457,35 @@ auto material_budget_bound_summary_from_report(json::Value const& report)
              "executor_budget_bound_summary",
              "failed_keys"}),
     };
+}
+
+auto material_budget_bound_results_from_report(json::Value const& report)
+    -> std::optional<std::vector<MaterialBudgetBoundResult>> {
+    auto const* results = json_array_at(report, {
+        "artifact_context",
+        "material_contract",
+        "executor_budget_bound_results",
+    });
+    if (!results)
+        return std::nullopt;
+
+    auto out = std::vector<MaterialBudgetBoundResult>{};
+    out.reserve(results->size());
+    for (auto const& item : *results) {
+        if (!item.is_object())
+            continue;
+        auto const& object = item.as_object();
+        out.push_back(MaterialBudgetBoundResult{
+            .key = json_object_string(object, "key"),
+            .field = json_object_string(object, "field"),
+            .bound = json_object_string(object, "bound"),
+            .expected = json_object_number(object, "expected"),
+            .actual = json_object_number(object, "actual"),
+            .ok = json_object_bool(object, "ok"),
+            .margin = json_object_number(object, "margin"),
+        });
+    }
+    return out;
 }
 
 auto sorted_unique(std::vector<std::string> values) -> std::vector<std::string> {
@@ -763,6 +824,35 @@ auto material_budget_bound_summary_json(
         json_string(summary->tightest_bound_field),
         budget_optional_number(summary->tightest_bound_margin),
         string_array_json(summary->failed_keys));
+}
+
+auto material_budget_bound_result_json(MaterialBudgetBoundResult const& result)
+    -> std::string {
+    return std::format(
+        "{{\"key\":{},\"field\":{},\"bound\":{},\"expected\":{},"
+        "\"actual\":{},\"ok\":{},\"margin\":{}}}",
+        json_string(result.key),
+        json_string(result.field),
+        json_string(result.bound),
+        budget_optional_number(result.expected),
+        budget_optional_number(result.actual),
+        budget_bool(result.ok),
+        budget_optional_number(result.margin));
+}
+
+auto material_budget_bound_results_json(
+        std::optional<std::vector<MaterialBudgetBoundResult>> const& results)
+    -> std::string {
+    if (!results)
+        return "null";
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < results->size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += material_budget_bound_result_json((*results)[i]);
+    }
+    out += "]";
+    return out;
 }
 
 auto budget_field_list_text(std::vector<std::string> const& fields,

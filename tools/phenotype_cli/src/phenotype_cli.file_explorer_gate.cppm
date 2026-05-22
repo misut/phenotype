@@ -31,6 +31,8 @@ struct FileExplorerArtifactCase {
     std::optional<VerifierManifestSummary> verifier_manifest;
     std::optional<MaterialBudgetCoverageSummary> material_budget_coverage;
     std::optional<MaterialBudgetBoundSummary> material_budget_bound_summary;
+    std::optional<std::vector<MaterialBudgetBoundResult>>
+        material_budget_bound_results;
     bool ok = false;
     std::string error;
 };
@@ -398,7 +400,8 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         "\"run_result\":{},\"verifier\":{},\"artifact\":{},"
         "\"material_budget\":{},\"verifier_manifest\":{},"
         "\"material_budget_coverage\":{},"
-        "\"material_budget_bound_summary\":{},\"error\":{}}}",
+        "\"material_budget_bound_summary\":{},"
+        "\"material_budget_bound_results\":{},\"error\":{}}}",
         json_string(item.profile),
         json_string(item.mode),
         json_string(item.scenario),
@@ -412,6 +415,7 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         verifier_manifest_summary_json(item.verifier_manifest),
         material_budget_coverage_json(item.material_budget_coverage),
         material_budget_bound_summary_json(item.material_budget_bound_summary),
+        material_budget_bound_results_json(item.material_budget_bound_results),
         json_string(item.error));
 }
 
@@ -754,6 +758,8 @@ auto run_file_explorer_case(fs::path const& root,
             item.verifier_manifest);
         item.material_budget_bound_summary =
             material_budget_bound_summary_from_report(*verifier_report);
+        item.material_budget_bound_results =
+            material_budget_bound_results_from_report(*verifier_report);
     }
     item.ok = item.artifact
         && item.artifact->snapshot_json
