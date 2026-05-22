@@ -1231,6 +1231,9 @@ compatibility wrappers once a matching CLI command exists.
 The CLI owns `artifact verify-glass-showcase` and `artifact
 verify-file-explorer` directly, so new docs and automation should prefer those
 command names while shell scripts remain as stable local wrappers.
+Those wrappers rebuild the CLI binary when it is missing or stale relative to
+the CLI sources and the shared example inputs they depend on, so local verifier
+runs do not accidentally reuse an older budget-reporting surface.
 Use the verifier command to validate the bundle before handing it to an LLM,
 attaching it to an issue, or comparing it in CI. The verifier checks the common
 debug schema, platform capabilities,
