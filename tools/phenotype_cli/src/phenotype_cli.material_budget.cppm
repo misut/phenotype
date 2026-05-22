@@ -3553,6 +3553,20 @@ auto coverage_minimum_shortfall_count_json(json::Object const& failure,
     return budget_optional_number(std::max(*expected_count - *actual_count, 0.0));
 }
 
+auto coverage_minimum_array_count_json(json::Object const& actual,
+                                       std::string_view key) -> std::string {
+    auto const* value = json_object_member(actual, key);
+    if (!value || !value->is_array())
+        return "null";
+
+    auto count = std::size_t{0};
+    for (auto const& item : value->as_array()) {
+        if (item.is_string())
+            ++count;
+    }
+    return std::to_string(count);
+}
+
 auto coverage_minimum_failure_detail_json(json::Object const& failure)
         -> std::string {
     auto path = json_object_failure_string(failure, "path");
@@ -3578,6 +3592,8 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
         "\"shortfall_count\":{},"
         "\"bound_keys\":{},\"guarded_fields\":{},\"observed_fields\":{},"
         "\"unguarded_observed_fields\":{},"
+        "\"bound_key_count\":{},\"guarded_field_count\":{},"
+        "\"observed_field_count\":{},\"unguarded_observed_field_count\":{},"
         "\"unguarded_observed_source_details\":{},"
         "\"actual_text\":{},\"text\":{},\"likely_layer\":{},"
         "\"likely_pass\":{},\"hint\":{},\"suggested_action\":{}}}",
@@ -3595,6 +3611,12 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
         json_object_value_or_null(actual_object, "guarded_fields"),
         json_object_value_or_null(actual_object, "observed_fields"),
         json_object_value_or_null(actual_object, "unguarded_observed_fields"),
+        coverage_minimum_array_count_json(actual_object, "bound_keys"),
+        coverage_minimum_array_count_json(actual_object, "guarded_fields"),
+        coverage_minimum_array_count_json(actual_object, "observed_fields"),
+        coverage_minimum_array_count_json(
+            actual_object,
+            "unguarded_observed_fields"),
         coverage_minimum_unguarded_source_details_json(actual_object),
         json_string(actual_text),
         json_string(failure_coverage_minimum_text(failure)),
