@@ -1845,6 +1845,9 @@ int main() {
         "\"actual_count\":1,\"shortfall_count\":1,\"bound_keys\":[\"draw_calls_gte\"]"));
     assert(contains_text(
         minimum_json,
+        "\"bound_key_count\":1,\"guarded_field_count\":1,\"observed_field_count\":null,\"unguarded_observed_field_count\":1"));
+    assert(contains_text(
+        minimum_json,
         "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"limit\":5,\"truncated\":false"));
     auto minimum_lines = verifier_failure_summary_lines(minimum_report);
     assert(contains_line(
@@ -1902,6 +1905,9 @@ int main() {
     assert(contains_text(
         many_minimum_json,
         "\"label\":\"resource.min_guarded_field_count\",\"coverage_family\":\"resource\",\"minimum_field\":\"min_guarded_field_count\""));
+    assert(contains_text(
+        many_minimum_json,
+        "\"bound_key_count\":null,\"guarded_field_count\":1,\"observed_field_count\":null,\"unguarded_observed_field_count\":null"));
     assert(count_text(
         many_minimum_json,
         "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":")
