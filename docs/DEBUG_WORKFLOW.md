@@ -211,7 +211,11 @@ artifact capture, and uv-managed verifier call directly. Its JSON includes
 build/run/verifier exit state, artifact bundle presence, manifest path,
 expected platform, accessibility display policy, and the same compact material
 budget concepts that `phenotype observe` exposes under
-`snapshot.material.executor_budget`. `artifact
+`snapshot.material.executor_budget`. It also exposes a compact
+`verifier_manifest` summary with the verifier manifest name, pixel-region
+counts, runtime numeric bound count, and material executor budget bound count,
+so local glass gates can show which manifest budget expectations were applied
+without embedding the full verifier report. `artifact
 verify-file-explorer` owns the shared-model test, desktop/mobile builds,
 deterministic native captures, and uv-managed verifier calls directly. Its case
 JSON includes `material_budget` whenever the verifier report contains
@@ -1630,9 +1634,12 @@ mise exec -- exon build
 
 The command emits a deterministic JSON report with build, run, verifier, and
 artifact details, plus `material_budget` when the verifier report contains
-`artifact_context.material_contract.executor_budget`, and exits non-zero when
-an invariant fails. The non-JSON command prints the same material budget in a
-short plans/work/status block with upload/copy utilization. The legacy
+`artifact_context.material_contract.executor_budget`, plus a compact
+`verifier_manifest` object that surfaces the manifest runtime/budget bound
+counts applied by the verifier, and exits non-zero when an invariant fails. The
+non-JSON command prints the same material budget in a short plans/work/status
+block with upload/copy utilization and a one-line verifier manifest summary.
+The legacy
 `tools/verify_glass_showcase_artifact.sh` wrapper delegates to the same CLI
 command for local compatibility.
 

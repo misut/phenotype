@@ -15,6 +15,9 @@ namespace phenotype_cli::glass_showcase {
 
 namespace fs = std::filesystem;
 using phenotype_cli::common::json_string;
+using phenotype_cli::common::json_integer_at;
+using phenotype_cli::common::json_object_at;
+using phenotype_cli::common::json_string_at;
 using phenotype_cli::common::path_string;
 using phenotype_cli::common::print_error;
 using phenotype_cli::common::read_text_file;
@@ -338,6 +341,16 @@ struct GlassArtifactGateSummary {
     std::string error;
 };
 
+struct VerifierManifestSummary {
+    std::string name;
+    std::int64_t pixel_regions = -1;
+    std::int64_t pixel_region_metrics = -1;
+    std::int64_t pixel_region_metric_comparisons = -1;
+    std::int64_t forbid_pixel_region_colors = -1;
+    std::int64_t runtime_numeric_bounds = -1;
+    std::int64_t material_executor_budget_bounds = -1;
+};
+
 auto timeout_seconds_json(
         std::optional<std::chrono::milliseconds> timeout) -> std::string {
     if (!timeout)
@@ -347,11 +360,78 @@ auto timeout_seconds_json(
         std::chrono::duration_cast<std::chrono::seconds>(*timeout).count());
 }
 
+auto verifier_report_from_result(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+    -> std::optional<json::Value> {
+    if (!result || result->stdout_text.empty())
+        return std::nullopt;
+    return parse_verifier_json(result->stdout_text);
+}
+
+auto verifier_manifest_summary_from_report(json::Value const& report)
+    -> std::optional<VerifierManifestSummary> {
+    if (!json_object_at(report, {"manifest"}))
+        return std::nullopt;
+    return VerifierManifestSummary{
+        .name = json_string_at(report, {"manifest", "name"})
+            .value_or("unknown"),
+        .pixel_regions = json_integer_at(
+            report,
+            {"manifest", "pixel_regions"}).value_or(-1),
+        .pixel_region_metrics = json_integer_at(
+            report,
+            {"manifest", "pixel_region_metrics"}).value_or(-1),
+        .pixel_region_metric_comparisons = json_integer_at(
+            report,
+            {"manifest", "pixel_region_metric_comparisons"}).value_or(-1),
+        .forbid_pixel_region_colors = json_integer_at(
+            report,
+            {"manifest", "forbid_pixel_region_colors"}).value_or(-1),
+        .runtime_numeric_bounds = json_integer_at(
+            report,
+            {"manifest", "runtime_numeric_bounds"}).value_or(-1),
+        .material_executor_budget_bounds = json_integer_at(
+            report,
+            {"manifest", "material_executor_budget_bounds"}).value_or(-1),
+    };
+}
+
+auto manifest_count_json(std::int64_t value) -> std::string {
+    return value >= 0 ? std::format("{}", value) : std::string{"null"};
+}
+
+auto verifier_manifest_summary_json(
+        std::optional<VerifierManifestSummary> const& manifest)
+    -> std::string {
+    if (!manifest)
+        return "null";
+    return std::format(
+        "{{\"name\":{},\"pixel_regions\":{},"
+        "\"pixel_region_metrics\":{},"
+        "\"pixel_region_metric_comparisons\":{},"
+        "\"forbid_pixel_region_colors\":{},"
+        "\"runtime_numeric_bounds\":{},"
+        "\"material_executor_budget_bounds\":{}}}",
+        json_string(manifest->name),
+        manifest_count_json(manifest->pixel_regions),
+        manifest_count_json(manifest->pixel_region_metrics),
+        manifest_count_json(manifest->pixel_region_metric_comparisons),
+        manifest_count_json(manifest->forbid_pixel_region_colors),
+        manifest_count_json(manifest->runtime_numeric_bounds),
+        manifest_count_json(manifest->material_executor_budget_bounds));
+}
+
 auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
     auto artifact = summary.artifact
         ? artifact_detail_json(*summary.artifact)
         : std::string{"null"};
-    auto budget = material_budget_from_verifier(summary.verifier_result);
+    auto verifier_report = verifier_report_from_result(summary.verifier_result);
+    auto budget = verifier_report
+        ? material_budget_from_report(*verifier_report)
+        : std::optional<MaterialBudgetSummary>{};
+    auto verifier_manifest = verifier_report
+        ? verifier_manifest_summary_from_report(*verifier_report)
+        : std::optional<VerifierManifestSummary>{};
     return std::format(
         "{{\"schema_version\":1,\"command\":\"artifact verify-glass-showcase\","
         "\"ok\":{},\"accessibility\":{},\"example_root\":{},"
@@ -359,7 +439,8 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         "\"manifest\":{},\"expect_platform\":{},"
         "\"accessibility_display\":{},\"timeout_seconds\":{},"
         "\"build\":{},\"run_result\":{},\"verifier\":{},"
-        "\"artifact\":{},\"material_budget\":{},\"error\":{}}}",
+        "\"artifact\":{},\"material_budget\":{},"
+        "\"verifier_manifest\":{},\"error\":{}}}",
         summary.ok ? "true" : "false",
         summary.accessibility ? "true" : "false",
         json_string(path_string(summary.example_root)),
@@ -375,6 +456,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         process_result_detail_json(summary.verifier_result),
         artifact,
         material_budget_json(budget),
+        verifier_manifest_summary_json(verifier_manifest),
         json_string(summary.error));
 }
 
@@ -415,6 +497,23 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
     };
     std::println("phenotype artifact verify-glass-showcase");
     std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    if (auto verifier_report =
+            verifier_report_from_result(summary.verifier_result)) {
+        if (auto manifest =
+                verifier_manifest_summary_from_report(*verifier_report)) {
+            std::println(
+                "verifier manifest: name={} runtime-bounds={} "
+                "budget-bounds={} pixel-regions={} metrics={} "
+                "comparisons={} forbidden-colors={}",
+                manifest->name,
+                budget_count(manifest->runtime_numeric_bounds),
+                budget_count(manifest->material_executor_budget_bounds),
+                budget_count(manifest->pixel_regions),
+                budget_count(manifest->pixel_region_metrics),
+                budget_count(manifest->pixel_region_metric_comparisons),
+                budget_count(manifest->forbid_pixel_region_colors));
+        }
+    }
     if (auto budget = material_budget_from_verifier(summary.verifier_result)) {
         std::println("material budget:");
         std::println(
