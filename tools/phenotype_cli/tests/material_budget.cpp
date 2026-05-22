@@ -319,6 +319,20 @@ auto sample_report() -> json::Value {
               "reduced-transparency": 1,
               "unsupported-backend": 1
             },
+            "plan_reference_model": {
+              "material_policies": {
+                "system-adaptive": 2,
+                "standard-material": 1
+              },
+              "accessibility_responses": {
+                "increase-contrast": 1,
+                "reduce-transparency": 2
+              },
+              "performance_responses": {
+                "bounded-backdrop": 2,
+                "deterministic-fallback": 1
+              }
+            },
             "decision_reduced_transparency": false,
             "decision_increase_contrast": true,
             "decision_reduce_motion": false,
@@ -471,7 +485,7 @@ int main() {
         "\"artifact_context\":{\"platform\":\"test\",\"backend\":\"synthetic\""));
     assert(contains_text(
         failure_json,
-        "\"material_contract\":{\"semantic_material_nodes\":3,\"renderer_plan_contract_version\":42,\"renderer_plan_count\":3,\"renderer_plans_present\":true,\"resolved_plan_count\":3,\"fallback_paths\":{\"unsupported-backend\":1},\"pass_executors\":{\"color-fill\":1,\"sampled-backdrop\":2},\"decision_first_blockers\":{\"reduced-transparency\":1,\"unsupported-backend\":1},\"decision_reduced_transparency\":false,\"decision_increase_contrast\":true,\"decision_reduce_motion\":false,\"app_probe_contract_name\":\"glass_showcase_material_probe_contract\",\"app_probe_reference_technology\":\"liquid-glass\"}"));
+        "\"material_contract\":{\"semantic_material_nodes\":3,\"renderer_plan_contract_version\":42,\"renderer_plan_count\":3,\"renderer_plans_present\":true,\"resolved_plan_count\":3,\"fallback_paths\":{\"unsupported-backend\":1},\"pass_executors\":{\"color-fill\":1,\"sampled-backdrop\":2},\"decision_first_blockers\":{\"reduced-transparency\":1,\"unsupported-backend\":1},\"reference_material_policies\":{\"standard-material\":1,\"system-adaptive\":2},\"reference_accessibility_responses\":{\"increase-contrast\":1,\"reduce-transparency\":2},\"reference_performance_responses\":{\"bounded-backdrop\":2,\"deterministic-fallback\":1},\"decision_reduced_transparency\":false,\"decision_increase_contrast\":true,\"decision_reduce_motion\":false,\"app_probe_contract_name\":\"glass_showcase_material_probe_contract\",\"app_probe_reference_technology\":\"liquid-glass\"}"));
     assert(contains_text(
         failure_json,
         "\"by_likely_layer\":{\"material-control\":2,\"platform-runtime\":1}"));
@@ -505,7 +519,7 @@ int main() {
         "top-action: reduce backdrop sample taps before raising the guard"));
     assert(contains_line(
         failure_lines,
-        "context: platform=test backend=synthetic semantic-nodes=3 renderer-plans=3 resolved-plans=3 fallbacks=unsupported-backend=1 blockers=reduced-transparency=1, unsupported-backend=1 pass-executors=sampled-backdrop=2, color-fill=1 reduced-transparency=false increase-contrast=true reduce-motion=false probe=liquid-glass"));
+        "context: platform=test backend=synthetic semantic-nodes=3 renderer-plans=3 resolved-plans=3 fallbacks=unsupported-backend=1 blockers=reduced-transparency=1, unsupported-backend=1 pass-executors=sampled-backdrop=2, color-fill=1 ref-policy=system-adaptive=2, standard-material=1 a11y=reduce-transparency=2, increase-contrast=1 perf=bounded-backdrop=2, deterministic-fallback=1 reduced-transparency=false increase-contrast=true reduce-motion=false probe=liquid-glass"));
     assert(contains_line(
         failure_lines,
         "by-layer: material-control=2, platform-runtime=1"));

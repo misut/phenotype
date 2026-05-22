@@ -1585,6 +1585,9 @@ auto failure_artifact_context_json(json::Value const& report) -> std::string {
         "\"fallback_paths\":{},"
         "\"pass_executors\":{},"
         "\"decision_first_blockers\":{},"
+        "\"reference_material_policies\":{},"
+        "\"reference_accessibility_responses\":{},"
+        "\"reference_performance_responses\":{},"
         "\"decision_reduced_transparency\":{},"
         "\"decision_increase_contrast\":{},"
         "\"decision_reduce_motion\":{},"
@@ -1628,6 +1631,18 @@ auto failure_artifact_context_json(json::Value const& report) -> std::string {
             report,
             {"failure_summary", "artifact_context", "material_contract",
              "decision_first_blockers"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "plan_reference_model", "material_policies"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "plan_reference_model", "accessibility_responses"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "plan_reference_model", "performance_responses"}),
         failure_json_value_or_null(
             report,
             {"failure_summary", "artifact_context", "material_contract",
@@ -1765,6 +1780,30 @@ auto failure_artifact_context_line(json::Value const& report) -> std::string {
             report,
             {"failure_summary", "artifact_context", "material_contract",
              "pass_executors"}));
+    append_failure_context_part(
+        parts,
+        "ref-policy",
+        compact_failure_count_map_text(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "plan_reference_model", "material_policies"},
+            2));
+    append_failure_context_part(
+        parts,
+        "a11y",
+        compact_failure_count_map_text(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "plan_reference_model", "accessibility_responses"},
+            2));
+    append_failure_context_part(
+        parts,
+        "perf",
+        compact_failure_count_map_text(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "plan_reference_model", "performance_responses"},
+            2));
     append_failure_context_part(
         parts,
         "reduced-transparency",
