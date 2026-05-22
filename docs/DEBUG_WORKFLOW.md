@@ -138,8 +138,9 @@ compact `material_plans.resource_bounds` summary, including pure plan blur/tap
 limits, capture and surface-sampling pixel bounds, runtime pass/stage counts,
 paint-layer counts, copy bounds, and deterministic fallback safety counters.
 `verifier.material_budget_bound_summary` adds the actual bound result summary,
-including pass/fail counts, failed bound keys, and the tightest remaining margin
-across the applied material executor budget bounds.
+including pass/fail counts, failed bound keys, zero/negative margin counts and
+source result lists, the tightest remaining margin, and the full tightest bound
+result across the applied material executor budget bounds.
 `verifier.material_budget_bound_results` mirrors the compact per-bound key,
 field, operator, expected value, actual value, pass/fail state, and margin so
 JSON consumers can compare every material budget constraint without scanning the
@@ -270,9 +271,10 @@ shadow counts plus maximum blur radius, sample taps, and backdrop pixel limits.
 `material_resource_bounds` reports the pure plan/resource budget maxima,
 runtime pass/stage usage, capture/surface-sampling pixel budgets, paint layer
 capacity, texture-copy bounds, and deterministic fallback counters.
-`material_budget_bound_summary` reports the applied budget bound pass/fail count
-and tightest margin. `material_budget_bound_results` provides the compact
-per-bound expected/actual/margin list from the same verifier report.
+`material_budget_bound_summary` reports the applied budget bound pass/fail count,
+zero/negative margin source result lists, and tightest result.
+`material_budget_bound_results` provides the compact per-bound
+expected/actual/margin list from the same verifier report.
 `material_resource_bound_summary`/`material_resource_bound_results` and
 `material_quality_policy_bound_summary`/`material_quality_policy_bound_results`
 mirror that compact bound-result shape for resource-budget and quality-policy
@@ -1660,9 +1662,10 @@ shape under `material_plans.resource_bound_results` /
 `resource_bound_summary` and `material_plans.quality_policy_bound_results` /
 `quality_policy_bound_summary`. Each result records the bound key, field,
 operator, expected value, actual value, pass/fail state, and numeric margin.
-The summaries report pass/fail counts, failed keys, and the tightest bound
-margin so local CLI output can show headroom without scanning the full
-`checks` array. Compact failure summaries additionally classify each bound group
+The summaries report pass/fail counts, failed keys, zero/negative margin sources,
+and the tightest bound result so local CLI output can show headroom without
+scanning the full `checks` array. Compact failure summaries additionally
+classify each bound group
 as `fail`, `tight`, `pass`, or `unknown` and count zero/negative margins in
 `bound_pressure`, including the zero/negative margin source key/field lists with
 their bound operator, expected value, actual value, pass/fail state, and margin,

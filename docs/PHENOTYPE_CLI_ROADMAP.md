@@ -161,6 +161,11 @@ summaries whenever a parsed report has bound summaries, so automation and local
 triage can distinguish a hard budget failure from a passing Liquid Glass budget
 that has no headroom left.
 
+Verifier bound summaries now carry the same source evidence directly:
+zero/negative margin counts, zero/negative source result arrays, and the full
+tightest bound result are present in the raw verifier JSON before the CLI derives
+its grouped pressure view.
+
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, package-owned SVG app icons,
 English/Korean locale files, and a Pretendard alias descriptor with CJK-capable

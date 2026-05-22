@@ -3551,17 +3551,29 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(by_key["max_plan_sample_taps_lte"]["actual"], 25)
         self.assertTrue(by_key["max_plan_sample_taps_lte"]["ok"])
         self.assertEqual(by_key["max_plan_sample_taps_lte"]["margin"], 0.0)
+        summary = report["material_plans"]["resource_bound_summary"]
+        self.assertEqual(summary["bound_count"], 44)
+        self.assertEqual(summary["pass_count"], 44)
+        self.assertEqual(summary["fail_count"], 0)
+        self.assertEqual(summary["failed_keys"], [])
+        self.assertEqual(summary["tightest_bound_key"], "max_plan_sample_taps_lte")
         self.assertEqual(
-            report["material_plans"]["resource_bound_summary"],
-            {
-                "bound_count": 44,
-                "pass_count": 44,
-                "fail_count": 0,
-                "failed_keys": [],
-                "tightest_bound_key": "max_plan_sample_taps_lte",
-                "tightest_bound_field": "max_plan_sample_taps",
-                "tightest_bound_margin": 0.0,
-            })
+            summary["tightest_bound_field"],
+            "max_plan_sample_taps")
+        self.assertEqual(summary["tightest_bound_margin"], 0.0)
+        self.assertEqual(
+            summary["tightest_bound_result"],
+            by_key["max_plan_sample_taps_lte"])
+        self.assertGreaterEqual(summary["zero_margin_count"], 1)
+        self.assertEqual(summary["negative_margin_count"], 0)
+        zero_sources = {
+            item["key"]: item
+            for item in summary["zero_margin_sources"]
+        }
+        self.assertEqual(
+            zero_sources["max_plan_sample_taps_lte"],
+            by_key["max_plan_sample_taps_lte"])
+        self.assertEqual(summary["negative_margin_sources"], [])
 
     def test_material_resource_bound_result_failure_is_llm_actionable(self) -> None:
         manifest = {
@@ -3585,6 +3597,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(result["actual"], 25)
         self.assertFalse(result["ok"])
         self.assertEqual(result["margin"], -25.0)
+        self.assertEqual(summary["negative_margin_count"], 1)
+        self.assertEqual(summary["negative_margin_sources"], [result])
+        self.assertEqual(summary["tightest_bound_result"], result)
         failure = next(
             item for item in report["failures"]
             if item["name"] == (
@@ -3625,6 +3640,13 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         }
         self.assertEqual(results["max_plan_sample_taps_lte"]["actual"], 25)
         self.assertTrue(results["require_bounded_texture_copy"]["ok"])
+        self.assertEqual(summary["zero_margin_count"], 2)
+        self.assertEqual(
+            {
+                item["key"]: item
+                for item in summary["zero_margin_sources"]
+            },
+            results)
 
     def test_manifest_can_require_execution_stage_summary(self) -> None:
         manifest = {
@@ -4569,17 +4591,27 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             by_key["max_backdrop_pixels_lte"]["actual"],
             4_000_000)
         self.assertTrue(by_key["max_backdrop_pixels_lte"]["ok"])
+        summary = report["material_plans"]["quality_policy_bound_summary"]
+        self.assertEqual(summary["bound_count"], 6)
+        self.assertEqual(summary["pass_count"], 6)
+        self.assertEqual(summary["fail_count"], 0)
+        self.assertEqual(summary["failed_keys"], [])
+        self.assertEqual(summary["tightest_bound_key"], "max_blur_radius_lte")
+        self.assertEqual(summary["tightest_bound_field"], "max_blur_radius")
+        self.assertEqual(summary["tightest_bound_margin"], 0.0)
         self.assertEqual(
-            report["material_plans"]["quality_policy_bound_summary"],
-            {
-                "bound_count": 6,
-                "pass_count": 6,
-                "fail_count": 0,
-                "failed_keys": [],
-                "tightest_bound_key": "max_blur_radius_lte",
-                "tightest_bound_field": "max_blur_radius",
-                "tightest_bound_margin": 0.0,
-            })
+            summary["tightest_bound_result"],
+            by_key["max_blur_radius_lte"])
+        self.assertGreaterEqual(summary["zero_margin_count"], 1)
+        self.assertEqual(summary["negative_margin_count"], 0)
+        zero_sources = {
+            item["key"]: item
+            for item in summary["zero_margin_sources"]
+        }
+        self.assertEqual(
+            zero_sources["max_blur_radius_lte"],
+            by_key["max_blur_radius_lte"])
+        self.assertEqual(summary["negative_margin_sources"], [])
 
     def test_material_quality_policy_bound_result_failure_is_llm_actionable(
             self) -> None:
@@ -4602,6 +4634,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(result["actual"], 36.0)
         self.assertFalse(result["ok"])
         self.assertEqual(result["margin"], -35.0)
+        self.assertEqual(summary["negative_margin_count"], 1)
+        self.assertEqual(summary["negative_margin_sources"], [result])
+        self.assertEqual(summary["tightest_bound_result"], result)
         failure = next(
             item for item in report["failures"]
             if item["name"] == (
@@ -4633,6 +4668,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(result["expected"], 1.0)
         self.assertEqual(result["actual"], 36.0)
         self.assertEqual(result["margin"], -35.0)
+        self.assertEqual(summary["negative_margin_count"], 1)
+        self.assertEqual(summary["negative_margin_sources"], [result])
+        self.assertEqual(summary["tightest_bound_result"], result)
 
     def test_manifest_can_require_runtime_numeric_bounds(self) -> None:
         manifest = {
@@ -4735,6 +4773,18 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(summary["pass_count"], 5)
         self.assertEqual(summary["fail_count"], 0)
         self.assertEqual(summary["failed_keys"], [])
+        self.assertEqual(summary["zero_margin_count"], 5)
+        self.assertEqual(summary["negative_margin_count"], 0)
+        zero_sources = {
+            item["key"]: item
+            for item in summary["zero_margin_sources"]
+        }
+        self.assertEqual(
+            zero_sources["upload_utilization_lte"],
+            by_key["upload_utilization_lte"])
+        self.assertEqual(
+            summary["tightest_bound_result"],
+            by_key["backdrop_copy_utilization_lte"])
 
     def test_cli_can_require_material_executor_budget_bounds_without_manifest(
             self) -> None:
@@ -4770,6 +4820,13 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         }
         self.assertEqual(results["draw_calls_gte"]["actual"], 1)
         self.assertEqual(results["max_sample_taps_equals"]["actual"], 13)
+        self.assertEqual(summary["zero_margin_count"], 2)
+        self.assertEqual(
+            {
+                item["key"]: item
+                for item in summary["zero_margin_sources"]
+            },
+            results)
 
     def test_material_executor_budget_bound_failure_is_llm_actionable(
             self) -> None:
@@ -4818,6 +4875,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(summary["pass_count"], 0)
         self.assertEqual(summary["fail_count"], 1)
         self.assertEqual(summary["failed_keys"], ["upload_utilization_lte"])
+        self.assertEqual(summary["negative_margin_count"], 1)
+        self.assertEqual(summary["negative_margin_sources"], [results[0]])
+        self.assertEqual(summary["tightest_bound_result"], results[0])
 
     def test_runtime_numeric_bound_failure_is_llm_actionable(self) -> None:
         manifest = {
