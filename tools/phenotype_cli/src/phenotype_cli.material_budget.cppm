@@ -235,6 +235,14 @@ auto json_object_number(json::Object const& object, std::string_view key)
     return found->as_float();
 }
 
+auto json_object_integer(json::Object const& object, std::string_view key)
+    -> std::optional<std::int64_t> {
+    auto const* found = json_object_member(object, key);
+    if (!found || !found->is_number())
+        return std::nullopt;
+    return found->as_integer();
+}
+
 auto json_object_bool(json::Object const& object, std::string_view key)
     -> std::optional<bool> {
     auto const* found = json_object_member(object, key);
@@ -247,6 +255,19 @@ auto json_object_string(json::Object const& object, std::string_view key)
     -> std::string {
     auto const* found = json_object_member(object, key);
     return found && found->is_string() ? found->as_string() : std::string{};
+}
+
+auto json_object_string_array(json::Object const& object, std::string_view key)
+    -> std::vector<std::string> {
+    auto out = std::vector<std::string>{};
+    auto const* found = json_object_member(object, key);
+    if (!found || !found->is_array())
+        return out;
+    for (auto const& item : found->as_array()) {
+        if (item.is_string())
+            out.push_back(item.as_string());
+    }
+    return out;
 }
 
 auto budget_integer_at(json::Value const& report, std::string_view key)
@@ -662,74 +683,26 @@ auto material_resource_bounds_from_verifier(
     return material_resource_bounds_from_verifier(*result);
 }
 
-auto material_budget_bound_summary_from_report(json::Value const& report)
-    -> std::optional<MaterialBudgetBoundSummary> {
-    if (!json_object_at(report, {
-            "artifact_context",
-            "material_contract",
-            "executor_budget_bound_summary",
-        })) {
-        return std::nullopt;
-    }
+auto material_bound_summary_from_object(json::Object const& object)
+    -> MaterialBudgetBoundSummary {
     return MaterialBudgetBoundSummary{
-        .bound_count = json_integer_at(
-            report,
-            {"artifact_context",
-             "material_contract",
-             "executor_budget_bound_summary",
-             "bound_count"}).value_or(-1),
-        .pass_count = json_integer_at(
-            report,
-            {"artifact_context",
-             "material_contract",
-             "executor_budget_bound_summary",
-             "pass_count"}).value_or(-1),
-        .fail_count = json_integer_at(
-            report,
-            {"artifact_context",
-             "material_contract",
-             "executor_budget_bound_summary",
-             "fail_count"}).value_or(-1),
-        .tightest_bound_key = json_string_at(
-            report,
-            {"artifact_context",
-             "material_contract",
-             "executor_budget_bound_summary",
-             "tightest_bound_key"}).value_or(""),
-        .tightest_bound_field = json_string_at(
-            report,
-            {"artifact_context",
-             "material_contract",
-             "executor_budget_bound_summary",
-             "tightest_bound_field"}).value_or(""),
-        .tightest_bound_margin = json_number_at(
-            report,
-            {"artifact_context",
-             "material_contract",
-             "executor_budget_bound_summary",
-             "tightest_bound_margin"}),
-        .failed_keys = json_string_array_at(
-            report,
-            {"artifact_context",
-             "material_contract",
-             "executor_budget_bound_summary",
-             "failed_keys"}),
+        .bound_count = json_object_integer(object, "bound_count").value_or(-1),
+        .pass_count = json_object_integer(object, "pass_count").value_or(-1),
+        .fail_count = json_object_integer(object, "fail_count").value_or(-1),
+        .tightest_bound_key = json_object_string(object, "tightest_bound_key"),
+        .tightest_bound_field =
+            json_object_string(object, "tightest_bound_field"),
+        .tightest_bound_margin =
+            json_object_number(object, "tightest_bound_margin"),
+        .failed_keys = json_object_string_array(object, "failed_keys"),
     };
 }
 
-auto material_budget_bound_results_from_report(json::Value const& report)
-    -> std::optional<std::vector<MaterialBudgetBoundResult>> {
-    auto const* results = json_array_at(report, {
-        "artifact_context",
-        "material_contract",
-        "executor_budget_bound_results",
-    });
-    if (!results)
-        return std::nullopt;
-
+auto material_bound_results_from_array(json::Array const& results)
+    -> std::vector<MaterialBudgetBoundResult> {
     auto out = std::vector<MaterialBudgetBoundResult>{};
-    out.reserve(results->size());
-    for (auto const& item : *results) {
+    out.reserve(results.size());
+    for (auto const& item : results) {
         if (!item.is_object())
             continue;
         auto const& object = item.as_object();
@@ -744,6 +717,70 @@ auto material_budget_bound_results_from_report(json::Value const& report)
         });
     }
     return out;
+}
+
+auto material_budget_bound_summary_from_report(json::Value const& report)
+    -> std::optional<MaterialBudgetBoundSummary> {
+    auto const* summary = json_object_at(report, {
+        "artifact_context",
+        "material_contract",
+        "executor_budget_bound_summary",
+    });
+    if (!summary)
+        return std::nullopt;
+    return material_bound_summary_from_object(*summary);
+}
+
+auto material_budget_bound_results_from_report(json::Value const& report)
+    -> std::optional<std::vector<MaterialBudgetBoundResult>> {
+    auto const* results = json_array_at(report, {
+        "artifact_context",
+        "material_contract",
+        "executor_budget_bound_results",
+    });
+    if (!results)
+        return std::nullopt;
+    return material_bound_results_from_array(*results);
+}
+
+auto material_resource_bound_summary_from_report(json::Value const& report)
+    -> std::optional<MaterialBudgetBoundSummary> {
+    auto const* summary = json_object_at(
+        report,
+        {"material_plans", "resource_bound_summary"});
+    if (!summary)
+        return std::nullopt;
+    return material_bound_summary_from_object(*summary);
+}
+
+auto material_resource_bound_results_from_report(json::Value const& report)
+    -> std::optional<std::vector<MaterialBudgetBoundResult>> {
+    auto const* results = json_array_at(
+        report,
+        {"material_plans", "resource_bound_results"});
+    if (!results)
+        return std::nullopt;
+    return material_bound_results_from_array(*results);
+}
+
+auto material_quality_policy_bound_summary_from_report(json::Value const& report)
+    -> std::optional<MaterialBudgetBoundSummary> {
+    auto const* summary = json_object_at(
+        report,
+        {"material_plans", "quality_policy_bound_summary"});
+    if (!summary)
+        return std::nullopt;
+    return material_bound_summary_from_object(*summary);
+}
+
+auto material_quality_policy_bound_results_from_report(json::Value const& report)
+    -> std::optional<std::vector<MaterialBudgetBoundResult>> {
+    auto const* results = json_array_at(
+        report,
+        {"material_plans", "quality_policy_bound_results"});
+    if (!results)
+        return std::nullopt;
+    return material_bound_results_from_array(*results);
 }
 
 auto sorted_unique(std::vector<std::string> values) -> std::vector<std::string> {

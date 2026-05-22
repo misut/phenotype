@@ -143,7 +143,13 @@ across the applied material executor budget bounds.
 `verifier.material_budget_bound_results` mirrors the compact per-bound key,
 field, operator, expected value, actual value, pass/fail state, and margin so
 JSON consumers can compare every material budget constraint without scanning the
-full report. `verifier.verifier_failure_summary` carries the same compact
+full report. `verifier.material_resource_bound_summary` and
+`verifier.material_resource_bound_results` expose the same expected/actual/margin
+shape for `require_material_resource_bounds`;
+`verifier.material_quality_policy_bound_summary` and
+`verifier.material_quality_policy_bound_results` do the same for
+`require_material_quality_policy`. `verifier.verifier_failure_summary` carries
+the same compact
 failure count, top likely layer/pass, top suggested action, and first failure
 details that the text output prints when the parsed verifier report fails.
 Use this as the first artifact triage command when a CI log or local bundle
@@ -261,6 +267,10 @@ capacity, texture-copy bounds, and deterministic fallback counters.
 `material_budget_bound_summary` reports the applied budget bound pass/fail count
 and tightest margin. `material_budget_bound_results` provides the compact
 per-bound expected/actual/margin list from the same verifier report.
+`material_resource_bound_summary`/`material_resource_bound_results` and
+`material_quality_policy_bound_summary`/`material_quality_policy_bound_results`
+mirror that compact bound-result shape for resource-budget and quality-policy
+manifest guards.
 When a parsed verifier report fails, JSON also includes
 `verifier_failure_summary` with the compact failure count, top likely
 layer/pass, top suggested action, and first failure details. The non-JSON gate
@@ -274,7 +284,9 @@ JSON includes `material_budget` whenever the verifier report contains
 `artifact_context.material_contract.executor_budget`, `verifier_manifest`
 whenever a case uses a manifest-backed verifier run, and
 `material_quality_policy`, `material_budget_coverage`,
-`material_resource_bounds`, `material_budget_bound_summary`, and
+`material_resource_bounds`, `material_resource_bound_summary`,
+`material_resource_bound_results`, `material_quality_policy_bound_summary`,
+`material_quality_policy_bound_results`, `material_budget_bound_summary`, and
 `material_budget_bound_results` when both inputs are present. Failed case JSON
 also includes
 `verifier_failure_summary` so machine consumers can triage the same compact
@@ -1566,6 +1578,9 @@ runtime stayed within the pure plan's performance budget. Supported limits are
 resolved plan. The runtime pass limits are aggregated from
 `renderer.material_plans[].passes` and should describe the actual executor pass
 list, not only the pure resource budget. Backends also serialize
+`material_plans.resource_bound_summary` and `material_plans.resource_bound_results`
+for every applied key so agents can compare expected, actual, pass/fail, and
+margin without reverse-engineering failure entries.
 `renderer.material_runtime_summary`; the verifier recomputes the same counters
 from `renderer.material_plans[]` and reports the exact summary field if the
 backend's view of executed material work drifts from the resolved plans. This
@@ -1671,6 +1686,10 @@ that exceed the engine caps surfaced by `phenotype.material`.
 eligibility; compare it with
 `renderer.material_executor_summary.backdrop_copy_pixels` when diagnosing how
 many pixels the backend actually copied in a frame.
+The verifier also serializes `material_plans.quality_policy_bound_summary` and
+`material_plans.quality_policy_bound_results` for every applied quality-policy
+guard, with the same expected/actual/pass/fail/margin fields used by material
+budget and resource bound results.
 On macOS this budget is intentionally larger than the generic 4M fallback
 because the native edge adapter probes Metal support and advertises a bounded
 16M backdrop-copy budget for Retina-sized windows. The artifact still proves the
@@ -1735,13 +1754,16 @@ applied by the verifier, plus `material_budget_coverage` showing guarded and
 unguarded observed budget fields, plus `material_budget_bound_summary` showing
 the budget bound pass/fail count and tightest margin, plus
 `material_budget_bound_results` listing each compact expected/actual/margin
-comparison, plus compact `verifier_failure_summary` metadata when the parsed
+comparison, plus resource-bound and quality-policy bound summaries/results with
+the same compact expected/actual/margin comparison shape, plus compact
+`verifier_failure_summary` metadata when the parsed
 verifier report fails, and exits non-zero when an invariant fails.
 The non-JSON command prints the same material budget in a short
 plans/work/status block with upload/copy utilization, a one-line verifier
 manifest summary, a one-line material budget coverage summary, a one-line
-material budget bounds summary, the nearest or failed bound comparison, and
-compact verifier failure summaries for failed parsed reports.
+material budget bounds summary, resource-bound and quality-policy bound summaries,
+the nearest or failed bound comparison, and compact verifier failure summaries for
+failed parsed reports.
 The legacy
 `tools/verify_glass_showcase_artifact.sh` wrapper delegates to the same CLI
 command for local compatibility.
