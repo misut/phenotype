@@ -2488,6 +2488,13 @@ auto verifier_bound_pressure_text(json::Value const& report) -> std::string {
     return text;
 }
 
+auto verifier_bound_pressure_text(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+        -> std::string {
+    auto report = verifier_report_from_result(result);
+    return report ? verifier_bound_pressure_text(*report) : std::string{};
+}
+
 auto verifier_material_budget_coverage_json(json::Value const& report)
         -> std::string {
     return material_budget_coverage_json(material_budget_coverage_summary(

@@ -279,7 +279,8 @@ mirror that compact bound-result shape for resource-budget and quality-policy
 manifest guards. `verifier_bound_pressure` groups those three bound families
 into `fail`, `tight`, `pass`, or `unknown` states even when the verifier report
 passes, so automation can spot no-headroom Liquid Glass budgets without waiting
-for a failure summary.
+for a failure summary. Non-JSON output prints the same grouped pressure line
+after the budget/resource/quality bound summaries.
 Both gates also accept the direct material bound guard options used by
 `artifact verify`, so local runs can tighten a resource, quality, or executor
 budget expectation without editing the checked-in manifest.
@@ -304,7 +305,8 @@ whenever a case uses a manifest-backed verifier run, and
 `material_quality_policy_bound_results`, `material_budget_bound_summary`, and
 `material_budget_bound_results` when both inputs are present. It also exposes
 `verifier_bound_pressure` for every parsed verifier report with bound summaries,
-including passing tight budgets. Failed case JSON includes
+including passing tight budgets, and the non-JSON output prints a per-case
+`material bound pressure` section. Failed case JSON includes
 `verifier_failure_summary` so machine consumers can triage the same compact
 failing paths, failed/tightest bounds, pressure state, and suggested actions
 without parsing verifier stdout; the non-JSON output prints the same case-level

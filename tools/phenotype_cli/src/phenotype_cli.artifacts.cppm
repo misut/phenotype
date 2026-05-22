@@ -909,6 +909,16 @@ void print_verifier_material_budget_bound_summary(
     }
 }
 
+void print_verifier_bound_pressure(VerifierObservation const& verifier) {
+    if (!verifier.report)
+        return;
+    auto pressure = verifier_bound_pressure_text(*verifier.report);
+    if (pressure.empty())
+        return;
+
+    std::println("material bound pressure: {}", pressure);
+}
+
 auto first_positional_or_error(cppx::cli::Invocation const& invocation,
                                std::string_view command_name)
     -> std::expected<fs::path, std::string> {
@@ -1184,6 +1194,7 @@ void print_artifact_verify_summary(fs::path const& bundle,
     print_verifier_material_resource_bound_summary(verifier);
     print_verifier_material_quality_policy_bound_summary(verifier);
     print_verifier_material_budget_bound_summary(verifier);
+    print_verifier_bound_pressure(verifier);
     print_verifier_material_budget(verifier);
     print_verifier_failure_summary(verifier);
 
@@ -1412,6 +1423,7 @@ void print_artifact_observation(ArtifactObservation const& observation) {
     print_verifier_material_resource_bound_summary(observation.verifier);
     print_verifier_material_quality_policy_bound_summary(observation.verifier);
     print_verifier_material_budget_bound_summary(observation.verifier);
+    print_verifier_bound_pressure(observation.verifier);
     print_verifier_material_budget(observation.verifier);
     print_verifier_failure_summary(observation.verifier);
     if (!observation.suggested_actions.empty()) {

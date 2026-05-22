@@ -567,6 +567,10 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
                 std::println("  {}", line);
             }
         }
+        if (auto pressure = verifier_bound_pressure_text(*verifier_report);
+            !pressure.empty()) {
+            std::println("material bound pressure: {}", pressure);
+        }
         for (auto const& line : verifier_failure_summary_lines(*verifier_report))
             std::println("{}", line);
     }

@@ -738,6 +738,25 @@ void print_material_quality_policy_bound_summary(
     }
 }
 
+void print_material_bound_pressure(
+        std::span<FileExplorerArtifactCase const> cases) {
+    auto has_pressure = std::ranges::any_of(
+        cases,
+        [](FileExplorerArtifactCase const& item) {
+            return !verifier_bound_pressure_text(item.verifier_result).empty();
+        });
+    if (!has_pressure)
+        return;
+
+    std::println("material bound pressure:");
+    for (auto const& item : cases) {
+        auto pressure = verifier_bound_pressure_text(item.verifier_result);
+        if (pressure.empty())
+            continue;
+        std::println("  {}: {}", case_label(item), pressure);
+    }
+}
+
 void print_file_explorer_gate(
         FileExplorerArtifactGateSummary const& summary) {
     auto lines = std::vector<cppx::terminal::StatusLine>{
@@ -781,6 +800,7 @@ void print_file_explorer_gate(
     print_material_resource_bound_summary(summary.cases);
     print_material_quality_policy_bound_summary(summary.cases);
     print_material_budget_bound_summary(summary.cases);
+    print_material_bound_pressure(summary.cases);
     print_material_budget_summary(summary.cases);
     if (!summary.error.empty()) {
         std::println("{}",
