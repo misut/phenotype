@@ -9,6 +9,16 @@ export namespace phenotype_cli::material_budget {
 
 using namespace phenotype_cli::common;
 
+struct MaterialBudgetSource {
+    std::string metric;
+    double value = -1.0;
+    std::string source_key;
+    std::string source_path;
+    std::string likely_layer;
+    std::string likely_pass;
+    std::string detail_json;
+};
+
 struct MaterialBudgetSummary {
     std::int64_t plan_count = -1;
     std::int64_t material_instance_count = -1;
@@ -43,6 +53,7 @@ struct MaterialBudgetSummary {
     std::string draw_status;
     std::string backdrop_copy_policy;
     std::string backdrop_copy_skip_reason;
+    std::vector<MaterialBudgetSource> sources;
 };
 
 struct MaterialQualityPolicySource {
@@ -447,6 +458,69 @@ auto budget_string_at(json::Value const& report, std::string_view key)
     });
 }
 
+auto material_budget_source_from_object(json::Object const& object,
+                                        std::string_view fallback_metric)
+    -> MaterialBudgetSource {
+    auto detail_json = std::string{};
+    if (auto const* detail = json_object_member(object, "detail");
+        detail && detail->is_object()) {
+        detail_json = json::emit(*detail);
+    }
+    auto metric = json_object_string(object, "metric");
+    if (metric.empty())
+        metric = std::string{fallback_metric};
+    return MaterialBudgetSource{
+        .metric = std::move(metric),
+        .value = json_object_number(object, "value").value_or(-1.0),
+        .source_key = json_object_string(object, "source_key"),
+        .source_path = json_object_string(object, "source_path"),
+        .likely_layer = json_object_string(object, "likely_layer"),
+        .likely_pass = json_object_string(object, "likely_pass"),
+        .detail_json = std::move(detail_json),
+    };
+}
+
+auto material_budget_sources_from_report(json::Value const& report)
+    -> std::vector<MaterialBudgetSource> {
+    auto out = std::vector<MaterialBudgetSource>{};
+    auto const* sources = json_object_at(
+        report,
+        {"artifact_context", "material_contract", "executor_budget_sources"});
+    if (!sources)
+        return out;
+    for (auto const& metric : {
+             "active_execution_stage_count",
+             "backdrop_copy_count",
+             "backdrop_copy_pixels",
+             "backdrop_copy_skipped_count",
+             "backdrop_copy_utilization",
+             "backdrop_execution_stage_count",
+             "buffer_capacity_bytes",
+             "draw_calls",
+             "dropped_execution_stage_count",
+             "execution_stage_count",
+             "fallback_instance_count",
+             "material_instance_count",
+             "max_backdrop_pixels",
+             "max_sample_taps",
+             "plan_count",
+             "planned_frame_capture_count",
+             "planned_frame_capture_pixels",
+             "planned_surface_sample_pixels",
+             "sampled_backdrop_instance_count",
+             "total_sample_taps",
+             "upload_bytes",
+             "upload_utilization",
+         }) {
+        auto const* source = json_object_member(*sources, metric);
+        if (source && source->is_object())
+            out.push_back(material_budget_source_from_object(
+                source->as_object(),
+                metric));
+    }
+    return out;
+}
+
 auto material_budget_from_report(json::Value const& report)
     -> std::optional<MaterialBudgetSummary> {
     auto prefix = std::initializer_list<std::string_view>{
@@ -539,6 +613,7 @@ auto material_budget_from_report(json::Value const& report)
         .backdrop_copy_skip_reason = budget_string_at(
             report,
             "backdrop_copy_skip_reason").value_or("unknown"),
+        .sources = material_budget_sources_from_report(report),
     };
 }
 
@@ -1847,6 +1922,42 @@ auto budget_bool_text(std::optional<bool> value) -> std::string {
     return *value ? "true" : "false";
 }
 
+auto material_budget_source_json(MaterialBudgetSource const& source)
+    -> std::string {
+    auto detail = source.detail_json.empty() ? std::string{"null"}
+                                             : source.detail_json;
+    return std::format(
+        "{{\"metric\":{},\"value\":{},\"source_key\":{},"
+        "\"source_path\":{},\"likely_layer\":{},\"likely_pass\":{},"
+        "\"detail\":{}}}",
+        json_string(source.metric),
+        budget_ratio(source.value),
+        json_string(source.source_key),
+        json_string(source.source_path),
+        json_string(source.likely_layer),
+        json_string(source.likely_pass),
+        detail);
+}
+
+auto material_budget_sources_json(
+        std::vector<MaterialBudgetSource> const& sources)
+    -> std::string {
+    auto out = std::string{"{"};
+    auto first = true;
+    for (auto const& source : sources) {
+        if (source.metric.empty())
+            continue;
+        if (!first)
+            out += ",";
+        first = false;
+        out += json_string(source.metric);
+        out += ":";
+        out += material_budget_source_json(source);
+    }
+    out += "}";
+    return out;
+}
+
 auto material_budget_json(std::optional<MaterialBudgetSummary> const& budget)
     -> std::string {
     if (!budget)
@@ -1870,7 +1981,8 @@ auto material_budget_json(std::optional<MaterialBudgetSummary> const& budget)
         "\"draw_required\":{},\"uploaded\":{},\"drawn\":{},"
         "\"backdrop_copy_required\":{},\"backdrop_copy_skipped_count\":{},"
         "\"upload_status\":{},\"draw_status\":{},"
-        "\"backdrop_copy_policy\":{},\"backdrop_copy_skip_reason\":{}}}",
+        "\"backdrop_copy_policy\":{},\"backdrop_copy_skip_reason\":{},"
+        "\"sources\":{}}}",
         budget->plan_count,
         budget->material_instance_count,
         budget->sampled_backdrop_instance_count,
@@ -1903,7 +2015,8 @@ auto material_budget_json(std::optional<MaterialBudgetSummary> const& budget)
         json_string(budget->upload_status),
         json_string(budget->draw_status),
         json_string(budget->backdrop_copy_policy),
-        json_string(budget->backdrop_copy_skip_reason));
+        json_string(budget->backdrop_copy_skip_reason),
+        material_budget_sources_json(budget->sources));
 }
 
 auto material_quality_policy_source_json(
@@ -2375,6 +2488,45 @@ auto verifier_manifest_debug_detail_paths_text(
     if (manifest.debug_detail_paths.empty())
         return {};
     return budget_field_list_text(manifest.debug_detail_paths, limit);
+}
+
+auto material_budget_source_text(MaterialBudgetSource const& source)
+    -> std::string {
+    auto key = source.source_key.empty()
+        ? std::string{}
+        : std::format(" key={}", source.source_key);
+    auto at = source.source_path.empty()
+        ? std::string{}
+        : std::format(" path={}", source.source_path);
+    auto pass = source.likely_pass.empty()
+        ? std::string{}
+        : std::format(" pass={}", source.likely_pass);
+    return std::format(
+        "{}={} layer={}",
+        source.metric,
+        budget_number_text(source.value),
+        source.likely_layer.empty() ? std::string{"unknown"}
+                                    : source.likely_layer)
+        + pass
+        + key
+        + at;
+}
+
+auto material_budget_sources_text(
+        std::vector<MaterialBudgetSource> const& sources,
+        std::size_t limit = 5)
+    -> std::string {
+    if (sources.empty())
+        return {};
+    auto parts = std::vector<std::string>{};
+    auto count = std::min(limit, sources.size());
+    for (std::size_t i = 0; i < count; ++i)
+        parts.push_back(material_budget_source_text(sources[i]));
+    auto text = std::views::join_with(parts, std::string_view{"; "})
+        | std::ranges::to<std::string>();
+    if (sources.size() > limit)
+        text += std::format("; +{} more", sources.size() - limit);
+    return text;
 }
 
 auto material_resource_bound_source_text(MaterialResourceBoundSource const& source)
@@ -2969,7 +3121,7 @@ auto failure_executor_budget_json(json::Value const& report) -> std::string {
         "\"backdrop_copy_utilization\":{},\"pipeline_ready\":{},"
         "\"backdrop_source_ready\":{},\"upload_status\":{},"
         "\"draw_status\":{},\"backdrop_copy_policy\":{},"
-        "\"backdrop_copy_skip_reason\":{}}}",
+        "\"backdrop_copy_skip_reason\":{},\"sources\":{}}}",
         failure_json_value_or_null(
             report,
             {"failure_summary", "artifact_context", "material_contract",
@@ -3021,7 +3173,11 @@ auto failure_executor_budget_json(json::Value const& report) -> std::string {
         failure_json_value_or_null(
             report,
             {"failure_summary", "artifact_context", "material_contract",
-             "executor_budget", "backdrop_copy_skip_reason"}));
+             "executor_budget", "backdrop_copy_skip_reason"}),
+        failure_json_value_or_null(
+            report,
+            {"failure_summary", "artifact_context", "material_contract",
+             "executor_budget_sources"}));
 }
 
 auto failure_resource_bounds_json(json::Value const& report) -> std::string {
@@ -4170,6 +4326,13 @@ auto verifier_material_budget_coverage_text(json::Value const& report)
     return coverage ? material_budget_coverage_text(*coverage) : std::string{};
 }
 
+auto verifier_material_budget_sources_text(json::Value const& report)
+    -> std::string {
+    auto budget = material_budget_from_report(report);
+    return budget ? material_budget_sources_text(budget->sources)
+                  : std::string{};
+}
+
 auto verifier_material_resource_bound_coverage_json(json::Value const& report)
     -> std::string {
     return material_bound_coverage_json(
@@ -4527,6 +4690,10 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto coverage = verifier_material_quality_policy_coverage_text(report);
         !coverage.empty()) {
         lines.push_back("  quality-coverage: " + coverage);
+    }
+    if (auto sources = verifier_material_budget_sources_text(report);
+        !sources.empty()) {
+        lines.push_back("  budget-sources: " + sources);
     }
     if (auto container_groups = verifier_material_container_groups_text(report);
         !container_groups.empty()) {

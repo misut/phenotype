@@ -142,6 +142,38 @@ auto sample_report() -> json::Value {
             "backdrop_copy_policy": "bounded",
             "backdrop_copy_skip_reason": "none"
           },
+          "executor_budget_sources": {
+            "draw_calls": {
+              "metric": "draw_calls",
+              "value": 2,
+              "source_key": "material_draw_calls",
+              "source_path": "debug.platform_runtime.details.renderer.material_executor_summary.material_draw_calls",
+              "likely_layer": "platform-runtime",
+              "likely_pass": "material-executor"
+            },
+            "max_backdrop_pixels": {
+              "metric": "max_backdrop_pixels",
+              "value": 4096,
+              "source_key": "max_backdrop_pixels",
+              "source_path": "debug.platform_runtime.details.renderer.material_plans#resource_bounds.max_backdrop_pixels",
+              "likely_layer": "platform-runtime",
+              "likely_pass": "resource-budget"
+            },
+            "upload_utilization": {
+              "metric": "upload_utilization",
+              "value": 0.0625,
+              "source_key": "upload_utilization",
+              "source_path": "debug.platform_runtime.details.renderer.material_executor_summary.material_upload_bytes",
+              "likely_layer": "platform-runtime",
+              "likely_pass": "material-executor",
+              "detail": {
+                "numerator": 256,
+                "numerator_path": "debug.platform_runtime.details.renderer.material_executor_summary.material_upload_bytes",
+                "denominator": 4096,
+                "denominator_path": "debug.platform_runtime.details.renderer.material_executor_summary.material_buffer_capacity_bytes"
+              }
+            }
+          },
           "executor_budget_coverage": {
             "guardable_field_count": 22,
             "observed_field_count": 22,
@@ -801,6 +833,30 @@ auto sample_report() -> json::Value {
               "backdrop_copy_policy": "bounded",
               "backdrop_copy_skip_reason": "none"
             },
+            "executor_budget_sources": {
+              "draw_calls": {
+                "metric": "draw_calls",
+                "value": 2,
+                "source_key": "material_draw_calls",
+                "source_path": "debug.platform_runtime.details.renderer.material_executor_summary.material_draw_calls",
+                "likely_layer": "platform-runtime",
+                "likely_pass": "material-executor"
+              },
+              "upload_utilization": {
+                "metric": "upload_utilization",
+                "value": 0.0625,
+                "source_key": "upload_utilization",
+                "source_path": "debug.platform_runtime.details.renderer.material_executor_summary.material_upload_bytes",
+                "likely_layer": "platform-runtime",
+                "likely_pass": "material-executor",
+                "detail": {
+                  "numerator": 256,
+                  "numerator_path": "debug.platform_runtime.details.renderer.material_executor_summary.material_upload_bytes",
+                  "denominator": 4096,
+                  "denominator_path": "debug.platform_runtime.details.renderer.material_executor_summary.material_buffer_capacity_bytes"
+                }
+              }
+            },
             "fallback_paths": {
               "unsupported-backend": 1
             },
@@ -945,6 +1001,21 @@ int main() {
     assert(budget->upload_utilization == 0.0625);
     assert(budget->backdrop_copy_required && *budget->backdrop_copy_required);
     assert(budget->upload_status == "uploaded");
+    assert(budget->sources.size() == 3);
+    assert(budget->sources[0].metric == "draw_calls");
+    assert(budget->sources[0].source_key == "material_draw_calls");
+    assert(budget->sources[1].metric == "max_backdrop_pixels");
+    assert(budget->sources[1].likely_pass == "resource-budget");
+    assert(budget->sources[2].metric == "upload_utilization");
+    assert(contains_text(
+        budget->sources[2].detail_json,
+        "\"denominator_path\""));
+    assert(contains_text(
+        material_budget_json(budget),
+        "\"sources\":{\"draw_calls\":{\"metric\":\"draw_calls\""));
+    assert(contains_text(
+        material_budget_sources_text(budget->sources),
+        "draw_calls=2 layer=platform-runtime"));
 
     auto coverage = material_budget_coverage_summary(budget, manifest);
     assert(coverage);
@@ -1197,7 +1268,14 @@ int main() {
         "\"artifact_context\":{\"platform\":\"test\",\"backend\":\"synthetic\""));
     assert(contains_text(
         failure_json,
-        "\"material_contract\":{\"semantic_material_nodes\":3,\"renderer_plan_contract_version\":42,\"renderer_plan_count\":3,\"renderer_plans_present\":true,\"resolved_plan_count\":3,\"executor_budget\":{\"plan_count\":3,\"sampled_backdrop_instance_count\":2,\"fallback_instance_count\":0,\"draw_calls\":2,\"total_sample_taps\":50,\"upload_utilization\":0.0625,\"backdrop_copy_utilization\":0.25,\"pipeline_ready\":true,\"backdrop_source_ready\":true,\"upload_status\":\"uploaded\",\"draw_status\":\"drawn\",\"backdrop_copy_policy\":\"bounded\",\"backdrop_copy_skip_reason\":\"none\"},\"fallback_paths\":{\"unsupported-backend\":1},\"pass_executors\":{\"color-fill\":1,\"sampled-backdrop\":2},\"decision_first_blockers\":{\"reduced-transparency\":1,\"unsupported-backend\":1},\"reference_material_policies\":{\"standard-material\":1,\"system-adaptive\":2},\"reference_accessibility_responses\":{\"increase-contrast\":1,\"reduce-transparency\":2},\"reference_performance_responses\":{\"bounded-backdrop\":2,\"deterministic-fallback\":1},\"decision_reduced_transparency\":false,\"decision_increase_contrast\":true,\"decision_reduce_motion\":false,\"app_probe_contract_name\":\"glass_showcase_material_probe_contract\",\"app_probe_reference_technology\":\"liquid-glass\"}"));
+        "\"backdrop_copy_skip_reason\":\"none\",\"sources\":{"));
+    assert(contains_text(failure_json, "\"draw_calls\":{"));
+    assert(contains_text(failure_json, "\"metric\":\"draw_calls\""));
+    assert(contains_text(
+        failure_json,
+        "\"upload_utilization\":{"));
+    assert(contains_text(failure_json, "\"metric\":\"upload_utilization\""));
+    assert(contains_text(failure_json, "\"source_key\":\"upload_utilization\""));
     assert(contains_text(
         failure_json,
         "\"bound_summaries\":{\"executor\":{\"bound_count\":3,\"pass_count\":2,\"fail_count\":1,\"zero_margin_count\":1,\"negative_margin_count\":1"));
@@ -1331,6 +1409,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "quality-coverage: guarded=2/6 observed=6 guard-keys=2 required=2/2 observed-required=2/2"));
+    assert(contains_line(
+        failure_lines,
+        "budget-sources: draw_calls=2 layer=platform-runtime pass=material-executor key=material_draw_calls"));
     assert(contains_line(
         failure_lines,
         "container-groups: groups=3 multi=1 union=1 morph=2 interactive=1"));

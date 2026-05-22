@@ -824,6 +824,10 @@ void print_verifier_material_budget(VerifierObservation const& verifier) {
         budget_bool_text(budget->backdrop_copy_required),
         budget->backdrop_copy_policy,
         budget->backdrop_copy_skip_reason);
+    if (auto sources = material_budget_sources_text(budget->sources);
+        !sources.empty()) {
+        std::println("  sources: {}", sources);
+    }
 }
 
 void print_verifier_manifest_summary(VerifierObservation const& verifier) {

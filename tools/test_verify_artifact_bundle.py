@@ -5424,6 +5424,19 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertIn(
             "executor_budget",
             report["failure_summary"]["artifact_context"]["material_contract"])
+        sources = (
+            report["failure_summary"]
+            ["artifact_context"]
+            ["material_contract"]
+            ["executor_budget_sources"])
+        self.assertEqual(
+            sources["upload_utilization"]["source_path"],
+            "debug.platform_runtime.details.renderer"
+            ".material_executor_summary.material_upload_bytes")
+        self.assertEqual(
+            sources["upload_utilization"]["detail"]["denominator_path"],
+            "debug.platform_runtime.details.renderer"
+            ".material_executor_summary.material_buffer_capacity_bytes")
         results = (
             report["artifact_context"]
             ["material_contract"]
@@ -5600,6 +5613,27 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertTrue(budget["drawn"])
         self.assertEqual(budget["upload_status"], "uploaded")
         self.assertEqual(budget["draw_status"], "drawn")
+        sources = (
+            report["artifact_context"]
+            ["material_contract"]
+            ["executor_budget_sources"])
+        self.assertEqual(
+            sources["draw_calls"]["source_key"],
+            "material_draw_calls")
+        self.assertEqual(
+            sources["draw_calls"]["source_path"],
+            "debug.platform_runtime.details.renderer"
+            ".material_executor_summary.material_draw_calls")
+        self.assertEqual(sources["upload_utilization"]["value"], 1.0)
+        self.assertEqual(
+            sources["upload_utilization"]["detail"]["numerator"],
+            128)
+        self.assertEqual(
+            sources["upload_utilization"]["detail"]["denominator"],
+            128)
+        self.assertEqual(
+            sources["max_backdrop_pixels"]["likely_pass"],
+            "resource-budget")
 
     def test_material_executor_summary_mismatch_is_llm_actionable(self) -> None:
         root = snapshot(material_plan())

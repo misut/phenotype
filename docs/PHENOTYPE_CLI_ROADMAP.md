@@ -177,6 +177,13 @@ the raw summary or the grouped pressure view without losing bound-source detail.
 The raw verifier JSON now stores executor budget coverage next to
 `artifact_context.material_contract.executor_budget`, and the CLI compact
 envelopes prefer that summary before falling back to their legacy derivation.
+The same material contract now records
+`artifact_context.material_contract.executor_budget_sources` with source keys,
+JSON paths, likely layer/pass hints, and ratio numerator/denominator detail for
+numeric executor-budget fields. CLI compact `material_budget.sources` JSON and
+non-JSON output preserve those descriptors so upload utilization, draw calls,
+stage counts, backdrop-copy pixels, and the copied resource-bound pixel ceiling
+can be traced without opening the full runtime summary.
 Raw verifier JSON and CLI compact envelopes also include
 `resource_bound_coverage` and `quality_policy_bound_coverage` summaries when
 manifests opt into `require_material_resource_bound_coverage` or

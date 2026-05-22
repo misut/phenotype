@@ -959,10 +959,14 @@ def material_failure_context(
             dict)
         executor_summary = renderer_details.get("material_executor_summary")
         if isinstance(executor_summary, dict):
-            material_contract["executor_budget"] = (
-                material_executor_budget_context(
+            executor_budget = material_executor_budget_context(
+                executor_summary,
+                material_plan_summary)
+            material_contract["executor_budget"] = executor_budget
+            material_contract["executor_budget_sources"] = (
+                material_executor_budget_sources_context(
                     executor_summary,
-                    material_plan_summary))
+                    executor_budget))
     if isinstance(material_plan_summary, dict):
         decision_trace = material_plan_summary.get("decision_trace")
         if not isinstance(decision_trace, dict):
@@ -1047,6 +1051,117 @@ def budget_ratio(
     if float(denominator) <= 0.0:
         return 0.0
     return float(numerator) / float(denominator)
+
+
+def material_executor_budget_source(
+    metric: str,
+    value: int | float,
+    source_key: str,
+    source_path: str,
+    *,
+    likely_pass: str = "material-executor",
+    detail: JsonObject | None = None,
+) -> JsonObject:
+    source: JsonObject = {
+        "metric": metric,
+        "value": value,
+        "source_key": source_key,
+        "source_path": source_path,
+        "likely_layer": "platform-runtime",
+        "likely_pass": likely_pass,
+    }
+    if isinstance(detail, dict) and detail:
+        source["detail"] = detail
+    return source
+
+
+def material_executor_budget_sources_context(
+    executor_summary: JsonObject,
+    budget: JsonObject,
+) -> JsonObject:
+    base = "debug.platform_runtime.details.renderer.material_executor_summary"
+    sources: JsonObject = {}
+
+    field_map = {
+        "plan_count": "plan_count",
+        "material_instance_count": "material_instance_count",
+        "sampled_backdrop_instance_count": "sampled_backdrop_instance_count",
+        "fallback_instance_count": "fallback_instance_count",
+        "execution_stage_count": "execution_stage_count",
+        "active_execution_stage_count": "active_execution_stage_count",
+        "backdrop_execution_stage_count": "backdrop_execution_stage_count",
+        "dropped_execution_stage_count": "dropped_execution_stage_count",
+        "draw_calls": "material_draw_calls",
+        "total_sample_taps": "material_total_sample_taps",
+        "max_sample_taps": "material_max_sample_taps",
+        "upload_bytes": "material_upload_bytes",
+        "buffer_capacity_bytes": "material_buffer_capacity_bytes",
+        "backdrop_copy_count": "backdrop_copy_count",
+        "backdrop_copy_pixels": "backdrop_copy_pixels",
+        "planned_frame_capture_count": "planned_frame_capture_count",
+        "planned_frame_capture_pixels": "planned_frame_capture_pixels",
+        "planned_surface_sample_pixels": "planned_surface_sample_pixels",
+        "backdrop_copy_skipped_count": "backdrop_copy_skipped_count",
+    }
+    for metric, source_key in field_map.items():
+        if number_at(executor_summary, source_key) is None:
+            continue
+        value = budget.get(metric)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            sources[metric] = material_executor_budget_source(
+                metric,
+                value,
+                source_key,
+                f"{base}.{source_key}")
+
+    max_backdrop_pixels = budget.get("max_backdrop_pixels")
+    if (isinstance(max_backdrop_pixels, (int, float))
+            and not isinstance(max_backdrop_pixels, bool)):
+        sources["max_backdrop_pixels"] = material_executor_budget_source(
+            "max_backdrop_pixels",
+            max_backdrop_pixels,
+            "max_backdrop_pixels",
+            "debug.platform_runtime.details.renderer"
+            ".material_plans#resource_bounds.max_backdrop_pixels",
+            likely_pass="resource-budget")
+
+    upload_utilization = budget.get("upload_utilization")
+    upload_bytes = budget.get("upload_bytes")
+    upload_capacity = budget.get("buffer_capacity_bytes")
+    if (isinstance(upload_utilization, (int, float))
+            and not isinstance(upload_utilization, bool)):
+        sources["upload_utilization"] = material_executor_budget_source(
+            "upload_utilization",
+            upload_utilization,
+            "upload_utilization",
+            f"{base}.material_upload_bytes",
+            detail={
+                "numerator": upload_bytes,
+                "numerator_path": f"{base}.material_upload_bytes",
+                "denominator": upload_capacity,
+                "denominator_path": (
+                    f"{base}.material_buffer_capacity_bytes"),
+            })
+
+    backdrop_copy_utilization = budget.get("backdrop_copy_utilization")
+    copied_pixels = budget.get("backdrop_copy_pixels")
+    if (isinstance(backdrop_copy_utilization, (int, float))
+            and not isinstance(backdrop_copy_utilization, bool)):
+        sources["backdrop_copy_utilization"] = material_executor_budget_source(
+            "backdrop_copy_utilization",
+            backdrop_copy_utilization,
+            "backdrop_copy_utilization",
+            f"{base}.backdrop_copy_pixels",
+            detail={
+                "numerator": copied_pixels,
+                "numerator_path": f"{base}.backdrop_copy_pixels",
+                "denominator": max_backdrop_pixels,
+                "denominator_path": (
+                    "debug.platform_runtime.details.renderer"
+                    ".material_plans#resource_bounds.max_backdrop_pixels"),
+            })
+
+    return sources
 
 
 def material_executor_budget_context(

@@ -702,6 +702,10 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
             budget_bool_text(budget->backdrop_copy_required),
             budget->backdrop_copy_policy,
             budget->backdrop_copy_skip_reason);
+        if (auto sources = material_budget_sources_text(budget->sources);
+            !sources.empty()) {
+            std::println("  sources: {}", sources);
+        }
     }
     if (!summary.error.empty()) {
         std::println("{}",
