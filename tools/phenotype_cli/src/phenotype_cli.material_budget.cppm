@@ -3218,6 +3218,55 @@ auto json_object_compact_failure_text_json(json::Object const& object,
     return failure_optional_string_json(text);
 }
 
+auto failure_missing_field_sources_text(json::Object const& failure,
+                                        std::size_t limit = 3)
+        -> std::string {
+    auto const* actual = json_object_member(failure, "actual");
+    if (!actual || !actual->is_object())
+        return {};
+    auto const* sources_value = json_object_member(
+        actual->as_object(),
+        "missing_field_sources");
+    if (!sources_value || !sources_value->is_object())
+        return {};
+
+    auto const& sources = sources_value->as_object();
+    auto parts = std::vector<std::string>{};
+    auto printed = std::size_t{0};
+    for (auto const& [field, value] : sources) {
+        if (printed >= limit)
+            break;
+        if (!value.is_object())
+            continue;
+        auto const& source = value.as_object();
+        auto text = std::string{field};
+        if (auto number = json_object_number(source, "value")) {
+            text += "=";
+            text += budget_number_text(*number);
+        }
+        if (auto pass = json_object_string(source, "likely_pass");
+            !pass.empty()) {
+            text += " pass=";
+            text += pass;
+        }
+        if (auto path = json_object_string(source, "source_path");
+            !path.empty()) {
+            text += " path=";
+            text += path;
+        }
+        parts.push_back(std::move(text));
+        ++printed;
+    }
+    if (parts.empty())
+        return {};
+
+    auto text = std::views::join_with(parts, std::string_view{"; "})
+        | std::ranges::to<std::string>();
+    if (sources.size() > printed)
+        text += std::format("; +{} more", sources.size() - printed);
+    return text;
+}
+
 auto compact_failure_location_text(json::Object const& failure)
         -> std::string {
     auto parts = std::vector<std::string>{};
@@ -4654,6 +4703,10 @@ auto verifier_failure_detail_lines(json::Object const& failure)
             expected.empty() ? "<unspecified>" : expected,
             actual.empty() ? "<unspecified>" : actual));
     }
+    if (auto sources = failure_missing_field_sources_text(failure);
+        !sources.empty()) {
+        lines.push_back("    missing-field-sources: " + sources);
+    }
 
     if (auto hint = json_object_failure_string(failure, "hint");
         !hint.empty()) {
@@ -4673,7 +4726,8 @@ auto verifier_failure_detail_json(json::Object const& failure)
     return std::format(
         "{{\"name\":{},\"message\":{},\"path\":{},\"region\":{},"
         "\"likely_layer\":{},\"likely_pass\":{},\"expected\":{},"
-        "\"actual\":{},\"hint\":{},\"suggested_action\":{}}}",
+        "\"actual\":{},\"missing_field_sources\":{},"
+        "\"hint\":{},\"suggested_action\":{}}}",
         json_object_failure_string_json(failure, "name"),
         json_object_failure_string_json(failure, "message"),
         json_object_failure_string_json(failure, "path"),
@@ -4682,6 +4736,8 @@ auto verifier_failure_detail_json(json::Object const& failure)
         json_object_failure_string_json(failure, "likely_pass"),
         json_object_compact_failure_text_json(failure, "expected"),
         json_object_compact_failure_text_json(failure, "actual"),
+        failure_optional_string_json(
+            failure_missing_field_sources_text(failure)),
         json_object_failure_string_json(failure, "hint"),
         json_object_failure_string_json(failure, "suggested_action"));
 }
