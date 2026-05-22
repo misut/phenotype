@@ -509,6 +509,9 @@ int main() {
         "\"budget_coverage\":{\"guardable_field_count\":22,\"observed_field_count\":22,\"guarded_observed_field_count\":3,\"unguarded_observed_field_count\":19,\"required_field_count\":2,\"covered_required_field_count\":2,\"missing_required_field_count\":0,\"manifest_field_count\":3,\"manifest_bound_key_count\":3"));
     assert(contains_text(
         failure_json,
+        "\"material_context\":{\"resource_bounds\":{\"max_plan_sample_taps\":25,\"total_plan_sample_taps\":50,\"max_backdrop_pixels\":4096,\"max_frame_capture_count\":1,\"max_frame_capture_pixels\":4096,\"total_surface_sample_pixels\":2048,\"total_execution_stages\":8,\"active_execution_stages\":8,\"backdrop_execution_stages\":2,\"dropped_execution_stages\":0,\"total_paint_layers\":6,\"active_paint_layers\":6,\"dropped_paint_layers\":0,\"max_pass_texture_copy_pixels\":1024,\"total_pass_texture_copy_pixels\":2048,\"unbounded_texture_copy\":0,\"non_deterministic_fallback\":0,\"max_refraction_offset_pixels\":3.5,\"max_container_spacing\":20,\"max_paint_layer_inflate\":6},\"quality_policy\":{\"backdrop_sampling_disabled\":0,\"noise_disabled\":0,\"shadow_disabled\":0,\"max_blur_radius\":36,\"max_sample_taps\":25,\"max_backdrop_pixels\":4096}}"));
+    assert(contains_text(
+        failure_json,
         "\"by_likely_layer\":{\"material-control\":2,\"platform-runtime\":1}"));
     assert(contains_text(
         failure_json,
@@ -547,6 +550,12 @@ int main() {
     assert(contains_line(
         failure_lines,
         "coverage: guarded=3/22 observed=22 guard-keys=3 unguarded=19 (active_execution_stage_count, backdrop_copy_count, backdrop_copy_pixels, backdrop_copy_skipped_count, backdrop_copy_utilization, backdrop_execution_stage_count, buffer_capacity_bytes, dropped_execution_stage_count, +11 more) required=2/2"));
+    assert(contains_line(
+        failure_lines,
+        "resources: plan-taps=25/50 runtime=8/8/2 stages-dropped=0 paint=6/6/0 copy=1024/2048 unbounded-copy=0 non-deterministic-fallback=0 refraction=3.5 spacing=20 inflate=6"));
+    assert(contains_line(
+        failure_lines,
+        "quality: disabled: backdrop-sampling=0 noise=0 shadow=0 limits: blur=36 sample-taps=25 backdrop-pixels=4096"));
     assert(contains_line(
         failure_lines,
         "by-layer: material-control=2, platform-runtime=1"));
