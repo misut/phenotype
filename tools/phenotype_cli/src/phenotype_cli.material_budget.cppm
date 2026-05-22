@@ -3567,6 +3567,25 @@ auto coverage_minimum_array_count_json(json::Object const& actual,
     return std::to_string(count);
 }
 
+auto coverage_minimum_counted_array_key(std::string_view field)
+        -> std::string {
+    if (field == "min_bound_key_count")
+        return "bound_keys";
+    if (field == "min_guarded_field_count")
+        return "guarded_fields";
+    if (field == "min_observed_field_count")
+        return "observed_fields";
+    return {};
+}
+
+auto coverage_minimum_counted_values_json(json::Object const& actual,
+                                          std::string_view key)
+        -> std::string {
+    if (key.empty())
+        return "null";
+    return json_object_value_or_null(actual, key);
+}
+
 auto coverage_minimum_failure_detail_json(json::Object const& failure)
         -> std::string {
     auto path = json_object_failure_string(failure, "path");
@@ -3584,11 +3603,14 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
     auto actual_text = coverage_minimum_actual_text(*actual);
     if (actual_text.empty())
         return {};
+    auto counted_array_key = coverage_minimum_counted_array_key(field);
 
     return std::format(
         "{{\"label\":{},\"coverage_family\":{},\"minimum_field\":{},"
         "\"path\":{},\"expected\":{},\"expected_operator\":{},"
         "\"expected_count\":{},\"actual\":{},\"actual_count\":{},"
+        "\"counted_array_key\":{},\"counted_values\":{},"
+        "\"counted_value_count\":{},"
         "\"shortfall_count\":{},"
         "\"bound_keys\":{},\"guarded_fields\":{},\"observed_fields\":{},"
         "\"unguarded_observed_fields\":{},"
@@ -3606,6 +3628,9 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
         coverage_minimum_expected_count_json(failure),
         json_object_value_or_null(failure, "actual"),
         json_object_value_or_null(actual_object, "count"),
+        failure_optional_string_json(counted_array_key),
+        coverage_minimum_counted_values_json(actual_object, counted_array_key),
+        coverage_minimum_array_count_json(actual_object, counted_array_key),
         coverage_minimum_shortfall_count_json(failure, actual_object),
         json_object_value_or_null(actual_object, "bound_keys"),
         json_object_value_or_null(actual_object, "guarded_fields"),
