@@ -196,6 +196,12 @@ offset, container spacing, paint inflate, and capacity counters. CLI compact
 `material_resource_bounds` JSON and non-JSON output preserve those source
 descriptors, so a tight or failed Liquid Glass resource guard can be traced to
 the responsible plan without opening the full plan array.
+Raw `material_plans.quality_policy_sources` now applies the same source
+descriptor shape to quality-policy maxima and disabled-effect counters. CLI
+compact `material_quality_policy.sources` preserves the plan id, JSON path,
+likely layer/pass, and container identity behind blur, sample-tap, backdrop
+pixel, backdrop-sampling, noise, and shadow policy values, so a quality-policy
+guard can be traced without opening the full material plan array.
 
 Grouped Liquid Glass diagnostics are now compact at the CLI edge as well: raw
 `material_plans.container_groups` counters and
