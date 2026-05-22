@@ -1763,8 +1763,9 @@ include raw `expected_value` and `actual_value` JSON values for the same printed
 failure window, so automation does not need to reopen the full verifier report
 just to recover typed values. The top-level compact summary also repeats the
 raw `first_failure` through `first_failure_detail` using the same normalized
-detail shape, so consumers can inspect the primary failure without scanning the
-printed failure window. The same compact summary includes
+detail shape, falling back to the first object in `failures[]` when the raw
+summary omitted `first_failure`, so consumers can inspect the primary failure
+without scanning the printed failure window. The same compact summary includes
 `failure_window` metadata with total, shown, omitted, limit, and truncation
 fields, so consumers can tell exactly how much of `failures[]` is visible
 without recomputing it from the array length. Non-JSON output prints the same
