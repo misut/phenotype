@@ -125,7 +125,7 @@ Current commands:
 | `phenotype doctor` | implemented | Read-only repository checks for `mise.toml`, verifier tools, Android contract script, CLI roadmap, shared packages, and the legacy-tool-to-CLI migration matrix. |
 | `phenotype commands --json` | implemented | Emits a recursive command tree with `cppx.cli` command metadata, stable paths, and schema version `1`. |
 | `phenotype artifact summary <bundle>` | implemented | Read-only structural summary for `snapshot.json`, `frame.bmp`, and platform runtime files. This does not replace semantic verification yet. |
-| `phenotype artifact verify <bundle>` | implemented | Edge wrapper that runs the uv-managed Python verifier through `mise`, forwards the verifier JSON report, and preserves direct material/debug contract options such as `--require-material-plan`, `--require-material-semantic-runtime-match`, and `--require-debug-detail`. |
+| `phenotype artifact verify <bundle>` | implemented | Edge wrapper that runs the uv-managed Python verifier through `mise`, preserves direct material/debug contract options such as `--require-material-plan`, `--require-material-semantic-runtime-match`, and `--require-debug-detail`, and prints compact manifest, material budget coverage, budget bound headroom, and verifier material budget summaries by default. `--json` keeps forwarding the raw verifier JSON report for machine consumers. |
 | `phenotype artifact verify-glass-showcase` | implemented | Local-only CLI-owned glass showcase build/capture/verifier gate, including accessibility mode, manifest override, expected-platform override, explicit bundle directory, structured JSON for build/run/verifier/artifact state, compact material budget fields, compact `verifier_manifest` runtime/budget bound visibility, `material_budget_coverage` guarded/unguarded/required field visibility, `material_budget_bound_summary` bound headroom visibility, and `material_budget_bound_results` expected/actual/margin details for utilization and execution-cost bounds. Non-JSON output includes the nearest or failed bound comparison. PR CI should not run this slow native capture gate by default. Legacy `tools/verify_glass_showcase*.sh` entry points are thin compatibility wrappers that build and delegate to this command. |
 | `phenotype artifact verify-file-explorer` | implemented | Local-only edge wrapper around the desktop/mobile Finder-style artifact gate. Legacy `tools/verify_file_explorer_artifacts.sh` is now a thin build-and-delegate wrapper for this command. `--profile`, repeated `--view-mode`, and repeated `--scenario` narrow the capture set for faster local iteration before the full gate. JSON and non-JSON output expose per-case material budget summaries, compact manifest bound summaries, per-case material budget coverage including utilization and execution-cost fields, per-case material budget bound headroom, and compact per-bound expected/actual/margin details from verifier reports. Non-JSON output includes each case's nearest or failed bound comparison. |
 | `phenotype observe <bundle>` | implemented | C++ artifact observation envelope for LLM-actionable debugging. It parses `snapshot.json`, summarizes semantic/platform/runtime/material plan presence, material kinds/roles, fallback and backdrop capture reasons, the compact `snapshot.material.executor_budget` counters and status strings, likely layer/pass hints, frame/platform files, and optionally embeds the uv-managed verifier report plus compact `verifier.material_budget`, `verifier.verifier_manifest`, `verifier.material_budget_coverage`, `verifier.material_budget_bound_summary`, and `verifier.material_budget_bound_results` summaries when `--manifest` or `--verify` is supplied. JSON and non-JSON output both surface the material budget, manifest, budget coverage, budget bound headroom, and nearest or failed bound comparison. |
@@ -369,10 +369,11 @@ should become an implementation detail during migration:
 1. Keep `tools/verify_artifact_bundle.py` as the reference verifier until the
    CLI emits byte-for-byte equivalent failure shapes for representative
    fixtures.
-2. Keep `phenotype artifact verify --json` as the developer-facing verifier
-   command. It is currently a uv-managed CLI edge wrapper; the long-term state
-   is native C++ verification so CI does not depend on Python for core artifact
-   contracts.
+2. Keep `phenotype artifact verify --json` as the raw verifier report for
+   machine consumers, while the default `phenotype artifact verify` output
+   stays compact enough for local debugging and material-budget triage. It is
+   currently a uv-managed CLI edge wrapper; the long-term state is native C++
+   verification so CI does not depend on Python for core artifact contracts.
 3. Convert shell scripts into thin compatibility wrappers that delegate to the
    matching CLI command. The glass showcase and file-explorer wrappers already
    delegate to the CLI.
