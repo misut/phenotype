@@ -695,6 +695,19 @@ int main() {
         "zero=1 negative=1"));
 
     auto pressure_json = verifier_bound_pressure_json(report);
+    auto tightest_json = verifier_tightest_bound_results_json(report);
+    assert(contains_text(
+        tightest_json,
+        "\"executor\":{\"key\":\"upload_utilization_lte\",\"field\":\"upload_utilization\""));
+    assert(contains_text(
+        tightest_json,
+        "\"resource\":{\"key\":\"max_plan_sample_taps_lte\",\"field\":\"max_plan_sample_taps\""));
+    assert(contains_text(
+        tightest_json,
+        "\"quality\":{\"key\":\"require_noise_allowed\",\"field\":\"noise_disabled\""));
+    assert(contains_text(
+        verifier_tightest_bound_results_text(report),
+        "executor=pass upload_utilization_lte actual=0.0625 expected<=1 margin=0.9375"));
     assert(contains_text(
         pressure_json,
         "\"executor\":{\"state\":\"fail\",\"bound_count\":3,\"pass_count\":2,\"fail_count\":1,\"zero_margin_count\":1,\"negative_margin_count\":1,\"zero_margin_sources\":[{\"key\":\"execution_stage_count_lte\",\"field\":\"execution_stage_count\",\"bound\":\"lte\",\"expected\":8,\"actual\":8,\"ok\":true,\"margin\":0}],\"negative_margin_sources\":[{\"key\":\"draw_calls_gte\",\"field\":\"draw_calls\",\"bound\":\"gte\",\"expected\":3,\"actual\":2,\"ok\":false,\"margin\":-1}],\"tightest_bound_key\":\"upload_utilization_lte\",\"tightest_bound_field\":\"upload_utilization\",\"tightest_bound_margin\":0.9375,\"tightest_bound_result\":{\"key\":\"upload_utilization_lte\",\"field\":\"upload_utilization\",\"bound\":\"lte\",\"expected\":1,\"actual\":0.0625,\"ok\":true,\"margin\":0.9375},\"failed_keys\":[\"draw_calls_gte\"]}"));
@@ -909,6 +922,8 @@ int main() {
 
     auto passing_report = json::parse(
         R"json({"failure_summary":{"count":0},"failures":[]})json");
+    assert(verifier_tightest_bound_results_json(passing_report) == "null");
+    assert(verifier_tightest_bound_results_text(passing_report).empty());
     assert(verifier_bound_pressure_json(passing_report) == "null");
     assert(verifier_bound_pressure_text(passing_report).empty());
     assert(verifier_failure_summary_json(passing_report) == "null");

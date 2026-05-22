@@ -415,6 +415,9 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
     auto failure_summary = verifier_report
         ? verifier_failure_summary_json(*verifier_report)
         : std::string{"null"};
+    auto tightest_bound_results = verifier_report
+        ? verifier_tightest_bound_results_json(*verifier_report)
+        : std::string{"null"};
     auto bound_pressure = verifier_report
         ? verifier_bound_pressure_json(*verifier_report)
         : std::string{"null"};
@@ -437,6 +440,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         "\"material_quality_policy_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
         "\"material_budget_bound_results\":{},"
+        "\"verifier_tightest_bound_results\":{},"
         "\"verifier_bound_pressure\":{},"
         "\"verifier_failure_summary\":{},\"error\":{}}}",
         summary.ok ? "true" : "false",
@@ -466,6 +470,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         material_bound_coverage_json(quality_policy_coverage),
         material_budget_bound_summary_json(bound_summary),
         material_budget_bound_results_json(bound_results),
+        tightest_bound_results,
         bound_pressure,
         failure_summary,
         json_string(summary.error));
@@ -604,6 +609,11 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
                      bound_summary)) {
                 std::println("  {}", line);
             }
+        }
+        if (auto tightest =
+                verifier_tightest_bound_results_text(*verifier_report);
+            !tightest.empty()) {
+            std::println("material tightest bounds: {}", tightest);
         }
         if (auto pressure = verifier_bound_pressure_text(*verifier_report);
             !pressure.empty()) {

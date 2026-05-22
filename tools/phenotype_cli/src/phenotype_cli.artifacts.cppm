@@ -645,6 +645,9 @@ auto verifier_observation_json(VerifierObservation const& verifier)
     auto const failure_summary = verifier.report
         ? verifier_failure_summary_json(*verifier.report)
         : std::string{"null"};
+    auto const tightest_bound_results = verifier.report
+        ? verifier_tightest_bound_results_json(*verifier.report)
+        : std::string{"null"};
     auto const bound_pressure = verifier.report
         ? verifier_bound_pressure_json(*verifier.report)
         : std::string{"null"};
@@ -664,6 +667,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         "\"material_quality_policy_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
         "\"material_budget_bound_results\":{},"
+        "\"verifier_tightest_bound_results\":{},"
         "\"verifier_bound_pressure\":{},"
         "\"verifier_failure_summary\":{},\"report\":{}}}",
         verifier.requested ? "true" : "false",
@@ -687,6 +691,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         material_bound_coverage_json(quality_policy_coverage),
         material_budget_bound_summary_json(bound_summary),
         material_budget_bound_results_json(bound_results),
+        tightest_bound_results,
         bound_pressure,
         failure_summary,
         json_report_or_null(verifier.report));
@@ -964,6 +969,16 @@ void print_verifier_bound_pressure(VerifierObservation const& verifier) {
         return;
 
     std::println("material bound pressure: {}", pressure);
+}
+
+void print_verifier_tightest_bound_results(VerifierObservation const& verifier) {
+    if (!verifier.report)
+        return;
+    auto tightest = verifier_tightest_bound_results_text(*verifier.report);
+    if (tightest.empty())
+        return;
+
+    std::println("material tightest bounds: {}", tightest);
 }
 
 auto first_positional_or_error(cppx::cli::Invocation const& invocation,
@@ -1291,6 +1306,7 @@ void print_artifact_verify_summary(fs::path const& bundle,
     print_verifier_material_resource_bound_summary(verifier);
     print_verifier_material_quality_policy_bound_summary(verifier);
     print_verifier_material_budget_bound_summary(verifier);
+    print_verifier_tightest_bound_results(verifier);
     print_verifier_bound_pressure(verifier);
     print_verifier_material_budget(verifier);
     print_verifier_failure_summary(verifier);
@@ -1534,6 +1550,7 @@ void print_artifact_observation(ArtifactObservation const& observation) {
     print_verifier_material_resource_bound_summary(observation.verifier);
     print_verifier_material_quality_policy_bound_summary(observation.verifier);
     print_verifier_material_budget_bound_summary(observation.verifier);
+    print_verifier_tightest_bound_results(observation.verifier);
     print_verifier_bound_pressure(observation.verifier);
     print_verifier_material_budget(observation.verifier);
     print_verifier_failure_summary(observation.verifier);
