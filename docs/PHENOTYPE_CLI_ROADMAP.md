@@ -177,7 +177,10 @@ the raw summary or the grouped pressure view without losing bound-source detail.
 When the corresponding source map contains the guarded field, each raw bound
 result also embeds that source descriptor, and the CLI keeps it in compact JSON
 and text output so a failed or zero-headroom bound points at the responsible
-runtime key or material plan path directly.
+runtime key or material plan path directly. The grouped `verifier_bound_pressure`
+source arrays and non-JSON pressure lines preserve the same descriptor, so the
+most compact fail/tight summary still names the runtime or plan source behind the
+bound.
 The raw verifier JSON now stores executor budget coverage next to
 `artifact_context.material_contract.executor_budget`, and the CLI compact
 envelopes prefer that summary before falling back to their legacy derivation.

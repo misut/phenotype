@@ -2895,19 +2895,33 @@ auto material_budget_bound_expected_text(MaterialBudgetBoundResult const& result
     return op + budget_optional_number(result.expected);
 }
 
+auto material_bound_source_suffix(std::string const& source_json,
+                                  std::string const& source_metric,
+                                  std::string const& field,
+                                  std::string const& source_path,
+                                  std::string const& source_likely_pass)
+        -> std::string {
+    if (source_json.empty())
+        return {};
+    auto text = std::format(
+        " source={}",
+        source_metric.empty() ? field : source_metric);
+    if (!source_path.empty())
+        text += std::format(" path={}", source_path);
+    if (!source_likely_pass.empty())
+        text += std::format(" pass={}", source_likely_pass);
+    return text;
+}
+
 auto material_budget_bound_result_text(MaterialBudgetBoundResult const& result)
     -> std::string {
     auto status = result.ok ? (*result.ok ? "pass" : "fail") : "unknown";
-    auto source = std::string{};
-    if (!result.source_json.empty()) {
-        source = std::format(
-            " source={}",
-            result.source_metric.empty() ? result.field : result.source_metric);
-        if (!result.source_path.empty())
-            source += std::format(" path={}", result.source_path);
-        if (!result.source_likely_pass.empty())
-            source += std::format(" pass={}", result.source_likely_pass);
-    }
+    auto source = material_bound_source_suffix(
+        result.source_json,
+        result.source_metric,
+        result.field,
+        result.source_path,
+        result.source_likely_pass);
     return std::format(
         "{} {} actual={} expected{} margin={}{}",
         status,
@@ -4046,6 +4060,12 @@ struct BoundPressureSource {
     std::optional<double> actual;
     std::optional<bool> ok;
     std::optional<double> margin;
+    std::string source_metric;
+    std::string source_key;
+    std::string source_path;
+    std::string source_likely_layer;
+    std::string source_likely_pass;
+    std::string source_json;
 };
 
 struct BoundPressureMargins {
@@ -4065,6 +4085,12 @@ auto bound_pressure_source_from_result(MaterialBudgetBoundResult const& result)
         .actual = result.actual,
         .ok = result.ok,
         .margin = result.margin,
+        .source_metric = result.source_metric,
+        .source_key = result.source_key,
+        .source_path = result.source_path,
+        .source_likely_layer = result.source_likely_layer,
+        .source_likely_pass = result.source_likely_pass,
+        .source_json = result.source_json,
     };
 }
 
@@ -4124,9 +4150,9 @@ auto bound_pressure_margins(
 
 auto bound_pressure_source_json(BoundPressureSource const& source)
         -> std::string {
-    return std::format(
+    auto out = std::format(
         "{{\"key\":{},\"field\":{},\"bound\":{},\"expected\":{},"
-        "\"actual\":{},\"ok\":{},\"margin\":{}}}",
+        "\"actual\":{},\"ok\":{},\"margin\":{}",
         json_string(source.key),
         json_string(source.field),
         json_string(source.bound),
@@ -4134,6 +4160,12 @@ auto bound_pressure_source_json(BoundPressureSource const& source)
         budget_optional_number(source.actual),
         budget_bool(source.ok),
         budget_optional_number(source.margin));
+    if (!source.source_json.empty()) {
+        out += ",\"source\":";
+        out += source.source_json;
+    }
+    out += "}";
+    return out;
 }
 
 auto bound_pressure_sources_json(
@@ -4160,13 +4192,20 @@ auto bound_pressure_source_text(BoundPressureSource const& source)
     auto target = source.field.empty()
         ? source.key
         : std::format("{}/{}", source.key, source.field);
+    auto source_suffix = material_bound_source_suffix(
+        source.source_json,
+        source.source_metric,
+        source.field,
+        source.source_path,
+        source.source_likely_pass);
     return std::format(
-        "{} {} actual={} expected{} margin={}",
+        "{} {} actual={} expected{} margin={}{}",
         status,
         target,
         budget_optional_number(source.actual),
         op + budget_optional_number(source.expected),
-        budget_optional_number(source.margin));
+        budget_optional_number(source.margin),
+        source_suffix);
 }
 
 auto bound_pressure_sources_text(

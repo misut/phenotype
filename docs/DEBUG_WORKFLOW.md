@@ -341,7 +341,9 @@ those three bound families into `fail`, `tight`, `pass`, or `unknown` states eve
 when the verifier report passes, so automation can spot no-headroom Liquid Glass
 budgets without waiting for a failure summary. Its zero/negative source lists
 carry the same bound operator, expected, actual, pass/fail, and margin evidence
-as bound results. The tightest bound also carries its full result object, while
+as bound results, including source descriptors when the verifier exposed the
+runtime key or material plan path behind the bound. The tightest bound also
+carries its full result object, while
 nearest headroom carries its own full result object for passing budgets with thin
 but non-zero margin. Non-JSON output prints the same direct tightest-bound,
 nearest-headroom, and grouped pressure lines after the budget/resource/quality
@@ -1745,10 +1747,11 @@ scanning the full `checks` array. Compact failure summaries additionally
 classify each bound group
 as `fail`, `tight`, `pass`, or `unknown` and count zero/negative margins in
 `bound_pressure`, including the zero/negative margin source key/field lists with
-their bound operator, expected value, actual value, pass/fail state, and margin,
-plus the tightest bound key/field and full tightest bound result. This separates
-hard failures from budgets that are passing with no headroom while keeping the
-responsible verifier fields and values visible in the compact output.
+their bound operator, expected value, actual value, pass/fail state, margin, and
+source descriptor when present, plus the tightest bound key/field and full
+tightest bound result. This separates hard failures from budgets that are passing
+with no headroom while keeping the responsible verifier fields, values, and
+runtime or material-plan source paths visible in the compact output.
 Use `require_material_resource_bound_coverage` and
 `require_material_quality_policy_coverage` next to resource and quality-policy
 bounds when the manifest must prove that important Liquid Glass resource and
