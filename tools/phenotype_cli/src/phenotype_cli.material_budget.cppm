@@ -5208,6 +5208,15 @@ auto verifier_failure_details_json(json::Value const& report,
     return out;
 }
 
+auto verifier_first_failure_detail_json(json::Value const& report)
+        -> std::string {
+    auto const* first_failure = json_object_at(
+        report,
+        {"failure_summary", "first_failure"});
+    return first_failure ? verifier_failure_detail_json(*first_failure)
+                         : std::string{"null"};
+}
+
 auto verifier_failure_summary_json(json::Value const& report)
         -> std::string {
     auto count = json_integer_at(report, {"failure_summary", "count"})
@@ -5251,6 +5260,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
         "\"by_path\":{},"
         "\"by_suggested_action\":{},\"first_failure\":{},"
+        "\"first_failure_detail\":{},"
         "\"failure_window\":{{\"total_count\":{},\"shown_count\":{},"
         "\"omitted_count\":{},\"limit\":{},\"truncated\":{}}},"
         "\"failures\":{},\"truncated\":{}}}",
@@ -5299,6 +5309,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         failure_json_value_or_null(
             report,
             {"failure_summary", "first_failure"}),
+        verifier_first_failure_detail_json(report),
         count,
         printable_count,
         omitted_count,

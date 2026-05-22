@@ -1587,6 +1587,15 @@ int main() {
         "\"first_failure\":{\"actual\":1.25"));
     assert(contains_text(
         failure_json,
+        "\"first_failure_detail\":{\"name\":\"pixel_region_tint_mismatch\""));
+    assert(contains_text(
+        failure_json,
+        "\"first_failure_detail\":{\"name\":\"pixel_region_tint_mismatch\",\"message\":null,\"path\":\"window.material.executor_budget.upload_utilization\""));
+    assert(contains_text(
+        failure_json,
+        "\"expected_value\":{\"max\":{\"upload_utilization\":1}},\"actual\":\"1.25\",\"actual_value\":1.25"));
+    assert(contains_text(
+        failure_json,
         "\"failure_window\":{\"total_count\":4,\"shown_count\":3,\"omitted_count\":1,\"limit\":3,\"truncated\":true}"));
     assert(contains_text(
         failure_json,
@@ -1787,6 +1796,7 @@ int main() {
     assert(contains_text(
         minimum_json,
         "\"failure_window\":{\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"limit\":3,\"truncated\":false}"));
+    assert(contains_text(minimum_json, "\"first_failure_detail\":null"));
     assert(contains_text(minimum_json, "\"expected_value\":{\">=\":2}"));
     assert(contains_text(
         minimum_json,
