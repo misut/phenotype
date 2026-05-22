@@ -3301,6 +3301,22 @@ auto failure_missing_field_sources_text(json::Object const& failure,
     return sources ? missing_field_sources_text(*sources, limit) : std::string{};
 }
 
+auto missing_field_source_detail_json(std::string_view field,
+                                      json::Value const& value) -> std::string {
+    if (!value.is_object())
+        return {};
+
+    auto text = missing_field_source_text(field, value.as_object());
+    if (text.empty())
+        return {};
+
+    return std::format(
+        "{{\"field\":{},\"source\":{},\"text\":{}}}",
+        json_string(field),
+        json::emit(value),
+        json_string(text));
+}
+
 auto coverage_minimum_actual_fields_text(
         json::Object const& actual,
         std::string_view key,
@@ -3506,6 +3522,49 @@ auto verifier_coverage_minimum_failures_text(json::Value const& report,
     if (entries.size() > count)
         text += std::format("; +{} more", entries.size() - count);
     return text;
+}
+
+auto verifier_missing_field_source_details_json(json::Value const& report,
+                                                std::size_t limit = 5)
+        -> std::string {
+    auto const* failures = json_array_at(report, {"failures"});
+    if (!failures)
+        return "null";
+
+    auto entries = std::vector<std::string>{};
+    auto seen = std::set<std::string>{};
+    for (auto const& failure : *failures) {
+        if (!failure.is_object())
+            continue;
+        auto const* sources =
+            failure_missing_field_sources_object(failure.as_object());
+        if (!sources)
+            continue;
+        for (auto const& [field, value] : *sources) {
+            auto detail = missing_field_source_detail_json(field, value);
+            if (detail.empty() || !seen.insert(detail).second)
+                continue;
+            entries.push_back(std::move(detail));
+        }
+    }
+    if (entries.empty())
+        return "null";
+
+    auto count = std::min(limit, entries.size());
+    auto out = std::string{"{\"entries\":["};
+    for (auto index = std::size_t{0}; index < count; ++index) {
+        if (index > 0)
+            out += ",";
+        out += entries[index];
+    }
+    out += std::format(
+        "],\"total_count\":{},\"shown_count\":{},\"omitted_count\":{},"
+        "\"truncated\":{}}}",
+        entries.size(),
+        count,
+        entries.size() - count,
+        entries.size() > count ? "true" : "false");
+    return out;
 }
 
 auto verifier_missing_field_sources_text(json::Value const& report,
@@ -5076,6 +5135,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         "\"resource_bound_coverage\":{},"
         "\"quality_policy_bound_coverage\":{},"
         "\"missing_field_sources\":{},"
+        "\"missing_field_source_details\":{},"
         "\"coverage_minimum_failures\":{},"
         "\"coverage_minimum_failure_details\":{},"
         "\"material_context\":{},"
@@ -5105,6 +5165,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         verifier_material_quality_policy_coverage_json(report),
         failure_optional_string_json(
             verifier_missing_field_sources_text(report)),
+        verifier_missing_field_source_details_json(report),
         failure_optional_string_json(
             verifier_coverage_minimum_failures_text(report)),
         verifier_coverage_minimum_failure_details_json(report),

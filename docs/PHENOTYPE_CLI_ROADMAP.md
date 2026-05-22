@@ -206,8 +206,11 @@ and where those counters came from. Coverage guard failures also include
 failing check points at the source descriptor without requiring a separate
 coverage-summary join; CLI non-JSON failure summaries render the same descriptors
 as an aggregate `coverage-missing-sources` line and as compact
-`missing-field-sources` lines for the first few failures. Coverage minimum count
-failures now carry `actual.count` plus the active bound keys, guarded or
+`missing-field-sources` lines for the first few failures. Compact JSON mirrors
+that aggregate as `missing_field_source_details.entries[]` with raw source
+descriptors, rendered text, and total/shown/omitted/truncated counts, so
+automation can consume missing-guard sources without string parsing. Coverage
+minimum count failures now carry `actual.count` plus the active bound keys, guarded or
 observed fields, and unguarded observed source descriptors when those explain a
 guarded-field shortfall; CLI compact failure details render the same shape as
 `count=... bound-keys=(...) guarded=(...)` with source paths when available, so

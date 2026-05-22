@@ -1587,6 +1587,15 @@ int main() {
         "\"missing_field_sources\":\"max_frame_capture_pixels=4096 pass=resource-budget path=debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels\""));
     assert(contains_text(
         failure_json,
+        "\"missing_field_source_details\":{\"entries\":[{\"field\":\"max_frame_capture_pixels\""));
+    assert(contains_text(
+        failure_json,
+        "\"text\":\"max_frame_capture_pixels=4096 pass=resource-budget path=debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels\""));
+    assert(contains_text(
+        failure_json,
+        "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"truncated\":false"));
+    assert(contains_text(
+        failure_json,
         "\"coverage_minimum_failures\":\"budget.min_guarded_field_count expected={>=: 2} actual=count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)\""));
     assert(contains_text(
         failure_json,
@@ -1804,6 +1813,43 @@ int main() {
     assert(!contains_text(
         many_minimum_json,
         "\"label\":\"quality.min_bound_key_count\""));
+
+    auto many_missing_report = json::parse(
+        R"json({
+          "failure_summary": {
+            "count": 1,
+            "top_likely_layer": "artifact-manifest",
+            "top_likely_pass": "resource-budget"
+          },
+          "failures": [
+            {
+              "path": "manifest.require_material_resource_bound_coverage.required_fields",
+              "expected": ["a", "b", "c", "d", "e", "f"],
+              "actual": {
+                "missing_fields": ["a", "b", "c", "d", "e", "f"],
+                "missing_field_sources": {
+                  "a": {"metric": "a", "value": 1, "source_path": "debug.a", "likely_pass": "resource-budget"},
+                  "b": {"metric": "b", "value": 2, "source_path": "debug.b", "likely_pass": "resource-budget"},
+                  "c": {"metric": "c", "value": 3, "source_path": "debug.c", "likely_pass": "resource-budget"},
+                  "d": {"metric": "d", "value": 4, "source_path": "debug.d", "likely_pass": "resource-budget"},
+                  "e": {"metric": "e", "value": 5, "source_path": "debug.e", "likely_pass": "resource-budget"},
+                  "f": {"metric": "f", "value": 6, "source_path": "debug.f", "likely_pass": "resource-budget"}
+                }
+              }
+            }
+          ]
+        })json");
+    auto many_missing_json = verifier_failure_summary_json(many_missing_report);
+    assert(contains_text(
+        many_missing_json,
+        "\"missing_field_source_details\":{\"entries\":[{\"field\":\"a\""));
+    assert(contains_text(
+        many_missing_json,
+        "\"text\":\"a=1 pass=resource-budget path=debug.a\""));
+    assert(contains_text(
+        many_missing_json,
+        "\"total_count\":6,\"shown_count\":5,\"omitted_count\":1,\"truncated\":true"));
+    assert(!contains_text(many_missing_json, "\"field\":\"f\""));
 
     auto passing_report = json::parse(
         R"json({"failure_summary":{"count":0},"failures":[]})json");

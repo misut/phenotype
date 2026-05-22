@@ -1748,8 +1748,12 @@ behind the missing guard. CLI non-JSON failure summaries print the same data as 
 compact aggregate `coverage-missing-sources` line and repeat it on the relevant
 `missing-field-sources` detail line for the first few verifier failures, so a
 local run can show the relevant field, pass, and path without rerunning with
-`--json` or depending on failure order. Minimum-count failures include their own
-context: failed bound-key, guarded-field, and observed-field floors report
+`--json` or depending on failure order. Compact JSON also publishes
+`missing_field_source_details.entries[]` with the field, raw source descriptor,
+rendered text, and total/shown/omitted/truncated counts, so automation can
+consume the aggregate without reparsing the compact string. Minimum-count
+failures include their own context: failed bound-key, guarded-field, and
+observed-field floors report
 `actual.count` plus the currently guarded or observed field lists, and
 guarded-field floor failures include `actual.unguarded_observed_sources` when
 the verifier can trace those counters. CLI compact failure details render that
