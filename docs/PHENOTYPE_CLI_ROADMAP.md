@@ -218,7 +218,10 @@ missing-guard sources without string parsing. Compact `failures[]` details keep
 the human-rendered `expected` and `actual` strings for quick scanning and also
 include raw `expected_value` and `actual_value` JSON values for the same printed
 failure window, so automation can recover typed values without opening the full
-verifier report. The compact summary also includes `failure_window` metadata
+verifier report. The compact summary also repeats the raw `first_failure`
+through `first_failure_detail` using the same normalized detail shape, so
+automation can inspect the primary failure without scanning the printed failure
+window. The compact summary also includes `failure_window` metadata
 with total, shown, omitted, limit, and truncation fields, so automation can see
 how much of `failures[]` is present without recomputing it from the array
 length. Non-JSON output prints the same window as a `failure-window` line before
