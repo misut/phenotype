@@ -1748,7 +1748,12 @@ behind the missing guard. CLI non-JSON failure summaries print the same data as 
 compact aggregate `coverage-missing-sources` line and repeat it on the relevant
 `missing-field-sources` detail line for the first few verifier failures, so a
 local run can show the relevant field, pass, and path without rerunning with
-`--json` or depending on failure order. They also include
+`--json` or depending on failure order. Raw minimum-count failures include their
+own context: failed bound-key, guarded-field, and
+observed-field floors report `actual.count` plus the currently guarded or
+observed field lists, and guarded-field floor failures include
+`actual.unguarded_observed_sources` when the verifier can trace those counters.
+The same verifier reports also include
 `artifact_context.material_contract.executor_budget_bound_results` and
 `executor_budget_bound_summary`; resource and quality guards mirror the same
 shape under `material_plans.resource_bound_results` /
@@ -1774,7 +1779,9 @@ legibility guard fields are both observed and bounded. They use the same
 `min_observed_field_count` grammar as executor budget coverage. Failures point
 at the missing manifest bound set or the missing
 `material_plans.resource_bounds` / `material_plans.quality_policy` telemetry,
-and the raw report records coverage summaries under `resource_bound_coverage`
+and minimum-count failures carry the active bound keys, guarded fields, observed
+fields, and unguarded observed source descriptors that explain the shortfall.
+The raw report records coverage summaries under `resource_bound_coverage`
 and `quality_policy_bound_coverage`. The glass showcase, file explorer, and
 Android artifact manifests require those coverage contracts for the shared
 resource bounds and for every quality-policy field they already guard.

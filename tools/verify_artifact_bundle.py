@@ -14164,6 +14164,26 @@ def material_executor_budget_coverage_summary(
     }
 
 
+def material_executor_coverage_minimum_actual(
+        coverage: JsonObject,
+        field: str,
+        count: int) -> JsonObject:
+    actual: JsonObject = {"count": count}
+    if field == "min_bound_key_count":
+        actual["bound_keys"] = coverage["manifest_bound_keys"]
+        actual["guarded_fields"] = coverage["manifest_fields"]
+    elif field == "min_guarded_field_count":
+        actual["guarded_fields"] = coverage["manifest_fields"]
+        actual["unguarded_observed_fields"] = (
+            coverage["unguarded_observed_fields"])
+        sources = coverage.get("unguarded_observed_sources")
+        if isinstance(sources, dict) and sources:
+            actual["unguarded_observed_sources"] = sources
+    elif field == "min_observed_field_count":
+        actual["observed_fields"] = coverage["observed_fields"]
+    return actual
+
+
 def material_executor_budget_bound_kind(key: str) -> str:
     for suffix, kind in (
             ("_lte", "lte"),
@@ -14356,7 +14376,10 @@ def check_material_executor_budget_coverage_requirements(
             actual >= expected,
             path=f"manifest.require_material_executor_budget_coverage.{field}",
             expected={">=": expected},
-            actual=actual,
+            actual=material_executor_coverage_minimum_actual(
+                coverage,
+                field,
+                actual),
             likely_layer="artifact-manifest",
             likely_pass="material-executor",
             hint=(
@@ -14423,6 +14446,7 @@ def material_bound_coverage_summary(
     unguarded_observed_sources = material_coverage_sources_for_fields(
         sources,
         unguarded_observed_fields)
+    bound_keys = sorted(bound_spec.keys()) if isinstance(bound_spec, dict) else []
     return {
         "guardable_field_count": len(allowed_fields),
         "observed_field_count": len(observed_fields),
@@ -14440,8 +14464,29 @@ def material_bound_coverage_summary(
         "unguarded_observed_fields": unguarded_observed_fields,
         "unguarded_observed_sources": unguarded_observed_sources,
         "required_fields": required_fields,
-        "bound_key_count": len(bound_spec) if isinstance(bound_spec, dict) else 0,
+        "bound_key_count": len(bound_keys),
+        "bound_keys": bound_keys,
     }
+
+
+def material_bound_coverage_minimum_actual(
+        coverage: JsonObject,
+        field: str,
+        count: int) -> JsonObject:
+    actual: JsonObject = {"count": count}
+    if field == "min_bound_key_count":
+        actual["bound_keys"] = coverage["bound_keys"]
+        actual["guarded_fields"] = coverage["guarded_fields"]
+    elif field == "min_guarded_field_count":
+        actual["guarded_fields"] = coverage["guarded_fields"]
+        actual["unguarded_observed_fields"] = (
+            coverage["unguarded_observed_fields"])
+        sources = coverage.get("unguarded_observed_sources")
+        if isinstance(sources, dict) and sources:
+            actual["unguarded_observed_sources"] = sources
+    elif field == "min_observed_field_count":
+        actual["observed_fields"] = coverage["observed_fields"]
+    return actual
 
 
 def check_material_bound_coverage_requirements(
@@ -14525,7 +14570,10 @@ def check_material_bound_coverage_requirements(
             actual >= expected,
             path=f"manifest.{coverage_manifest_key}.{field}",
             expected={">=": expected},
-            actual=actual,
+            actual=material_bound_coverage_minimum_actual(
+                coverage,
+                field,
+                actual),
             likely_layer="artifact-manifest",
             likely_pass=likely_pass,
             hint=(
