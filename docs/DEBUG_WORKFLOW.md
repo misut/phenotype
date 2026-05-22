@@ -1784,14 +1784,16 @@ when available, and the failure summary repeats coverage minimum failures in a
 `coverage-minimum-failures` aggregate even when the individual failure is beyond
 the first few printed details. Compact JSON also keeps those failures under
 `coverage_minimum_failure_details.entries[]` with raw `expected`/`actual`
-objects plus the rendered `actual_text`; `total_count`, `shown_count`,
+objects plus flattened `coverage_family`, `minimum_field`, `actual_count`, and
+the active bound/guarded/observed field arrays. The rendered `actual_text`
+stays beside those fields for humans; `total_count`, `shown_count`,
 `omitted_count`, `limit`, and `truncated` record how much of that structured
 list is visible in the compact envelope, so automation can consume the same
-guard breadth context without reparsing the human string. Each compact
-`failures[]` detail that represents a coverage-minimum failure repeats the same
-structured object for the printed failure window, so local automation can
-consume the per-failure detail directly. This lets a local run identify missing guard
-breadth directly.
+guard breadth context without reparsing the human string or reopening the raw
+`actual` object. Each compact `failures[]` detail that represents a
+coverage-minimum failure repeats the same structured object for the printed
+failure window, so local automation can consume the per-failure detail directly.
+This lets a local run identify missing guard breadth directly.
 The same verifier reports also include
 `artifact_context.material_contract.executor_budget_bound_results` and
 `executor_budget_bound_summary`; resource and quality guards mirror the same

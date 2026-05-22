@@ -3439,9 +3439,7 @@ auto compact_failure_actual_text_json(json::Object const& failure)
     return failure_optional_string_json(compact_failure_actual_text(failure));
 }
 
-auto coverage_minimum_failure_label(json::Object const& failure)
-        -> std::string {
-    auto path = json_object_failure_string(failure, "path");
+auto coverage_minimum_failure_field(std::string_view path) -> std::string {
     if (path.empty())
         return {};
     auto const separator = path.rfind('.');
@@ -3450,19 +3448,33 @@ auto coverage_minimum_failure_label(json::Object const& failure)
     auto field = path.substr(separator + 1);
     if (!field.starts_with("min_"))
         return {};
+    return std::string{field};
+}
+
+auto coverage_minimum_failure_family(std::string_view path) -> std::string {
     if (path.find("require_material_executor_budget_coverage.") !=
         std::string::npos) {
-        return "budget." + field;
+        return "budget";
     }
     if (path.find("require_material_resource_bound_coverage.") !=
         std::string::npos) {
-        return "resource." + field;
+        return "resource";
     }
     if (path.find("require_material_quality_policy_coverage.") !=
         std::string::npos) {
-        return "quality." + field;
+        return "quality";
     }
     return {};
+}
+
+auto coverage_minimum_failure_label(json::Object const& failure)
+        -> std::string {
+    auto path = json_object_failure_string(failure, "path");
+    auto family = coverage_minimum_failure_family(path);
+    auto field = coverage_minimum_failure_field(path);
+    if (family.empty() || field.empty())
+        return {};
+    return family + "." + field;
 }
 
 auto failure_coverage_minimum_text(json::Object const& failure)
@@ -3486,26 +3498,40 @@ auto failure_coverage_minimum_text(json::Object const& failure)
 
 auto coverage_minimum_failure_detail_json(json::Object const& failure)
         -> std::string {
-    auto label = coverage_minimum_failure_label(failure);
-    if (label.empty())
+    auto path = json_object_failure_string(failure, "path");
+    auto family = coverage_minimum_failure_family(path);
+    auto field = coverage_minimum_failure_field(path);
+    if (family.empty() || field.empty())
         return {};
+    auto label = family + "." + field;
 
     auto const* actual = json_object_member(failure, "actual");
-    if (!actual)
+    if (!actual || !actual->is_object())
         return {};
+    auto const& actual_object = actual->as_object();
 
     auto actual_text = coverage_minimum_actual_text(*actual);
     if (actual_text.empty())
         return {};
 
     return std::format(
-        "{{\"label\":{},\"path\":{},\"expected\":{},\"actual\":{},"
-        "\"actual_text\":{},\"text\":{},\"likely_layer\":{},"
-        "\"likely_pass\":{},\"hint\":{},\"suggested_action\":{}}}",
+        "{{\"label\":{},\"coverage_family\":{},\"minimum_field\":{},"
+        "\"path\":{},\"expected\":{},\"actual\":{},\"actual_count\":{},"
+        "\"bound_keys\":{},\"guarded_fields\":{},\"observed_fields\":{},"
+        "\"unguarded_observed_fields\":{},\"actual_text\":{},\"text\":{},"
+        "\"likely_layer\":{},\"likely_pass\":{},\"hint\":{},"
+        "\"suggested_action\":{}}}",
         json_string(label),
+        json_string(family),
+        json_string(field),
         json_object_failure_string_json(failure, "path"),
         json_object_value_or_null(failure, "expected"),
         json_object_value_or_null(failure, "actual"),
+        json_object_value_or_null(actual_object, "count"),
+        json_object_value_or_null(actual_object, "bound_keys"),
+        json_object_value_or_null(actual_object, "guarded_fields"),
+        json_object_value_or_null(actual_object, "observed_fields"),
+        json_object_value_or_null(actual_object, "unguarded_observed_fields"),
         json_string(actual_text),
         json_string(failure_coverage_minimum_text(failure)),
         json_object_failure_string_json(failure, "likely_layer"),

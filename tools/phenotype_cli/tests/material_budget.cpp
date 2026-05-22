@@ -1638,7 +1638,13 @@ int main() {
         "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":\"budget.min_guarded_field_count\""));
     assert(contains_text(
         failure_json,
+        "\"label\":\"budget.min_guarded_field_count\",\"coverage_family\":\"budget\",\"minimum_field\":\"min_guarded_field_count\""));
+    assert(contains_text(
+        failure_json,
         "\"actual\":{\"bound_keys\":[\"draw_calls_gte\"],\"count\":1,\"guarded_fields\":[\"draw_calls\"]"));
+    assert(contains_text(
+        failure_json,
+        "\"actual_count\":1,\"bound_keys\":[\"draw_calls_gte\"],\"guarded_fields\":[\"draw_calls\"],\"observed_fields\":null,\"unguarded_observed_fields\":[\"planned_frame_capture_pixels\"]"));
     assert(contains_text(
         failure_json,
         "\"unguarded_observed_fields\":[\"planned_frame_capture_pixels\"]"));
@@ -1812,6 +1818,9 @@ int main() {
     assert(contains_text(
         minimum_json,
         "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":\"budget.min_guarded_field_count\""));
+    assert(contains_text(
+        minimum_json,
+        "\"label\":\"budget.min_guarded_field_count\",\"coverage_family\":\"budget\",\"minimum_field\":\"min_guarded_field_count\""));
     assert(count_text(
         minimum_json,
         "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":\"budget.min_guarded_field_count\"")
@@ -1875,6 +1884,9 @@ int main() {
     assert(contains_text(
         many_minimum_json,
         "\"total_count\":6,\"shown_count\":5,\"omitted_count\":1,\"limit\":5,\"truncated\":true"));
+    assert(contains_text(
+        many_minimum_json,
+        "\"label\":\"resource.min_guarded_field_count\",\"coverage_family\":\"resource\",\"minimum_field\":\"min_guarded_field_count\""));
     assert(count_text(
         many_minimum_json,
         "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":")
