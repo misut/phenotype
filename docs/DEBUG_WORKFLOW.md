@@ -127,8 +127,8 @@ triage command when a CI log or local bundle needs one machine-readable
 explanation before deeper pixel-contract debugging.
 Without `--json`, the same command prints short `snapshot material budget` and
 `verifier material budget` blocks when those counters are available, so local
-triage can see plan, stage, tap, upload, draw, and backdrop-copy status without
-opening the full report.
+triage can see plan, stage, tap, upload/copy utilization, draw, and
+backdrop-copy status without opening the full report.
 
 When debugging the CLI/native input-output boundary itself, first check the
 pure contract surface:
@@ -216,8 +216,9 @@ verify-file-explorer` owns the shared-model test, desktop/mobile builds,
 deterministic native captures, and uv-managed verifier calls directly. Its case
 JSON includes `material_budget` whenever the verifier report contains
 `artifact_context.material_contract.executor_budget`, and the non-JSON output
-prints the same case-level plans/work/status summary. Both commands are local
-verification commands, not default PR CI jobs.
+prints the same case-level plans/work/status summary with upload/copy
+utilization. Both commands are local verification commands, not default PR CI
+jobs.
 
 For file explorer workflow debugging that does not need a native window, use
 the deterministic drive command:
@@ -1622,8 +1623,9 @@ The command emits a deterministic JSON report with build, run, verifier, and
 artifact details, plus `material_budget` when the verifier report contains
 `artifact_context.material_contract.executor_budget`, and exits non-zero when
 an invariant fails. The non-JSON command prints the same material budget in a
-short plans/work/status block. The legacy `tools/verify_glass_showcase_artifact.sh`
-wrapper delegates to the same CLI command for local compatibility.
+short plans/work/status block with upload/copy utilization. The legacy
+`tools/verify_glass_showcase_artifact.sh` wrapper delegates to the same CLI
+command for local compatibility.
 
 To validate the accessibility downgrade contract end to end, run the companion
 gate:

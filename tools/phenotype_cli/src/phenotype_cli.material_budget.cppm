@@ -253,6 +253,22 @@ auto budget_ratio(double value) -> std::string {
     return value >= 0.0 ? std::format("{:.6g}", value) : std::string{"null"};
 }
 
+auto budget_utilization_text(double value) -> std::string {
+    return value >= 0.0
+        ? std::format("{:.1f}%", value * 100.0)
+        : std::string{"unknown"};
+}
+
+auto budget_ratio_text(std::int64_t value, std::int64_t capacity)
+    -> std::string {
+    if (value < 0 || capacity < 0)
+        return "unknown";
+    if (capacity == 0)
+        return value == 0 ? std::string{"0.0%"} : std::string{"unknown"};
+    return budget_utilization_text(
+        static_cast<double>(value) / static_cast<double>(capacity));
+}
+
 auto budget_bool(std::optional<bool> value) -> std::string {
     if (!value)
         return "null";
