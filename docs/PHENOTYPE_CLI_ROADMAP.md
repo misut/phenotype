@@ -148,6 +148,14 @@ Current commands:
 | `phenotype drive glass-showcase` | implemented | Drives the shared material probe model through the `phenotype_cli.glass_showcase` module from typed CLI inputs or line-based scripts and emits a stable observation JSON with final state, trace, public material kinds, expected material plan count, expected execution-stage budget, expected sample-tap budget, backdrop/inspector/density/viewport state, progress value, the pure `GlassProbeContract`, per-probe material kind/container/pass/kernel/luminance/fallback metadata, and optional expectation results. |
 | `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, passes package-root environment when a manifest exists, validates file explorer `--input`/`--script` through the shared model, and emits a stable JSON launch receipt with build/run output tails, input counts, timeout state, artifact bundle summary, optional `--observe-output` artifact observation, and explicit environment overrides. |
 
+The compact verifier failure summary is intentionally richer than a first-error
+receipt. For material gates it now includes manifest context, material budget
+coverage, budget/resource/quality bound summaries, failed bound results,
+tightest bound results, and `bound_pressure`, which classifies each bound group
+as `fail`, `tight`, `pass`, or `unknown` and counts zero/negative margins. This
+lets local non-JSON output and automation distinguish a hard budget failure from
+a passing Liquid Glass budget that has no headroom left.
+
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, package-owned SVG app icons,
 English/Korean locale files, and a Pretendard alias descriptor with CJK-capable
@@ -192,9 +200,9 @@ reporting, `phenotype_cli.artifacts` owns artifact summary, uv-managed verifier
 invocation, snapshot/material observation including compact executor budget
 visibility, and likely-layer suggestions,
 `phenotype_cli.material_budget` owns shared verifier budget, manifest summary,
-budget coverage, and compact failure context/distribution/first-failure
-parsing, JSON, and human count/status/utilization formatting for material
-artifact gates,
+budget coverage, bound result/headroom/pressure, and compact failure
+context/distribution/first-failure parsing, JSON, and human
+count/status/utilization formatting for material artifact gates,
 `phenotype_cli.contracts` owns the pure theme/IO contract commands,
 `phenotype_cli.file_explorer` owns file explorer observation, chrome/native
 window control, and drive JSON, `phenotype_cli.icons` owns icon/SVG command
