@@ -1767,8 +1767,11 @@ the first few printed details. Compact JSON also keeps those failures under
 objects plus the rendered `actual_text`; `total_count`, `shown_count`,
 `omitted_count`, and `truncated` record how much of that structured list is
 visible in the compact envelope, so automation can consume the same guard
-breadth context without reparsing the human string. This lets a local run
-identify missing guard breadth directly.
+breadth context without reparsing the human string. Each compact `failures[]`
+detail that represents a coverage-minimum failure repeats the same structured
+object for the printed failure window, so local automation can consume the
+per-failure detail directly. This lets a local run identify missing guard
+breadth directly.
 The same verifier reports also include
 `artifact_context.material_contract.executor_budget_bound_results` and
 `executor_budget_bound_summary`; resource and quality guards mirror the same

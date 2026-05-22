@@ -223,7 +223,10 @@ floor shortfalls stay visible even when failure ordering changes. Compact JSON
 also exposes structured `coverage_minimum_failure_details.entries[]` with raw
 expected/actual objects and rendered `actual_text`, plus `total_count`,
 `shown_count`, `omitted_count`, and `truncated` metadata so automation can tell
-when the compact list was shortened without string parsing. Resource and quality
+when the compact list was shortened without string parsing. Each compact
+`failures[]` detail that represents a coverage-minimum failure repeats the same
+structured object for the printed failure window, so automation can consume the
+local detail without joining it back to the aggregate list. Resource and quality
 coverage summaries preserve the active `bound_keys` array and repeat it as
 `guard-key-list=(...)` in compact text, and executor budget coverage compact text
 repeats `manifest_bound_keys` the same way, so guard breadth and the concrete

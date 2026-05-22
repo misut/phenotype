@@ -1771,6 +1771,10 @@ int main() {
     assert(contains_text(
         minimum_json,
         "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":\"budget.min_guarded_field_count\""));
+    assert(count_text(
+        minimum_json,
+        "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":\"budget.min_guarded_field_count\"")
+        >= 2);
     assert(contains_text(
         minimum_json,
         "\"expected\":{\">=\":2},\"actual\":{\"bound_keys\":[\"draw_calls_gte\"],\"count\":1,\"guarded_fields\":[\"draw_calls\"]"));
@@ -1827,6 +1831,13 @@ int main() {
     assert(contains_text(
         many_minimum_json,
         "\"total_count\":6,\"shown_count\":5,\"omitted_count\":1,\"truncated\":true"));
+    assert(count_text(
+        many_minimum_json,
+        "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":")
+        >= 4);
+    assert(contains_text(
+        many_minimum_json,
+        "\"total_count\":1,\"shown_count\":1,\"omitted_count\":0,\"truncated\":false"));
     assert(!contains_text(
         many_minimum_json,
         "\"label\":\"quality.min_bound_key_count\""));
