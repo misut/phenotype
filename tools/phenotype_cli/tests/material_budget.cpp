@@ -1588,6 +1588,18 @@ int main() {
     assert(contains_text(
         failure_json,
         "\"coverage_minimum_failures\":\"budget.min_guarded_field_count expected={>=: 2} actual=count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)\""));
+    assert(contains_text(
+        failure_json,
+        "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":\"budget.min_guarded_field_count\""));
+    assert(contains_text(
+        failure_json,
+        "\"actual\":{\"bound_keys\":[\"draw_calls_gte\"],\"count\":1,\"guarded_fields\":[\"draw_calls\"]"));
+    assert(contains_text(
+        failure_json,
+        "\"unguarded_observed_fields\":[\"planned_frame_capture_pixels\"]"));
+    assert(contains_text(
+        failure_json,
+        "\"actual_text\":\"count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)\""));
     assert(contains_text(failure_json, "\"truncated\":true"));
 
     auto failure_lines = verifier_failure_summary_lines(report);
@@ -1727,6 +1739,12 @@ int main() {
     assert(contains_text(
         minimum_json,
         "\"actual\":\"count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)\""));
+    assert(contains_text(
+        minimum_json,
+        "\"coverage_minimum_failure_details\":{\"entries\":[{\"label\":\"budget.min_guarded_field_count\""));
+    assert(contains_text(
+        minimum_json,
+        "\"expected\":{\">=\":2},\"actual\":{\"bound_keys\":[\"draw_calls_gte\"],\"count\":1,\"guarded_fields\":[\"draw_calls\"]"));
     auto minimum_lines = verifier_failure_summary_lines(minimum_report);
     assert(contains_line(
         minimum_lines,

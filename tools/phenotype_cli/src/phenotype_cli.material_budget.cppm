@@ -3215,6 +3215,12 @@ auto json_object_compact_failure_text(json::Object const& object,
     return value ? compact_failure_json_text(*value) : std::string{};
 }
 
+auto json_object_value_or_null(json::Object const& object,
+                               std::string_view key) -> std::string {
+    auto const* value = json_object_member(object, key);
+    return value ? json::emit(*value) : std::string{"null"};
+}
+
 auto json_object_failure_string(json::Object const& object,
                                 std::string_view key) -> std::string {
     auto const* value = json_object_member(object, key);
@@ -3403,6 +3409,69 @@ auto failure_coverage_minimum_text(json::Object const& failure)
         text += " expected=" + expected;
     text += " actual=" + actual_text;
     return text;
+}
+
+auto coverage_minimum_failure_detail_json(json::Object const& failure)
+        -> std::string {
+    auto label = coverage_minimum_failure_label(failure);
+    if (label.empty())
+        return {};
+
+    auto const* actual = json_object_member(failure, "actual");
+    if (!actual)
+        return {};
+
+    auto actual_text = coverage_minimum_actual_text(*actual);
+    if (actual_text.empty())
+        return {};
+
+    return std::format(
+        "{{\"label\":{},\"path\":{},\"expected\":{},\"actual\":{},"
+        "\"actual_text\":{},\"text\":{},\"likely_layer\":{},"
+        "\"likely_pass\":{},\"hint\":{},\"suggested_action\":{}}}",
+        json_string(label),
+        json_object_failure_string_json(failure, "path"),
+        json_object_value_or_null(failure, "expected"),
+        json_object_value_or_null(failure, "actual"),
+        json_string(actual_text),
+        json_string(failure_coverage_minimum_text(failure)),
+        json_object_failure_string_json(failure, "likely_layer"),
+        json_object_failure_string_json(failure, "likely_pass"),
+        json_object_failure_string_json(failure, "hint"),
+        json_object_failure_string_json(failure, "suggested_action"));
+}
+
+auto verifier_coverage_minimum_failure_details_json(
+        json::Value const& report,
+        std::size_t limit = 5) -> std::string {
+    auto const* failures = json_array_at(report, {"failures"});
+    if (!failures)
+        return "null";
+
+    auto entries = std::vector<std::string>{};
+    auto seen = std::set<std::string>{};
+    for (auto const& failure : *failures) {
+        if (!failure.is_object())
+            continue;
+        auto detail = coverage_minimum_failure_detail_json(failure.as_object());
+        if (detail.empty() || !seen.insert(detail).second)
+            continue;
+        entries.push_back(std::move(detail));
+    }
+    if (entries.empty())
+        return "null";
+
+    auto count = std::min(limit, entries.size());
+    auto out = std::string{"{\"entries\":["};
+    for (auto index = std::size_t{0}; index < count; ++index) {
+        if (index > 0)
+            out += ",";
+        out += entries[index];
+    }
+    out += std::format(
+        "],\"truncated\":{}}}",
+        entries.size() > count ? "true" : "false");
+    return out;
 }
 
 auto verifier_coverage_minimum_failures_text(json::Value const& report,
@@ -5004,6 +5073,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         "\"quality_policy_bound_coverage\":{},"
         "\"missing_field_sources\":{},"
         "\"coverage_minimum_failures\":{},"
+        "\"coverage_minimum_failure_details\":{},"
         "\"material_context\":{},"
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
         "\"by_path\":{},"
@@ -5033,6 +5103,7 @@ auto verifier_failure_summary_json(json::Value const& report)
             verifier_missing_field_sources_text(report)),
         failure_optional_string_json(
             verifier_coverage_minimum_failures_text(report)),
+        verifier_coverage_minimum_failure_details_json(report),
         failure_material_context_json(report),
         failure_json_value_or_null(
             report,
