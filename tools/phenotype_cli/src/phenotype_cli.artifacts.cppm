@@ -1010,10 +1010,104 @@ auto capture_artifact_verifier(fs::path const& bundle,
     return verifier;
 }
 
+auto artifact_verifier_exit_code(VerifierObservation const& verifier) -> int {
+    if (verifier.timed_out)
+        return verifier.exit_code == 0 ? 124 : verifier.exit_code;
+    return verifier.exit_code;
+}
+
+auto artifact_verifier_exit_code(
+        cppx::process::CapturedProcessResult const& result) -> int {
+    if (result.timed_out)
+        return result.exit_code == 0 ? 124 : result.exit_code;
+    return result.exit_code;
+}
+
+void print_verifier_process_output(
+        cppx::process::CapturedProcessResult const& result) {
+    if (!result.stdout_text.empty()) {
+        std::print("{}", result.stdout_text);
+        if (!result.stdout_text.ends_with('\n'))
+            std::println("");
+    }
+    if (!result.stderr_text.empty()) {
+        std::print(std::cerr, "{}", result.stderr_text);
+        if (!result.stderr_text.ends_with('\n'))
+            std::println(std::cerr, "");
+    }
+}
+
+auto verifier_report_status_text(VerifierObservation const& verifier)
+        -> std::string {
+    if (verifier.report)
+        return "parsed";
+    if (!verifier.report_error.empty())
+        return verifier.report_error;
+    if (!verifier.stdout_tail.empty())
+        return "not parsed";
+    return "no stdout";
+}
+
+void print_verifier_tail(std::string_view label, std::string const& tail) {
+    if (tail.empty())
+        return;
+    std::println("{}:", label);
+    std::print("{}", tail);
+    if (!tail.ends_with('\n'))
+        std::println("");
+}
+
+void print_artifact_verify_summary(fs::path const& bundle,
+                                   VerifierObservation const& verifier) {
+    auto artifact = artifact_summary(bundle);
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "bundle",
+         .value = path_string(artifact.bundle),
+         .status = artifact.exists && artifact.is_directory
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "verifier",
+         .value = verifier.executed
+            ? std::format("exit {}", artifact_verifier_exit_code(verifier))
+            : "not executed",
+         .status = verifier.ok ? cppx::terminal::StatusKind::ok
+                                : cppx::terminal::StatusKind::fail},
+        {.label = "report",
+         .value = verifier_report_status_text(verifier),
+         .status = verifier.report ? cppx::terminal::StatusKind::ok
+                                    : cppx::terminal::StatusKind::fail},
+    };
+    std::println("phenotype artifact verify");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    print_verifier_manifest_summary(verifier);
+    print_verifier_material_budget_coverage(verifier);
+    print_verifier_material_budget_bound_summary(verifier);
+    print_verifier_material_budget(verifier);
+
+    if (!verifier.ok) {
+        if (!verifier.report)
+            print_verifier_tail("verifier stdout tail", verifier.stdout_tail);
+        print_verifier_tail("verifier stderr tail", verifier.stderr_tail);
+    }
+}
+
 int run_artifact_verify(cppx::cli::Invocation const& invocation) {
     auto path = first_positional_or_error(invocation, "artifact verify");
     if (!path)
         return print_error("artifact verify", path.error(), invocation.has("json"));
+
+    if (!invocation.has("json")) {
+        auto verifier = capture_artifact_verifier(*path, invocation);
+        if (!verifier) {
+            return print_error(
+                "artifact verify",
+                verifier.error(),
+                false);
+        }
+
+        print_artifact_verify_summary(*path, *verifier);
+        return artifact_verifier_exit_code(*verifier);
+    }
 
     auto root = find_repo_root(fs::current_path());
     if (!root) {
@@ -1042,20 +1136,8 @@ int run_artifact_verify(cppx::cli::Invocation const& invocation) {
             invocation.has("json"));
     }
 
-    if (!result->stdout_text.empty()) {
-        std::print("{}", result->stdout_text);
-        if (!result->stdout_text.ends_with('\n'))
-            std::println("");
-    }
-    if (!result->stderr_text.empty()) {
-        std::print(std::cerr, "{}", result->stderr_text);
-        if (!result->stderr_text.ends_with('\n'))
-            std::println(std::cerr, "");
-    }
-
-    if (result->timed_out)
-        return result->exit_code == 0 ? 124 : result->exit_code;
-    return result->exit_code;
+    print_verifier_process_output(*result);
+    return artifact_verifier_exit_code(*result);
 }
 
 void append_artifact_observation_guidance(ArtifactObservation& observation) {

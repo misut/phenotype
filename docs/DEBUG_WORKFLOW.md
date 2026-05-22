@@ -192,8 +192,11 @@ mise exec -- exon build
 ```
 
 `artifact verify` runs the uv-managed reference verifier from the repository
-root and forwards the verifier's JSON report. This keeps Python managed by
-`mise`/`uv` while moving the developer-facing entry point under the CLI.
+root. The default output prints a compact status frame plus verifier manifest,
+material budget coverage, budget bound headroom, and material execution budget
+summaries; `--json` forwards the raw verifier JSON report for machine
+consumers. This keeps Python managed by `mise`/`uv` while moving the
+developer-facing entry point under the CLI.
 
 For icon-source regressions, start with the aggregate icon gate:
 
@@ -1646,7 +1649,6 @@ pure pixel-capture failure.
 
 ```sh
 tools/phenotype_cli/.exon/debug/phenotype_cli artifact verify /tmp/phenotype-native-startup \
-  --json \
   --expect-platform macos \
   --require-frame \
   --require-label "Control States" \
@@ -1661,11 +1663,13 @@ tools/phenotype_cli/.exon/debug/phenotype_cli artifact verify /tmp/phenotype-nat
   --require-material-plan
 ```
 
+Add `--json` when the full verifier report is needed instead of the compact
+human summary.
+
 For the material-focused showcase, require every public material kind:
 
 ```sh
 tools/phenotype_cli/.exon/debug/phenotype_cli artifact verify /tmp/phenotype-glass-showcase \
-  --json \
   --expect-platform macos \
   --manifest examples/glass_showcase/artifact_manifest.json
 ```
