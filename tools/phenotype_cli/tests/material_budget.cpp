@@ -234,6 +234,16 @@ auto sample_report() -> json::Value {
               "total_sample_taps",
               "upload_bytes"
             ],
+            "unguarded_observed_sources": {
+              "max_backdrop_pixels": {
+                "metric": "max_backdrop_pixels",
+                "value": 4096,
+                "source_key": "max_backdrop_pixels",
+                "source_path": "debug.platform_runtime.details.renderer.material_plans#resource_bounds.max_backdrop_pixels",
+                "likely_layer": "platform-runtime",
+                "likely_pass": "resource-budget"
+              }
+            },
             "required_fields": [
               "draw_calls",
               "execution_stage_count"
@@ -543,6 +553,19 @@ auto sample_report() -> json::Value {
           "unguarded_observed_fields": [
             "max_frame_capture_pixels"
           ],
+          "unguarded_observed_sources": {
+            "max_frame_capture_pixels": {
+              "metric": "max_frame_capture_pixels",
+              "value": 4096,
+              "plan_id": "material.content.liquid-glass",
+              "kind": "thin",
+              "role": "content",
+              "plan_path": "debug.platform_runtime.details.renderer.material_plans[1]",
+              "source_path": "debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels",
+              "likely_layer": "material-backdrop",
+              "likely_pass": "resource-budget"
+            }
+          },
           "required_fields": [
             "bounded_texture_copy",
             "max_plan_sample_taps"
@@ -699,6 +722,19 @@ auto sample_report() -> json::Value {
             "max_sample_taps",
             "shadow_disabled"
           ],
+          "unguarded_observed_sources": {
+            "max_sample_taps": {
+              "metric": "max_sample_taps",
+              "value": 25,
+              "plan_id": "material.toolbar.liquid-glass",
+              "kind": "regular",
+              "role": "toolbar",
+              "plan_path": "debug.platform_runtime.details.renderer.material_plans[0]",
+              "source_path": "debug.platform_runtime.details.renderer.material_plans[0].quality_policy.max_sample_taps",
+              "likely_layer": "material-blur-pass",
+              "likely_pass": "quality-policy"
+            }
+          },
           "required_fields": [
             "max_blur_radius",
             "noise_disabled"
@@ -1033,12 +1069,24 @@ int main() {
     assert(raw_coverage->manifest_bound_key_count == 3);
     assert(raw_coverage->manifest_bound_keys.size() == 3);
     assert(contains_text(
+        raw_coverage->unguarded_observed_sources_json,
+        "\"max_backdrop_pixels\""));
+    assert(contains_text(
+        raw_coverage->unguarded_observed_sources_json,
+        "material_plans#resource_bounds.max_backdrop_pixels"));
+    assert(contains_text(
         verifier_material_budget_coverage_json(report),
         "\"manifest_bound_keys\":[\"draw_calls_gte\","
         "\"execution_stage_count_lte\",\"upload_utilization_lte\"]"));
     assert(contains_text(
+        verifier_material_budget_coverage_json(report),
+        "\"unguarded_observed_sources\":{\"max_backdrop_pixels\""));
+    assert(contains_text(
         verifier_material_budget_coverage_text(report),
         "unguarded=19"));
+    assert(contains_text(
+        verifier_material_budget_coverage_text(report),
+        "unguarded-sources=(max_backdrop_pixels=4096 pass=resource-budget"));
 
     auto resource_coverage =
         material_resource_bound_coverage_from_report(report);
@@ -1057,10 +1105,16 @@ int main() {
         "\"unguarded_observed_fields\":[\"max_frame_capture_pixels\"]"));
     assert(contains_text(
         material_bound_coverage_json(resource_coverage),
+        "\"unguarded_observed_sources\":{\"max_frame_capture_pixels\""));
+    assert(contains_text(
+        material_bound_coverage_json(resource_coverage),
         "\"required_fields\":[\"bounded_texture_copy\",\"max_plan_sample_taps\"]"));
     assert(contains_text(
         material_bound_coverage_text(*resource_coverage),
         "unguarded=1 (max_frame_capture_pixels)"));
+    assert(contains_text(
+        material_bound_coverage_text(*resource_coverage),
+        "unguarded-sources=(max_frame_capture_pixels=4096 pass=resource-budget"));
 
     auto quality_coverage =
         material_quality_policy_coverage_from_report(report);
@@ -1072,6 +1126,12 @@ int main() {
         material_bound_coverage_text(*quality_coverage),
         "unguarded=4 (backdrop_sampling_disabled, max_backdrop_pixels, "
         "max_sample_taps, shadow_disabled)"));
+    assert(contains_text(
+        material_bound_coverage_json(quality_coverage),
+        "\"unguarded_observed_sources\":{\"max_sample_taps\""));
+    assert(contains_text(
+        material_bound_coverage_text(*quality_coverage),
+        "unguarded-sources=(max_sample_taps=25 pass=quality-policy"));
 
     auto resource_bounds = material_resource_bounds_from_report(report);
     assert(resource_bounds);
@@ -1471,7 +1531,10 @@ int main() {
         "manifest: name=unit-material-gate runtime-details=4 debug-details=3 runtime-bounds=5 pixel-regions=2 budget=3 resource=2 quality=2 required-budget=(draw_calls, execution_stage_count) required-resource=(bounded_texture_copy, max_plan_sample_taps) required-quality=(max_blur_radius, noise_disabled) runtime-detail-paths=(renderer.material_executor_summary.material_draw_status, renderer.material_executor_summary.material_sampled_backdrop_drawn, renderer.material_executor_summary.material_sampled_backdrop_uploaded, renderer.material_executor_summary.material_upload_status) debug-detail-paths=(application.file_explorer.chrome.geometry.titlebar_transparent, application.file_explorer.input.commands.duplicate, platform_capabilities.material_capability_profile) coverage-minimums=(budget=(keys=3 guarded=2 observed=21) resource=(keys=2 guarded=2 observed=2) quality=(keys=2 guarded=2 observed=6)) budget-keys=(execution_stage_count_lte, draw_calls_gte, upload_utilization_lte) resource-keys=(max_plan_sample_taps_lte, require_bounded_texture_copy) quality-keys=(max_blur_radius_lte, require_noise_allowed)"));
     assert(contains_line(
         failure_lines,
-        "coverage: guarded=3/22 observed=22 guard-keys=3 unguarded=19 (active_execution_stage_count, backdrop_copy_count, backdrop_copy_pixels, backdrop_copy_skipped_count, backdrop_copy_utilization, backdrop_execution_stage_count, buffer_capacity_bytes, dropped_execution_stage_count, +11 more) required=2/2"));
+        "coverage: guarded=3/22 observed=22 guard-keys=3 unguarded=19 (active_execution_stage_count, backdrop_copy_count, backdrop_copy_pixels, backdrop_copy_skipped_count, backdrop_copy_utilization, backdrop_execution_stage_count, buffer_capacity_bytes, dropped_execution_stage_count, +11 more)"));
+    assert(contains_line(
+        failure_lines,
+        "unguarded-sources=(max_backdrop_pixels=4096 pass=resource-budget"));
     assert(contains_line(
         failure_lines,
         "resource-coverage: guarded=2/4 observed=3 guard-keys=2 required=2/2 observed-required=2/2"));

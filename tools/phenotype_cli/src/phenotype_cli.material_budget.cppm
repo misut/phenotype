@@ -250,6 +250,7 @@ struct MaterialBudgetCoverageSummary {
     std::vector<std::string> observed_fields;
     std::vector<std::string> guarded_observed_fields;
     std::vector<std::string> unguarded_observed_fields;
+    std::string unguarded_observed_sources_json;
     std::vector<std::string> required_fields;
     std::vector<std::string> covered_required_fields;
     std::vector<std::string> missing_required_fields;
@@ -271,6 +272,7 @@ struct MaterialBoundCoverageSummary {
     std::vector<std::string> observed_fields;
     std::vector<std::string> guarded_fields;
     std::vector<std::string> unguarded_observed_fields;
+    std::string unguarded_observed_sources_json;
     std::vector<std::string> required_fields;
 };
 
@@ -422,6 +424,12 @@ auto json_object_string_array(json::Object const& object, std::string_view key)
             out.push_back(item.as_string());
     }
     return out;
+}
+
+auto json_object_object_json(json::Object const& object, std::string_view key)
+    -> std::string {
+    auto const* found = json_object_member(object, key);
+    return found && found->is_object() ? json::emit(*found) : std::string{};
 }
 
 auto budget_integer_at(json::Value const& report, std::string_view key)
@@ -1661,6 +1669,7 @@ auto material_budget_coverage_summary(
         .observed_fields = std::move(observed),
         .guarded_observed_fields = std::move(guarded),
         .unguarded_observed_fields = std::move(unguarded),
+        .unguarded_observed_sources_json = {},
         .required_fields = std::move(required_fields),
         .covered_required_fields = std::move(covered_required),
         .missing_required_fields = std::move(missing_required),
@@ -1754,6 +1763,9 @@ auto material_budget_coverage_from_object(json::Object const& coverage)
         .observed_fields = std::move(observed_fields),
         .guarded_observed_fields = std::move(guarded_observed_fields),
         .unguarded_observed_fields = std::move(unguarded_observed_fields),
+        .unguarded_observed_sources_json = json_object_object_json(
+            coverage,
+            "unguarded_observed_sources"),
         .required_fields = std::move(required_fields),
         .covered_required_fields = std::move(covered_required_fields),
         .missing_required_fields = std::move(missing_required_fields),
@@ -1842,6 +1854,9 @@ auto material_bound_coverage_from_object(json::Object const& coverage)
         .observed_fields = std::move(observed_fields),
         .guarded_fields = std::move(guarded_fields),
         .unguarded_observed_fields = std::move(unguarded_observed_fields),
+        .unguarded_observed_sources_json = json_object_object_json(
+            coverage,
+            "unguarded_observed_sources"),
         .required_fields = json_object_string_array(
             coverage,
             "required_fields"),
@@ -2359,7 +2374,7 @@ auto material_budget_coverage_json(
     -> std::string {
     if (!coverage)
         return "null";
-    return std::format(
+    auto out = std::format(
         "{{\"guardable_field_count\":{},\"observed_field_count\":{},"
         "\"guarded_observed_field_count\":{},"
         "\"unguarded_observed_field_count\":{},"
@@ -2369,7 +2384,7 @@ auto material_budget_coverage_json(
         "\"observed_fields\":{},\"guarded_observed_fields\":{},"
         "\"unguarded_observed_fields\":{},\"required_fields\":{},"
         "\"covered_required_fields\":{},\"missing_required_fields\":{},"
-        "\"manifest_fields\":{},\"manifest_bound_keys\":{}}}",
+        "\"manifest_fields\":{},\"manifest_bound_keys\":{}",
         coverage->guardable_field_count,
         coverage->observed_field_count,
         coverage->guarded_observed_field_count,
@@ -2387,6 +2402,12 @@ auto material_budget_coverage_json(
         string_array_json(coverage->missing_required_fields),
         string_array_json(coverage->manifest_fields),
         string_array_json(coverage->manifest_bound_keys));
+    if (!coverage->unguarded_observed_sources_json.empty()) {
+        out += ",\"unguarded_observed_sources\":";
+        out += coverage->unguarded_observed_sources_json;
+    }
+    out += "}";
+    return out;
 }
 
 auto material_bound_coverage_json(
@@ -2394,7 +2415,7 @@ auto material_bound_coverage_json(
     -> std::string {
     if (!coverage)
         return "null";
-    return std::format(
+    auto out = std::format(
         "{{\"guardable_field_count\":{},\"observed_field_count\":{},"
         "\"guarded_field_count\":{},\"required_field_count\":{},"
         "\"covered_required_field_count\":{},"
@@ -2402,7 +2423,7 @@ auto material_bound_coverage_json(
         "\"bound_key_count\":{},\"unguarded_observed_field_count\":{},"
         "\"missing_guarded_fields\":{},\"missing_observed_fields\":{},"
         "\"observed_fields\":{},\"guarded_fields\":{},"
-        "\"unguarded_observed_fields\":{},\"required_fields\":{}}}",
+        "\"unguarded_observed_fields\":{},\"required_fields\":{}",
         manifest_count_json(coverage->guardable_field_count),
         manifest_count_json(coverage->observed_field_count),
         manifest_count_json(coverage->guarded_field_count),
@@ -2417,6 +2438,12 @@ auto material_bound_coverage_json(
         string_array_json(coverage->guarded_fields),
         string_array_json(coverage->unguarded_observed_fields),
         string_array_json(coverage->required_fields));
+    if (!coverage->unguarded_observed_sources_json.empty()) {
+        out += ",\"unguarded_observed_sources\":";
+        out += coverage->unguarded_observed_sources_json;
+    }
+    out += "}";
+    return out;
 }
 
 auto material_budget_bound_result_json(MaterialBudgetBoundResult const& result)
@@ -2605,6 +2632,51 @@ auto material_resource_bound_sources_text(
     return text;
 }
 
+auto coverage_source_map_text(std::string_view sources_json,
+                              std::size_t limit = 3)
+    -> std::string {
+    if (sources_json.empty())
+        return {};
+    auto parsed = parse_verifier_json(sources_json);
+    if (!parsed || !parsed->is_object())
+        return {};
+
+    auto parts = std::vector<std::string>{};
+    auto index = std::size_t{0};
+    auto const& sources = parsed->as_object();
+    for (auto const& [field, value] : sources) {
+        if (index >= limit)
+            break;
+        if (!value.is_object())
+            continue;
+        auto const& source = value.as_object();
+        auto text = std::string{field};
+        if (auto number = json_object_number(source, "value")) {
+            text += "=";
+            text += budget_number_text(*number);
+        }
+        if (auto pass = json_object_string(source, "likely_pass");
+            !pass.empty()) {
+            text += " pass=";
+            text += pass;
+        }
+        if (auto path = json_object_string(source, "source_path");
+            !path.empty()) {
+            text += " path=";
+            text += path;
+        }
+        parts.push_back(std::move(text));
+        ++index;
+    }
+    if (parts.empty())
+        return {};
+    auto text = std::views::join_with(parts, std::string_view{"; "})
+        | std::ranges::to<std::string>();
+    if (sources.size() > index)
+        text += std::format("; +{} more", sources.size() - index);
+    return text;
+}
+
 auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage)
     -> std::string {
     auto required = coverage.required_field_count > 0
@@ -2618,6 +2690,11 @@ auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage
         : std::format(
             " missing-required=({})",
             budget_field_list_text(coverage.missing_required_fields));
+    auto sources = coverage_source_map_text(
+        coverage.unguarded_observed_sources_json);
+    auto source_text = sources.empty()
+        ? std::string{}
+        : std::format(" unguarded-sources=({})", sources);
     return std::format(
         "guarded={}/{} observed={} guard-keys={} unguarded={} ({})",
         coverage.guarded_observed_field_count,
@@ -2626,6 +2703,7 @@ auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage
         coverage.manifest_bound_key_count,
         coverage.unguarded_observed_field_count,
         budget_field_list_text(coverage.unguarded_observed_fields))
+        + source_text
         + required
         + missing;
 }
@@ -2656,6 +2734,11 @@ auto material_bound_coverage_text(MaterialBoundCoverageSummary const& coverage)
             coverage.unguarded_observed_field_count,
             budget_field_list_text(coverage.unguarded_observed_fields))
         : std::string{};
+    auto sources = coverage_source_map_text(
+        coverage.unguarded_observed_sources_json);
+    auto source_text = sources.empty()
+        ? std::string{}
+        : std::format(" unguarded-sources=({})", sources);
     return std::format(
         "guarded={}/{} observed={} guard-keys={}",
         coverage.guarded_field_count,
@@ -2664,6 +2747,7 @@ auto material_bound_coverage_text(MaterialBoundCoverageSummary const& coverage)
         coverage.bound_key_count)
         + required
         + unguarded
+        + source_text
         + missing_guarded
         + missing_observed;
 }

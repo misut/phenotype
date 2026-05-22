@@ -310,9 +310,12 @@ JSON also includes
 `material_budget_coverage`, which separates manifest-guarded observed budget
 fields from observed-but-unguarded fields, and
 `material_resource_bound_coverage`/`material_quality_policy_coverage`, which do
-the same for resource and quality-policy counters, and
-`material_quality_policy`, which reports disabled backdrop sampling, noise, and
-shadow counts plus maximum blur radius, sample taps, and backdrop pixel limits.
+the same for resource and quality-policy counters. Coverage summaries also keep
+`unguarded_observed_sources` when the verifier can trace an unguarded field back
+to a runtime summary key or material plan path.
+JSON includes `material_quality_policy`, which reports disabled backdrop
+sampling, noise, and shadow counts plus maximum blur radius, sample taps, and
+backdrop pixel limits.
 `material_resource_bounds` reports the pure plan/resource budget maxima,
 runtime pass/stage usage, capture/surface-sampling pixel budgets, paint layer
 capacity, texture-copy bounds, deterministic fallback counters, and compact
@@ -1735,6 +1738,10 @@ showcase and file explorer manifests require the utilization and execution-cost
 fields above to be guarded by compact budget bounds and require the compact
 executor budget to keep reporting all 22 currently guardable fields. Verifier
 reports also include
+`unguarded_observed_sources` in budget/resource/quality coverage summaries when
+an observed-but-unguarded field has a source descriptor, so a coverage warning can
+point directly at the runtime key or material plan path that introduced the
+counter. They also include
 `artifact_context.material_contract.executor_budget_bound_results` and
 `executor_budget_bound_summary`; resource and quality guards mirror the same
 shape under `material_plans.resource_bound_results` /

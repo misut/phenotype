@@ -13879,6 +13879,17 @@ def material_bound_source_for_field(
     return None
 
 
+def material_coverage_sources_for_fields(
+        sources: Any,
+        fields: list[str]) -> JsonObject:
+    coverage_sources: JsonObject = {}
+    for field in fields:
+        source = material_bound_source_for_field(sources, field)
+        if source is not None:
+            coverage_sources[field] = source
+    return coverage_sources
+
+
 def check_material_resource_bounds_requirements(
         summary: JsonObject,
         spec: JsonObject,
@@ -14110,7 +14121,8 @@ def material_executor_budget_guarded_fields(spec: Any) -> list[str]:
 def material_executor_budget_coverage_summary(
         budget: Any,
         budget_spec: Any,
-        coverage_spec: JsonObject) -> JsonObject:
+        coverage_spec: JsonObject,
+        sources: Any = None) -> JsonObject:
     observed_fields = material_executor_budget_observed_fields(budget)
     guarded_fields = material_executor_budget_guarded_fields(budget_spec)
     required_fields = coverage_spec.get("required_fields", [])
@@ -14124,6 +14136,9 @@ def material_executor_budget_coverage_summary(
         set(required_fields) - set(missing_guarded))
     manifest_bound_keys = (
         sorted(budget_spec.keys()) if isinstance(budget_spec, dict) else [])
+    unguarded_observed_sources = material_coverage_sources_for_fields(
+        sources,
+        unguarded_observed_fields)
     return {
         "guardable_field_count": len(MATERIAL_EXECUTOR_BUDGET_FIELDS),
         "observed_field_count": len(observed_fields),
@@ -14139,6 +14154,7 @@ def material_executor_budget_coverage_summary(
         "guarded_observed_fields": sorted(
             set(observed_fields) & set(guarded_fields)),
         "unguarded_observed_fields": unguarded_observed_fields,
+        "unguarded_observed_sources": unguarded_observed_sources,
         "required_fields": sorted(required_fields),
         "covered_required_fields": covered_required_fields,
         "missing_required_fields": missing_guarded,
@@ -14281,7 +14297,10 @@ def check_material_executor_budget_coverage_requirements(
     coverage = material_executor_budget_coverage_summary(
         budget,
         budget_spec,
-        coverage_spec)
+        coverage_spec,
+        material_contract.get("executor_budget_sources")
+        if isinstance(material_contract, dict)
+        else None)
     if isinstance(material_contract, dict):
         material_contract["executor_budget_coverage"] = coverage
     required_fields = coverage["required_fields"]
@@ -14378,7 +14397,8 @@ def material_bound_coverage_summary(
         coverage_spec: JsonObject,
         allowed_fields: list[str],
         field_from_key: Callable[[str], str],
-        aliases: dict[str, str] | None = None) -> JsonObject:
+        aliases: dict[str, str] | None = None,
+        sources: Any = None) -> JsonObject:
     observed_fields = material_bound_observed_fields(
         source,
         allowed_fields,
@@ -14394,6 +14414,9 @@ def material_bound_coverage_summary(
     missing_observed = sorted(set(required_fields) - set(observed_fields))
     unguarded_observed_fields = sorted(
         set(observed_fields) - set(guarded_fields))
+    unguarded_observed_sources = material_coverage_sources_for_fields(
+        sources,
+        unguarded_observed_fields)
     return {
         "guardable_field_count": len(allowed_fields),
         "observed_field_count": len(observed_fields),
@@ -14409,6 +14432,7 @@ def material_bound_coverage_summary(
         "observed_fields": observed_fields,
         "guarded_fields": guarded_fields,
         "unguarded_observed_fields": unguarded_observed_fields,
+        "unguarded_observed_sources": unguarded_observed_sources,
         "required_fields": required_fields,
         "bound_key_count": len(bound_spec) if isinstance(bound_spec, dict) else 0,
     }
@@ -14420,6 +14444,7 @@ def check_material_bound_coverage_requirements(
         summary: JsonObject,
         summary_key: str,
         source_key: str,
+        source_summary_key: str,
         bound_spec: Any,
         coverage_spec: JsonObject,
         allowed_fields: list[str],
@@ -14440,7 +14465,8 @@ def check_material_bound_coverage_requirements(
         coverage_spec,
         allowed_fields,
         field_from_key,
-        aliases)
+        aliases,
+        summary.get(source_summary_key))
     summary[summary_key] = coverage
     required_fields = coverage["required_fields"]
     missing_guarded = coverage["missing_guarded_fields"]
@@ -16441,6 +16467,7 @@ def verify(args: argparse.Namespace) -> int:
                     summary=material_plan_summary,
                     summary_key="resource_bound_coverage",
                     source_key="resource_bounds",
+                    source_summary_key="resource_bound_sources",
                     bound_spec=material_resource_bounds_spec,
                     coverage_spec=material_resource_bound_coverage_spec,
                     allowed_fields=MATERIAL_RESOURCE_BOUND_FIELDS,
@@ -16478,6 +16505,7 @@ def verify(args: argparse.Namespace) -> int:
                     summary=material_plan_summary,
                     summary_key="quality_policy_bound_coverage",
                     source_key="quality_policy",
+                    source_summary_key="quality_policy_sources",
                     bound_spec=material_quality_policy_spec,
                     coverage_spec=material_quality_policy_coverage_spec,
                     allowed_fields=MATERIAL_QUALITY_POLICY_FIELDS,
