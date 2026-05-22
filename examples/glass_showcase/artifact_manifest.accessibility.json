@@ -428,6 +428,15 @@
     "require_deterministic_fallback": true
   },
   "require_material_executor_budget": {
+    "execution_stage_count_equals": 51,
+    "active_execution_stage_count_equals": 51,
+    "backdrop_execution_stage_count_equals": 0,
+    "dropped_execution_stage_count_equals": 0,
+    "draw_calls_equals": 0,
+    "total_sample_taps_equals": 0,
+    "max_sample_taps_equals": 0,
+    "backdrop_copy_count_equals": 0,
+    "backdrop_copy_pixels_lte": 0,
     "upload_utilization_gte": 0.0,
     "upload_utilization_lte": 1.0,
     "backdrop_copy_utilization_gte": 0.0,
@@ -435,11 +444,20 @@
   },
   "require_material_executor_budget_coverage": {
     "required_fields": [
+      "active_execution_stage_count",
+      "backdrop_copy_count",
+      "backdrop_copy_pixels",
       "backdrop_copy_utilization",
+      "backdrop_execution_stage_count",
+      "draw_calls",
+      "dropped_execution_stage_count",
+      "execution_stage_count",
+      "max_sample_taps",
+      "total_sample_taps",
       "upload_utilization"
     ],
-    "min_bound_key_count": 4,
-    "min_guarded_field_count": 2,
+    "min_bound_key_count": 13,
+    "min_guarded_field_count": 11,
     "min_observed_field_count": 22
   },
   "require_material_quality_policy": {

@@ -1552,20 +1552,24 @@ Use `require_material_executor_budget` when a material gate needs the compact
 artifact budget rather than a raw runtime path. It supports numeric
 `*_lte`/`*_gte`/`*_equals` keys for fields under
 `artifact_context.material_contract.executor_budget`, including
-`upload_utilization`, `backdrop_copy_utilization`, stage counts, sample taps,
-upload bytes/capacity, backdrop copy pixels, and frame-capture bounds. The
-glass showcase and file explorer manifests require both utilization ratios to
-stay between 0 and 1 so a hidden buffer/copy overrun is reported as a
-material-executor budget failure before reading the full runtime JSON.
+`upload_utilization`, `backdrop_copy_utilization`, stage counts, draw calls,
+sample taps, upload bytes/capacity, backdrop copy count/pixels, and
+frame-capture bounds. The glass showcase and file explorer manifests require
+both utilization ratios to stay between 0 and 1 and guard the core execution
+cost counters that determine how much Liquid Glass work ran: execution stages,
+backdrop stages, dropped stages, draw calls, sample taps, max taps, and
+backdrop copies. This makes hidden buffer/copy overruns or unexpected execution
+growth show up as material-executor budget failures before reading the full
+runtime JSON.
 Use `require_material_executor_budget_coverage` next to those bounds when the
 manifest must fail if important compact budget fields stop being guarded. It
 supports `required_fields`, `min_bound_key_count`, `min_guarded_field_count`,
 and `min_observed_field_count`; failures point either at the manifest budget
 bound set or at `artifact_context.material_contract.executor_budget`. The glass
-showcase and file explorer manifests require `upload_utilization` and
-`backdrop_copy_utilization` to be guarded by four total bound keys and require
-the compact executor budget to keep reporting all 22 currently guardable
-fields. Verifier reports also include
+showcase and file explorer manifests require the utilization and execution-cost
+fields above to be guarded by compact budget bounds and require the compact
+executor budget to keep reporting all 22 currently guardable fields. Verifier
+reports also include
 `artifact_context.material_contract.executor_budget_bound_results` and
 `executor_budget_bound_summary`; each result records the bound key, field,
 operator, expected value, actual value, pass/fail state, and numeric margin.
