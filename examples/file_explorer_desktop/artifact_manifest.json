@@ -2309,11 +2309,13 @@
     "draw_calls_lte": 8,
     "total_sample_taps_equals": 200,
     "max_sample_taps_equals": 25,
+    "upload_bytes_gte": 1024,
     "backdrop_copy_count_equals": 1,
+    "backdrop_copy_pixels_gte": 3600000,
     "backdrop_copy_pixels_lte": 4000000,
-    "upload_utilization_gte": 0.0,
+    "upload_utilization_gte": 0.25,
     "upload_utilization_lte": 1.0,
-    "backdrop_copy_utilization_gte": 0.0,
+    "backdrop_copy_utilization_gte": 0.2,
     "backdrop_copy_utilization_lte": 1.0
   },
   "require_material_executor_budget_coverage": {
@@ -2328,10 +2330,11 @@
       "execution_stage_count",
       "max_sample_taps",
       "total_sample_taps",
+      "upload_bytes",
       "upload_utilization"
     ],
-    "min_bound_key_count": 14,
-    "min_guarded_field_count": 11,
+    "min_bound_key_count": 16,
+    "min_guarded_field_count": 12,
     "min_observed_field_count": 22
   },
   "require_material_quality_policy": {

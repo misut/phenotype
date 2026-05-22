@@ -352,6 +352,10 @@ plans/work/status summary with upload/copy utilization, per-case manifest bound
 summaries, per-case material quality policy, per-case material resource bounds,
 per-case budget coverage, per-case budget bound headroom, and the tightest or
 failed expected-vs-actual budget bound detail when present.
+The checked-in desktop and mobile default manifests also pin positive executor
+floors for upload bytes, backdrop-copy pixels, and upload/copy utilization, so
+a file-explorer material capture cannot pass after silently losing the native
+material executor work.
 Failed cases also print the compact verifier failure summary when the verifier
 report parsed successfully, falling back to the raw report tail only when
 parsing failed.
