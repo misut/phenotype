@@ -240,7 +240,8 @@ floor shortfalls stay visible even when failure ordering changes. Compact JSON
 also exposes structured `coverage_minimum_failure_details.entries[]` with raw
 expected/actual objects, rendered `actual_text`, flattened `expected_operator`,
 `expected_count`, `coverage_family`/`minimum_field` values, `actual_count`, and
-the active field arrays. Guarded-field shortfalls also expose
+`shortfall_count` for at-least count floors, plus the active field arrays.
+Guarded-field shortfalls also expose
 `unguarded_observed_source_details` with flattened field/metric/value/source-path
 data, plus `total_count`, `shown_count`, `omitted_count`, `limit`, and
 `truncated` metadata so automation can tell when the compact list was shortened
