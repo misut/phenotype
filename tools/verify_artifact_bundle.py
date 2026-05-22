@@ -3481,6 +3481,13 @@ def material_executor_budget_spec_from_manifest(value: Any) -> JsonObject | None
     return spec
 
 
+def material_executor_budget_field_from_key(key: str) -> str:
+    for suffix in ("_lte", "_gte", "_equals"):
+        if key.endswith(suffix):
+            return key[:-len(suffix)]
+    return key
+
+
 def material_quality_policy_spec_from_manifest(value: Any) -> JsonObject | None:
     if value is None:
         return None
@@ -3629,6 +3636,18 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         report.check("manifest schema is valid", False, str(exc))
         return False
 
+    material_executor_budget_bounds_value = (
+        manifest.get("require_material_executor_budget", {}) or {})
+    material_executor_budget_bounds = (
+        material_executor_budget_bounds_value
+        if isinstance(material_executor_budget_bounds_value, dict)
+        else {})
+    material_executor_budget_keys = sorted(material_executor_budget_bounds.keys())
+    material_executor_budget_fields = sorted({
+        material_executor_budget_field_from_key(key)
+        for key in material_executor_budget_keys
+    })
+
     report.data["manifest"] = {
         "path": str(manifest_path),
         "name": manifest.get("name"),
@@ -3640,8 +3659,9 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
             manifest.get("forbid_pixel_region_colors", []) or []),
         "runtime_numeric_bounds": len(
             manifest.get("require_runtime_numeric_bounds", []) or []),
-        "material_executor_budget_bounds": len(
-            manifest.get("require_material_executor_budget", {}) or {}),
+        "material_executor_budget_bounds": len(material_executor_budget_keys),
+        "material_executor_budget_bound_keys": material_executor_budget_keys,
+        "material_executor_budget_fields": material_executor_budget_fields,
     }
     report.check("manifest schema is valid", True, str(manifest_path))
     return True
