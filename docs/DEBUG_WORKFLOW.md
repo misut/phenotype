@@ -163,6 +163,11 @@ upload/copy utilization, draw, backdrop-copy status, quality-policy limits,
 resource bounds, budget-bound coverage, the nearest/failing expected-vs-actual
 comparison, and compact verifier failure paths, hints, and suggested actions
 without opening the full report.
+For one-off budget probes that do not need a manifest file, pass direct guards to
+`artifact verify` or `observe`: `--require-material-budget-bound key=json`,
+`--require-material-resource-bound key=json`, or
+`--require-material-quality-bound key=json`. These options use the same key names
+and emit the same bound summary/result objects as the manifest fields.
 
 When debugging the CLI/native input-output boundary itself, first check the
 pure contract surface:

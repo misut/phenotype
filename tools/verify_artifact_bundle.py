@@ -3592,20 +3592,57 @@ def material_quality_policy_spec_from_manifest(value: Any) -> JsonObject | None:
     return spec
 
 
+def bound_cli_specs_from_args(values: list[str], option_name: str) -> JsonObject:
+    spec: JsonObject = {}
+    for value in values:
+        if "=" not in value:
+            raise ValueError(f"{option_name} entries must use KEY=JSON")
+        key, raw = value.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise ValueError(f"{option_name} entries must have a non-empty key")
+        try:
+            parsed: Any = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = raw
+        spec[key] = parsed
+    return spec
+
+
+def merge_bound_specs(
+        base: JsonObject | None,
+        overrides: JsonObject | None) -> JsonObject | None:
+    if base is None and overrides is None:
+        return None
+    merged: JsonObject = {}
+    if base is not None:
+        merged.update(base)
+    if overrides is not None:
+        merged.update(overrides)
+    return merged
+
+
 def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
-    if not args.manifest:
-        return True
+    manifest_path: Path | None = None
+    manifest: JsonObject = {}
+    if args.manifest:
+        manifest_path = Path(args.manifest).resolve()
+        if not report.check(
+                "manifest exists",
+                manifest_path.is_file(),
+                str(manifest_path)):
+            return False
 
-    manifest_path = Path(args.manifest).resolve()
-    if not report.check("manifest exists", manifest_path.is_file(), str(manifest_path)):
-        return False
-
-    manifest = load_json_file(manifest_path, report)
-    if not report.check("manifest root is object", isinstance(manifest, dict), str(manifest_path)):
-        return False
-    assert isinstance(manifest, dict)
+        loaded_manifest = load_json_file(manifest_path, report)
+        if not report.check(
+                "manifest root is object",
+                isinstance(loaded_manifest, dict),
+                str(manifest_path)):
+            return False
+        manifest = loaded_manifest
 
     material_resource_bounds: JsonObject | None = None
+    material_executor_budget: JsonObject | None = None
     material_executor_budget_coverage: JsonObject | None = None
     material_quality_policy: JsonObject | None = None
     try:
@@ -3665,6 +3702,39 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
             args.require_material_plan = True
             args.require_material_quality_policy = material_quality_policy
 
+        cli_material_resource_bounds = material_resource_bounds_spec_from_manifest(
+            bound_cli_specs_from_args(
+                args.require_material_resource_bound,
+                "--require-material-resource-bound"))
+        if cli_material_resource_bounds is not None:
+            args.require_material_plan = True
+            material_resource_bounds = merge_bound_specs(
+                material_resource_bounds,
+                cli_material_resource_bounds)
+            args.require_material_resource_bounds = material_resource_bounds
+
+        cli_material_executor_budget = material_executor_budget_spec_from_manifest(
+            bound_cli_specs_from_args(
+                args.require_material_budget_bound,
+                "--require-material-budget-bound"))
+        if cli_material_executor_budget is not None:
+            args.require_material_plan = True
+            material_executor_budget = merge_bound_specs(
+                material_executor_budget,
+                cli_material_executor_budget)
+            args.require_material_executor_budget = material_executor_budget
+
+        cli_material_quality_policy = material_quality_policy_spec_from_manifest(
+            bound_cli_specs_from_args(
+                args.require_material_quality_bound,
+                "--require-material-quality-bound"))
+        if cli_material_quality_policy is not None:
+            args.require_material_plan = True
+            material_quality_policy = merge_bound_specs(
+                material_quality_policy,
+                cli_material_quality_policy)
+            args.require_material_quality_policy = material_quality_policy
+
         args.require_label.extend(list_of_strings(manifest, "require_labels"))
         args.require_label_contains.extend(
             list_of_strings(manifest, "require_label_contains"))
@@ -3711,11 +3781,16 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
                 manifest.get("forbid_pixel_region_colors")))
 
     except ValueError as exc:
-        report.check("manifest schema is valid", False, str(exc))
+        report.check(
+            "manifest schema is valid"
+            if manifest_path is not None
+            else "verifier requirement schema is valid",
+            False,
+            str(exc))
         return False
 
     material_executor_budget_bounds_value = (
-        manifest.get("require_material_executor_budget", {}) or {})
+        material_executor_budget if isinstance(material_executor_budget, dict) else {})
     material_executor_budget_bounds = (
         material_executor_budget_bounds_value
         if isinstance(material_executor_budget_bounds_value, dict)
@@ -3748,30 +3823,39 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         for key in material_quality_policy_keys
     })
 
-    report.data["manifest"] = {
-        "path": str(manifest_path),
-        "name": manifest.get("name"),
-        "pixel_regions": len(manifest.get("pixel_regions", []) or []),
-        "pixel_region_metrics": len(manifest.get("pixel_region_metrics", []) or []),
-        "pixel_region_metric_comparisons": len(
-            manifest.get("pixel_region_metric_comparisons", []) or []),
-        "forbid_pixel_region_colors": len(
-            manifest.get("forbid_pixel_region_colors", []) or []),
-        "runtime_numeric_bounds": len(
-            manifest.get("require_runtime_numeric_bounds", []) or []),
-        "material_executor_budget_bounds": len(material_executor_budget_keys),
-        "material_executor_budget_bound_keys": material_executor_budget_keys,
-        "material_executor_budget_fields": material_executor_budget_fields,
-        "material_resource_bounds": len(material_resource_bound_keys),
-        "material_resource_bound_keys": material_resource_bound_keys,
-        "material_resource_bound_fields": material_resource_bound_fields,
-        "material_executor_budget_coverage_required_fields": (
-            material_executor_budget_coverage_required_fields),
-        "material_quality_policy_bounds": len(material_quality_policy_keys),
-        "material_quality_policy_bound_keys": material_quality_policy_keys,
-        "material_quality_policy_fields": material_quality_policy_fields,
-    }
-    report.check("manifest schema is valid", True, str(manifest_path))
+    has_direct_bounds = any((
+        material_executor_budget_keys,
+        material_resource_bound_keys,
+        material_quality_policy_keys,
+    ))
+    if manifest_path is not None or has_direct_bounds:
+        report.data["manifest"] = {
+            "path": str(manifest_path) if manifest_path is not None else None,
+            "name": manifest.get("name"),
+            "pixel_regions": len(manifest.get("pixel_regions", []) or []),
+            "pixel_region_metrics": len(manifest.get("pixel_region_metrics", []) or []),
+            "pixel_region_metric_comparisons": len(
+                manifest.get("pixel_region_metric_comparisons", []) or []),
+            "forbid_pixel_region_colors": len(
+                manifest.get("forbid_pixel_region_colors", []) or []),
+            "runtime_numeric_bounds": len(
+                manifest.get("require_runtime_numeric_bounds", []) or []),
+            "material_executor_budget_bounds": len(material_executor_budget_keys),
+            "material_executor_budget_bound_keys": material_executor_budget_keys,
+            "material_executor_budget_fields": material_executor_budget_fields,
+            "material_resource_bounds": len(material_resource_bound_keys),
+            "material_resource_bound_keys": material_resource_bound_keys,
+            "material_resource_bound_fields": material_resource_bound_fields,
+            "material_executor_budget_coverage_required_fields": (
+                material_executor_budget_coverage_required_fields),
+            "material_quality_policy_bounds": len(material_quality_policy_keys),
+            "material_quality_policy_bound_keys": material_quality_policy_keys,
+            "material_quality_policy_fields": material_quality_policy_fields,
+        }
+    if manifest_path is not None:
+        report.check("manifest schema is valid", True, str(manifest_path))
+    elif has_direct_bounds:
+        report.check("verifier requirement schema is valid", True)
     return True
 
 
@@ -15685,6 +15769,31 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help=(
             "Require semantic material node count/kinds to match resolved "
             "backend material plan count/kinds."))
+    parser.add_argument(
+        "--require-material-budget-bound",
+        action="append",
+        default=[],
+        metavar="KEY=JSON",
+        help=(
+            "Require a material executor budget bound such as "
+            "active_execution_stage_count_lte=64. Repeatable."))
+    parser.add_argument(
+        "--require-material-resource-bound",
+        action="append",
+        default=[],
+        metavar="KEY=JSON",
+        help=(
+            "Require a material resource bound such as "
+            "max_plan_sample_taps_lte=25 or "
+            "require_bounded_texture_copy=true. Repeatable."))
+    parser.add_argument(
+        "--require-material-quality-bound",
+        action="append",
+        default=[],
+        metavar="KEY=JSON",
+        help=(
+            "Require a material quality-policy bound such as "
+            "max_blur_radius_lte=36 or require_noise_allowed=true. Repeatable."))
     parser.add_argument(
         "--require-capability",
         action="append",
