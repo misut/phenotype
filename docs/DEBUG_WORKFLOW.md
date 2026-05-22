@@ -129,13 +129,16 @@ the exact material executor budget bound keys/fields. When both summaries are
 present, `verifier.material_budget_coverage` lists the observed budget fields,
 which observed fields are guarded by manifest bounds, and which observed
 fields are still unguarded. This keeps coverage drift visible without opening
-the full verifier report. `verifier.material_budget_bound_summary` adds the
-actual bound result summary, including pass/fail counts, failed bound keys, and
-the tightest remaining margin across the applied material executor budget
-bounds. `verifier.material_budget_bound_results` mirrors the compact per-bound
-key, field, operator, expected value, actual value, pass/fail state, and margin
-so JSON consumers can compare every material budget constraint without scanning
-the full report. `verifier.verifier_failure_summary` carries the same compact
+the full verifier report. `verifier.material_quality_policy` mirrors the
+verifier's compact quality-policy summary, including disabled backdrop sampling,
+noise, and shadow counts plus maximum blur radius, sample taps, and backdrop
+pixel limits. `verifier.material_budget_bound_summary` adds the actual bound
+result summary, including pass/fail counts, failed bound keys, and the tightest
+remaining margin across the applied material executor budget bounds.
+`verifier.material_budget_bound_results` mirrors the compact per-bound key,
+field, operator, expected value, actual value, pass/fail state, and margin so
+JSON consumers can compare every material budget constraint without scanning the
+full report. `verifier.verifier_failure_summary` carries the same compact
 failure count, top likely layer/pass, top suggested action, and first failure
 details that the text output prints when the parsed verifier report fails.
 Use this as the first artifact triage command when a CI log or local bundle
@@ -143,11 +146,12 @@ needs one machine-readable explanation before deeper pixel-contract debugging.
 Without `--json`, the same command prints short `snapshot material budget` and
 `verifier material budget` blocks plus one-line `verifier manifest` and
 `material budget coverage` summaries when those counters are available. It also
-prints the tightest budget bound detail, or failed bound details when a bound
-fails, so local triage can see plan, stage, tap, upload/copy utilization, draw,
-backdrop-copy status, budget-bound coverage, the nearest/failing
-expected-vs-actual comparison, and compact verifier failure paths, hints, and
-suggested actions without opening the full report.
+prints `material quality policy`, the tightest budget bound detail, or failed
+bound details when a bound fails, so local triage can see plan, stage, tap,
+upload/copy utilization, draw, backdrop-copy status, quality-policy limits,
+budget-bound coverage, the nearest/failing expected-vs-actual comparison, and
+compact verifier failure paths, hints, and suggested actions without opening
+the full report.
 
 When debugging the CLI/native input-output boundary itself, first check the
 pure contract surface:
@@ -242,9 +246,11 @@ so local glass gates can show which manifest budget expectations were applied
 without embedding the full verifier report. JSON also includes
 `material_budget_coverage`, which separates manifest-guarded observed budget
 fields from observed-but-unguarded fields, and
-`material_budget_bound_summary`, which reports the applied budget bound
-pass/fail count and tightest margin. `material_budget_bound_results` provides
-the compact per-bound expected/actual/margin list from the same verifier report.
+`material_quality_policy`, which reports disabled backdrop sampling, noise, and
+shadow counts plus maximum blur radius, sample taps, and backdrop pixel limits.
+`material_budget_bound_summary` reports the applied budget bound pass/fail count
+and tightest margin. `material_budget_bound_results` provides the compact
+per-bound expected/actual/margin list from the same verifier report.
 When a parsed verifier report fails, JSON also includes
 `verifier_failure_summary` with the compact failure count, top likely
 layer/pass, top suggested action, and first failure details. The non-JSON gate
@@ -257,16 +263,18 @@ deterministic native captures, and uv-managed verifier calls directly. Its case
 JSON includes `material_budget` whenever the verifier report contains
 `artifact_context.material_contract.executor_budget`, `verifier_manifest`
 whenever a case uses a manifest-backed verifier run, and
-`material_budget_coverage`, `material_budget_bound_summary`, and
-`material_budget_bound_results` when both inputs are present. Failed case JSON
-also includes `verifier_failure_summary` so machine consumers can triage the
-same compact failing paths and suggested actions without parsing verifier
-stdout; the non-JSON output prints the same case-level plans/work/status summary
-with upload/copy utilization, per-case manifest bound summaries, per-case budget
-coverage, per-case budget bound headroom, and the tightest or failed
-expected-vs-actual budget bound detail when present. Failed cases also print the
-compact verifier failure summary when the verifier report parsed successfully,
-falling back to the raw report tail only when parsing failed.
+`material_quality_policy`, `material_budget_coverage`,
+`material_budget_bound_summary`, and `material_budget_bound_results` when both
+inputs are present. Failed case JSON also includes
+`verifier_failure_summary` so machine consumers can triage the same compact
+failing paths and suggested actions without parsing verifier stdout; the
+non-JSON output prints the same case-level plans/work/status summary with
+upload/copy utilization, per-case manifest bound summaries, per-case material
+quality policy, per-case budget coverage, per-case budget bound headroom, and
+the tightest or failed expected-vs-actual budget bound detail when present.
+Failed cases also print the compact verifier failure summary when the verifier
+report parsed successfully, falling back to the raw report tail only when
+parsing failed.
 Both commands are local
 verification commands, not default PR CI jobs.
 
@@ -1705,6 +1713,8 @@ mise exec -- exon build
 The command emits a deterministic JSON report with build, run, verifier, and
 artifact details, plus `material_budget` when the verifier report contains
 `artifact_context.material_contract.executor_budget`, plus a compact
+`material_quality_policy` summary of disabled quality-policy effects and
+resolved quality limits, plus a compact
 `verifier_manifest` object that surfaces the manifest runtime/budget bound
 counts, exact material executor budget bound keys, and budget field names
 applied by the verifier, plus `material_budget_coverage` showing guarded and

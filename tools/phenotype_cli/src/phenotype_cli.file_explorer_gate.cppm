@@ -28,6 +28,7 @@ struct FileExplorerArtifactCase {
     std::optional<cppx::process::CapturedProcessResult> verifier_result;
     std::optional<ArtifactSummary> artifact;
     std::optional<MaterialBudgetSummary> material_budget;
+    std::optional<MaterialQualityPolicySummary> material_quality_policy;
     std::optional<VerifierManifestSummary> verifier_manifest;
     std::optional<MaterialBudgetCoverageSummary> material_budget_coverage;
     std::optional<MaterialBudgetBoundSummary> material_budget_bound_summary;
@@ -398,7 +399,8 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         "{{\"profile\":{},\"mode\":{},\"scenario\":{},"
         "\"artifact_reason\":{},\"artifact_dir\":{},\"ok\":{},"
         "\"run_result\":{},\"verifier\":{},\"artifact\":{},"
-        "\"material_budget\":{},\"verifier_manifest\":{},"
+        "\"material_budget\":{},\"material_quality_policy\":{},"
+        "\"verifier_manifest\":{},"
         "\"material_budget_coverage\":{},"
         "\"material_budget_bound_summary\":{},"
         "\"material_budget_bound_results\":{},"
@@ -413,6 +415,7 @@ auto file_explorer_case_json(FileExplorerArtifactCase const& item)
         process_result_detail_json(item.verifier_result),
         artifact,
         material_budget_json(item.material_budget),
+        material_quality_policy_json(item.material_quality_policy),
         verifier_manifest_summary_json(item.verifier_manifest),
         material_budget_coverage_json(item.material_budget_coverage),
         material_budget_bound_summary_json(item.material_budget_bound_summary),
@@ -563,6 +566,27 @@ void print_material_budget_coverage_summary(
     }
 }
 
+void print_material_quality_policy_summary(
+        std::span<FileExplorerArtifactCase const> cases) {
+    auto has_quality_policy = std::ranges::any_of(
+        cases,
+        [](FileExplorerArtifactCase const& item) {
+            return item.material_quality_policy.has_value();
+        });
+    if (!has_quality_policy)
+        return;
+
+    std::println("material quality policy:");
+    for (auto const& item : cases) {
+        if (!item.material_quality_policy)
+            continue;
+        std::println(
+            "  {}: {}",
+            case_label(item),
+            material_quality_policy_text(*item.material_quality_policy));
+    }
+}
+
 void print_material_budget_bound_summary(
         std::span<FileExplorerArtifactCase const> cases) {
     auto has_bound_summary = std::ranges::any_of(
@@ -628,6 +652,7 @@ void print_file_explorer_gate(
     std::println("{}", cppx::terminal::format_status_frame(lines, false));
     print_verifier_manifest_summary(summary.cases);
     print_material_budget_coverage_summary(summary.cases);
+    print_material_quality_policy_summary(summary.cases);
     print_material_budget_bound_summary(summary.cases);
     print_material_budget_summary(summary.cases);
     if (!summary.error.empty()) {
@@ -767,6 +792,8 @@ auto run_file_explorer_case(fs::path const& root,
     item.verifier_result = std::move(*verifier);
     if (auto verifier_report = verifier_report_from_result(item.verifier_result)) {
         item.material_budget = material_budget_from_report(*verifier_report);
+        item.material_quality_policy =
+            material_quality_policy_from_report(*verifier_report);
         item.verifier_manifest =
             verifier_manifest_summary_from_report(*verifier_report);
         item.material_budget_coverage = material_budget_coverage_summary(
