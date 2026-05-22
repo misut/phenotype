@@ -932,7 +932,8 @@ Current seed:
 - `examples/glass_showcase/artifact_manifest.json` is the first committed
   pixel-region manifest and also requires the macOS material pipeline/source
   runtime details, material quality policy, resource bounds, executor numeric
-  bounds, fallback reason summary, and stale fallback metadata checks;
+  bounds, sampled frame/copy and surface-area ceilings, fallback reason summary,
+  and stale fallback metadata checks;
 - `examples/glass_showcase/artifact_manifest.accessibility.json` captures the
   same scene under reduced transparency, increased contrast, and reduced motion
   overrides so the artifact proves deterministic accessibility fallback
