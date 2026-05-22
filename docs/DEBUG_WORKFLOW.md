@@ -1785,8 +1785,10 @@ when available, and the failure summary repeats coverage minimum failures in a
 the first few printed details. Compact JSON also keeps those failures under
 `coverage_minimum_failure_details.entries[]` with raw `expected`/`actual`
 objects plus flattened `coverage_family`, `minimum_field`, `actual_count`, and
-the active bound/guarded/observed field arrays. The rendered `actual_text`
-stays beside those fields for humans; `total_count`, `shown_count`,
+the active bound/guarded/observed field arrays. Guarded-field shortfalls also
+publish `unguarded_observed_source_details` with the same flattened
+field/metric/value/source-path/pass shape as missing-field sources. The rendered
+`actual_text` stays beside those fields for humans; `total_count`, `shown_count`,
 `omitted_count`, `limit`, and `truncated` record how much of that structured
 list is visible in the compact envelope, so automation can consume the same
 guard breadth context without reparsing the human string or reopening the raw
