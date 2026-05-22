@@ -3469,7 +3469,11 @@ auto verifier_coverage_minimum_failure_details_json(
         out += entries[index];
     }
     out += std::format(
-        "],\"truncated\":{}}}",
+        "],\"total_count\":{},\"shown_count\":{},\"omitted_count\":{},"
+        "\"truncated\":{}}}",
+        entries.size(),
+        count,
+        entries.size() - count,
         entries.size() > count ? "true" : "false");
     return out;
 }
