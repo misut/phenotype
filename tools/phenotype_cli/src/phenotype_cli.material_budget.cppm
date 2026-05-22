@@ -3342,6 +3342,81 @@ auto compact_failure_actual_text_json(json::Object const& failure)
     return failure_optional_string_json(compact_failure_actual_text(failure));
 }
 
+auto coverage_minimum_failure_label(json::Object const& failure)
+        -> std::string {
+    auto path = json_object_failure_string(failure, "path");
+    if (path.empty())
+        return {};
+    auto const separator = path.rfind('.');
+    if (separator == std::string::npos || separator + 1 >= path.size())
+        return {};
+    auto field = path.substr(separator + 1);
+    if (!field.starts_with("min_"))
+        return {};
+    if (path.find("require_material_executor_budget_coverage.") !=
+        std::string::npos) {
+        return "budget." + field;
+    }
+    if (path.find("require_material_resource_bound_coverage.") !=
+        std::string::npos) {
+        return "resource." + field;
+    }
+    if (path.find("require_material_quality_policy_coverage.") !=
+        std::string::npos) {
+        return "quality." + field;
+    }
+    return {};
+}
+
+auto failure_coverage_minimum_text(json::Object const& failure)
+        -> std::string {
+    auto label = coverage_minimum_failure_label(failure);
+    if (label.empty())
+        return {};
+    auto const* actual = json_object_member(failure, "actual");
+    if (!actual)
+        return {};
+    auto actual_text = coverage_minimum_actual_text(*actual);
+    if (actual_text.empty())
+        return {};
+    auto expected = json_object_compact_failure_text(failure, "expected");
+    auto text = std::move(label);
+    if (!expected.empty())
+        text += " expected=" + expected;
+    text += " actual=" + actual_text;
+    return text;
+}
+
+auto verifier_coverage_minimum_failures_text(json::Value const& report,
+                                             std::size_t limit = 5)
+        -> std::string {
+    auto const* failures = json_array_at(report, {"failures"});
+    if (!failures)
+        return {};
+
+    auto entries = std::vector<std::string>{};
+    auto seen = std::set<std::string>{};
+    for (auto const& failure : *failures) {
+        if (!failure.is_object())
+            continue;
+        auto text = failure_coverage_minimum_text(failure.as_object());
+        if (text.empty() || !seen.insert(text).second)
+            continue;
+        entries.push_back(std::move(text));
+    }
+    if (entries.empty())
+        return {};
+
+    auto count = std::min(limit, entries.size());
+    auto selected = std::vector<std::string>{entries.begin(),
+                                            entries.begin() + count};
+    auto text = std::views::join_with(selected, std::string_view{"; "})
+        | std::ranges::to<std::string>();
+    if (entries.size() > count)
+        text += std::format("; +{} more", entries.size() - count);
+    return text;
+}
+
 auto verifier_missing_field_sources_text(json::Value const& report,
                                          std::size_t limit = 5)
         -> std::string {
@@ -4910,6 +4985,7 @@ auto verifier_failure_summary_json(json::Value const& report)
         "\"resource_bound_coverage\":{},"
         "\"quality_policy_bound_coverage\":{},"
         "\"missing_field_sources\":{},"
+        "\"coverage_minimum_failures\":{},"
         "\"material_context\":{},"
         "\"by_likely_layer\":{},\"by_likely_pass\":{},\"by_region\":{},"
         "\"by_path\":{},"
@@ -4937,6 +5013,8 @@ auto verifier_failure_summary_json(json::Value const& report)
         verifier_material_quality_policy_coverage_json(report),
         failure_optional_string_json(
             verifier_missing_field_sources_text(report)),
+        failure_optional_string_json(
+            verifier_coverage_minimum_failures_text(report)),
         failure_material_context_json(report),
         failure_json_value_or_null(
             report,
@@ -5037,6 +5115,10 @@ auto verifier_failure_summary_lines(json::Value const& report)
     if (auto sources = verifier_missing_field_sources_text(report);
         !sources.empty()) {
         lines.push_back("  coverage-missing-sources: " + sources);
+    }
+    if (auto minimums = verifier_coverage_minimum_failures_text(report);
+        !minimums.empty()) {
+        lines.push_back("  coverage-minimum-failures: " + minimums);
     }
     if (auto sources = verifier_material_budget_sources_text(report);
         !sources.empty()) {

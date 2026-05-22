@@ -979,7 +979,31 @@ auto sample_report() -> json::Value {
           }
         },
         {
-          "name": "extra_failure_not_printed"
+          "name": "material executor budget coverage min_guarded_field_count is satisfied",
+          "path": "manifest.require_material_executor_budget_coverage.min_guarded_field_count",
+          "expected": {
+            ">=": 2
+          },
+          "actual": {
+            "count": 1,
+            "bound_keys": [
+              "draw_calls_gte"
+            ],
+            "guarded_fields": [
+              "draw_calls"
+            ],
+            "unguarded_observed_fields": [
+              "planned_frame_capture_pixels"
+            ],
+            "unguarded_observed_sources": {
+              "planned_frame_capture_pixels": {
+                "metric": "planned_frame_capture_pixels",
+                "value": 0,
+                "source_path": "debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels",
+                "likely_pass": "material-executor"
+              }
+            }
+          }
         }
       ]
     })json");
@@ -1528,6 +1552,9 @@ int main() {
     assert(contains_text(
         failure_json,
         "\"missing_field_sources\":\"max_frame_capture_pixels=4096 pass=resource-budget path=debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels\""));
+    assert(contains_text(
+        failure_json,
+        "\"coverage_minimum_failures\":\"budget.min_guarded_field_count expected={>=: 2} actual=count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)\""));
     assert(contains_text(failure_json, "\"truncated\":true"));
 
     auto failure_lines = verifier_failure_summary_lines(report);
@@ -1573,6 +1600,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "coverage-missing-sources: max_frame_capture_pixels=4096 pass=resource-budget path=debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels"));
+    assert(contains_line(
+        failure_lines,
+        "coverage-minimum-failures: budget.min_guarded_field_count expected={>=: 2} actual=count=1 bound-keys=(draw_calls_gte) guarded=(draw_calls) unguarded=(planned_frame_capture_pixels) sources=(planned_frame_capture_pixels=0 pass=material-executor path=debug.platform_runtime.details.renderer.material_executor_summary.planned_frame_capture_pixels)"));
     assert(contains_line(
         failure_lines,
         "budget-sources: draw_calls=2 layer=platform-runtime pass=material-executor key=material_draw_calls"));
