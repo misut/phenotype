@@ -3507,6 +3507,30 @@ auto failure_coverage_minimum_text(json::Object const& failure)
     return text;
 }
 
+auto coverage_minimum_expected_operator_json(json::Object const& failure)
+        -> std::string {
+    auto const* expected = json_object_member(failure, "expected");
+    if (!expected || !expected->is_object())
+        return "null";
+    for (auto const& [op, value] : expected->as_object()) {
+        if (value.is_number())
+            return json_string(op);
+    }
+    return "null";
+}
+
+auto coverage_minimum_expected_count_json(json::Object const& failure)
+        -> std::string {
+    auto const* expected = json_object_member(failure, "expected");
+    if (!expected || !expected->is_object())
+        return "null";
+    for (auto const& [_op, value] : expected->as_object()) {
+        if (value.is_number())
+            return json::emit(value);
+    }
+    return "null";
+}
+
 auto coverage_minimum_failure_detail_json(json::Object const& failure)
         -> std::string {
     auto path = json_object_failure_string(failure, "path");
@@ -3527,7 +3551,8 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
 
     return std::format(
         "{{\"label\":{},\"coverage_family\":{},\"minimum_field\":{},"
-        "\"path\":{},\"expected\":{},\"actual\":{},\"actual_count\":{},"
+        "\"path\":{},\"expected\":{},\"expected_operator\":{},"
+        "\"expected_count\":{},\"actual\":{},\"actual_count\":{},"
         "\"bound_keys\":{},\"guarded_fields\":{},\"observed_fields\":{},"
         "\"unguarded_observed_fields\":{},"
         "\"unguarded_observed_source_details\":{},"
@@ -3538,6 +3563,8 @@ auto coverage_minimum_failure_detail_json(json::Object const& failure)
         json_string(field),
         json_object_failure_string_json(failure, "path"),
         json_object_value_or_null(failure, "expected"),
+        coverage_minimum_expected_operator_json(failure),
+        coverage_minimum_expected_count_json(failure),
         json_object_value_or_null(failure, "actual"),
         json_object_value_or_null(actual_object, "count"),
         json_object_value_or_null(actual_object, "bound_keys"),
