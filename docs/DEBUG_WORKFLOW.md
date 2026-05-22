@@ -1754,7 +1754,10 @@ context: failed bound-key, guarded-field, and observed-field floors report
 guarded-field floor failures include `actual.unguarded_observed_sources` when
 the verifier can trace those counters. CLI compact failure details render that
 shape as a `count=... bound-keys=(...) guarded=(...)` line with source paths
-when available, so a local run can identify the missing guard breadth directly.
+when available, and the failure summary repeats coverage minimum failures in a
+`coverage-minimum-failures` aggregate even when the individual failure is beyond
+the first few printed details. This lets a local run identify missing guard
+breadth directly.
 The same verifier reports also include
 `artifact_context.material_contract.executor_budget_bound_results` and
 `executor_budget_bound_summary`; resource and quality guards mirror the same

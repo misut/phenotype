@@ -212,7 +212,9 @@ observed fields, and unguarded observed source descriptors when those explain a
 guarded-field shortfall; CLI compact failure details render the same shape as
 `count=... bound-keys=(...) guarded=(...)` with source paths when available, so
 verifier JSON and non-JSON output can explain why a floor was missed without
-opening the full coverage object. The
+opening the full coverage object. The compact failure summary also aggregates
+coverage minimum failures separately from the first few detailed failures, so
+floor shortfalls stay visible even when failure ordering changes. The
 checked-in glass showcase, file
 explorer, and Android artifact manifests now opt into those resource and
 quality-policy coverage contracts.
