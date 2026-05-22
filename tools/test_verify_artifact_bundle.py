@@ -5359,6 +5359,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             failure["expected"]["<="]["reference_region"],
             "backdrop")
         self.assertEqual(failure["actual"]["region"], "blur")
+        self.assertEqual(report["failure_summary"]["by_region"]["blur"], 1)
         self.assertIn("smoother than the named backdrop reference", failure["hint"])
         self.assertIn("frame.bmp region blur", failure["suggested_action"])
 

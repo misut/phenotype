@@ -267,6 +267,10 @@ auto sample_report() -> json::Value {
           "material-executor": 2,
           "sampled-backdrop": 1
         },
+        "by_region": {
+          "contentGlass": 1,
+          "toolbarGlass": 1
+        },
         "by_path": {
           "material.plans[2].semantic": 1,
           "window.material.executor_budget.upload_utilization": 2,
@@ -465,6 +469,9 @@ int main() {
         "\"by_likely_pass\":{\"material-executor\":2,\"sampled-backdrop\":1}"));
     assert(contains_text(
         failure_json,
+        "\"by_region\":{\"contentGlass\":1,\"toolbarGlass\":1}"));
+    assert(contains_text(
+        failure_json,
         "\"by_path\":{\"material.plans[2].semantic\":1,\"window.material.executor_budget.upload_utilization\":2,\"window.material.resource_bounds.unbounded_texture_copy\":1,\"window.pixel_regions.toolbarGlass\":1}"));
     assert(contains_text(
         failure_json,
@@ -494,6 +501,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "by-pass: material-executor=2, sampled-backdrop=1"));
+    assert(contains_line(
+        failure_lines,
+        "by-region: contentGlass=1, toolbarGlass=1"));
     assert(contains_line(
         failure_lines,
         "by-path: window.material.executor_budget.upload_utilization=2, material.plans[2].semantic=1, window.material.resource_bounds.unbounded_texture_copy=1, +1 more"));
