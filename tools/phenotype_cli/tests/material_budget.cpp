@@ -953,10 +953,30 @@ auto sample_report() -> json::Value {
           "suggested_action": "record a semantic material plan before capture"
         },
         {
-          "name": "resource_bound_failed",
+          "name": "material resource bound coverage guards required fields",
           "region": "contentGlass",
-          "expected": false,
-          "actual": true
+          "expected": {
+            "required_fields": [
+              "max_frame_capture_pixels"
+            ]
+          },
+          "actual": {
+            "guarded_fields": [
+              "bounded_texture_copy",
+              "max_plan_sample_taps"
+            ],
+            "missing_fields": [
+              "max_frame_capture_pixels"
+            ],
+            "missing_field_sources": {
+              "max_frame_capture_pixels": {
+                "metric": "max_frame_capture_pixels",
+                "value": 4096,
+                "source_path": "debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels",
+                "likely_pass": "resource-budget"
+              }
+            }
+          }
         },
         {
           "name": "extra_failure_not_printed"
@@ -1499,6 +1519,9 @@ int main() {
         failure_json,
         "\"name\":\"pixel_region_tint_mismatch\""));
     assert(contains_text(failure_json, "\"actual\":\"1.25\""));
+    assert(contains_text(
+        failure_json,
+        "\"missing_field_sources\":\"max_frame_capture_pixels=4096 pass=resource-budget"));
     assert(contains_text(failure_json, "\"truncated\":true"));
 
     auto failure_lines = verifier_failure_summary_lines(report);
@@ -1582,6 +1605,9 @@ int main() {
     assert(contains_line(
         failure_lines,
         "action: reduce backdrop sample taps before raising the guard"));
+    assert(contains_line(
+        failure_lines,
+        "missing-field-sources: max_frame_capture_pixels=4096 pass=resource-budget path=debug.platform_runtime.details.renderer.material_plans[1].resource_budget.max_frame_capture_pixels"));
     assert(contains_line(
         failure_lines,
         "... +1 more failures; rerun with --json for the full report"));

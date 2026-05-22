@@ -204,7 +204,8 @@ still show which observed counters have not yet been promoted to manifest guards
 and where those counters came from. Coverage guard failures also include
 `actual.missing_field_sources` for observed-but-unguarded required fields, so the
 failing check points at the source descriptor without requiring a separate
-coverage-summary join. The
+coverage-summary join; CLI non-JSON failure summaries render the same descriptors
+as compact `missing-field-sources` lines for the first few failures. The
 checked-in glass showcase, file
 explorer, and Android artifact manifests now opt into those resource and
 quality-policy coverage contracts.
