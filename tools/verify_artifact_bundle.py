@@ -3432,6 +3432,55 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
     return spec
 
 
+def material_executor_budget_spec_from_manifest(value: Any) -> JsonObject | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("require_material_executor_budget must be an object")
+    number_fields = {
+        "plan_count",
+        "material_instance_count",
+        "sampled_backdrop_instance_count",
+        "fallback_instance_count",
+        "execution_stage_count",
+        "active_execution_stage_count",
+        "backdrop_execution_stage_count",
+        "dropped_execution_stage_count",
+        "draw_calls",
+        "total_sample_taps",
+        "max_sample_taps",
+        "upload_bytes",
+        "buffer_capacity_bytes",
+        "upload_utilization",
+        "backdrop_copy_count",
+        "backdrop_copy_pixels",
+        "max_backdrop_pixels",
+        "backdrop_copy_utilization",
+        "planned_frame_capture_count",
+        "planned_frame_capture_pixels",
+        "planned_surface_sample_pixels",
+        "backdrop_copy_skipped_count",
+    }
+    suffixes = ("_lte", "_gte", "_equals")
+    allowed = {
+        f"{field}{suffix}"
+        for field in number_fields
+        for suffix in suffixes
+    }
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise ValueError(
+            "unknown require_material_executor_budget keys: "
+            + ", ".join(unknown))
+    spec: JsonObject = {}
+    for field in sorted(allowed):
+        if field in value:
+            spec[field] = non_negative_number(
+                value[field],
+                f"require_material_executor_budget.{field}")
+    return spec
+
+
 def material_quality_policy_spec_from_manifest(value: Any) -> JsonObject | None:
     if value is None:
         return None
@@ -3520,6 +3569,11 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         if material_resource_bounds is not None:
             args.require_material_plan = True
             args.require_material_resource_bounds = material_resource_bounds
+        material_executor_budget = material_executor_budget_spec_from_manifest(
+            manifest.get("require_material_executor_budget"))
+        if material_executor_budget is not None:
+            args.require_material_plan = True
+            args.require_material_executor_budget = material_executor_budget
         material_quality_policy = material_quality_policy_spec_from_manifest(
             manifest.get("require_material_quality_policy"))
         if material_quality_policy is not None:
@@ -3586,6 +3640,8 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
             manifest.get("forbid_pixel_region_colors", []) or []),
         "runtime_numeric_bounds": len(
             manifest.get("require_runtime_numeric_bounds", []) or []),
+        "material_executor_budget_bounds": len(
+            manifest.get("require_material_executor_budget", {}) or {}),
     }
     report.check("manifest schema is valid", True, str(manifest_path))
     return True
@@ -12763,6 +12819,69 @@ def check_material_resource_bounds_requirements(
             hint="MaterialResourceBudget.deterministic_fallback must stay true for every plan.")
 
 
+def check_material_executor_budget_requirements(
+        artifact_context: JsonObject,
+        spec: JsonObject,
+        report: Report) -> None:
+    material_contract = artifact_context.get("material_contract")
+    budget = (
+        material_contract.get("executor_budget")
+        if isinstance(material_contract, dict)
+        else None)
+    if not isinstance(budget, dict):
+        budget = {}
+    base_path = "artifact_context.material_contract.executor_budget"
+    for spec_field, expected in spec.items():
+        if spec_field.endswith("_lte"):
+            summary_field = spec_field[:-4]
+            actual = budget.get(summary_field)
+            report.check(
+                f"material executor budget {summary_field} is within limit",
+                isinstance(actual, (int, float)) and not isinstance(actual, bool)
+                and float(actual) <= float(expected),
+                path=f"{base_path}.{summary_field}",
+                expected={"<=": expected},
+                actual=actual,
+                likely_layer="platform-runtime",
+                likely_pass="material-executor",
+                hint=(
+                    "Inspect renderer.material_executor_summary and the "
+                    "derived executor budget in artifact_context."))
+        elif spec_field.endswith("_gte"):
+            summary_field = spec_field[:-4]
+            actual = budget.get(summary_field)
+            report.check(
+                f"material executor budget {summary_field} meets floor",
+                isinstance(actual, (int, float)) and not isinstance(actual, bool)
+                and float(actual) >= float(expected),
+                path=f"{base_path}.{summary_field}",
+                expected={">=": expected},
+                actual=actual,
+                likely_layer="platform-runtime",
+                likely_pass="material-executor",
+                hint=(
+                    "Inspect renderer.material_executor_summary and the "
+                    "derived executor budget in artifact_context."))
+        elif spec_field.endswith("_equals"):
+            summary_field = spec_field[:-7]
+            actual = budget.get(summary_field)
+            matches = (
+                isinstance(actual, (int, float))
+                and not isinstance(actual, bool)
+                and numbers_close(actual, expected))
+            report.check(
+                f"material executor budget {summary_field} equals expectation",
+                matches,
+                path=f"{base_path}.{summary_field}",
+                expected=expected,
+                actual=actual,
+                likely_layer="platform-runtime",
+                likely_pass="material-executor",
+                hint=(
+                    "Inspect renderer.material_executor_summary and the "
+                    "derived executor budget in artifact_context."))
+
+
 def check_material_container_group_summary_contract(
         summary: JsonObject,
         group_summary: Any,
@@ -14714,6 +14833,15 @@ def verify(args: argparse.Namespace) -> int:
         summary,
         renderer_details,
         material_plan_summary)
+    material_executor_budget_spec = getattr(
+        args,
+        "require_material_executor_budget",
+        None)
+    if isinstance(material_executor_budget_spec, dict):
+        check_material_executor_budget_requirements(
+            report.data["artifact_context"],
+            material_executor_budget_spec,
+            report)
 
     full_labels: list[str] = []
     walk_labels(semantic_tree, full_labels)
@@ -15217,6 +15345,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.set_defaults(
         require_material_plan_summary=None,
         require_material_resource_bounds=None,
+        require_material_executor_budget=None,
         require_material_quality_policy=None,
         require_runtime_numeric_bound=[],
         require_pixel_region_metric_comparison=[],

@@ -4449,6 +4449,62 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertTrue(report["ok"])
         self.assertEqual(report["manifest"]["runtime_numeric_bounds"], 2)
 
+    def test_manifest_can_require_material_executor_budget_bounds(self) -> None:
+        manifest = {
+            "require_material_executor_budget": {
+                "draw_calls_gte": 1,
+                "max_sample_taps_equals": 13,
+                "upload_utilization_gte": 1.0,
+                "upload_utilization_lte": 1.0,
+                "backdrop_copy_utilization_lte": 0.0,
+            },
+        }
+        code, report = self.run_verifier(
+            snapshot(sampled_material_plan(sample_taps=13)),
+            manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["manifest"]["material_executor_budget_bounds"], 5)
+        budget = (
+            report["artifact_context"]
+            ["material_contract"]
+            ["executor_budget"])
+        self.assertEqual(budget["upload_utilization"], 1.0)
+        self.assertEqual(budget["backdrop_copy_utilization"], 0.0)
+
+    def test_material_executor_budget_bound_failure_is_llm_actionable(
+            self) -> None:
+        manifest = {
+            "require_material_executor_budget": {
+                "upload_utilization_lte": 0.5,
+            },
+        }
+        code, report = self.run_verifier(
+            snapshot(sampled_material_plan(sample_taps=13)),
+            manifest)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material executor budget upload_utilization is within limit"))
+        self.assertEqual(
+            failure["path"],
+            "artifact_context.material_contract.executor_budget"
+            ".upload_utilization")
+        self.assertEqual(failure["expected"], {"<=": 0.5})
+        self.assertEqual(failure["actual"], 1.0)
+        self.assertEqual(failure["likely_layer"], "platform-runtime")
+        self.assertEqual(failure["likely_pass"], "material-executor")
+        self.assertIn("executor budget", failure["hint"])
+        self.assertEqual(
+            report["failure_summary"]["top_likely_pass"],
+            "material-executor")
+        self.assertIn(
+            "executor_budget",
+            report["failure_summary"]["artifact_context"]["material_contract"])
+
     def test_runtime_numeric_bound_failure_is_llm_actionable(self) -> None:
         manifest = {
             "require_runtime_numeric_bounds": [
