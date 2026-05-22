@@ -358,6 +358,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
     auto verifier_manifest = verifier_report
         ? verifier_manifest_summary_from_report(*verifier_report)
         : std::optional<VerifierManifestSummary>{};
+    auto coverage = material_budget_coverage_summary(budget, verifier_manifest);
     return std::format(
         "{{\"schema_version\":1,\"command\":\"artifact verify-glass-showcase\","
         "\"ok\":{},\"accessibility\":{},\"example_root\":{},"
@@ -366,7 +367,8 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         "\"accessibility_display\":{},\"timeout_seconds\":{},"
         "\"build\":{},\"run_result\":{},\"verifier\":{},"
         "\"artifact\":{},\"material_budget\":{},"
-        "\"verifier_manifest\":{},\"error\":{}}}",
+        "\"verifier_manifest\":{},\"material_budget_coverage\":{},"
+        "\"error\":{}}}",
         summary.ok ? "true" : "false",
         summary.accessibility ? "true" : "false",
         json_string(path_string(summary.example_root)),
@@ -383,6 +385,7 @@ auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
         artifact,
         material_budget_json(budget),
         verifier_manifest_summary_json(verifier_manifest),
+        material_budget_coverage_json(coverage),
         json_string(summary.error));
 }
 
@@ -425,8 +428,9 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
     std::println("{}", cppx::terminal::format_status_frame(lines, false));
     if (auto verifier_report =
             verifier_report_from_result(summary.verifier_result)) {
-        if (auto manifest =
-                verifier_manifest_summary_from_report(*verifier_report)) {
+        auto budget = material_budget_from_report(*verifier_report);
+        auto manifest = verifier_manifest_summary_from_report(*verifier_report);
+        if (manifest) {
             std::println(
                 "verifier manifest: name={} runtime-bounds={} "
                 "budget-bounds={} pixel-regions={} metrics={} "
@@ -438,6 +442,12 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
                 budget_count(manifest->pixel_region_metrics),
                 budget_count(manifest->pixel_region_metric_comparisons),
                 budget_count(manifest->forbid_pixel_region_colors));
+        }
+        if (auto coverage =
+                material_budget_coverage_summary(budget, manifest)) {
+            std::println(
+                "material budget coverage: {}",
+                material_budget_coverage_text(*coverage));
         }
     }
     if (auto budget = material_budget_from_verifier(summary.verifier_result)) {

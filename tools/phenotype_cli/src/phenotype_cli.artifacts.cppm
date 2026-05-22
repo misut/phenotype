@@ -611,12 +611,13 @@ auto verifier_observation_json(VerifierObservation const& verifier)
     auto const manifest = verifier.report
         ? verifier_manifest_summary_from_report(*verifier.report)
         : std::optional<VerifierManifestSummary>{};
+    auto const coverage = material_budget_coverage_summary(budget, manifest);
     return std::format(
         "{{\"requested\":{},\"executed\":{},\"ok\":{},"
         "\"exit_code\":{},\"timed_out\":{},\"stdout_tail\":{},"
         "\"stderr_tail\":{},\"report_error\":{},"
         "\"material_budget\":{},\"verifier_manifest\":{},"
-        "\"report\":{}}}",
+        "\"material_budget_coverage\":{},\"report\":{}}}",
         verifier.requested ? "true" : "false",
         verifier.executed ? "true" : "false",
         verifier.ok ? "true" : "false",
@@ -627,6 +628,7 @@ auto verifier_observation_json(VerifierObservation const& verifier)
         json_string(verifier.report_error),
         material_budget_json(budget),
         verifier_manifest_summary_json(manifest),
+        material_budget_coverage_json(coverage),
         json_report_or_null(verifier.report));
 }
 
@@ -761,6 +763,21 @@ void print_verifier_manifest_summary(VerifierObservation const& verifier) {
         budget_count(manifest->pixel_region_metrics),
         budget_count(manifest->pixel_region_metric_comparisons),
         budget_count(manifest->forbid_pixel_region_colors));
+}
+
+void print_verifier_material_budget_coverage(
+        VerifierObservation const& verifier) {
+    if (!verifier.report)
+        return;
+    auto budget = material_budget_from_report(*verifier.report);
+    auto manifest = verifier_manifest_summary_from_report(*verifier.report);
+    auto coverage = material_budget_coverage_summary(budget, manifest);
+    if (!coverage)
+        return;
+
+    std::println(
+        "material budget coverage: {}",
+        material_budget_coverage_text(*coverage));
 }
 
 auto first_positional_or_error(cppx::cli::Invocation const& invocation,
@@ -1169,6 +1186,7 @@ void print_artifact_observation(ArtifactObservation const& observation) {
     print_snapshot_material_budget(
         observation.snapshot.material.executor_budget);
     print_verifier_manifest_summary(observation.verifier);
+    print_verifier_material_budget_coverage(observation.verifier);
     print_verifier_material_budget(observation.verifier);
     if (!observation.suggested_actions.empty()) {
         std::println("suggestions:");

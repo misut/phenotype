@@ -124,14 +124,20 @@ uv-managed verifier, embeds its JSON report in the same envelope, and mirrors
 the verifier's compact `artifact_context.material_contract.executor_budget`
 under `verifier.material_budget` when present. Manifest-backed verifier runs
 also expose `verifier.verifier_manifest` with the manifest name, pixel-region
-counts, runtime numeric bound count, and material executor budget bound count.
+counts, runtime numeric bound count, material executor budget bound count, and
+the exact material executor budget bound keys/fields. When both summaries are
+present, `verifier.material_budget_coverage` lists the observed budget fields,
+which observed fields are guarded by manifest bounds, and which observed
+fields are still unguarded. This keeps coverage drift visible without opening
+the full verifier report.
 Use this as the first artifact triage command when a CI log or local bundle
 needs one machine-readable explanation before deeper pixel-contract debugging.
 Without `--json`, the same command prints short `snapshot material budget` and
-`verifier material budget` blocks plus a one-line `verifier manifest` summary
-when those counters are available, so local triage can see plan, stage, tap,
-upload/copy utilization, draw, and backdrop-copy status without opening the
-full report.
+`verifier material budget` blocks plus one-line `verifier manifest` and
+`material budget coverage` summaries when those counters are available, so
+local triage can see plan, stage, tap, upload/copy utilization, draw,
+backdrop-copy status, and budget-bound coverage without opening the full
+report.
 
 When debugging the CLI/native input-output boundary itself, first check the
 pure contract surface:
@@ -218,14 +224,18 @@ budget concepts that `phenotype observe` exposes under
 `verifier_manifest` summary with the verifier manifest name, pixel-region
 counts, runtime numeric bound count, and material executor budget bound count,
 so local glass gates can show which manifest budget expectations were applied
-without embedding the full verifier report. `artifact
+without embedding the full verifier report. JSON also includes
+`material_budget_coverage`, which separates manifest-guarded observed budget
+fields from observed-but-unguarded fields. `artifact
 verify-file-explorer` owns the shared-model test, desktop/mobile builds,
 deterministic native captures, and uv-managed verifier calls directly. Its case
 JSON includes `material_budget` whenever the verifier report contains
-`artifact_context.material_contract.executor_budget` and `verifier_manifest`
-whenever a case uses a manifest-backed verifier run; the non-JSON output prints
-the same case-level plans/work/status summary with upload/copy utilization and
-per-case manifest bound summaries when present. Both commands are local
+`artifact_context.material_contract.executor_budget`, `verifier_manifest`
+whenever a case uses a manifest-backed verifier run, and
+`material_budget_coverage` when both inputs are present; the non-JSON output
+prints the same case-level plans/work/status summary with upload/copy
+utilization, per-case manifest bound summaries, and per-case budget coverage
+when present. Both commands are local
 verification commands, not default PR CI jobs.
 
 For file explorer workflow debugging that does not need a native window, use
@@ -1640,9 +1650,12 @@ The command emits a deterministic JSON report with build, run, verifier, and
 artifact details, plus `material_budget` when the verifier report contains
 `artifact_context.material_contract.executor_budget`, plus a compact
 `verifier_manifest` object that surfaces the manifest runtime/budget bound
-counts applied by the verifier, and exits non-zero when an invariant fails. The
-non-JSON command prints the same material budget in a short plans/work/status
-block with upload/copy utilization and a one-line verifier manifest summary.
+counts, exact material executor budget bound keys, and budget field names
+applied by the verifier, plus `material_budget_coverage` showing guarded and
+unguarded observed budget fields, and exits non-zero when an invariant fails.
+The non-JSON command prints the same material budget in a short
+plans/work/status block with upload/copy utilization, a one-line verifier
+manifest summary, and a one-line material budget coverage summary.
 The legacy
 `tools/verify_glass_showcase_artifact.sh` wrapper delegates to the same CLI
 command for local compatibility.

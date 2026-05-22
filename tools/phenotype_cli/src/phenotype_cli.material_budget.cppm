@@ -53,6 +53,22 @@ struct VerifierManifestSummary {
     std::int64_t forbid_pixel_region_colors = -1;
     std::int64_t runtime_numeric_bounds = -1;
     std::int64_t material_executor_budget_bounds = -1;
+    std::vector<std::string> material_executor_budget_bound_keys;
+    std::vector<std::string> material_executor_budget_fields;
+};
+
+struct MaterialBudgetCoverageSummary {
+    std::int64_t guardable_field_count = 0;
+    std::int64_t observed_field_count = 0;
+    std::int64_t guarded_observed_field_count = 0;
+    std::int64_t unguarded_observed_field_count = 0;
+    std::int64_t manifest_field_count = 0;
+    std::int64_t manifest_bound_key_count = 0;
+    std::vector<std::string> observed_fields;
+    std::vector<std::string> guarded_observed_fields;
+    std::vector<std::string> unguarded_observed_fields;
+    std::vector<std::string> manifest_fields;
+    std::vector<std::string> manifest_bound_keys;
 };
 
 auto trim_copy(std::string_view text) -> std::string {
@@ -115,6 +131,20 @@ auto json_number_at(json::Value const& value,
     if (!found || !found->is_number())
         return std::nullopt;
     return found->as_float();
+}
+
+auto json_string_array_at(json::Value const& value,
+                          std::initializer_list<std::string_view> path)
+    -> std::vector<std::string> {
+    auto out = std::vector<std::string>{};
+    auto const* array = json_array_at(value, path);
+    if (!array)
+        return out;
+    for (auto const& item : *array) {
+        if (item.is_string())
+            out.push_back(item.as_string());
+    }
+    return out;
 }
 
 auto budget_integer_at(json::Value const& report, std::string_view key)
@@ -286,6 +316,12 @@ auto verifier_manifest_summary_from_report(json::Value const& report)
         .material_executor_budget_bounds = json_integer_at(
             report,
             {"manifest", "material_executor_budget_bounds"}).value_or(-1),
+        .material_executor_budget_bound_keys = json_string_array_at(
+            report,
+            {"manifest", "material_executor_budget_bound_keys"}),
+        .material_executor_budget_fields = json_string_array_at(
+            report,
+            {"manifest", "material_executor_budget_fields"}),
     };
 }
 
@@ -312,6 +348,168 @@ auto material_budget_from_verifier(
     if (!result)
         return std::nullopt;
     return material_budget_from_verifier(*result);
+}
+
+auto sorted_unique(std::vector<std::string> values) -> std::vector<std::string> {
+    std::ranges::sort(values);
+    auto last = std::ranges::unique(values);
+    values.erase(last.begin(), last.end());
+    return values;
+}
+
+auto contains_field(std::span<std::string const> fields,
+                    std::string_view field) -> bool {
+    return std::ranges::find(fields, field) != fields.end();
+}
+
+auto material_budget_guardable_fields() -> std::vector<std::string> {
+    return {
+        "active_execution_stage_count",
+        "backdrop_copy_count",
+        "backdrop_copy_pixels",
+        "backdrop_copy_skipped_count",
+        "backdrop_copy_utilization",
+        "backdrop_execution_stage_count",
+        "buffer_capacity_bytes",
+        "draw_calls",
+        "dropped_execution_stage_count",
+        "execution_stage_count",
+        "fallback_instance_count",
+        "material_instance_count",
+        "max_backdrop_pixels",
+        "max_sample_taps",
+        "plan_count",
+        "planned_frame_capture_count",
+        "planned_frame_capture_pixels",
+        "planned_surface_sample_pixels",
+        "sampled_backdrop_instance_count",
+        "total_sample_taps",
+        "upload_bytes",
+        "upload_utilization",
+    };
+}
+
+void append_if_known(std::vector<std::string>& fields,
+                     std::string field,
+                     std::int64_t value) {
+    if (value >= 0)
+        fields.push_back(std::move(field));
+}
+
+void append_if_known(std::vector<std::string>& fields,
+                     std::string field,
+                     double value) {
+    if (value >= 0.0)
+        fields.push_back(std::move(field));
+}
+
+auto observed_material_budget_fields(MaterialBudgetSummary const& budget)
+    -> std::vector<std::string> {
+    auto fields = std::vector<std::string>{};
+    append_if_known(fields, "plan_count", budget.plan_count);
+    append_if_known(
+        fields,
+        "material_instance_count",
+        budget.material_instance_count);
+    append_if_known(
+        fields,
+        "sampled_backdrop_instance_count",
+        budget.sampled_backdrop_instance_count);
+    append_if_known(
+        fields,
+        "fallback_instance_count",
+        budget.fallback_instance_count);
+    append_if_known(
+        fields,
+        "execution_stage_count",
+        budget.execution_stage_count);
+    append_if_known(
+        fields,
+        "active_execution_stage_count",
+        budget.active_execution_stage_count);
+    append_if_known(
+        fields,
+        "backdrop_execution_stage_count",
+        budget.backdrop_execution_stage_count);
+    append_if_known(
+        fields,
+        "dropped_execution_stage_count",
+        budget.dropped_execution_stage_count);
+    append_if_known(fields, "draw_calls", budget.draw_calls);
+    append_if_known(fields, "total_sample_taps", budget.total_sample_taps);
+    append_if_known(fields, "max_sample_taps", budget.max_sample_taps);
+    append_if_known(fields, "upload_bytes", budget.upload_bytes);
+    append_if_known(
+        fields,
+        "buffer_capacity_bytes",
+        budget.buffer_capacity_bytes);
+    append_if_known(fields, "upload_utilization", budget.upload_utilization);
+    append_if_known(fields, "backdrop_copy_count", budget.backdrop_copy_count);
+    append_if_known(fields, "backdrop_copy_pixels", budget.backdrop_copy_pixels);
+    append_if_known(fields, "max_backdrop_pixels", budget.max_backdrop_pixels);
+    append_if_known(
+        fields,
+        "backdrop_copy_utilization",
+        budget.backdrop_copy_utilization);
+    append_if_known(
+        fields,
+        "planned_frame_capture_count",
+        budget.planned_frame_capture_count);
+    append_if_known(
+        fields,
+        "planned_frame_capture_pixels",
+        budget.planned_frame_capture_pixels);
+    append_if_known(
+        fields,
+        "planned_surface_sample_pixels",
+        budget.planned_surface_sample_pixels);
+    append_if_known(
+        fields,
+        "backdrop_copy_skipped_count",
+        budget.backdrop_copy_skipped_count);
+    return sorted_unique(std::move(fields));
+}
+
+auto material_budget_coverage_summary(
+        std::optional<MaterialBudgetSummary> const& budget,
+        std::optional<VerifierManifestSummary> const& manifest)
+    -> std::optional<MaterialBudgetCoverageSummary> {
+    if (!budget || !manifest)
+        return std::nullopt;
+
+    auto observed = observed_material_budget_fields(*budget);
+    auto manifest_fields = sorted_unique(manifest->material_executor_budget_fields);
+    auto manifest_bound_keys = sorted_unique(
+        manifest->material_executor_budget_bound_keys);
+    auto guarded = std::vector<std::string>{};
+    auto unguarded = std::vector<std::string>{};
+    for (auto const& field : observed) {
+        if (contains_field(manifest_fields, field)) {
+            guarded.push_back(field);
+        } else {
+            unguarded.push_back(field);
+        }
+    }
+
+    auto guardable = material_budget_guardable_fields();
+    auto bound_key_count = manifest_bound_keys.empty()
+        ? manifest->material_executor_budget_bounds
+        : static_cast<std::int64_t>(manifest_bound_keys.size());
+    return MaterialBudgetCoverageSummary{
+        .guardable_field_count = static_cast<std::int64_t>(guardable.size()),
+        .observed_field_count = static_cast<std::int64_t>(observed.size()),
+        .guarded_observed_field_count =
+            static_cast<std::int64_t>(guarded.size()),
+        .unguarded_observed_field_count =
+            static_cast<std::int64_t>(unguarded.size()),
+        .manifest_field_count = static_cast<std::int64_t>(manifest_fields.size()),
+        .manifest_bound_key_count = bound_key_count,
+        .observed_fields = std::move(observed),
+        .guarded_observed_fields = std::move(guarded),
+        .unguarded_observed_fields = std::move(unguarded),
+        .manifest_fields = std::move(manifest_fields),
+        .manifest_bound_keys = std::move(manifest_bound_keys),
+    };
 }
 
 auto budget_count(std::int64_t value) -> std::string {
@@ -413,6 +611,60 @@ auto material_budget_json(std::optional<MaterialBudgetSummary> const& budget)
         json_string(budget->backdrop_copy_skip_reason));
 }
 
+auto material_budget_coverage_json(
+        std::optional<MaterialBudgetCoverageSummary> const& coverage)
+    -> std::string {
+    if (!coverage)
+        return "null";
+    return std::format(
+        "{{\"guardable_field_count\":{},\"observed_field_count\":{},"
+        "\"guarded_observed_field_count\":{},"
+        "\"unguarded_observed_field_count\":{},"
+        "\"manifest_field_count\":{},\"manifest_bound_key_count\":{},"
+        "\"observed_fields\":{},\"guarded_observed_fields\":{},"
+        "\"unguarded_observed_fields\":{},\"manifest_fields\":{},"
+        "\"manifest_bound_keys\":{}}}",
+        coverage->guardable_field_count,
+        coverage->observed_field_count,
+        coverage->guarded_observed_field_count,
+        coverage->unguarded_observed_field_count,
+        coverage->manifest_field_count,
+        coverage->manifest_bound_key_count,
+        string_array_json(coverage->observed_fields),
+        string_array_json(coverage->guarded_observed_fields),
+        string_array_json(coverage->unguarded_observed_fields),
+        string_array_json(coverage->manifest_fields),
+        string_array_json(coverage->manifest_bound_keys));
+}
+
+auto budget_field_list_text(std::vector<std::string> const& fields,
+                            std::size_t limit = 8) -> std::string {
+    if (fields.empty())
+        return "none";
+    auto text = std::string{};
+    auto count = std::min(limit, fields.size());
+    for (std::size_t i = 0; i < count; ++i) {
+        if (i > 0)
+            text += ", ";
+        text += fields[i];
+    }
+    if (fields.size() > limit)
+        text += std::format(", +{} more", fields.size() - limit);
+    return text;
+}
+
+auto material_budget_coverage_text(MaterialBudgetCoverageSummary const& coverage)
+    -> std::string {
+    return std::format(
+        "guarded={}/{} observed={} guard-keys={} unguarded={} ({})",
+        coverage.guarded_observed_field_count,
+        coverage.guardable_field_count,
+        coverage.observed_field_count,
+        coverage.manifest_bound_key_count,
+        coverage.unguarded_observed_field_count,
+        budget_field_list_text(coverage.unguarded_observed_fields));
+}
+
 auto verifier_manifest_summary_json(
         std::optional<VerifierManifestSummary> const& manifest)
     -> std::string {
@@ -424,14 +676,18 @@ auto verifier_manifest_summary_json(
         "\"pixel_region_metric_comparisons\":{},"
         "\"forbid_pixel_region_colors\":{},"
         "\"runtime_numeric_bounds\":{},"
-        "\"material_executor_budget_bounds\":{}}}",
+        "\"material_executor_budget_bounds\":{},"
+        "\"material_executor_budget_bound_keys\":{},"
+        "\"material_executor_budget_fields\":{}}}",
         json_string(manifest->name),
         manifest_count_json(manifest->pixel_regions),
         manifest_count_json(manifest->pixel_region_metrics),
         manifest_count_json(manifest->pixel_region_metric_comparisons),
         manifest_count_json(manifest->forbid_pixel_region_colors),
         manifest_count_json(manifest->runtime_numeric_bounds),
-        manifest_count_json(manifest->material_executor_budget_bounds));
+        manifest_count_json(manifest->material_executor_budget_bounds),
+        string_array_json(manifest->material_executor_budget_bound_keys),
+        string_array_json(manifest->material_executor_budget_fields));
 }
 
 } // namespace phenotype_cli::material_budget
