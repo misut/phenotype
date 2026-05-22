@@ -1075,6 +1075,21 @@ auto json_object_failure_string(json::Object const& object,
     return value && value->is_string() ? value->as_string() : std::string{};
 }
 
+auto failure_optional_string_json(std::string_view text) -> std::string {
+    return text.empty() ? std::string{"null"} : json_string(text);
+}
+
+auto json_object_failure_string_json(json::Object const& object,
+                                     std::string_view key) -> std::string {
+    return failure_optional_string_json(json_object_failure_string(object, key));
+}
+
+auto json_object_compact_failure_text_json(json::Object const& object,
+                                           std::string_view key) -> std::string {
+    auto text = json_object_compact_failure_text(object, key);
+    return failure_optional_string_json(text);
+}
+
 auto compact_failure_location_text(json::Object const& failure)
         -> std::string {
     auto parts = std::vector<std::string>{};
@@ -1137,6 +1152,92 @@ auto verifier_failure_detail_lines(json::Object const& failure)
             "    action: " + truncate_failure_text(std::move(action), 220));
     }
     return lines;
+}
+
+auto verifier_failure_detail_json(json::Object const& failure)
+        -> std::string {
+    return std::format(
+        "{{\"name\":{},\"message\":{},\"path\":{},\"region\":{},"
+        "\"likely_layer\":{},\"likely_pass\":{},\"expected\":{},"
+        "\"actual\":{},\"hint\":{},\"suggested_action\":{}}}",
+        json_object_failure_string_json(failure, "name"),
+        json_object_failure_string_json(failure, "message"),
+        json_object_failure_string_json(failure, "path"),
+        json_object_failure_string_json(failure, "region"),
+        json_object_failure_string_json(failure, "likely_layer"),
+        json_object_failure_string_json(failure, "likely_pass"),
+        json_object_compact_failure_text_json(failure, "expected"),
+        json_object_compact_failure_text_json(failure, "actual"),
+        json_object_failure_string_json(failure, "hint"),
+        json_object_failure_string_json(failure, "suggested_action"));
+}
+
+auto verifier_failure_details_json(json::Value const& report,
+                                   std::size_t limit) -> std::string {
+    auto const* failures = json_array_at(report, {"failures"});
+    if (!failures)
+        return "[]";
+
+    auto out = std::string{"["};
+    auto printed = std::size_t{0};
+    for (auto const& failure : *failures) {
+        if (printed >= limit)
+            break;
+        if (!failure.is_object())
+            continue;
+        if (printed > 0)
+            out += ",";
+        out += verifier_failure_detail_json(failure.as_object());
+        ++printed;
+    }
+    out += "]";
+    return out;
+}
+
+auto verifier_failure_summary_json(json::Value const& report)
+        -> std::string {
+    auto count = json_integer_at(report, {"failure_summary", "count"})
+        .value_or(0);
+    if (count <= 0)
+        return "null";
+
+    auto const* failures = json_array_at(report, {"failures"});
+    auto const limit = std::size_t{3};
+    auto printable_count = std::size_t{0};
+    if (failures) {
+        for (auto const& failure : *failures) {
+            if (printable_count >= limit)
+                break;
+            if (failure.is_object())
+                ++printable_count;
+        }
+    }
+    auto truncated = count > static_cast<std::int64_t>(printable_count)
+        ? "true"
+        : "false";
+    return std::format(
+        "{{\"count\":{},\"top_likely_layer\":{},"
+        "\"top_likely_pass\":{},\"top_suggested_action\":{},"
+        "\"failures\":{},\"truncated\":{}}}",
+        count,
+        failure_optional_string_json(json_string_at(
+            report,
+            {"failure_summary", "top_likely_layer"}).value_or("")),
+        failure_optional_string_json(json_string_at(
+            report,
+            {"failure_summary", "top_likely_pass"}).value_or("")),
+        failure_optional_string_json(json_string_at(
+            report,
+            {"failure_summary", "top_suggested_action"}).value_or("")),
+        verifier_failure_details_json(report, limit),
+        truncated);
+}
+
+auto verifier_failure_summary_json(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+        -> std::string {
+    auto report = verifier_report_from_result(result);
+    return report ? verifier_failure_summary_json(*report) : std::string{"null"};
 }
 
 auto verifier_failure_summary_lines(json::Value const& report)

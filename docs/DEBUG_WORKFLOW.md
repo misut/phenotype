@@ -135,7 +135,9 @@ the tightest remaining margin across the applied material executor budget
 bounds. `verifier.material_budget_bound_results` mirrors the compact per-bound
 key, field, operator, expected value, actual value, pass/fail state, and margin
 so JSON consumers can compare every material budget constraint without scanning
-the full report.
+the full report. `verifier.verifier_failure_summary` carries the same compact
+failure count, top likely layer/pass, top suggested action, and first failure
+details that the text output prints when the parsed verifier report fails.
 Use this as the first artifact triage command when a CI log or local bundle
 needs one machine-readable explanation before deeper pixel-contract debugging.
 Without `--json`, the same command prints short `snapshot material budget` and
@@ -243,9 +245,12 @@ fields from observed-but-unguarded fields, and
 `material_budget_bound_summary`, which reports the applied budget bound
 pass/fail count and tightest margin. `material_budget_bound_results` provides
 the compact per-bound expected/actual/margin list from the same verifier report.
-When a parsed verifier report fails, the non-JSON gate prints the compact
-`failure_summary` paths, expected/actual values, hints, and suggested actions
-instead of dumping the raw verifier JSON tail; use `--json` for the full report.
+When a parsed verifier report fails, JSON also includes
+`verifier_failure_summary` with the compact failure count, top likely
+layer/pass, top suggested action, and first failure details. The non-JSON gate
+prints the same compact `failure_summary` paths, expected/actual values, hints,
+and suggested actions instead of dumping the raw verifier JSON tail; use
+`--json` for the full report.
 `artifact
 verify-file-explorer` owns the shared-model test, desktop/mobile builds,
 deterministic native captures, and uv-managed verifier calls directly. Its case
@@ -253,13 +258,15 @@ JSON includes `material_budget` whenever the verifier report contains
 `artifact_context.material_contract.executor_budget`, `verifier_manifest`
 whenever a case uses a manifest-backed verifier run, and
 `material_budget_coverage`, `material_budget_bound_summary`, and
-`material_budget_bound_results` when both inputs are present; the non-JSON
-output prints the same case-level plans/work/status summary with upload/copy
-utilization, per-case manifest bound summaries, per-case budget coverage,
-per-case budget bound headroom, and the tightest or failed expected-vs-actual
-budget bound detail when present. Failed cases also print the compact verifier
-failure summary when the verifier report parsed successfully, falling back to
-the raw report tail only when parsing failed.
+`material_budget_bound_results` when both inputs are present. Failed case JSON
+also includes `verifier_failure_summary` so machine consumers can triage the
+same compact failing paths and suggested actions without parsing verifier
+stdout; the non-JSON output prints the same case-level plans/work/status summary
+with upload/copy utilization, per-case manifest bound summaries, per-case budget
+coverage, per-case budget bound headroom, and the tightest or failed
+expected-vs-actual budget bound detail when present. Failed cases also print the
+compact verifier failure summary when the verifier report parsed successfully,
+falling back to the raw report tail only when parsing failed.
 Both commands are local
 verification commands, not default PR CI jobs.
 
@@ -1704,7 +1711,8 @@ applied by the verifier, plus `material_budget_coverage` showing guarded and
 unguarded observed budget fields, plus `material_budget_bound_summary` showing
 the budget bound pass/fail count and tightest margin, plus
 `material_budget_bound_results` listing each compact expected/actual/margin
-comparison, and exits non-zero when an invariant fails.
+comparison, plus compact `verifier_failure_summary` metadata when the parsed
+verifier report fails, and exits non-zero when an invariant fails.
 The non-JSON command prints the same material budget in a short
 plans/work/status block with upload/copy utilization, a one-line verifier
 manifest summary, a one-line material budget coverage summary, a one-line
