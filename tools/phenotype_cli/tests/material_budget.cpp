@@ -473,6 +473,9 @@ int main() {
     assert(contains_text(
         pressure_json,
         "\"quality\":{\"state\":\"tight\",\"bound_count\":2,\"pass_count\":2,\"fail_count\":0,\"zero_margin_count\":2,\"negative_margin_count\":0,\"tightest_bound_key\":\"require_noise_allowed\",\"tightest_bound_margin\":0,\"failed_keys\":[]}"));
+    assert(
+        verifier_bound_pressure_text(report)
+        == "executor=fail,pass=2/3,fail=1,zero=1,negative=1,tightest-margin=0.9375,failed=(draw_calls_gte); resource=tight,pass=2/2,fail=0,zero=2,negative=0,tightest-margin=0; quality=tight,pass=2/2,fail=0,zero=2,negative=0,tightest-margin=0");
 
     auto resource_summary = material_resource_bound_summary_from_report(report);
     auto resource_results = material_resource_bound_results_from_report(report);
@@ -624,6 +627,7 @@ int main() {
     auto passing_report = json::parse(
         R"json({"failure_summary":{"count":0},"failures":[]})json");
     assert(verifier_bound_pressure_json(passing_report) == "null");
+    assert(verifier_bound_pressure_text(passing_report).empty());
     assert(verifier_failure_summary_json(passing_report) == "null");
     assert(verifier_failure_summary_lines(passing_report).empty());
 }
