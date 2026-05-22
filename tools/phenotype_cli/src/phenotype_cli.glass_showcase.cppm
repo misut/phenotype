@@ -526,6 +526,11 @@ void print_glass_gate(GlassArtifactGateSummary const& summary) {
                 budget_count(manifest->pixel_region_metrics),
                 budget_count(manifest->pixel_region_metric_comparisons),
                 budget_count(manifest->forbid_pixel_region_colors));
+            if (auto minimums =
+                    verifier_manifest_coverage_minimums_text(*manifest);
+                !minimums.empty()) {
+                std::println("  coverage-minimums: {}", minimums);
+            }
         }
         if (auto coverage =
                 material_budget_coverage_summary(budget, manifest)) {

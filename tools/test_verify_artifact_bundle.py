@@ -3624,6 +3624,18 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["manifest"][
                 "material_resource_bound_coverage_required_fields"],
             coverage["required_fields"])
+        self.assertEqual(
+            report["manifest"][
+                "material_resource_bound_coverage_min_bound_key_count"],
+            4)
+        self.assertEqual(
+            report["manifest"][
+                "material_resource_bound_coverage_min_guarded_field_count"],
+            4)
+        self.assertEqual(
+            report["manifest"][
+                "material_resource_bound_coverage_min_observed_field_count"],
+            4)
 
     def test_material_resource_bound_coverage_failure_is_llm_actionable(
             self) -> None:
@@ -4819,6 +4831,18 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["manifest"][
                 "material_quality_policy_coverage_required_fields"],
             coverage["required_fields"])
+        self.assertEqual(
+            report["manifest"][
+                "material_quality_policy_coverage_min_bound_key_count"],
+            6)
+        self.assertEqual(
+            report["manifest"][
+                "material_quality_policy_coverage_min_guarded_field_count"],
+            6)
+        self.assertEqual(
+            report["manifest"][
+                "material_quality_policy_coverage_min_observed_field_count"],
+            6)
 
     def test_material_quality_policy_coverage_failure_is_llm_actionable(
             self) -> None:
@@ -5021,6 +5045,18 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "max_sample_taps",
                 "upload_utilization",
             ])
+        self.assertEqual(
+            report["manifest"][
+                "material_executor_budget_coverage_min_bound_key_count"],
+            5)
+        self.assertEqual(
+            report["manifest"][
+                "material_executor_budget_coverage_min_guarded_field_count"],
+            4)
+        self.assertEqual(
+            report["manifest"][
+                "material_executor_budget_coverage_min_observed_field_count"],
+            21)
         budget = (
             report["artifact_context"]
             ["material_contract"]
@@ -5158,6 +5194,10 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["manifest"]
             ["material_executor_budget_coverage_required_fields"],
             [])
+        self.assertEqual(
+            report["manifest"][
+                "material_executor_budget_coverage_min_observed_field_count"],
+            2)
 
     def test_cli_material_executor_budget_coverage_minimum_keeps_manifest_floor(
             self) -> None:
@@ -5187,6 +5227,10 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "is satisfied"]
         self.assertEqual(failure["expected"], {">=": 2})
         self.assertEqual(failure["actual"], 1)
+        self.assertEqual(
+            report["manifest"][
+                "material_executor_budget_coverage_min_bound_key_count"],
+            2)
 
     def test_material_executor_budget_bound_failure_is_llm_actionable(
             self) -> None:

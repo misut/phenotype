@@ -656,6 +656,10 @@ void print_verifier_manifest_summary(
             budget_count(manifest.pixel_region_metrics),
             budget_count(manifest.pixel_region_metric_comparisons),
             budget_count(manifest.forbid_pixel_region_colors));
+        if (auto minimums = verifier_manifest_coverage_minimums_text(manifest);
+            !minimums.empty()) {
+            std::println("    coverage-minimums: {}", minimums);
+        }
     }
 }
 

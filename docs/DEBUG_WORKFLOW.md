@@ -126,7 +126,8 @@ under `verifier.material_budget` when present. Manifest-backed verifier runs
 also expose `verifier.verifier_manifest` with the manifest name, pixel-region
 counts, runtime numeric bound count, material executor budget bound count, and
 the exact material executor budget bound keys/fields, material resource bound
-keys/fields, and quality-policy bound keys/fields. When both summaries are
+keys/fields, quality-policy bound keys/fields, and any coverage minimums for
+bound-key, guarded-field, and observed-field counts. When both summaries are
 present, `verifier.material_budget_coverage` lists the observed budget fields,
 which observed fields are guarded by manifest bounds, and which observed fields
 are still unguarded. This keeps coverage drift visible without opening the full
@@ -282,8 +283,9 @@ budget concepts that `phenotype observe` exposes under
 `verifier_manifest` summary with the verifier manifest name, pixel-region
 counts, runtime numeric bound count, material executor budget bound count,
 material resource bound count, quality-policy bound count, and the exact
-manifest guard keys/fields, so local glass gates can show which manifest budget
-and policy expectations were applied without embedding the full verifier report.
+manifest guard keys/fields plus coverage minimums, so local glass gates can show
+which manifest budget and policy expectations were applied without embedding the
+full verifier report.
 JSON also includes
 `material_budget_coverage`, which separates manifest-guarded observed budget
 fields from observed-but-unguarded fields, and
@@ -1830,9 +1832,10 @@ fallback bounds, plus a compact
 `verifier_manifest` object that surfaces the manifest runtime/budget/resource/
 policy bound counts, exact material executor budget bound keys, material
 resource bound keys, quality-policy bound keys, and their normalized field names
-applied by the verifier, plus `material_budget_coverage` showing guarded and
-unguarded observed budget fields, plus `material_budget_bound_summary` showing
-the budget bound pass/fail count and tightest margin, plus
+applied by the verifier, plus the required coverage minimums for budget,
+resource, and quality-policy bounds, plus `material_budget_coverage` showing
+guarded and unguarded observed budget fields, plus `material_budget_bound_summary`
+showing the budget bound pass/fail count and tightest margin, plus
 `material_budget_bound_results` listing each compact expected/actual/margin
 comparison, plus resource-bound and quality-policy bound summaries/results with
 the same compact expected/actual/margin comparison shape, plus compact

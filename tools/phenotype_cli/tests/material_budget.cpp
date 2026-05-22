@@ -44,10 +44,16 @@ auto sample_report() -> json::Value {
           "draw_calls",
           "execution_stage_count"
         ],
+        "material_executor_budget_coverage_min_bound_key_count": 3,
+        "material_executor_budget_coverage_min_guarded_field_count": 2,
+        "material_executor_budget_coverage_min_observed_field_count": 21,
         "material_resource_bound_coverage_required_fields": [
           "bounded_texture_copy",
           "max_plan_sample_taps"
         ],
+        "material_resource_bound_coverage_min_bound_key_count": 2,
+        "material_resource_bound_coverage_min_guarded_field_count": 2,
+        "material_resource_bound_coverage_min_observed_field_count": 2,
         "material_resource_bounds": 2,
         "material_resource_bound_keys": [
           "max_plan_sample_taps_lte",
@@ -69,7 +75,10 @@ auto sample_report() -> json::Value {
         "material_quality_policy_coverage_required_fields": [
           "max_blur_radius",
           "noise_disabled"
-        ]
+        ],
+        "material_quality_policy_coverage_min_bound_key_count": 2,
+        "material_quality_policy_coverage_min_guarded_field_count": 2,
+        "material_quality_policy_coverage_min_observed_field_count": 6
       },
       "artifact_context": {
         "platform": "test",
@@ -569,6 +578,17 @@ int main() {
         manifest->material_resource_bound_coverage_required_fields.size() == 2);
     assert(
         manifest->material_quality_policy_coverage_required_fields.size() == 2);
+    assert(manifest->material_executor_budget_coverage_min_bound_key_count == 3);
+    assert(
+        manifest->material_executor_budget_coverage_min_observed_field_count
+        == 21);
+    assert(manifest->material_resource_bound_coverage_min_guarded_field_count
+        == 2);
+    assert(manifest->material_quality_policy_coverage_min_observed_field_count
+        == 6);
+    assert(contains_text(
+        verifier_manifest_coverage_minimums_text(*manifest),
+        "budget=(keys=3 guarded=2 observed=21)"));
 
     auto budget = material_budget_from_report(report);
     assert(budget);
@@ -774,7 +794,13 @@ int main() {
         "\"material_resource_bound_coverage_required_fields\":[\"bounded_texture_copy\",\"max_plan_sample_taps\"]"));
     assert(contains_text(
         failure_json,
+        "\"material_resource_bound_coverage_min_guarded_field_count\":2"));
+    assert(contains_text(
+        failure_json,
         "\"material_quality_policy_coverage_required_fields\":[\"max_blur_radius\",\"noise_disabled\"]"));
+    assert(contains_text(
+        failure_json,
+        "\"material_quality_policy_coverage_min_observed_field_count\":6"));
     assert(contains_text(
         failure_json,
         "\"budget_coverage\":{\"guardable_field_count\":22,\"observed_field_count\":22,\"guarded_observed_field_count\":3,\"unguarded_observed_field_count\":19,\"required_field_count\":2,\"covered_required_field_count\":2,\"missing_required_field_count\":0,\"manifest_field_count\":3,\"manifest_bound_key_count\":3"));
@@ -835,7 +861,7 @@ int main() {
         "pressure: executor=fail,pass=2/3,fail=1,zero=1,negative=1,tightest=upload_utilization_lte,field=upload_utilization,tightest-margin=0.9375,tightest-result=(pass upload_utilization_lte/upload_utilization actual=0.0625 expected<=1 margin=0.9375),zero-sources=(pass execution_stage_count_lte/execution_stage_count actual=8 expected<=8 margin=0),negative-sources=(fail draw_calls_gte/draw_calls actual=2 expected>=3 margin=-1),failed=(draw_calls_gte); resource=tight,pass=2/2,fail=0,zero=2,negative=0,tightest=max_plan_sample_taps_lte,field=max_plan_sample_taps,tightest-margin=0,tightest-result=(pass max_plan_sample_taps_lte/max_plan_sample_taps actual=25 expected<=25 margin=0),zero-sources=(pass max_plan_sample_taps_lte/max_plan_sample_taps actual=25 expected<=25 margin=0, pass require_bounded_texture_copy/unbounded_texture_copy actual=0 expected==0 margin=0); quality=tight,pass=2/2,fail=0,zero=2,negative=0,tightest=require_noise_allowed,field=noise_disabled,tightest-margin=0,tightest-result=(pass require_noise_allowed/noise_disabled actual=0 expected==0 margin=0),zero-sources=(pass max_blur_radius_lte/max_blur_radius actual=36 expected<=36 margin=0, pass require_noise_allowed/noise_disabled actual=0 expected==0 margin=0)"));
     assert(contains_line(
         failure_lines,
-        "manifest: name=unit-material-gate runtime=5 pixel-regions=2 budget=3 resource=2 quality=2 required-budget=(draw_calls, execution_stage_count) required-resource=(bounded_texture_copy, max_plan_sample_taps) required-quality=(max_blur_radius, noise_disabled) budget-keys=(execution_stage_count_lte, draw_calls_gte, upload_utilization_lte) resource-keys=(max_plan_sample_taps_lte, require_bounded_texture_copy) quality-keys=(max_blur_radius_lte, require_noise_allowed)"));
+        "manifest: name=unit-material-gate runtime=5 pixel-regions=2 budget=3 resource=2 quality=2 required-budget=(draw_calls, execution_stage_count) required-resource=(bounded_texture_copy, max_plan_sample_taps) required-quality=(max_blur_radius, noise_disabled) coverage-minimums=(budget=(keys=3 guarded=2 observed=21) resource=(keys=2 guarded=2 observed=2) quality=(keys=2 guarded=2 observed=6)) budget-keys=(execution_stage_count_lte, draw_calls_gte, upload_utilization_lte) resource-keys=(max_plan_sample_taps_lte, require_bounded_texture_copy) quality-keys=(max_blur_radius_lte, require_noise_allowed)"));
     assert(contains_line(
         failure_lines,
         "coverage: guarded=3/22 observed=22 guard-keys=3 unguarded=19 (active_execution_stage_count, backdrop_copy_count, backdrop_copy_pixels, backdrop_copy_skipped_count, backdrop_copy_utilization, backdrop_execution_stage_count, buffer_capacity_bytes, dropped_execution_stage_count, +11 more) required=2/2"));
