@@ -2402,6 +2402,15 @@ inline void apply_material_container_execution_descriptors(
             continue;
         if (execution->group_bounds_valid && execution->shape_blend_execution) {
             if (execution->glass_effect_match_source_valid) {
+                inst.rect[0] = execution->glass_effect_match_rect_x;
+                inst.rect[1] = execution->glass_effect_match_rect_y;
+                inst.rect[2] = execution->glass_effect_match_rect_w;
+                inst.rect[3] = execution->glass_effect_match_rect_h;
+                inst.params[0] = std::min(
+                    std::max(0.0f, execution->glass_effect_match_rect_radius),
+                    std::max(
+                        0.0f,
+                        std::min(inst.rect[2], inst.rect[3]) * 0.5f));
                 inst.group_rect[0] = execution->glass_effect_match_rect_x;
                 inst.group_rect[1] = execution->glass_effect_match_rect_y;
                 inst.group_rect[2] = execution->glass_effect_match_rect_w;
