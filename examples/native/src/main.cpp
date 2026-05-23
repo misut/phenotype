@@ -454,6 +454,9 @@ void view(State const& state) {
             glass.role = MaterialSurfaceRole::Content;
             glass.has_tint = true;
             glass.tint = Color{64, 156, 255, 96};
+            glass.glass_identity =
+                layout::glass_effect_identity("native.showcase", "surface");
+            glass.transition = layout::glass_matched_geometry_transition(1.0f);
             glass.semantic_label = "Glass Effect Surface";
             layout::glass_effect(glass, [&] {
                 widget::text("Glass Effect Surface");
