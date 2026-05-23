@@ -463,28 +463,47 @@ void view(State const& state) {
                 widget::text("Regular Liquid Glass now defaults to a capsule shape and can participate in a morphing effect container.");
                 layout::spacer(8);
                 layout::row([&] {
-                    auto action_glass = layout::glass_clear()
+                    auto action_union = layout::glass_clear()
                         .tint(Color{64, 156, 255, 110})
                         .effect_union(
                             "native.showcase",
                             "action.row",
-                            12.0f)
-                        .effect_id("native.showcase", "secondary-action")
-                        .matched_geometry();
+                            12.0f);
                     widget::glass_prominent_button<Msg>(
                         "Glass action",
-                        Increment{});
+                        Increment{},
+                        action_union
+                            .effect_id("native.showcase", "primary-action")
+                            .matched_geometry());
                     widget::glass_button<Msg>(
                         "Secondary",
                         Decrement{},
-                        action_glass);
+                        action_union
+                            .effect_id("native.showcase", "secondary-action")
+                            .matched_geometry());
                     widget::glass_button<Msg>(
                         "More",
                         Increment{},
-                        action_glass.effect_id(
-                            "native.showcase",
-                            "more-action"));
+                        action_union
+                            .effect_id("native.showcase", "more-action")
+                            .matched_geometry());
                 });
+                layout::spacer(8);
+                widget::glass_text_field<Msg>(
+                    "Liquid search field",
+                    state.name,
+                    on_name_changed,
+                    layout::glass_regular()
+                        .tint(Color{64, 156, 255, 72})
+                        .effect_union("native.showcase", "field.row", 18.0f)
+                        .effect_id("native.showcase", "search-field")
+                        .matched_geometry(),
+                    GlassTextFieldStyleOptions{
+                        .role = MaterialSurfaceRole::Toolbar,
+                        .width = 280.0f,
+                        .height = 34.0f,
+                        .semantic_label = "Glass Search Field",
+                    });
                 layout::spacer(8);
                 widget::code("layout::glass_effect_container(options, builder);");
             });
