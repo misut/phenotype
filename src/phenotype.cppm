@@ -3052,6 +3052,7 @@ struct MaterialSurfaceOptions {
     float max_width = 0.0f;
     float fixed_height = -1.0f;
     float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Default;
     float border_width = -1.0f;
     char const* semantic_label = "";
     bool inherit_material_container = true;
@@ -3128,6 +3129,7 @@ inline void configure_material_surface(LayoutNode& node,
     node.border_radius = options.border_radius >= 0.0f
         ? options.border_radius
         : t.radius_lg;
+    node.material_shape = options.shape;
     node.style.flex_direction = options.direction;
     node.style.gap = space_value(options.gap);
     node.style.cross_align = options.cross_align;
@@ -3198,6 +3200,7 @@ inline MaterialSurfaceOptions glass_surface_options(
             options.gap = SpaceToken::Xs;
             options.cross_align = CrossAxisAlignment::Center;
             options.border_radius = 0.0f;
+            options.shape = MaterialSurfaceShape::Rectangle;
             options.semantic_label = chrome_label_or(
                 semantic_label,
                 "Toolbar");
@@ -3210,6 +3213,7 @@ inline MaterialSurfaceOptions glass_surface_options(
             options.gap = SpaceToken::Xs;
             options.cross_align = CrossAxisAlignment::Center;
             options.interactive = true;
+            options.shape = MaterialSurfaceShape::Capsule;
             options.semantic_label = chrome_label_or(
                 semantic_label,
                 "Toolbar Group");
@@ -3223,6 +3227,7 @@ inline MaterialSurfaceOptions glass_surface_options(
             options.cross_align = CrossAxisAlignment::Center;
             options.interactive = true;
             options.border_radius = t.radius_md;
+            options.shape = MaterialSurfaceShape::Capsule;
             options.semantic_label = chrome_label_or(
                 semantic_label,
                 "Segmented Control");
@@ -3235,6 +3240,7 @@ inline MaterialSurfaceOptions glass_surface_options(
             options.gap = SpaceToken::Xs;
             options.cross_align = CrossAxisAlignment::Center;
             options.interactive = true;
+            options.shape = MaterialSurfaceShape::Capsule;
             options.semantic_label = chrome_label_or(
                 semantic_label,
                 "Navigation");

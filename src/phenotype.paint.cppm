@@ -712,6 +712,19 @@ inline void flush_if_changed() { flush_if_changed(detail::g_wasi); }
 
 export namespace phenotype::detail {
 
+inline float resolve_material_surface_radius(LayoutNode const& node) noexcept {
+    switch (node.material_shape) {
+        case MaterialSurfaceShape::Rectangle:
+            return 0.0f;
+        case MaterialSurfaceShape::Capsule:
+            return std::max(0.0f, std::min(node.width, node.height) * 0.5f);
+        case MaterialSurfaceShape::RoundedRectangle:
+        case MaterialSurfaceShape::Default:
+            return std::max(0.0f, node.border_radius);
+    }
+    return std::max(0.0f, node.border_radius);
+}
+
 inline FontSpec paint_default_text_font(bool mono) noexcept {
     if (mono)
         return FontSpec{ {}, FontWeight::Regular, FontStyle::Upright, true };
@@ -1036,8 +1049,9 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             node,
             draw_x,
             draw_y);
+        auto const material_radius = resolve_material_surface_radius(node);
         emit_material_rect(r, draw_x, draw_y, node.width, node.height,
-                           node.border_radius, material);
+                           material_radius, material);
     } else if (bg.a > 0) {
         if (node.border_radius > 0)
             emit_round_rect(r, draw_x, draw_y, node.width, node.height,
