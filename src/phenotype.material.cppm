@@ -1835,6 +1835,23 @@ inline float material_background_paint_inflate(
         + std::max(0.0f, plan.glass_background.soft_edge_radius);
 }
 
+inline std::int64_t material_estimate_surface_sample_pixels_from_area(
+        double surface_area,
+        MaterialRenderTargetAnalysis target) noexcept {
+    if (!target.ready)
+        return 0;
+    auto const scaled =
+        surface_area
+        * static_cast<double>(target.scale)
+        * static_cast<double>(target.scale);
+    if (!std::isfinite(scaled) || scaled <= 0.0)
+        return 0;
+    auto const bounded = std::min(
+        scaled,
+        static_cast<double>(target.pixel_count));
+    return static_cast<std::int64_t>(std::ceil(bounded));
+}
+
 struct MaterialSurfaceExecutionGeometry {
     bool active = false;
     float x = 0.0f;
@@ -1898,6 +1915,20 @@ inline MaterialSurfaceExecutionGeometry material_surface_execution_geometry(
         std::max(0.0f, std::min(geometry.w, geometry.h) * 0.5f));
     geometry.active = true;
     return geometry;
+}
+
+inline std::int64_t material_estimate_surface_sample_pixels(
+        MaterialPlan const& plan,
+        MaterialContainerExecutionDescriptor const* execution) noexcept {
+    if (!plan.backdrop_sampling)
+        return 0;
+    auto const geometry =
+        material_surface_execution_geometry(plan, execution);
+    if (!geometry.active)
+        return 0;
+    return material_estimate_surface_sample_pixels_from_area(
+        static_cast<double>(geometry.w) * static_cast<double>(geometry.h),
+        plan.render_target);
 }
 
 inline float material_surface_execution_anchor(
@@ -3033,6 +3064,27 @@ inline MaterialContainerGroupRuntimeSummary summarize_material_container_groups(
     return summary;
 }
 
+struct MaterialSurfaceSampleRuntimeSummary {
+    std::int64_t total_surface_sample_pixels = 0;
+    std::int64_t max_surface_sample_pixels = 0;
+};
+
+inline MaterialSurfaceSampleRuntimeSummary
+summarize_material_execution_surface_samples(
+        std::span<MaterialRuntimeRecord const> records) {
+    MaterialSurfaceSampleRuntimeSummary summary{};
+    for (auto const& record : records) {
+        auto const execution =
+            material_container_execution_descriptor(record, records);
+        auto const pixels =
+            material_estimate_surface_sample_pixels(record.plan, &execution);
+        summary.total_surface_sample_pixels += pixels;
+        summary.max_surface_sample_pixels =
+            std::max(summary.max_surface_sample_pixels, pixels);
+    }
+    return summary;
+}
+
 inline void accumulate_material_executor_plan_summary(
         MaterialExecutorSummary& summary,
         MaterialPlan const& plan) noexcept {
@@ -3178,6 +3230,10 @@ inline void finalize_material_executor_summary(
         MaterialExecutorSummary& summary,
         std::span<MaterialRuntimeRecord const> records) {
     summary.container_groups = summarize_material_container_groups(records);
+    auto const surface_samples =
+        summarize_material_execution_surface_samples(records);
+    summary.planned_surface_sample_pixels =
+        surface_samples.total_surface_sample_pixels;
     finalize_material_executor_execution_status(summary);
 }
 
@@ -3418,6 +3474,12 @@ inline void finalize_material_runtime_summary(
         MaterialRuntimeSummary& summary,
         std::span<MaterialRuntimeRecord const> records) {
     summary.container_groups = summarize_material_container_groups(records);
+    auto const surface_samples =
+        summarize_material_execution_surface_samples(records);
+    summary.total_surface_sample_pixels =
+        surface_samples.total_surface_sample_pixels;
+    summary.max_surface_sample_pixels =
+        surface_samples.max_surface_sample_pixels;
 }
 
 struct MaterialEnvironment {
@@ -4132,23 +4194,6 @@ inline MaterialRenderTargetAnalysis analyze_material_render_target(
     analysis.within_backdrop_budget =
         analysis.pixel_count <= max_backdrop_pixels;
     return analysis;
-}
-
-inline std::int64_t material_estimate_surface_sample_pixels_from_area(
-        double surface_area,
-        MaterialRenderTargetAnalysis target) noexcept {
-    if (!target.ready)
-        return 0;
-    auto const scaled =
-        surface_area
-        * static_cast<double>(target.scale)
-        * static_cast<double>(target.scale);
-    if (!std::isfinite(scaled) || scaled <= 0.0)
-        return 0;
-    auto const bounded = std::min(
-        scaled,
-        static_cast<double>(target.pixel_count));
-    return static_cast<std::int64_t>(std::ceil(bounded));
 }
 
 inline std::int64_t material_estimate_surface_sample_pixels(
