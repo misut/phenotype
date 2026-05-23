@@ -395,6 +395,12 @@ inline ButtonStyleOptions glass_control_button_style(
     auto material = material_style_for_kind(kind, t);
     material.role = options.role;
     material.fallback = kind != MaterialKind::None;
+    material.container = MaterialContainerDescriptor{
+        0u,
+        0u,
+        8.0f,
+        !options.disabled && kind != MaterialKind::None,
+        true};
     material.prominence = MaterialProminenceDescriptor{
         options.prominent && !options.disabled && kind != MaterialKind::None,
         options.prominence};
@@ -1027,6 +1033,13 @@ inline void glass_button(str label,
                          Msg msg,
                          GlassControlStyleOptions options = {}) {
     button(label, std::move(msg), glass_control_button_style(options));
+}
+
+template<typename Msg>
+inline void glass_prominent_button(str label,
+                                   Msg msg,
+                                   GlassControlStyleOptions options = {}) {
+    button(label, std::move(msg), glass_prominent_button_style(options));
 }
 
 namespace _impl {
