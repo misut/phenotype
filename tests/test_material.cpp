@@ -76,7 +76,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 58);
+    assert(material_plan_contract_version == 59);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -1303,6 +1303,14 @@ void test_interactive_material_modulates_optics_contract() {
            < 0.0001f);
     assert(plan.interaction.pointer_lens_radius > 0.0f);
     assert(plan.interaction.pointer_lens_strength > 0.0f);
+    assert(std::string_view(plan.interaction.control_morph_model)
+        == "hover-liquid-control-morph");
+    assert(plan.interaction.control_morph_active);
+    assert(!plan.interaction.control_morph_reduced_motion_suppressed);
+    assert(plan.interaction.control_morph_scale_delta > 0.0f);
+    assert(plan.interaction.control_morph_depth > 0.0f);
+    assert(plan.interaction.control_morph_edge > 0.0f);
+    assert(plan.interaction.control_morph_shadow > 0.0f);
     assert(plan.interaction.response_strength > 0.0f);
     assert(plan.opacity > baseline_plan.opacity);
     assert(plan.blur_radius > baseline_plan.blur_radius);
@@ -1368,6 +1376,14 @@ void test_interactive_material_modulates_optics_contract() {
         == "liquid-glass-interaction");
     assert(plan.optical_composition.interaction_response_strength
            == plan.interaction.response_strength);
+    assert(plan.optical_composition.interaction_control_morph_scale_delta
+           == plan.interaction.control_morph_scale_delta);
+    assert(plan.optical_composition.interaction_control_morph_depth
+           == plan.interaction.control_morph_depth);
+    assert(plan.optical_composition.interaction_control_morph_edge
+           == plan.interaction.control_morph_edge);
+    assert(plan.optical_composition.interaction_control_morph_shadow
+           == plan.interaction.control_morph_shadow);
     assert(plan.optical_composition.refraction_required);
     assert(plan.optical_composition.refraction_strength
            == plan.refraction.strength);
@@ -1386,6 +1402,29 @@ void test_interactive_material_modulates_optics_contract() {
     assert(plan.optical_response.dynamic_lighting_active);
     assert(plan.optical_response.glass_thickness_active);
     assert(plan.optical_response.glass_dispersion_active);
+    assert(std::string_view(
+               plan.execution_stages[1].optics.control_morph_model)
+        == "hover-liquid-control-morph");
+    assert(plan.execution_stages[1].optics.control_morph_scale_delta
+           == plan.interaction.control_morph_scale_delta);
+    assert(plan.execution_stages[2].optics.control_morph_depth
+           == plan.interaction.control_morph_depth);
+
+    auto pressed_request = request;
+    pressed_request.style.interaction.hovered = false;
+    pressed_request.style.interaction.pressed = true;
+    auto pressed_plan =
+        plan_material_surface(pressed_request, sampled_environment());
+    assert(pressed_plan.interaction.enabled);
+    assert(pressed_plan.interaction.active);
+    assert(pressed_plan.interaction.pressed);
+    assert(std::string_view(pressed_plan.interaction.control_morph_model)
+        == "pressed-liquid-control-morph");
+    assert(pressed_plan.interaction.control_morph_scale_delta < 0.0f);
+    assert(pressed_plan.interaction.control_morph_depth
+           > plan.interaction.control_morph_depth);
+    assert(pressed_plan.interaction.control_morph_shadow
+           > plan.interaction.control_morph_shadow);
 
     auto reduced_env = sampled_environment();
     reduced_env.capabilities.reduce_motion = true;
@@ -1403,6 +1442,16 @@ void test_interactive_material_modulates_optics_contract() {
     assert(reduced_plan.interaction.pointer_lens_active);
     assert(reduced_plan.interaction.pointer_lens_strength
            < plan.interaction.pointer_lens_strength);
+    assert(reduced_plan.interaction.control_morph_active);
+    assert(reduced_plan.interaction.control_morph_reduced_motion_suppressed);
+    assert(reduced_plan.interaction.control_morph_scale_delta
+           < plan.interaction.control_morph_scale_delta);
+    assert(reduced_plan.interaction.control_morph_depth
+           < plan.interaction.control_morph_depth);
+    assert(reduced_plan.interaction.control_morph_edge
+           < plan.interaction.control_morph_edge);
+    assert(reduced_plan.interaction.control_morph_shadow
+           < plan.interaction.control_morph_shadow);
     assert(reduced_plan.interaction.response_strength
            <= plan.interaction.response_strength);
     assert(reduced_plan.refraction.active);

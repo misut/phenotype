@@ -2226,6 +2226,28 @@ namespace detail {
             "pointer_lens_strength",
             json::Value{plan.interaction.pointer_lens_strength});
         interaction.emplace(
+            "control_morph_model",
+            json::Value{plan.interaction.control_morph_model});
+        interaction.emplace(
+            "control_morph_active",
+            json::Value{plan.interaction.control_morph_active});
+        interaction.emplace(
+            "control_morph_reduced_motion_suppressed",
+            json::Value{
+                plan.interaction.control_morph_reduced_motion_suppressed});
+        interaction.emplace(
+            "control_morph_scale_delta",
+            json::Value{plan.interaction.control_morph_scale_delta});
+        interaction.emplace(
+            "control_morph_depth",
+            json::Value{plan.interaction.control_morph_depth});
+        interaction.emplace(
+            "control_morph_edge",
+            json::Value{plan.interaction.control_morph_edge});
+        interaction.emplace(
+            "control_morph_shadow",
+            json::Value{plan.interaction.control_morph_shadow});
+        interaction.emplace(
             "deterministic",
             json::Value{plan.interaction.deterministic});
 
@@ -2546,6 +2568,19 @@ namespace detail {
             "interaction_response_strength",
             json::Value{composition.interaction_response_strength});
         optical_composition.emplace(
+            "interaction_control_morph_scale_delta",
+            json::Value{
+                composition.interaction_control_morph_scale_delta});
+        optical_composition.emplace(
+            "interaction_control_morph_depth",
+            json::Value{composition.interaction_control_morph_depth});
+        optical_composition.emplace(
+            "interaction_control_morph_edge",
+            json::Value{composition.interaction_control_morph_edge});
+        optical_composition.emplace(
+            "interaction_control_morph_shadow",
+            json::Value{composition.interaction_control_morph_shadow});
+        optical_composition.emplace(
             "transition_progress",
             json::Value{composition.transition_progress});
         optical_composition.emplace(
@@ -2727,6 +2762,21 @@ namespace detail {
             optics_json.emplace(
                 "pointer_lens_strength",
                 json::Value{optics.pointer_lens_strength});
+            optics_json.emplace(
+                "control_morph_model",
+                json::Value{optics.control_morph_model});
+            optics_json.emplace(
+                "control_morph_scale_delta",
+                json::Value{optics.control_morph_scale_delta});
+            optics_json.emplace(
+                "control_morph_depth",
+                json::Value{optics.control_morph_depth});
+            optics_json.emplace(
+                "control_morph_edge",
+                json::Value{optics.control_morph_edge});
+            optics_json.emplace(
+                "control_morph_shadow",
+                json::Value{optics.control_morph_shadow});
             optics_json.emplace(
                 "refraction_model",
                 json::Value{optics.refraction_model});

@@ -1631,6 +1631,8 @@ struct MaterialInstanceGPU {
     float interaction[4]{};
     // pointer lens anchor x/y, radius, strength
     float interaction_lens[4]{};
+    // control morph scale delta, depth, edge lift, shadow compression
+    float control_morph[4]{};
     // refraction strength, edge bias, max offset pixels, edge caustic intensity
     float refraction[4]{};
     // bevel width, inner highlight, outer shadow, chromatic fringe
@@ -2378,6 +2380,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
         plan.interaction.pointer_lens_anchor_y);
     inst.interaction_lens[2] = plan.interaction.pointer_lens_radius;
     inst.interaction_lens[3] = plan.interaction.pointer_lens_strength;
+    inst.control_morph[0] = plan.interaction.control_morph_scale_delta;
+    inst.control_morph[1] = plan.interaction.control_morph_depth;
+    inst.control_morph[2] = plan.interaction.control_morph_edge;
+    inst.control_morph[3] = plan.interaction.control_morph_shadow;
     inst.refraction[0] = plan.refraction.strength;
     inst.refraction[1] = plan.refraction.edge_bias;
     inst.refraction[2] = plan.refraction.max_offset_pixels;
@@ -4589,6 +4595,7 @@ struct MaterialVsOut {
     float4 luminance_curve;
     float4 interaction;
     float4 interaction_lens;
+    float4 control_morph;
     float4 refraction;
     float4 edge_optics;
     float4 spectral_tint;
@@ -4610,6 +4617,7 @@ struct MaterialInstance {
     float4 luminance_curve;
     float4 interaction;
     float4 interaction_lens;
+    float4 control_morph;
     float4 refraction;
     float4 edge_optics;
     float4 spectral_tint;
@@ -4633,25 +4641,38 @@ vertex MaterialVsOut vs_material(
     };
     float2 c = corners[vi];
     MaterialInstance inst = instances[ii];
-    float px = inst.rect.x + c.x * inst.rect.z;
-    float py = inst.rect.y + c.y * inst.rect.w;
+    float control_morph_scale_delta = clamp(
+        inst.control_morph.x,
+        -0.06,
+        0.06);
+    float2 material_size = max(
+        inst.rect.zw * (1.0 + control_morph_scale_delta),
+        float2(1.0));
+    float2 material_origin =
+        inst.rect.xy + (inst.rect.zw - material_size) * 0.5;
+    float px = material_origin.x + c.x * material_size.x;
+    float py = material_origin.y + c.y * material_size.y;
     float cx = (px / u.viewport.x) * 2.0 - 1.0;
     float cy = 1.0 - (py / u.viewport.y) * 2.0;
     MaterialVsOut out;
     out.pos = float4(cx, cy, 0, 1);
-    out.local_pos = c * inst.rect.zw;
-    out.rect_size = inst.rect.zw;
+    out.local_pos = c * material_size;
+    out.rect_size = material_size;
     out.screen_pos = float2(px, py);
     out.screen_uv = float2(px / u.viewport.x, py / u.viewport.y);
     out.content_scale = u.content_scale;
     out.tint = inst.tint;
     out.params = inst.params;
+    out.params.x = min(
+        max(out.params.x * (1.0 + control_morph_scale_delta), 0.0),
+        min(material_size.x, material_size.y) * 0.5);
     out.optics = inst.optics;
     out.effects = inst.effects;
     out.sampling = inst.sampling;
     out.luminance_curve = inst.luminance_curve;
     out.interaction = inst.interaction;
     out.interaction_lens = inst.interaction_lens;
+    out.control_morph = inst.control_morph;
     out.refraction = inst.refraction;
     out.edge_optics = inst.edge_optics;
     out.spectral_tint = inst.spectral_tint;
@@ -4782,6 +4803,10 @@ fragment float4 fs_material(
     float scroll_edge_dissolve = clamp(in.scroll_edge.y, 0.0, 0.60);
     float scroll_edge_dimming = clamp(in.scroll_edge.z, 0.0, 0.45);
     float scroll_edge_hard_style = clamp(in.scroll_edge.w, 0.0, 0.70);
+    float control_morph_depth = clamp(in.control_morph.y, 0.0, 0.40);
+    float control_morph_edge_lift = clamp(in.control_morph.z, 0.0, 0.35);
+    float control_morph_shadow_compression =
+        clamp(in.control_morph.w, 0.0, 0.35);
     float2 default_light_dir = normalize(float2(-0.58, -0.82));
     float2 dynamic_light_raw = in.lighting.xy;
     float2 dynamic_light_dir = length(dynamic_light_raw) > 0.0001
@@ -4977,6 +5002,29 @@ fragment float4 fs_material(
                         + 0.32 * scroll_edge_hard_style,
                         0.0,
                         0.72));
+    }
+    if (control_morph_depth > 0.0001
+        || control_morph_edge_lift > 0.0001
+        || control_morph_shadow_compression > 0.0001) {
+        float control_center =
+            1.0 - smoothstep(0.12, 1.08, normalized_len);
+        float control_edge = 1.0 - smoothstep(
+            0.0,
+            edge_width,
+            signed_edge_distance);
+        float control_rim =
+            edge_lens * (0.45 + 0.55 * control_edge);
+        float3 compressed = backdrop_rgb
+            * (1.0
+               - 0.22
+                   * control_morph_shadow_compression
+                   * control_center);
+        backdrop_rgb = mix(backdrop_rgb, compressed, control_morph_depth);
+        backdrop_rgb += float3(1.0)
+            * control_rim
+            * control_morph_edge_lift
+            * 0.18;
+        backdrop_rgb = clamp(backdrop_rgb, 0.0, 1.0);
     }
     float tint_strength = clamp(in.tint.a, 0.0, 1.0);
     float opacity = clamp(in.params.z, 0.0, 1.0);

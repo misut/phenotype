@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 58;
+inline constexpr std::uint32_t material_plan_contract_version = 59;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -439,6 +439,11 @@ struct MaterialStageOptics {
     float pointer_lens_anchor_y = 0.5f;
     float pointer_lens_radius = 0.0f;
     float pointer_lens_strength = 0.0f;
+    char const* control_morph_model = "none";
+    float control_morph_scale_delta = 0.0f;
+    float control_morph_depth = 0.0f;
+    float control_morph_edge = 0.0f;
+    float control_morph_shadow = 0.0f;
     char const* refraction_model = "none";
     float refraction_strength = 0.0f;
     float refraction_edge_bias = 0.0f;
@@ -728,6 +733,13 @@ struct MaterialInteractionResponse {
     float pointer_lens_anchor_y = 0.5f;
     float pointer_lens_radius = 0.0f;
     float pointer_lens_strength = 0.0f;
+    char const* control_morph_model = "none";
+    bool control_morph_active = false;
+    bool control_morph_reduced_motion_suppressed = false;
+    float control_morph_scale_delta = 0.0f;
+    float control_morph_depth = 0.0f;
+    float control_morph_edge = 0.0f;
+    float control_morph_shadow = 0.0f;
     bool deterministic = true;
 };
 
@@ -840,6 +852,10 @@ struct MaterialOpticalComposition {
     float scroll_edge_dimming = 0.0f;
     float scroll_edge_hard_style = 0.0f;
     float interaction_response_strength = 0.0f;
+    float interaction_control_morph_scale_delta = 0.0f;
+    float interaction_control_morph_depth = 0.0f;
+    float interaction_control_morph_edge = 0.0f;
+    float interaction_control_morph_shadow = 0.0f;
     float transition_progress = 1.0f;
     float transition_opacity_gain = 1.0f;
     float transition_optical_gain = 1.0f;
@@ -1131,6 +1147,12 @@ inline MaterialStageOptics material_primary_stage_optics(
     optics.scroll_edge_dissolve = plan.scroll_edge.dissolve_strength;
     optics.scroll_edge_dimming = plan.scroll_edge.dimming_strength;
     optics.scroll_edge_hard_style = plan.scroll_edge.hard_style_strength;
+    optics.control_morph_model = plan.interaction.control_morph_model;
+    optics.control_morph_scale_delta =
+        plan.interaction.control_morph_scale_delta;
+    optics.control_morph_depth = plan.interaction.control_morph_depth;
+    optics.control_morph_edge = plan.interaction.control_morph_edge;
+    optics.control_morph_shadow = plan.interaction.control_morph_shadow;
     return optics;
 }
 
@@ -1197,6 +1219,12 @@ inline MaterialStageOptics material_edge_stage_optics(
     optics.scroll_edge_dissolve = plan.scroll_edge.dissolve_strength;
     optics.scroll_edge_dimming = plan.scroll_edge.dimming_strength;
     optics.scroll_edge_hard_style = plan.scroll_edge.hard_style_strength;
+    optics.control_morph_model = plan.interaction.control_morph_model;
+    optics.control_morph_scale_delta =
+        plan.interaction.control_morph_scale_delta;
+    optics.control_morph_depth = plan.interaction.control_morph_depth;
+    optics.control_morph_edge = plan.interaction.control_morph_edge;
+    optics.control_morph_shadow = plan.interaction.control_morph_shadow;
     return optics;
 }
 
@@ -5386,11 +5414,45 @@ inline MaterialInteractionResponse material_resolve_interaction_response(
         strength = std::min(strength, 0.36f);
     response.response_strength = strength;
     response.active = strength > 0.0f;
+    auto const press = response.pressed ? strength : 0.0f;
+    auto const hover = response.pressed
+        ? 0.0f
+        : ((response.hovered || response.pointer_inside) ? strength : 0.0f);
+    auto const focus = (!response.pressed
+        && !(response.hovered || response.pointer_inside)
+        && response.focused) ? strength : 0.0f;
+    auto const motion_scale = reduce_motion ? 0.35f : 1.0f;
+    if (response.active) {
+        response.control_morph_model = response.pressed
+            ? "pressed-liquid-control-morph"
+            : ((response.hovered || response.pointer_inside)
+                ? "hover-liquid-control-morph"
+                : "focused-liquid-control-morph");
+        response.control_morph_active = true;
+        response.control_morph_reduced_motion_suppressed = reduce_motion;
+        response.control_morph_scale_delta = std::clamp(
+            motion_scale
+                * (0.014f * hover + 0.006f * focus - 0.018f * press),
+            -0.024f,
+            0.020f);
+        response.control_morph_depth = std::clamp(
+            motion_scale * (0.15f * hover + 0.30f * press + 0.08f * focus),
+            0.0f,
+            0.34f);
+        response.control_morph_edge = std::clamp(
+            motion_scale * (0.08f * hover + 0.16f * press + 0.04f * focus),
+            0.0f,
+            0.26f);
+        response.control_morph_shadow = std::clamp(
+            motion_scale * (0.08f * hover + 0.20f * press),
+            0.0f,
+            0.28f);
+    }
     auto const pointer_driven =
         response.pointer_inside || response.hovered || response.pressed;
     if (pointer_driven && response.active) {
         auto const press_scale = response.pressed ? 1.0f : 0.0f;
-        auto const motion_scale = reduce_motion ? 0.45f : 1.0f;
+        auto const pointer_motion_scale = reduce_motion ? 0.45f : 1.0f;
         response.specular_model = "pointer-specular";
         response.specular_highlight_active = true;
         response.specular_anchor_x = response.pointer_x;
@@ -5400,7 +5462,7 @@ inline MaterialInteractionResponse material_resolve_interaction_response(
             0.20f,
             0.38f);
         response.specular_intensity = std::clamp(
-            motion_scale * (0.42f + 0.18f * press_scale) * strength,
+            pointer_motion_scale * (0.42f + 0.18f * press_scale) * strength,
             0.0f,
             0.75f);
         response.pointer_lens_model = response.pressed
@@ -5414,7 +5476,7 @@ inline MaterialInteractionResponse material_resolve_interaction_response(
             0.26f,
             0.44f);
         response.pointer_lens_strength = std::clamp(
-            motion_scale * (0.16f + 0.10f * press_scale) * strength,
+            pointer_motion_scale * (0.16f + 0.10f * press_scale) * strength,
             0.0f,
             0.32f);
     }
@@ -6913,6 +6975,14 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.scroll_edge.hard_style_strength;
     composition.interaction_response_strength =
         plan.interaction.response_strength;
+    composition.interaction_control_morph_scale_delta =
+        plan.interaction.control_morph_scale_delta;
+    composition.interaction_control_morph_depth =
+        plan.interaction.control_morph_depth;
+    composition.interaction_control_morph_edge =
+        plan.interaction.control_morph_edge;
+    composition.interaction_control_morph_shadow =
+        plan.interaction.control_morph_shadow;
     composition.transition_progress = plan.transition.progress;
     composition.transition_opacity_gain = plan.transition.opacity_gain;
     composition.transition_optical_gain = plan.transition.optical_gain;
@@ -6964,6 +7034,7 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
             || std::fabs(plan.interaction.edge_highlight_delta) > 0.0001f
             || std::fabs(plan.interaction.shadow_alpha_delta) > 0.0001f
             || std::fabs(plan.interaction.shadow_radius_delta) > 0.0001f
+            || plan.interaction.control_morph_active
             || plan.interaction.pointer_lens_active);
     response.deterministic_fallback = composition.deterministic;
     return response;
