@@ -3979,6 +3979,142 @@ void test_glass_surface_presets_emit_material_contract() {
     auto const expected_radius = std::min(material->w, material->h) * 0.5f;
     assert(std::fabs(material->radius - expected_radius) < 0.0001f);
 
+    auto const nav_identity =
+        layout::glass_effect_identity("surfaces", "navigation");
+    auto const nav_container_id =
+        layout::glass_effect_stable_id("surfaces.scope");
+    auto const nav_union_id =
+        layout::glass_effect_stable_id("surfaces.nav");
+    auto const nav_tint = Color{64, 156, 255, 82};
+    auto const nav_border = Color{64, 156, 255, 146};
+    auto styled_nav = layout::glass_surface_options(
+        layout::GlassSurfacePreset::Navigation,
+        layout::glass_clear()
+            .tint(nav_tint)
+            .border(nav_border)
+            .effect_id(nav_identity)
+            .matched_geometry(0.45f, false)
+            .effect_union(
+                "surfaces.scope",
+                "surfaces.nav",
+                18.0f,
+                true,
+                true),
+        "Glass Navigation");
+    assert(styled_nav.kind == MaterialKind::Clear);
+    assert(styled_nav.role == MaterialSurfaceRole::Navigation);
+    assert(styled_nav.direction == FlexDirection::Row);
+    assert(styled_nav.interactive);
+    assert(styled_nav.has_material_override);
+    assert(styled_nav.material_override.kind == MaterialKind::Clear);
+    assert(styled_nav.material_override.tint == nav_tint);
+    assert(styled_nav.material_override.border == nav_border);
+    assert(styled_nav.transition.kind
+           == MaterialGlassTransitionKind::MatchedGeometry);
+    assert(std::fabs(styled_nav.transition.progress - 0.45f) < 0.0001f);
+    assert(!styled_nav.transition.appearing);
+    assert(!styled_nav.inherit_material_transition);
+    assert(styled_nav.glass_identity == nav_identity);
+    assert(!styled_nav.inherit_material_identity);
+    assert(styled_nav.container.container_id == nav_container_id);
+    assert(styled_nav.container.union_id == nav_union_id);
+    assert(std::fabs(styled_nav.container.spacing - 18.0f) < 0.0001f);
+    assert(!styled_nav.inherit_material_container);
+    assert(std::string_view{styled_nav.semantic_label} == "Glass Navigation");
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto sheet_root_h = detail::alloc_node();
+    detail::node_at(sheet_root_h).style.flex_direction = FlexDirection::Column;
+    Scope sheet_scope(sheet_root_h);
+    Scope::set_current(&sheet_scope);
+    layout::glass_surface(
+        layout::GlassSurfacePreset::Sheet,
+        layout::glass_regular()
+            .tint(Color{255, 255, 255, 142})
+            .effect_id("surfaces", "sheet")
+            .materialize(0.6f, true)
+            .effect_union("surfaces.scope", "sheet", 22.0f, true, true),
+        [] {
+            widget::text("Glass sheet");
+        },
+        "Glass Sheet");
+    Scope::set_current(nullptr);
+
+    auto const& sheet_root = detail::node_at(sheet_root_h);
+    assert(sheet_root.children.size() == 1u);
+    auto const& sheet_surface = detail::node_at(sheet_root.children[0]);
+    assert(sheet_surface.material.kind == MaterialKind::Regular);
+    assert(sheet_surface.material.role == MaterialSurfaceRole::Overlay);
+    assert(sheet_surface.material.transition.kind
+           == MaterialGlassTransitionKind::Materialize);
+    assert(std::fabs(sheet_surface.material.transition.progress - 0.6f)
+           < 0.0001f);
+    assert(sheet_surface.material.glass_identity
+           == layout::glass_effect_identity("surfaces", "sheet"));
+    assert(sheet_surface.material.container.container_id
+           == nav_container_id);
+    assert(sheet_surface.material.container.union_id
+           == layout::glass_effect_stable_id("sheet"));
+    assert(std::fabs(sheet_surface.material.container.spacing - 22.0f)
+           < 0.0001f);
+    assert(sheet_surface.material.container.interactive);
+    assert(std::string_view{sheet_surface.debug_semantic_label}
+           == "Glass Sheet");
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto scoped_root_h = detail::alloc_node();
+    detail::node_at(scoped_root_h).style.flex_direction = FlexDirection::Column;
+    Scope scoped_scope(scoped_root_h);
+    Scope::set_current(&scoped_scope);
+    layout::glass_effect_container(
+        layout::GlassEffectContainerOptions{
+            .container_id = 906u,
+            .union_id = 44u,
+            .spacing = 15.0f,
+            .interactive = false,
+            .morph_transitions = true,
+        },
+        [] {
+            layout::glass_effect_transition(
+                layout::glass_matched_geometry_transition(0.35f, false),
+                [] {
+                    layout::glass_surface(
+                        layout::GlassSurfacePreset::ToolbarGroup,
+                        layout::glass_clear()
+                            .effect_id("surfaces", "scoped-toolbar"),
+                        [] {
+                            widget::text("Scoped toolbar");
+                        });
+                });
+        });
+    Scope::set_current(nullptr);
+
+    auto const& scoped_root = detail::node_at(scoped_root_h);
+    assert(scoped_root.children.size() == 1u);
+    auto const& scoped_surface = detail::node_at(scoped_root.children[0]);
+    assert(scoped_surface.material.kind == MaterialKind::Clear);
+    assert(scoped_surface.material.role == MaterialSurfaceRole::Toolbar);
+    assert(scoped_surface.material.transition.kind
+           == MaterialGlassTransitionKind::MatchedGeometry);
+    assert(std::fabs(scoped_surface.material.transition.progress - 0.35f)
+           < 0.0001f);
+    assert(!scoped_surface.material.transition.appearing);
+    assert(scoped_surface.material.glass_identity
+           == layout::glass_effect_identity("surfaces", "scoped-toolbar"));
+    assert(scoped_surface.material.container.container_id == 906u);
+    assert(scoped_surface.material.container.union_id == 44u);
+    assert(std::fabs(scoped_surface.material.container.spacing - 15.0f)
+           < 0.0001f);
+    assert(scoped_surface.material.container.interactive);
+
     std::puts("PASS: glass surface presets emit material contract");
 }
 

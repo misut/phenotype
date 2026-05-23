@@ -548,6 +548,38 @@ void view(State const& state) {
                         .semantic_label = "Glass Search Field",
                     });
                 layout::spacer(8);
+                layout::glass_surface(
+                    layout::GlassSurfacePreset::ToolbarGroup,
+                    layout::glass_clear()
+                        .tint(Color{64, 156, 255, 82})
+                        .effect_union(
+                            "native.showcase",
+                            "surface.toolbar",
+                            14.0f,
+                            true,
+                            true)
+                        .effect_id("native.showcase", "surface-toolbar")
+                        .matched_geometry(),
+                    [&] {
+                        widget::text("Preset surface");
+                        widget::glass_button<Msg>(
+                            "Apply",
+                            Increment{},
+                            layout::glass_clear()
+                                .tint(Color{64, 156, 255, 104})
+                                .effect_union(
+                                    "native.showcase",
+                                    "surface.toolbar",
+                                    14.0f,
+                                    true,
+                                    true)
+                                .effect_id(
+                                    "native.showcase",
+                                    "surface-toolbar-apply")
+                                .matched_geometry());
+                    },
+                    "Glass Toolbar Group");
+                layout::spacer(8);
                 widget::code("layout::glass_effect_container(options, builder);");
             });
             layout::spacer(8);

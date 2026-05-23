@@ -4277,6 +4277,45 @@ inline MaterialSurfaceOptions glass_surface_options(
     return options;
 }
 
+inline MaterialSurfaceOptions glass_surface_options(
+        GlassSurfacePreset preset,
+        GlassEffectStyle style,
+        char const* semantic_label = "") {
+    auto options = glass_surface_options(preset, semantic_label);
+    options.kind = style.kind;
+    if (style.is_identity()) {
+        options.interactive = false;
+        options.has_material_override = false;
+        options.material_override = {};
+        options.transition = {};
+        options.glass_identity = {};
+        options.inherit_material_transition = true;
+        options.inherit_material_identity = true;
+        options.inherit_material_container = true;
+        options.container = {};
+        return options;
+    }
+
+    if (style.interactive_enabled)
+        options.interactive = true;
+    options.transition = style.transition_descriptor;
+    options.inherit_material_transition = style.inherit_transition;
+    options.glass_identity = style.glass_identity_descriptor;
+    options.inherit_material_identity = style.inherit_identity;
+    options.container = style.container_descriptor;
+    options.inherit_material_container = style.inherit_container;
+
+    if (style.has_tint || style.has_border) {
+        options.has_material_override = true;
+        options.material_override = material_style(style.kind);
+        if (style.has_tint)
+            options.material_override.tint = style.tint_color;
+        if (style.has_border)
+            options.material_override.border = style.border_color;
+    }
+    return options;
+}
+
 template<typename F>
     requires std::is_invocable_v<F>
 void glass_surface(GlassSurfacePreset preset,
@@ -4284,6 +4323,17 @@ void glass_surface(GlassSurfacePreset preset,
                    char const* semantic_label = "") {
     material_surface(
         glass_surface_options(preset, semantic_label),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_surface(GlassSurfacePreset preset,
+                   GlassEffectStyle style,
+                   F&& builder,
+                   char const* semantic_label = "") {
+    material_surface(
+        glass_surface_options(preset, style, semantic_label),
         std::forward<F>(builder));
 }
 
