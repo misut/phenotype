@@ -13,7 +13,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 45;
+inline constexpr std::uint32_t material_plan_contract_version = 46;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -433,6 +433,11 @@ struct MaterialStageOptics {
     float specular_anchor_y = 0.5f;
     float specular_radius = 0.0f;
     float specular_intensity = 0.0f;
+    char const* pointer_lens_model = "none";
+    float pointer_lens_anchor_x = 0.5f;
+    float pointer_lens_anchor_y = 0.5f;
+    float pointer_lens_radius = 0.0f;
+    float pointer_lens_strength = 0.0f;
     char const* refraction_model = "none";
     float refraction_strength = 0.0f;
     float refraction_edge_bias = 0.0f;
@@ -580,6 +585,12 @@ struct MaterialInteractionResponse {
     float specular_anchor_y = 0.5f;
     float specular_radius = 0.0f;
     float specular_intensity = 0.0f;
+    char const* pointer_lens_model = "none";
+    bool pointer_lens_active = false;
+    float pointer_lens_anchor_x = 0.5f;
+    float pointer_lens_anchor_y = 0.5f;
+    float pointer_lens_radius = 0.0f;
+    float pointer_lens_strength = 0.0f;
     bool deterministic = true;
 };
 
@@ -870,6 +881,11 @@ inline MaterialStageOptics material_edge_stage_optics(
     optics.specular_anchor_y = plan.interaction.specular_anchor_y;
     optics.specular_radius = plan.interaction.specular_radius;
     optics.specular_intensity = plan.interaction.specular_intensity;
+    optics.pointer_lens_model = plan.interaction.pointer_lens_model;
+    optics.pointer_lens_anchor_x = plan.interaction.pointer_lens_anchor_x;
+    optics.pointer_lens_anchor_y = plan.interaction.pointer_lens_anchor_y;
+    optics.pointer_lens_radius = plan.interaction.pointer_lens_radius;
+    optics.pointer_lens_strength = plan.interaction.pointer_lens_strength;
     return optics;
 }
 
@@ -1247,6 +1263,7 @@ struct MaterialRuntimeSummary {
     std::uint32_t interaction_active_count = 0;
     std::uint32_t interaction_reduce_motion_count = 0;
     std::uint32_t interaction_specular_highlight_count = 0;
+    std::uint32_t interaction_pointer_lens_count = 0;
     std::uint32_t refraction_active_count = 0;
     std::uint32_t theme_default_glass_token_count = 0;
     std::uint32_t theme_custom_token_count = 0;
@@ -1264,6 +1281,8 @@ struct MaterialRuntimeSummary {
     float max_interaction_response_strength = 0.0f;
     float max_interaction_specular_radius = 0.0f;
     float max_interaction_specular_intensity = 0.0f;
+    float max_interaction_pointer_lens_radius = 0.0f;
+    float max_interaction_pointer_lens_strength = 0.0f;
     float max_refraction_strength = 0.0f;
     float max_refraction_edge_bias = 0.0f;
     float max_refraction_offset_pixels = 0.0f;
@@ -1331,10 +1350,13 @@ struct MaterialExecutorSummary {
     std::uint32_t interaction_enabled_count = 0;
     std::uint32_t interaction_active_count = 0;
     std::uint32_t interaction_specular_highlight_count = 0;
+    std::uint32_t interaction_pointer_lens_count = 0;
     std::uint32_t refraction_active_count = 0;
     float max_interaction_response_strength = 0.0f;
     float max_interaction_specular_radius = 0.0f;
     float max_interaction_specular_intensity = 0.0f;
+    float max_interaction_pointer_lens_radius = 0.0f;
+    float max_interaction_pointer_lens_strength = 0.0f;
     float max_refraction_strength = 0.0f;
     float max_refraction_edge_bias = 0.0f;
     float max_refraction_offset_pixels = 0.0f;
@@ -2123,6 +2145,8 @@ inline void accumulate_material_executor_plan_summary(
         ++summary.interaction_active_count;
     if (plan.interaction.specular_highlight_active)
         ++summary.interaction_specular_highlight_count;
+    if (plan.interaction.pointer_lens_active)
+        ++summary.interaction_pointer_lens_count;
     if (plan.refraction.active)
         ++summary.refraction_active_count;
     summary.max_interaction_response_strength = std::max(
@@ -2134,6 +2158,12 @@ inline void accumulate_material_executor_plan_summary(
     summary.max_interaction_specular_intensity = std::max(
         summary.max_interaction_specular_intensity,
         plan.interaction.specular_intensity);
+    summary.max_interaction_pointer_lens_radius = std::max(
+        summary.max_interaction_pointer_lens_radius,
+        plan.interaction.pointer_lens_radius);
+    summary.max_interaction_pointer_lens_strength = std::max(
+        summary.max_interaction_pointer_lens_strength,
+        plan.interaction.pointer_lens_strength);
     summary.max_refraction_strength = std::max(
         summary.max_refraction_strength,
         plan.refraction.strength);
@@ -2327,6 +2357,8 @@ inline void accumulate_material_runtime_summary(
         ++summary.interaction_reduce_motion_count;
     if (plan.interaction.specular_highlight_active)
         ++summary.interaction_specular_highlight_count;
+    if (plan.interaction.pointer_lens_active)
+        ++summary.interaction_pointer_lens_count;
     if (plan.refraction.active)
         ++summary.refraction_active_count;
     if (plan.theme.default_glass_tokens)
@@ -2366,6 +2398,12 @@ inline void accumulate_material_runtime_summary(
     summary.max_interaction_specular_intensity = std::max(
         summary.max_interaction_specular_intensity,
         plan.interaction.specular_intensity);
+    summary.max_interaction_pointer_lens_radius = std::max(
+        summary.max_interaction_pointer_lens_radius,
+        plan.interaction.pointer_lens_radius);
+    summary.max_interaction_pointer_lens_strength = std::max(
+        summary.max_interaction_pointer_lens_strength,
+        plan.interaction.pointer_lens_strength);
     summary.max_refraction_strength = std::max(
         summary.max_refraction_strength,
         plan.refraction.strength);
@@ -3598,6 +3636,20 @@ inline MaterialInteractionResponse material_resolve_interaction_response(
             motion_scale * (0.42f + 0.18f * press_scale) * strength,
             0.0f,
             0.75f);
+        response.pointer_lens_model = response.pressed
+            ? "pressed-pointer-lens"
+            : "hover-pointer-lens";
+        response.pointer_lens_active = true;
+        response.pointer_lens_anchor_x = response.pointer_x;
+        response.pointer_lens_anchor_y = response.pointer_y;
+        response.pointer_lens_radius = std::clamp(
+            0.42f - 0.10f * press_scale,
+            0.26f,
+            0.44f);
+        response.pointer_lens_strength = std::clamp(
+            motion_scale * (0.16f + 0.10f * press_scale) * strength,
+            0.0f,
+            0.32f);
     }
     return response;
 }
@@ -3711,10 +3763,12 @@ inline MaterialRefractionProfile material_resolve_refraction_profile(
     profile.interaction_driven = plan.interaction.active;
     profile.reduced_motion_suppressed =
         plan.decision_trace.reduce_motion && motion_scale < 1.0f;
-    profile.model = profile.interaction_driven
-        ? "interactive-edge-lens"
-        : "edge-lens";
-    profile.source = "sampled-backdrop-edge-refraction";
+    profile.model = plan.interaction.pointer_lens_active
+        ? "interactive-pointer-lens"
+        : (profile.interaction_driven ? "interactive-edge-lens" : "edge-lens");
+    profile.source = plan.interaction.pointer_lens_active
+        ? "sampled-backdrop-pointer-refraction"
+        : "sampled-backdrop-edge-refraction";
     profile.strength = strength;
     profile.edge_bias = std::clamp(
         0.32f + 0.28f * plan.shape.normalized_radius,
@@ -4248,7 +4302,8 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
             || std::fabs(plan.interaction.saturation_delta) > 0.0001f
             || std::fabs(plan.interaction.edge_highlight_delta) > 0.0001f
             || std::fabs(plan.interaction.shadow_alpha_delta) > 0.0001f
-            || std::fabs(plan.interaction.shadow_radius_delta) > 0.0001f);
+            || std::fabs(plan.interaction.shadow_radius_delta) > 0.0001f
+            || plan.interaction.pointer_lens_active);
     response.deterministic_fallback = composition.deterministic;
     return response;
 }

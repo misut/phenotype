@@ -1894,6 +1894,24 @@ namespace detail {
             "specular_intensity",
             json::Value{plan.interaction.specular_intensity});
         interaction.emplace(
+            "pointer_lens_model",
+            json::Value{plan.interaction.pointer_lens_model});
+        interaction.emplace(
+            "pointer_lens_active",
+            json::Value{plan.interaction.pointer_lens_active});
+        interaction.emplace(
+            "pointer_lens_anchor_x",
+            json::Value{plan.interaction.pointer_lens_anchor_x});
+        interaction.emplace(
+            "pointer_lens_anchor_y",
+            json::Value{plan.interaction.pointer_lens_anchor_y});
+        interaction.emplace(
+            "pointer_lens_radius",
+            json::Value{plan.interaction.pointer_lens_radius});
+        interaction.emplace(
+            "pointer_lens_strength",
+            json::Value{plan.interaction.pointer_lens_strength});
+        interaction.emplace(
             "deterministic",
             json::Value{plan.interaction.deterministic});
 
@@ -2245,6 +2263,21 @@ namespace detail {
             optics_json.emplace(
                 "specular_intensity",
                 json::Value{optics.specular_intensity});
+            optics_json.emplace(
+                "pointer_lens_model",
+                json::Value{optics.pointer_lens_model});
+            optics_json.emplace(
+                "pointer_lens_anchor_x",
+                json::Value{optics.pointer_lens_anchor_x});
+            optics_json.emplace(
+                "pointer_lens_anchor_y",
+                json::Value{optics.pointer_lens_anchor_y});
+            optics_json.emplace(
+                "pointer_lens_radius",
+                json::Value{optics.pointer_lens_radius});
+            optics_json.emplace(
+                "pointer_lens_strength",
+                json::Value{optics.pointer_lens_strength});
             optics_json.emplace(
                 "refraction_model",
                 json::Value{optics.refraction_model});
@@ -3021,6 +3054,11 @@ namespace detail {
                 static_cast<std::int64_t>(
                     summary.interaction_specular_highlight_count)});
         out.emplace(
+            "interaction_pointer_lens_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.interaction_pointer_lens_count)});
+        out.emplace(
             "refraction_active_count",
             json::Value{
                 static_cast<std::int64_t>(
@@ -3067,6 +3105,12 @@ namespace detail {
         out.emplace(
             "max_interaction_specular_intensity",
             json::Value{summary.max_interaction_specular_intensity});
+        out.emplace(
+            "max_interaction_pointer_lens_radius",
+            json::Value{summary.max_interaction_pointer_lens_radius});
+        out.emplace(
+            "max_interaction_pointer_lens_strength",
+            json::Value{summary.max_interaction_pointer_lens_strength});
         out.emplace(
             "max_refraction_strength",
             json::Value{summary.max_refraction_strength});
@@ -3364,6 +3408,11 @@ namespace detail {
                 static_cast<std::int64_t>(
                     summary.interaction_specular_highlight_count)});
         out.emplace(
+            "interaction_pointer_lens_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.interaction_pointer_lens_count)});
+        out.emplace(
             "refraction_active_count",
             json::Value{
                 static_cast<std::int64_t>(
@@ -3377,6 +3426,12 @@ namespace detail {
         out.emplace(
             "max_interaction_specular_intensity",
             json::Value{summary.max_interaction_specular_intensity});
+        out.emplace(
+            "max_interaction_pointer_lens_radius",
+            json::Value{summary.max_interaction_pointer_lens_radius});
+        out.emplace(
+            "max_interaction_pointer_lens_strength",
+            json::Value{summary.max_interaction_pointer_lens_strength});
         out.emplace(
             "max_refraction_strength",
             json::Value{summary.max_refraction_strength});

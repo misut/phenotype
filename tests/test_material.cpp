@@ -61,7 +61,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 45);
+    assert(material_plan_contract_version == 46);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -718,6 +718,15 @@ void test_interactive_material_modulates_optics_contract() {
     assert(std::fabs(plan.interaction.specular_anchor_y - 0.25f) < 0.0001f);
     assert(plan.interaction.specular_radius > 0.0f);
     assert(plan.interaction.specular_intensity > 0.0f);
+    assert(std::string_view(plan.interaction.pointer_lens_model)
+        == "hover-pointer-lens");
+    assert(plan.interaction.pointer_lens_active);
+    assert(std::fabs(plan.interaction.pointer_lens_anchor_x - 0.75f)
+           < 0.0001f);
+    assert(std::fabs(plan.interaction.pointer_lens_anchor_y - 0.25f)
+           < 0.0001f);
+    assert(plan.interaction.pointer_lens_radius > 0.0f);
+    assert(plan.interaction.pointer_lens_strength > 0.0f);
     assert(plan.interaction.response_strength > 0.0f);
     assert(plan.opacity > baseline_plan.opacity);
     assert(plan.blur_radius > baseline_plan.blur_radius);
@@ -728,7 +737,9 @@ void test_interactive_material_modulates_optics_contract() {
     assert(plan.refraction.active);
     assert(plan.refraction.interaction_driven);
     assert(std::string_view(plan.refraction.model)
-        == "interactive-edge-lens");
+        == "interactive-pointer-lens");
+    assert(std::string_view(plan.refraction.source)
+        == "sampled-backdrop-pointer-refraction");
     assert(plan.refraction.strength > baseline_plan.refraction.strength);
     assert(plan.refraction.max_offset_pixels
            > baseline_plan.refraction.max_offset_pixels);
@@ -764,6 +775,9 @@ void test_interactive_material_modulates_optics_contract() {
     assert(reduced_plan.interaction.specular_highlight_active);
     assert(reduced_plan.interaction.specular_intensity
            < plan.interaction.specular_intensity);
+    assert(reduced_plan.interaction.pointer_lens_active);
+    assert(reduced_plan.interaction.pointer_lens_strength
+           < plan.interaction.pointer_lens_strength);
     assert(reduced_plan.interaction.response_strength
            <= plan.interaction.response_strength);
     assert(reduced_plan.refraction.active);

@@ -1629,6 +1629,8 @@ struct MaterialInstanceGPU {
     float luminance_curve[4]{};
     // specular anchor x/y, radius, intensity
     float interaction[4]{};
+    // pointer lens anchor x/y, radius, strength
+    float interaction_lens[4]{};
     // refraction strength, edge bias, max offset pixels, edge caustic intensity
     float refraction[4]{};
     // group x/y/w/h for container edge-continuity execution
@@ -2330,6 +2332,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.interaction[1] = plan.interaction.specular_anchor_y;
     inst.interaction[2] = plan.interaction.specular_radius;
     inst.interaction[3] = plan.interaction.specular_intensity;
+    inst.interaction_lens[0] = plan.interaction.pointer_lens_anchor_x;
+    inst.interaction_lens[1] = plan.interaction.pointer_lens_anchor_y;
+    inst.interaction_lens[2] = plan.interaction.pointer_lens_radius;
+    inst.interaction_lens[3] = plan.interaction.pointer_lens_strength;
     inst.refraction[0] = plan.refraction.strength;
     inst.refraction[1] = plan.refraction.edge_bias;
     inst.refraction[2] = plan.refraction.max_offset_pixels;
@@ -4209,6 +4215,7 @@ struct MaterialVsOut {
     float4 sampling;
     float4 luminance_curve;
     float4 interaction;
+    float4 interaction_lens;
     float4 refraction;
     float4 group_rect;
     float4 group_effects;
@@ -4223,6 +4230,7 @@ struct MaterialInstance {
     float4 sampling;
     float4 luminance_curve;
     float4 interaction;
+    float4 interaction_lens;
     float4 refraction;
     float4 group_rect;
     float4 group_effects;
@@ -4258,6 +4266,7 @@ vertex MaterialVsOut vs_material(
     out.sampling = inst.sampling;
     out.luminance_curve = inst.luminance_curve;
     out.interaction = inst.interaction;
+    out.interaction_lens = inst.interaction_lens;
     out.refraction = inst.refraction;
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
@@ -4359,6 +4368,31 @@ fragment float4 fs_material(
         refraction_dir * texel
         * (refraction_offset_pixels * content_scale)
         * edge_lens;
+    float pointer_lens_strength = clamp(in.interaction_lens.w, 0.0, 0.35);
+    if (pointer_lens_strength > 0.0001) {
+        float2 pointer_anchor =
+            clamp(in.interaction_lens.xy, float2(0.0), float2(1.0))
+            * max(in.rect_size, float2(1.0));
+        float pointer_lens_radius =
+            clamp(in.interaction_lens.z, 0.05, 1.0)
+            * max(min(in.rect_size.x, in.rect_size.y), 1.0);
+        float2 pointer_delta = in.local_pos - pointer_anchor;
+        float pointer_distance = length(pointer_delta);
+        float2 pointer_dir = pointer_distance > 0.0001
+            ? pointer_delta / pointer_distance
+            : -refraction_dir;
+        float pointer_lens = 1.0 - smoothstep(
+            0.0,
+            pointer_lens_radius,
+            pointer_distance);
+        pointer_lens *= pointer_lens;
+        refraction_uv += pointer_dir
+            * texel
+            * (refraction_offset_pixels * content_scale)
+            * pointer_lens
+            * pointer_lens_strength
+            * 1.65;
+    }
     float caustic_weight = clamp(
         edge_lens * refraction_edge_caustic,
         0.0,
