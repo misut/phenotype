@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 67;
+inline constexpr std::uint32_t material_plan_contract_version = 68;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1678,6 +1678,17 @@ struct MaterialContainerExecutionDescriptor {
     float glass_effect_match_rect_w = 0.0f;
     float glass_effect_match_rect_h = 0.0f;
     float glass_effect_match_rect_radius = 0.0f;
+    bool group_interaction_source_valid = false;
+    std::uint32_t group_interaction_source_command_index = 0;
+    float group_interaction_specular_anchor_x = 0.5f;
+    float group_interaction_specular_anchor_y = 0.5f;
+    float group_interaction_specular_radius = 0.0f;
+    float group_interaction_specular_intensity = 0.0f;
+    bool group_interaction_pointer_lens_active = false;
+    float group_interaction_pointer_lens_anchor_x = 0.5f;
+    float group_interaction_pointer_lens_anchor_y = 0.5f;
+    float group_interaction_pointer_lens_radius = 0.0f;
+    float group_interaction_pointer_lens_strength = 0.0f;
 };
 
 struct MaterialPaintLayerExecutionGeometry {
@@ -3751,6 +3762,143 @@ inline MaterialGlassEffectMotionOptics material_container_bridge_motion_optics(
     return optics;
 }
 
+inline bool material_container_group_interaction_candidate(
+        MaterialRuntimeRecord const& record,
+        MaterialRuntimeRecord const& candidate,
+        MaterialContainerExecutionDescriptor const& execution,
+        MaterialContainerGroupAccumulator const& shape_blend_cluster)
+        noexcept {
+    auto const& plan = candidate.plan;
+    if (!plan.primary_pass.active
+        || !plan.shape.valid
+        || !material_plan_in_container(plan, execution.container_id)
+        || (!plan.specular.interaction_driven
+            && !plan.interaction.pointer_lens_active)) {
+        return false;
+    }
+    if (execution.union_execution) {
+        return material_plan_in_glass_effect_union_group(
+            plan,
+            record.plan);
+    }
+    if (execution.group_surface_execution) {
+        return material_plan_uses_group_surface_merge_executor(plan)
+            && material_container_plan_inside_cluster_bounds(
+                plan,
+                shape_blend_cluster);
+    }
+    if (execution.glass_effect_match_execution) {
+        return material_plan_in_glass_effect_match_group(
+            plan,
+            record.plan,
+            execution.container_id);
+    }
+    return false;
+}
+
+inline float material_container_group_interaction_score(
+        MaterialPlan const& plan) noexcept {
+    auto score = 0.0f;
+    if (plan.specular.interaction_driven) {
+        score += 1.0f
+            + std::clamp(plan.specular.intensity, 0.0f, 1.0f)
+            + std::clamp(plan.interaction.response_strength, 0.0f, 1.0f)
+                * 0.25f;
+    }
+    if (plan.interaction.pointer_lens_active) {
+        score += 2.0f
+            + std::clamp(
+                plan.interaction.pointer_lens_strength,
+                0.0f,
+                1.0f);
+    }
+    return score;
+}
+
+inline void material_apply_container_group_interaction_source(
+        MaterialContainerExecutionDescriptor& execution,
+        MaterialRuntimeRecord const& record,
+        std::span<MaterialRuntimeRecord const> records,
+        MaterialContainerGroupAccumulator const& shape_blend_cluster)
+        noexcept {
+    if (!execution.shape_blend_execution
+        || !execution.surface_leader
+        || !execution.group_bounds_valid
+        || (!execution.union_execution
+            && !execution.group_surface_execution
+            && !execution.glass_effect_match_execution)) {
+        return;
+    }
+
+    auto const geometry =
+        material_surface_execution_geometry(record.plan, &execution);
+    if (!geometry.active)
+        return;
+
+    MaterialRuntimeRecord const* source = nullptr;
+    auto best_score = 0.0f;
+    for (auto const& candidate : records) {
+        if (!material_container_group_interaction_candidate(
+                record,
+                candidate,
+                execution,
+                shape_blend_cluster)) {
+            continue;
+        }
+        auto const score =
+            material_container_group_interaction_score(candidate.plan);
+        auto const better =
+            source == nullptr
+            || score > best_score + 0.0001f
+            || (std::fabs(score - best_score) <= 0.0001f
+                && candidate.command_index < source->command_index);
+        if (!better)
+            continue;
+        source = &candidate;
+        best_score = score;
+    }
+    if (!source)
+        return;
+
+    auto const& source_plan = source->plan;
+    execution.group_interaction_source_valid = true;
+    execution.group_interaction_source_command_index =
+        source->command_index;
+    if (source_plan.specular.interaction_driven) {
+        execution.group_interaction_specular_anchor_x =
+            material_surface_execution_anchor_x(
+                source_plan,
+                geometry,
+                source_plan.specular.anchor_x);
+        execution.group_interaction_specular_anchor_y =
+            material_surface_execution_anchor_y(
+                source_plan,
+                geometry,
+                source_plan.specular.anchor_y);
+        execution.group_interaction_specular_radius =
+            source_plan.specular.radius;
+        execution.group_interaction_specular_intensity =
+            source_plan.specular.intensity;
+    }
+    if (source_plan.interaction.pointer_lens_active) {
+        execution.group_interaction_pointer_lens_active = true;
+        execution.group_interaction_pointer_lens_anchor_x =
+            material_surface_execution_anchor_x(
+                source_plan,
+                geometry,
+                source_plan.interaction.pointer_lens_anchor_x);
+        execution.group_interaction_pointer_lens_anchor_y =
+            material_surface_execution_anchor_y(
+                source_plan,
+                geometry,
+                source_plan.interaction.pointer_lens_anchor_y);
+        execution.group_interaction_pointer_lens_radius =
+            source_plan.interaction.pointer_lens_radius;
+        execution.group_interaction_pointer_lens_strength =
+            source_plan.interaction.pointer_lens_strength;
+    }
+}
+
 inline MaterialContainerExecutionDescriptor
 material_container_execution_descriptor_from_group(
         MaterialRuntimeRecord const& record,
@@ -3938,6 +4086,11 @@ material_container_execution_descriptor_from_group(
     } else if (group.has_bounds) {
         material_apply_container_group_execution_bounds(descriptor, group);
     }
+    material_apply_container_group_interaction_source(
+        descriptor,
+        record,
+        records,
+        shape_blend_cluster);
     return descriptor;
 }
 

@@ -3409,6 +3409,45 @@ namespace detail {
         out.emplace(
             "group_execution_policy",
             json::Value{execution.execution_policy});
+        json::Object group_interaction_source;
+        group_interaction_source.emplace(
+            "valid",
+            json::Value{execution.group_interaction_source_valid});
+        group_interaction_source.emplace(
+            "command_index",
+            json::Value{
+                static_cast<std::int64_t>(
+                    execution.group_interaction_source_command_index)});
+        group_interaction_source.emplace(
+            "specular_anchor_x",
+            json::Value{execution.group_interaction_specular_anchor_x});
+        group_interaction_source.emplace(
+            "specular_anchor_y",
+            json::Value{execution.group_interaction_specular_anchor_y});
+        group_interaction_source.emplace(
+            "specular_radius",
+            json::Value{execution.group_interaction_specular_radius});
+        group_interaction_source.emplace(
+            "specular_intensity",
+            json::Value{execution.group_interaction_specular_intensity});
+        group_interaction_source.emplace(
+            "pointer_lens_active",
+            json::Value{execution.group_interaction_pointer_lens_active});
+        group_interaction_source.emplace(
+            "pointer_lens_anchor_x",
+            json::Value{execution.group_interaction_pointer_lens_anchor_x});
+        group_interaction_source.emplace(
+            "pointer_lens_anchor_y",
+            json::Value{execution.group_interaction_pointer_lens_anchor_y});
+        group_interaction_source.emplace(
+            "pointer_lens_radius",
+            json::Value{execution.group_interaction_pointer_lens_radius});
+        group_interaction_source.emplace(
+            "pointer_lens_strength",
+            json::Value{execution.group_interaction_pointer_lens_strength});
+        out.emplace(
+            "group_interaction_source",
+            json::Value{std::move(group_interaction_source)});
         out.emplace("group_radius", json::Value{execution.group_radius});
         out.emplace(
             "fusion_model",

@@ -2589,7 +2589,24 @@ inline void apply_material_container_execution_descriptors(
                     inst.bridge_optics[3] =
                         container_motion.highlight_gain;
                 }
-                if (record->plan.specular.interaction_driven) {
+                if (execution->group_interaction_source_valid) {
+                    inst.interaction[0] =
+                        execution->group_interaction_specular_anchor_x;
+                    inst.interaction[1] =
+                        execution->group_interaction_specular_anchor_y;
+                    inst.interaction[2] = std::clamp(
+                        std::max(
+                            inst.interaction[2],
+                            execution->group_interaction_specular_radius),
+                        0.0f,
+                        1.0f);
+                    inst.interaction[3] = std::clamp(
+                        std::max(
+                            inst.interaction[3],
+                            execution->group_interaction_specular_intensity),
+                        0.0f,
+                        1.0f);
+                } else if (record->plan.specular.interaction_driven) {
                     inst.interaction[0] = material_surface_execution_anchor_x(
                         record->plan,
                         geometry,
@@ -2618,7 +2635,25 @@ inline void apply_material_container_execution_descriptors(
                     inst.interaction[0] = 0.5f;
                     inst.interaction[1] = 0.5f;
                 }
-                if (record->plan.interaction.pointer_lens_active) {
+                if (execution->group_interaction_pointer_lens_active) {
+                    inst.interaction_lens[0] =
+                        execution->group_interaction_pointer_lens_anchor_x;
+                    inst.interaction_lens[1] =
+                        execution->group_interaction_pointer_lens_anchor_y;
+                    inst.interaction_lens[2] = std::clamp(
+                        std::max(
+                            inst.interaction_lens[2],
+                            execution->group_interaction_pointer_lens_radius),
+                        0.0f,
+                        1.0f);
+                    inst.interaction_lens[3] = std::clamp(
+                        std::max(
+                            inst.interaction_lens[3],
+                            execution
+                                ->group_interaction_pointer_lens_strength),
+                        0.0f,
+                        1.0f);
+                } else if (record->plan.interaction.pointer_lens_active) {
                     inst.interaction_lens[0] =
                         material_surface_execution_anchor_x(
                             record->plan,
