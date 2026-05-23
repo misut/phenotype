@@ -1042,6 +1042,27 @@ void test_materialize_transition_modulates_glass_optics_contract() {
     assert(plan.optical_composition.blur_radius == plan.blur_radius);
     assert(plan.optical_composition.refraction_strength
            == plan.refraction.strength);
+    auto const baseline_geometry = material_surface_execution_geometry(baseline);
+    auto const transition_geometry = material_surface_execution_geometry(plan);
+    auto const geometry_scale =
+        material_surface_materialize_geometry_scale(plan.transition);
+    assert(baseline_geometry.active);
+    assert(transition_geometry.active);
+    assert(geometry_scale > 0.72f);
+    assert(geometry_scale < 1.0f);
+    assert(std::fabs(transition_geometry.x
+                     - (baseline_geometry.x
+                        + baseline_geometry.w * (1.0f - geometry_scale) * 0.5f))
+           < 0.0001f);
+    assert(std::fabs(transition_geometry.y
+                     - (baseline_geometry.y
+                        + baseline_geometry.h * (1.0f - geometry_scale) * 0.5f))
+           < 0.0001f);
+    assert(std::fabs(transition_geometry.w - baseline_geometry.w * geometry_scale)
+           < 0.0001f);
+    assert(std::fabs(transition_geometry.h - baseline_geometry.h * geometry_scale)
+           < 0.0001f);
+    assert(transition_geometry.radius < baseline_geometry.radius);
 
     auto disappearing_request = regular_request();
     disappearing_request.style.transition = MaterialTransitionDescriptor{
@@ -1090,6 +1111,57 @@ void test_materialize_transition_modulates_glass_optics_contract() {
            == disappearing_plan.transition.optical_gain);
     assert(disappearing_plan.optical_composition.transition_refraction_gain
            == disappearing_plan.transition.refraction_gain);
+    auto const disappearing_geometry =
+        material_surface_execution_geometry(disappearing_plan);
+    assert(disappearing_geometry.active);
+    assert(disappearing_geometry.w < transition_geometry.w);
+    assert(disappearing_geometry.h < transition_geometry.h);
+    assert(std::fabs(
+               (disappearing_geometry.x + disappearing_geometry.w * 0.5f)
+                   - (baseline_geometry.x + baseline_geometry.w * 0.5f))
+           < 0.0001f);
+    assert(std::fabs(
+               (disappearing_geometry.y + disappearing_geometry.h * 0.5f)
+                   - (baseline_geometry.y + baseline_geometry.h * 0.5f))
+           < 0.0001f);
+
+    auto fallback_env = sampled_environment();
+    fallback_env.capabilities.material_backdrop_blur = false;
+    fallback_env.capabilities.shader_blur = false;
+    fallback_env.capabilities.frame_history = false;
+    fallback_env.backdrop.available = false;
+    fallback_env.backdrop.stable = false;
+    fallback_env.backdrop.source = "none";
+    auto fallback_baseline = plan_material_surface(regular_request(), fallback_env);
+    auto fallback_plan = plan_material_surface(request, fallback_env);
+    assert(fallback_baseline.fallback());
+    assert(fallback_plan.fallback());
+    assert(fallback_plan.paint_layer_count > 1u);
+    auto const& fallback_layer = fallback_plan.paint_layers[1];
+    auto const fallback_baseline_geometry =
+        material_paint_layer_execution_geometry(
+            fallback_baseline,
+            fallback_baseline.paint_layers[1]);
+    auto const fallback_transition_geometry =
+        material_paint_layer_execution_geometry(
+            fallback_plan,
+            fallback_layer);
+    assert(fallback_baseline_geometry.active);
+    assert(fallback_transition_geometry.active);
+    assert(fallback_transition_geometry.w < fallback_baseline_geometry.w);
+    assert(fallback_transition_geometry.h < fallback_baseline_geometry.h);
+    assert(std::fabs(
+               (fallback_transition_geometry.x
+                + fallback_transition_geometry.w * 0.5f)
+                   - (fallback_baseline_geometry.x
+                      + fallback_baseline_geometry.w * 0.5f))
+           < 0.0001f);
+    assert(std::fabs(
+               (fallback_transition_geometry.y
+                + fallback_transition_geometry.h * 0.5f)
+                   - (fallback_baseline_geometry.y
+                      + fallback_baseline_geometry.h * 0.5f))
+           < 0.0001f);
 
     auto reduced_env = sampled_environment();
     reduced_env.capabilities.reduce_motion = true;
@@ -1103,6 +1175,17 @@ void test_materialize_transition_modulates_glass_optics_contract() {
     assert(reduced_plan.opacity == reduced_baseline.opacity);
     assert(reduced_plan.tint.a == reduced_baseline.tint.a);
     assert(reduced_plan.blur_radius == reduced_baseline.blur_radius);
+    auto const reduced_geometry =
+        material_surface_execution_geometry(reduced_plan);
+    auto const reduced_baseline_geometry =
+        material_surface_execution_geometry(reduced_baseline);
+    assert(reduced_geometry.active);
+    assert(reduced_baseline_geometry.active);
+    assert(reduced_geometry.x == reduced_baseline_geometry.x);
+    assert(reduced_geometry.y == reduced_baseline_geometry.y);
+    assert(reduced_geometry.w == reduced_baseline_geometry.w);
+    assert(reduced_geometry.h == reduced_baseline_geometry.h);
+    assert(reduced_geometry.radius == reduced_baseline_geometry.radius);
     assert(!reduced_plan.optical_composition.transition_required);
     assert(std::string_view(reduced_plan.optical_composition.transition_source)
         == "reduced-motion-static");

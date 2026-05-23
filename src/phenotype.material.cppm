@@ -1312,6 +1312,49 @@ struct MaterialPaintLayerExecutionGeometry {
     float radius = 0.0f;
 };
 
+inline float material_surface_materialize_geometry_scale(
+        MaterialTransitionAnalysis const& transition) noexcept {
+    if (!transition.active || !transition.materialize)
+        return 1.0f;
+    return std::clamp(0.72f + 0.28f * transition.optical_gain, 0.72f, 1.0f);
+}
+
+inline void material_apply_centered_geometry_scale(float& x,
+                                                   float& y,
+                                                   float& w,
+                                                   float& h,
+                                                   float& radius,
+                                                   float scale) noexcept {
+    scale = std::isfinite(scale) ? std::clamp(scale, 0.0f, 1.0f) : 1.0f;
+    if (scale >= 0.999f)
+        return;
+    w = std::max(0.0f, w);
+    h = std::max(0.0f, h);
+    auto const cx = x + w * 0.5f;
+    auto const cy = y + h * 0.5f;
+    w *= scale;
+    h *= scale;
+    x = cx - w * 0.5f;
+    y = cy - h * 0.5f;
+    radius = std::max(0.0f, radius * scale);
+}
+
+inline void material_apply_materialize_execution_geometry(
+        MaterialTransitionAnalysis const& transition,
+        float& x,
+        float& y,
+        float& w,
+        float& h,
+        float& radius) noexcept {
+    material_apply_centered_geometry_scale(
+        x,
+        y,
+        w,
+        h,
+        radius,
+        material_surface_materialize_geometry_scale(transition));
+}
+
 inline MaterialPaintLayerExecutionGeometry
 material_paint_layer_execution_geometry(
         MaterialPlan const& plan,
@@ -1347,6 +1390,13 @@ material_paint_layer_execution_geometry(
         w = execution->group_w;
         h = execution->group_h;
     }
+    material_apply_materialize_execution_geometry(
+        plan.transition,
+        x,
+        y,
+        w,
+        h,
+        radius);
 
     auto const inflate = std::max(layer.inflate, 0.0f);
     MaterialPaintLayerExecutionGeometry geometry{};
@@ -1827,6 +1877,13 @@ inline MaterialSurfaceExecutionGeometry material_surface_execution_geometry(
         w = execution->group_w;
         h = execution->group_h;
     }
+    material_apply_materialize_execution_geometry(
+        plan.transition,
+        x,
+        y,
+        w,
+        h,
+        radius);
 
     auto const inflate = material_background_paint_inflate(plan);
     MaterialSurfaceExecutionGeometry geometry{};
