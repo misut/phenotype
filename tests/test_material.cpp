@@ -997,6 +997,91 @@ void test_glass_effect_identity_marks_matched_transition_contract() {
     std::puts("PASS: glass effect identity marks matched transition contract");
 }
 
+void test_glass_effect_identity_drives_matched_execution_contract() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 12.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 88u,
+        .union_id = 0u,
+        .spacing = 8.0f,
+        .interactive = false,
+        .morph_transitions = true,
+    };
+    request.style.transition = MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::MatchedGeometry,
+        .progress = 0.5f,
+        .appearing = true,
+    };
+    request.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 19u,
+        .effect_id = 700u,
+    };
+
+    auto peer = request;
+    peer.geometry = MaterialGeometry{120.0f, 0.0f, 40.0f, 40.0f, 12.0f};
+
+    auto unrelated = request;
+    unrelated.geometry = MaterialGeometry{240.0f, 0.0f, 40.0f, 40.0f, 12.0f};
+    unrelated.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 19u,
+        .effect_id = 701u,
+    };
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(peer, sampled_environment()), 2u},
+        {plan_material_surface(unrelated, sampled_environment()), 3u},
+    };
+
+    auto const group = accumulate_material_container_group(records, 88u);
+    assert(group.shape_pair_count == 3u);
+    assert(group.blend_candidate_pair_count == 0u);
+    assert(!material_container_group_shape_blend_execution_active(group));
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const second_execution =
+        material_container_execution_descriptor(records[1], records);
+    auto const unrelated_execution =
+        material_container_execution_descriptor(records[2], records);
+
+    assert(first_execution.active);
+    assert(first_execution.shape_blend_execution);
+    assert(!first_execution.union_execution);
+    assert(first_execution.morph_execution);
+    assert(first_execution.glass_effect_match_execution);
+    assert(first_execution.glass_namespace_id == 19u);
+    assert(first_execution.glass_effect_id == 700u);
+    assert(first_execution.glass_effect_surface_count == 2u);
+    assert(std::string_view(first_execution.execution_policy)
+           == "glass-effect-matched-geometry");
+    assert(first_execution.group_bounds_valid);
+    assert(first_execution.group_x == 0.0f);
+    assert(first_execution.group_y == 0.0f);
+    assert(first_execution.group_w == 160.0f);
+    assert(first_execution.group_h == 40.0f);
+    assert(std::fabs(first_execution.glass_effect_match_progress - 0.5f)
+           < 0.0001f);
+    assert(std::fabs(first_execution.glass_effect_match_blend_strength - 0.5f)
+           < 0.0001f);
+    assert(std::fabs(first_execution.shape_blend_strength - 0.5f)
+           < 0.0001f);
+    assert(std::fabs(
+               first_execution.inner_edge_alpha_blend_strength - 0.5f)
+           < 0.0001f);
+
+    assert(second_execution.glass_effect_match_execution);
+    assert(second_execution.glass_effect_surface_count == 2u);
+    assert(std::fabs(second_execution.shape_blend_strength - 0.5f)
+           < 0.0001f);
+
+    assert(!unrelated_execution.glass_effect_match_execution);
+    assert(unrelated_execution.glass_effect_surface_count == 1u);
+    assert(!unrelated_execution.shape_blend_execution);
+
+    std::puts("PASS: glass effect identity drives matched execution contract");
+}
+
 void test_warmup_backdrop_access_contract() {
     auto env = sampled_environment();
     env.capabilities.frame_history = false;
@@ -1388,6 +1473,7 @@ int main() {
     test_interactive_material_modulates_optics_contract();
     test_materialize_transition_modulates_glass_optics_contract();
     test_glass_effect_identity_marks_matched_transition_contract();
+    test_glass_effect_identity_drives_matched_execution_contract();
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     test_executor_frame_capture_policy_contract();
