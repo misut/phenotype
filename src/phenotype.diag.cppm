@@ -833,6 +833,41 @@ namespace detail {
         return json::Value{std::move(out)};
     }
 
+    inline json::Value material_transition_descriptor_json(
+            MaterialTransitionDescriptor const& descriptor) {
+        json::Object out;
+        out.emplace(
+            "kind",
+            json::Value{
+                material_glass_transition_kind_name(descriptor.kind)});
+        out.emplace("progress", json::Value{descriptor.progress});
+        out.emplace("appearing", json::Value{descriptor.appearing});
+        return json::Value{std::move(out)};
+    }
+
+    inline json::Value material_transition_analysis_json(
+            MaterialTransitionAnalysis const& analysis) {
+        json::Object out;
+        out.emplace("kind", json::Value{analysis.kind_name});
+        out.emplace("active", json::Value{analysis.active});
+        out.emplace("materialize", json::Value{analysis.materialize});
+        out.emplace("matched_geometry", json::Value{analysis.matched_geometry});
+        out.emplace("appearing", json::Value{analysis.appearing});
+        out.emplace(
+            "reduced_motion_suppressed",
+            json::Value{analysis.reduced_motion_suppressed});
+        out.emplace("bounded", json::Value{analysis.bounded});
+        out.emplace("progress", json::Value{analysis.progress});
+        out.emplace("opacity_gain", json::Value{analysis.opacity_gain});
+        out.emplace("optical_gain", json::Value{analysis.optical_gain});
+        out.emplace("shadow_gain", json::Value{analysis.shadow_gain});
+        out.emplace(
+            "refraction_gain",
+            json::Value{analysis.refraction_gain});
+        out.emplace("policy", json::Value{analysis.policy});
+        return json::Value{std::move(out)};
+    }
+
     inline json::Value color_to_json(Color color) {
         json::Object out;
         out.emplace(
@@ -1085,6 +1120,10 @@ namespace detail {
             "interaction",
             material_interaction_descriptor_json(
                 plan.command_descriptor.interaction));
+        command_descriptor.emplace(
+            "transition",
+            material_transition_descriptor_json(
+                plan.command_descriptor.transition));
         command_descriptor.emplace(
             "opacity",
             json::Value{plan.command_descriptor.opacity});
@@ -2016,6 +2055,9 @@ namespace detail {
             "interaction_source",
             json::Value{composition.interaction_source});
         optical_composition.emplace(
+            "transition_source",
+            json::Value{composition.transition_source});
+        optical_composition.emplace(
             "fallback_source",
             json::Value{composition.fallback_source});
         optical_composition.emplace(
@@ -2060,6 +2102,9 @@ namespace detail {
         optical_composition.emplace(
             "interaction_required",
             json::Value{composition.interaction_required});
+        optical_composition.emplace(
+            "transition_required",
+            json::Value{composition.transition_required});
         optical_composition.emplace(
             "fallback_required",
             json::Value{composition.fallback_required});
@@ -2123,6 +2168,18 @@ namespace detail {
         optical_composition.emplace(
             "interaction_response_strength",
             json::Value{composition.interaction_response_strength});
+        optical_composition.emplace(
+            "transition_progress",
+            json::Value{composition.transition_progress});
+        optical_composition.emplace(
+            "transition_opacity_gain",
+            json::Value{composition.transition_opacity_gain});
+        optical_composition.emplace(
+            "transition_optical_gain",
+            json::Value{composition.transition_optical_gain});
+        optical_composition.emplace(
+            "transition_refraction_gain",
+            json::Value{composition.transition_refraction_gain});
         optical_composition.emplace(
             "sample_taps",
             json::Value{
@@ -2366,6 +2423,9 @@ namespace detail {
         out.emplace(
             "container",
             material_container_analysis_json(plan.container));
+        out.emplace(
+            "transition",
+            material_transition_analysis_json(plan.transition));
         out.emplace("reference_model", json::Value{std::move(reference_model)});
         out.emplace("plan_id", json::Value{plan.plan_id});
         out.emplace(

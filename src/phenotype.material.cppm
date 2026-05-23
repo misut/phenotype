@@ -13,7 +13,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 48;
+inline constexpr std::uint32_t material_plan_contract_version = 49;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -638,6 +638,7 @@ struct MaterialOpticalComposition {
     char const* depth_source = "none";
     char const* refraction_source = "none";
     char const* interaction_source = "none";
+    char const* transition_source = "identity";
     char const* fallback_source = "none";
     char const* stage_order = "none";
     char const* backdrop_capture_policy = "no-capture";
@@ -653,6 +654,7 @@ struct MaterialOpticalComposition {
     bool noise_required = false;
     bool refraction_required = false;
     bool interaction_required = false;
+    bool transition_required = false;
     bool fallback_required = false;
     bool backdrop_capture_required = false;
     bool foreground_excluded_from_backdrop = false;
@@ -675,6 +677,10 @@ struct MaterialOpticalComposition {
     float refraction_offset_pixels = 0.0f;
     float refraction_edge_caustic_intensity = 0.0f;
     float interaction_response_strength = 0.0f;
+    float transition_progress = 1.0f;
+    float transition_opacity_gain = 1.0f;
+    float transition_optical_gain = 1.0f;
+    float transition_refraction_gain = 1.0f;
     unsigned int sample_taps = 0;
     std::int64_t max_texture_copy_pixels = 0;
     std::int64_t max_surface_sample_pixels = 0;
@@ -726,6 +732,23 @@ struct MaterialContainerAnalysis {
     char const* blend_policy = "isolated";
     char const* morph_policy = "isolated";
     char const* performance_policy = "single-surface";
+};
+
+struct MaterialTransitionAnalysis {
+    MaterialGlassTransitionKind kind = MaterialGlassTransitionKind::Identity;
+    char const* kind_name = "identity";
+    bool active = false;
+    bool materialize = false;
+    bool matched_geometry = false;
+    bool appearing = true;
+    bool reduced_motion_suppressed = false;
+    bool bounded = true;
+    float progress = 1.0f;
+    float opacity_gain = 1.0f;
+    float optical_gain = 1.0f;
+    float shadow_gain = 1.0f;
+    float refraction_gain = 1.0f;
+    char const* policy = "identity";
 };
 
 struct MaterialReferenceModel {
@@ -791,6 +814,7 @@ struct MaterialPlan {
     MaterialRenderTargetAnalysis render_target{};
     MaterialCapabilityAnalysis capability_snapshot{};
     MaterialContainerAnalysis container{};
+    MaterialTransitionAnalysis transition{};
     MaterialReferenceModel reference_model{};
     MaterialDecisionTrace decision_trace{};
     float opacity = 0.0f;
@@ -2703,7 +2727,8 @@ inline MaterialCommandDescriptor material_command_descriptor(
         style.noise_opacity,
         style.shadow_alpha,
         style.shadow_radius,
-        style.interaction};
+        style.interaction,
+        style.transition};
 }
 
 inline MaterialStyle material_style_for_command(MaterialKind kind,
@@ -2772,6 +2797,7 @@ inline MaterialStyle material_style_for_command(
     style.role = descriptor.role;
     style.container = descriptor.container;
     style.interaction = descriptor.interaction;
+    style.transition = descriptor.transition;
     return style;
 }
 
@@ -3396,6 +3422,99 @@ inline MaterialContainerAnalysis analyze_material_container(
     return analysis;
 }
 
+inline float material_transition_progress(float progress) noexcept {
+    return std::isfinite(progress)
+        ? std::clamp(progress, 0.0f, 1.0f)
+        : 1.0f;
+}
+
+inline float material_smooth_transition_gain(float progress) noexcept {
+    progress = material_transition_progress(progress);
+    return progress * progress * (3.0f - 2.0f * progress);
+}
+
+inline MaterialTransitionAnalysis analyze_material_transition(
+        MaterialTransitionDescriptor descriptor,
+        bool reduce_motion) noexcept {
+    MaterialTransitionAnalysis analysis{};
+    analysis.kind = descriptor.kind;
+    analysis.kind_name = material_glass_transition_kind_name(descriptor.kind);
+    analysis.appearing = descriptor.appearing;
+    analysis.progress = material_transition_progress(descriptor.progress);
+    analysis.materialize =
+        descriptor.kind == MaterialGlassTransitionKind::Materialize;
+    analysis.matched_geometry =
+        descriptor.kind == MaterialGlassTransitionKind::MatchedGeometry;
+    analysis.reduced_motion_suppressed =
+        reduce_motion && descriptor.kind != MaterialGlassTransitionKind::Identity;
+    if (analysis.reduced_motion_suppressed) {
+        analysis.progress = 1.0f;
+        analysis.policy = "reduced-motion-static";
+        return analysis;
+    }
+    analysis.active =
+        descriptor.kind != MaterialGlassTransitionKind::Identity
+        && analysis.progress < 0.999f;
+    if (!analysis.active)
+        return analysis;
+    auto const gain = material_smooth_transition_gain(analysis.progress);
+    if (analysis.materialize) {
+        analysis.opacity_gain = gain;
+        analysis.optical_gain = std::clamp(0.22f + 0.78f * gain, 0.0f, 1.0f);
+        analysis.shadow_gain = std::clamp(0.10f + 0.90f * gain, 0.0f, 1.0f);
+        analysis.refraction_gain = std::clamp(gain, 0.0f, 1.0f);
+        analysis.policy = analysis.appearing
+            ? "materialize-in"
+            : "materialize-out";
+    } else if (analysis.matched_geometry) {
+        analysis.opacity_gain = 1.0f;
+        analysis.optical_gain = std::clamp(0.65f + 0.35f * gain, 0.0f, 1.0f);
+        analysis.shadow_gain = 1.0f;
+        analysis.refraction_gain =
+            std::clamp(0.70f + 0.30f * gain, 0.0f, 1.0f);
+        analysis.policy = "matched-geometry";
+    }
+    return analysis;
+}
+
+inline unsigned char material_scale_alpha(unsigned char alpha,
+                                          float gain) noexcept {
+    return static_cast<unsigned char>(std::clamp(
+        std::lround(
+            static_cast<float>(alpha)
+            * std::clamp(gain, 0.0f, 1.0f)),
+        0l,
+        255l));
+}
+
+inline void apply_material_transition_policy(MaterialPlan& plan) noexcept {
+    if (!plan.transition.active)
+        return;
+    auto const opacity_gain = plan.transition.opacity_gain;
+    auto const optical_gain = plan.transition.optical_gain;
+    auto const shadow_gain = plan.transition.shadow_gain;
+    plan.opacity = std::clamp(plan.opacity * opacity_gain, 0.0f, 1.0f);
+    plan.tint.a = material_scale_alpha(plan.tint.a, opacity_gain);
+    plan.blur_radius = std::clamp(
+        plan.blur_radius * optical_gain,
+        0.0f,
+        plan.resource_budget.max_blur_radius);
+    plan.saturation = 1.0f + (plan.saturation - 1.0f) * optical_gain;
+    plan.edge_highlight = std::clamp(
+        plan.edge_highlight * optical_gain,
+        0.0f,
+        1.0f);
+    plan.noise_opacity = std::clamp(
+        plan.noise_opacity * optical_gain,
+        0.0f,
+        0.05f);
+    plan.shadow_alpha = std::clamp(
+        plan.shadow_alpha * shadow_gain,
+        0.0f,
+        0.4f);
+    plan.shadow_radius = std::max(0.0f, plan.shadow_radius * shadow_gain);
+}
+
 inline char const* material_luminance_response_name(
         bool dark,
         bool bright,
@@ -3855,8 +3974,12 @@ inline MaterialRefractionProfile material_resolve_refraction_profile(
                 1.0f)
             : 0.0f;
     auto const motion_scale = plan.decision_trace.reduce_motion ? 0.48f : 1.0f;
+    auto const transition_gain =
+        plan.transition.active ? plan.transition.refraction_gain : 1.0f;
     auto const strength = std::clamp(
-        motion_scale * (thickness_strength + radius_strength + interaction_boost),
+        transition_gain
+            * motion_scale
+            * (thickness_strength + radius_strength + interaction_boost),
         0.0f,
         0.22f);
     if (strength <= 0.0001f)
@@ -3937,11 +4060,12 @@ inline MaterialSpecularProfile material_resolve_specular_profile(
     auto const caustic_response =
         std::clamp(plan.refraction.edge_caustic_intensity, 0.0f, 0.20f);
     auto const ambient_intensity = std::clamp(
-        material_base_specular_intensity(plan.kind)
-            + 0.030f * shape_roundness
-            + 0.045f * std::clamp(plan.edge_highlight, 0.0f, 1.0f)
-            + 0.020f * backdrop_response
-            + 0.50f * caustic_response,
+        (material_base_specular_intensity(plan.kind)
+             + 0.030f * shape_roundness
+             + 0.045f * std::clamp(plan.edge_highlight, 0.0f, 1.0f)
+             + 0.020f * backdrop_response
+             + 0.50f * caustic_response)
+            * (plan.transition.active ? plan.transition.optical_gain : 1.0f),
         0.0f,
         0.24f);
     if (ambient_intensity <= 0.0001f)
@@ -4298,6 +4422,17 @@ inline char const* material_optical_interaction_source_name(
     return "none";
 }
 
+inline char const* material_optical_transition_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (!plan.transition.active)
+        return plan.transition.policy;
+    if (plan.transition.materialize)
+        return "glass-effect-materialize";
+    if (plan.transition.matched_geometry)
+        return "glass-effect-matched-geometry";
+    return plan.transition.policy;
+}
+
 inline char const* material_optical_refraction_source_name(
         MaterialPlan const& plan) noexcept {
     if (plan.refraction.active
@@ -4376,6 +4511,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         material_optical_refraction_source_name(plan);
     composition.interaction_source =
         material_optical_interaction_source_name(plan);
+    composition.transition_source =
+        material_optical_transition_source_name(plan);
     composition.fallback_source = plan.fallback()
         ? material_fallback_path_name(plan.fallback_path)
         : "none";
@@ -4404,6 +4541,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.backdrop_sampling && plan.noise_opacity > 0.0f;
     composition.refraction_required = plan.refraction.active;
     composition.interaction_required = plan.interaction.active;
+    composition.transition_required = plan.transition.active;
     composition.fallback_required = plan.fallback();
     composition.backdrop_capture_required =
         plan.backdrop_access.shared_frame_capture
@@ -4417,7 +4555,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         && plan.sampling_kernel.bounded
         && plan.luminance_curve.bounded
         && plan.backdrop_access.bounded
-        && plan.refraction.bounded;
+        && plan.refraction.bounded
+        && plan.transition.bounded;
     composition.deterministic =
         plan.resource_budget.deterministic_fallback
         && plan.foreground.deterministic
@@ -4440,6 +4579,11 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.refraction.edge_caustic_intensity;
     composition.interaction_response_strength =
         plan.interaction.response_strength;
+    composition.transition_progress = plan.transition.progress;
+    composition.transition_opacity_gain = plan.transition.opacity_gain;
+    composition.transition_optical_gain = plan.transition.optical_gain;
+    composition.transition_refraction_gain =
+        plan.transition.refraction_gain;
     composition.sample_taps = plan.sample_taps;
     composition.max_texture_copy_pixels =
         plan.primary_pass.max_texture_copy_pixels;
@@ -4508,6 +4652,9 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         resolved_quality.max_backdrop_pixels);
     plan.container = analyze_material_container(
         style.container,
+        environment.capabilities.reduce_motion);
+    plan.transition = analyze_material_transition(
+        style.transition,
         environment.capabilities.reduce_motion);
     plan.opacity = std::clamp(style.opacity, 0.0f, 1.0f);
     plan.blur_radius = std::clamp(
@@ -4694,6 +4841,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.saturation = 1.0f;
         plan.noise_opacity = 0.0f;
     }
+    if (has_material)
+        apply_material_transition_policy(plan);
     plan.decision_trace.first_blocker =
         material_fallback_path_name(plan.fallback_path);
 

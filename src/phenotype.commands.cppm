@@ -185,6 +185,9 @@ inline std::vector<DrawCommand> parse_commands(
             auto interaction_flags = read_u32();
             auto interaction_x = read_f32();
             auto interaction_y = read_f32();
+            auto transition_kind = read_u32();
+            auto transition_progress = read_f32();
+            auto transition_flags = read_u32();
             out.emplace_back(MaterialRectCmd{
                 x,
                 y,
@@ -213,7 +216,11 @@ inline std::vector<DrawCommand> parse_commands(
                     material_interaction_descriptor_from_wire(
                         interaction_flags,
                         interaction_x,
-                        interaction_y)}});
+                        interaction_y),
+                    material_transition_descriptor_from_wire(
+                        transition_kind,
+                        transition_progress,
+                        transition_flags)}});
             break;
         }
         case Cmd::DrawText: {

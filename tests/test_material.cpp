@@ -61,7 +61,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 48);
+    assert(material_plan_contract_version == 49);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -90,6 +90,11 @@ void test_sampled_backdrop_access_contract() {
            == "shadow-primary-edge-noise");
     assert(std::string_view(plan.interaction.enablement_reason)
         == "noninteractive-container");
+    assert(!plan.transition.active);
+    assert(!plan.transition.materialize);
+    assert(std::string_view(plan.transition.kind_name) == "identity");
+    assert(std::string_view(plan.transition.policy) == "identity");
+    assert(plan.transition.progress == 1.0f);
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(!plan.shape.capsule);
     assert(plan.theme.default_glass_tokens);
@@ -835,6 +840,87 @@ void test_interactive_material_modulates_optics_contract() {
     std::puts("PASS: interactive material modulates optics contract");
 }
 
+void test_materialize_transition_modulates_glass_optics_contract() {
+    auto request = regular_request();
+    request.style.transition = MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::Materialize,
+        .progress = 0.5f,
+        .appearing = true,
+    };
+
+    auto baseline = plan_material_surface(regular_request(), sampled_environment());
+    auto plan = plan_material_surface(request, sampled_environment());
+
+    assert(plan.transition.active);
+    assert(plan.transition.materialize);
+    assert(!plan.transition.matched_geometry);
+    assert(plan.transition.appearing);
+    assert(!plan.transition.reduced_motion_suppressed);
+    assert(plan.transition.bounded);
+    assert(std::string_view(plan.transition.kind_name) == "materialize");
+    assert(std::string_view(plan.transition.policy) == "materialize-in");
+    assert(std::fabs(plan.transition.progress - 0.5f) < 0.0001f);
+    assert(std::fabs(plan.transition.opacity_gain - 0.5f) < 0.0001f);
+    assert(plan.transition.optical_gain > plan.transition.opacity_gain);
+    assert(plan.transition.optical_gain < 1.0f);
+    assert(plan.transition.shadow_gain > plan.transition.opacity_gain);
+    assert(plan.transition.shadow_gain < 1.0f);
+    assert(std::fabs(plan.transition.refraction_gain - 0.5f) < 0.0001f);
+
+    assert(plan.backdrop_sampling);
+    assert(!plan.fallback());
+    assert(plan.opacity < baseline.opacity);
+    assert(plan.tint.a < baseline.tint.a);
+    assert(plan.blur_radius < baseline.blur_radius);
+    assert(plan.saturation < baseline.saturation);
+    assert(plan.edge_highlight < baseline.edge_highlight);
+    assert(plan.noise_opacity < baseline.noise_opacity);
+    assert(plan.shadow_alpha < baseline.shadow_alpha);
+    assert(plan.shadow_radius < baseline.shadow_radius);
+    assert(plan.refraction.active);
+    assert(plan.refraction.strength < baseline.refraction.strength);
+    assert(plan.refraction.max_offset_pixels
+           < baseline.refraction.max_offset_pixels);
+    assert(plan.refraction.edge_caustic_intensity
+           < baseline.refraction.edge_caustic_intensity);
+    assert(plan.specular.active);
+    assert(plan.specular.intensity < baseline.specular.intensity);
+    assert(plan.optical_composition.transition_required);
+    assert(std::string_view(plan.optical_composition.transition_source)
+        == "glass-effect-materialize");
+    assert(std::fabs(
+               plan.optical_composition.transition_progress
+                   - plan.transition.progress)
+           < 0.0001f);
+    assert(plan.optical_composition.transition_opacity_gain
+           == plan.transition.opacity_gain);
+    assert(plan.optical_composition.transition_optical_gain
+           == plan.transition.optical_gain);
+    assert(plan.optical_composition.transition_refraction_gain
+           == plan.transition.refraction_gain);
+    assert(plan.optical_composition.opacity == plan.opacity);
+    assert(plan.optical_composition.blur_radius == plan.blur_radius);
+    assert(plan.optical_composition.refraction_strength
+           == plan.refraction.strength);
+
+    auto reduced_env = sampled_environment();
+    reduced_env.capabilities.reduce_motion = true;
+    auto reduced_baseline = plan_material_surface(regular_request(), reduced_env);
+    auto reduced_plan = plan_material_surface(request, reduced_env);
+    assert(!reduced_plan.transition.active);
+    assert(reduced_plan.transition.reduced_motion_suppressed);
+    assert(reduced_plan.transition.progress == 1.0f);
+    assert(std::string_view(reduced_plan.transition.policy)
+        == "reduced-motion-static");
+    assert(reduced_plan.opacity == reduced_baseline.opacity);
+    assert(reduced_plan.tint.a == reduced_baseline.tint.a);
+    assert(reduced_plan.blur_radius == reduced_baseline.blur_radius);
+    assert(!reduced_plan.optical_composition.transition_required);
+    assert(std::string_view(reduced_plan.optical_composition.transition_source)
+        == "reduced-motion-static");
+    std::puts("PASS: materialize transition modulates glass optics contract");
+}
+
 void test_warmup_backdrop_access_contract() {
     auto env = sampled_environment();
     env.capabilities.frame_history = false;
@@ -1224,6 +1310,7 @@ int main() {
     test_foreground_contrast_gap_uses_absolute_contrast_candidate();
     test_increase_contrast_raises_foreground_readability_contract();
     test_interactive_material_modulates_optics_contract();
+    test_materialize_transition_modulates_glass_optics_contract();
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     test_executor_frame_capture_policy_contract();

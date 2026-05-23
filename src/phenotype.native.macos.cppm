@@ -2819,6 +2819,9 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 unsigned int interaction_flags = 0;
                 float interaction_x = 0.5f;
                 float interaction_y = 0.5f;
+                unsigned int transition_kind = 0;
+                float transition_progress = 1.0f;
+                unsigned int transition_flags = 1u;
                 if (!reader.read_f32(x) || !reader.read_f32(y)
                     || !reader.read_f32(w) || !reader.read_f32(h)
                     || !reader.read_f32(radius)
@@ -2841,7 +2844,10 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     || !reader.read_u32(container_flags)
                     || !reader.read_u32(interaction_flags)
                     || !reader.read_f32(interaction_x)
-                    || !reader.read_f32(interaction_y))
+                    || !reader.read_f32(interaction_y)
+                    || !reader.read_u32(transition_kind)
+                    || !reader.read_f32(transition_progress)
+                    || !reader.read_u32(transition_flags))
                     return false;
                 auto material_env_for_command = material_env;
                 material_env_for_command.debug_seed.node =
@@ -2868,7 +2874,11 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     material_interaction_descriptor_from_wire(
                         interaction_flags,
                         interaction_x,
-                        interaction_y)};
+                        interaction_y),
+                    material_transition_descriptor_from_wire(
+                        transition_kind,
+                        transition_progress,
+                        transition_flags)};
                 auto plan = plan_material_surface(
                     material_request_for_command(
                         descriptor,

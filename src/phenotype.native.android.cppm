@@ -4359,6 +4359,9 @@ inline void decode_android_color_commands(unsigned char const* buf,
             auto const interaction_flags = read_u32();
             auto const interaction_x = read_f32();
             auto const interaction_y = read_f32();
+            auto const transition_kind = read_u32();
+            auto const transition_progress = read_f32();
+            auto const transition_flags = read_u32();
             auto material_env_for_command = material_env;
             material_env_for_command.debug_seed.node = current_command_index;
             ::phenotype::MaterialCommandDescriptor descriptor{
@@ -4383,7 +4386,11 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 ::phenotype::material_interaction_descriptor_from_wire(
                     interaction_flags,
                     interaction_x,
-                    interaction_y)};
+                    interaction_y),
+                ::phenotype::material_transition_descriptor_from_wire(
+                    transition_kind,
+                    transition_progress,
+                    transition_flags)};
             auto plan = ::phenotype::plan_material_surface(
                 ::phenotype::material_request_for_command(
                     descriptor,

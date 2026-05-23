@@ -2930,6 +2930,7 @@ struct MaterialSurfaceOptions {
     MaterialKind kind = MaterialKind::Regular;
     MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
     MaterialInteractionDescriptor interaction{};
+    MaterialTransitionDescriptor transition{};
     FlexDirection direction = FlexDirection::Column;
     SpaceToken padding = SpaceToken::Lg;
     SpaceToken gap = SpaceToken::Md;
@@ -2995,6 +2996,7 @@ inline void configure_material_surface(LayoutNode& node,
         : material_style(options.kind);
     node.material.role = options.role;
     node.material.interaction = options.interaction;
+    node.material.transition = options.transition;
     node.material.container = options.inherit_material_container
         ? current_material_container()
         : options.container;

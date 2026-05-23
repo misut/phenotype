@@ -186,6 +186,62 @@ struct MaterialInteractionDescriptor {
         default;
 };
 
+enum class MaterialGlassTransitionKind {
+    Identity,
+    MatchedGeometry,
+    Materialize,
+};
+
+inline char const* material_glass_transition_kind_name(
+        MaterialGlassTransitionKind kind) noexcept {
+    switch (kind) {
+        case MaterialGlassTransitionKind::Identity:
+            return "identity";
+        case MaterialGlassTransitionKind::MatchedGeometry:
+            return "matched-geometry";
+        case MaterialGlassTransitionKind::Materialize:
+            return "materialize";
+    }
+    return "identity";
+}
+
+inline MaterialGlassTransitionKind material_glass_transition_kind_from_wire(
+        unsigned int raw) noexcept {
+    switch (static_cast<MaterialGlassTransitionKind>(raw)) {
+        case MaterialGlassTransitionKind::MatchedGeometry:
+            return MaterialGlassTransitionKind::MatchedGeometry;
+        case MaterialGlassTransitionKind::Materialize:
+            return MaterialGlassTransitionKind::Materialize;
+        case MaterialGlassTransitionKind::Identity:
+        default:
+            return MaterialGlassTransitionKind::Identity;
+    }
+}
+
+struct MaterialTransitionDescriptor {
+    MaterialGlassTransitionKind kind = MaterialGlassTransitionKind::Identity;
+    float progress = 1.0f;
+    bool appearing = true;
+
+    constexpr bool operator==(MaterialTransitionDescriptor const&) const =
+        default;
+};
+
+inline unsigned int material_transition_flags(
+        MaterialTransitionDescriptor descriptor) noexcept {
+    return descriptor.appearing ? 1u : 0u;
+}
+
+inline MaterialTransitionDescriptor material_transition_descriptor_from_wire(
+        unsigned int kind,
+        float progress,
+        unsigned int flags) noexcept {
+    return MaterialTransitionDescriptor{
+        material_glass_transition_kind_from_wire(kind),
+        progress,
+        (flags & 1u) != 0u};
+}
+
 inline unsigned int material_interaction_flags(
         MaterialInteractionDescriptor descriptor) noexcept {
     return (descriptor.hovered ? 1u : 0u)
@@ -233,6 +289,7 @@ struct MaterialStyle {
     char const* plan_id = "material.none";
     char const* verifier_profile = "none";
     MaterialInteractionDescriptor interaction{};
+    MaterialTransitionDescriptor transition{};
 };
 
 struct MaterialCommandDescriptor {
@@ -251,6 +308,7 @@ struct MaterialCommandDescriptor {
     float shadow_alpha = 0.0f;
     float shadow_radius = 0.0f;
     MaterialInteractionDescriptor interaction{};
+    MaterialTransitionDescriptor transition{};
 };
 
 // A solid convex quadrilateral in canvas-local coordinates. Intended
@@ -1003,7 +1061,8 @@ enum class Cmd : unsigned int {
     // edge_highlight/edge_width/noise_opacity/shadow_alpha/
     // shadow_radius f32 + container_id/union_id u32 +
     // container_spacing f32 + container_flags u32 +
-    // interaction_flags u32 + interaction pointer_x/pointer_y f32.
+    // interaction_flags u32 + interaction pointer_x/pointer_y f32 +
+    // transition_kind u32 + transition_progress f32 + transition_flags u32.
     // Backends with backdrop sampling render a glass/material effect;
     // backends without it draw the tint as a rounded-rect fallback.
     MaterialRect = 15,
