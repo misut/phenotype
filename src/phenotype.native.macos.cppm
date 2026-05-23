@@ -2315,17 +2315,18 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     auto const background_soft_edge = plan.glass_background.feathered
         ? std::max(0.0f, plan.glass_background.soft_edge_radius)
         : 0.0f;
-    inst.rect[0] = plan.geometry.x - background_inflate;
-    inst.rect[1] = plan.geometry.y - background_inflate;
-    inst.rect[2] = plan.geometry.w + background_inflate * 2.0f;
-    inst.rect[3] = plan.geometry.h + background_inflate * 2.0f;
+    auto const geometry = material_surface_execution_geometry(plan);
+    if (!geometry.active)
+        return;
+    inst.rect[0] = geometry.x;
+    inst.rect[1] = geometry.y;
+    inst.rect[2] = geometry.w;
+    inst.rect[3] = geometry.h;
     inst.tint[0] = plan.tint.r / 255.0f;
     inst.tint[1] = plan.tint.g / 255.0f;
     inst.tint[2] = plan.tint.b / 255.0f;
     inst.tint[3] = plan.tint.a / 255.0f;
-    inst.params[0] = std::min(
-        std::max(0.0f, plan.shape.effective_radius + background_inflate),
-        std::max(0.0f, std::min(inst.rect[2], inst.rect[3]) * 0.5f));
+    inst.params[0] = geometry.radius;
     inst.params[1] = plan.blur_radius;
     inst.params[2] = plan.opacity;
     inst.params[3] = static_cast<float>(plan.sample_taps);
