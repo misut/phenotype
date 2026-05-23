@@ -3,7 +3,7 @@
 // Color pipeline fragment shader — direct port of phenotype.native.macos
 // fs_color / phenotype.native.windows fs_color. Single-pipeline design:
 // params.z selects the draw path (0 = Fill, 1 = Stroke, 2 = Round,
-// 3 = rounded-edge material stroke).
+// 3 = rounded-edge material stroke, 5 = soft-edge rounded fill).
 
 layout(location = 0) in vec4 v_color;
 layout(location = 1) in vec2 v_local_pos;
@@ -24,6 +24,22 @@ void main() {
         float d = length(max(p, vec2(0.0))) - radius;
         if (d > 0.5) discard;
         float alpha = v_color.a * clamp(0.5 - d, 0.0, 1.0);
+        frag_color = vec4(v_color.rgb * alpha, alpha);
+        return;
+    }
+
+    // Feathered rounded rect. The pure MaterialPlan resolves the
+    // padding and soft-edge radius; this shader only applies the alpha
+    // falloff inside the inflated paint bounds.
+    if (draw_type == 5u && radius > 0.0) {
+        float soft_edge = max(v_params.w, 0.5);
+        vec2 half_size = v_rect_size * 0.5;
+        vec2 p = abs(v_local_pos - half_size) - half_size + vec2(radius);
+        float d = length(max(p, vec2(0.0))) - radius;
+        if (d > 0.5) discard;
+        float outer = clamp(0.5 - d, 0.0, 1.0);
+        float feather = clamp((-d) / soft_edge, 0.0, 1.0);
+        float alpha = v_color.a * min(outer, feather);
         frag_color = vec4(v_color.rgb * alpha, alpha);
         return;
     }

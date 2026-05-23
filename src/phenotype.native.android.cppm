@@ -4065,7 +4065,8 @@ inline void append_material_paint_layer_instance(
             layer.executor,
             "rounded-edge")
             ? 3.0f
-            : 2.0f;
+            : (layer.soft_edge_radius > 0.0f ? 5.0f : 2.0f);
+    inst.params[3] = layer.soft_edge_radius;
     out.push_back(inst);
 }
 

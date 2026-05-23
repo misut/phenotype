@@ -1383,6 +1383,17 @@ float4 fs_color(ColorVsOut input) : SV_TARGET {
         float alpha = input.color.a * saturate(0.5f - d);
         return float4(input.color.rgb * alpha, alpha);
     }
+    if (draw_type == 5u && radius > 0.0f) {
+        float soft_edge = max(input.params.w, 0.5f);
+        float2 half_size = input.rect_size * 0.5f;
+        float2 p = abs(input.local_pos - half_size) - half_size + float2(radius, radius);
+        float d = length(max(p, float2(0.0f, 0.0f))) - radius;
+        clip(0.5f - d);
+        float outer = saturate(0.5f - d);
+        float feather = saturate((-d) / soft_edge);
+        float alpha = input.color.a * min(outer, feather);
+        return float4(input.color.rgb * alpha, alpha);
+    }
     if (draw_type == 4u && radius > 0.0f) {
         float2 half_size = input.rect_size * 0.5f;
         float2 p = abs(input.local_pos - half_size) - half_size + float2(radius, radius);
@@ -2536,7 +2547,8 @@ inline void append_material_paint_layer_instance(
         material_paint_layer_alpha(layer),
         (std::max)(0.0f, plan.shape.effective_radius + layer.radius_delta),
         rounded_edge ? (std::max)(layer.stroke_width, 0.5f) : 0.0f,
-        rounded_edge ? 4.0f : 2.0f);
+        rounded_edge ? 4.0f : (layer.soft_edge_radius > 0.0f ? 5.0f : 2.0f),
+        layer.soft_edge_radius);
 }
 
 inline void append_material_paint_layer_instances(
