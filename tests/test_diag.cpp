@@ -1324,6 +1324,17 @@ void test_material_runtime_record_json_contract() {
     assert(std::fabs(refraction.at("max_offset_pixels").as_float()) < 0.0001f);
     assert(std::fabs(refraction.at("edge_caustic_intensity").as_float())
            < 0.0001f);
+    auto const& specular = obj.at("specular").as_object();
+    assert(specular.at("model").as_string() == "none");
+    assert(specular.at("source").as_string() == "none");
+    assert(specular.at("active").as_bool() == false);
+    assert(specular.at("ambient").as_bool() == false);
+    assert(specular.at("interaction_driven").as_bool() == false);
+    assert(specular.at("bounded").as_bool() == true);
+    assert(specular.at("anchor_x").as_float() == 0.5f);
+    assert(specular.at("anchor_y").as_float() == 0.5f);
+    assert(std::fabs(specular.at("radius").as_float()) < 0.0001f);
+    assert(std::fabs(specular.at("intensity").as_float()) < 0.0001f);
     auto const& optical_response = obj.at("optical_response").as_object();
     assert(optical_response.at("response_model").as_string()
            == "deterministic-fallback");

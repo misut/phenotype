@@ -13,7 +13,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 47;
+inline constexpr std::uint32_t material_plan_contract_version = 48;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -558,6 +558,19 @@ struct MaterialRefractionProfile {
     float edge_caustic_intensity = 0.0f;
 };
 
+struct MaterialSpecularProfile {
+    char const* model = "none";
+    char const* source = "none";
+    bool active = false;
+    bool ambient = false;
+    bool interaction_driven = false;
+    bool bounded = true;
+    float anchor_x = 0.5f;
+    float anchor_y = 0.5f;
+    float radius = 0.0f;
+    float intensity = 0.0f;
+};
+
 struct MaterialInteractionResponse {
     bool enabled = false;
     bool active = false;
@@ -798,6 +811,7 @@ struct MaterialPlan {
     MaterialThemeSnapshot theme{};
     MaterialForegroundRecommendation foreground{};
     MaterialRefractionProfile refraction{};
+    MaterialSpecularProfile specular{};
     MaterialInteractionResponse interaction{};
     MaterialOpticalComposition optical_composition{};
     MaterialOpticalResponseContract optical_response{};
@@ -876,11 +890,11 @@ inline MaterialStageOptics material_edge_stage_optics(
     optics.channel = "edge-highlight";
     optics.edge_highlight = composition.edge_highlight;
     optics.edge_width = composition.edge_width;
-    optics.specular_model = plan.interaction.specular_model;
-    optics.specular_anchor_x = plan.interaction.specular_anchor_x;
-    optics.specular_anchor_y = plan.interaction.specular_anchor_y;
-    optics.specular_radius = plan.interaction.specular_radius;
-    optics.specular_intensity = plan.interaction.specular_intensity;
+    optics.specular_model = plan.specular.model;
+    optics.specular_anchor_x = plan.specular.anchor_x;
+    optics.specular_anchor_y = plan.specular.anchor_y;
+    optics.specular_radius = plan.specular.radius;
+    optics.specular_intensity = plan.specular.intensity;
     optics.pointer_lens_model = plan.interaction.pointer_lens_model;
     optics.pointer_lens_anchor_x = plan.interaction.pointer_lens_anchor_x;
     optics.pointer_lens_anchor_y = plan.interaction.pointer_lens_anchor_y;
@@ -3896,6 +3910,76 @@ inline MaterialRefractionProfile material_resolve_refraction_profile(
     return profile;
 }
 
+inline float material_base_specular_intensity(MaterialKind kind) noexcept {
+    switch (kind) {
+        case MaterialKind::Clear: return 0.050f;
+        case MaterialKind::Thin: return 0.070f;
+        case MaterialKind::Regular: return 0.090f;
+        case MaterialKind::Thick: return 0.115f;
+        case MaterialKind::None: return 0.0f;
+    }
+    return 0.0f;
+}
+
+inline MaterialSpecularProfile material_resolve_specular_profile(
+        MaterialPlan const& plan) noexcept {
+    MaterialSpecularProfile profile{};
+    if (!plan.backdrop_sampling
+        || plan.fallback()
+        || plan.kind == MaterialKind::None) {
+        return profile;
+    }
+
+    auto const shape_roundness =
+        std::clamp(plan.shape.normalized_radius, 0.0f, 1.0f);
+    auto const backdrop_response =
+        std::clamp(plan.backdrop.response_strength, 0.0f, 1.0f);
+    auto const caustic_response =
+        std::clamp(plan.refraction.edge_caustic_intensity, 0.0f, 0.20f);
+    auto const ambient_intensity = std::clamp(
+        material_base_specular_intensity(plan.kind)
+            + 0.030f * shape_roundness
+            + 0.045f * std::clamp(plan.edge_highlight, 0.0f, 1.0f)
+            + 0.020f * backdrop_response
+            + 0.50f * caustic_response,
+        0.0f,
+        0.24f);
+    if (ambient_intensity <= 0.0001f)
+        return profile;
+
+    profile.active = true;
+    profile.ambient = true;
+    profile.model = "ambient-glass-sheen";
+    profile.source = "sampled-backdrop-edge-lighting";
+    profile.anchor_x = std::clamp(
+        0.30f + 0.06f * shape_roundness,
+        0.0f,
+        1.0f);
+    profile.anchor_y = std::clamp(
+        0.18f + 0.04f * backdrop_response,
+        0.0f,
+        1.0f);
+    profile.radius = std::clamp(
+        0.58f + 0.18f * shape_roundness,
+        0.48f,
+        0.82f);
+    profile.intensity = ambient_intensity;
+
+    if (plan.interaction.specular_highlight_active) {
+        profile.model = plan.interaction.specular_model;
+        profile.source = "sampled-backdrop-pointer-lighting";
+        profile.interaction_driven = true;
+        profile.anchor_x = plan.interaction.specular_anchor_x;
+        profile.anchor_y = plan.interaction.specular_anchor_y;
+        profile.radius = plan.interaction.specular_radius;
+        profile.intensity = std::clamp(
+            plan.interaction.specular_intensity + ambient_intensity * 0.35f,
+            0.0f,
+            0.85f);
+    }
+    return profile;
+}
+
 inline MaterialBackdropAccess material_resolve_backdrop_access(
         MaterialPlan const& plan) noexcept {
     MaterialBackdropAccess access{};
@@ -4644,6 +4728,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.refraction = material_resolve_refraction_profile(plan);
     plan.resource_budget.max_refraction_offset_pixels =
         plan.refraction.max_offset_pixels;
+    plan.specular = material_resolve_specular_profile(plan);
     plan.luminance_curve = material_resolve_luminance_curve(
         plan.backdrop_sampling,
         plan.backdrop,
