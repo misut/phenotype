@@ -3523,6 +3523,8 @@ struct GlassEffectStyle {
     bool inherit_transition = true;
     MaterialGlassIdentityDescriptor glass_identity_descriptor{};
     bool inherit_identity = true;
+    MaterialContainerDescriptor container_descriptor{};
+    bool inherit_container = true;
 
     constexpr bool is_identity() const noexcept {
         return kind == MaterialKind::None;
@@ -3593,6 +3595,46 @@ struct GlassEffectStyle {
     constexpr GlassEffectStyle identity_transition() const noexcept {
         return transition(glass_identity_transition());
     }
+
+    constexpr GlassEffectStyle effect_union(
+            MaterialContainerDescriptor descriptor) const noexcept {
+        auto copy = *this;
+        if (!copy.is_identity()
+            && descriptor.mode() == MaterialContainerMode::Union) {
+            copy.container_descriptor = descriptor;
+            copy.inherit_container = false;
+        }
+        return copy;
+    }
+
+    constexpr GlassEffectStyle effect_union(
+            std::uint32_t namespace_id,
+            std::uint32_t union_id,
+            float spacing = 0.0f,
+            bool interactive = false,
+            bool morph_transitions = true) const noexcept {
+        return effect_union(
+            MaterialContainerDescriptor{
+                namespace_id,
+                union_id,
+                spacing,
+                interactive,
+                morph_transitions});
+    }
+
+    GlassEffectStyle effect_union(
+            std::string_view namespace_id,
+            std::string_view union_id,
+            float spacing = 0.0f,
+            bool interactive = false,
+            bool morph_transitions = true) const noexcept {
+        return effect_union(
+            glass_effect_stable_id(namespace_id),
+            glass_effect_stable_id(union_id),
+            spacing,
+            interactive,
+            morph_transitions);
+    }
 };
 
 inline constexpr GlassEffectStyle glass_regular() noexcept {
@@ -3626,6 +3668,8 @@ inline GlassEffectOptions glass_effect_options(
     options.inherit_material_transition = style.inherit_transition;
     options.glass_identity = style.glass_identity_descriptor;
     options.inherit_material_identity = style.inherit_identity;
+    options.container = style.container_descriptor;
+    options.inherit_material_container = style.inherit_container;
     return options;
 }
 
