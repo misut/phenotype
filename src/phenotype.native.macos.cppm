@@ -2302,15 +2302,21 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
                                      MaterialPlan const& plan,
                                      std::uint32_t command_index) {
     MaterialInstanceGPU inst{};
-    inst.rect[0] = plan.geometry.x;
-    inst.rect[1] = plan.geometry.y;
-    inst.rect[2] = plan.geometry.w;
-    inst.rect[3] = plan.geometry.h;
+    auto const background_inflate = material_background_paint_inflate(plan);
+    auto const background_soft_edge = plan.glass_background.feathered
+        ? std::max(0.0f, plan.glass_background.soft_edge_radius)
+        : 0.0f;
+    inst.rect[0] = plan.geometry.x - background_inflate;
+    inst.rect[1] = plan.geometry.y - background_inflate;
+    inst.rect[2] = plan.geometry.w + background_inflate * 2.0f;
+    inst.rect[3] = plan.geometry.h + background_inflate * 2.0f;
     inst.tint[0] = plan.tint.r / 255.0f;
     inst.tint[1] = plan.tint.g / 255.0f;
     inst.tint[2] = plan.tint.b / 255.0f;
     inst.tint[3] = plan.tint.a / 255.0f;
-    inst.params[0] = plan.shape.effective_radius;
+    inst.params[0] = std::min(
+        std::max(0.0f, plan.shape.effective_radius + background_inflate),
+        std::max(0.0f, std::min(inst.rect[2], inst.rect[3]) * 0.5f));
     inst.params[1] = plan.blur_radius;
     inst.params[2] = plan.opacity;
     inst.params[3] = static_cast<float>(plan.sample_taps);
@@ -2324,6 +2330,8 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.effects[3] = plan.noise_opacity;
     inst.sampling[0] = plan.sampling_kernel.blur_step_scale;
     inst.sampling[1] = static_cast<float>(plan.sampling_kernel.radius);
+    inst.sampling[2] = background_soft_edge;
+    inst.sampling[3] = background_inflate;
     inst.luminance_curve[0] = plan.luminance_curve.gamma;
     inst.luminance_curve[1] = plan.luminance_curve.midpoint;
     inst.luminance_curve[2] = plan.luminance_curve.contrast;
@@ -2340,10 +2348,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.refraction[1] = plan.refraction.edge_bias;
     inst.refraction[2] = plan.refraction.max_offset_pixels;
     inst.refraction[3] = plan.refraction.edge_caustic_intensity;
-    inst.group_rect[0] = plan.geometry.x;
-    inst.group_rect[1] = plan.geometry.y;
-    inst.group_rect[2] = plan.geometry.w;
-    inst.group_rect[3] = plan.geometry.h;
+    inst.group_rect[0] = inst.rect[0];
+    inst.group_rect[1] = inst.rect[1];
+    inst.group_rect[2] = inst.rect[2];
+    inst.group_rect[3] = inst.rect[3];
     inst.group_effects[3] = static_cast<float>(command_index);
     out.push_back(inst);
 }
@@ -2406,15 +2414,25 @@ inline void apply_material_container_execution_descriptors(
                 inst.rect[1] = execution->glass_effect_match_rect_y;
                 inst.rect[2] = execution->glass_effect_match_rect_w;
                 inst.rect[3] = execution->glass_effect_match_rect_h;
+                auto const background_inflate = std::max(0.0f, inst.sampling[3]);
+                if (background_inflate > 0.0f) {
+                    inst.rect[0] -= background_inflate;
+                    inst.rect[1] -= background_inflate;
+                    inst.rect[2] += background_inflate * 2.0f;
+                    inst.rect[3] += background_inflate * 2.0f;
+                }
                 inst.params[0] = std::min(
-                    std::max(0.0f, execution->glass_effect_match_rect_radius),
+                    std::max(
+                        0.0f,
+                        execution->glass_effect_match_rect_radius
+                            + background_inflate),
                     std::max(
                         0.0f,
                         std::min(inst.rect[2], inst.rect[3]) * 0.5f));
-                inst.group_rect[0] = execution->glass_effect_match_rect_x;
-                inst.group_rect[1] = execution->glass_effect_match_rect_y;
-                inst.group_rect[2] = execution->glass_effect_match_rect_w;
-                inst.group_rect[3] = execution->glass_effect_match_rect_h;
+                inst.group_rect[0] = inst.rect[0];
+                inst.group_rect[1] = inst.rect[1];
+                inst.group_rect[2] = inst.rect[2];
+                inst.group_rect[3] = inst.rect[3];
             } else {
                 inst.group_rect[0] = execution->group_x;
                 inst.group_rect[1] = execution->group_y;
@@ -4398,6 +4416,14 @@ fragment float4 fs_material(
             normalized_local,
             group_normalized_local,
             group_blend_strength);
+    }
+    float soft_edge_radius = max(in.sampling.z, 0.0);
+    if (soft_edge_radius > 0.0) {
+        float feather = clamp(
+            signed_edge_distance / soft_edge_radius,
+            0.0,
+            1.0);
+        edge_alpha = min(edge_alpha, feather);
     }
 
     float2 texel = 1.0 / float2(float(backdrop.get_width()),
