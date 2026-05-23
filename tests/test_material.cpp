@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 66);
+    assert(material_plan_contract_version == 67);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -2433,20 +2433,43 @@ void test_glass_effect_matched_geometry_respects_container_spacing() {
     assert(first_execution.active);
     assert(first_execution.glass_effect_surface_count == 2u);
     assert(!first_execution.glass_effect_match_execution);
+    assert(first_execution.glass_effect_materialize_execution);
     assert(!first_execution.glass_effect_match_source_valid);
     assert(first_execution.glass_effect_match_blend_strength == 0.0f);
+    assert(first_execution.glass_effect_materialize_wave_strength == 1.0f);
     assert(!first_execution.shape_blend_execution);
     assert(std::string_view(first_execution.execution_policy)
-           == "group-isolated");
+           == "glass-effect-materialize");
 
     assert(second_execution.active);
     assert(second_execution.glass_effect_surface_count == 2u);
     assert(!second_execution.glass_effect_match_execution);
+    assert(second_execution.glass_effect_materialize_execution);
     assert(!second_execution.glass_effect_match_source_valid);
     assert(second_execution.glass_effect_match_blend_strength == 0.0f);
+    assert(second_execution.glass_effect_materialize_wave_strength == 1.0f);
     assert(!second_execution.shape_blend_execution);
     assert(std::string_view(second_execution.execution_policy)
-           == "group-isolated");
+           == "glass-effect-materialize");
+
+    auto const first_transition =
+        material_execution_transition(records[0].plan.transition,
+                                      &first_execution);
+    assert(first_transition.materialize);
+    assert(!first_transition.matched_geometry);
+    assert(std::string_view(first_transition.policy) == "materialize-in");
+    assert(first_transition.opacity_gain == 0.5f);
+    assert(first_transition.materialize_lensing_gain > 1.23f);
+
+    auto const first_base_geometry =
+        material_surface_execution_geometry(records[0].plan);
+    auto const first_materialize_geometry =
+        material_surface_execution_geometry(records[0].plan, &first_execution);
+    assert(first_base_geometry.active);
+    assert(first_materialize_geometry.active);
+    assert(first_materialize_geometry.w < first_base_geometry.w);
+    assert(first_materialize_geometry.h < first_base_geometry.h);
+    assert(first_materialize_geometry.radius < first_base_geometry.radius);
 
     std::puts("PASS: glass effect matched geometry respects container spacing");
 }

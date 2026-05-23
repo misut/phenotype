@@ -3341,6 +3341,15 @@ namespace detail {
         out.emplace(
             "glass_effect_match_blend_strength",
             json::Value{execution.glass_effect_match_blend_strength});
+        out.emplace(
+            "glass_effect_materialize_execution",
+            json::Value{execution.glass_effect_materialize_execution});
+        out.emplace(
+            "glass_effect_materialize_progress",
+            json::Value{execution.glass_effect_materialize_progress});
+        out.emplace(
+            "glass_effect_materialize_wave_strength",
+            json::Value{execution.glass_effect_materialize_wave_strength});
         json::Object match_source;
         match_source.emplace(
             "valid",
