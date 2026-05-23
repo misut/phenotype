@@ -3178,6 +3178,73 @@ struct GlassEffectOptions {
     MaterialContainerDescriptor container{};
 };
 
+struct GlassEffectStyle {
+    MaterialKind kind = MaterialKind::Regular;
+    bool interactive_enabled = false;
+    bool has_tint = false;
+    Color tint_color = {};
+    bool has_border = false;
+    Color border_color = {};
+
+    constexpr bool is_identity() const noexcept {
+        return kind == MaterialKind::None;
+    }
+
+    constexpr GlassEffectStyle tint(Color color) const noexcept {
+        auto copy = *this;
+        if (!copy.is_identity()) {
+            copy.has_tint = true;
+            copy.tint_color = color;
+        }
+        return copy;
+    }
+
+    constexpr GlassEffectStyle border(Color color) const noexcept {
+        auto copy = *this;
+        if (!copy.is_identity()) {
+            copy.has_border = true;
+            copy.border_color = color;
+        }
+        return copy;
+    }
+
+    constexpr GlassEffectStyle interactive(bool enabled = true) const noexcept {
+        auto copy = *this;
+        copy.interactive_enabled = enabled && !copy.is_identity();
+        return copy;
+    }
+};
+
+inline constexpr GlassEffectStyle glass_regular() noexcept {
+    return GlassEffectStyle{.kind = MaterialKind::Regular};
+}
+
+inline constexpr GlassEffectStyle glass_clear() noexcept {
+    return GlassEffectStyle{.kind = MaterialKind::Clear};
+}
+
+inline constexpr GlassEffectStyle glass_identity() noexcept {
+    return GlassEffectStyle{.kind = MaterialKind::None};
+}
+
+inline GlassEffectOptions glass_effect_options(
+        GlassEffectStyle style) noexcept {
+    GlassEffectOptions options{};
+    options.kind = style.kind;
+    if (style.is_identity()) {
+        options.interactive = false;
+        options.has_tint = false;
+        options.has_border = false;
+        return options;
+    }
+    options.interactive = style.interactive_enabled;
+    options.has_tint = style.has_tint;
+    options.tint = style.tint_color;
+    options.has_border = style.has_border;
+    options.border = style.border_color;
+    return options;
+}
+
 inline MaterialSurfaceOptions glass_effect_surface_options(
         GlassEffectOptions const& options) {
     MaterialSurfaceOptions surface{};
@@ -3326,6 +3393,14 @@ template<typename F>
 void glass_effect(GlassEffectOptions options, F&& builder) {
     material_surface(
         glass_effect_surface_options(options),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect(GlassEffectStyle style, F&& builder) {
+    glass_effect(
+        glass_effect_options(style),
         std::forward<F>(builder));
 }
 
