@@ -4886,18 +4886,20 @@ inline GlassControlStyleOptions glass_control_style_options(
 }
 
 inline void apply_glass_effect_style_material(
-        ButtonStyleOptions& style,
+        MaterialStyle& material,
+        bool has_material,
+        bool disabled,
         layout::GlassEffectStyle glass) {
-    if (!style.has_material
-        || style.material.kind == MaterialKind::None
+    if (!has_material
+        || material.kind == MaterialKind::None
         || glass.is_identity()) {
         return;
     }
 
-    style.material.transition = layout::resolve_material_transition(
+    material.transition = layout::resolve_material_transition(
         glass.transition_descriptor,
         glass.inherit_transition);
-    style.material.glass_identity = layout::resolve_material_glass_identity(
+    material.glass_identity = layout::resolve_material_glass_identity(
         glass.glass_identity_descriptor,
         glass.inherit_identity);
 
@@ -4905,21 +4907,112 @@ inline void apply_glass_effect_style_material(
         ? layout::current_material_container()
         : glass.container_descriptor;
     if (container.participates()) {
-        auto const keep_button_interaction =
-            style.material.container.interactive || glass.interactive_enabled;
-        style.material.container = container;
-        if (!style.disabled && keep_button_interaction)
-            style.material.container.interactive = true;
+        auto const keep_interaction =
+            material.container.interactive || glass.interactive_enabled;
+        material.container = container;
+        if (!disabled && keep_interaction)
+            material.container.interactive = true;
     }
 }
 
-inline ButtonStyleOptions glass_button_style(
+inline void apply_glass_effect_style_material(
+        ButtonStyleOptions& style,
+        layout::GlassEffectStyle glass) {
+    apply_glass_effect_style_material(
+        style.material,
+        style.has_material,
+        style.disabled,
+        glass);
+}
+
+inline void apply_glass_effect_style_material(
+        TextFieldStyleOptions& style,
+        layout::GlassEffectStyle glass) {
+    apply_glass_effect_style_material(
+        style.material,
+        style.has_material,
+        style.disabled,
+        glass);
+}
+
+inline ButtonStyleOptions glass_control_button_style(
         layout::GlassEffectStyle glass,
         GlassControlStyleOptions options = {}) {
     auto style = glass_control_button_style(
         glass_control_style_options(glass, options));
     apply_glass_effect_style_material(style, glass);
     return style;
+}
+
+inline ButtonStyleOptions glass_prominent_button_style(
+        layout::GlassEffectStyle glass,
+        GlassControlStyleOptions options = {}) {
+    auto style = glass_prominent_button_style(
+        glass_control_style_options(glass, options));
+    apply_glass_effect_style_material(style, glass);
+    return style;
+}
+
+inline ButtonStyleOptions glass_split_button_style(
+        layout::GlassEffectStyle glass,
+        GlassSplitButtonStyleOptions options = {}) {
+    auto style = glass_split_button_style(options);
+    apply_glass_effect_style_material(style, glass);
+    return style;
+}
+
+inline ButtonStyleOptions glass_selection_button_style(
+        layout::GlassEffectStyle glass,
+        GlassSelectionStyleOptions options = {}) {
+    auto style = glass_selection_button_style(options);
+    apply_glass_effect_style_material(style, glass);
+    return style;
+}
+
+inline ButtonStyleOptions glass_outline_row_button_style(
+        layout::GlassEffectStyle glass,
+        GlassOutlineRowStyleOptions options = {}) {
+    auto style = glass_outline_row_button_style(options);
+    apply_glass_effect_style_material(style, glass);
+    return style;
+}
+
+inline ButtonStyleOptions glass_menu_item_button_style(
+        layout::GlassEffectStyle glass,
+        GlassMenuItemStyleOptions options = {}) {
+    auto style = glass_menu_item_button_style(options);
+    apply_glass_effect_style_material(style, glass);
+    return style;
+}
+
+inline ButtonStyleOptions glass_table_header_button_style(
+        layout::GlassEffectStyle glass,
+        GlassTableHeaderStyleOptions options = {}) {
+    auto style = glass_table_header_button_style(options);
+    apply_glass_effect_style_material(style, glass);
+    return style;
+}
+
+inline ButtonStyleOptions glass_disclosure_header_style(
+        layout::GlassEffectStyle glass,
+        GlassDisclosureStyleOptions options = {}) {
+    auto style = glass_disclosure_header_style(options);
+    apply_glass_effect_style_material(style, glass);
+    return style;
+}
+
+inline TextFieldStyleOptions glass_text_field_style(
+        layout::GlassEffectStyle glass,
+        GlassTextFieldStyleOptions options = {}) {
+    auto style = glass_text_field_style(options);
+    apply_glass_effect_style_material(style, glass);
+    return style;
+}
+
+inline ButtonStyleOptions glass_button_style(
+        layout::GlassEffectStyle glass,
+        GlassControlStyleOptions options = {}) {
+    return glass_control_button_style(glass, options);
 }
 
 template<typename Msg>
@@ -4931,6 +5024,30 @@ inline void glass_button(str label,
         label,
         std::move(msg),
         glass_button_style(glass, options));
+}
+
+template<typename Msg>
+inline void glass_prominent_button(str label,
+                                   Msg msg,
+                                   layout::GlassEffectStyle glass,
+                                   GlassControlStyleOptions options = {}) {
+    button(
+        label,
+        std::move(msg),
+        glass_prominent_button_style(glass, options));
+}
+
+template<typename Msg>
+inline void glass_text_field(str hint,
+                             std::string const& current,
+                             Msg(*mapper)(std::string),
+                             layout::GlassEffectStyle glass,
+                             GlassTextFieldStyleOptions options = {}) {
+    text_field<Msg>(
+        hint,
+        current,
+        mapper,
+        glass_text_field_style(glass, options));
 }
 
 } // namespace widget

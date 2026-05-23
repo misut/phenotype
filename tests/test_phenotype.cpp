@@ -6581,6 +6581,237 @@ void test_glass_disclosure_header_style_material_contract() {
     std::puts("PASS: glass disclosure header style emits material contract");
 }
 
+void assert_glass_effect_context(
+        MaterialStyle const& material,
+        MaterialGlassIdentityDescriptor identity,
+        std::uint32_t container_id,
+        std::uint32_t union_id,
+        float spacing,
+        MaterialGlassTransitionKind transition_kind,
+        float transition_progress,
+        bool transition_appearing) {
+    assert(material.glass_identity == identity);
+    assert(material.transition.kind == transition_kind);
+    assert(std::fabs(material.transition.progress - transition_progress)
+           < 0.0001f);
+    assert(material.transition.appearing == transition_appearing);
+    assert(material.container.container_id == container_id);
+    assert(material.container.union_id == union_id);
+    assert(std::fabs(material.container.spacing - spacing) < 0.0001f);
+    assert(material.container.interactive);
+    assert(material.container.morph_transitions);
+}
+
+void test_glass_effect_context_reaches_control_styles() {
+    set_theme(Theme{});
+
+    auto const identity =
+        layout::glass_effect_identity("controls", "primary");
+    auto const container_id =
+        layout::glass_effect_stable_id("controls.scope");
+    auto const union_id =
+        layout::glass_effect_stable_id("controls.cluster");
+    auto effect_glass = layout::glass_clear()
+        .effect_id(identity)
+        .materialize(0.4f, false)
+        .effect_union(
+            "controls.scope",
+            "controls.cluster",
+            13.0f,
+            true,
+            true);
+
+    auto prominent = widget::glass_prominent_button_style(
+        effect_glass,
+        GlassControlStyleOptions{
+            .role = MaterialSurfaceRole::Control,
+            .width = 124.0f,
+            .height = 36.0f,
+        });
+    assert(prominent.has_material);
+    assert(prominent.material.kind == MaterialKind::Regular);
+    assert(prominent.material.prominence.enabled);
+    assert(prominent.max_width == 124.0f);
+    assert_glass_effect_context(
+        prominent.material,
+        identity,
+        container_id,
+        union_id,
+        13.0f,
+        MaterialGlassTransitionKind::Materialize,
+        0.4f,
+        false);
+
+    auto split = widget::glass_split_button_style(
+        effect_glass,
+        GlassSplitButtonStyleOptions{
+            .segment = GlassSplitButtonSegment::Middle,
+            .selected = true,
+            .width = 44.0f,
+            .height = 32.0f,
+        });
+    assert(split.has_material);
+    assert(split.material.kind == MaterialKind::Clear);
+    assert_glass_effect_context(
+        split.material,
+        identity,
+        container_id,
+        union_id,
+        13.0f,
+        MaterialGlassTransitionKind::Materialize,
+        0.4f,
+        false);
+
+    auto selection = widget::glass_selection_button_style(
+        effect_glass,
+        GlassSelectionStyleOptions{
+            .chrome = GlassSelectionChrome::SidebarPill,
+            .selected = true,
+        });
+    assert(selection.has_material);
+    assert(selection.material.kind == MaterialKind::Thin);
+    assert_glass_effect_context(
+        selection.material,
+        identity,
+        container_id,
+        union_id,
+        13.0f,
+        MaterialGlassTransitionKind::Materialize,
+        0.4f,
+        false);
+
+    auto outline = widget::glass_outline_row_button_style(
+        effect_glass,
+        GlassOutlineRowStyleOptions{
+            .chrome = GlassOutlineRowChrome::ColumnRow,
+            .selected = false,
+            .expanded = true,
+        });
+    assert(outline.has_material);
+    assert(outline.material.kind == MaterialKind::Clear);
+    assert_glass_effect_context(
+        outline.material,
+        identity,
+        container_id,
+        union_id,
+        13.0f,
+        MaterialGlassTransitionKind::Materialize,
+        0.4f,
+        false);
+
+    auto menu = widget::glass_menu_item_button_style(effect_glass);
+    assert(menu.has_material);
+    assert(menu.material.kind == MaterialKind::Clear);
+    assert_glass_effect_context(
+        menu.material,
+        identity,
+        container_id,
+        union_id,
+        13.0f,
+        MaterialGlassTransitionKind::Materialize,
+        0.4f,
+        false);
+
+    auto table = widget::glass_table_header_button_style(
+        effect_glass,
+        GlassTableHeaderStyleOptions{.sorted = true});
+    assert(table.has_material);
+    assert(table.material.kind == MaterialKind::Clear);
+    assert_glass_effect_context(
+        table.material,
+        identity,
+        container_id,
+        union_id,
+        13.0f,
+        MaterialGlassTransitionKind::Materialize,
+        0.4f,
+        false);
+
+    auto disclosure = widget::glass_disclosure_header_style(
+        effect_glass,
+        GlassDisclosureStyleOptions{.expanded = true});
+    assert(disclosure.has_material);
+    assert(disclosure.material.kind == MaterialKind::Clear);
+    assert_glass_effect_context(
+        disclosure.material,
+        identity,
+        container_id,
+        union_id,
+        13.0f,
+        MaterialGlassTransitionKind::Materialize,
+        0.4f,
+        false);
+
+    auto disabled = widget::glass_menu_item_button_style(
+        effect_glass,
+        GlassMenuItemStyleOptions{.disabled = true});
+    assert(disabled.disabled);
+    assert(!disabled.has_material);
+    assert(disabled.material.kind == MaterialKind::None);
+
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::glass_prominent_button<button_test::ButtonMsg>(
+        "Primary",
+        button_test::Click{},
+        effect_glass);
+    Scope::set_current(nullptr);
+
+    auto const& root = detail::node_at(root_h);
+    assert(root.children.size() == 1u);
+    auto const& wrapped = detail::node_at(root.children[0]);
+    assert(wrapped.interaction_role == InteractionRole::Button);
+    assert(wrapped.material.prominence.enabled);
+    assert_glass_effect_context(
+        wrapped.material,
+        identity,
+        container_id,
+        union_id,
+        13.0f,
+        MaterialGlassTransitionKind::Materialize,
+        0.4f,
+        false);
+
+    layout::glass_effect_container(
+        layout::GlassEffectContainerOptions{
+            .container_id = 901u,
+            .union_id = 7u,
+            .spacing = 15.0f,
+            .interactive = false,
+            .morph_transitions = true,
+        },
+        [&] {
+            layout::glass_effect_transition(
+                layout::glass_matched_geometry_transition(0.6f, true),
+                [&] {
+                    auto scoped = widget::glass_table_header_button_style(
+                        layout::glass_regular()
+                            .effect_id("controls", "scoped-header"),
+                        GlassTableHeaderStyleOptions{.sorted = true});
+                    assert(scoped.has_material);
+                    assert_glass_effect_context(
+                        scoped.material,
+                        layout::glass_effect_identity(
+                            "controls",
+                            "scoped-header"),
+                        901u,
+                        7u,
+                        15.0f,
+                        MaterialGlassTransitionKind::MatchedGeometry,
+                        0.6f,
+                        true);
+                });
+        });
+
+    std::puts("PASS: glass effect context reaches control styles");
+}
+
 void test_symbol_button_minimum_hit_region_contract() {
     icons::SymbolButtonOptions options;
     options.role = icons::SymbolPresentationRole::Toolbar;
@@ -6847,6 +7078,101 @@ void test_glass_text_field_style_material_contract() {
     assert(f.style.max_width == 220.0f);
     assert(f.style.fixed_height == 34.0f);
     assert(f.debug_semantic_label == "Search Field");
+
+    auto const field_identity =
+        layout::glass_effect_identity("fields", "search");
+    auto const field_container =
+        layout::glass_effect_stable_id("fields.scope");
+    auto const field_union =
+        layout::glass_effect_stable_id("fields.cluster");
+    auto effect_style = widget::glass_text_field_style(
+        layout::glass_regular()
+            .effect_id(field_identity)
+            .matched_geometry(0.75f, true)
+            .effect_union("fields.scope", "fields.cluster", 18.0f),
+        GlassTextFieldStyleOptions{
+            .kind = MaterialKind::Regular,
+            .role = MaterialSurfaceRole::Toolbar,
+            .width = 240.0f,
+            .height = 36.0f,
+            .semantic_label = "Effect Search",
+        });
+    assert(effect_style.has_material);
+    assert(effect_style.max_width == 240.0f);
+    assert(effect_style.fixed_height == 36.0f);
+    assert_glass_effect_context(
+        effect_style.material,
+        field_identity,
+        field_container,
+        field_union,
+        18.0f,
+        MaterialGlassTransitionKind::MatchedGeometry,
+        0.75f,
+        true);
+
+    auto effect_h = text_field_test::build_text_field_with_options(
+        "effect query",
+        effect_style,
+        /*focused_id=*/0u,
+        /*focus_visible=*/false);
+    auto& effect_field = detail::node_at(effect_h);
+    assert(effect_field.is_input);
+    assert(effect_field.focusable);
+    assert(effect_field.material.kind == MaterialKind::Regular);
+    assert(effect_field.material.role == MaterialSurfaceRole::Toolbar);
+    assert(effect_field.material_shape == MaterialSurfaceShape::Capsule);
+    assert(effect_field.debug_semantic_label == "Effect Search");
+    assert_glass_effect_context(
+        effect_field.material,
+        field_identity,
+        field_container,
+        field_union,
+        18.0f,
+        MaterialGlassTransitionKind::MatchedGeometry,
+        0.75f,
+        true);
+
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.input_handlers.clear();
+    detail::g_app.input_nodes.clear();
+    detail::msg_queue().clear();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::glass_text_field<text_field_test::TfMsg>(
+        "Effect Search",
+        std::string{"query"},
+        &text_field_test::make_changed,
+        layout::glass_regular()
+            .effect_id(field_identity)
+            .matched_geometry(0.75f, true)
+            .effect_union("fields.scope", "fields.cluster", 18.0f),
+        GlassTextFieldStyleOptions{
+            .role = MaterialSurfaceRole::Toolbar,
+            .width = 240.0f,
+            .height = 36.0f,
+            .semantic_label = "Effect Search",
+        });
+    Scope::set_current(nullptr);
+
+    auto const& root = detail::node_at(root_h);
+    assert(root.children.size() == 1u);
+    auto const& wrapped_field = detail::node_at(root.children[0]);
+    assert(wrapped_field.interaction_role == InteractionRole::TextField);
+    assert(wrapped_field.is_input);
+    assert(wrapped_field.focusable);
+    assert_glass_effect_context(
+        wrapped_field.material,
+        field_identity,
+        field_container,
+        field_union,
+        18.0f,
+        MaterialGlassTransitionKind::MatchedGeometry,
+        0.75f,
+        true);
 
     auto disabled_style = widget::glass_text_field_style(
         GlassTextFieldStyleOptions{
@@ -7624,6 +7950,7 @@ int main() {
     test_glass_menu_item_symbol_button_material_contract();
     test_glass_table_header_button_material_contract();
     test_glass_disclosure_header_style_material_contract();
+    test_glass_effect_context_reaches_control_styles();
     test_symbol_button_minimum_hit_region_contract();
     test_symbol_button_visual_state_token_contract();
     test_symbol_button_disabled_contract();
