@@ -1999,12 +1999,134 @@ void test_container_member_shape_blend_uses_spacing_falloff() {
     assert(std::fabs(distant_execution.shape_blend_strength) < 0.0001f);
     assert(std::fabs(distant_execution.inner_edge_alpha_blend_strength)
            < 0.0001f);
+    assert(first_execution.group_surface_execution);
+    assert(second_execution.group_surface_execution);
+    assert(!distant_execution.group_surface_execution);
+    assert(first_execution.surface_leader);
+    assert(!second_execution.surface_leader);
+    assert(first_execution.group_bounds_valid);
+    assert(first_execution.group_x == 0.0f);
+    assert(first_execution.group_y == 0.0f);
+    assert(first_execution.group_w == 90.0f);
+    assert(first_execution.group_h == 40.0f);
+
+    auto const first_surface_geometry =
+        material_surface_execution_geometry(records[0].plan, &first_execution);
+    auto const second_surface_geometry =
+        material_surface_execution_geometry(records[1].plan, &second_execution);
+    auto const distant_surface_geometry =
+        material_surface_execution_geometry(records[2].plan, &distant_execution);
+    assert(first_surface_geometry.active);
+    assert(first_surface_geometry.x == 0.0f);
+    assert(first_surface_geometry.w == 90.0f);
+    assert(first_surface_geometry.h == 40.0f);
+    assert(!second_surface_geometry.active);
+    assert(distant_surface_geometry.active);
+    assert(distant_surface_geometry.x == 200.0f);
+    assert(distant_surface_geometry.w == 40.0f);
+
+    MaterialRuntimeSummary runtime_summary{};
+    for (auto const& record : records)
+        accumulate_material_runtime_summary(runtime_summary, record);
+    finalize_material_runtime_summary(runtime_summary, records);
+    assert(runtime_summary.total_surface_sample_pixels == 90 * 40 + 40 * 40);
+    assert(runtime_summary.max_surface_sample_pixels == 90 * 40);
 
     auto summary = summarize_material_container_groups(records);
     assert(summary.shape_blend_execution_group_count == 1u);
     assert(summary.shape_blend_execution_surface_count == 2u);
     assert(std::fabs(summary.max_shape_blend_strength - 0.5f) < 0.0001f);
     std::puts("PASS: container member shape blend uses spacing falloff");
+}
+
+void test_container_member_fallback_paint_uses_proximity_cluster() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 16.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 905u,
+        .union_id = 0u,
+        .spacing = 20.0f,
+        .interactive = false,
+        .morph_transitions = true,
+    };
+    auto nearby = request;
+    nearby.geometry.x = 50.0f;
+    auto distant = request;
+    distant.geometry.x = 200.0f;
+
+    auto env = sampled_environment();
+    env.capabilities.material_backdrop_blur = false;
+    env.capabilities.shader_blur = false;
+    env.capabilities.frame_history = false;
+    env.backdrop.available = false;
+    env.backdrop.stable = false;
+    env.backdrop.source = "none";
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, env), 1u},
+        {plan_material_surface(nearby, env), 2u},
+        {plan_material_surface(distant, env), 3u},
+    };
+    assert(records[0].plan.fallback());
+    assert(records[1].plan.fallback());
+    assert(records[0].plan.paint_layer_count > 1u);
+    assert(records[1].plan.paint_layer_count > 1u);
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const second_execution =
+        material_container_execution_descriptor(records[1], records);
+    auto const distant_execution =
+        material_container_execution_descriptor(records[2], records);
+    assert(first_execution.group_surface_execution);
+    assert(second_execution.group_surface_execution);
+    assert(!distant_execution.group_surface_execution);
+    assert(first_execution.surface_leader);
+    assert(!second_execution.surface_leader);
+    assert(first_execution.paint_layer_leader);
+    assert(!second_execution.paint_layer_leader);
+    assert(first_execution.group_x == 0.0f);
+    assert(first_execution.group_w == 90.0f);
+
+    auto const& first_layer = records[0].plan.paint_layers[1];
+    auto const first_inflate = std::max(first_layer.inflate, 0.0f);
+    auto const first_geometry =
+        material_paint_layer_execution_geometry(
+            records[0].plan,
+            first_layer,
+            &first_execution);
+    assert(first_geometry.active);
+    assert(std::fabs(first_geometry.x
+                     - (first_execution.group_x
+                        + first_layer.x_offset
+                        - first_inflate))
+           < 0.0001f);
+    assert(std::fabs(first_geometry.w
+                     - (first_execution.group_w + first_inflate * 2.0f))
+           < 0.0001f);
+
+    auto const& second_layer = records[1].plan.paint_layers[1];
+    auto const second_base_geometry =
+        material_paint_layer_execution_geometry(records[1].plan, second_layer);
+    auto const second_cluster_geometry =
+        material_paint_layer_execution_geometry(
+            records[1].plan,
+            second_layer,
+            &second_execution);
+    assert(second_base_geometry.active);
+    assert(!second_cluster_geometry.active);
+
+    auto const& distant_layer = records[2].plan.paint_layers[1];
+    auto const distant_geometry =
+        material_paint_layer_execution_geometry(
+            records[2].plan,
+            distant_layer,
+            &distant_execution);
+    assert(distant_geometry.active);
+    assert(std::fabs(distant_geometry.x - 200.0f) < 0.0001f);
+    assert(std::fabs(distant_geometry.w - 40.0f) < 0.0001f);
+
+    std::puts("PASS: container member fallback paint uses proximity cluster");
 }
 
 void test_glass_effect_union_uses_compatible_render_bounds() {
@@ -2400,6 +2522,7 @@ int main() {
     test_executor_sampled_status_contract();
     test_container_group_runtime_summary_contract();
     test_container_member_shape_blend_uses_spacing_falloff();
+    test_container_member_fallback_paint_uses_proximity_cluster();
     test_glass_effect_union_uses_compatible_render_bounds();
     test_glass_effect_union_combines_at_rest_without_spacing();
     test_glass_effect_union_sample_budget_uses_leader_bounds();
