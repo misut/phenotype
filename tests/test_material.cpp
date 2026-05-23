@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 64);
+    assert(material_plan_contract_version == 65);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -2923,6 +2923,9 @@ void test_container_member_shape_blend_uses_spacing_falloff() {
     assert(first_bridge_motion.caustic_gain
            > first_bridge_motion.refraction_gain);
     assert(first_bridge_motion.specular_intensity_gain > 1.0f);
+    assert(first_bridge_motion.flow_offset_gain > 0.0f);
+    assert(first_bridge_motion.ribbon_width > 0.10f);
+    assert(first_bridge_motion.highlight_gain > 0.0f);
     assert(!second_bridge_motion.active);
     assert(!distant_bridge_motion.active);
     assert(first_execution.surface_leader);
@@ -3147,6 +3150,9 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     assert(first_bridge_motion.caustic_gain
            > first_bridge_motion.refraction_gain);
     assert(first_bridge_motion.specular_intensity_gain > 1.40f);
+    assert(first_bridge_motion.flow_offset_gain > 0.40f);
+    assert(first_bridge_motion.ribbon_width > 0.25f);
+    assert(first_bridge_motion.highlight_gain > 0.19f);
     assert(!peer_bridge_motion.active);
     assert(first_execution.surface_leader);
     assert(!peer_execution.surface_leader);
