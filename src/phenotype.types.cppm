@@ -260,6 +260,70 @@ inline MaterialGlassIdentityDescriptor material_glass_identity_from_wire(
     return MaterialGlassIdentityDescriptor{namespace_id, effect_id};
 }
 
+enum class MaterialGlassBackgroundEffectKind : unsigned int {
+    None = 0,
+    Automatic = 1,
+    Plate = 2,
+    Feathered = 3,
+};
+
+inline char const* material_glass_background_effect_kind_name(
+        MaterialGlassBackgroundEffectKind kind) noexcept {
+    switch (kind) {
+        case MaterialGlassBackgroundEffectKind::None:
+            return "none";
+        case MaterialGlassBackgroundEffectKind::Automatic:
+            return "automatic";
+        case MaterialGlassBackgroundEffectKind::Plate:
+            return "plate";
+        case MaterialGlassBackgroundEffectKind::Feathered:
+            return "feathered";
+    }
+    return "none";
+}
+
+inline MaterialGlassBackgroundEffectKind
+material_glass_background_effect_kind_from_wire(unsigned int raw) noexcept {
+    switch (raw) {
+        case 1u:
+            return MaterialGlassBackgroundEffectKind::Automatic;
+        case 2u:
+            return MaterialGlassBackgroundEffectKind::Plate;
+        case 3u:
+            return MaterialGlassBackgroundEffectKind::Feathered;
+        default:
+            return MaterialGlassBackgroundEffectKind::None;
+    }
+}
+
+inline float material_glass_background_non_negative(float value) noexcept {
+    return std::isfinite(value) && value > 0.0f ? value : 0.0f;
+}
+
+struct MaterialGlassBackgroundDescriptor {
+    MaterialGlassBackgroundEffectKind kind =
+        MaterialGlassBackgroundEffectKind::None;
+    float feather_padding = 0.0f;
+    float soft_edge_radius = 0.0f;
+
+    constexpr bool active() const noexcept {
+        return kind != MaterialGlassBackgroundEffectKind::None;
+    }
+
+    constexpr bool operator==(MaterialGlassBackgroundDescriptor const&) const =
+        default;
+};
+
+inline MaterialGlassBackgroundDescriptor material_glass_background_from_wire(
+        unsigned int kind,
+        float feather_padding,
+        float soft_edge_radius) noexcept {
+    return MaterialGlassBackgroundDescriptor{
+        material_glass_background_effect_kind_from_wire(kind),
+        material_glass_background_non_negative(feather_padding),
+        material_glass_background_non_negative(soft_edge_radius)};
+}
+
 inline unsigned int material_interaction_flags(
         MaterialInteractionDescriptor descriptor) noexcept {
     return (descriptor.hovered ? 1u : 0u)
@@ -309,6 +373,7 @@ struct MaterialStyle {
     MaterialInteractionDescriptor interaction{};
     MaterialTransitionDescriptor transition{};
     MaterialGlassIdentityDescriptor glass_identity{};
+    MaterialGlassBackgroundDescriptor glass_background{};
 };
 
 struct MaterialCommandDescriptor {
@@ -329,6 +394,7 @@ struct MaterialCommandDescriptor {
     MaterialInteractionDescriptor interaction{};
     MaterialTransitionDescriptor transition{};
     MaterialGlassIdentityDescriptor glass_identity{};
+    MaterialGlassBackgroundDescriptor glass_background{};
 };
 
 // A solid convex quadrilateral in canvas-local coordinates. Intended
@@ -1083,7 +1149,9 @@ enum class Cmd : unsigned int {
     // container_spacing f32 + container_flags u32 +
     // interaction_flags u32 + interaction pointer_x/pointer_y f32 +
     // transition_kind u32 + transition_progress f32 + transition_flags u32 +
-    // glass_namespace_id u32 + glass_effect_id u32.
+    // glass_namespace_id u32 + glass_effect_id u32 +
+    // glass_background_effect_kind u32 + glass_background_feather_padding f32 +
+    // glass_background_soft_edge_radius f32.
     // Backends with backdrop sampling render a glass/material effect;
     // backends without it draw the tint as a rounded-rect fallback.
     MaterialRect = 15,

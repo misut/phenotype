@@ -333,7 +333,7 @@ void emit_material_rect(R& r, float x, float y, float w, float h,
                         float radius, MaterialStyle const& material) {
     if (material.kind == MaterialKind::None || material.tint.a == 0)
         return;
-    if (!detail::ensure(r, 124, Cmd::MaterialRect)) return;
+    if (!detail::ensure(r, 136, Cmd::MaterialRect)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::MaterialRect));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, w); detail::write_f32(r, h);
@@ -365,6 +365,11 @@ void emit_material_rect(R& r, float x, float y, float w, float h,
     detail::write_u32(r, material_transition_flags(material.transition));
     detail::write_u32(r, material.glass_identity.namespace_id);
     detail::write_u32(r, material.glass_identity.effect_id);
+    detail::write_u32(
+        r,
+        static_cast<unsigned int>(material.glass_background.kind));
+    detail::write_f32(r, material.glass_background.feather_padding);
+    detail::write_f32(r, material.glass_background.soft_edge_radius);
 }
 
 template <render_backend R>

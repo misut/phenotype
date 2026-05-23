@@ -4364,6 +4364,9 @@ inline void decode_android_color_commands(unsigned char const* buf,
             auto const transition_flags = read_u32();
             auto const glass_namespace_id = read_u32();
             auto const glass_effect_id = read_u32();
+            auto const glass_background_kind = read_u32();
+            auto const glass_background_feather_padding = read_f32();
+            auto const glass_background_soft_edge_radius = read_f32();
             auto material_env_for_command = material_env;
             material_env_for_command.debug_seed.node = current_command_index;
             ::phenotype::MaterialCommandDescriptor descriptor{
@@ -4395,7 +4398,11 @@ inline void decode_android_color_commands(unsigned char const* buf,
                     transition_flags),
                 ::phenotype::material_glass_identity_from_wire(
                     glass_namespace_id,
-                    glass_effect_id)};
+                    glass_effect_id),
+                ::phenotype::material_glass_background_from_wire(
+                    glass_background_kind,
+                    glass_background_feather_padding,
+                    glass_background_soft_edge_radius)};
             auto plan = ::phenotype::plan_material_surface(
                 ::phenotype::material_request_for_command(
                     descriptor,

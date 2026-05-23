@@ -1257,6 +1257,15 @@ namespace detail {
             json::Value{
                 plan.reference_model.glass_effect_matched_geometry});
         reference_model.emplace(
+            "glass_background_effect",
+            json::Value{plan.reference_model.glass_background_effect});
+        reference_model.emplace(
+            "glass_background_plate",
+            json::Value{plan.reference_model.glass_background_plate});
+        reference_model.emplace(
+            "glass_background_feathered",
+            json::Value{plan.reference_model.glass_background_feathered});
+        reference_model.emplace(
             "legibility_preserved",
             json::Value{plan.reference_model.legibility_preserved});
         reference_model.emplace(

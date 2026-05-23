@@ -3304,6 +3304,9 @@ void test_glass_background_effect_display_modes_follow_containment_contract() {
     assert(defaults.shape == MaterialSurfaceShape::RoundedRectangle);
     assert(defaults.padding == SpaceToken::Md);
     assert(defaults.border_width == 0.0f);
+    assert(defaults.has_material_override);
+    assert(defaults.material_override.glass_background.kind
+           == MaterialGlassBackgroundEffectKind::Automatic);
     assert(std::string_view{defaults.semantic_label} == "Glass Background");
 
     auto never = layout::glass_background_effect_surface_options(
@@ -3314,6 +3317,7 @@ void test_glass_background_effect_display_modes_follow_containment_contract() {
     assert(never.kind == MaterialKind::None);
     assert(!never.interactive);
     assert(never.shape == MaterialSurfaceShape::RoundedRectangle);
+    assert(!never.has_material_override);
 
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -3390,12 +3394,18 @@ void test_glass_background_effect_display_modes_follow_containment_contract() {
     assert(materials.size() == 3u);
     assert(materials[0].material.kind == MaterialKind::Regular);
     assert(materials[0].material.role == MaterialSurfaceRole::Surface);
+    assert(materials[0].material.glass_background.kind
+           == MaterialGlassBackgroundEffectKind::Automatic);
     assert(materials[0].radius > 0.0f);
     assert(materials[0].radius < std::min(materials[0].w, materials[0].h)
            * 0.5f);
     assert(materials[1].material.kind == MaterialKind::Regular);
     assert(materials[1].material.role == MaterialSurfaceRole::Surface);
+    assert(materials[1].material.glass_background.kind
+           == MaterialGlassBackgroundEffectKind::None);
     assert(materials[2].material.kind == MaterialKind::Regular);
+    assert(materials[2].material.glass_background.kind
+           == MaterialGlassBackgroundEffectKind::Automatic);
     assert(std::fabs(materials[2].radius) < 0.0001f);
 
     MaterialEnvironment env{};
@@ -3425,6 +3435,128 @@ void test_glass_background_effect_display_modes_follow_containment_contract() {
            == "liquid-glass");
 
     std::puts("PASS: glass background effect display modes follow containment contract");
+}
+
+void test_glass_background_effect_variants_map_to_material_contract() {
+    auto const automatic_surface = layout::glass_background_effect_surface_options(
+        layout::GlassBackgroundEffectOptions{});
+    auto const plate_surface = layout::glass_background_effect_surface_options(
+        layout::GlassBackgroundEffectOptions{
+            .display_mode = layout::GlassBackgroundDisplayMode::Always,
+            .effect = layout::glass_background_plate(),
+        });
+    auto const feathered_surface = layout::glass_background_effect_surface_options(
+        layout::GlassBackgroundEffectOptions{
+            .display_mode = layout::GlassBackgroundDisplayMode::Always,
+            .effect = layout::glass_background_feathered(20.0f, 9.0f),
+        });
+
+    assert(automatic_surface.material_override.glass_background.kind
+           == MaterialGlassBackgroundEffectKind::Automatic);
+    assert(plate_surface.material_override.glass_background.kind
+           == MaterialGlassBackgroundEffectKind::Plate);
+    assert(plate_surface.material_override.opacity
+           > automatic_surface.material_override.opacity);
+    assert(plate_surface.material_override.blur_radius
+           > automatic_surface.material_override.blur_radius);
+    assert(feathered_surface.material_override.glass_background.kind
+           == MaterialGlassBackgroundEffectKind::Feathered);
+    assert(feathered_surface.material_override.glass_background.feather_padding
+           == 20.0f);
+    assert(feathered_surface.material_override.glass_background.soft_edge_radius
+           == 9.0f);
+    assert(feathered_surface.material_override.edge_width
+           > automatic_surface.material_override.edge_width);
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::glass_background_effect(
+        layout::glass_background_plate(),
+        [] {
+            widget::text("Plate background");
+        });
+    layout::glass_background_effect(
+        layout::glass_background_feathered(20.0f, 9.0f),
+        MaterialSurfaceShape::Capsule,
+        [] {
+            widget::text("Feathered background");
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 240.0f);
+
+    auto const commands = parse_commands(CMD_BUF, CMD_LEN);
+    std::vector<MaterialRectCmd> materials;
+    for (auto const& cmd : commands) {
+        if (auto const* material = std::get_if<MaterialRectCmd>(&cmd))
+            materials.push_back(*material);
+    }
+
+    assert(materials.size() == 2u);
+    assert(materials[0].material.glass_background.kind
+           == MaterialGlassBackgroundEffectKind::Plate);
+    assert(materials[1].material.glass_background.kind
+           == MaterialGlassBackgroundEffectKind::Feathered);
+    assert(materials[1].material.glass_background.feather_padding == 20.0f);
+    assert(materials[1].material.glass_background.soft_edge_radius == 9.0f);
+    assert(std::fabs(materials[1].radius - materials[1].h * 0.5f)
+           < 0.0001f);
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.render_target.width = 320;
+    env.render_target.height = 96;
+
+    auto plate_plan = make_test_material_plan(
+        material_request_for_command(
+            materials[0].material,
+            MaterialGeometry{
+                materials[0].x,
+                materials[0].y,
+                materials[0].w,
+                materials[0].h,
+                materials[0].radius},
+            detail::g_app.theme),
+        env);
+    auto feathered_plan = make_test_material_plan(
+        material_request_for_command(
+            materials[1].material,
+            MaterialGeometry{
+                materials[1].x,
+                materials[1].y,
+                materials[1].w,
+                materials[1].h,
+                materials[1].radius},
+            detail::g_app.theme),
+        env);
+
+    assert(plate_plan->glass_background.plate);
+    assert(std::string_view{
+        plate_plan->reference_model.glass_background_effect}
+        == "plate");
+    assert(plate_plan->reference_model.glass_background_plate);
+    assert(feathered_plan->glass_background.feathered);
+    assert(feathered_plan->glass_background.feather_padding == 20.0f);
+    assert(feathered_plan->glass_background.soft_edge_radius == 9.0f);
+    assert(std::string_view{
+        feathered_plan->reference_model.glass_background_effect}
+        == "feathered");
+    assert(feathered_plan->reference_model.glass_background_feathered);
+
+    std::puts("PASS: glass background effect variants map to material contract");
 }
 
 void test_glass_effect_style_variants_map_to_material_contract() {
@@ -7000,6 +7132,7 @@ int main() {
     test_glass_effect_surface_api_emits_capsule_tint_contract();
     test_glass_effect_shape_argument_anchors_material_contract();
     test_glass_background_effect_display_modes_follow_containment_contract();
+    test_glass_background_effect_variants_map_to_material_contract();
     test_glass_effect_style_variants_map_to_material_contract();
     test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();

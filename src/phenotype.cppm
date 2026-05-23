@@ -2814,11 +2814,92 @@ inline char const* glass_background_display_mode_name(
     return "always";
 }
 
+inline constexpr float glass_background_default_feather_padding = 12.0f;
+inline constexpr float glass_background_default_soft_edge_radius = 18.0f;
+
+struct GlassBackgroundEffectStyle {
+    MaterialGlassBackgroundEffectKind kind =
+        MaterialGlassBackgroundEffectKind::Automatic;
+    float feather_padding = 0.0f;
+    float soft_edge_radius = 0.0f;
+};
+
+inline constexpr GlassBackgroundEffectStyle
+glass_background_automatic() noexcept {
+    return GlassBackgroundEffectStyle{
+        .kind = MaterialGlassBackgroundEffectKind::Automatic,
+    };
+}
+
+inline constexpr GlassBackgroundEffectStyle glass_background_plate() noexcept {
+    return GlassBackgroundEffectStyle{
+        .kind = MaterialGlassBackgroundEffectKind::Plate,
+    };
+}
+
+inline constexpr GlassBackgroundEffectStyle glass_background_feathered(
+        float padding = glass_background_default_feather_padding,
+        float soft_edge_radius =
+            glass_background_default_soft_edge_radius) noexcept {
+    return GlassBackgroundEffectStyle{
+        .kind = MaterialGlassBackgroundEffectKind::Feathered,
+        .feather_padding = padding,
+        .soft_edge_radius = soft_edge_radius,
+    };
+}
+
+inline MaterialGlassBackgroundDescriptor glass_background_descriptor(
+        GlassBackgroundEffectStyle style) noexcept {
+    return MaterialGlassBackgroundDescriptor{
+        style.kind,
+        material_glass_background_non_negative(style.feather_padding),
+        material_glass_background_non_negative(style.soft_edge_radius)};
+}
+
+inline MaterialStyle glass_background_effect_material_style(
+        MaterialKind kind,
+        GlassBackgroundEffectStyle effect) noexcept {
+    auto style = material_style(kind);
+    style.glass_background = glass_background_descriptor(effect);
+    switch (style.glass_background.kind) {
+        case MaterialGlassBackgroundEffectKind::Plate:
+            style.opacity = std::clamp(style.opacity + 0.08f, 0.0f, 1.0f);
+            style.blur_radius =
+                std::min(style.blur_radius + 4.0f, material_max_blur_radius);
+            style.saturation = std::max(style.saturation, 1.08f);
+            style.edge_highlight =
+                std::clamp(style.edge_highlight + 0.08f, 0.0f, 1.0f);
+            style.edge_width = std::max(style.edge_width, 1.25f);
+            style.shadow_alpha =
+                std::clamp(style.shadow_alpha + 0.05f, 0.0f, 0.4f);
+            style.shadow_radius = std::max(style.shadow_radius, 12.0f);
+            break;
+        case MaterialGlassBackgroundEffectKind::Feathered:
+            style.opacity = std::clamp(style.opacity - 0.03f, 0.0f, 1.0f);
+            style.blur_radius =
+                std::min(style.blur_radius + 2.0f, material_max_blur_radius);
+            style.edge_highlight =
+                std::clamp(style.edge_highlight + 0.03f, 0.0f, 1.0f);
+            style.edge_width = std::max(
+                style.edge_width,
+                1.0f + style.glass_background.soft_edge_radius * 0.05f);
+            style.shadow_radius = std::max(
+                style.shadow_radius,
+                8.0f + style.glass_background.feather_padding * 0.25f);
+            break;
+        case MaterialGlassBackgroundEffectKind::Automatic:
+        case MaterialGlassBackgroundEffectKind::None:
+            break;
+    }
+    return style;
+}
+
 struct GlassBackgroundEffectOptions {
     MaterialKind kind = MaterialKind::Regular;
     MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
     GlassBackgroundDisplayMode display_mode =
         GlassBackgroundDisplayMode::Always;
+    GlassBackgroundEffectStyle effect = glass_background_automatic();
     FlexDirection direction = FlexDirection::Column;
     SpaceToken padding = SpaceToken::Md;
     SpaceToken gap = SpaceToken::Md;
@@ -3501,6 +3582,11 @@ inline MaterialSurfaceOptions glass_background_effect_surface_options(
     surface.border_width = options.border_width;
     surface.semantic_label = options.semantic_label;
     surface.interactive = displayed && options.interactive;
+    if (displayed && options.kind != MaterialKind::None) {
+        surface.has_material_override = true;
+        surface.material_override =
+            glass_background_effect_material_style(options.kind, options.effect);
+    }
     return surface;
 }
 
@@ -3654,6 +3740,36 @@ void glass_background_effect(GlassBackgroundEffectOptions options,
                              F&& builder) {
     material_surface(
         glass_background_effect_surface_options(options),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_background_effect(GlassBackgroundEffectStyle effect,
+                             F&& builder,
+                             GlassBackgroundDisplayMode display_mode =
+                                 GlassBackgroundDisplayMode::Always) {
+    glass_background_effect(
+        GlassBackgroundEffectOptions{
+            .display_mode = display_mode,
+            .effect = effect,
+        },
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_background_effect(GlassBackgroundEffectStyle effect,
+                             MaterialSurfaceShape shape,
+                             F&& builder,
+                             GlassBackgroundDisplayMode display_mode =
+                                 GlassBackgroundDisplayMode::Always) {
+    glass_background_effect(
+        GlassBackgroundEffectOptions{
+            .display_mode = display_mode,
+            .effect = effect,
+            .shape = shape,
+        },
         std::forward<F>(builder));
 }
 
