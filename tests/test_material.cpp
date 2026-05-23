@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -665,6 +666,77 @@ void test_glass_background_variants_shape_fallback_paint_policy() {
     assert(feathered_plan.execution_audit.contract_satisfied);
 
     std::puts("PASS: glass background variants shape fallback paint policy");
+}
+
+void test_glass_background_sample_bounds_follow_execution_geometry() {
+    auto baseline = plan_material_surface(regular_request(), sampled_environment());
+    assert(baseline.backdrop_sampling);
+    assert(baseline.backdrop_access.max_surface_sample_pixels == 240 * 96);
+
+    auto plate_request = regular_request();
+    plate_request.style.glass_background =
+        MaterialGlassBackgroundDescriptor{
+            .kind = MaterialGlassBackgroundEffectKind::Plate,
+        };
+    auto plate_plan = plan_material_surface(plate_request, sampled_environment());
+    assert(plate_plan.backdrop_sampling);
+    assert(plate_plan.glass_background.plate);
+    assert(plate_plan.backdrop_access.max_surface_sample_pixels
+           == baseline.backdrop_access.max_surface_sample_pixels);
+
+    auto feathered_request = regular_request();
+    feathered_request.style.glass_background =
+        material_glass_background_from_wire(
+            static_cast<unsigned int>(
+                MaterialGlassBackgroundEffectKind::Feathered),
+            14.0f,
+            6.0f);
+    auto feathered_plan =
+        plan_material_surface(feathered_request, sampled_environment());
+    auto const feathered_geometry =
+        material_surface_execution_geometry(feathered_plan);
+    assert(feathered_plan.backdrop_sampling);
+    assert(feathered_plan.glass_background.feathered);
+    assert(feathered_geometry.active);
+    assert(std::fabs(feathered_geometry.x - (baseline.geometry.x - 20.0f))
+           < 0.0001f);
+    assert(std::fabs(feathered_geometry.y - (baseline.geometry.y - 20.0f))
+           < 0.0001f);
+    assert(std::fabs(feathered_geometry.w - 280.0f) < 0.0001f);
+    assert(std::fabs(feathered_geometry.h - 136.0f) < 0.0001f);
+    auto const feathered_pixels = static_cast<std::int64_t>(
+        std::ceil(feathered_geometry.w * feathered_geometry.h));
+    assert(feathered_pixels == 38'080);
+    assert(feathered_plan.backdrop_access.max_surface_sample_pixels
+           == feathered_pixels);
+    assert(feathered_plan.resource_budget.max_surface_sample_pixels
+           == feathered_pixels);
+    assert(feathered_plan.backdrop_access.max_surface_sample_pixels
+           > baseline.backdrop_access.max_surface_sample_pixels);
+
+    auto materialize_request = feathered_request;
+    materialize_request.style.transition = MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::Materialize,
+        .progress = 0.5f,
+        .appearing = true,
+    };
+    auto materialize_plan =
+        plan_material_surface(materialize_request, sampled_environment());
+    auto const materialize_geometry =
+        material_surface_execution_geometry(materialize_plan);
+    assert(materialize_plan.backdrop_sampling);
+    assert(materialize_plan.transition.materialize);
+    assert(materialize_geometry.active);
+    assert(materialize_geometry.w < feathered_geometry.w);
+    assert(materialize_geometry.h < feathered_geometry.h);
+    auto const materialize_pixels = static_cast<std::int64_t>(
+        std::ceil(materialize_geometry.w * materialize_geometry.h));
+    assert(materialize_plan.backdrop_access.max_surface_sample_pixels
+           == materialize_pixels);
+    assert(materialize_plan.resource_budget.max_surface_sample_pixels
+           == materialize_pixels);
+
+    std::puts("PASS: glass background sample bounds follow execution geometry");
 }
 
 void test_custom_theme_snapshot_contract() {
@@ -2184,6 +2256,7 @@ int main() {
     test_content_layer_stays_standard_material_contract();
     test_fallback_backdrop_access_contract();
     test_glass_background_variants_shape_fallback_paint_policy();
+    test_glass_background_sample_bounds_follow_execution_geometry();
     test_custom_theme_snapshot_contract();
     test_command_material_preserves_theme_snapshot_contract();
     test_foreground_contrast_gap_uses_absolute_contrast_candidate();
