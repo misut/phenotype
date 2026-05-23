@@ -1476,7 +1476,8 @@ void test_material_runtime_record_json_contract() {
     assert(obj.at("resource_budget").as_object()
                .at("max_sampling_kernel_radius").as_integer() == 0);
     assert(obj.at("resource_budget").as_object()
-               .at("max_paint_layers").as_integer() == 3);
+               .at("max_paint_layers").as_integer()
+           == material_max_paint_layers);
     assert(obj.at("resource_budget").as_object()
                .at("max_container_spacing").as_float() == 0.0f);
     assert(obj.at("resource_budget").as_object()
@@ -1485,7 +1486,8 @@ void test_material_runtime_record_json_contract() {
                .at("deterministic_fallback").as_bool() == true);
     assert(obj.at("execution_stage_capacity").as_integer() == 4);
     assert(obj.at("dropped_execution_stage_count").as_integer() == 0);
-    assert(obj.at("paint_layer_capacity").as_integer() == 3);
+    assert(obj.at("paint_layer_capacity").as_integer()
+           == material_max_paint_layers);
     assert(obj.at("dropped_paint_layer_count").as_integer() == 0);
     auto const& paint_layers = obj.at("paint_layers").as_array();
     assert(paint_layers.size() == 3);

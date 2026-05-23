@@ -13,9 +13,9 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 51;
+inline constexpr std::uint32_t material_plan_contract_version = 52;
 inline constexpr unsigned int material_max_execution_stages = 4;
-inline constexpr unsigned int material_max_paint_layers = 3;
+inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
 inline constexpr unsigned int material_max_sample_taps = 25;
 inline constexpr std::int64_t material_default_max_backdrop_pixels = 4'000'000;
@@ -1800,6 +1800,65 @@ inline char const* material_background_effect_layer_name(
         : "none";
 }
 
+inline bool material_interaction_paint_highlight_active(
+        MaterialPlan const& plan) noexcept {
+    return plan.primary_pass.active
+        && !plan.primary_pass.requires_backdrop
+        && plan.interaction.specular_highlight_active
+        && plan.interaction.specular_intensity > 0.0f;
+}
+
+inline float material_interaction_paint_extent(
+        MaterialPlan const& plan) noexcept {
+    return std::min(
+        std::max(plan.geometry.w, 0.0f),
+        std::max(plan.geometry.h, 0.0f));
+}
+
+inline float material_interaction_paint_offset(
+        float anchor,
+        float extent,
+        float response_strength) noexcept {
+    auto const scale = std::clamp(
+        0.12f + 0.10f * response_strength,
+        0.12f,
+        0.24f);
+    return std::clamp((anchor - 0.5f) * extent * scale, -24.0f, 24.0f);
+}
+
+inline float material_interaction_paint_inflate(
+        MaterialPlan const& plan) noexcept {
+    auto const extent = material_interaction_paint_extent(plan);
+    auto const lens_radius = plan.interaction.pointer_lens_active
+        ? plan.interaction.pointer_lens_radius
+        : plan.interaction.specular_radius;
+    return std::clamp(
+        extent * std::clamp(lens_radius, 0.0f, 1.0f) * 0.16f,
+        4.0f,
+        18.0f);
+}
+
+inline float material_interaction_paint_opacity(
+        MaterialPlan const& plan) noexcept {
+    return std::clamp(
+        0.04f
+            + plan.interaction.specular_intensity * 0.32f
+            + plan.interaction.pointer_lens_strength * 0.20f
+            + plan.interaction.response_strength * 0.02f,
+        0.0f,
+        0.26f);
+}
+
+inline float material_interaction_paint_soft_edge(
+        MaterialPlan const& plan) noexcept {
+    auto const extent = material_interaction_paint_extent(plan);
+    return std::clamp(
+        extent * std::clamp(plan.interaction.specular_radius, 0.0f, 1.0f)
+            * 0.40f,
+        8.0f,
+        30.0f);
+}
+
 inline void resolve_material_paint_layers(MaterialPlan& plan) noexcept {
     if (!plan.primary_pass.active || plan.primary_pass.requires_backdrop)
         return;
@@ -1848,6 +1907,36 @@ inline void resolve_material_paint_layers(MaterialPlan& plan) noexcept {
             soft_edge_radius,
             true,
         });
+
+    if (material_interaction_paint_highlight_active(plan)) {
+        auto const highlight_inflate =
+            material_interaction_paint_inflate(plan);
+        append_material_paint_layer(
+            plan,
+            MaterialPaintLayer{
+                "pointer-specular-highlight",
+                true,
+                "rounded-fill",
+                background_effect,
+                material_interaction_paint_offset(
+                    plan.interaction.specular_anchor_x,
+                    plan.geometry.w,
+                    plan.interaction.response_strength),
+                material_interaction_paint_offset(
+                    plan.interaction.specular_anchor_y,
+                    plan.geometry.h,
+                    plan.interaction.response_strength),
+                background_inflate + highlight_inflate,
+                background_inflate + highlight_inflate,
+                0.0f,
+                Color{255, 255, 255, 255},
+                material_interaction_paint_opacity(plan),
+                std::max(
+                    soft_edge_radius,
+                    material_interaction_paint_soft_edge(plan)),
+                true,
+            });
+    }
 
     if (plan.edge_highlight > 0.0f) {
         append_material_paint_layer(
