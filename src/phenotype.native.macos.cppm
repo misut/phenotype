@@ -1651,6 +1651,8 @@ struct MaterialInstanceGPU {
     float scroll_edge[4]{};
     // intensity, tint weight, edge lift, lensing gain
     float prominent_glass[4]{};
+    // dimming, contrast lift, brightness response, detail response
+    float clear_glass[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
     // shape blend strength, inner-edge alpha blend strength, flags, command index
@@ -2426,6 +2428,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.prominent_glass[1] = plan.prominent_glass.tint_weight;
     inst.prominent_glass[2] = plan.prominent_glass.edge_lift;
     inst.prominent_glass[3] = plan.prominent_glass.lensing_gain;
+    inst.clear_glass[0] = plan.clear_glass_legibility.dimming_strength;
+    inst.clear_glass[1] = plan.clear_glass_legibility.contrast_lift;
+    inst.clear_glass[2] = plan.clear_glass_legibility.brightness_response;
+    inst.clear_glass[3] = plan.clear_glass_legibility.detail_response;
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];
@@ -4639,6 +4645,7 @@ struct MaterialVsOut {
     float4 dispersion;
     float4 scroll_edge;
     float4 prominent_glass;
+    float4 clear_glass;
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
@@ -4664,6 +4671,7 @@ struct MaterialInstance {
     float4 dispersion;
     float4 scroll_edge;
     float4 prominent_glass;
+    float4 clear_glass;
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
@@ -4722,6 +4730,7 @@ vertex MaterialVsOut vs_material(
     out.dispersion = inst.dispersion;
     out.scroll_edge = inst.scroll_edge;
     out.prominent_glass = inst.prominent_glass;
+    out.clear_glass = inst.clear_glass;
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
     out.fusion_optics = inst.fusion_optics;
@@ -4880,6 +4889,10 @@ fragment float4 fs_material(
     float prominent_tint_weight = clamp(in.prominent_glass.y, 0.0, 0.64);
     float prominent_edge_lift = clamp(in.prominent_glass.z, 0.0, 0.20);
     float prominent_lensing_gain = clamp(in.prominent_glass.w, 1.0, 1.24);
+    float clear_glass_dimming = clamp(in.clear_glass.x, 0.0, 0.34);
+    float clear_glass_contrast = clamp(in.clear_glass.y, 0.0, 0.28);
+    float clear_glass_brightness = clamp(in.clear_glass.z, 0.0, 1.0);
+    float clear_glass_detail = clamp(in.clear_glass.w, 0.0, 1.0);
     edge_inner_highlight = clamp(
         edge_inner_highlight + prominent_edge_lift,
         0.0,
@@ -5062,6 +5075,27 @@ fragment float4 fs_material(
                          1.0);
     backdrop_rgb = clamp(max(backdrop_rgb * luminance_gain,
                             float3(luminance_floor)), 0.0, 1.0);
+    if (clear_glass_dimming > 0.0001
+        || clear_glass_contrast > 0.0001) {
+        float clear_luma =
+            dot(backdrop_rgb, float3(0.2126, 0.7152, 0.0722));
+        float brightness_gate =
+            max(smoothstep(0.52, 0.92, clear_luma),
+                clear_glass_brightness);
+        float detail_gate = 0.35 + 0.65 * clear_glass_detail;
+        float dimming_weight =
+            clear_glass_dimming
+            * (0.42 + 0.58 * brightness_gate)
+            * detail_gate;
+        float3 dimmed = backdrop_rgb * (1.0 - dimming_weight);
+        float3 contrasted = clamp(
+            (dimmed - float3(0.50))
+                * (1.0 + clear_glass_contrast * detail_gate)
+                + float3(0.50),
+            0.0,
+            1.0);
+        backdrop_rgb = mix(dimmed, contrasted, 0.72);
+    }
     float scattering_strength = clamp(
         (glass_scattering_gain - 1.0) * 0.22 + glass_thickness * 0.035,
         0.0,

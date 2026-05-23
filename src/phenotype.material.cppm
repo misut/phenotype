@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 62;
+inline constexpr std::uint32_t material_plan_contract_version = 63;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -484,6 +484,11 @@ struct MaterialStageOptics {
     float scroll_edge_dissolve = 0.0f;
     float scroll_edge_dimming = 0.0f;
     float scroll_edge_hard_style = 0.0f;
+    char const* clear_glass_legibility_model = "none";
+    float clear_glass_dimming = 0.0f;
+    float clear_glass_contrast = 0.0f;
+    float clear_glass_brightness_response = 0.0f;
+    float clear_glass_detail_response = 0.0f;
 };
 
 struct MaterialExecutionStage {
@@ -720,6 +725,22 @@ struct MaterialScrollEdgeProfile {
     float hard_style_strength = 0.0f;
 };
 
+struct MaterialClearGlassLegibilityProfile {
+    char const* model = "none";
+    char const* source = "none";
+    bool active = false;
+    bool backdrop_driven = false;
+    bool brightness_driven = false;
+    bool detail_driven = false;
+    bool contrast_driven = false;
+    bool accessibility_driven = false;
+    bool bounded = true;
+    float dimming_strength = 0.0f;
+    float contrast_lift = 0.0f;
+    float brightness_response = 0.0f;
+    float detail_response = 0.0f;
+};
+
 struct MaterialInteractionResponse {
     bool enabled = false;
     bool active = false;
@@ -784,6 +805,7 @@ struct MaterialOpticalResponseContract {
     bool glass_dispersion_active = false;
     bool scroll_edge_active = false;
     bool prominent_glass_active = false;
+    bool clear_glass_legibility_active = false;
     bool foreground_vibrancy_active = false;
     bool interaction_active = false;
     bool interaction_modulates_optics = false;
@@ -805,6 +827,7 @@ struct MaterialOpticalComposition {
     char const* glass_dispersion_source = "none";
     char const* scroll_edge_source = "none";
     char const* prominent_glass_source = "none";
+    char const* clear_glass_legibility_source = "none";
     char const* interaction_source = "none";
     char const* transition_source = "identity";
     char const* fallback_source = "none";
@@ -827,6 +850,7 @@ struct MaterialOpticalComposition {
     bool glass_dispersion_required = false;
     bool scroll_edge_required = false;
     bool prominent_glass_required = false;
+    bool clear_glass_legibility_required = false;
     bool interaction_required = false;
     bool transition_required = false;
     bool fallback_required = false;
@@ -878,6 +902,10 @@ struct MaterialOpticalComposition {
     float prominent_glass_tint_weight = 0.0f;
     float prominent_glass_edge_lift = 0.0f;
     float prominent_glass_lensing_gain = 1.0f;
+    float clear_glass_dimming = 0.0f;
+    float clear_glass_contrast = 0.0f;
+    float clear_glass_brightness_response = 0.0f;
+    float clear_glass_detail_response = 0.0f;
     float interaction_response_strength = 0.0f;
     float interaction_control_morph_scale_delta = 0.0f;
     float interaction_control_morph_depth = 0.0f;
@@ -1093,6 +1121,7 @@ struct MaterialPlan {
     MaterialGlassDispersionProfile glass_dispersion{};
     MaterialScrollEdgeProfile scroll_edge{};
     MaterialProminentGlassProfile prominent_glass{};
+    MaterialClearGlassLegibilityProfile clear_glass_legibility{};
     MaterialInteractionResponse interaction{};
     MaterialOpticalComposition optical_composition{};
     MaterialOpticalResponseContract optical_response{};
@@ -1185,6 +1214,16 @@ inline MaterialStageOptics material_primary_stage_optics(
     optics.scroll_edge_dissolve = plan.scroll_edge.dissolve_strength;
     optics.scroll_edge_dimming = plan.scroll_edge.dimming_strength;
     optics.scroll_edge_hard_style = plan.scroll_edge.hard_style_strength;
+    optics.clear_glass_legibility_model =
+        plan.clear_glass_legibility.model;
+    optics.clear_glass_dimming =
+        plan.clear_glass_legibility.dimming_strength;
+    optics.clear_glass_contrast =
+        plan.clear_glass_legibility.contrast_lift;
+    optics.clear_glass_brightness_response =
+        plan.clear_glass_legibility.brightness_response;
+    optics.clear_glass_detail_response =
+        plan.clear_glass_legibility.detail_response;
     optics.control_morph_model = plan.interaction.control_morph_model;
     optics.control_morph_scale_delta =
         plan.interaction.control_morph_scale_delta;
@@ -1262,6 +1301,16 @@ inline MaterialStageOptics material_edge_stage_optics(
     optics.scroll_edge_dissolve = plan.scroll_edge.dissolve_strength;
     optics.scroll_edge_dimming = plan.scroll_edge.dimming_strength;
     optics.scroll_edge_hard_style = plan.scroll_edge.hard_style_strength;
+    optics.clear_glass_legibility_model =
+        plan.clear_glass_legibility.model;
+    optics.clear_glass_dimming =
+        plan.clear_glass_legibility.dimming_strength;
+    optics.clear_glass_contrast =
+        plan.clear_glass_legibility.contrast_lift;
+    optics.clear_glass_brightness_response =
+        plan.clear_glass_legibility.brightness_response;
+    optics.clear_glass_detail_response =
+        plan.clear_glass_legibility.detail_response;
     optics.control_morph_model = plan.interaction.control_morph_model;
     optics.control_morph_scale_delta =
         plan.interaction.control_morph_scale_delta;
@@ -4721,7 +4770,22 @@ inline float material_estimated_surface_luma(MaterialPlan const& plan) noexcept 
         plan.opacity * (static_cast<float>(plan.tint.a) / 255.0f),
         0.0f,
         1.0f);
-    auto const mixed = backdrop_luma * (1.0f - alpha) + tint_luma * alpha;
+    auto mixed = backdrop_luma * (1.0f - alpha) + tint_luma * alpha;
+    if (plan.clear_glass_legibility.active) {
+        auto const bright_gate =
+            std::clamp((mixed - 0.54f) / 0.38f, 0.0f, 1.0f);
+        auto const dimming =
+            plan.clear_glass_legibility.dimming_strength
+            * (0.38f + 0.62f * std::max(
+                bright_gate,
+                plan.clear_glass_legibility.brightness_response));
+        mixed *= 1.0f - std::clamp(dimming, 0.0f, 0.34f);
+        auto const contrast = std::clamp(
+            plan.clear_glass_legibility.contrast_lift,
+            0.0f,
+            0.28f);
+        mixed = (mixed - 0.50f) * (1.0f + contrast) + 0.50f;
+    }
     return std::clamp(mixed + plan.luminance_floor * 0.08f, 0.0f, 1.0f);
 }
 
@@ -6661,6 +6725,94 @@ inline MaterialScrollEdgeProfile material_resolve_scroll_edge_profile(
     return profile;
 }
 
+inline char const* material_clear_glass_legibility_source_name(
+        bool accessibility_driven,
+        bool brightness_driven,
+        bool detail_driven,
+        bool contrast_driven) noexcept {
+    if (accessibility_driven)
+        return "accessibility-clear-glass-legibility-dimming";
+    if (brightness_driven && detail_driven)
+        return "sampled-clear-glass-bright-detail-dimming";
+    if (brightness_driven)
+        return "sampled-clear-glass-brightness-dimming";
+    if (detail_driven || contrast_driven)
+        return "sampled-clear-glass-detail-dimming";
+    return "clear-glass-legibility-dimming";
+}
+
+inline MaterialClearGlassLegibilityProfile
+material_resolve_clear_glass_legibility_profile(
+        MaterialPlan const& plan) noexcept {
+    MaterialClearGlassLegibilityProfile profile{};
+    profile.bounded = true;
+    if (!plan.backdrop_sampling
+        || plan.fallback()
+        || plan.kind != MaterialKind::Clear
+        || plan.backdrop.luma_sample_count == 0u) {
+        return profile;
+    }
+
+    auto const luma_mean = std::clamp(plan.backdrop.luma_mean, 0.0f, 1.0f);
+    auto const luma_span = std::clamp(plan.backdrop.luma_span, 0.0f, 1.0f);
+    auto const brightness_response =
+        std::clamp((luma_mean - 0.62f) / 0.38f, 0.0f, 1.0f);
+    auto const detail_response =
+        std::clamp((luma_span - 0.18f) / 0.46f, 0.0f, 1.0f);
+    auto const flat_contrast_response =
+        std::clamp((0.16f - luma_span) / 0.16f, 0.0f, 1.0f)
+        * (1.0f - brightness_response);
+    auto const accessibility_response =
+        plan.decision_trace.increase_contrast ? 1.0f : 0.0f;
+    auto const response = std::clamp(
+        0.22f
+            + 0.44f * brightness_response
+            + 0.26f * detail_response
+            + 0.20f * flat_contrast_response
+            + 0.28f * accessibility_response,
+        0.0f,
+        1.0f);
+
+    profile.dimming_strength = std::clamp(
+        0.050f
+            + 0.145f * brightness_response
+            + 0.060f * detail_response
+            + 0.038f * flat_contrast_response
+            + 0.055f * accessibility_response,
+        0.0f,
+        0.30f);
+    profile.contrast_lift = std::clamp(
+        0.030f
+            + 0.075f * detail_response
+            + 0.060f * brightness_response
+            + 0.045f * flat_contrast_response
+            + 0.060f * accessibility_response,
+        0.0f,
+        0.24f);
+    if (response <= 0.0001f
+        || (profile.dimming_strength <= 0.0001f
+            && profile.contrast_lift <= 0.0001f)) {
+        return MaterialClearGlassLegibilityProfile{};
+    }
+
+    profile.active = true;
+    profile.backdrop_driven = true;
+    profile.brightness_driven = brightness_response > 0.0001f;
+    profile.detail_driven = detail_response > 0.0001f;
+    profile.contrast_driven = flat_contrast_response > 0.0001f;
+    profile.accessibility_driven = accessibility_response > 0.0001f;
+    profile.brightness_response = brightness_response;
+    profile.detail_response =
+        std::max(detail_response, flat_contrast_response);
+    profile.model = "adaptive-clear-glass-legibility";
+    profile.source = material_clear_glass_legibility_source_name(
+        profile.accessibility_driven,
+        profile.brightness_driven,
+        profile.detail_driven,
+        profile.contrast_driven);
+    return profile;
+}
+
 inline float material_base_specular_intensity(MaterialKind kind) noexcept {
     switch (kind) {
         case MaterialKind::Clear: return 0.050f;
@@ -7131,6 +7283,15 @@ inline char const* material_optical_prominent_glass_source_name(
     return "none";
 }
 
+inline char const* material_optical_clear_glass_legibility_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.clear_glass_legibility.active
+        && plan.clear_glass_legibility.source
+        && plan.clear_glass_legibility.source[0])
+        return plan.clear_glass_legibility.source;
+    return "none";
+}
+
 inline char const* material_optical_stage_order_name(
         MaterialPlan const& plan) noexcept {
     if (!plan.primary_pass.active)
@@ -7210,6 +7371,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         material_optical_scroll_edge_source_name(plan);
     composition.prominent_glass_source =
         material_optical_prominent_glass_source_name(plan);
+    composition.clear_glass_legibility_source =
+        material_optical_clear_glass_legibility_source_name(plan);
     composition.interaction_source =
         material_optical_interaction_source_name(plan);
     composition.transition_source =
@@ -7247,6 +7410,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.glass_dispersion_required = plan.glass_dispersion.active;
     composition.scroll_edge_required = plan.scroll_edge.active;
     composition.prominent_glass_required = plan.prominent_glass.active;
+    composition.clear_glass_legibility_required =
+        plan.clear_glass_legibility.active;
     composition.interaction_required = plan.interaction.active;
     composition.transition_required = plan.transition.active;
     composition.fallback_required = plan.fallback();
@@ -7270,6 +7435,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         && plan.glass_dispersion.bounded
         && plan.scroll_edge.bounded
         && plan.prominent_glass.bounded
+        && plan.clear_glass_legibility.bounded
         && plan.transition.bounded;
     composition.deterministic =
         plan.resource_budget.deterministic_fallback
@@ -7332,6 +7498,14 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.prominent_glass.edge_lift;
     composition.prominent_glass_lensing_gain =
         plan.prominent_glass.lensing_gain;
+    composition.clear_glass_dimming =
+        plan.clear_glass_legibility.dimming_strength;
+    composition.clear_glass_contrast =
+        plan.clear_glass_legibility.contrast_lift;
+    composition.clear_glass_brightness_response =
+        plan.clear_glass_legibility.brightness_response;
+    composition.clear_glass_detail_response =
+        plan.clear_glass_legibility.detail_response;
     composition.interaction_response_strength =
         plan.interaction.response_strength;
     composition.interaction_control_morph_scale_delta =
@@ -7393,6 +7567,8 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
         composition.scroll_edge_required;
     response.prominent_glass_active =
         composition.prominent_glass_required;
+    response.clear_glass_legibility_active =
+        composition.clear_glass_legibility_required;
     response.foreground_vibrancy_active = plan.foreground.uses_vibrancy;
     response.interaction_active = composition.interaction_required;
     response.interaction_modulates_optics =
@@ -7673,6 +7849,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.glass_thickness = material_resolve_glass_thickness_profile(plan);
     plan.glass_dispersion = material_resolve_glass_dispersion_profile(plan);
     plan.scroll_edge = material_resolve_scroll_edge_profile(plan);
+    plan.clear_glass_legibility =
+        material_resolve_clear_glass_legibility_profile(plan);
     plan.specular = material_resolve_specular_profile(plan);
     plan.luminance_curve = material_resolve_luminance_curve(
         plan.backdrop_sampling,

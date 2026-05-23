@@ -50,6 +50,13 @@ MaterialRequest regular_request() {
     };
 }
 
+MaterialRequest clear_request() {
+    return MaterialRequest{
+        material_style_for_kind(MaterialKind::Clear, Theme{}),
+        MaterialGeometry{12.0f, 20.0f, 240.0f, 96.0f, 10.0f},
+    };
+}
+
 MaterialRequest large_surface_request() {
     auto request = regular_request();
     request.geometry = MaterialGeometry{8.0f, 12.0f, 520.0f, 260.0f, 28.0f};
@@ -76,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 62);
+    assert(material_plan_contract_version == 63);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -120,6 +127,7 @@ void test_sampled_backdrop_access_contract() {
     assert(!plan.reference_model.glass_effect_identified);
     assert(!plan.reference_model.glass_effect_matched_geometry);
     assert(!plan.prominent_glass.active);
+    assert(!plan.clear_glass_legibility.active);
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(!plan.shape.capsule);
     assert(plan.theme.default_glass_tokens);
@@ -238,6 +246,11 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.scroll_edge.dissolve_strength == 0.0f);
     assert(plan.scroll_edge.dimming_strength == 0.0f);
     assert(plan.scroll_edge.hard_style_strength == 0.0f);
+    assert(!plan.clear_glass_legibility.active);
+    assert(std::string_view(plan.clear_glass_legibility.model) == "none");
+    assert(std::string_view(plan.clear_glass_legibility.source) == "none");
+    assert(plan.clear_glass_legibility.dimming_strength == 0.0f);
+    assert(plan.clear_glass_legibility.contrast_lift == 0.0f);
     assert(plan.specular.active);
     assert(plan.specular.ambient);
     assert(!plan.specular.interaction_driven);
@@ -298,6 +311,8 @@ void test_sampled_backdrop_access_contract() {
         == "directional-thickness-prismatic-dispersion");
     assert(std::string_view(plan.optical_composition.scroll_edge_source)
         == "none");
+    assert(std::string_view(
+        plan.optical_composition.clear_glass_legibility_source) == "none");
     assert(std::string_view(plan.optical_composition.fallback_source)
         == "none");
     assert(std::string_view(plan.optical_composition.stage_order)
@@ -321,6 +336,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_composition.glass_thickness_required);
     assert(plan.optical_composition.glass_dispersion_required);
     assert(!plan.optical_composition.scroll_edge_required);
+    assert(!plan.optical_composition.clear_glass_legibility_required);
     assert(!plan.optical_composition.fallback_required);
     assert(plan.optical_composition.backdrop_capture_required);
     assert(plan.optical_composition.foreground_excluded_from_backdrop);
@@ -380,6 +396,8 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_dispersion.prismatic_gain);
     assert(plan.optical_composition.glass_dispersion_caustic_spread
            == plan.glass_dispersion.caustic_spread);
+    assert(plan.optical_composition.clear_glass_dimming == 0.0f);
+    assert(plan.optical_composition.clear_glass_contrast == 0.0f);
     assert(plan.optical_response.backdrop_driven);
     assert(plan.optical_response.blur_active);
     assert(plan.optical_response.frosting_active);
@@ -395,6 +413,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_response.glass_thickness_active);
     assert(plan.optical_response.glass_dispersion_active);
     assert(!plan.optical_response.scroll_edge_active);
+    assert(!plan.optical_response.clear_glass_legibility_active);
     assert(plan.optical_response.foreground_vibrancy_active);
     assert(plan.optical_response.deterministic_fallback);
     assert(material_plan_uses_sampled_backdrop_executor(plan));
@@ -1205,6 +1224,73 @@ void test_foreground_contrast_gap_uses_absolute_contrast_candidate() {
     assert(plan.reference_model.legibility_preserved);
     assert((plan.foreground.primary == Color{0, 0, 0, 255}));
     std::puts("PASS: foreground contrast gap uses absolute contrast candidate");
+}
+
+void test_clear_glass_legibility_dimming_contract() {
+    auto env = sampled_environment();
+    env.backdrop.luma_min = 0.70f;
+    env.backdrop.luma_max = 0.98f;
+    env.backdrop.luma_mean = 0.90f;
+    env.backdrop.color_mean = Color{236, 244, 255, 255};
+
+    auto plan = plan_material_surface(clear_request(), env);
+
+    assert(plan.kind == MaterialKind::Clear);
+    assert(plan.backdrop_sampling);
+    assert(plan.clear_glass_legibility.active);
+    assert(plan.clear_glass_legibility.backdrop_driven);
+    assert(plan.clear_glass_legibility.brightness_driven);
+    assert(plan.clear_glass_legibility.detail_driven);
+    assert(!plan.clear_glass_legibility.accessibility_driven);
+    assert(plan.clear_glass_legibility.bounded);
+    assert(std::string_view(plan.clear_glass_legibility.model)
+        == "adaptive-clear-glass-legibility");
+    assert(std::string_view(plan.clear_glass_legibility.source)
+        == "sampled-clear-glass-bright-detail-dimming");
+    assert(plan.clear_glass_legibility.dimming_strength > 0.15f);
+    assert(plan.clear_glass_legibility.contrast_lift > 0.07f);
+    assert(plan.clear_glass_legibility.brightness_response > 0.70f);
+    assert(plan.clear_glass_legibility.detail_response > 0.0f);
+    assert(plan.foreground.background_luma < env.backdrop.luma_mean);
+    assert(plan.foreground.primary_contrast_ratio
+           >= plan.foreground.minimum_contrast_ratio);
+    assert(plan.reference_model.legibility_preserved);
+    assert(std::string_view(
+        plan.optical_composition.clear_glass_legibility_source)
+        == "sampled-clear-glass-bright-detail-dimming");
+    assert(plan.optical_composition.clear_glass_legibility_required);
+    assert(plan.optical_composition.clear_glass_dimming
+           == plan.clear_glass_legibility.dimming_strength);
+    assert(plan.optical_composition.clear_glass_contrast
+           == plan.clear_glass_legibility.contrast_lift);
+    assert(plan.optical_composition.clear_glass_brightness_response
+           == plan.clear_glass_legibility.brightness_response);
+    assert(plan.optical_composition.clear_glass_detail_response
+           == plan.clear_glass_legibility.detail_response);
+    assert(plan.optical_response.clear_glass_legibility_active);
+    assert(plan.execution_stages[1].optics.clear_glass_dimming
+           == plan.clear_glass_legibility.dimming_strength);
+    assert(plan.execution_stages[1].optics.clear_glass_contrast
+           == plan.clear_glass_legibility.contrast_lift);
+    assert(std::string_view(
+        plan.execution_stages[1].optics.clear_glass_legibility_model)
+        == "adaptive-clear-glass-legibility");
+
+    auto regular_plan = plan_material_surface(regular_request(), env);
+    assert(!regular_plan.clear_glass_legibility.active);
+    assert(!regular_plan.optical_response.clear_glass_legibility_active);
+
+    auto high_contrast_env = env;
+    high_contrast_env.capabilities.increase_contrast = true;
+    auto high_contrast_plan =
+        plan_material_surface(clear_request(), high_contrast_env);
+    assert(high_contrast_plan.clear_glass_legibility.accessibility_driven);
+    assert(high_contrast_plan.clear_glass_legibility.dimming_strength
+           > plan.clear_glass_legibility.dimming_strength);
+    assert(high_contrast_plan.clear_glass_legibility.contrast_lift
+           > plan.clear_glass_legibility.contrast_lift);
+
+    std::puts("PASS: clear glass legibility dimming contract");
 }
 
 void test_increase_contrast_raises_foreground_readability_contract() {
@@ -3342,6 +3428,7 @@ int main() {
     test_custom_theme_snapshot_contract();
     test_command_material_preserves_theme_snapshot_contract();
     test_foreground_contrast_gap_uses_absolute_contrast_candidate();
+    test_clear_glass_legibility_dimming_contract();
     test_increase_contrast_raises_foreground_readability_contract();
     test_interactive_material_modulates_optics_contract();
     test_prominent_glass_action_optics_contract();
