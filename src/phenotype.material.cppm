@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 55;
+inline constexpr std::uint32_t material_plan_contract_version = 56;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -459,6 +459,11 @@ struct MaterialStageOptics {
     float dynamic_light_direction_y = 0.0f;
     float dynamic_light_highlight = 0.0f;
     float dynamic_light_shadow = 0.0f;
+    char const* glass_thickness_model = "none";
+    float glass_thickness = 0.0f;
+    float glass_lensing_gain = 1.0f;
+    float glass_shadow_gain = 1.0f;
+    float glass_scattering_gain = 1.0f;
 };
 
 struct MaterialExecutionStage {
@@ -633,6 +638,21 @@ struct MaterialDynamicLightingProfile {
     float shadow_strength = 0.0f;
 };
 
+struct MaterialGlassThicknessProfile {
+    char const* model = "none";
+    char const* source = "none";
+    bool active = false;
+    bool size_driven = false;
+    bool transition_driven = false;
+    bool interaction_driven = false;
+    bool reduced_motion_suppressed = false;
+    bool bounded = true;
+    float thickness = 0.0f;
+    float lensing_gain = 1.0f;
+    float shadow_gain = 1.0f;
+    float scattering_gain = 1.0f;
+};
+
 struct MaterialInteractionResponse {
     bool enabled = false;
     bool active = false;
@@ -686,6 +706,7 @@ struct MaterialOpticalResponseContract {
     bool refraction_active = false;
     bool spectral_tint_active = false;
     bool dynamic_lighting_active = false;
+    bool glass_thickness_active = false;
     bool foreground_vibrancy_active = false;
     bool interaction_active = false;
     bool interaction_modulates_optics = false;
@@ -703,6 +724,7 @@ struct MaterialOpticalComposition {
     char const* refraction_source = "none";
     char const* spectral_tint_source = "none";
     char const* dynamic_lighting_source = "none";
+    char const* glass_thickness_source = "none";
     char const* interaction_source = "none";
     char const* transition_source = "identity";
     char const* fallback_source = "none";
@@ -721,6 +743,7 @@ struct MaterialOpticalComposition {
     bool refraction_required = false;
     bool spectral_tint_required = false;
     bool dynamic_lighting_required = false;
+    bool glass_thickness_required = false;
     bool interaction_required = false;
     bool transition_required = false;
     bool fallback_required = false;
@@ -756,6 +779,10 @@ struct MaterialOpticalComposition {
     float dynamic_light_direction_y = 0.0f;
     float dynamic_light_highlight = 0.0f;
     float dynamic_light_shadow = 0.0f;
+    float glass_thickness = 0.0f;
+    float glass_lensing_gain = 1.0f;
+    float glass_shadow_gain = 1.0f;
+    float glass_scattering_gain = 1.0f;
     float interaction_response_strength = 0.0f;
     float transition_progress = 1.0f;
     float transition_opacity_gain = 1.0f;
@@ -953,6 +980,7 @@ struct MaterialPlan {
     MaterialEdgeOpticsProfile edge_optics{};
     MaterialSpectralTintProfile spectral_tint{};
     MaterialDynamicLightingProfile dynamic_lighting{};
+    MaterialGlassThicknessProfile glass_thickness{};
     MaterialInteractionResponse interaction{};
     MaterialOpticalComposition optical_composition{};
     MaterialOpticalResponseContract optical_response{};
@@ -1026,6 +1054,11 @@ inline MaterialStageOptics material_primary_stage_optics(
     optics.dynamic_light_highlight =
         plan.dynamic_lighting.highlight_strength;
     optics.dynamic_light_shadow = plan.dynamic_lighting.shadow_strength;
+    optics.glass_thickness_model = plan.glass_thickness.model;
+    optics.glass_thickness = plan.glass_thickness.thickness;
+    optics.glass_lensing_gain = plan.glass_thickness.lensing_gain;
+    optics.glass_shadow_gain = plan.glass_thickness.shadow_gain;
+    optics.glass_scattering_gain = plan.glass_thickness.scattering_gain;
     return optics;
 }
 
@@ -1073,6 +1106,11 @@ inline MaterialStageOptics material_edge_stage_optics(
     optics.dynamic_light_highlight =
         plan.dynamic_lighting.highlight_strength;
     optics.dynamic_light_shadow = plan.dynamic_lighting.shadow_strength;
+    optics.glass_thickness_model = plan.glass_thickness.model;
+    optics.glass_thickness = plan.glass_thickness.thickness;
+    optics.glass_lensing_gain = plan.glass_thickness.lensing_gain;
+    optics.glass_shadow_gain = plan.glass_thickness.shadow_gain;
+    optics.glass_scattering_gain = plan.glass_thickness.scattering_gain;
     return optics;
 }
 
@@ -5757,6 +5795,109 @@ inline MaterialDynamicLightingProfile material_resolve_dynamic_lighting_profile(
     return profile;
 }
 
+inline float material_base_glass_thickness(MaterialKind kind) noexcept {
+    switch (kind) {
+        case MaterialKind::Clear: return 0.10f;
+        case MaterialKind::Thin: return 0.16f;
+        case MaterialKind::Regular: return 0.24f;
+        case MaterialKind::Thick: return 0.34f;
+        case MaterialKind::None: return 0.0f;
+    }
+    return 0.0f;
+}
+
+inline char const* material_glass_thickness_source_name(
+        bool size_driven,
+        bool transition_driven,
+        bool interaction_driven) noexcept {
+    if (transition_driven && interaction_driven)
+        return "transition-interactive-thickness-lensing";
+    if (transition_driven)
+        return "transition-thickness-lensing";
+    if (interaction_driven)
+        return "interactive-thickness-lensing";
+    if (size_driven)
+        return "size-adaptive-thickness-lensing";
+    return "material-thickness-lensing";
+}
+
+inline MaterialGlassThicknessProfile material_resolve_glass_thickness_profile(
+        MaterialPlan const& plan) noexcept {
+    MaterialGlassThicknessProfile profile{};
+    profile.bounded = true;
+    if (!plan.backdrop_sampling
+        || plan.fallback()
+        || plan.kind == MaterialKind::None) {
+        return profile;
+    }
+
+    auto const width = std::max(plan.geometry.w, 1.0f);
+    auto const height = std::max(plan.geometry.h, 1.0f);
+    auto const min_dim = std::min(width, height);
+    auto const area_root = std::sqrt(width * height);
+    auto const area_scale =
+        std::clamp((area_root - 96.0f) / 420.0f, 0.0f, 1.0f);
+    auto const span_scale =
+        std::clamp((min_dim - 44.0f) / 240.0f, 0.0f, 1.0f);
+    auto const size_response =
+        std::clamp(area_scale + 0.35f * span_scale, 0.0f, 1.0f);
+    auto const shape_response =
+        std::clamp(plan.shape.normalized_radius, 0.0f, 1.0f);
+    auto const transition_response = plan.transition.active
+        ? std::clamp(
+            0.22f
+                + 0.36f * (1.0f - plan.transition.optical_gain)
+                + 0.24f * (1.0f - plan.transition.refraction_gain)
+                + (plan.transition.matched_geometry ? 0.18f : 0.0f),
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const interaction_response = plan.interaction.active
+        ? std::clamp(plan.interaction.response_strength, 0.0f, 1.0f)
+        : 0.0f;
+    auto const motion_scale = plan.decision_trace.reduce_motion ? 0.72f : 1.0f;
+
+    profile.thickness = std::clamp(
+        motion_scale
+            * (material_base_glass_thickness(plan.kind)
+               + 0.20f * size_response
+               + 0.08f * shape_response
+               + 0.12f * transition_response
+               + 0.06f * interaction_response),
+        0.0f,
+        0.72f);
+    if (profile.thickness <= 0.0001f)
+        return MaterialGlassThicknessProfile{};
+
+    profile.active = true;
+    profile.size_driven = size_response > 0.0001f;
+    profile.transition_driven = transition_response > 0.0001f;
+    profile.interaction_driven = interaction_response > 0.0001f;
+    profile.reduced_motion_suppressed =
+        plan.decision_trace.reduce_motion && motion_scale < 1.0f;
+    profile.model = "adaptive-glass-thickness";
+    profile.source = material_glass_thickness_source_name(
+        profile.size_driven,
+        profile.transition_driven,
+        profile.interaction_driven);
+    profile.lensing_gain = std::clamp(
+        1.0f + 0.34f * profile.thickness + 0.12f * size_response,
+        1.0f,
+        1.42f);
+    profile.shadow_gain = std::clamp(
+        1.0f + 0.28f * profile.thickness + 0.18f * transition_response,
+        1.0f,
+        1.38f);
+    profile.scattering_gain = std::clamp(
+        1.0f
+            + 0.30f * profile.thickness
+            + (profile.size_driven ? 0.12f : 0.0f)
+            + 0.08f * interaction_response,
+        1.0f,
+        1.36f);
+    return profile;
+}
+
 inline float material_base_specular_intensity(MaterialKind kind) noexcept {
     switch (kind) {
         case MaterialKind::Clear: return 0.050f;
@@ -6188,6 +6329,15 @@ inline char const* material_optical_dynamic_lighting_source_name(
     return "none";
 }
 
+inline char const* material_optical_glass_thickness_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.glass_thickness.active
+        && plan.glass_thickness.source
+        && plan.glass_thickness.source[0])
+        return plan.glass_thickness.source;
+    return "none";
+}
+
 inline char const* material_optical_stage_order_name(
         MaterialPlan const& plan) noexcept {
     if (!plan.primary_pass.active)
@@ -6259,6 +6409,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         material_optical_spectral_tint_source_name(plan);
     composition.dynamic_lighting_source =
         material_optical_dynamic_lighting_source_name(plan);
+    composition.glass_thickness_source =
+        material_optical_glass_thickness_source_name(plan);
     composition.interaction_source =
         material_optical_interaction_source_name(plan);
     composition.transition_source =
@@ -6292,6 +6444,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.refraction_required = plan.refraction.active;
     composition.spectral_tint_required = plan.spectral_tint.active;
     composition.dynamic_lighting_required = plan.dynamic_lighting.active;
+    composition.glass_thickness_required = plan.glass_thickness.active;
     composition.interaction_required = plan.interaction.active;
     composition.transition_required = plan.transition.active;
     composition.fallback_required = plan.fallback();
@@ -6311,6 +6464,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         && plan.edge_optics.bounded
         && plan.spectral_tint.bounded
         && plan.dynamic_lighting.bounded
+        && plan.glass_thickness.bounded
         && plan.transition.bounded;
     composition.deterministic =
         plan.resource_budget.deterministic_fallback
@@ -6348,6 +6502,10 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.dynamic_lighting.highlight_strength;
     composition.dynamic_light_shadow =
         plan.dynamic_lighting.shadow_strength;
+    composition.glass_thickness = plan.glass_thickness.thickness;
+    composition.glass_lensing_gain = plan.glass_thickness.lensing_gain;
+    composition.glass_shadow_gain = plan.glass_thickness.shadow_gain;
+    composition.glass_scattering_gain = plan.glass_thickness.scattering_gain;
     composition.interaction_response_strength =
         plan.interaction.response_strength;
     composition.transition_progress = plan.transition.progress;
@@ -6385,6 +6543,8 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
     response.spectral_tint_active = composition.spectral_tint_required;
     response.dynamic_lighting_active =
         composition.dynamic_lighting_required;
+    response.glass_thickness_active =
+        composition.glass_thickness_required;
     response.foreground_vibrancy_active = plan.foreground.uses_vibrancy;
     response.interaction_active = composition.interaction_required;
     response.interaction_modulates_optics =
@@ -6660,6 +6820,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.edge_optics = material_resolve_edge_optics_profile(plan);
     plan.spectral_tint = material_resolve_spectral_tint_profile(plan);
     plan.dynamic_lighting = material_resolve_dynamic_lighting_profile(plan);
+    plan.glass_thickness = material_resolve_glass_thickness_profile(plan);
     plan.specular = material_resolve_specular_profile(plan);
     plan.luminance_curve = material_resolve_luminance_curve(
         plan.backdrop_sampling,

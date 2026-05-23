@@ -2036,6 +2036,44 @@ namespace detail {
             "shadow_strength",
             json::Value{plan.dynamic_lighting.shadow_strength});
 
+        json::Object glass_thickness;
+        glass_thickness.emplace(
+            "model",
+            json::Value{plan.glass_thickness.model});
+        glass_thickness.emplace(
+            "source",
+            json::Value{plan.glass_thickness.source});
+        glass_thickness.emplace(
+            "active",
+            json::Value{plan.glass_thickness.active});
+        glass_thickness.emplace(
+            "size_driven",
+            json::Value{plan.glass_thickness.size_driven});
+        glass_thickness.emplace(
+            "transition_driven",
+            json::Value{plan.glass_thickness.transition_driven});
+        glass_thickness.emplace(
+            "interaction_driven",
+            json::Value{plan.glass_thickness.interaction_driven});
+        glass_thickness.emplace(
+            "reduced_motion_suppressed",
+            json::Value{plan.glass_thickness.reduced_motion_suppressed});
+        glass_thickness.emplace(
+            "bounded",
+            json::Value{plan.glass_thickness.bounded});
+        glass_thickness.emplace(
+            "thickness",
+            json::Value{plan.glass_thickness.thickness});
+        glass_thickness.emplace(
+            "lensing_gain",
+            json::Value{plan.glass_thickness.lensing_gain});
+        glass_thickness.emplace(
+            "shadow_gain",
+            json::Value{plan.glass_thickness.shadow_gain});
+        glass_thickness.emplace(
+            "scattering_gain",
+            json::Value{plan.glass_thickness.scattering_gain});
+
         json::Object interaction;
         interaction.emplace("enabled", json::Value{plan.interaction.enabled});
         interaction.emplace("active", json::Value{plan.interaction.active});
@@ -2172,6 +2210,9 @@ namespace detail {
             "dynamic_lighting_active",
             json::Value{plan.optical_response.dynamic_lighting_active});
         optical_response.emplace(
+            "glass_thickness_active",
+            json::Value{plan.optical_response.glass_thickness_active});
+        optical_response.emplace(
             "foreground_vibrancy_active",
             json::Value{plan.optical_response.foreground_vibrancy_active});
         optical_response.emplace(
@@ -2215,6 +2256,9 @@ namespace detail {
         optical_composition.emplace(
             "dynamic_lighting_source",
             json::Value{composition.dynamic_lighting_source});
+        optical_composition.emplace(
+            "glass_thickness_source",
+            json::Value{composition.glass_thickness_source});
         optical_composition.emplace(
             "interaction_source",
             json::Value{composition.interaction_source});
@@ -2269,6 +2313,9 @@ namespace detail {
         optical_composition.emplace(
             "dynamic_lighting_required",
             json::Value{composition.dynamic_lighting_required});
+        optical_composition.emplace(
+            "glass_thickness_required",
+            json::Value{composition.glass_thickness_required});
         optical_composition.emplace(
             "interaction_required",
             json::Value{composition.interaction_required});
@@ -2371,6 +2418,18 @@ namespace detail {
         optical_composition.emplace(
             "dynamic_light_shadow",
             json::Value{composition.dynamic_light_shadow});
+        optical_composition.emplace(
+            "glass_thickness",
+            json::Value{composition.glass_thickness});
+        optical_composition.emplace(
+            "glass_lensing_gain",
+            json::Value{composition.glass_lensing_gain});
+        optical_composition.emplace(
+            "glass_shadow_gain",
+            json::Value{composition.glass_shadow_gain});
+        optical_composition.emplace(
+            "glass_scattering_gain",
+            json::Value{composition.glass_scattering_gain});
         optical_composition.emplace(
             "interaction_response_strength",
             json::Value{composition.interaction_response_strength});
@@ -2617,6 +2676,21 @@ namespace detail {
             optics_json.emplace(
                 "dynamic_light_shadow",
                 json::Value{optics.dynamic_light_shadow});
+            optics_json.emplace(
+                "glass_thickness_model",
+                json::Value{optics.glass_thickness_model});
+            optics_json.emplace(
+                "glass_thickness",
+                json::Value{optics.glass_thickness});
+            optics_json.emplace(
+                "glass_lensing_gain",
+                json::Value{optics.glass_lensing_gain});
+            optics_json.emplace(
+                "glass_shadow_gain",
+                json::Value{optics.glass_shadow_gain});
+            optics_json.emplace(
+                "glass_scattering_gain",
+                json::Value{optics.glass_scattering_gain});
             json::Object out_stage;
             out_stage.emplace("name", json::Value{stage.name});
             out_stage.emplace("active", json::Value{stage.active});
@@ -2726,6 +2800,9 @@ namespace detail {
         out.emplace(
             "dynamic_lighting",
             json::Value{std::move(dynamic_lighting)});
+        out.emplace(
+            "glass_thickness",
+            json::Value{std::move(glass_thickness)});
         out.emplace("interaction", json::Value{std::move(interaction)});
         out.emplace(
             "optical_response",
