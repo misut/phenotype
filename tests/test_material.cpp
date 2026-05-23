@@ -1959,7 +1959,7 @@ void test_container_member_shape_blend_uses_spacing_falloff() {
     request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 16.0f};
     request.style.container = MaterialContainerDescriptor{
         .container_id = 900u,
-        .union_id = 1u,
+        .union_id = 0u,
         .spacing = 20.0f,
         .interactive = false,
         .morph_transitions = true,
@@ -2071,8 +2071,7 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     assert(first_execution.group_y == 0.0f);
     assert(first_execution.group_w == 90.0f);
     assert(first_execution.group_h == 40.0f);
-    assert(std::fabs(first_execution.shape_blend_strength
-                     - (14.0f / 24.0f)) < 0.0001f);
+    assert(first_execution.shape_blend_strength == 1.0f);
     assert(first_execution.surface_leader);
     assert(!peer_execution.surface_leader);
     assert(first_execution.paint_layer_leader);
@@ -2097,6 +2096,72 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     assert(!different_shape_execution.union_execution);
 
     std::puts("PASS: glass effect union uses compatible render bounds");
+}
+
+void test_glass_effect_union_combines_at_rest_without_spacing() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 20.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 912u,
+        .union_id = 1u,
+        .spacing = 0.0f,
+        .interactive = false,
+        .morph_transitions = false,
+    };
+
+    auto peer = request;
+    peer.geometry.x = 160.0f;
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(peer, sampled_environment()), 2u},
+    };
+
+    auto const union_group =
+        accumulate_material_glass_effect_union_group(records, records[0].plan);
+    assert(union_group.surface_count == 2u);
+    assert(union_group.shape_pair_count == 1u);
+    assert(union_group.blend_candidate_pair_count == 0u);
+    assert(union_group.union_candidate_pair_count == 0u);
+    assert(material_glass_effect_union_execution_active(union_group));
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const peer_execution =
+        material_container_execution_descriptor(records[1], records);
+    assert(first_execution.union_execution);
+    assert(peer_execution.union_execution);
+    assert(first_execution.surface_leader);
+    assert(!peer_execution.surface_leader);
+    assert(first_execution.group_bounds_valid);
+    assert(first_execution.group_x == 0.0f);
+    assert(first_execution.group_y == 0.0f);
+    assert(first_execution.group_w == 200.0f);
+    assert(first_execution.group_h == 40.0f);
+    assert(first_execution.shape_blend_strength == 1.0f);
+    assert(first_execution.inner_edge_alpha_blend_strength == 1.0f);
+
+    auto const first_surface_geometry =
+        material_surface_execution_geometry(
+            records[0].plan,
+            &first_execution);
+    auto const peer_surface_geometry =
+        material_surface_execution_geometry(
+            records[1].plan,
+            &peer_execution);
+    assert(first_surface_geometry.active);
+    assert(first_surface_geometry.w == 200.0f);
+    assert(first_surface_geometry.h == 40.0f);
+    assert(!peer_surface_geometry.active);
+
+    MaterialRuntimeSummary runtime_summary{};
+    for (auto const& record : records)
+        accumulate_material_runtime_summary(runtime_summary, record);
+    finalize_material_runtime_summary(runtime_summary, records);
+    assert(runtime_summary.total_surface_sample_pixels == 200 * 40);
+    assert(runtime_summary.max_surface_sample_pixels == 200 * 40);
+
+    std::puts("PASS: glass effect union combines at rest without spacing");
 }
 
 void test_glass_effect_union_sample_budget_uses_leader_bounds() {
@@ -2336,6 +2401,7 @@ int main() {
     test_container_group_runtime_summary_contract();
     test_container_member_shape_blend_uses_spacing_falloff();
     test_glass_effect_union_uses_compatible_render_bounds();
+    test_glass_effect_union_combines_at_rest_without_spacing();
     test_glass_effect_union_sample_budget_uses_leader_bounds();
     test_glass_effect_union_fallback_paint_uses_group_leader();
     test_glass_effect_matched_fallback_paint_uses_match_rect();

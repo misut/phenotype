@@ -1145,26 +1145,19 @@ void test_material_runtime_record_json_contract() {
     assert(first_member.at("group_execution_policy").as_string()
            == "glass-effect-union");
     assert(first_member.at("shape_blend_execution").as_bool());
-    assert(std::fabs(
-               first_member.at("shape_blend_strength").as_float() - 0.75f)
-           < 0.0001f);
-    assert(std::fabs(
-               first_member
-                   .at("inner_edge_alpha_blend_strength")
-                   .as_float()
-                   - 0.75f)
-           < 0.0001f);
+    assert(first_member.at("shape_blend_strength").as_float() == 1.0f);
+    assert(first_member
+               .at("inner_edge_alpha_blend_strength")
+               .as_float() == 1.0f);
     assert(first_member.at("geometry").as_object().at("w").as_float()
            == 44.0f);
     auto const& third_member = members[2].as_object();
     assert(third_member.at("command_index").as_integer() == 9);
     assert(third_member.at("shape_blend_execution").as_bool());
-    assert(std::fabs(third_member.at("shape_blend_strength").as_float())
-           < 0.0001f);
-    assert(std::fabs(
-               third_member
-                   .at("inner_edge_alpha_blend_strength")
-                   .as_float()) < 0.0001f);
+    assert(third_member.at("shape_blend_strength").as_float() == 1.0f);
+    assert(third_member
+               .at("inner_edge_alpha_blend_strength")
+               .as_float() == 1.0f);
 
     assert(obj.at("command_index").as_integer() == 3);
     assert(obj.at("contract_version").as_integer()

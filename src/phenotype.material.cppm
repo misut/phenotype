@@ -2360,6 +2360,13 @@ inline bool material_glass_effect_match_execution_active(
         && group.has_bounds;
 }
 
+inline bool material_glass_effect_union_execution_active(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    return group.active_surfaces > 1u
+        && group.union_surfaces > 1u
+        && group.has_bounds;
+}
+
 inline float material_lerp(float a, float b, float t) noexcept {
     return a + (b - a) * t;
 }
@@ -2449,14 +2456,13 @@ inline float material_glass_effect_union_member_shape_blend_strength(
         MaterialRuntimeRecord const& record,
         std::span<MaterialRuntimeRecord const> records,
         MaterialContainerGroupAccumulator const& group) noexcept {
-    if (!material_container_group_shape_blend_execution_active(group))
+    if (!material_glass_effect_union_execution_active(group))
         return 0.0f;
     auto const& plan = record.plan;
     if (!plan.primary_pass.active
         || !material_plan_in_glass_effect_union_group(plan, plan)) {
         return 0.0f;
     }
-    auto best = 0.0f;
     for (auto const& candidate_record : records) {
         if (&candidate_record == &record)
             continue;
@@ -2465,19 +2471,9 @@ inline float material_glass_effect_union_member_shape_blend_strength(
             || !material_plan_in_glass_effect_union_group(candidate, plan)) {
             continue;
         }
-        auto const gap = material_rect_gap(plan.geometry, candidate.geometry);
-        auto const blend_distance = std::min(
-            plan.container.blend_distance,
-            candidate.container.blend_distance);
-        best = std::max(
-            best,
-            material_container_shape_blend_strength_for_gap(
-                gap,
-                blend_distance));
+        return 1.0f;
     }
-    return std::min(
-        material_container_group_shape_blend_strength(group),
-        best);
+    return 0.0f;
 }
 
 inline std::uint32_t material_container_group_shape_blend_surface_count(
@@ -2808,7 +2804,7 @@ material_container_execution_descriptor_from_group(
         records,
         plan);
     auto const union_group_shape_blend_execution =
-        material_container_group_shape_blend_execution_active(union_group);
+        material_glass_effect_union_execution_active(union_group);
     descriptor.shape_blend_execution =
         descriptor.active
         && (union_group_shape_blend_execution
