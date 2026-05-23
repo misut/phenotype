@@ -2488,6 +2488,7 @@ inline void apply_material_container_execution_descriptors(
         auto const command_index =
             static_cast<std::uint32_t>(
                 std::max(0.0f, std::round(inst.group_effects[3])));
+        inst.group_effects[3] = 0.0f;
         auto const* execution =
             static_cast<MaterialContainerExecutionDescriptor const*>(nullptr);
         for (auto const& candidate :
@@ -3037,6 +3038,40 @@ inline void apply_material_container_execution_descriptors(
                         0.0f,
                         1.0f);
                 }
+                if (execution->overlap_response_active) {
+                    auto const overlap = std::clamp(
+                        execution->overlap_response_strength,
+                        0.0f,
+                        1.0f);
+                    inst.refraction[0] = std::clamp(
+                        inst.refraction[0] * (1.0f - 0.10f * overlap),
+                        0.0f,
+                        0.35f);
+                    inst.refraction[2] = std::clamp(
+                        inst.refraction[2] * (1.0f - 0.12f * overlap),
+                        0.0f,
+                        5.0f);
+                    inst.edge_optics[1] = std::clamp(
+                        inst.edge_optics[1] + 0.030f * overlap,
+                        0.0f,
+                        0.85f);
+                    inst.edge_optics[2] = std::clamp(
+                        inst.edge_optics[2] + 0.024f * overlap,
+                        0.0f,
+                        0.60f);
+                    inst.clear_glass[0] = std::clamp(
+                        std::max(inst.clear_glass[0], 0.070f * overlap),
+                        0.0f,
+                        0.34f);
+                    inst.clear_glass[1] = std::clamp(
+                        std::max(inst.clear_glass[1], 0.052f * overlap),
+                        0.0f,
+                        0.28f);
+                    inst.thickness[3] = std::clamp(
+                        inst.thickness[3] + 0.050f * overlap,
+                        1.0f,
+                        1.40f);
+                }
                 if (container_motion.active) {
                     inst.refraction[0] = std::clamp(
                         inst.refraction[0]
@@ -3154,6 +3189,7 @@ inline void apply_material_container_execution_descriptors(
                 + (execution->shared_backdrop_scope ? 8.0f : 0.0f)
                 + (execution->glass_effect_match_execution ? 16.0f : 0.0f)
                 + (execution->group_surface_execution ? 32.0f : 0.0f);
+            inst.group_effects[3] = execution->overlap_response_strength;
             inst.fusion_optics[0] = execution->fusion_strength;
             inst.fusion_optics[1] = execution->fusion_lensing_gain;
             inst.fusion_optics[2] = execution->fusion_edge_lift;
@@ -5233,6 +5269,7 @@ fragment float4 fs_material(
     float fusion_lensing_gain = clamp(in.fusion_optics.y, 1.0, 1.35);
     float fusion_edge_lift = clamp(in.fusion_optics.z, 0.0, 0.16);
     float fusion_shadow_gain = clamp(in.fusion_optics.w, 1.0, 1.32);
+    float overlap_response_strength = clamp(in.group_effects.w, 0.0, 1.0);
     float bridge_motion_strength = clamp(in.bridge_optics.x, 0.0, 1.0);
     float bridge_flow_offset_gain = clamp(in.bridge_optics.y, 0.0, 0.60);
     float bridge_ribbon_width = clamp(in.bridge_optics.z, 0.08, 0.32);
@@ -5317,7 +5354,8 @@ fragment float4 fs_material(
         * (refraction_strength > 0.0 ? 1.0 : 0.0)
         * glass_lensing_gain
         * fusion_lensing_gain
-        * materialize_lensing_gain;
+        * materialize_lensing_gain
+        * (1.0 - 0.12 * overlap_response_strength);
     float refraction_edge_caustic =
         clamp(
             in.refraction.w
@@ -5364,6 +5402,12 @@ fragment float4 fs_material(
     float clear_glass_contrast = clamp(in.clear_glass.y, 0.0, 0.28);
     float clear_glass_brightness = clamp(in.clear_glass.z, 0.0, 1.0);
     float clear_glass_detail = clamp(in.clear_glass.w, 0.0, 1.0);
+    clear_glass_dimming = max(
+        clear_glass_dimming,
+        0.060 * overlap_response_strength);
+    clear_glass_contrast = max(
+        clear_glass_contrast,
+        0.045 * overlap_response_strength);
     edge_inner_highlight = clamp(
         edge_inner_highlight + prominent_edge_lift,
         0.0,
@@ -5603,6 +5647,20 @@ fragment float4 fs_material(
             0.0,
             1.0);
         backdrop_rgb = mix(dimmed, contrasted, 0.72);
+    }
+    if (overlap_response_strength > 0.0001) {
+        float overlap_center =
+            1.0 - smoothstep(0.18, 1.10, normalized_len);
+        float overlap_luma =
+            dot(backdrop_rgb, float3(0.2126, 0.7152, 0.0722));
+        float3 overlap_settled =
+            mix(backdrop_rgb, float3(overlap_luma), 0.42);
+        overlap_settled *=
+            1.0 - 0.035 * overlap_response_strength * overlap_center;
+        backdrop_rgb = mix(
+            backdrop_rgb,
+            overlap_settled,
+            0.10 + 0.18 * overlap_response_strength);
     }
     float scattering_strength = clamp(
         (glass_scattering_gain - 1.0) * 0.22 + glass_thickness * 0.035,

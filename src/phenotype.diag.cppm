@@ -3512,6 +3512,26 @@ namespace detail {
         out.emplace(
             "group_execution_policy",
             json::Value{execution.execution_policy});
+        json::Object group_overlap_response;
+        group_overlap_response.emplace(
+            "active",
+            json::Value{execution.overlap_response_active});
+        group_overlap_response.emplace(
+            "pair_count",
+            json::Value{
+                static_cast<std::int64_t>(execution.overlap_pair_count)});
+        group_overlap_response.emplace(
+            "strength",
+            json::Value{execution.overlap_response_strength});
+        group_overlap_response.emplace(
+            "max_fraction",
+            json::Value{execution.overlap_max_fraction});
+        group_overlap_response.emplace(
+            "density",
+            json::Value{execution.overlap_density});
+        out.emplace(
+            "group_overlap_response",
+            json::Value{std::move(group_overlap_response)});
         json::Object group_interaction_source;
         group_interaction_source.emplace(
             "valid",
