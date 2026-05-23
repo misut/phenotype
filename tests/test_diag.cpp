@@ -1151,11 +1151,18 @@ void test_material_runtime_record_json_contract() {
                .as_float() == 0.0f);
     assert(first_member.at("group_execution_policy").as_string()
            == "glass-effect-union");
+    assert(first_member.at("fusion_model").as_string()
+           == "union-liquid-glass-fusion");
+    assert(first_member.at("fusion_optics_active").as_bool());
     assert(first_member.at("shape_blend_execution").as_bool());
     assert(first_member.at("shape_blend_strength").as_float() == 1.0f);
     assert(first_member
                .at("inner_edge_alpha_blend_strength")
                .as_float() == 1.0f);
+    assert(first_member.at("fusion_strength").as_float() == 1.0f);
+    assert(first_member.at("fusion_lensing_gain").as_float() > 1.0f);
+    assert(first_member.at("fusion_edge_lift").as_float() > 0.0f);
+    assert(first_member.at("fusion_shadow_gain").as_float() > 1.0f);
     assert(first_member.at("geometry").as_object().at("w").as_float()
            == 44.0f);
     auto const& third_member = members[2].as_object();

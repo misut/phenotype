@@ -76,7 +76,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 59);
+    assert(material_plan_contract_version == 60);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -1988,6 +1988,13 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
     assert(std::fabs(
                first_execution.inner_edge_alpha_blend_strength - 0.5f)
            < 0.0001f);
+    assert(std::string_view(first_execution.fusion_model)
+           == "matched-liquid-glass-fusion");
+    assert(first_execution.fusion_optics_active);
+    assert(first_execution.fusion_strength > first_execution.shape_blend_strength);
+    assert(first_execution.fusion_lensing_gain > 1.0f);
+    assert(first_execution.fusion_edge_lift > 0.0f);
+    assert(first_execution.fusion_shadow_gain > 1.0f);
     assert(!first_execution.surface_leader);
     assert(!first_execution.paint_layer_leader);
 
@@ -2009,6 +2016,10 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
            < 0.0001f);
     assert(std::fabs(second_execution.shape_blend_strength - 0.5f)
            < 0.0001f);
+    assert(std::string_view(second_execution.fusion_model)
+           == "matched-liquid-glass-fusion");
+    assert(second_execution.fusion_optics_active);
+    assert(second_execution.fusion_strength == first_execution.fusion_strength);
     assert(second_execution.surface_leader);
     assert(second_execution.paint_layer_leader);
 
@@ -2544,6 +2555,16 @@ void test_container_member_shape_blend_uses_spacing_falloff() {
     assert(first_execution.group_surface_execution);
     assert(second_execution.group_surface_execution);
     assert(!distant_execution.group_surface_execution);
+    assert(std::string_view(first_execution.fusion_model)
+           == "proximity-liquid-glass-fusion");
+    assert(first_execution.fusion_optics_active);
+    assert(first_execution.fusion_strength > 0.45f);
+    assert(first_execution.fusion_strength < 0.50f);
+    assert(first_execution.fusion_lensing_gain > 1.0f);
+    assert(first_execution.fusion_edge_lift > 0.0f);
+    assert(first_execution.fusion_shadow_gain > 1.0f);
+    assert(!distant_execution.fusion_optics_active);
+    assert(std::string_view(distant_execution.fusion_model) == "none");
     assert(first_execution.surface_leader);
     assert(!second_execution.surface_leader);
     assert(first_execution.group_bounds_valid);
@@ -2736,6 +2757,13 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     assert(first_execution.group_w == 90.0f);
     assert(first_execution.group_h == 40.0f);
     assert(first_execution.shape_blend_strength == 1.0f);
+    assert(std::string_view(first_execution.fusion_model)
+           == "union-liquid-glass-fusion");
+    assert(first_execution.fusion_optics_active);
+    assert(first_execution.fusion_strength == 1.0f);
+    assert(first_execution.fusion_lensing_gain > 1.17f);
+    assert(first_execution.fusion_edge_lift > 0.07f);
+    assert(first_execution.fusion_shadow_gain > 1.15f);
     assert(first_execution.surface_leader);
     assert(!peer_execution.surface_leader);
     assert(first_execution.paint_layer_leader);
@@ -2804,6 +2832,10 @@ void test_glass_effect_union_combines_at_rest_without_spacing() {
     assert(first_execution.group_h == 40.0f);
     assert(first_execution.shape_blend_strength == 1.0f);
     assert(first_execution.inner_edge_alpha_blend_strength == 1.0f);
+    assert(std::string_view(first_execution.fusion_model)
+           == "union-liquid-glass-fusion");
+    assert(first_execution.fusion_optics_active);
+    assert(first_execution.fusion_strength == 1.0f);
 
     auto const first_surface_geometry =
         material_surface_execution_geometry(

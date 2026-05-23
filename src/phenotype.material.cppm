@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 59;
+inline constexpr std::uint32_t material_plan_contract_version = 60;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1545,12 +1545,18 @@ struct MaterialContainerExecutionDescriptor {
     bool morph_execution = false;
     bool glass_effect_match_execution = false;
     char const* execution_policy = "isolated";
+    char const* fusion_model = "none";
+    bool fusion_optics_active = false;
     float group_x = 0.0f;
     float group_y = 0.0f;
     float group_w = 0.0f;
     float group_h = 0.0f;
     float shape_blend_strength = 0.0f;
     float inner_edge_alpha_blend_strength = 0.0f;
+    float fusion_strength = 0.0f;
+    float fusion_lensing_gain = 1.0f;
+    float fusion_edge_lift = 0.0f;
+    float fusion_shadow_gain = 1.0f;
     float glass_effect_match_progress = 1.0f;
     float glass_effect_match_blend_strength = 0.0f;
     bool glass_effect_match_source_valid = false;
@@ -2689,6 +2695,54 @@ inline float material_container_group_blend_continuity(
     return 0.0f;
 }
 
+inline char const* material_container_fusion_model_name(
+        MaterialContainerExecutionDescriptor const& execution) noexcept {
+    if (execution.glass_effect_match_execution)
+        return "matched-liquid-glass-fusion";
+    if (execution.union_execution)
+        return "union-liquid-glass-fusion";
+    if (execution.group_surface_execution)
+        return "proximity-liquid-glass-fusion";
+    if (execution.morph_execution)
+        return "morph-liquid-glass-fusion";
+    if (execution.shape_blend_execution)
+        return "container-liquid-glass-fusion";
+    return "none";
+}
+
+inline void material_apply_container_fusion_optics(
+        MaterialContainerExecutionDescriptor& execution,
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (!execution.shape_blend_execution
+        || execution.shape_blend_strength <= 0.0001f) {
+        execution.fusion_model = "none";
+        execution.fusion_optics_active = false;
+        execution.fusion_strength = 0.0f;
+        execution.fusion_lensing_gain = 1.0f;
+        execution.fusion_edge_lift = 0.0f;
+        execution.fusion_shadow_gain = 1.0f;
+        return;
+    }
+
+    auto const continuity = material_container_group_blend_continuity(group);
+    auto const match_bias = execution.glass_effect_match_execution ? 0.10f : 0.0f;
+    auto const union_bias = execution.union_execution ? 0.08f : 0.0f;
+    auto const fusion_strength = std::clamp(
+        execution.shape_blend_strength
+            * (0.72f + 0.28f * continuity + match_bias + union_bias),
+        0.0f,
+        1.0f);
+    execution.fusion_model = material_container_fusion_model_name(execution);
+    execution.fusion_optics_active = fusion_strength > 0.0001f;
+    execution.fusion_strength = fusion_strength;
+    execution.fusion_lensing_gain = 1.0f + 0.18f * fusion_strength;
+    execution.fusion_edge_lift = std::clamp(
+        0.075f * fusion_strength + 0.025f * union_bias,
+        0.0f,
+        0.12f);
+    execution.fusion_shadow_gain = 1.0f + 0.16f * fusion_strength;
+}
+
 inline float material_container_shape_blend_strength_for_gap(
         float gap,
         float blend_distance) noexcept {
@@ -3424,6 +3478,7 @@ material_container_execution_descriptor_from_group(
             : material_container_inner_edge_alpha_blend_strength(
                 group,
                 descriptor.shape_blend_strength);
+    material_apply_container_fusion_optics(descriptor, group);
     if (descriptor.glass_effect_match_execution) {
         if (auto const* source = match_source.record) {
             descriptor.glass_effect_match_source_valid = true;
