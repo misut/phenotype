@@ -920,6 +920,32 @@ namespace detail {
         return json::Value{std::move(out)};
     }
 
+    inline json::Value material_scroll_edge_profile_json(
+            MaterialScrollEdgeProfile const& profile) {
+        json::Object out;
+        out.emplace("model", json::Value{profile.model});
+        out.emplace("source", json::Value{profile.source});
+        out.emplace("active", json::Value{profile.active});
+        out.emplace("role_driven", json::Value{profile.role_driven});
+        out.emplace("backdrop_driven", json::Value{profile.backdrop_driven});
+        out.emplace("contrast_driven", json::Value{profile.contrast_driven});
+        out.emplace("hard_style", json::Value{profile.hard_style});
+        out.emplace("bounded", json::Value{profile.bounded});
+        out.emplace(
+            "fade_extent_pixels",
+            json::Value{profile.fade_extent_pixels});
+        out.emplace(
+            "dissolve_strength",
+            json::Value{profile.dissolve_strength});
+        out.emplace(
+            "dimming_strength",
+            json::Value{profile.dimming_strength});
+        out.emplace(
+            "hard_style_strength",
+            json::Value{profile.hard_style_strength});
+        return json::Value{std::move(out)};
+    }
+
     inline json::Value material_plan_runtime_json(
             MaterialRuntimeRecord const& record) {
         auto const& plan = record.plan;
@@ -2260,6 +2286,9 @@ namespace detail {
             "glass_dispersion_active",
             json::Value{plan.optical_response.glass_dispersion_active});
         optical_response.emplace(
+            "scroll_edge_active",
+            json::Value{plan.optical_response.scroll_edge_active});
+        optical_response.emplace(
             "foreground_vibrancy_active",
             json::Value{plan.optical_response.foreground_vibrancy_active});
         optical_response.emplace(
@@ -2309,6 +2338,9 @@ namespace detail {
         optical_composition.emplace(
             "glass_dispersion_source",
             json::Value{composition.glass_dispersion_source});
+        optical_composition.emplace(
+            "scroll_edge_source",
+            json::Value{composition.scroll_edge_source});
         optical_composition.emplace(
             "interaction_source",
             json::Value{composition.interaction_source});
@@ -2369,6 +2401,9 @@ namespace detail {
         optical_composition.emplace(
             "glass_dispersion_required",
             json::Value{composition.glass_dispersion_required});
+        optical_composition.emplace(
+            "scroll_edge_required",
+            json::Value{composition.scroll_edge_required});
         optical_composition.emplace(
             "interaction_required",
             json::Value{composition.interaction_required});
@@ -2495,6 +2530,18 @@ namespace detail {
         optical_composition.emplace(
             "glass_dispersion_caustic_spread",
             json::Value{composition.glass_dispersion_caustic_spread});
+        optical_composition.emplace(
+            "scroll_edge_extent",
+            json::Value{composition.scroll_edge_extent});
+        optical_composition.emplace(
+            "scroll_edge_dissolve",
+            json::Value{composition.scroll_edge_dissolve});
+        optical_composition.emplace(
+            "scroll_edge_dimming",
+            json::Value{composition.scroll_edge_dimming});
+        optical_composition.emplace(
+            "scroll_edge_hard_style",
+            json::Value{composition.scroll_edge_hard_style});
         optical_composition.emplace(
             "interaction_response_strength",
             json::Value{composition.interaction_response_strength});
@@ -2771,6 +2818,21 @@ namespace detail {
             optics_json.emplace(
                 "glass_dispersion_caustic_spread",
                 json::Value{optics.glass_dispersion_caustic_spread});
+            optics_json.emplace(
+                "scroll_edge_model",
+                json::Value{optics.scroll_edge_model});
+            optics_json.emplace(
+                "scroll_edge_extent",
+                json::Value{optics.scroll_edge_extent});
+            optics_json.emplace(
+                "scroll_edge_dissolve",
+                json::Value{optics.scroll_edge_dissolve});
+            optics_json.emplace(
+                "scroll_edge_dimming",
+                json::Value{optics.scroll_edge_dimming});
+            optics_json.emplace(
+                "scroll_edge_hard_style",
+                json::Value{optics.scroll_edge_hard_style});
             json::Object out_stage;
             out_stage.emplace("name", json::Value{stage.name});
             out_stage.emplace("active", json::Value{stage.active});
@@ -2886,6 +2948,9 @@ namespace detail {
         out.emplace(
             "glass_dispersion",
             json::Value{std::move(glass_dispersion)});
+        out.emplace(
+            "scroll_edge",
+            material_scroll_edge_profile_json(plan.scroll_edge));
         out.emplace("interaction", json::Value{std::move(interaction)});
         out.emplace(
             "optical_response",

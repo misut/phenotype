@@ -11,6 +11,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -1028,7 +1029,8 @@ void test_material_runtime_record_json_contract() {
     env.quality.max_sample_taps = 9;
     env.quality.max_backdrop_pixels = 100'000;
 
-    auto plan = plan_material_surface(
+    auto record = std::make_unique<MaterialRuntimeRecord>();
+    record->plan = plan_material_surface(
         material_request_for_command(
             MaterialKind::Thin,
             0.5f,
@@ -1037,8 +1039,8 @@ void test_material_runtime_record_json_contract() {
             MaterialGeometry{4.0f, 8.0f, 160.0f, 64.0f, 12.0f},
             theme),
         env);
-    MaterialRuntimeRecord record{plan, 3};
-    auto value = diag::detail::material_plan_runtime_json(record);
+    record->command_index = 3;
+    auto value = diag::detail::material_plan_runtime_json(*record);
     auto const& obj = value.as_object();
 
     auto grouped_request = material_request_for_command(
@@ -1055,20 +1057,24 @@ void test_material_runtime_record_json_contract() {
         .interactive = true,
         .morph_transitions = true,
     };
-    auto grouped_plan_a = plan_material_surface(grouped_request, env);
+    std::vector<MaterialRuntimeRecord> grouped_records;
+    grouped_records.reserve(3);
+    grouped_records.push_back(
+        MaterialRuntimeRecord{plan_material_surface(grouped_request, env), 7u});
     auto grouped_request_b = grouped_request;
     grouped_request_b.geometry.x = 58.0f;
     grouped_request_b.style.container.union_id = 4u;
-    auto grouped_plan_b = plan_material_surface(grouped_request_b, env);
+    grouped_records.push_back(
+        MaterialRuntimeRecord{
+            plan_material_surface(grouped_request_b, env),
+            8u});
     auto grouped_request_c = grouped_request;
     grouped_request_c.geometry.x = 140.0f;
     grouped_request_c.style.container.union_id = 4u;
-    auto grouped_plan_c = plan_material_surface(grouped_request_c, env);
-    std::vector<MaterialRuntimeRecord> grouped_records{
-        MaterialRuntimeRecord{grouped_plan_a, 7u},
-        MaterialRuntimeRecord{grouped_plan_b, 8u},
-        MaterialRuntimeRecord{grouped_plan_c, 9u},
-    };
+    grouped_records.push_back(
+        MaterialRuntimeRecord{
+            plan_material_surface(grouped_request_c, env),
+            9u});
     auto group_details =
         diag::detail::material_container_group_details_json(grouped_records);
     assert(group_details.size() == 1);
@@ -1095,7 +1101,8 @@ void test_material_runtime_record_json_contract() {
     assert(members.size() == 3);
     auto const& first_member = members[0].as_object();
     assert(first_member.at("command_index").as_integer() == 7);
-    assert(first_member.at("plan_id").as_string() == grouped_plan_a.plan_id);
+    assert(first_member.at("plan_id").as_string()
+           == grouped_records[0].plan.plan_id);
     assert(first_member.at("mode").as_string() == "union");
     assert(first_member.at("union_id").as_integer() == 4);
     assert(first_member.at("shape_union_expected").as_bool());
@@ -1603,11 +1610,11 @@ void test_material_runtime_record_json_contract() {
     assert(std::fabs(edge_optics.at("pointer_lens_strength").as_float())
            < 0.0001f);
 
-    std::vector<MaterialRuntimeRecord> records{record};
+    std::vector<MaterialRuntimeRecord> records{*record};
     auto plans = diag::detail::material_plans_runtime_json(records);
     assert(plans.size() == 1);
     MaterialRuntimeSummary pure_summary;
-    accumulate_material_runtime_summary(pure_summary, record);
+    accumulate_material_runtime_summary(pure_summary, *record);
     assert(pure_summary.plan_count == 1);
     assert(pure_summary.fallback_count == 1);
     assert(pure_summary.total_runtime_passes == 1);
