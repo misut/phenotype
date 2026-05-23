@@ -242,6 +242,7 @@ inline bool material_equal(MaterialStyle const& a, MaterialStyle const& b) noexc
         && a.fallback == b.fallback
         && a.interaction == b.interaction
         && a.transition == b.transition
+        && a.glass_identity == b.glass_identity
         && cstr_equal(a.fallback_reason, b.fallback_reason)
         && cstr_equal(a.contrast_intent, b.contrast_intent)
         && cstr_equal(a.plan_id, b.plan_id)

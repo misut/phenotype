@@ -2810,6 +2810,39 @@ inline MaterialTransitionDescriptor resolve_material_transition(
     return current_material_transition();
 }
 
+inline MaterialGlassIdentityDescriptor glass_effect_identity(
+        std::uint32_t namespace_id,
+        std::uint32_t effect_id) noexcept {
+    return MaterialGlassIdentityDescriptor{namespace_id, effect_id};
+}
+
+inline bool material_glass_identity_is_empty(
+        MaterialGlassIdentityDescriptor descriptor) noexcept {
+    return descriptor.namespace_id == 0u && descriptor.effect_id == 0u;
+}
+
+inline std::vector<MaterialGlassIdentityDescriptor>&
+material_glass_identity_stack() {
+    static std::vector<MaterialGlassIdentityDescriptor>& stack =
+        *new std::vector<MaterialGlassIdentityDescriptor>();
+    return stack;
+}
+
+inline MaterialGlassIdentityDescriptor current_material_glass_identity() {
+    auto& stack = material_glass_identity_stack();
+    return stack.empty() ? MaterialGlassIdentityDescriptor{} : stack.back();
+}
+
+inline MaterialGlassIdentityDescriptor resolve_material_glass_identity(
+        MaterialGlassIdentityDescriptor requested,
+        bool inherit_identity) {
+    if (!inherit_identity)
+        return requested;
+    if (!material_glass_identity_is_empty(requested))
+        return requested;
+    return current_material_glass_identity();
+}
+
 template<typename F>
     requires std::is_invocable_v<F>
 void material_container(MaterialContainerOptions options, F&& builder) {
@@ -2827,6 +2860,25 @@ void glass_effect_transition(MaterialTransitionDescriptor transition,
     stack.push_back(transition);
     builder();
     stack.pop_back();
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect_id(MaterialGlassIdentityDescriptor identity, F&& builder) {
+    auto& stack = material_glass_identity_stack();
+    stack.push_back(identity);
+    builder();
+    stack.pop_back();
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect_id(std::uint32_t namespace_id,
+                     std::uint32_t effect_id,
+                     F&& builder) {
+    glass_effect_id(
+        glass_effect_identity(namespace_id, effect_id),
+        std::forward<F>(builder));
 }
 
 inline MaterialTransitionDescriptor glass_materialize_transition(
@@ -2989,7 +3041,9 @@ struct MaterialSurfaceOptions {
     MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
     MaterialInteractionDescriptor interaction{};
     MaterialTransitionDescriptor transition{};
+    MaterialGlassIdentityDescriptor glass_identity{};
     bool inherit_material_transition = true;
+    bool inherit_material_identity = true;
     FlexDirection direction = FlexDirection::Column;
     SpaceToken padding = SpaceToken::Lg;
     SpaceToken gap = SpaceToken::Md;
@@ -3058,6 +3112,9 @@ inline void configure_material_surface(LayoutNode& node,
     node.material.transition = resolve_material_transition(
         options.transition,
         options.inherit_material_transition);
+    node.material.glass_identity = resolve_material_glass_identity(
+        options.glass_identity,
+        options.inherit_material_identity);
     node.material.container = options.inherit_material_container
         ? current_material_container()
         : options.container;

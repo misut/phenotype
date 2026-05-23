@@ -242,6 +242,24 @@ inline MaterialTransitionDescriptor material_transition_descriptor_from_wire(
         (flags & 1u) != 0u};
 }
 
+struct MaterialGlassIdentityDescriptor {
+    std::uint32_t namespace_id = 0;
+    std::uint32_t effect_id = 0;
+
+    constexpr bool participates() const noexcept {
+        return namespace_id != 0u && effect_id != 0u;
+    }
+
+    constexpr bool operator==(MaterialGlassIdentityDescriptor const&) const =
+        default;
+};
+
+inline MaterialGlassIdentityDescriptor material_glass_identity_from_wire(
+        unsigned int namespace_id,
+        unsigned int effect_id) noexcept {
+    return MaterialGlassIdentityDescriptor{namespace_id, effect_id};
+}
+
 inline unsigned int material_interaction_flags(
         MaterialInteractionDescriptor descriptor) noexcept {
     return (descriptor.hovered ? 1u : 0u)
@@ -290,6 +308,7 @@ struct MaterialStyle {
     char const* verifier_profile = "none";
     MaterialInteractionDescriptor interaction{};
     MaterialTransitionDescriptor transition{};
+    MaterialGlassIdentityDescriptor glass_identity{};
 };
 
 struct MaterialCommandDescriptor {
@@ -309,6 +328,7 @@ struct MaterialCommandDescriptor {
     float shadow_radius = 0.0f;
     MaterialInteractionDescriptor interaction{};
     MaterialTransitionDescriptor transition{};
+    MaterialGlassIdentityDescriptor glass_identity{};
 };
 
 // A solid convex quadrilateral in canvas-local coordinates. Intended
@@ -1062,7 +1082,8 @@ enum class Cmd : unsigned int {
     // shadow_radius f32 + container_id/union_id u32 +
     // container_spacing f32 + container_flags u32 +
     // interaction_flags u32 + interaction pointer_x/pointer_y f32 +
-    // transition_kind u32 + transition_progress f32 + transition_flags u32.
+    // transition_kind u32 + transition_progress f32 + transition_flags u32 +
+    // glass_namespace_id u32 + glass_effect_id u32.
     // Backends with backdrop sampling render a glass/material effect;
     // backends without it draw the tint as a rounded-rect fallback.
     MaterialRect = 15,

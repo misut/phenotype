@@ -61,7 +61,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 49);
+    assert(material_plan_contract_version == 50);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -95,6 +95,15 @@ void test_sampled_backdrop_access_contract() {
     assert(std::string_view(plan.transition.kind_name) == "identity");
     assert(std::string_view(plan.transition.policy) == "identity");
     assert(plan.transition.progress == 1.0f);
+    assert(plan.glass_identity.namespace_id == 0u);
+    assert(plan.glass_identity.effect_id == 0u);
+    assert(!plan.glass_identity.participates);
+    assert(!plan.glass_identity.container_scoped);
+    assert(!plan.glass_identity.matched_geometry_candidate);
+    assert(std::string_view(plan.glass_identity.source) == "none");
+    assert(std::string_view(plan.glass_identity.policy) == "unidentified");
+    assert(!plan.reference_model.glass_effect_identified);
+    assert(!plan.reference_model.glass_effect_matched_geometry);
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(!plan.shape.capsule);
     assert(plan.theme.default_glass_tokens);
@@ -921,6 +930,73 @@ void test_materialize_transition_modulates_glass_optics_contract() {
     std::puts("PASS: materialize transition modulates glass optics contract");
 }
 
+void test_glass_effect_identity_marks_matched_transition_contract() {
+    auto request = regular_request();
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 55u,
+        .union_id = 0u,
+        .spacing = 16.0f,
+        .interactive = false,
+        .morph_transitions = true,
+    };
+    request.style.transition = MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::MatchedGeometry,
+        .progress = 0.5f,
+        .appearing = true,
+    };
+    request.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 77u,
+        .effect_id = 901u,
+    };
+
+    auto descriptor = material_command_descriptor(request.style);
+    auto roundtrip_style = material_style_for_command(descriptor, Theme{});
+    auto plan = plan_material_surface(request, sampled_environment());
+
+    assert(descriptor.glass_identity.namespace_id == 77u);
+    assert(descriptor.glass_identity.effect_id == 901u);
+    assert(roundtrip_style.glass_identity.namespace_id == 77u);
+    assert(roundtrip_style.glass_identity.effect_id == 901u);
+    assert(plan.command_descriptor.glass_identity.namespace_id == 77u);
+    assert(plan.command_descriptor.glass_identity.effect_id == 901u);
+
+    assert(plan.container.participates);
+    assert(plan.transition.active);
+    assert(plan.transition.matched_geometry);
+    assert(plan.glass_identity.namespace_id == 77u);
+    assert(plan.glass_identity.effect_id == 901u);
+    assert(plan.glass_identity.namespace_scoped);
+    assert(plan.glass_identity.effect_identified);
+    assert(plan.glass_identity.participates);
+    assert(plan.glass_identity.container_scoped);
+    assert(plan.glass_identity.matched_geometry_candidate);
+    assert(plan.glass_identity.bounded);
+    assert(std::string_view(plan.glass_identity.source) == "glass-effect-id");
+    assert(std::string_view(plan.glass_identity.policy)
+           == "matched-geometry-container");
+    assert(plan.reference_model.container_grouped);
+    assert(plan.reference_model.container_morphing);
+    assert(plan.reference_model.glass_effect_identified);
+    assert(plan.reference_model.glass_effect_matched_geometry);
+
+    auto partial = regular_request();
+    partial.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 77u,
+        .effect_id = 0u,
+    };
+    auto partial_plan = plan_material_surface(partial, sampled_environment());
+    assert(partial_plan.glass_identity.namespace_scoped);
+    assert(!partial_plan.glass_identity.effect_identified);
+    assert(!partial_plan.glass_identity.participates);
+    assert(std::string_view(partial_plan.glass_identity.source)
+           == "partial-glass-effect-id");
+    assert(std::string_view(partial_plan.glass_identity.policy)
+           == "incomplete-effect-id");
+    assert(!partial_plan.reference_model.glass_effect_identified);
+
+    std::puts("PASS: glass effect identity marks matched transition contract");
+}
+
 void test_warmup_backdrop_access_contract() {
     auto env = sampled_environment();
     env.capabilities.frame_history = false;
@@ -1311,6 +1387,7 @@ int main() {
     test_increase_contrast_raises_foreground_readability_contract();
     test_interactive_material_modulates_optics_contract();
     test_materialize_transition_modulates_glass_optics_contract();
+    test_glass_effect_identity_marks_matched_transition_contract();
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     test_executor_frame_capture_policy_contract();
