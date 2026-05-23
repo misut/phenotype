@@ -61,7 +61,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 47);
+    assert(material_plan_contract_version == 48);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -131,6 +131,20 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.refraction.edge_caustic_intensity > 0.0f);
     assert(plan.resource_budget.max_refraction_offset_pixels
            == plan.refraction.max_offset_pixels);
+    assert(plan.specular.active);
+    assert(plan.specular.ambient);
+    assert(!plan.specular.interaction_driven);
+    assert(plan.specular.bounded);
+    assert(std::string_view(plan.specular.model) == "ambient-glass-sheen");
+    assert(std::string_view(plan.specular.source)
+        == "sampled-backdrop-edge-lighting");
+    assert(plan.specular.anchor_x > 0.0f);
+    assert(plan.specular.anchor_x < 1.0f);
+    assert(plan.specular.anchor_y > 0.0f);
+    assert(plan.specular.anchor_y < 1.0f);
+    assert(plan.specular.radius > 0.0f);
+    assert(plan.specular.intensity > 0.0f);
+    assert(!plan.interaction.specular_highlight_active);
     assert(plan.observation_contract.shared_frame_capture_required);
     assert(plan.observation_contract.next_frame_capture_required);
     assert(plan.observation_contract.backdrop_capture_excludes_foreground_text);
@@ -219,6 +233,18 @@ void test_sampled_backdrop_access_contract() {
     assert(material_plan_uses_sampled_backdrop_executor(plan));
     assert(!material_plan_uses_standard_fill_executor(plan));
     assert(!material_plan_uses_deterministic_fallback_executor(plan));
+    assert(plan.execution_stage_count == 4u);
+    assert(std::string_view(plan.execution_stages[2].name) == "edge-highlight");
+    assert(std::string_view(plan.execution_stages[2].optics.specular_model)
+        == "ambient-glass-sheen");
+    assert(plan.execution_stages[2].optics.specular_anchor_x
+           == plan.specular.anchor_x);
+    assert(plan.execution_stages[2].optics.specular_anchor_y
+           == plan.specular.anchor_y);
+    assert(plan.execution_stages[2].optics.specular_radius
+           == plan.specular.radius);
+    assert(plan.execution_stages[2].optics.specular_intensity
+           == plan.specular.intensity);
     assert(plan.paint_layer_count == 0u);
     assert(plan.dropped_paint_layer_count == 0u);
     assert(plan.resource_budget.max_paint_layers == material_max_paint_layers);
@@ -413,6 +439,10 @@ void test_content_layer_stays_standard_material_contract() {
     assert(std::string_view(plan.refraction.source) == "none");
     assert(plan.refraction.edge_caustic_intensity == 0.0f);
     assert(plan.resource_budget.max_refraction_offset_pixels == 0.0f);
+    assert(!plan.specular.active);
+    assert(std::string_view(plan.specular.model) == "none");
+    assert(std::string_view(plan.specular.source) == "none");
+    assert(plan.specular.intensity == 0.0f);
     assert(!plan.optical_response.backdrop_driven);
     assert(!plan.optical_response.blur_active);
     assert(!plan.optical_response.frosting_active);
@@ -745,6 +775,17 @@ void test_interactive_material_modulates_optics_contract() {
            > baseline_plan.refraction.max_offset_pixels);
     assert(plan.refraction.edge_caustic_intensity
            > baseline_plan.refraction.edge_caustic_intensity);
+    assert(plan.specular.active);
+    assert(plan.specular.ambient);
+    assert(plan.specular.interaction_driven);
+    assert(std::string_view(plan.specular.model) == "pointer-specular");
+    assert(std::string_view(plan.specular.source)
+        == "sampled-backdrop-pointer-lighting");
+    assert(plan.specular.anchor_x == plan.interaction.specular_anchor_x);
+    assert(plan.specular.anchor_y == plan.interaction.specular_anchor_y);
+    assert(plan.specular.radius == plan.interaction.specular_radius);
+    assert(plan.specular.intensity > plan.interaction.specular_intensity);
+    assert(plan.specular.intensity > baseline_plan.specular.intensity);
     assert(plan.interaction.opacity_delta
            == plan.opacity - baseline_plan.opacity);
     assert(plan.interaction.blur_radius_delta
@@ -787,6 +828,9 @@ void test_interactive_material_modulates_optics_contract() {
            < plan.refraction.max_offset_pixels);
     assert(reduced_plan.refraction.edge_caustic_intensity
            < plan.refraction.edge_caustic_intensity);
+    assert(reduced_plan.specular.active);
+    assert(reduced_plan.specular.interaction_driven);
+    assert(reduced_plan.specular.intensity < plan.specular.intensity);
     assert(!reduced_plan.container.morph_transitions);
     std::puts("PASS: interactive material modulates optics contract");
 }

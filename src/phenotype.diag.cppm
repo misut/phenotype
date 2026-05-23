@@ -1831,6 +1831,20 @@ namespace detail {
             "edge_caustic_intensity",
             json::Value{plan.refraction.edge_caustic_intensity});
 
+        json::Object specular;
+        specular.emplace("model", json::Value{plan.specular.model});
+        specular.emplace("source", json::Value{plan.specular.source});
+        specular.emplace("active", json::Value{plan.specular.active});
+        specular.emplace("ambient", json::Value{plan.specular.ambient});
+        specular.emplace(
+            "interaction_driven",
+            json::Value{plan.specular.interaction_driven});
+        specular.emplace("bounded", json::Value{plan.specular.bounded});
+        specular.emplace("anchor_x", json::Value{plan.specular.anchor_x});
+        specular.emplace("anchor_y", json::Value{plan.specular.anchor_y});
+        specular.emplace("radius", json::Value{plan.specular.radius});
+        specular.emplace("intensity", json::Value{plan.specular.intensity});
+
         json::Object interaction;
         interaction.emplace("enabled", json::Value{plan.interaction.enabled});
         interaction.emplace("active", json::Value{plan.interaction.active});
@@ -2386,6 +2400,7 @@ namespace detail {
         out.emplace("theme", json::Value{std::move(theme)});
         out.emplace("foreground", json::Value{std::move(foreground)});
         out.emplace("refraction", json::Value{std::move(refraction)});
+        out.emplace("specular", json::Value{std::move(specular)});
         out.emplace("interaction", json::Value{std::move(interaction)});
         out.emplace(
             "optical_response",
