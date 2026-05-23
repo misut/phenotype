@@ -2452,6 +2452,9 @@ namespace detail {
             layer_json.emplace("name", json::Value{layer.name});
             layer_json.emplace("active", json::Value{layer.active});
             layer_json.emplace("executor", json::Value{layer.executor});
+            layer_json.emplace(
+                "background_effect",
+                json::Value{layer.background_effect});
             layer_json.emplace("x_offset", json::Value{layer.x_offset});
             layer_json.emplace("y_offset", json::Value{layer.y_offset});
             layer_json.emplace("inflate", json::Value{layer.inflate});
@@ -2459,6 +2462,9 @@ namespace detail {
             layer_json.emplace("stroke_width", json::Value{layer.stroke_width});
             layer_json.emplace("color", color_to_json(layer.color));
             layer_json.emplace("opacity", json::Value{layer.opacity});
+            layer_json.emplace(
+                "soft_edge_radius",
+                json::Value{layer.soft_edge_radius});
             layer_json.emplace("bounded", json::Value{layer.bounded});
             paint_layers.push_back(json::Value{std::move(layer_json)});
         }
