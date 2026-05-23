@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 54;
+inline constexpr std::uint32_t material_plan_contract_version = 55;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -454,6 +454,11 @@ struct MaterialStageOptics {
     float spectral_tint_coolness = 0.0f;
     float spectral_dispersion = 0.0f;
     float spectral_rim_tint = 0.0f;
+    char const* dynamic_lighting_model = "none";
+    float dynamic_light_direction_x = 0.0f;
+    float dynamic_light_direction_y = 0.0f;
+    float dynamic_light_highlight = 0.0f;
+    float dynamic_light_shadow = 0.0f;
 };
 
 struct MaterialExecutionStage {
@@ -612,6 +617,22 @@ struct MaterialSpectralTintProfile {
     float balance = 0.5f;
 };
 
+struct MaterialDynamicLightingProfile {
+    char const* model = "none";
+    char const* source = "none";
+    bool active = false;
+    bool backdrop_driven = false;
+    bool color_driven = false;
+    bool caustic_driven = false;
+    bool interaction_driven = false;
+    bool reduced_motion_suppressed = false;
+    bool bounded = true;
+    float direction_x = 0.0f;
+    float direction_y = 0.0f;
+    float highlight_strength = 0.0f;
+    float shadow_strength = 0.0f;
+};
+
 struct MaterialInteractionResponse {
     bool enabled = false;
     bool active = false;
@@ -664,6 +685,7 @@ struct MaterialOpticalResponseContract {
     bool noise_dither_active = false;
     bool refraction_active = false;
     bool spectral_tint_active = false;
+    bool dynamic_lighting_active = false;
     bool foreground_vibrancy_active = false;
     bool interaction_active = false;
     bool interaction_modulates_optics = false;
@@ -680,6 +702,7 @@ struct MaterialOpticalComposition {
     char const* depth_source = "none";
     char const* refraction_source = "none";
     char const* spectral_tint_source = "none";
+    char const* dynamic_lighting_source = "none";
     char const* interaction_source = "none";
     char const* transition_source = "identity";
     char const* fallback_source = "none";
@@ -697,6 +720,7 @@ struct MaterialOpticalComposition {
     bool noise_required = false;
     bool refraction_required = false;
     bool spectral_tint_required = false;
+    bool dynamic_lighting_required = false;
     bool interaction_required = false;
     bool transition_required = false;
     bool fallback_required = false;
@@ -728,6 +752,10 @@ struct MaterialOpticalComposition {
     float spectral_tint_coolness = 0.0f;
     float spectral_dispersion = 0.0f;
     float spectral_rim_tint = 0.0f;
+    float dynamic_light_direction_x = 0.0f;
+    float dynamic_light_direction_y = 0.0f;
+    float dynamic_light_highlight = 0.0f;
+    float dynamic_light_shadow = 0.0f;
     float interaction_response_strength = 0.0f;
     float transition_progress = 1.0f;
     float transition_opacity_gain = 1.0f;
@@ -924,6 +952,7 @@ struct MaterialPlan {
     MaterialSpecularProfile specular{};
     MaterialEdgeOpticsProfile edge_optics{};
     MaterialSpectralTintProfile spectral_tint{};
+    MaterialDynamicLightingProfile dynamic_lighting{};
     MaterialInteractionResponse interaction{};
     MaterialOpticalComposition optical_composition{};
     MaterialOpticalResponseContract optical_response{};
@@ -991,6 +1020,12 @@ inline MaterialStageOptics material_primary_stage_optics(
     optics.spectral_tint_coolness = plan.spectral_tint.coolness;
     optics.spectral_dispersion = plan.spectral_tint.dispersion;
     optics.spectral_rim_tint = plan.spectral_tint.rim_tint;
+    optics.dynamic_lighting_model = plan.dynamic_lighting.model;
+    optics.dynamic_light_direction_x = plan.dynamic_lighting.direction_x;
+    optics.dynamic_light_direction_y = plan.dynamic_lighting.direction_y;
+    optics.dynamic_light_highlight =
+        plan.dynamic_lighting.highlight_strength;
+    optics.dynamic_light_shadow = plan.dynamic_lighting.shadow_strength;
     return optics;
 }
 
@@ -1032,6 +1067,12 @@ inline MaterialStageOptics material_edge_stage_optics(
     optics.spectral_tint_coolness = plan.spectral_tint.coolness;
     optics.spectral_dispersion = plan.spectral_tint.dispersion;
     optics.spectral_rim_tint = plan.spectral_tint.rim_tint;
+    optics.dynamic_lighting_model = plan.dynamic_lighting.model;
+    optics.dynamic_light_direction_x = plan.dynamic_lighting.direction_x;
+    optics.dynamic_light_direction_y = plan.dynamic_lighting.direction_y;
+    optics.dynamic_light_highlight =
+        plan.dynamic_lighting.highlight_strength;
+    optics.dynamic_light_shadow = plan.dynamic_lighting.shadow_strength;
     return optics;
 }
 
@@ -5588,6 +5629,134 @@ inline MaterialSpectralTintProfile material_resolve_spectral_tint_profile(
     return profile;
 }
 
+inline char const* material_dynamic_lighting_source_name(
+        bool color_driven,
+        bool caustic_driven,
+        bool interaction_driven) noexcept {
+    if (interaction_driven && color_driven)
+        return "sampled-backdrop-interactive-color-lighting";
+    if (interaction_driven)
+        return "sampled-backdrop-interactive-lighting";
+    if (color_driven && caustic_driven)
+        return "sampled-backdrop-color-caustic-lighting";
+    if (color_driven)
+        return "sampled-backdrop-color-lighting";
+    if (caustic_driven)
+        return "sampled-backdrop-caustic-lighting";
+    return "sampled-backdrop-dynamic-lighting";
+}
+
+inline MaterialDynamicLightingProfile material_resolve_dynamic_lighting_profile(
+        MaterialPlan const& plan) noexcept {
+    MaterialDynamicLightingProfile profile{};
+    profile.bounded = true;
+    if (!plan.backdrop_sampling
+        || plan.fallback()
+        || plan.kind == MaterialKind::None
+        || plan.backdrop.color_sample_count == 0u) {
+        return profile;
+    }
+
+    auto const source = plan.backdrop.color_mean;
+    auto const red = material_color_channel_fraction(source.r);
+    auto const green = material_color_channel_fraction(source.g);
+    auto const blue = material_color_channel_fraction(source.b);
+    auto const colorfulness = material_colorfulness(source);
+    auto const sample_luma = plan.backdrop.luma_sample_count > 0u
+        ? plan.backdrop.luma_mean
+        : material_color_luma(source);
+    auto const luma_mean = std::clamp(sample_luma, 0.0f, 1.0f);
+    auto const luma_span = std::clamp(plan.backdrop.luma_span, 0.0f, 1.0f);
+    auto const backdrop_response =
+        std::clamp(plan.backdrop.response_strength, 0.0f, 1.0f);
+    auto const edge_highlight =
+        std::clamp(plan.edge_highlight, 0.0f, 1.0f);
+    auto const caustic =
+        std::clamp(plan.refraction.edge_caustic_intensity, 0.0f, 0.35f);
+    auto const spectral_energy = std::clamp(
+        std::max(plan.spectral_tint.warmth, plan.spectral_tint.coolness)
+            + 0.45f * plan.spectral_tint.rim_tint,
+        0.0f,
+        0.32f);
+    auto const interaction_response = plan.interaction.active
+        ? std::clamp(plan.interaction.response_strength, 0.0f, 1.0f)
+        : 0.0f;
+    auto const motion_scale = plan.decision_trace.reduce_motion ? 0.66f : 1.0f;
+    auto const shift_scale = plan.decision_trace.reduce_motion ? 0.42f : 1.0f;
+    auto const transition_gain =
+        plan.transition.active ? plan.transition.optical_gain : 1.0f;
+
+    profile.highlight_strength = std::clamp(
+        transition_gain
+            * motion_scale
+            * (0.045f
+               + 0.150f * edge_highlight
+               + 0.58f * caustic
+               + 0.055f * backdrop_response
+               + 0.18f * spectral_energy
+               + 0.045f * interaction_response),
+        0.0f,
+        0.38f);
+    profile.shadow_strength = std::clamp(
+        transition_gain
+            * motion_scale
+            * (0.035f
+               + 0.28f * std::clamp(plan.shadow_alpha, 0.0f, 0.45f)
+               + 0.090f * luma_span
+               + 0.46f * caustic
+               + 0.025f * interaction_response),
+        0.0f,
+        0.30f);
+
+    if (profile.highlight_strength <= 0.0001f
+        && profile.shadow_strength <= 0.0001f) {
+        return MaterialDynamicLightingProfile{};
+    }
+
+    auto const color_shift = std::clamp(
+        (blue - red) * 0.16f + (green - red) * 0.06f,
+        -0.22f,
+        0.22f);
+    auto const luma_shift = std::clamp(
+        (luma_mean - 0.5f) * 0.18f,
+        -0.12f,
+        0.12f);
+    auto const pointer_shift_x = plan.interaction.pointer_lens_active
+        ? (plan.interaction.pointer_x - 0.5f) * 0.20f
+        : 0.0f;
+    auto const pointer_shift_y = plan.interaction.pointer_lens_active
+        ? (plan.interaction.pointer_y - 0.5f) * 0.16f
+        : 0.0f;
+    auto const raw_x =
+        -0.58f + shift_scale * (color_shift + pointer_shift_x);
+    auto const raw_y =
+        -0.82f + shift_scale * (luma_shift + pointer_shift_y);
+    auto const length = std::sqrt(raw_x * raw_x + raw_y * raw_y);
+    if (length > 0.0001f) {
+        profile.direction_x = std::clamp(raw_x / length, -0.98f, 0.98f);
+        profile.direction_y = std::clamp(raw_y / length, -0.98f, 0.98f);
+    } else {
+        profile.direction_x = -0.58f;
+        profile.direction_y = -0.82f;
+    }
+
+    profile.active = true;
+    profile.backdrop_driven = true;
+    profile.color_driven = colorfulness > 0.025f;
+    profile.caustic_driven = caustic > 0.0001f;
+    profile.interaction_driven = plan.interaction.active;
+    profile.reduced_motion_suppressed =
+        plan.decision_trace.reduce_motion && motion_scale < 1.0f;
+    profile.model = profile.interaction_driven
+        ? "interactive-dynamic-glass-light"
+        : "dynamic-liquid-glass-light";
+    profile.source = material_dynamic_lighting_source_name(
+        profile.color_driven,
+        profile.caustic_driven,
+        profile.interaction_driven);
+    return profile;
+}
+
 inline float material_base_specular_intensity(MaterialKind kind) noexcept {
     switch (kind) {
         case MaterialKind::Clear: return 0.050f;
@@ -6010,6 +6179,15 @@ inline char const* material_optical_spectral_tint_source_name(
     return "none";
 }
 
+inline char const* material_optical_dynamic_lighting_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.dynamic_lighting.active
+        && plan.dynamic_lighting.source
+        && plan.dynamic_lighting.source[0])
+        return plan.dynamic_lighting.source;
+    return "none";
+}
+
 inline char const* material_optical_stage_order_name(
         MaterialPlan const& plan) noexcept {
     if (!plan.primary_pass.active)
@@ -6079,6 +6257,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         material_optical_refraction_source_name(plan);
     composition.spectral_tint_source =
         material_optical_spectral_tint_source_name(plan);
+    composition.dynamic_lighting_source =
+        material_optical_dynamic_lighting_source_name(plan);
     composition.interaction_source =
         material_optical_interaction_source_name(plan);
     composition.transition_source =
@@ -6111,6 +6291,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.backdrop_sampling && plan.noise_opacity > 0.0f;
     composition.refraction_required = plan.refraction.active;
     composition.spectral_tint_required = plan.spectral_tint.active;
+    composition.dynamic_lighting_required = plan.dynamic_lighting.active;
     composition.interaction_required = plan.interaction.active;
     composition.transition_required = plan.transition.active;
     composition.fallback_required = plan.fallback();
@@ -6129,6 +6310,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         && plan.refraction.bounded
         && plan.edge_optics.bounded
         && plan.spectral_tint.bounded
+        && plan.dynamic_lighting.bounded
         && plan.transition.bounded;
     composition.deterministic =
         plan.resource_budget.deterministic_fallback
@@ -6158,6 +6340,14 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.spectral_tint_coolness = plan.spectral_tint.coolness;
     composition.spectral_dispersion = plan.spectral_tint.dispersion;
     composition.spectral_rim_tint = plan.spectral_tint.rim_tint;
+    composition.dynamic_light_direction_x =
+        plan.dynamic_lighting.direction_x;
+    composition.dynamic_light_direction_y =
+        plan.dynamic_lighting.direction_y;
+    composition.dynamic_light_highlight =
+        plan.dynamic_lighting.highlight_strength;
+    composition.dynamic_light_shadow =
+        plan.dynamic_lighting.shadow_strength;
     composition.interaction_response_strength =
         plan.interaction.response_strength;
     composition.transition_progress = plan.transition.progress;
@@ -6193,6 +6383,8 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
     response.noise_dither_active = composition.noise_required;
     response.refraction_active = composition.refraction_required;
     response.spectral_tint_active = composition.spectral_tint_required;
+    response.dynamic_lighting_active =
+        composition.dynamic_lighting_required;
     response.foreground_vibrancy_active = plan.foreground.uses_vibrancy;
     response.interaction_active = composition.interaction_required;
     response.interaction_modulates_optics =
@@ -6467,6 +6659,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.refraction.max_offset_pixels;
     plan.edge_optics = material_resolve_edge_optics_profile(plan);
     plan.spectral_tint = material_resolve_spectral_tint_profile(plan);
+    plan.dynamic_lighting = material_resolve_dynamic_lighting_profile(plan);
     plan.specular = material_resolve_specular_profile(plan);
     plan.luminance_curve = material_resolve_luminance_curve(
         plan.backdrop_sampling,

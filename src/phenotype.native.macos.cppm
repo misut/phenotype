@@ -1637,6 +1637,8 @@ struct MaterialInstanceGPU {
     float edge_optics[4]{};
     // spectral warmth, coolness, dispersion, rim tint
     float spectral_tint[4]{};
+    // dynamic light direction x/y, highlight strength, shadow strength
+    float lighting[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
     // shape blend strength, inner-edge alpha blend strength, flags, command index
@@ -2382,6 +2384,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.spectral_tint[1] = plan.spectral_tint.coolness;
     inst.spectral_tint[2] = plan.spectral_tint.dispersion;
     inst.spectral_tint[3] = plan.spectral_tint.rim_tint;
+    inst.lighting[0] = plan.dynamic_lighting.direction_x;
+    inst.lighting[1] = plan.dynamic_lighting.direction_y;
+    inst.lighting[2] = plan.dynamic_lighting.highlight_strength;
+    inst.lighting[3] = plan.dynamic_lighting.shadow_strength;
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];
@@ -2569,6 +2575,16 @@ inline void apply_material_container_execution_descriptors(
                             + 0.040f * match_motion.strength,
                         0.0f,
                         0.28f);
+                    inst.lighting[2] = std::clamp(
+                        inst.lighting[2]
+                            + 0.055f * match_motion.strength,
+                        0.0f,
+                        0.45f);
+                    inst.lighting[3] = std::clamp(
+                        inst.lighting[3]
+                            + 0.040f * match_motion.strength,
+                        0.0f,
+                        0.36f);
                 }
             } else {
                 inst.group_rect[0] = execution->group_x;
@@ -4518,6 +4534,7 @@ struct MaterialVsOut {
     float4 refraction;
     float4 edge_optics;
     float4 spectral_tint;
+    float4 lighting;
     float4 group_rect;
     float4 group_effects;
 };
@@ -4535,6 +4552,7 @@ struct MaterialInstance {
     float4 refraction;
     float4 edge_optics;
     float4 spectral_tint;
+    float4 lighting;
     float4 group_rect;
     float4 group_effects;
 };
@@ -4573,6 +4591,7 @@ vertex MaterialVsOut vs_material(
     out.refraction = inst.refraction;
     out.edge_optics = inst.edge_optics;
     out.spectral_tint = inst.spectral_tint;
+    out.lighting = inst.lighting;
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
     return out;
@@ -4678,6 +4697,13 @@ fragment float4 fs_material(
     float spectral_coolness = clamp(in.spectral_tint.y, 0.0, 0.22);
     float spectral_dispersion = clamp(in.spectral_tint.z, 0.0, 0.22);
     float spectral_rim_tint = clamp(in.spectral_tint.w, 0.0, 0.28);
+    float2 default_light_dir = normalize(float2(-0.58, -0.82));
+    float2 dynamic_light_raw = in.lighting.xy;
+    float2 dynamic_light_dir = length(dynamic_light_raw) > 0.0001
+        ? normalize(dynamic_light_raw)
+        : default_light_dir;
+    float dynamic_light_highlight = clamp(in.lighting.z, 0.0, 0.45);
+    float dynamic_light_shadow = clamp(in.lighting.w, 0.0, 0.36);
     float normalized_len = length(normalized_local);
     float2 refraction_dir = normalized_len > 0.0001
         ? normalized_local / normalized_len
@@ -4814,6 +4840,15 @@ fragment float4 fs_material(
                0.24 * (spectral_warmth + spectral_coolness),
                spectral_coolness);
     rgb += spectral_rgb * spectral_edge * (0.20 + 1.40 * caustic_weight);
+    float light_sweep = smoothstep(
+        -0.72,
+        0.96,
+        dot(normalized_local, -dynamic_light_dir));
+    light_sweep *= 1.0 - smoothstep(0.28, 1.18, normalized_len);
+    rgb += (float3(1.0) + spectral_rgb * 2.0)
+        * dynamic_light_highlight
+        * light_sweep
+        * 0.16;
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
@@ -4826,20 +4861,22 @@ fragment float4 fs_material(
             0.0,
             max(edge_width * 1.25, 0.5),
             signed_edge_distance);
-        float2 bevel_light_dir = normalize(float2(-0.58, -0.82));
         float bevel_alignment = clamp(
-            dot(refraction_dir, bevel_light_dir) * 0.5 + 0.5,
+            dot(refraction_dir, dynamic_light_dir) * 0.5 + 0.5,
             0.0,
             1.0);
         float corner_focus = clamp(length(normalized_local) * 0.52, 0.0, 1.0);
         float bright_band = inner_bevel
             * edge_inner_highlight
             * (0.34 + 0.66 * bevel_alignment)
-            * (0.82 + 0.18 * corner_focus);
+            * (0.82 + 0.18 * corner_focus)
+            * (1.0 + dynamic_light_highlight * 1.25);
         float shadow_band_inner = bevel
             * (1.0 - inner_bevel * 0.58)
             * edge_outer_shadow
-            * (0.28 + 0.72 * (1.0 - bevel_alignment));
+            * (0.28 + 0.72 * (1.0 - bevel_alignment))
+            * (1.0 + dynamic_light_shadow * 1.30);
+        shadow_band_inner = clamp(shadow_band_inner, 0.0, 0.72);
         float3 bevel_tint =
             float3(1.0 + spectral_warmth * 1.35,
                    1.0 + (spectral_warmth + spectral_coolness) * 0.22,
@@ -4848,17 +4885,19 @@ fragment float4 fs_material(
         rgb *= (1.0 - shadow_band_inner);
     }
     if (caustic_weight > 0.0001) {
-        float2 light_dir = normalize(float2(-0.58, -0.82));
         float rim_alignment = clamp(
-            dot(refraction_dir, light_dir) * 0.5 + 0.5,
+            dot(refraction_dir, dynamic_light_dir) * 0.5 + 0.5,
             0.0,
             1.0);
         float rim_light = caustic_weight
             * (0.55 + 0.45 * rim_alignment * rim_alignment)
-            * (0.60 + 0.40 * edge_lift);
+            * (0.60 + 0.40 * edge_lift)
+            * (1.0 + dynamic_light_highlight * 1.35);
         float rim_shadow = caustic_weight
             * (1.0 - rim_alignment)
-            * clamp(in.effects.y + 0.16, 0.0, 0.42);
+            * clamp(in.effects.y + 0.16, 0.0, 0.42)
+            * (1.0 + dynamic_light_shadow * 1.20);
+        rim_shadow = clamp(rim_shadow, 0.0, 0.42);
         float3 rim_tint =
             float3(1.0 + spectral_warmth * 1.60,
                    1.0 + (spectral_warmth + spectral_coolness) * 0.24,

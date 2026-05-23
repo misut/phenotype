@@ -1995,6 +1995,47 @@ namespace detail {
             "balance",
             json::Value{plan.spectral_tint.balance});
 
+        json::Object dynamic_lighting;
+        dynamic_lighting.emplace(
+            "model",
+            json::Value{plan.dynamic_lighting.model});
+        dynamic_lighting.emplace(
+            "source",
+            json::Value{plan.dynamic_lighting.source});
+        dynamic_lighting.emplace(
+            "active",
+            json::Value{plan.dynamic_lighting.active});
+        dynamic_lighting.emplace(
+            "backdrop_driven",
+            json::Value{plan.dynamic_lighting.backdrop_driven});
+        dynamic_lighting.emplace(
+            "color_driven",
+            json::Value{plan.dynamic_lighting.color_driven});
+        dynamic_lighting.emplace(
+            "caustic_driven",
+            json::Value{plan.dynamic_lighting.caustic_driven});
+        dynamic_lighting.emplace(
+            "interaction_driven",
+            json::Value{plan.dynamic_lighting.interaction_driven});
+        dynamic_lighting.emplace(
+            "reduced_motion_suppressed",
+            json::Value{plan.dynamic_lighting.reduced_motion_suppressed});
+        dynamic_lighting.emplace(
+            "bounded",
+            json::Value{plan.dynamic_lighting.bounded});
+        dynamic_lighting.emplace(
+            "direction_x",
+            json::Value{plan.dynamic_lighting.direction_x});
+        dynamic_lighting.emplace(
+            "direction_y",
+            json::Value{plan.dynamic_lighting.direction_y});
+        dynamic_lighting.emplace(
+            "highlight_strength",
+            json::Value{plan.dynamic_lighting.highlight_strength});
+        dynamic_lighting.emplace(
+            "shadow_strength",
+            json::Value{plan.dynamic_lighting.shadow_strength});
+
         json::Object interaction;
         interaction.emplace("enabled", json::Value{plan.interaction.enabled});
         interaction.emplace("active", json::Value{plan.interaction.active});
@@ -2128,6 +2169,9 @@ namespace detail {
             "spectral_tint_active",
             json::Value{plan.optical_response.spectral_tint_active});
         optical_response.emplace(
+            "dynamic_lighting_active",
+            json::Value{plan.optical_response.dynamic_lighting_active});
+        optical_response.emplace(
             "foreground_vibrancy_active",
             json::Value{plan.optical_response.foreground_vibrancy_active});
         optical_response.emplace(
@@ -2168,6 +2212,9 @@ namespace detail {
         optical_composition.emplace(
             "spectral_tint_source",
             json::Value{composition.spectral_tint_source});
+        optical_composition.emplace(
+            "dynamic_lighting_source",
+            json::Value{composition.dynamic_lighting_source});
         optical_composition.emplace(
             "interaction_source",
             json::Value{composition.interaction_source});
@@ -2219,6 +2266,9 @@ namespace detail {
         optical_composition.emplace(
             "spectral_tint_required",
             json::Value{composition.spectral_tint_required});
+        optical_composition.emplace(
+            "dynamic_lighting_required",
+            json::Value{composition.dynamic_lighting_required});
         optical_composition.emplace(
             "interaction_required",
             json::Value{composition.interaction_required});
@@ -2309,6 +2359,18 @@ namespace detail {
         optical_composition.emplace(
             "spectral_rim_tint",
             json::Value{composition.spectral_rim_tint});
+        optical_composition.emplace(
+            "dynamic_light_direction_x",
+            json::Value{composition.dynamic_light_direction_x});
+        optical_composition.emplace(
+            "dynamic_light_direction_y",
+            json::Value{composition.dynamic_light_direction_y});
+        optical_composition.emplace(
+            "dynamic_light_highlight",
+            json::Value{composition.dynamic_light_highlight});
+        optical_composition.emplace(
+            "dynamic_light_shadow",
+            json::Value{composition.dynamic_light_shadow});
         optical_composition.emplace(
             "interaction_response_strength",
             json::Value{composition.interaction_response_strength});
@@ -2540,6 +2602,21 @@ namespace detail {
             optics_json.emplace(
                 "spectral_rim_tint",
                 json::Value{optics.spectral_rim_tint});
+            optics_json.emplace(
+                "dynamic_lighting_model",
+                json::Value{optics.dynamic_lighting_model});
+            optics_json.emplace(
+                "dynamic_light_direction_x",
+                json::Value{optics.dynamic_light_direction_x});
+            optics_json.emplace(
+                "dynamic_light_direction_y",
+                json::Value{optics.dynamic_light_direction_y});
+            optics_json.emplace(
+                "dynamic_light_highlight",
+                json::Value{optics.dynamic_light_highlight});
+            optics_json.emplace(
+                "dynamic_light_shadow",
+                json::Value{optics.dynamic_light_shadow});
             json::Object out_stage;
             out_stage.emplace("name", json::Value{stage.name});
             out_stage.emplace("active", json::Value{stage.active});
@@ -2646,6 +2723,9 @@ namespace detail {
         out.emplace("specular", json::Value{std::move(specular)});
         out.emplace("edge_optics", json::Value{std::move(edge_optics)});
         out.emplace("spectral_tint", json::Value{std::move(spectral_tint)});
+        out.emplace(
+            "dynamic_lighting",
+            json::Value{std::move(dynamic_lighting)});
         out.emplace("interaction", json::Value{std::move(interaction)});
         out.emplace(
             "optical_response",
