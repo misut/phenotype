@@ -63,7 +63,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 53);
+    assert(material_plan_contract_version == 54);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -159,6 +159,19 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.edge_optics.inner_highlight > 0.0f);
     assert(plan.edge_optics.outer_shadow > 0.0f);
     assert(plan.edge_optics.chromatic_fringe > 0.0f);
+    assert(plan.spectral_tint.active);
+    assert(plan.spectral_tint.backdrop_driven);
+    assert(!plan.spectral_tint.color_driven);
+    assert(plan.spectral_tint.caustic_driven);
+    assert(plan.spectral_tint.bounded);
+    assert(std::string_view(plan.spectral_tint.model)
+        == "spectral-liquid-glass-tint");
+    assert(std::string_view(plan.spectral_tint.source)
+        == "sampled-backdrop-spectral-rim");
+    assert(plan.spectral_tint.warmth > 0.0f);
+    assert(plan.spectral_tint.coolness > 0.0f);
+    assert(plan.spectral_tint.dispersion > 0.0f);
+    assert(plan.spectral_tint.rim_tint > 0.0f);
     assert(plan.specular.active);
     assert(plan.specular.ambient);
     assert(!plan.specular.interaction_driven);
@@ -209,6 +222,8 @@ void test_sampled_backdrop_access_contract() {
         == "layered-shadow-edge-noise");
     assert(std::string_view(plan.optical_composition.refraction_source)
         == "sampled-backdrop-edge-refraction");
+    assert(std::string_view(plan.optical_composition.spectral_tint_source)
+        == "sampled-backdrop-spectral-rim");
     assert(std::string_view(plan.optical_composition.fallback_source)
         == "none");
     assert(std::string_view(plan.optical_composition.stage_order)
@@ -227,6 +242,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_composition.shadow_required);
     assert(plan.optical_composition.noise_required);
     assert(plan.optical_composition.refraction_required);
+    assert(plan.optical_composition.spectral_tint_required);
     assert(!plan.optical_composition.fallback_required);
     assert(plan.optical_composition.backdrop_capture_required);
     assert(plan.optical_composition.foreground_excluded_from_backdrop);
@@ -254,6 +270,14 @@ void test_sampled_backdrop_access_contract() {
            == plan.edge_optics.outer_shadow);
     assert(plan.optical_composition.edge_chromatic_fringe
            == plan.edge_optics.chromatic_fringe);
+    assert(plan.optical_composition.spectral_tint_warmth
+           == plan.spectral_tint.warmth);
+    assert(plan.optical_composition.spectral_tint_coolness
+           == plan.spectral_tint.coolness);
+    assert(plan.optical_composition.spectral_dispersion
+           == plan.spectral_tint.dispersion);
+    assert(plan.optical_composition.spectral_rim_tint
+           == plan.spectral_tint.rim_tint);
     assert(plan.optical_response.backdrop_driven);
     assert(plan.optical_response.blur_active);
     assert(plan.optical_response.frosting_active);
@@ -264,6 +288,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_response.depth_shadow_active);
     assert(plan.optical_response.noise_dither_active);
     assert(plan.optical_response.refraction_active);
+    assert(plan.optical_response.spectral_tint_active);
     assert(plan.optical_response.foreground_vibrancy_active);
     assert(plan.optical_response.deterministic_fallback);
     assert(material_plan_uses_sampled_backdrop_executor(plan));
@@ -291,6 +316,16 @@ void test_sampled_backdrop_access_contract() {
            == plan.edge_optics.outer_shadow);
     assert(plan.execution_stages[2].optics.edge_chromatic_fringe
            == plan.edge_optics.chromatic_fringe);
+    assert(std::string_view(plan.execution_stages[2].optics.spectral_tint_model)
+        == "spectral-liquid-glass-tint");
+    assert(plan.execution_stages[2].optics.spectral_tint_warmth
+           == plan.spectral_tint.warmth);
+    assert(plan.execution_stages[2].optics.spectral_tint_coolness
+           == plan.spectral_tint.coolness);
+    assert(plan.execution_stages[2].optics.spectral_dispersion
+           == plan.spectral_tint.dispersion);
+    assert(plan.execution_stages[2].optics.spectral_rim_tint
+           == plan.spectral_tint.rim_tint);
     assert(plan.paint_layer_count == 0u);
     assert(plan.dropped_paint_layer_count == 0u);
     assert(plan.resource_budget.max_paint_layers == material_max_paint_layers);
@@ -397,11 +432,25 @@ void test_backdrop_optical_response_contract() {
     auto color_plan = plan_material_surface(regular_request(), env);
     assert(std::string_view(color_plan.backdrop.color_response)
         == "sampled-backdrop-color");
+    assert(std::string_view(color_plan.spectral_tint.source)
+        == "sampled-backdrop-spectral-caustics");
+    assert(color_plan.spectral_tint.color_driven);
+    assert(color_plan.spectral_tint.coolness
+           > color_plan.spectral_tint.warmth);
+    assert(color_plan.optical_composition.spectral_tint_coolness
+           == color_plan.spectral_tint.coolness);
     assert(color_plan.backdrop.tint_color_delta > 0.0f);
     assert(color_plan.tint.r < 255);
     assert(color_plan.tint.g < 255);
     assert(color_plan.tint.b == 255);
     assert(color_plan.tint.a == neutral_plan.tint.a);
+
+    env.backdrop.color_mean = Color{255, 176, 118, 255};
+    auto warm_plan = plan_material_surface(regular_request(), env);
+    assert(warm_plan.spectral_tint.color_driven);
+    assert(warm_plan.spectral_tint.warmth
+           > warm_plan.spectral_tint.coolness);
+    assert(warm_plan.spectral_tint.balance > 0.5f);
     std::puts("PASS: backdrop optical response contract");
 }
 
@@ -489,6 +538,10 @@ void test_content_layer_stays_standard_material_contract() {
     assert(std::string_view(plan.specular.model) == "none");
     assert(std::string_view(plan.specular.source) == "none");
     assert(plan.specular.intensity == 0.0f);
+    assert(!plan.spectral_tint.active);
+    assert(std::string_view(plan.spectral_tint.model) == "none");
+    assert(std::string_view(plan.spectral_tint.source) == "none");
+    assert(plan.spectral_tint.dispersion == 0.0f);
     assert(!plan.optical_response.backdrop_driven);
     assert(!plan.optical_response.blur_active);
     assert(!plan.optical_response.frosting_active);
@@ -499,6 +552,7 @@ void test_content_layer_stays_standard_material_contract() {
     assert(plan.optical_response.depth_shadow_active);
     assert(!plan.optical_response.noise_dither_active);
     assert(!plan.optical_response.refraction_active);
+    assert(!plan.optical_response.spectral_tint_active);
     assert(!plan.optical_response.foreground_vibrancy_active);
     assert(plan.optical_response.deterministic_fallback);
     assert(!material_plan_uses_sampled_backdrop_executor(plan));
@@ -598,6 +652,7 @@ void test_fallback_backdrop_access_contract() {
     assert(plan.optical_composition.shadow_required);
     assert(!plan.optical_composition.noise_required);
     assert(!plan.optical_composition.refraction_required);
+    assert(!plan.optical_composition.spectral_tint_required);
     assert(plan.optical_composition.fallback_required);
     assert(!plan.optical_composition.backdrop_capture_required);
     assert(!plan.optical_composition.foreground_excluded_from_backdrop);
@@ -614,6 +669,7 @@ void test_fallback_backdrop_access_contract() {
     assert(plan.optical_response.depth_shadow_active);
     assert(!plan.optical_response.noise_dither_active);
     assert(!plan.optical_response.refraction_active);
+    assert(!plan.optical_response.spectral_tint_active);
     assert(!plan.optical_response.foreground_vibrancy_active);
     assert(!plan.refraction.active);
     assert(plan.refraction.bounded);
@@ -621,6 +677,8 @@ void test_fallback_backdrop_access_contract() {
     assert(std::string_view(plan.refraction.source) == "none");
     assert(plan.refraction.edge_caustic_intensity == 0.0f);
     assert(plan.resource_budget.max_refraction_offset_pixels == 0.0f);
+    assert(!plan.spectral_tint.active);
+    assert(std::string_view(plan.spectral_tint.source) == "none");
     assert(plan.optical_response.deterministic_fallback);
     assert(!material_plan_uses_sampled_backdrop_executor(plan));
     assert(!material_plan_uses_standard_fill_executor(plan));

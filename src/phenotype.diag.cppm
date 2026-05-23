@@ -1939,6 +1939,62 @@ namespace detail {
         specular.emplace("radius", json::Value{plan.specular.radius});
         specular.emplace("intensity", json::Value{plan.specular.intensity});
 
+        json::Object edge_optics;
+        edge_optics.emplace("model", json::Value{plan.edge_optics.model});
+        edge_optics.emplace("source", json::Value{plan.edge_optics.source});
+        edge_optics.emplace("active", json::Value{plan.edge_optics.active});
+        edge_optics.emplace(
+            "backdrop_driven",
+            json::Value{plan.edge_optics.backdrop_driven});
+        edge_optics.emplace(
+            "caustic_driven",
+            json::Value{plan.edge_optics.caustic_driven});
+        edge_optics.emplace("bounded", json::Value{plan.edge_optics.bounded});
+        edge_optics.emplace(
+            "bevel_width",
+            json::Value{plan.edge_optics.bevel_width});
+        edge_optics.emplace(
+            "inner_highlight",
+            json::Value{plan.edge_optics.inner_highlight});
+        edge_optics.emplace(
+            "outer_shadow",
+            json::Value{plan.edge_optics.outer_shadow});
+        edge_optics.emplace(
+            "chromatic_fringe",
+            json::Value{plan.edge_optics.chromatic_fringe});
+
+        json::Object spectral_tint;
+        spectral_tint.emplace("model", json::Value{plan.spectral_tint.model});
+        spectral_tint.emplace(
+            "source",
+            json::Value{plan.spectral_tint.source});
+        spectral_tint.emplace("active", json::Value{plan.spectral_tint.active});
+        spectral_tint.emplace(
+            "backdrop_driven",
+            json::Value{plan.spectral_tint.backdrop_driven});
+        spectral_tint.emplace(
+            "color_driven",
+            json::Value{plan.spectral_tint.color_driven});
+        spectral_tint.emplace(
+            "caustic_driven",
+            json::Value{plan.spectral_tint.caustic_driven});
+        spectral_tint.emplace(
+            "bounded",
+            json::Value{plan.spectral_tint.bounded});
+        spectral_tint.emplace("warmth", json::Value{plan.spectral_tint.warmth});
+        spectral_tint.emplace(
+            "coolness",
+            json::Value{plan.spectral_tint.coolness});
+        spectral_tint.emplace(
+            "dispersion",
+            json::Value{plan.spectral_tint.dispersion});
+        spectral_tint.emplace(
+            "rim_tint",
+            json::Value{plan.spectral_tint.rim_tint});
+        spectral_tint.emplace(
+            "balance",
+            json::Value{plan.spectral_tint.balance});
+
         json::Object interaction;
         interaction.emplace("enabled", json::Value{plan.interaction.enabled});
         interaction.emplace("active", json::Value{plan.interaction.active});
@@ -2069,6 +2125,9 @@ namespace detail {
             "refraction_active",
             json::Value{plan.optical_response.refraction_active});
         optical_response.emplace(
+            "spectral_tint_active",
+            json::Value{plan.optical_response.spectral_tint_active});
+        optical_response.emplace(
             "foreground_vibrancy_active",
             json::Value{plan.optical_response.foreground_vibrancy_active});
         optical_response.emplace(
@@ -2106,6 +2165,9 @@ namespace detail {
         optical_composition.emplace(
             "refraction_source",
             json::Value{composition.refraction_source});
+        optical_composition.emplace(
+            "spectral_tint_source",
+            json::Value{composition.spectral_tint_source});
         optical_composition.emplace(
             "interaction_source",
             json::Value{composition.interaction_source});
@@ -2154,6 +2216,9 @@ namespace detail {
         optical_composition.emplace(
             "refraction_required",
             json::Value{composition.refraction_required});
+        optical_composition.emplace(
+            "spectral_tint_required",
+            json::Value{composition.spectral_tint_required});
         optical_composition.emplace(
             "interaction_required",
             json::Value{composition.interaction_required});
@@ -2220,6 +2285,30 @@ namespace detail {
             "refraction_edge_caustic_intensity",
             json::Value{
                 composition.refraction_edge_caustic_intensity});
+        optical_composition.emplace(
+            "edge_bevel_width",
+            json::Value{composition.edge_bevel_width});
+        optical_composition.emplace(
+            "edge_inner_highlight",
+            json::Value{composition.edge_inner_highlight});
+        optical_composition.emplace(
+            "edge_outer_shadow",
+            json::Value{composition.edge_outer_shadow});
+        optical_composition.emplace(
+            "edge_chromatic_fringe",
+            json::Value{composition.edge_chromatic_fringe});
+        optical_composition.emplace(
+            "spectral_tint_warmth",
+            json::Value{composition.spectral_tint_warmth});
+        optical_composition.emplace(
+            "spectral_tint_coolness",
+            json::Value{composition.spectral_tint_coolness});
+        optical_composition.emplace(
+            "spectral_dispersion",
+            json::Value{composition.spectral_dispersion});
+        optical_composition.emplace(
+            "spectral_rim_tint",
+            json::Value{composition.spectral_rim_tint});
         optical_composition.emplace(
             "interaction_response_strength",
             json::Value{composition.interaction_response_strength});
@@ -2421,6 +2510,36 @@ namespace detail {
                 "refraction_edge_caustic_intensity",
                 json::Value{
                     optics.refraction_edge_caustic_intensity});
+            optics_json.emplace(
+                "edge_optics_model",
+                json::Value{optics.edge_optics_model});
+            optics_json.emplace(
+                "edge_bevel_width",
+                json::Value{optics.edge_bevel_width});
+            optics_json.emplace(
+                "edge_inner_highlight",
+                json::Value{optics.edge_inner_highlight});
+            optics_json.emplace(
+                "edge_outer_shadow",
+                json::Value{optics.edge_outer_shadow});
+            optics_json.emplace(
+                "edge_chromatic_fringe",
+                json::Value{optics.edge_chromatic_fringe});
+            optics_json.emplace(
+                "spectral_tint_model",
+                json::Value{optics.spectral_tint_model});
+            optics_json.emplace(
+                "spectral_tint_warmth",
+                json::Value{optics.spectral_tint_warmth});
+            optics_json.emplace(
+                "spectral_tint_coolness",
+                json::Value{optics.spectral_tint_coolness});
+            optics_json.emplace(
+                "spectral_dispersion",
+                json::Value{optics.spectral_dispersion});
+            optics_json.emplace(
+                "spectral_rim_tint",
+                json::Value{optics.spectral_rim_tint});
             json::Object out_stage;
             out_stage.emplace("name", json::Value{stage.name});
             out_stage.emplace("active", json::Value{stage.active});
@@ -2525,6 +2644,8 @@ namespace detail {
         out.emplace("foreground", json::Value{std::move(foreground)});
         out.emplace("refraction", json::Value{std::move(refraction)});
         out.emplace("specular", json::Value{std::move(specular)});
+        out.emplace("edge_optics", json::Value{std::move(edge_optics)});
+        out.emplace("spectral_tint", json::Value{std::move(spectral_tint)});
         out.emplace("interaction", json::Value{std::move(interaction)});
         out.emplace(
             "optical_response",
