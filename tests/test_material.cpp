@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -1793,6 +1794,75 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     std::puts("PASS: glass effect union uses compatible render bounds");
 }
 
+void test_glass_effect_union_fallback_paint_uses_group_leader() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 20.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 920u,
+        .union_id = 1u,
+        .spacing = 24.0f,
+        .interactive = false,
+        .morph_transitions = false,
+    };
+
+    auto peer = request;
+    peer.geometry.x = 50.0f;
+
+    auto env = sampled_environment();
+    env.capabilities.material_backdrop_blur = false;
+    env.capabilities.shader_blur = false;
+    env.capabilities.frame_history = false;
+    env.backdrop.available = false;
+    env.backdrop.stable = false;
+    env.backdrop.source = "none";
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, env), 1u},
+        {plan_material_surface(peer, env), 2u},
+    };
+    assert(records[0].plan.paint_layer_count > 1u);
+    assert(records[1].plan.paint_layer_count > 1u);
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const peer_execution =
+        material_container_execution_descriptor(records[1], records);
+
+    assert(first_execution.union_execution);
+    assert(peer_execution.union_execution);
+    assert(first_execution.paint_layer_leader);
+    assert(!peer_execution.paint_layer_leader);
+    assert(first_execution.group_x == 0.0f);
+    assert(first_execution.group_w == 90.0f);
+
+    auto const& layer = records[0].plan.paint_layers[1];
+    auto const inflate = std::max(layer.inflate, 0.0f);
+    auto const first_geometry =
+        material_paint_layer_execution_geometry(
+            records[0].plan,
+            layer,
+            &first_execution);
+    assert(first_geometry.active);
+    assert(std::fabs(first_geometry.x
+                     - (first_execution.group_x + layer.x_offset - inflate))
+           < 0.0001f);
+    assert(std::fabs(first_geometry.w
+                     - (first_execution.group_w + inflate * 2.0f))
+           < 0.0001f);
+
+    auto const peer_base_geometry =
+        material_paint_layer_execution_geometry(records[1].plan, layer);
+    auto const peer_union_geometry =
+        material_paint_layer_execution_geometry(
+            records[1].plan,
+            layer,
+            &peer_execution);
+    assert(peer_base_geometry.active);
+    assert(!peer_union_geometry.active);
+
+    std::puts("PASS: glass effect union fallback paint uses group leader");
+}
+
 } // namespace
 
 int main() {
@@ -1818,6 +1888,7 @@ int main() {
     test_container_group_runtime_summary_contract();
     test_container_member_shape_blend_uses_spacing_falloff();
     test_glass_effect_union_uses_compatible_render_bounds();
+    test_glass_effect_union_fallback_paint_uses_group_leader();
     std::puts("\nAll material tests passed.");
     return 0;
 }

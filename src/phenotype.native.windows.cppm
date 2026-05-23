@@ -2524,28 +2524,22 @@ inline void append_material_paint_layer_instance(
         std::vector<float>& color_data,
         MaterialPlan const& plan,
         MaterialPaintLayer const& layer) {
-    if (!layer.active)
-        return;
-    auto const inflate = (std::max)(layer.inflate, 0.0f);
-    auto const x = plan.geometry.x + layer.x_offset - inflate;
-    auto const y = plan.geometry.y + layer.y_offset - inflate;
-    auto const w = plan.geometry.w + inflate * 2.0f;
-    auto const h = plan.geometry.h + inflate * 2.0f;
-    if (w <= 0.0f || h <= 0.0f)
+    auto const geometry = material_paint_layer_execution_geometry(plan, layer);
+    if (!geometry.active)
         return;
     auto const rounded_edge =
         material_paint_layer_matches(layer.executor, "rounded-edge");
     append_color_instance(
         color_data,
-        x,
-        y,
-        w,
-        h,
+        geometry.x,
+        geometry.y,
+        geometry.w,
+        geometry.h,
         layer.color.r / 255.0f,
         layer.color.g / 255.0f,
         layer.color.b / 255.0f,
         material_paint_layer_alpha(layer),
-        (std::max)(0.0f, plan.shape.effective_radius + layer.radius_delta),
+        geometry.radius,
         rounded_edge ? (std::max)(layer.stroke_width, 0.5f) : 0.0f,
         rounded_edge ? 4.0f : (layer.soft_edge_radius > 0.0f ? 5.0f : 2.0f),
         layer.soft_edge_radius);
@@ -2927,6 +2921,12 @@ struct PendingImageCmd {
     std::string url;
 };
 
+struct MaterialPaintLayerRange {
+    std::uint32_t command_index = 0;
+    std::size_t first = 0;
+    std::size_t count = 0;
+};
+
 struct DecodedFrame {
     double clear_r = 0.98;
     double clear_g = 0.98;
@@ -2939,6 +2939,7 @@ struct DecodedFrame {
     std::vector<TextEntry> text_entries;
     std::vector<HitRegionCmd> hit_regions;
     std::vector<MaterialRuntimeRecord> material_records;
+    std::vector<MaterialPaintLayerRange> material_paint_layer_ranges;
     std::vector<PendingImageCmd> images;
     std::vector<float> fill_polygon;
     std::vector<float> fill_tris;
@@ -2947,6 +2948,123 @@ struct DecodedFrame {
     std::uint32_t foreground_text_candidate_count = 0;
     std::uint32_t foreground_text_remap_count = 0;
 };
+
+inline MaterialRuntimeRecord const* find_material_runtime_record(
+        std::span<MaterialRuntimeRecord const> records,
+        std::uint32_t command_index) {
+    for (auto const& record : records) {
+        if (record.command_index == command_index)
+            return &record;
+    }
+    return nullptr;
+}
+
+inline MaterialContainerExecutionDescriptor const*
+find_material_container_execution_descriptor(
+        std::span<MaterialContainerExecutionDescriptor const> descriptors,
+        std::uint32_t command_index) {
+    for (auto const& descriptor : descriptors) {
+        if (descriptor.command_index == command_index)
+            return &descriptor;
+    }
+    return nullptr;
+}
+
+inline bool write_material_paint_layer_instance(
+        std::vector<float>& color_data,
+        std::size_t instance_index,
+        MaterialPlan const& plan,
+        MaterialPaintLayer const& layer,
+        MaterialContainerExecutionDescriptor const* execution) {
+    auto const offset = instance_index * 12u;
+    if (offset + 11u >= color_data.size())
+        return false;
+    auto const geometry =
+        material_paint_layer_execution_geometry(plan, layer, execution);
+    if (!geometry.active)
+        return false;
+    auto const rounded_edge =
+        material_paint_layer_matches(layer.executor, "rounded-edge");
+    color_data[offset + 0u] = geometry.x;
+    color_data[offset + 1u] = geometry.y;
+    color_data[offset + 2u] = geometry.w;
+    color_data[offset + 3u] = geometry.h;
+    color_data[offset + 4u] = layer.color.r / 255.0f;
+    color_data[offset + 5u] = layer.color.g / 255.0f;
+    color_data[offset + 6u] = layer.color.b / 255.0f;
+    color_data[offset + 7u] = material_paint_layer_alpha(layer);
+    color_data[offset + 8u] = geometry.radius;
+    color_data[offset + 9u] =
+        rounded_edge ? (std::max)(layer.stroke_width, 0.5f) : 0.0f;
+    color_data[offset + 10u] =
+        rounded_edge ? 4.0f : (layer.soft_edge_radius > 0.0f ? 5.0f : 2.0f);
+    color_data[offset + 11u] = layer.soft_edge_radius;
+    return true;
+}
+
+inline void apply_material_paint_layer_execution_range(
+        std::vector<float>& color_data,
+        MaterialPlan const& plan,
+        MaterialContainerExecutionDescriptor const* execution,
+        std::size_t first,
+        std::size_t count) {
+    auto cursor = first;
+    auto const end = (std::min)(first + count, color_data.size() / 12u);
+    for (unsigned int i = 0; i < plan.paint_layer_count && cursor < end; ++i) {
+        auto const& layer = plan.paint_layers[i];
+        if (!material_paint_layer_execution_geometry(plan, layer).active)
+            continue;
+        if (!write_material_paint_layer_instance(
+                color_data,
+                cursor,
+                plan,
+                layer,
+                execution)) {
+            color_data[cursor * 12u + 7u] = 0.0f;
+        }
+        ++cursor;
+    }
+    while (cursor < end) {
+        color_data[cursor * 12u + 7u] = 0.0f;
+        ++cursor;
+    }
+}
+
+inline void apply_material_paint_layer_execution_ranges(
+        DecodedFrame& frame) {
+    if (frame.material_paint_layer_ranges.empty()
+        || frame.material_records.empty()) {
+        return;
+    }
+
+    std::vector<MaterialContainerExecutionDescriptor> descriptors;
+    descriptors.reserve(frame.material_records.size());
+    for (auto const& record : frame.material_records) {
+        auto descriptor =
+            material_container_execution_descriptor(record, frame.material_records);
+        if (descriptor.container_id != 0u)
+            descriptors.push_back(descriptor);
+    }
+    if (descriptors.empty())
+        return;
+
+    for (auto const& range : frame.material_paint_layer_ranges) {
+        auto const* record = find_material_runtime_record(
+            frame.material_records,
+            range.command_index);
+        auto const* execution = find_material_container_execution_descriptor(
+            descriptors,
+            range.command_index);
+        if (!record || !execution)
+            continue;
+        apply_material_paint_layer_execution_range(
+            frame.color_data,
+            record->plan,
+            execution,
+            range.first,
+            range.count);
+    }
+}
 
 inline bool decode_frame_commands(unsigned char const* buf,
                                   unsigned int len,
@@ -3132,7 +3250,16 @@ inline bool decode_frame_commands(unsigned char const* buf,
                 material_env_for_command);
             frame.material_records.push_back(
                 MaterialRuntimeRecord{plan, current_command_index});
+            auto const first = frame.color_data.size() / 12u;
             append_material_paint_layer_instances(frame.color_data, plan);
+            auto const count = frame.color_data.size() / 12u - first;
+            if (count > 0u) {
+                frame.material_paint_layer_ranges.push_back(
+                    MaterialPaintLayerRange{
+                        current_command_index,
+                        first,
+                        count});
+            }
             break;
         }
         case Cmd::DrawText: {
@@ -3695,6 +3822,7 @@ inline bool decode_frame_commands(unsigned char const* buf,
             return false;
         }
     }
+    apply_material_paint_layer_execution_ranges(frame);
     return true;
 }
 

@@ -1274,6 +1274,7 @@ struct MaterialContainerExecutionDescriptor {
     bool shared_backdrop_scope = false;
     bool shape_blend_execution = false;
     bool union_execution = false;
+    bool paint_layer_leader = true;
     bool morph_execution = false;
     bool glass_effect_match_execution = false;
     char const* execution_policy = "isolated";
@@ -1300,6 +1301,56 @@ struct MaterialContainerExecutionDescriptor {
     float glass_effect_match_rect_h = 0.0f;
     float glass_effect_match_rect_radius = 0.0f;
 };
+
+struct MaterialPaintLayerExecutionGeometry {
+    bool active = false;
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+    float radius = 0.0f;
+};
+
+inline MaterialPaintLayerExecutionGeometry
+material_paint_layer_execution_geometry(
+        MaterialPlan const& plan,
+        MaterialPaintLayer const& layer,
+        MaterialContainerExecutionDescriptor const* execution = nullptr)
+        noexcept {
+    if (!layer.active)
+        return {};
+    if (execution
+        && execution->union_execution
+        && !execution->paint_layer_leader) {
+        return {};
+    }
+
+    auto x = plan.geometry.x;
+    auto y = plan.geometry.y;
+    auto w = plan.geometry.w;
+    auto h = plan.geometry.h;
+    auto radius = plan.shape.effective_radius;
+    if (execution
+        && execution->union_execution
+        && execution->group_bounds_valid) {
+        x = execution->group_x;
+        y = execution->group_y;
+        w = execution->group_w;
+        h = execution->group_h;
+    }
+
+    auto const inflate = std::max(layer.inflate, 0.0f);
+    MaterialPaintLayerExecutionGeometry geometry{};
+    geometry.x = x + layer.x_offset - inflate;
+    geometry.y = y + layer.y_offset - inflate;
+    geometry.w = w + inflate * 2.0f;
+    geometry.h = h + inflate * 2.0f;
+    if (geometry.w <= 0.0f || geometry.h <= 0.0f)
+        return {};
+    geometry.radius = std::max(0.0f, radius + layer.radius_delta);
+    geometry.active = true;
+    return geometry;
+}
 
 struct MaterialRuntimeSummary {
     std::uint32_t plan_count = 0;
@@ -2274,6 +2325,32 @@ accumulate_material_glass_effect_union_group(
     return group;
 }
 
+inline bool material_glass_effect_union_paint_layer_leader(
+        MaterialRuntimeRecord const& record,
+        std::span<MaterialRuntimeRecord const> records) noexcept {
+    auto const& plan = record.plan;
+    if (!material_plan_in_glass_effect_union_group(plan, plan)
+        || material_plan_uses_sampled_backdrop_executor(plan)) {
+        return true;
+    }
+
+    auto found = false;
+    auto leader_command_index = record.command_index;
+    for (auto const& candidate_record : records) {
+        auto const& candidate = candidate_record.plan;
+        if (!candidate.primary_pass.active
+            || material_plan_uses_sampled_backdrop_executor(candidate)
+            || !material_plan_in_glass_effect_union_group(candidate, plan)) {
+            continue;
+        }
+        if (!found || candidate_record.command_index < leader_command_index) {
+            leader_command_index = candidate_record.command_index;
+            found = true;
+        }
+    }
+    return !found || record.command_index == leader_command_index;
+}
+
 inline MaterialGlassEffectMatchAccumulator
 accumulate_material_glass_effect_match_group(
         std::span<MaterialRuntimeRecord const> records,
@@ -2429,6 +2506,9 @@ material_container_execution_descriptor_from_group(
         descriptor.shape_blend_execution
         && union_group_shape_blend_execution
         && !descriptor.glass_effect_match_execution;
+    descriptor.paint_layer_leader =
+        !descriptor.union_execution
+        || material_glass_effect_union_paint_layer_leader(record, records);
     descriptor.morph_execution =
         descriptor.shape_blend_execution
         && (group.morph_surfaces > 0u
