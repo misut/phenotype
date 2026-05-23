@@ -1643,6 +1643,8 @@ struct MaterialInstanceGPU {
     float thickness[4]{};
     // axial offset, tangential offset, prismatic gain, caustic spread
     float dispersion[4]{};
+    // fade extent, dissolve, dimming, hard style
+    float scroll_edge[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
     // shape blend strength, inner-edge alpha blend strength, flags, command index
@@ -2400,6 +2402,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.dispersion[1] = plan.glass_dispersion.tangential_offset_pixels;
     inst.dispersion[2] = plan.glass_dispersion.prismatic_gain;
     inst.dispersion[3] = plan.glass_dispersion.caustic_spread;
+    inst.scroll_edge[0] = plan.scroll_edge.fade_extent_pixels;
+    inst.scroll_edge[1] = plan.scroll_edge.dissolve_strength;
+    inst.scroll_edge[2] = plan.scroll_edge.dimming_strength;
+    inst.scroll_edge[3] = plan.scroll_edge.hard_style_strength;
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];
@@ -4589,6 +4595,7 @@ struct MaterialVsOut {
     float4 lighting;
     float4 thickness;
     float4 dispersion;
+    float4 scroll_edge;
     float4 group_rect;
     float4 group_effects;
 };
@@ -4609,6 +4616,7 @@ struct MaterialInstance {
     float4 lighting;
     float4 thickness;
     float4 dispersion;
+    float4 scroll_edge;
     float4 group_rect;
     float4 group_effects;
 };
@@ -4650,6 +4658,7 @@ vertex MaterialVsOut vs_material(
     out.lighting = inst.lighting;
     out.thickness = inst.thickness;
     out.dispersion = inst.dispersion;
+    out.scroll_edge = inst.scroll_edge;
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
     return out;
@@ -4769,6 +4778,10 @@ fragment float4 fs_material(
     float glass_dispersion_tangential = clamp(in.dispersion.y, 0.0, 2.75);
     float glass_prismatic_gain = clamp(in.dispersion.z, 1.0, 1.80);
     float glass_caustic_spread = clamp(in.dispersion.w, 0.0, 0.44);
+    float scroll_edge_extent = clamp(in.scroll_edge.x, 0.0, 96.0);
+    float scroll_edge_dissolve = clamp(in.scroll_edge.y, 0.0, 0.60);
+    float scroll_edge_dimming = clamp(in.scroll_edge.z, 0.0, 0.45);
+    float scroll_edge_hard_style = clamp(in.scroll_edge.w, 0.0, 0.70);
     float2 default_light_dir = normalize(float2(-0.58, -0.82));
     float2 dynamic_light_raw = in.lighting.xy;
     float2 dynamic_light_dir = length(dynamic_light_raw) > 0.0001
@@ -4942,6 +4955,29 @@ fragment float4 fs_material(
         backdrop_rgb,
         mix(backdrop_rgb, float3(luma), 0.58),
         scattering_strength * (0.55 + 0.45 * edge_lens));
+    if (scroll_edge_extent > 0.0001
+        && (scroll_edge_dissolve > 0.0001
+            || scroll_edge_dimming > 0.0001
+            || scroll_edge_hard_style > 0.0001)) {
+        float scroll_edge_band = 1.0 - smoothstep(
+            0.0,
+            max(scroll_edge_extent, 0.5),
+            signed_edge_distance);
+        float hard_plate = scroll_edge_hard_style
+            * (1.0 - smoothstep(0.34, 1.10, normalized_len));
+        float separation = clamp(max(scroll_edge_band, hard_plate), 0.0, 1.0);
+        float scroll_luma = dot(backdrop_rgb, float3(0.2126, 0.7152, 0.0722));
+        float3 dissolved = mix(backdrop_rgb, float3(scroll_luma), 0.72);
+        float3 dimmed = dissolved * (1.0 - scroll_edge_dimming * separation);
+        backdrop_rgb = mix(
+            backdrop_rgb,
+            dimmed,
+            separation
+                * clamp(scroll_edge_dissolve
+                        + 0.32 * scroll_edge_hard_style,
+                        0.0,
+                        0.72));
+    }
     float tint_strength = clamp(in.tint.a, 0.0, 1.0);
     float opacity = clamp(in.params.z, 0.0, 1.0);
     float3 rgb = mix(backdrop_rgb, in.tint.rgb, tint_strength);
