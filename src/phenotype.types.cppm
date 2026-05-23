@@ -1594,6 +1594,15 @@ struct TabsStyleOptions {
     MaterialKind kind = MaterialKind::Regular;
     MaterialSurfaceRole role = MaterialSurfaceRole::Navigation;
     bool interactive = true;
+    bool has_tint = false;
+    Color tint = {};
+    bool has_border = false;
+    Color border = {};
+    bool has_effect_context = false;
+    MaterialTransitionDescriptor transition{};
+    MaterialGlassIdentityDescriptor glass_identity{};
+    MaterialGlassIdentityDescriptor indicator_glass_identity{};
+    MaterialContainerDescriptor container{};
     float border_radius = -1.0f;
     MaterialSurfaceShape shape = MaterialSurfaceShape::Capsule;
     float border_width = 0.0f;

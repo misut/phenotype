@@ -434,8 +434,27 @@ void view(State const& state) {
                 tab_items.emplace_back("Overview", 8u);
                 tab_items.emplace_back("Settings", 8u);
                 tab_items.emplace_back("Activity", 8u);
-                widget::tabs<Msg>(tab_items, state.selected_tab,
-                    [](std::size_t i) -> Msg { return SelectTab{i}; });
+                auto tab_options = TabsStyleOptions{};
+                tab_options.indicator_glass_identity =
+                    layout::glass_effect_identity(
+                        "native.showcase",
+                        "tabs.selection");
+                widget::tabs<Msg>(
+                    tab_items,
+                    state.selected_tab,
+                    [](std::size_t i) -> Msg { return SelectTab{i}; },
+                    layout::glass_regular()
+                        .tint(Color{64, 156, 255, 70})
+                        .border(Color{64, 156, 255, 128})
+                        .effect_union(
+                            "native.showcase",
+                            "tabs.segmented",
+                            18.0f,
+                            true,
+                            true)
+                        .effect_id("native.showcase", "tabs.pill")
+                        .matched_geometry(),
+                    tab_options);
             }
             layout::spacer(12);
             widget::text("Indeterminate progress");
