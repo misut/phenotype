@@ -164,6 +164,13 @@ struct ScissorBatch {
     std::uint32_t text_first  = 0;
 };
 
+struct MaterialPaintLayerRange {
+    std::uint32_t command_index = 0;
+    std::size_t batch_index = 0;
+    std::size_t first = 0;
+    std::size_t count = 0;
+};
+
 // Per-frame CPU-side decode scratch. `has_clear` tracks whether the
 // frame contained an explicit Clear command; when false, renderer_flush
 // uses the active phenotype theme background instead.
@@ -181,6 +188,7 @@ struct FrameScratch {
     std::vector<TextInstanceGPU>  text_instances;
     std::vector<ImageInstanceGPU> image_instances;
     std::vector<MaterialRuntimeRecord> material_records;
+    std::vector<MaterialPaintLayerRange> material_paint_layer_ranges;
 
     std::vector<::phenotype::native::TextEntry> text_entries;
     // Parallel to text_entries: which batch each entry belongs to. Set
@@ -4031,29 +4039,26 @@ inline float material_paint_layer_alpha(
     return color_alpha * layer.opacity;
 }
 
-inline void append_material_paint_layer_instance(
-        std::vector<ColorInstanceGPU>& out,
+inline bool configure_material_paint_layer_instance(
+        ColorInstanceGPU& inst,
         ::phenotype::MaterialPlan const& plan,
-        ::phenotype::MaterialPaintLayer const& layer) {
-    if (!layer.active)
-        return;
-    auto const inflate = std::max(layer.inflate, 0.0f);
-    auto const x = plan.geometry.x + layer.x_offset - inflate;
-    auto const y = plan.geometry.y + layer.y_offset - inflate;
-    auto const w = plan.geometry.w + inflate * 2.0f;
-    auto const h = plan.geometry.h + inflate * 2.0f;
-    if (w <= 0.0f || h <= 0.0f)
-        return;
-
-    ColorInstanceGPU inst{};
-    inst.rect[0] = x;
-    inst.rect[1] = y;
-    inst.rect[2] = w;
-    inst.rect[3] = h;
+        ::phenotype::MaterialPaintLayer const& layer,
+        ::phenotype::MaterialContainerExecutionDescriptor const* execution =
+            nullptr) {
+    auto const geometry =
+        ::phenotype::material_paint_layer_execution_geometry(
+            plan,
+            layer,
+            execution);
+    if (!geometry.active)
+        return false;
+    inst.rect[0] = geometry.x;
+    inst.rect[1] = geometry.y;
+    inst.rect[2] = geometry.w;
+    inst.rect[3] = geometry.h;
     normalize_color(layer.color, inst.color);
     inst.color[3] = material_paint_layer_alpha(layer);
-    inst.params[0] =
-        std::max(0.0f, plan.shape.effective_radius + layer.radius_delta);
+    inst.params[0] = geometry.radius;
     inst.params[1] =
         ::phenotype::material_paint_layer_matches(
             layer.executor,
@@ -4067,6 +4072,16 @@ inline void append_material_paint_layer_instance(
             ? 3.0f
             : (layer.soft_edge_radius > 0.0f ? 5.0f : 2.0f);
     inst.params[3] = layer.soft_edge_radius;
+    return true;
+}
+
+inline void append_material_paint_layer_instance(
+        std::vector<ColorInstanceGPU>& out,
+        ::phenotype::MaterialPlan const& plan,
+        ::phenotype::MaterialPaintLayer const& layer) {
+    ColorInstanceGPU inst{};
+    if (!configure_material_paint_layer_instance(inst, plan, layer))
+        return;
     out.push_back(inst);
 }
 
@@ -4075,6 +4090,101 @@ inline void append_material_paint_layer_instances(
         ::phenotype::MaterialPlan const& plan) {
     for (unsigned int i = 0; i < plan.paint_layer_count; ++i) {
         append_material_paint_layer_instance(out, plan, plan.paint_layers[i]);
+    }
+}
+
+inline ::phenotype::MaterialRuntimeRecord const* find_material_runtime_record(
+        std::span<::phenotype::MaterialRuntimeRecord const> records,
+        std::uint32_t command_index) {
+    for (auto const& record : records) {
+        if (record.command_index == command_index)
+            return &record;
+    }
+    return nullptr;
+}
+
+inline ::phenotype::MaterialContainerExecutionDescriptor const*
+find_material_container_execution_descriptor(
+        std::span<::phenotype::MaterialContainerExecutionDescriptor const>
+            descriptors,
+        std::uint32_t command_index) {
+    for (auto const& descriptor : descriptors) {
+        if (descriptor.command_index == command_index)
+            return &descriptor;
+    }
+    return nullptr;
+}
+
+inline void apply_material_paint_layer_execution_range(
+        std::vector<ColorInstanceGPU>& instances,
+        ::phenotype::MaterialPlan const& plan,
+        ::phenotype::MaterialContainerExecutionDescriptor const* execution,
+        std::size_t first,
+        std::size_t count) {
+    auto cursor = first;
+    auto const end = std::min(first + count, instances.size());
+    for (unsigned int i = 0; i < plan.paint_layer_count && cursor < end; ++i) {
+        auto const& layer = plan.paint_layers[i];
+        if (!::phenotype::material_paint_layer_execution_geometry(
+                plan,
+                layer).active) {
+            continue;
+        }
+        if (!configure_material_paint_layer_instance(
+                instances[cursor],
+                plan,
+                layer,
+                execution)) {
+            instances[cursor].color[3] = 0.0f;
+        }
+        ++cursor;
+    }
+    while (cursor < end) {
+        instances[cursor].color[3] = 0.0f;
+        ++cursor;
+    }
+}
+
+inline void apply_material_paint_layer_execution_ranges(FrameScratch& scratch) {
+    if (scratch.material_paint_layer_ranges.empty()
+        || scratch.material_records.empty()) {
+        return;
+    }
+
+    std::vector<::phenotype::MaterialContainerExecutionDescriptor> descriptors;
+    descriptors.reserve(scratch.material_records.size());
+    for (auto const& record : scratch.material_records) {
+        auto descriptor =
+            ::phenotype::material_container_execution_descriptor(
+                record,
+                scratch.material_records);
+        if (descriptor.container_id != 0u)
+            descriptors.push_back(descriptor);
+    }
+    if (descriptors.empty())
+        return;
+
+    for (auto const& range : scratch.material_paint_layer_ranges) {
+        if (range.batch_index >= scratch.batches.size())
+            continue;
+        auto const* record = find_material_runtime_record(
+            scratch.material_records,
+            range.command_index);
+        auto const* execution = find_material_container_execution_descriptor(
+            descriptors,
+            range.command_index);
+        if (!record || !execution)
+            continue;
+        auto const flat_first =
+            static_cast<std::size_t>(
+                scratch.batches[range.batch_index].color_first)
+            + range.first;
+        apply_material_paint_layer_execution_range(
+            scratch.color_instances,
+            record->plan,
+            execution,
+            flat_first,
+            range.count);
     }
 }
 
@@ -4415,9 +4525,21 @@ inline void decode_android_color_commands(unsigned char const* buf,
                     plan,
                     current_command_index});
             prepare_batch_for_pipeline(out, 0);
+            auto const batch_index = out.batches.size() - 1u;
+            auto& colors = out.batches.back().colors;
+            auto const first = colors.size();
             append_material_paint_layer_instances(
-                out.batches.back().colors,
+                colors,
                 plan);
+            auto const count = colors.size() - first;
+            if (count > 0u) {
+                out.material_paint_layer_ranges.push_back(
+                    MaterialPaintLayerRange{
+                        current_command_index,
+                        batch_index,
+                        first,
+                        count});
+            }
         } else if (cmd == ::phenotype::Cmd::DrawLine) {
             float x1 = read_f32(), y1 = read_f32();
             float x2 = read_f32(), y2 = read_f32();
@@ -5082,9 +5204,21 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                         plan,
                         current_command_index});
                 prepare_batch_for_pipeline(out, 0);
+                auto const batch_index = out.batches.size() - 1u;
+                auto& colors = out.batches.back().colors;
+                auto const first = colors.size();
                 append_material_paint_layer_instances(
-                    out.batches.back().colors,
+                    colors,
                     plan);
+                auto const count = colors.size() - first;
+                if (count > 0u) {
+                    out.material_paint_layer_ranges.push_back(
+                        MaterialPaintLayerRange{
+                            current_command_index,
+                            batch_index,
+                            first,
+                            count});
+                }
             } else if constexpr (std::same_as<T, ::phenotype::DrawLineCmd>) {
                 float dx = c.x2 - c.x1;
                 float dy = c.y2 - c.y1;
@@ -6042,7 +6176,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             scratch.batches[batch_idx].texts.push_back(inst);
         }
     }
-    if (!can_skip_decode) finalize_batches(scratch);
+    if (!can_skip_decode) {
+        finalize_batches(scratch);
+        apply_material_paint_layer_execution_ranges(scratch);
+    }
 
     std::uint32_t idx = 0;
     auto r = vkAcquireNextImageKHR(
