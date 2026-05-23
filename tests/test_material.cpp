@@ -610,6 +610,62 @@ void test_fallback_backdrop_access_contract() {
     std::puts("PASS: fallback backdrop access contract");
 }
 
+void test_glass_background_variants_shape_fallback_paint_policy() {
+    auto env = sampled_environment();
+    env.capabilities.material_backdrop_blur = false;
+    env.capabilities.shader_blur = false;
+    env.capabilities.frame_history = false;
+    env.backdrop.available = false;
+    env.backdrop.stable = false;
+    env.backdrop.source = "none";
+
+    auto plate_request = regular_request();
+    plate_request.style.glass_background =
+        MaterialGlassBackgroundDescriptor{
+            .kind = MaterialGlassBackgroundEffectKind::Plate,
+        };
+    auto plate_plan = plan_material_surface(plate_request, env);
+    assert(plate_plan.fallback());
+    assert(plate_plan.glass_background.plate);
+    assert(plate_plan.paint_layer_count == 3u);
+    assert(std::string_view{plate_plan.paint_layers[1].name}
+           == "plate-glass-fill");
+    assert(std::string_view{plate_plan.paint_layers[1].executor}
+           == "rounded-fill");
+    assert(std::string_view{plate_plan.paint_layers[1].background_effect}
+           == "plate");
+    assert(plate_plan.paint_layers[1].inflate == 0.0f);
+    assert(plate_plan.paint_layers[1].soft_edge_radius == 0.0f);
+
+    auto feathered_request = regular_request();
+    feathered_request.style.glass_background =
+        material_glass_background_from_wire(
+            static_cast<unsigned int>(
+                MaterialGlassBackgroundEffectKind::Feathered),
+            14.0f,
+            6.0f);
+    auto feathered_plan = plan_material_surface(feathered_request, env);
+    assert(feathered_plan.fallback());
+    assert(feathered_plan.glass_background.feathered);
+    assert(feathered_plan.paint_layer_count == 3u);
+    assert(std::string_view{feathered_plan.paint_layers[1].name}
+           == "feathered-glass-fill");
+    assert(std::string_view{feathered_plan.paint_layers[1].background_effect}
+           == "feathered");
+    assert(feathered_plan.paint_layers[1].inflate == 20.0f);
+    assert(feathered_plan.paint_layers[1].radius_delta == 20.0f);
+    assert(feathered_plan.paint_layers[1].soft_edge_radius == 6.0f);
+    assert(feathered_plan.paint_layers[0].inflate
+           > plate_plan.paint_layers[0].inflate);
+    assert(feathered_plan.resource_budget.max_paint_layer_inflate
+           == feathered_plan.paint_layers[0].inflate);
+    assert(feathered_plan.observation_contract.expected_paint_layers == 3u);
+    assert(feathered_plan.observation_contract.expected_fill_paint_layers == 1u);
+    assert(feathered_plan.execution_audit.contract_satisfied);
+
+    std::puts("PASS: glass background variants shape fallback paint policy");
+}
+
 void test_custom_theme_snapshot_contract() {
     Theme theme{};
     theme.accent = {255, 45, 85, 255};
@@ -1671,6 +1727,7 @@ int main() {
     test_backdrop_optical_response_contract();
     test_content_layer_stays_standard_material_contract();
     test_fallback_backdrop_access_contract();
+    test_glass_background_variants_shape_fallback_paint_policy();
     test_custom_theme_snapshot_contract();
     test_command_material_preserves_theme_snapshot_contract();
     test_foreground_contrast_gap_uses_absolute_contrast_candidate();

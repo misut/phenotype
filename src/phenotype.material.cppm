@@ -461,6 +461,7 @@ struct MaterialPaintLayer {
     char const* name = "none";
     bool active = false;
     char const* executor = "none";
+    char const* background_effect = "none";
     float x_offset = 0.0f;
     float y_offset = 0.0f;
     float inflate = 0.0f;
@@ -468,6 +469,7 @@ struct MaterialPaintLayer {
     float stroke_width = 0.0f;
     Color color = {0, 0, 0, 0};
     float opacity = 0.0f;
+    float soft_edge_radius = 0.0f;
     bool bounded = true;
 };
 
@@ -1010,6 +1012,7 @@ inline void append_material_paint_layer(
     layer.inflate = std::max(0.0f, layer.inflate);
     layer.stroke_width = std::max(0.0f, layer.stroke_width);
     layer.opacity = std::clamp(layer.opacity, 0.0f, 1.0f);
+    layer.soft_edge_radius = std::max(0.0f, layer.soft_edge_radius);
     plan.resource_budget.max_paint_layer_inflate = std::max(
         plan.resource_budget.max_paint_layer_inflate,
         layer.inflate);
@@ -1714,9 +1717,39 @@ inline float material_shadow_paint_y_offset(
     return std::min(std::max(plan.shadow_radius * 0.18f, 1.0f), 6.0f);
 }
 
+inline float material_background_paint_inflate(
+        MaterialPlan const& plan) noexcept {
+    if (!plan.glass_background.feathered)
+        return 0.0f;
+    return std::max(0.0f, plan.glass_background.feather_padding)
+        + std::max(0.0f, plan.glass_background.soft_edge_radius);
+}
+
+inline char const* material_background_fill_layer_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.glass_background.plate)
+        return "plate-glass-fill";
+    if (plan.glass_background.feathered)
+        return "feathered-glass-fill";
+    return plan.primary_pass.name;
+}
+
+inline char const* material_background_effect_layer_name(
+        MaterialPlan const& plan) noexcept {
+    return plan.glass_background.active
+        ? plan.glass_background.kind_name
+        : "none";
+}
+
 inline void resolve_material_paint_layers(MaterialPlan& plan) noexcept {
     if (!plan.primary_pass.active || plan.primary_pass.requires_backdrop)
         return;
+
+    auto const background_inflate = material_background_paint_inflate(plan);
+    auto const background_effect = material_background_effect_layer_name(plan);
+    auto const soft_edge_radius = plan.glass_background.feathered
+        ? plan.glass_background.soft_edge_radius
+        : 0.0f;
 
     if (plan.shadow_alpha > 0.0f) {
         auto const inflate = material_shadow_paint_inflate(plan);
@@ -1726,13 +1759,15 @@ inline void resolve_material_paint_layers(MaterialPlan& plan) noexcept {
                 "fallback-shadow",
                 true,
                 "rounded-shadow",
+                background_effect,
                 0.0f,
                 material_shadow_paint_y_offset(plan),
-                inflate,
-                inflate,
+                inflate + background_inflate,
+                inflate + background_inflate,
                 0.0f,
                 Color{0, 0, 0, 255},
                 plan.shadow_alpha,
+                soft_edge_radius,
                 true,
             });
     }
@@ -1740,16 +1775,18 @@ inline void resolve_material_paint_layers(MaterialPlan& plan) noexcept {
     append_material_paint_layer(
         plan,
         MaterialPaintLayer{
-            plan.primary_pass.name,
+            material_background_fill_layer_name(plan),
             true,
             "rounded-fill",
+            background_effect,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
+            background_inflate,
+            background_inflate,
             0.0f,
             plan.tint,
             plan.opacity,
+            soft_edge_radius,
             true,
         });
 
@@ -1760,15 +1797,17 @@ inline void resolve_material_paint_layers(MaterialPlan& plan) noexcept {
                 "fallback-edge-highlight",
                 true,
                 "rounded-edge",
+                background_effect,
                 0.0f,
                 0.0f,
-                0.0f,
-                0.0f,
+                background_inflate,
+                background_inflate,
                 plan.edge_width,
                 material_paint_layer_color_with_alpha(
                     Color{255, 255, 255, 255},
                     plan.edge_highlight),
                 1.0f,
+                soft_edge_radius,
                 true,
             });
     }
