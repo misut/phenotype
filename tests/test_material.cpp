@@ -1411,6 +1411,78 @@ void test_interactive_material_modulates_optics_contract() {
     assert(plan.execution_stages[2].optics.control_morph_depth
            == plan.interaction.control_morph_depth);
 
+    auto focused_request = regular_request();
+    focused_request.style.container = request.style.container;
+    focused_request.style.interaction = MaterialInteractionDescriptor{
+        .hovered = false,
+        .pressed = false,
+        .focused = true,
+        .pointer_inside = false,
+        .pointer_x = 0.15f,
+        .pointer_y = 0.85f,
+    };
+    auto focused_plan =
+        plan_material_surface(focused_request, sampled_environment());
+    assert(focused_plan.container.interactive);
+    assert(focused_plan.interaction.enabled);
+    assert(focused_plan.interaction.active);
+    assert(focused_plan.interaction.focused);
+    assert(!focused_plan.interaction.hovered);
+    assert(!focused_plan.interaction.pressed);
+    assert(!focused_plan.interaction.pointer_inside);
+    assert(std::string_view(focused_plan.interaction.state) == "focused");
+    assert(std::string_view(focused_plan.interaction.specular_model)
+        == "focus-specular");
+    assert(focused_plan.interaction.specular_highlight_active);
+    assert(std::fabs(focused_plan.interaction.specular_anchor_x - 0.5f)
+           < 0.0001f);
+    assert(std::fabs(focused_plan.interaction.specular_anchor_y - 0.5f)
+           < 0.0001f);
+    assert(focused_plan.interaction.specular_radius > 0.0f);
+    assert(focused_plan.interaction.specular_intensity > 0.0f);
+    assert(!focused_plan.interaction.pointer_lens_active);
+    assert(std::string_view(focused_plan.interaction.control_morph_model)
+        == "focused-liquid-control-morph");
+    assert(focused_plan.interaction.control_morph_active);
+    assert(focused_plan.interaction.control_morph_scale_delta > 0.0f);
+    assert(focused_plan.interaction.control_morph_depth > 0.0f);
+    assert(focused_plan.interaction.control_morph_edge > 0.0f);
+    assert(focused_plan.edge_highlight > baseline_plan.edge_highlight);
+    assert(focused_plan.specular.active);
+    assert(focused_plan.specular.ambient);
+    assert(focused_plan.specular.interaction_driven);
+    assert(std::string_view(focused_plan.specular.model)
+        == "focus-specular");
+    assert(std::string_view(focused_plan.specular.source)
+        == "sampled-backdrop-focus-lighting");
+    assert(focused_plan.specular.anchor_x
+           == focused_plan.interaction.specular_anchor_x);
+    assert(focused_plan.specular.anchor_y
+           == focused_plan.interaction.specular_anchor_y);
+    assert(focused_plan.specular.radius
+           == focused_plan.interaction.specular_radius);
+    assert(focused_plan.specular.intensity
+           > focused_plan.interaction.specular_intensity);
+    assert(focused_plan.optical_response.interaction_active);
+    assert(focused_plan.optical_response.interaction_modulates_optics);
+    assert(std::string_view(
+               focused_plan.execution_stages[2].optics.specular_model)
+        == "focus-specular");
+    assert(focused_plan.execution_stages[2].optics.specular_intensity
+           == focused_plan.specular.intensity);
+
+    auto reduced_focus_env = sampled_environment();
+    reduced_focus_env.capabilities.reduce_motion = true;
+    auto reduced_focus_plan =
+        plan_material_surface(focused_request, reduced_focus_env);
+    assert(reduced_focus_plan.interaction.specular_highlight_active);
+    assert(reduced_focus_plan.interaction.specular_intensity
+           < focused_plan.interaction.specular_intensity);
+    assert(!reduced_focus_plan.interaction.pointer_lens_active);
+    assert(reduced_focus_plan.specular.interaction_driven);
+    assert(reduced_focus_plan.specular.intensity
+           < focused_plan.specular.intensity);
+
     auto pressed_request = request;
     pressed_request.style.interaction.hovered = false;
     pressed_request.style.interaction.pressed = true;
