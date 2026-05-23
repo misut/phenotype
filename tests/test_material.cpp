@@ -1003,7 +1003,7 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
     request.style.container = MaterialContainerDescriptor{
         .container_id = 88u,
         .union_id = 0u,
-        .spacing = 8.0f,
+        .spacing = 128.0f,
         .interactive = false,
         .morph_transitions = true,
     };
@@ -1022,6 +1022,7 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
 
     auto unrelated = request;
     unrelated.geometry = MaterialGeometry{240.0f, 0.0f, 40.0f, 40.0f, 12.0f};
+    unrelated.style.container.container_id = 89u;
     unrelated.style.glass_identity = MaterialGlassIdentityDescriptor{
         .namespace_id = 19u,
         .effect_id = 701u,
@@ -1034,9 +1035,9 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
     };
 
     auto const group = accumulate_material_container_group(records, 88u);
-    assert(group.shape_pair_count == 3u);
-    assert(group.blend_candidate_pair_count == 0u);
-    assert(!material_container_group_shape_blend_execution_active(group));
+    assert(group.shape_pair_count == 1u);
+    assert(group.blend_candidate_pair_count == 1u);
+    assert(material_container_group_shape_blend_execution_active(group));
 
     auto const first_execution =
         material_container_execution_descriptor(records[0], records);
@@ -1066,6 +1067,13 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
     assert(first_execution.glass_effect_match_source_w == 40.0f);
     assert(first_execution.glass_effect_match_source_h == 40.0f);
     assert(first_execution.glass_effect_match_source_radius == 24.0f);
+    assert(std::fabs(first_execution.glass_effect_match_source_gap - 80.0f)
+           < 0.0001f);
+    assert(std::fabs(first_execution.glass_effect_match_source_spacing - 128.0f)
+           < 0.0001f);
+    assert(std::fabs(
+               first_execution.glass_effect_match_source_proximity - 0.375f)
+           < 0.0001f);
     assert(std::fabs(first_execution.glass_effect_match_rect_x - 60.0f)
            < 0.0001f);
     assert(first_execution.glass_effect_match_rect_y == 0.0f);
@@ -1088,6 +1096,13 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
     assert(second_execution.glass_effect_match_source_valid);
     assert(second_execution.glass_effect_match_source_x == 0.0f);
     assert(second_execution.glass_effect_match_source_radius == 12.0f);
+    assert(std::fabs(second_execution.glass_effect_match_source_gap - 80.0f)
+           < 0.0001f);
+    assert(std::fabs(second_execution.glass_effect_match_source_spacing - 128.0f)
+           < 0.0001f);
+    assert(std::fabs(
+               second_execution.glass_effect_match_source_proximity - 0.375f)
+           < 0.0001f);
     assert(std::fabs(second_execution.glass_effect_match_rect_x - 60.0f)
            < 0.0001f);
     assert(std::fabs(second_execution.glass_effect_match_rect_radius - 18.0f)
@@ -1100,6 +1115,66 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
     assert(!unrelated_execution.shape_blend_execution);
 
     std::puts("PASS: glass effect identity drives matched execution contract");
+}
+
+void test_glass_effect_matched_geometry_respects_container_spacing() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 12.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 90u,
+        .union_id = 0u,
+        .spacing = 8.0f,
+        .interactive = false,
+        .morph_transitions = true,
+    };
+    request.style.transition = MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::MatchedGeometry,
+        .progress = 0.5f,
+        .appearing = true,
+    };
+    request.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 19u,
+        .effect_id = 800u,
+    };
+
+    auto far_peer = request;
+    far_peer.geometry =
+        MaterialGeometry{120.0f, 0.0f, 40.0f, 40.0f, 24.0f};
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(far_peer, sampled_environment()), 2u},
+    };
+
+    auto const group = accumulate_material_container_group(records, 90u);
+    assert(group.shape_pair_count == 1u);
+    assert(group.blend_candidate_pair_count == 0u);
+    assert(!material_container_group_shape_blend_execution_active(group));
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const second_execution =
+        material_container_execution_descriptor(records[1], records);
+
+    assert(first_execution.active);
+    assert(first_execution.glass_effect_surface_count == 2u);
+    assert(!first_execution.glass_effect_match_execution);
+    assert(!first_execution.glass_effect_match_source_valid);
+    assert(first_execution.glass_effect_match_blend_strength == 0.0f);
+    assert(!first_execution.shape_blend_execution);
+    assert(std::string_view(first_execution.execution_policy)
+           == "group-isolated");
+
+    assert(second_execution.active);
+    assert(second_execution.glass_effect_surface_count == 2u);
+    assert(!second_execution.glass_effect_match_execution);
+    assert(!second_execution.glass_effect_match_source_valid);
+    assert(second_execution.glass_effect_match_blend_strength == 0.0f);
+    assert(!second_execution.shape_blend_execution);
+    assert(std::string_view(second_execution.execution_policy)
+           == "group-isolated");
+
+    std::puts("PASS: glass effect matched geometry respects container spacing");
 }
 
 void test_warmup_backdrop_access_contract() {
@@ -1494,6 +1569,7 @@ int main() {
     test_materialize_transition_modulates_glass_optics_contract();
     test_glass_effect_identity_marks_matched_transition_contract();
     test_glass_effect_identity_drives_matched_execution_contract();
+    test_glass_effect_matched_geometry_respects_container_spacing();
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     test_executor_frame_capture_policy_contract();

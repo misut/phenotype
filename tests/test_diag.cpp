@@ -1122,6 +1122,18 @@ void test_material_runtime_record_json_contract() {
                .as_object()
                .at("radius")
                .as_float() == 0.0f);
+    assert(first_member.at("glass_effect_match_source")
+               .as_object()
+               .at("gap")
+               .as_float() == 0.0f);
+    assert(first_member.at("glass_effect_match_source")
+               .as_object()
+               .at("spacing")
+               .as_float() == 0.0f);
+    assert(first_member.at("glass_effect_match_source")
+               .as_object()
+               .at("proximity")
+               .as_float() == 0.0f);
     assert(first_member.at("glass_effect_match_rect")
                .as_object()
                .at("valid")
