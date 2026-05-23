@@ -2665,6 +2665,9 @@ namespace detail {
         match_source.emplace(
             "h",
             json::Value{execution.glass_effect_match_source_h});
+        match_source.emplace(
+            "radius",
+            json::Value{execution.glass_effect_match_source_radius});
         out.emplace(
             "glass_effect_match_source",
             json::Value{std::move(match_source)});
@@ -2684,6 +2687,9 @@ namespace detail {
         match_rect.emplace(
             "h",
             json::Value{execution.glass_effect_match_rect_h});
+        match_rect.emplace(
+            "radius",
+            json::Value{execution.glass_effect_match_rect_radius});
         out.emplace(
             "glass_effect_match_rect",
             json::Value{std::move(match_rect)});

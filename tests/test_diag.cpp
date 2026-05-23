@@ -1118,10 +1118,18 @@ void test_material_runtime_record_json_contract() {
                .as_object()
                .at("valid")
                .as_bool() == false);
+    assert(first_member.at("glass_effect_match_source")
+               .as_object()
+               .at("radius")
+               .as_float() == 0.0f);
     assert(first_member.at("glass_effect_match_rect")
                .as_object()
                .at("valid")
                .as_bool() == false);
+    assert(first_member.at("glass_effect_match_rect")
+               .as_object()
+               .at("radius")
+               .as_float() == 0.0f);
     assert(first_member.at("group_execution_policy").as_string()
            == "group-edge-continuity");
     assert(first_member.at("shape_blend_execution").as_bool());

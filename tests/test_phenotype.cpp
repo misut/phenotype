@@ -3871,8 +3871,12 @@ void test_glass_effect_string_id_scope_emits_stable_context() {
     assert(first_execution.glass_effect_match_progress == 1.0f);
     assert(first_execution.glass_effect_match_source_valid);
     assert(first_execution.glass_effect_match_source_y > 0.0f);
+    assert(first_execution.glass_effect_match_source_radius
+           == records[1].plan.geometry.radius);
     assert(first_execution.glass_effect_match_rect_y
            == records[0].plan.geometry.y);
+    assert(first_execution.glass_effect_match_rect_radius
+           == records[0].plan.geometry.radius);
     assert(std::string_view{first_execution.execution_policy}
            == "glass-effect-matched-geometry");
     assert(std::fabs(first_execution.glass_effect_match_blend_strength - 1.0f)
