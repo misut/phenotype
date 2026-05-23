@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 65;
+inline constexpr std::uint32_t material_plan_contract_version = 66;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1652,6 +1652,7 @@ struct MaterialContainerExecutionDescriptor {
     float group_y = 0.0f;
     float group_w = 0.0f;
     float group_h = 0.0f;
+    float group_radius = 0.0f;
     float shape_blend_strength = 0.0f;
     float inner_edge_alpha_blend_strength = 0.0f;
     float fusion_strength = 0.0f;
@@ -1787,6 +1788,7 @@ material_paint_layer_execution_geometry(
         y = execution->group_y;
         w = execution->group_w;
         h = execution->group_h;
+        radius = execution->group_radius;
     }
     material_apply_materialize_execution_geometry(
         plan.transition,
@@ -2299,6 +2301,7 @@ inline MaterialSurfaceExecutionGeometry material_surface_execution_geometry(
         y = execution->group_y;
         w = execution->group_w;
         h = execution->group_h;
+        radius = execution->group_radius;
     }
     material_apply_materialize_execution_geometry(
         plan.transition,
@@ -2580,6 +2583,7 @@ struct MaterialContainerGroupAccumulator {
     float min_shape_gap = 0.0f;
     float max_shape_gap = 0.0f;
     float max_blend_distance = 0.0f;
+    float max_effective_radius = 0.0f;
 };
 
 struct MaterialGlassEffectMatchAccumulator {
@@ -2594,6 +2598,7 @@ struct MaterialGlassEffectMatchAccumulator {
     float max_x = 0.0f;
     float max_y = 0.0f;
     float max_progress = 0.0f;
+    float max_effective_radius = 0.0f;
 };
 
 inline bool material_plan_in_container(
@@ -2657,6 +2662,8 @@ inline void accumulate_material_container_bounds(
         return;
     group.max_blend_distance =
         std::max(group.max_blend_distance, plan.container.blend_distance);
+    group.max_effective_radius =
+        std::max(group.max_effective_radius, plan.shape.effective_radius);
     auto const x0 = plan.geometry.x;
     auto const y0 = plan.geometry.y;
     auto const x1 = plan.geometry.x + std::max(0.0f, plan.geometry.w);
@@ -2680,6 +2687,8 @@ inline void accumulate_material_glass_effect_match_bounds(
         MaterialPlan const& plan) noexcept {
     if (!plan.shape.valid)
         return;
+    group.max_effective_radius =
+        std::max(group.max_effective_radius, plan.shape.effective_radius);
     auto const x0 = plan.geometry.x;
     auto const y0 = plan.geometry.y;
     auto const x1 = plan.geometry.x + std::max(0.0f, plan.geometry.w);
@@ -2696,6 +2705,95 @@ inline void accumulate_material_glass_effect_match_bounds(
     group.min_y = std::min(group.min_y, y0);
     group.max_x = std::max(group.max_x, x1);
     group.max_y = std::max(group.max_y, y1);
+}
+
+inline float material_container_bounds_span(float min, float max) noexcept {
+    return std::max(0.0f, max - min);
+}
+
+inline float material_container_group_radius_for_bounds(
+        float radius,
+        float w,
+        float h) noexcept {
+    if (!std::isfinite(radius) || radius <= 0.0f)
+        return 0.0f;
+    auto const limit = std::max(0.0f, std::min(w, h) * 0.5f);
+    return std::clamp(radius, 0.0f, limit);
+}
+
+inline float material_container_group_bounds_width(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    return group.has_bounds
+        ? material_container_bounds_span(group.min_x, group.max_x)
+        : 0.0f;
+}
+
+inline float material_container_group_bounds_height(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    return group.has_bounds
+        ? material_container_bounds_span(group.min_y, group.max_y)
+        : 0.0f;
+}
+
+inline float material_container_group_execution_radius(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (!group.has_bounds)
+        return 0.0f;
+    return material_container_group_radius_for_bounds(
+        group.max_effective_radius,
+        material_container_group_bounds_width(group),
+        material_container_group_bounds_height(group));
+}
+
+inline float material_glass_effect_match_group_bounds_width(
+        MaterialGlassEffectMatchAccumulator const& group) noexcept {
+    return group.has_bounds
+        ? material_container_bounds_span(group.min_x, group.max_x)
+        : 0.0f;
+}
+
+inline float material_glass_effect_match_group_bounds_height(
+        MaterialGlassEffectMatchAccumulator const& group) noexcept {
+    return group.has_bounds
+        ? material_container_bounds_span(group.min_y, group.max_y)
+        : 0.0f;
+}
+
+inline float material_glass_effect_match_group_execution_radius(
+        MaterialGlassEffectMatchAccumulator const& group) noexcept {
+    if (!group.has_bounds)
+        return 0.0f;
+    return material_container_group_radius_for_bounds(
+        group.max_effective_radius,
+        material_glass_effect_match_group_bounds_width(group),
+        material_glass_effect_match_group_bounds_height(group));
+}
+
+inline void material_apply_container_group_execution_bounds(
+        MaterialContainerExecutionDescriptor& descriptor,
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (!group.has_bounds)
+        return;
+    descriptor.group_bounds_valid = true;
+    descriptor.group_x = group.min_x;
+    descriptor.group_y = group.min_y;
+    descriptor.group_w = material_container_group_bounds_width(group);
+    descriptor.group_h = material_container_group_bounds_height(group);
+    descriptor.group_radius = material_container_group_execution_radius(group);
+}
+
+inline void material_apply_glass_effect_match_group_execution_bounds(
+        MaterialContainerExecutionDescriptor& descriptor,
+        MaterialGlassEffectMatchAccumulator const& group) noexcept {
+    if (!group.has_bounds)
+        return;
+    descriptor.group_bounds_valid = true;
+    descriptor.group_x = group.min_x;
+    descriptor.group_y = group.min_y;
+    descriptor.group_w = material_glass_effect_match_group_bounds_width(group);
+    descriptor.group_h = material_glass_effect_match_group_bounds_height(group);
+    descriptor.group_radius =
+        material_glass_effect_match_group_execution_radius(group);
 }
 
 inline void accumulate_material_container_pair(
@@ -3752,41 +3850,20 @@ material_container_execution_descriptor_from_group(
         }
     }
     if (descriptor.glass_effect_match_execution && glass_group.has_bounds) {
-        descriptor.group_bounds_valid = true;
-        descriptor.group_x = glass_group.min_x;
-        descriptor.group_y = glass_group.min_y;
-        descriptor.group_w = std::max(
-            0.0f,
-            glass_group.max_x - glass_group.min_x);
-        descriptor.group_h = std::max(
-            0.0f,
-            glass_group.max_y - glass_group.min_y);
+        material_apply_glass_effect_match_group_execution_bounds(
+            descriptor,
+            glass_group);
     } else if (descriptor.union_execution && union_group.has_bounds) {
-        descriptor.group_bounds_valid = true;
-        descriptor.group_x = union_group.min_x;
-        descriptor.group_y = union_group.min_y;
-        descriptor.group_w = std::max(
-            0.0f,
-            union_group.max_x - union_group.min_x);
-        descriptor.group_h = std::max(
-            0.0f,
-            union_group.max_y - union_group.min_y);
+        material_apply_container_group_execution_bounds(
+            descriptor,
+            union_group);
     } else if (descriptor.group_surface_execution
                && shape_blend_cluster.has_bounds) {
-        descriptor.group_bounds_valid = true;
-        descriptor.group_x = shape_blend_cluster.min_x;
-        descriptor.group_y = shape_blend_cluster.min_y;
-        descriptor.group_w = std::max(
-            0.0f,
-            shape_blend_cluster.max_x - shape_blend_cluster.min_x);
-        descriptor.group_h = std::max(
-            0.0f,
-            shape_blend_cluster.max_y - shape_blend_cluster.min_y);
+        material_apply_container_group_execution_bounds(
+            descriptor,
+            shape_blend_cluster);
     } else if (group.has_bounds) {
-        descriptor.group_x = group.min_x;
-        descriptor.group_y = group.min_y;
-        descriptor.group_w = std::max(0.0f, group.max_x - group.min_x);
-        descriptor.group_h = std::max(0.0f, group.max_y - group.min_y);
+        material_apply_container_group_execution_bounds(descriptor, group);
     }
     return descriptor;
 }

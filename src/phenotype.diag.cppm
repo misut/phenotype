@@ -3400,6 +3400,7 @@ namespace detail {
         out.emplace(
             "group_execution_policy",
             json::Value{execution.execution_policy});
+        out.emplace("group_radius", json::Value{execution.group_radius});
         out.emplace(
             "fusion_model",
             json::Value{execution.fusion_model});
@@ -3461,6 +3462,9 @@ namespace detail {
         bounds.emplace("y", json::Value{group.has_bounds ? group.min_y : 0.0f});
         bounds.emplace("w", json::Value{bounds_width});
         bounds.emplace("h", json::Value{bounds_height});
+        bounds.emplace(
+            "radius",
+            json::Value{material_container_group_execution_radius(group)});
         bounds.emplace("area", json::Value{bounds_width * bounds_height});
 
         json::Object out;
