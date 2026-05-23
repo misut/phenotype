@@ -2846,6 +2846,21 @@ inline MaterialTransitionDescriptor resolve_material_transition(
     return current_material_transition();
 }
 
+inline bool glass_effect_container_should_default_transition(
+        GlassEffectContainerOptions const& options) noexcept {
+    return options.morph_transitions
+        && material_transition_is_identity(current_material_transition());
+}
+
+inline MaterialTransitionDescriptor
+glass_effect_container_default_transition() noexcept {
+    return MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::MatchedGeometry,
+        .progress = 1.0f,
+        .appearing = true,
+    };
+}
+
 inline MaterialGlassIdentityDescriptor glass_effect_identity(
         std::uint32_t namespace_id,
         std::uint32_t effect_id) noexcept {
@@ -2912,9 +2927,17 @@ void material_container(MaterialContainerOptions options, F&& builder) {
 template<typename F>
     requires std::is_invocable_v<F>
 void glass_effect_container(GlassEffectContainerOptions options, F&& builder) {
+    auto const push_default_transition =
+        glass_effect_container_should_default_transition(options);
+    if (push_default_transition) {
+        auto& transition_stack = material_transition_stack();
+        transition_stack.push_back(glass_effect_container_default_transition());
+    }
     material_container(
         glass_effect_container_options(options),
         std::forward<F>(builder));
+    if (push_default_transition)
+        material_transition_stack().pop_back();
 }
 
 template<typename F>
@@ -2979,6 +3002,10 @@ inline MaterialTransitionDescriptor glass_materialize_transition(
     };
 }
 
+inline MaterialTransitionDescriptor glass_materialize_transition() noexcept {
+    return glass_materialize_transition(1.0f);
+}
+
 inline MaterialTransitionDescriptor glass_matched_geometry_transition(
         float progress,
         bool appearing = true) noexcept {
@@ -2987,6 +3014,14 @@ inline MaterialTransitionDescriptor glass_matched_geometry_transition(
         .progress = progress,
         .appearing = appearing,
     };
+}
+
+inline MaterialTransitionDescriptor glass_matched_geometry_transition() noexcept {
+    return glass_matched_geometry_transition(1.0f);
+}
+
+inline MaterialTransitionDescriptor glass_identity_transition() noexcept {
+    return MaterialTransitionDescriptor{};
 }
 
 // column — vertical flex container.

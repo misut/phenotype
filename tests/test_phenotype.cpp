@@ -3514,6 +3514,10 @@ void test_glass_effect_container_scope_emits_morph_context() {
         assert(container.mode() == MaterialContainerMode::Union);
         assert(material.material.kind == MaterialKind::Regular);
         assert(material.material.role == MaterialSurfaceRole::Control);
+        assert(material.material.transition.kind
+               == MaterialGlassTransitionKind::MatchedGeometry);
+        assert(material.material.transition.progress == 1.0f);
+        assert(material.material.transition.appearing);
     }
 
     MaterialEnvironment env{};
@@ -3549,6 +3553,9 @@ void test_glass_effect_container_scope_emits_morph_context() {
     assert(plan->reference_model.container_union);
     assert(plan->reference_model.container_morphing);
     assert(plan->reference_model.interactive_response);
+    assert(plan->transition.matched_geometry);
+    assert(std::string_view(plan->transition.kind_name)
+           == "matched-geometry");
 
     std::puts("PASS: glass effect container scope emits morph context");
 }
@@ -3628,6 +3635,66 @@ void test_glass_effect_transition_scope_emits_command_context() {
     assert(materials[2].transition.appearing);
 
     std::puts("PASS: glass effect transition scope emits command context");
+}
+
+void test_glass_effect_container_default_transition_respects_explicit_scope() {
+    auto identity = layout::glass_identity_transition();
+    assert(identity.kind == MaterialGlassTransitionKind::Identity);
+    assert(identity.progress == 1.0f);
+    assert(identity.appearing);
+
+    auto materialize_default = layout::glass_materialize_transition();
+    assert(materialize_default.kind == MaterialGlassTransitionKind::Materialize);
+    assert(materialize_default.progress == 1.0f);
+    assert(materialize_default.appearing);
+
+    auto matched_default = layout::glass_matched_geometry_transition();
+    assert(matched_default.kind == MaterialGlassTransitionKind::MatchedGeometry);
+    assert(matched_default.progress == 1.0f);
+    assert(matched_default.appearing);
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::glass_effect_transition(
+        layout::glass_materialize_transition(0.25f, false),
+        [] {
+            layout::glass_effect_container(
+                layout::GlassEffectContainerOptions{
+                    .container_id = 612u,
+                    .spacing = 8.0f,
+                    .morph_transitions = true,
+                },
+                [] {
+                    auto glass = layout::GlassEffectOptions{};
+                    glass.role = MaterialSurfaceRole::Control;
+                    glass.fixed_height = 36.0f;
+                    layout::glass_effect(glass, [] {
+                        widget::text("Explicit transition");
+                    });
+                });
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    auto const& material = first_material_command(cmds);
+    assert(material.material.container.container_id == 612u);
+    assert(material.material.transition.kind
+           == MaterialGlassTransitionKind::Materialize);
+    assert(std::fabs(material.material.transition.progress - 0.25f)
+           < 0.0001f);
+    assert(!material.material.transition.appearing);
+
+    std::puts("PASS: glass effect container default transition respects explicit scope");
 }
 
 void test_glass_effect_id_scope_emits_command_context() {
@@ -3730,8 +3797,6 @@ void test_glass_effect_string_id_scope_emits_stable_context() {
             layout::glass_effect_id("showcase", "pencil", [&] {
                 auto first = layout::GlassEffectOptions{};
                 first.role = MaterialSurfaceRole::Control;
-                first.transition = layout::glass_matched_geometry_transition(
-                    0.5f);
                 first.fixed_height = 36.0f;
                 first.semantic_label = "String Glass ID A";
                 layout::glass_effect(first, [] {
@@ -3742,7 +3807,6 @@ void test_glass_effect_string_id_scope_emits_stable_context() {
             second.role = MaterialSurfaceRole::Control;
             second.glass_identity =
                 layout::glass_effect_identity("showcase", "pencil");
-            second.transition = layout::glass_matched_geometry_transition(0.5f);
             second.fixed_height = 36.0f;
             second.semantic_label = "String Glass ID B";
             layout::glass_effect(second, [] {
@@ -3768,6 +3832,7 @@ void test_glass_effect_string_id_scope_emits_stable_context() {
         assert(material.material.container.container_id == 901u);
         assert(material.material.transition.kind
                == MaterialGlassTransitionKind::MatchedGeometry);
+        assert(material.material.transition.progress == 1.0f);
     }
 
     MaterialEnvironment env{};
@@ -3803,9 +3868,10 @@ void test_glass_effect_string_id_scope_emits_stable_context() {
     assert(first_execution.glass_namespace_id == expected.namespace_id);
     assert(first_execution.glass_effect_id == expected.effect_id);
     assert(first_execution.glass_effect_surface_count == 2u);
+    assert(first_execution.glass_effect_match_progress == 1.0f);
     assert(std::string_view{first_execution.execution_policy}
            == "glass-effect-matched-geometry");
-    assert(std::fabs(first_execution.glass_effect_match_blend_strength - 0.5f)
+    assert(std::fabs(first_execution.glass_effect_match_blend_strength - 1.0f)
            < 0.0001f);
 
     std::puts("PASS: glass effect string id scope emits stable context");
@@ -6550,6 +6616,7 @@ int main() {
     test_material_container_scope_emits_command_context();
     test_glass_effect_container_scope_emits_morph_context();
     test_glass_effect_transition_scope_emits_command_context();
+    test_glass_effect_container_default_transition_respects_explicit_scope();
     test_glass_effect_id_scope_emits_command_context();
     test_glass_effect_string_id_scope_emits_stable_context();
     test_material_command_preserves_style_optics();
