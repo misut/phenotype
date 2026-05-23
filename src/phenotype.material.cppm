@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 52;
+inline constexpr std::uint32_t material_plan_contract_version = 53;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -444,6 +444,11 @@ struct MaterialStageOptics {
     float refraction_edge_bias = 0.0f;
     float refraction_offset_pixels = 0.0f;
     float refraction_edge_caustic_intensity = 0.0f;
+    char const* edge_optics_model = "none";
+    float edge_bevel_width = 0.0f;
+    float edge_inner_highlight = 0.0f;
+    float edge_outer_shadow = 0.0f;
+    float edge_chromatic_fringe = 0.0f;
 };
 
 struct MaterialExecutionStage {
@@ -574,6 +579,19 @@ struct MaterialSpecularProfile {
     float intensity = 0.0f;
 };
 
+struct MaterialEdgeOpticsProfile {
+    char const* model = "none";
+    char const* source = "none";
+    bool active = false;
+    bool backdrop_driven = false;
+    bool caustic_driven = false;
+    bool bounded = true;
+    float bevel_width = 0.0f;
+    float inner_highlight = 0.0f;
+    float outer_shadow = 0.0f;
+    float chromatic_fringe = 0.0f;
+};
+
 struct MaterialInteractionResponse {
     bool enabled = false;
     bool active = false;
@@ -679,6 +697,10 @@ struct MaterialOpticalComposition {
     float refraction_edge_bias = 0.0f;
     float refraction_offset_pixels = 0.0f;
     float refraction_edge_caustic_intensity = 0.0f;
+    float edge_bevel_width = 0.0f;
+    float edge_inner_highlight = 0.0f;
+    float edge_outer_shadow = 0.0f;
+    float edge_chromatic_fringe = 0.0f;
     float interaction_response_strength = 0.0f;
     float transition_progress = 1.0f;
     float transition_opacity_gain = 1.0f;
@@ -873,6 +895,7 @@ struct MaterialPlan {
     MaterialForegroundRecommendation foreground{};
     MaterialRefractionProfile refraction{};
     MaterialSpecularProfile specular{};
+    MaterialEdgeOpticsProfile edge_optics{};
     MaterialInteractionResponse interaction{};
     MaterialOpticalComposition optical_composition{};
     MaterialOpticalResponseContract optical_response{};
@@ -930,6 +953,11 @@ inline MaterialStageOptics material_primary_stage_optics(
     optics.refraction_offset_pixels = plan.refraction.max_offset_pixels;
     optics.refraction_edge_caustic_intensity =
         plan.refraction.edge_caustic_intensity;
+    optics.edge_optics_model = plan.edge_optics.model;
+    optics.edge_bevel_width = plan.edge_optics.bevel_width;
+    optics.edge_inner_highlight = plan.edge_optics.inner_highlight;
+    optics.edge_outer_shadow = plan.edge_optics.outer_shadow;
+    optics.edge_chromatic_fringe = plan.edge_optics.chromatic_fringe;
     return optics;
 }
 
@@ -961,6 +989,11 @@ inline MaterialStageOptics material_edge_stage_optics(
     optics.pointer_lens_anchor_y = plan.interaction.pointer_lens_anchor_y;
     optics.pointer_lens_radius = plan.interaction.pointer_lens_radius;
     optics.pointer_lens_strength = plan.interaction.pointer_lens_strength;
+    optics.edge_optics_model = plan.edge_optics.model;
+    optics.edge_bevel_width = plan.edge_optics.bevel_width;
+    optics.edge_inner_highlight = plan.edge_optics.inner_highlight;
+    optics.edge_outer_shadow = plan.edge_optics.outer_shadow;
+    optics.edge_chromatic_fringe = plan.edge_optics.chromatic_fringe;
     return optics;
 }
 
@@ -5341,6 +5374,76 @@ inline MaterialRefractionProfile material_resolve_refraction_profile(
     return profile;
 }
 
+inline MaterialEdgeOpticsProfile material_resolve_edge_optics_profile(
+        MaterialPlan const& plan) noexcept {
+    MaterialEdgeOpticsProfile profile{};
+    if (!plan.backdrop_sampling
+        || plan.fallback()
+        || plan.kind == MaterialKind::None
+        || plan.edge_highlight <= 0.0001f) {
+        return profile;
+    }
+
+    auto const shape_roundness =
+        std::clamp(plan.shape.normalized_radius, 0.0f, 1.0f);
+    auto const edge_highlight =
+        std::clamp(plan.edge_highlight, 0.0f, 1.0f);
+    auto const refraction_strength =
+        plan.refraction.active
+            ? std::clamp(plan.refraction.strength, 0.0f, 0.35f)
+            : 0.0f;
+    auto const caustic_response =
+        plan.refraction.active
+            ? std::clamp(plan.refraction.edge_caustic_intensity, 0.0f, 0.35f)
+            : 0.0f;
+    auto const backdrop_response =
+        std::clamp(plan.backdrop.response_strength, 0.0f, 1.0f);
+    auto const motion_scale = plan.decision_trace.reduce_motion ? 0.78f : 1.0f;
+    auto const transition_gain =
+        plan.transition.active ? plan.transition.optical_gain : 1.0f;
+
+    profile.active = true;
+    profile.backdrop_driven = true;
+    profile.caustic_driven = caustic_response > 0.0001f;
+    profile.model = "beveled-liquid-glass-edge";
+    profile.source = profile.caustic_driven
+        ? "sampled-backdrop-bevel-caustics"
+        : "sampled-backdrop-bevel-lighting";
+    profile.bevel_width = std::clamp(
+        plan.edge_width * (1.35f + 1.20f * shape_roundness)
+            + 0.035f * std::clamp(plan.blur_radius, 0.0f,
+                                   material_max_blur_radius),
+        0.75f,
+        14.0f);
+    profile.inner_highlight = std::clamp(
+        transition_gain
+            * motion_scale
+            * (0.10f
+               + 0.40f * edge_highlight
+               + 0.75f * caustic_response
+               + 0.08f * backdrop_response
+               + 0.08f * shape_roundness),
+        0.0f,
+        0.65f);
+    profile.outer_shadow = std::clamp(
+        transition_gain
+            * motion_scale
+            * (0.06f
+               + 0.22f * edge_highlight
+               + 0.40f * caustic_response
+               + 0.08f * std::clamp(plan.shadow_alpha, 0.0f, 0.4f)),
+        0.0f,
+        0.42f);
+    profile.chromatic_fringe = std::clamp(
+        motion_scale
+            * (0.015f
+               + 0.38f * caustic_response
+               + 0.08f * refraction_strength),
+        0.0f,
+        0.12f);
+    return profile;
+}
+
 inline float material_base_specular_intensity(MaterialKind kind) noexcept {
     switch (kind) {
         case MaterialKind::Clear: return 0.050f;
@@ -5868,6 +5971,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         && plan.luminance_curve.bounded
         && plan.backdrop_access.bounded
         && plan.refraction.bounded
+        && plan.edge_optics.bounded
         && plan.transition.bounded;
     composition.deterministic =
         plan.resource_budget.deterministic_fallback
@@ -5889,6 +5993,10 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.refraction_offset_pixels = plan.refraction.max_offset_pixels;
     composition.refraction_edge_caustic_intensity =
         plan.refraction.edge_caustic_intensity;
+    composition.edge_bevel_width = plan.edge_optics.bevel_width;
+    composition.edge_inner_highlight = plan.edge_optics.inner_highlight;
+    composition.edge_outer_shadow = plan.edge_optics.outer_shadow;
+    composition.edge_chromatic_fringe = plan.edge_optics.chromatic_fringe;
     composition.interaction_response_strength =
         plan.interaction.response_strength;
     composition.transition_progress = plan.transition.progress;
@@ -6195,6 +6303,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.refraction = material_resolve_refraction_profile(plan);
     plan.resource_budget.max_refraction_offset_pixels =
         plan.refraction.max_offset_pixels;
+    plan.edge_optics = material_resolve_edge_optics_profile(plan);
     plan.specular = material_resolve_specular_profile(plan);
     plan.luminance_curve = material_resolve_luminance_curve(
         plan.backdrop_sampling,

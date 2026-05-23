@@ -63,7 +63,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 52);
+    assert(material_plan_contract_version == 53);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -147,6 +147,18 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.refraction.edge_caustic_intensity > 0.0f);
     assert(plan.resource_budget.max_refraction_offset_pixels
            == plan.refraction.max_offset_pixels);
+    assert(plan.edge_optics.active);
+    assert(plan.edge_optics.backdrop_driven);
+    assert(plan.edge_optics.caustic_driven);
+    assert(plan.edge_optics.bounded);
+    assert(std::string_view(plan.edge_optics.model)
+        == "beveled-liquid-glass-edge");
+    assert(std::string_view(plan.edge_optics.source)
+        == "sampled-backdrop-bevel-caustics");
+    assert(plan.edge_optics.bevel_width > plan.edge_width);
+    assert(plan.edge_optics.inner_highlight > 0.0f);
+    assert(plan.edge_optics.outer_shadow > 0.0f);
+    assert(plan.edge_optics.chromatic_fringe > 0.0f);
     assert(plan.specular.active);
     assert(plan.specular.ambient);
     assert(!plan.specular.interaction_driven);
@@ -234,6 +246,14 @@ void test_sampled_backdrop_access_contract() {
            == plan.refraction.max_offset_pixels);
     assert(plan.optical_composition.refraction_edge_caustic_intensity
            == plan.refraction.edge_caustic_intensity);
+    assert(plan.optical_composition.edge_bevel_width
+           == plan.edge_optics.bevel_width);
+    assert(plan.optical_composition.edge_inner_highlight
+           == plan.edge_optics.inner_highlight);
+    assert(plan.optical_composition.edge_outer_shadow
+           == plan.edge_optics.outer_shadow);
+    assert(plan.optical_composition.edge_chromatic_fringe
+           == plan.edge_optics.chromatic_fringe);
     assert(plan.optical_response.backdrop_driven);
     assert(plan.optical_response.blur_active);
     assert(plan.optical_response.frosting_active);
@@ -261,6 +281,16 @@ void test_sampled_backdrop_access_contract() {
            == plan.specular.radius);
     assert(plan.execution_stages[2].optics.specular_intensity
            == plan.specular.intensity);
+    assert(std::string_view(plan.execution_stages[2].optics.edge_optics_model)
+        == "beveled-liquid-glass-edge");
+    assert(plan.execution_stages[2].optics.edge_bevel_width
+           == plan.edge_optics.bevel_width);
+    assert(plan.execution_stages[2].optics.edge_inner_highlight
+           == plan.edge_optics.inner_highlight);
+    assert(plan.execution_stages[2].optics.edge_outer_shadow
+           == plan.edge_optics.outer_shadow);
+    assert(plan.execution_stages[2].optics.edge_chromatic_fringe
+           == plan.edge_optics.chromatic_fringe);
     assert(plan.paint_layer_count == 0u);
     assert(plan.dropped_paint_layer_count == 0u);
     assert(plan.resource_budget.max_paint_layers == material_max_paint_layers);
