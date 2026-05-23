@@ -3445,6 +3445,22 @@ namespace detail {
         group_interaction_source.emplace(
             "pointer_lens_strength",
             json::Value{execution.group_interaction_pointer_lens_strength});
+        group_interaction_source.emplace(
+            "control_morph_active",
+            json::Value{execution.group_interaction_control_morph_active});
+        group_interaction_source.emplace(
+            "control_morph_scale_delta",
+            json::Value{
+                execution.group_interaction_control_morph_scale_delta});
+        group_interaction_source.emplace(
+            "control_morph_depth",
+            json::Value{execution.group_interaction_control_morph_depth});
+        group_interaction_source.emplace(
+            "control_morph_edge",
+            json::Value{execution.group_interaction_control_morph_edge});
+        group_interaction_source.emplace(
+            "control_morph_shadow",
+            json::Value{execution.group_interaction_control_morph_shadow});
         out.emplace(
             "group_interaction_source",
             json::Value{std::move(group_interaction_source)});
