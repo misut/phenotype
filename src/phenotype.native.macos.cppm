@@ -2461,7 +2461,7 @@ inline void append_material_paint_layer_instance(
     auto const draw_type =
         material_paint_layer_matches(layer.executor, "rounded-edge")
             ? 3.0f
-            : 2.0f;
+            : (layer.soft_edge_radius > 0.0f ? 5.0f : 2.0f);
     auto const stroke_width =
         material_paint_layer_matches(layer.executor, "rounded-edge")
             ? std::max(layer.stroke_width, 0.5f)
@@ -2478,7 +2478,8 @@ inline void append_material_paint_layer_instance(
         material_paint_layer_alpha(layer),
         radius,
         stroke_width,
-        draw_type);
+        draw_type,
+        layer.soft_edge_radius);
 }
 
 inline void append_material_paint_layer_instances(
@@ -4216,6 +4217,17 @@ fragment float4 fs_color(ColorVsOut in [[stage_in]]) {
         float d = length(max(p, float2(0.0))) - radius;
         if (d > 0.5) discard_fragment();
         float alpha = in.color.a * clamp(0.5 - d, 0.0, 1.0);
+        return float4(in.color.rgb * alpha, alpha);
+    }
+    if (draw_type == 5u && radius > 0.0) {
+        float soft_edge = max(in.params.w, 0.5);
+        float2 half_size = in.rect_size * 0.5;
+        float2 p = abs(in.local_pos - half_size) - half_size + float2(radius);
+        float d = length(max(p, float2(0.0))) - radius;
+        if (d > 0.5) discard_fragment();
+        float outer = clamp(0.5 - d, 0.0, 1.0);
+        float feather = clamp((-d) / soft_edge, 0.0, 1.0);
+        float alpha = in.color.a * min(outer, feather);
         return float4(in.color.rgb * alpha, alpha);
     }
     if (draw_type == 3u && radius > 0.0) {

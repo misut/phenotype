@@ -13,7 +13,7 @@ layout(std140, binding = 0) uniform Uniforms {
 struct ColorInstance {
     vec4 rect;         // x, y, w, h (pixels, top-left origin)
     vec4 color;        // linear RGBA 0..1
-    vec4 params;       // radius, border_w, draw_type, unused
+    vec4 params;       // radius, border_w, draw_type, soft_edge_radius
 };
 
 layout(std430, binding = 1) readonly buffer Instances {
