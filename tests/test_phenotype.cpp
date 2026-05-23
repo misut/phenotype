@@ -2659,15 +2659,15 @@ void test_material_surface_shape_overrides() {
         layout::MaterialSurfaceOptions{
             .kind = MaterialKind::Regular,
             .role = MaterialSurfaceRole::Content,
-            .fixed_height = 40.0f,
-            .border_radius = 7.5f,
-            .border_width = 0.0f,
-            .semantic_label = "Shaped Material",
             .transition = MaterialTransitionDescriptor{
                 .kind = MaterialGlassTransitionKind::Materialize,
                 .progress = 0.5f,
                 .appearing = false,
             },
+            .fixed_height = 40.0f,
+            .border_radius = 7.5f,
+            .border_width = 0.0f,
+            .semantic_label = "Shaped Material",
         },
         [] {
             widget::text("Override radius");
