@@ -2676,6 +2676,117 @@ inline void apply_material_container_execution_descriptors(
                     inst.control_morph[3] =
                         execution->group_interaction_control_morph_shadow;
                 }
+                if (execution->group_interaction_refraction_active) {
+                    inst.refraction[0] = std::clamp(
+                        std::max(
+                            inst.refraction[0],
+                            execution
+                                ->group_interaction_refraction_strength),
+                        0.0f,
+                        0.35f);
+                    inst.refraction[1] = std::clamp(
+                        std::max(
+                            inst.refraction[1],
+                            execution
+                                ->group_interaction_refraction_edge_bias),
+                        0.0f,
+                        1.0f);
+                    inst.refraction[2] = std::clamp(
+                        std::max(
+                            inst.refraction[2],
+                            execution
+                                ->group_interaction_refraction_max_offset_pixels),
+                        0.0f,
+                        5.0f);
+                    inst.refraction[3] = std::clamp(
+                        std::max(
+                            inst.refraction[3],
+                            execution
+                                ->group_interaction_refraction_edge_caustic_intensity),
+                        0.0f,
+                        0.35f);
+                }
+                if (execution->group_interaction_dynamic_lighting_active) {
+                    inst.lighting[0] =
+                        execution
+                            ->group_interaction_dynamic_light_direction_x;
+                    inst.lighting[1] =
+                        execution
+                            ->group_interaction_dynamic_light_direction_y;
+                    inst.lighting[2] = std::clamp(
+                        std::max(
+                            inst.lighting[2],
+                            execution
+                                ->group_interaction_dynamic_light_highlight),
+                        0.0f,
+                        0.45f);
+                    inst.lighting[3] = std::clamp(
+                        std::max(
+                            inst.lighting[3],
+                            execution
+                                ->group_interaction_dynamic_light_shadow),
+                        0.0f,
+                        0.36f);
+                }
+                if (execution->group_interaction_glass_thickness_active) {
+                    inst.thickness[0] = std::clamp(
+                        std::max(
+                            inst.thickness[0],
+                            execution->group_interaction_glass_thickness),
+                        0.0f,
+                        0.78f);
+                    inst.thickness[1] = std::clamp(
+                        std::max(
+                            inst.thickness[1],
+                            execution
+                                ->group_interaction_glass_lensing_gain),
+                        1.0f,
+                        1.48f);
+                    inst.thickness[2] = std::clamp(
+                        std::max(
+                            inst.thickness[2],
+                            execution
+                                ->group_interaction_glass_shadow_gain),
+                        1.0f,
+                        1.44f);
+                    inst.thickness[3] = std::clamp(
+                        std::max(
+                            inst.thickness[3],
+                            execution
+                                ->group_interaction_glass_scattering_gain),
+                        1.0f,
+                        1.40f);
+                }
+                if (execution->group_interaction_glass_dispersion_active) {
+                    inst.dispersion[0] = std::clamp(
+                        std::max(
+                            inst.dispersion[0],
+                            execution
+                                ->group_interaction_glass_dispersion_axial_offset),
+                        0.0f,
+                        3.20f);
+                    inst.dispersion[1] = std::clamp(
+                        std::max(
+                            inst.dispersion[1],
+                            execution
+                                ->group_interaction_glass_dispersion_tangential_offset),
+                        0.0f,
+                        2.45f);
+                    inst.dispersion[2] = std::clamp(
+                        std::max(
+                            inst.dispersion[2],
+                            execution
+                                ->group_interaction_glass_dispersion_prismatic_gain),
+                        1.0f,
+                        1.75f);
+                    inst.dispersion[3] = std::clamp(
+                        std::max(
+                            inst.dispersion[3],
+                            execution
+                                ->group_interaction_glass_dispersion_caustic_spread),
+                        0.0f,
+                        0.40f);
+                }
                 if (container_motion.active) {
                     inst.refraction[0] = std::clamp(
                         inst.refraction[0]

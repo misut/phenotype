@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 69);
+    assert(material_plan_contract_version == 70);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -3071,6 +3071,10 @@ void test_container_group_surface_aggregates_member_interaction() {
     assert(!records[0].plan.interaction.pointer_lens_active);
     assert(records[1].plan.specular.interaction_driven);
     assert(records[1].plan.interaction.pointer_lens_active);
+    assert(records[1].plan.refraction.interaction_driven);
+    assert(records[1].plan.dynamic_lighting.interaction_driven);
+    assert(records[1].plan.glass_thickness.interaction_driven);
+    assert(records[1].plan.glass_dispersion.interaction_driven);
 
     auto const first_execution =
         material_container_execution_descriptor(records[0], records);
@@ -3142,6 +3146,42 @@ void test_container_group_surface_aggregates_member_interaction() {
            == records[1].plan.interaction.control_morph_edge);
     assert(first_execution.group_interaction_control_morph_shadow
            == records[1].plan.interaction.control_morph_shadow);
+    assert(first_execution.group_interaction_refraction_active);
+    assert(first_execution.group_interaction_refraction_strength
+           == records[1].plan.refraction.strength);
+    assert(first_execution.group_interaction_refraction_edge_bias
+           == records[1].plan.refraction.edge_bias);
+    assert(first_execution.group_interaction_refraction_max_offset_pixels
+           == records[1].plan.refraction.max_offset_pixels);
+    assert(first_execution.group_interaction_refraction_edge_caustic_intensity
+           == records[1].plan.refraction.edge_caustic_intensity);
+    assert(first_execution.group_interaction_dynamic_lighting_active);
+    assert(first_execution.group_interaction_dynamic_light_direction_x
+           == records[1].plan.dynamic_lighting.direction_x);
+    assert(first_execution.group_interaction_dynamic_light_direction_y
+           == records[1].plan.dynamic_lighting.direction_y);
+    assert(first_execution.group_interaction_dynamic_light_highlight
+           == records[1].plan.dynamic_lighting.highlight_strength);
+    assert(first_execution.group_interaction_dynamic_light_shadow
+           == records[1].plan.dynamic_lighting.shadow_strength);
+    assert(first_execution.group_interaction_glass_thickness_active);
+    assert(first_execution.group_interaction_glass_thickness
+           == records[1].plan.glass_thickness.thickness);
+    assert(first_execution.group_interaction_glass_lensing_gain
+           == records[1].plan.glass_thickness.lensing_gain);
+    assert(first_execution.group_interaction_glass_shadow_gain
+           == records[1].plan.glass_thickness.shadow_gain);
+    assert(first_execution.group_interaction_glass_scattering_gain
+           == records[1].plan.glass_thickness.scattering_gain);
+    assert(first_execution.group_interaction_glass_dispersion_active);
+    assert(first_execution.group_interaction_glass_dispersion_axial_offset
+           == records[1].plan.glass_dispersion.axial_offset_pixels);
+    assert(first_execution.group_interaction_glass_dispersion_tangential_offset
+           == records[1].plan.glass_dispersion.tangential_offset_pixels);
+    assert(first_execution.group_interaction_glass_dispersion_prismatic_gain
+           == records[1].plan.glass_dispersion.prismatic_gain);
+    assert(first_execution.group_interaction_glass_dispersion_caustic_spread
+           == records[1].plan.glass_dispersion.caustic_spread);
 
     std::puts("PASS: container group surface aggregates member interaction");
 }
@@ -3391,6 +3431,10 @@ void test_glass_effect_union_aggregates_member_interaction() {
     assert(!records[0].plan.specular.interaction_driven);
     assert(records[1].plan.specular.interaction_driven);
     assert(records[1].plan.interaction.pointer_lens_active);
+    assert(records[1].plan.refraction.interaction_driven);
+    assert(records[1].plan.dynamic_lighting.interaction_driven);
+    assert(records[1].plan.glass_thickness.interaction_driven);
+    assert(records[1].plan.glass_dispersion.interaction_driven);
 
     auto const first_execution =
         material_container_execution_descriptor(records[0], records);
@@ -3438,6 +3482,22 @@ void test_glass_effect_union_aggregates_member_interaction() {
            == records[1].plan.interaction.control_morph_edge);
     assert(first_execution.group_interaction_control_morph_shadow
            == records[1].plan.interaction.control_morph_shadow);
+    assert(first_execution.group_interaction_refraction_active);
+    assert(first_execution.group_interaction_refraction_strength
+           == records[1].plan.refraction.strength);
+    assert(first_execution.group_interaction_dynamic_lighting_active);
+    assert(first_execution.group_interaction_dynamic_light_direction_x
+           == records[1].plan.dynamic_lighting.direction_x);
+    assert(first_execution.group_interaction_dynamic_light_direction_y
+           == records[1].plan.dynamic_lighting.direction_y);
+    assert(first_execution.group_interaction_glass_thickness_active);
+    assert(first_execution.group_interaction_glass_thickness
+           == records[1].plan.glass_thickness.thickness);
+    assert(first_execution.group_interaction_glass_dispersion_active);
+    assert(first_execution.group_interaction_glass_dispersion_axial_offset
+           == records[1].plan.glass_dispersion.axial_offset_pixels);
+    assert(first_execution.group_interaction_glass_dispersion_prismatic_gain
+           == records[1].plan.glass_dispersion.prismatic_gain);
 
     std::puts("PASS: glass effect union aggregates member interaction");
 }

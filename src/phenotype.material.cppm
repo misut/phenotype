@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 69;
+inline constexpr std::uint32_t material_plan_contract_version = 70;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1694,6 +1694,26 @@ struct MaterialContainerExecutionDescriptor {
     float group_interaction_control_morph_depth = 0.0f;
     float group_interaction_control_morph_edge = 0.0f;
     float group_interaction_control_morph_shadow = 0.0f;
+    bool group_interaction_refraction_active = false;
+    float group_interaction_refraction_strength = 0.0f;
+    float group_interaction_refraction_edge_bias = 0.0f;
+    float group_interaction_refraction_max_offset_pixels = 0.0f;
+    float group_interaction_refraction_edge_caustic_intensity = 0.0f;
+    bool group_interaction_dynamic_lighting_active = false;
+    float group_interaction_dynamic_light_direction_x = 0.0f;
+    float group_interaction_dynamic_light_direction_y = 0.0f;
+    float group_interaction_dynamic_light_highlight = 0.0f;
+    float group_interaction_dynamic_light_shadow = 0.0f;
+    bool group_interaction_glass_thickness_active = false;
+    float group_interaction_glass_thickness = 0.0f;
+    float group_interaction_glass_lensing_gain = 1.0f;
+    float group_interaction_glass_shadow_gain = 1.0f;
+    float group_interaction_glass_scattering_gain = 1.0f;
+    bool group_interaction_glass_dispersion_active = false;
+    float group_interaction_glass_dispersion_axial_offset = 0.0f;
+    float group_interaction_glass_dispersion_tangential_offset = 0.0f;
+    float group_interaction_glass_dispersion_prismatic_gain = 1.0f;
+    float group_interaction_glass_dispersion_caustic_spread = 0.0f;
 };
 
 struct MaterialPaintLayerExecutionGeometry {
@@ -3912,6 +3932,54 @@ inline void material_apply_container_group_interaction_source(
             source_plan.interaction.control_morph_edge;
         execution.group_interaction_control_morph_shadow =
             source_plan.interaction.control_morph_shadow;
+    }
+    if (source_plan.refraction.active
+        && source_plan.refraction.interaction_driven) {
+        execution.group_interaction_refraction_active = true;
+        execution.group_interaction_refraction_strength =
+            source_plan.refraction.strength;
+        execution.group_interaction_refraction_edge_bias =
+            source_plan.refraction.edge_bias;
+        execution.group_interaction_refraction_max_offset_pixels =
+            source_plan.refraction.max_offset_pixels;
+        execution.group_interaction_refraction_edge_caustic_intensity =
+            source_plan.refraction.edge_caustic_intensity;
+    }
+    if (source_plan.dynamic_lighting.active
+        && source_plan.dynamic_lighting.interaction_driven) {
+        execution.group_interaction_dynamic_lighting_active = true;
+        execution.group_interaction_dynamic_light_direction_x =
+            source_plan.dynamic_lighting.direction_x;
+        execution.group_interaction_dynamic_light_direction_y =
+            source_plan.dynamic_lighting.direction_y;
+        execution.group_interaction_dynamic_light_highlight =
+            source_plan.dynamic_lighting.highlight_strength;
+        execution.group_interaction_dynamic_light_shadow =
+            source_plan.dynamic_lighting.shadow_strength;
+    }
+    if (source_plan.glass_thickness.active
+        && source_plan.glass_thickness.interaction_driven) {
+        execution.group_interaction_glass_thickness_active = true;
+        execution.group_interaction_glass_thickness =
+            source_plan.glass_thickness.thickness;
+        execution.group_interaction_glass_lensing_gain =
+            source_plan.glass_thickness.lensing_gain;
+        execution.group_interaction_glass_shadow_gain =
+            source_plan.glass_thickness.shadow_gain;
+        execution.group_interaction_glass_scattering_gain =
+            source_plan.glass_thickness.scattering_gain;
+    }
+    if (source_plan.glass_dispersion.active
+        && source_plan.glass_dispersion.interaction_driven) {
+        execution.group_interaction_glass_dispersion_active = true;
+        execution.group_interaction_glass_dispersion_axial_offset =
+            source_plan.glass_dispersion.axial_offset_pixels;
+        execution.group_interaction_glass_dispersion_tangential_offset =
+            source_plan.glass_dispersion.tangential_offset_pixels;
+        execution.group_interaction_glass_dispersion_prismatic_gain =
+            source_plan.glass_dispersion.prismatic_gain;
+        execution.group_interaction_glass_dispersion_caustic_spread =
+            source_plan.glass_dispersion.caustic_spread;
     }
 }
 
