@@ -1100,6 +1100,20 @@ void test_material_runtime_record_json_contract() {
     assert(first_member.at("union_id").as_integer() == 4);
     assert(first_member.at("shape_union_expected").as_bool());
     assert(first_member.at("morph_transitions").as_bool());
+    assert(first_member.at("glass_namespace_id").as_integer() == 0);
+    assert(first_member.at("glass_effect_id").as_integer() == 0);
+    assert(first_member.at("glass_effect_participates").as_bool() == false);
+    assert(first_member
+               .at("glass_effect_matched_geometry_candidate")
+               .as_bool() == false);
+    assert(first_member.at("glass_effect_match_execution").as_bool()
+           == false);
+    assert(first_member.at("glass_effect_surface_count").as_integer() == 0);
+    assert(first_member.at("glass_effect_match_progress").as_float()
+           == 1.0f);
+    assert(first_member
+               .at("glass_effect_match_blend_strength")
+               .as_float() == 0.0f);
     assert(first_member.at("group_execution_policy").as_string()
            == "group-edge-continuity");
     assert(first_member.at("shape_blend_execution").as_bool());

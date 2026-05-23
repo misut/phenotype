@@ -2620,6 +2620,36 @@ namespace detail {
             "morph_transitions",
             json::Value{plan.container.morph_transitions});
         out.emplace(
+            "glass_namespace_id",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.glass_identity.namespace_id)});
+        out.emplace(
+            "glass_effect_id",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.glass_identity.effect_id)});
+        out.emplace(
+            "glass_effect_participates",
+            json::Value{plan.glass_identity.participates});
+        out.emplace(
+            "glass_effect_matched_geometry_candidate",
+            json::Value{plan.glass_identity.matched_geometry_candidate});
+        out.emplace(
+            "glass_effect_match_execution",
+            json::Value{execution.glass_effect_match_execution});
+        out.emplace(
+            "glass_effect_surface_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    execution.glass_effect_surface_count)});
+        out.emplace(
+            "glass_effect_match_progress",
+            json::Value{execution.glass_effect_match_progress});
+        out.emplace(
+            "glass_effect_match_blend_strength",
+            json::Value{execution.glass_effect_match_blend_strength});
+        out.emplace(
             "shared_backdrop_scope",
             json::Value{plan.container.shared_backdrop_scope});
         out.emplace(

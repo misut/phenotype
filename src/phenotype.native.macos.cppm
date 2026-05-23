@@ -2412,7 +2412,8 @@ inline void apply_material_container_execution_descriptors(
                 (execution->shape_blend_execution ? 1.0f : 0.0f)
                 + (execution->union_execution ? 2.0f : 0.0f)
                 + (execution->morph_execution ? 4.0f : 0.0f)
-                + (execution->shared_backdrop_scope ? 8.0f : 0.0f);
+                + (execution->shared_backdrop_scope ? 8.0f : 0.0f)
+                + (execution->glass_effect_match_execution ? 16.0f : 0.0f);
         }
     }
 }

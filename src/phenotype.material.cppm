@@ -1245,12 +1245,16 @@ struct MaterialContainerExecutionDescriptor {
     std::uint32_t command_index = 0;
     std::uint32_t container_id = 0;
     std::uint32_t surface_count = 0;
+    std::uint32_t glass_namespace_id = 0;
+    std::uint32_t glass_effect_id = 0;
+    std::uint32_t glass_effect_surface_count = 0;
     bool active = false;
     bool group_bounds_valid = false;
     bool shared_backdrop_scope = false;
     bool shape_blend_execution = false;
     bool union_execution = false;
     bool morph_execution = false;
+    bool glass_effect_match_execution = false;
     char const* execution_policy = "isolated";
     float group_x = 0.0f;
     float group_y = 0.0f;
@@ -1258,6 +1262,8 @@ struct MaterialContainerExecutionDescriptor {
     float group_h = 0.0f;
     float shape_blend_strength = 0.0f;
     float inner_edge_alpha_blend_strength = 0.0f;
+    float glass_effect_match_progress = 1.0f;
+    float glass_effect_match_blend_strength = 0.0f;
 };
 
 struct MaterialRuntimeSummary {
@@ -1751,11 +1757,42 @@ struct MaterialContainerGroupAccumulator {
     float max_blend_distance = 0.0f;
 };
 
+struct MaterialGlassEffectMatchAccumulator {
+    std::uint32_t namespace_id = 0;
+    std::uint32_t effect_id = 0;
+    std::uint32_t container_id = 0;
+    std::uint32_t surface_count = 0;
+    std::uint32_t matched_geometry_surfaces = 0;
+    bool has_bounds = false;
+    float min_x = 0.0f;
+    float min_y = 0.0f;
+    float max_x = 0.0f;
+    float max_y = 0.0f;
+    float max_progress = 0.0f;
+};
+
 inline bool material_plan_in_container(
         MaterialPlan const& plan,
         std::uint32_t container_id) noexcept {
     return plan.container.participates
         && plan.container.container_id == container_id;
+}
+
+inline bool material_plans_share_glass_effect_identity(
+        MaterialPlan const& a,
+        MaterialPlan const& b) noexcept {
+    return a.glass_identity.participates
+        && b.glass_identity.participates
+        && a.glass_identity.namespace_id == b.glass_identity.namespace_id
+        && a.glass_identity.effect_id == b.glass_identity.effect_id;
+}
+
+inline bool material_plan_in_glass_effect_match_group(
+        MaterialPlan const& plan,
+        MaterialPlan const& anchor,
+        std::uint32_t container_id) noexcept {
+    return material_plans_share_glass_effect_identity(plan, anchor)
+        && material_plan_in_container(plan, container_id);
 }
 
 inline float material_rect_gap(MaterialGeometry const& a,
@@ -1776,6 +1813,29 @@ inline void accumulate_material_container_bounds(
         return;
     group.max_blend_distance =
         std::max(group.max_blend_distance, plan.container.blend_distance);
+    auto const x0 = plan.geometry.x;
+    auto const y0 = plan.geometry.y;
+    auto const x1 = plan.geometry.x + std::max(0.0f, plan.geometry.w);
+    auto const y1 = plan.geometry.y + std::max(0.0f, plan.geometry.h);
+    if (!group.has_bounds) {
+        group.has_bounds = true;
+        group.min_x = x0;
+        group.min_y = y0;
+        group.max_x = x1;
+        group.max_y = y1;
+        return;
+    }
+    group.min_x = std::min(group.min_x, x0);
+    group.min_y = std::min(group.min_y, y0);
+    group.max_x = std::max(group.max_x, x1);
+    group.max_y = std::max(group.max_y, y1);
+}
+
+inline void accumulate_material_glass_effect_match_bounds(
+        MaterialGlassEffectMatchAccumulator& group,
+        MaterialPlan const& plan) noexcept {
+    if (!plan.shape.valid)
+        return;
     auto const x0 = plan.geometry.x;
     auto const y0 = plan.geometry.y;
     auto const x1 = plan.geometry.x + std::max(0.0f, plan.geometry.w);
@@ -1855,6 +1915,22 @@ inline float material_container_group_shape_blend_strength(
         0.0f,
         1.0f);
     return std::clamp(std::max(0.25f, proximity), 0.0f, 1.0f);
+}
+
+inline bool material_glass_effect_match_execution_active(
+        MaterialGlassEffectMatchAccumulator const& group) noexcept {
+    return group.surface_count > 1u
+        && group.matched_geometry_surfaces > 0u
+        && group.has_bounds;
+}
+
+inline float material_glass_effect_match_blend_strength(
+        MaterialGlassEffectMatchAccumulator const& group) noexcept {
+    if (!material_glass_effect_match_execution_active(group))
+        return 0.0f;
+    auto const progress = std::clamp(group.max_progress, 0.0f, 1.0f);
+    auto const smooth = progress * progress * (3.0f - 2.0f * progress);
+    return std::clamp(std::max(0.25f, smooth), 0.0f, 1.0f);
 }
 
 inline float material_container_group_blend_continuity(
@@ -2008,6 +2084,41 @@ inline MaterialContainerGroupAccumulator accumulate_material_container_group(
     return group;
 }
 
+inline MaterialGlassEffectMatchAccumulator
+accumulate_material_glass_effect_match_group(
+        std::span<MaterialRuntimeRecord const> records,
+        MaterialPlan const& anchor,
+        std::uint32_t container_id) noexcept {
+    MaterialGlassEffectMatchAccumulator group{
+        .namespace_id = anchor.glass_identity.namespace_id,
+        .effect_id = anchor.glass_identity.effect_id,
+        .container_id = container_id,
+    };
+    if (!anchor.glass_identity.participates
+        || !anchor.glass_identity.matched_geometry_candidate
+        || container_id == 0u) {
+        return group;
+    }
+    for (auto const& candidate_record : records) {
+        auto const& candidate = candidate_record.plan;
+        if (!material_plan_in_glass_effect_match_group(
+                candidate,
+                anchor,
+                container_id)) {
+            continue;
+        }
+        ++group.surface_count;
+        accumulate_material_glass_effect_match_bounds(group, candidate);
+        if (candidate.glass_identity.matched_geometry_candidate) {
+            ++group.matched_geometry_surfaces;
+            group.max_progress = std::max(
+                group.max_progress,
+                candidate.transition.progress);
+        }
+    }
+    return group;
+}
+
 inline MaterialContainerExecutionDescriptor
 material_container_execution_descriptor_from_group(
         MaterialRuntimeRecord const& record,
@@ -2024,29 +2135,70 @@ material_container_execution_descriptor_from_group(
 
     descriptor.container_id = group.container_id;
     descriptor.surface_count = group.surface_count;
+    descriptor.glass_namespace_id = plan.glass_identity.namespace_id;
+    descriptor.glass_effect_id = plan.glass_identity.effect_id;
     descriptor.active = plan.primary_pass.active && group.surface_count > 0u;
     descriptor.group_bounds_valid = group.has_bounds;
     descriptor.shared_backdrop_scope = plan.container.shared_backdrop_scope
         && group.shared_backdrop_scope_surfaces > 1u;
+    auto const glass_group = accumulate_material_glass_effect_match_group(
+        records,
+        plan,
+        group.container_id);
+    descriptor.glass_effect_surface_count = glass_group.surface_count;
+    descriptor.glass_effect_match_progress =
+        glass_group.max_progress > 0.0f ? glass_group.max_progress : 1.0f;
+    descriptor.glass_effect_match_blend_strength =
+        material_glass_effect_match_blend_strength(glass_group);
+    descriptor.glass_effect_match_execution =
+        descriptor.active
+        && material_glass_effect_match_execution_active(glass_group);
+    auto const group_shape_blend_execution =
+        material_container_group_shape_blend_execution_active(group);
     descriptor.shape_blend_execution =
         descriptor.active
-        && material_container_group_shape_blend_execution_active(group);
+        && (group_shape_blend_execution
+            || descriptor.glass_effect_match_execution);
     descriptor.union_execution =
-        descriptor.shape_blend_execution && group.union_surfaces > 0u;
+        descriptor.shape_blend_execution
+        && group.union_surfaces > 0u
+        && !descriptor.glass_effect_match_execution;
     descriptor.morph_execution =
-        descriptor.shape_blend_execution && group.morph_surfaces > 0u;
+        descriptor.shape_blend_execution
+        && (group.morph_surfaces > 0u
+            || descriptor.glass_effect_match_execution);
     descriptor.execution_policy =
-        material_container_execution_policy_name(group);
+        descriptor.glass_effect_match_execution
+            ? "glass-effect-matched-geometry"
+            : material_container_execution_policy_name(group);
     descriptor.shape_blend_strength =
-        material_container_member_shape_blend_strength(
-            record,
-            records,
-            group);
+        std::max(
+            material_container_member_shape_blend_strength(
+                record,
+                records,
+                group),
+            descriptor.glass_effect_match_blend_strength);
     descriptor.inner_edge_alpha_blend_strength =
-        material_container_inner_edge_alpha_blend_strength(
-            group,
-            descriptor.shape_blend_strength);
-    if (group.has_bounds) {
+        descriptor.glass_effect_match_execution
+            ? std::max(
+                descriptor.glass_effect_match_blend_strength,
+                material_container_inner_edge_alpha_blend_strength(
+                    group,
+                    descriptor.shape_blend_strength))
+            : material_container_inner_edge_alpha_blend_strength(
+                group,
+                descriptor.shape_blend_strength);
+    if (descriptor.glass_effect_match_execution && glass_group.has_bounds) {
+        descriptor.group_bounds_valid = true;
+        descriptor.group_x = glass_group.min_x;
+        descriptor.group_y = glass_group.min_y;
+        descriptor.group_w = std::max(
+            0.0f,
+            glass_group.max_x - glass_group.min_x);
+        descriptor.group_h = std::max(
+            0.0f,
+            glass_group.max_y - glass_group.min_y);
+    } else if (group.has_bounds) {
         descriptor.group_x = group.min_x;
         descriptor.group_y = group.min_y;
         descriptor.group_w = std::max(0.0f, group.max_x - group.min_x);
