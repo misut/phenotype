@@ -450,10 +450,11 @@ void view(State const& state) {
         glass_group.spacing = 16.0f;
         glass_group.interactive = true;
         layout::glass_effect_container(glass_group, [&] {
-            auto glass = layout::GlassEffectOptions{};
+            auto glass = layout::glass_effect_options(
+                layout::glass_regular()
+                    .tint(Color{64, 156, 255, 96})
+                    .interactive());
             glass.role = MaterialSurfaceRole::Content;
-            glass.has_tint = true;
-            glass.tint = Color{64, 156, 255, 96};
             glass.glass_identity =
                 layout::glass_effect_identity("native.showcase", "surface");
             glass.transition = layout::glass_matched_geometry_transition(1.0f);

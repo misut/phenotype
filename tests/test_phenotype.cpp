@@ -3174,6 +3174,105 @@ void test_glass_effect_surface_api_emits_capsule_tint_contract() {
     std::puts("PASS: glass effect surface api emits capsule tint contract");
 }
 
+void test_glass_effect_style_variants_map_to_material_contract() {
+    auto const accent_tint = Color{64, 156, 255, 112};
+    auto regular = layout::glass_effect_options(
+        layout::glass_regular()
+            .tint(accent_tint)
+            .interactive());
+    assert(regular.kind == MaterialKind::Regular);
+    assert(regular.interactive);
+    assert(regular.has_tint);
+    assert(regular.tint == accent_tint);
+    assert(regular.shape == MaterialSurfaceShape::Capsule);
+
+    auto const clear_border = Color{255, 255, 255, 120};
+    auto clear = layout::glass_effect_surface_options(
+        layout::glass_effect_options(
+            layout::glass_clear()
+                .tint(accent_tint)
+                .border(clear_border)
+                .interactive()));
+    assert(clear.kind == MaterialKind::Clear);
+    assert(clear.interactive);
+    assert(clear.has_material_override);
+    assert(clear.material_override.kind == MaterialKind::Clear);
+    assert(clear.material_override.tint == accent_tint);
+    assert(clear.material_override.border == clear_border);
+
+    auto identity = layout::glass_effect_options(
+        layout::glass_identity()
+            .tint(accent_tint)
+            .border(clear_border)
+            .interactive());
+    assert(identity.kind == MaterialKind::None);
+    assert(!identity.interactive);
+    assert(!identity.has_tint);
+    assert(!identity.has_border);
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto identity_root_h = detail::alloc_node();
+    detail::node_at(identity_root_h).style.flex_direction =
+        FlexDirection::Column;
+    Scope identity_scope(identity_root_h);
+    Scope::set_current(&identity_scope);
+    layout::glass_effect(layout::glass_identity().interactive(), [] {
+        widget::text("Identity glass");
+    });
+    Scope::set_current(nullptr);
+
+    auto const& identity_root = detail::node_at(identity_root_h);
+    assert(identity_root.children.size() == 1);
+    auto const& identity_surface =
+        detail::node_at(identity_root.children[0]);
+    assert(identity_surface.material.kind == MaterialKind::None);
+    assert(identity_surface.material_shape == MaterialSurfaceShape::Capsule);
+    assert(identity_surface.background.a == 0);
+    assert(!identity_surface.material.container.interactive);
+
+    LAYOUT_NODE(identity_root_h, 320.0f);
+    PAINT_NODE(identity_root_h, 0, 0, 0, 600.0f);
+    auto identity_commands = parse_commands(CMD_BUF, CMD_LEN);
+    bool identity_emitted_material = false;
+    for (auto const& cmd : identity_commands) {
+        identity_emitted_material =
+            identity_emitted_material
+            || std::holds_alternative<MaterialRectCmd>(cmd);
+    }
+    assert(!identity_emitted_material);
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto clear_root_h = detail::alloc_node();
+    detail::node_at(clear_root_h).style.flex_direction =
+        FlexDirection::Column;
+    Scope clear_scope(clear_root_h);
+    Scope::set_current(&clear_scope);
+    layout::glass_effect(
+        layout::glass_clear().tint(accent_tint).interactive(),
+        [] {
+            widget::text("Clear glass");
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(clear_root_h, 320.0f);
+    PAINT_NODE(clear_root_h, 0, 0, 0, 600.0f);
+    auto clear_commands = parse_commands(CMD_BUF, CMD_LEN);
+    auto const& clear_cmd = first_material_command(clear_commands);
+    assert(clear_cmd.material.kind == MaterialKind::Clear);
+    assert(clear_cmd.material.tint == accent_tint);
+    assert(clear_cmd.material.container.interactive);
+
+    std::puts("PASS: glass effect style variants map to material contract");
+}
+
 void test_glass_surface_presets_emit_material_contract() {
     auto toolbar = layout::glass_surface_options(
         layout::GlassSurfacePreset::Toolbar);
@@ -6446,6 +6545,7 @@ int main() {
     test_material_surface_resolves_live_input_interaction();
     test_material_surface_interactive_option_enables_plan_response();
     test_glass_effect_surface_api_emits_capsule_tint_contract();
+    test_glass_effect_style_variants_map_to_material_contract();
     test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();
     test_glass_effect_container_scope_emits_morph_context();
