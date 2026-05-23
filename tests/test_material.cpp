@@ -62,7 +62,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 51);
+    assert(material_plan_contract_version == 52);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -904,6 +904,80 @@ void test_interactive_material_modulates_optics_contract() {
     assert(reduced_plan.specular.intensity < plan.specular.intensity);
     assert(!reduced_plan.container.morph_transitions);
     std::puts("PASS: interactive material modulates optics contract");
+}
+
+void test_interactive_fallback_material_adds_pointer_highlight_layer() {
+    auto env = sampled_environment();
+    env.capabilities.material_backdrop_blur = false;
+    env.capabilities.shader_blur = false;
+    env.capabilities.frame_history = false;
+    env.backdrop.available = false;
+    env.backdrop.stable = false;
+    env.backdrop.source = "none";
+
+    auto baseline = regular_request();
+    baseline.style.container = MaterialContainerDescriptor{
+        .container_id = 89u,
+        .union_id = 0u,
+        .spacing = 18.0f,
+        .interactive = true,
+        .morph_transitions = true,
+    };
+    auto request = baseline;
+    request.style.interaction = MaterialInteractionDescriptor{
+        .hovered = true,
+        .pressed = false,
+        .focused = false,
+        .pointer_inside = true,
+        .pointer_x = 0.75f,
+        .pointer_y = 0.25f,
+    };
+
+    auto const baseline_plan = plan_material_surface(baseline, env);
+    auto const plan = plan_material_surface(request, env);
+
+    assert(plan.fallback());
+    assert(plan.interaction.enabled);
+    assert(plan.interaction.active);
+    assert(plan.interaction.specular_highlight_active);
+    assert(plan.interaction.pointer_lens_active);
+    assert(!plan.refraction.active);
+    assert(plan.paint_layer_count == 4u);
+    assert(plan.dropped_paint_layer_count == 0u);
+    assert(baseline_plan.paint_layer_count == 3u);
+
+    auto const& highlight = plan.paint_layers[2];
+    assert(std::string_view(highlight.name) == "pointer-specular-highlight");
+    assert(std::string_view(highlight.executor) == "rounded-fill");
+    assert(highlight.x_offset > 0.0f);
+    assert(highlight.y_offset < 0.0f);
+    assert(highlight.inflate > plan.paint_layers[1].inflate);
+    assert(highlight.radius_delta == highlight.inflate);
+    assert(highlight.opacity > 0.0f);
+    assert(highlight.opacity <= 0.26f);
+    assert(highlight.soft_edge_radius > 0.0f);
+    assert(highlight.color.r == 255);
+    assert(highlight.color.g == 255);
+    assert(highlight.color.b == 255);
+    assert(highlight.color.a == 255);
+    assert(std::string_view(plan.paint_layers[3].name)
+        == "fallback-edge-highlight");
+    assert(plan.observation_contract.expected_paint_layers == 4u);
+    assert(plan.observation_contract.expected_active_paint_layers == 4u);
+    assert(plan.observation_contract.expected_shadow_paint_layers == 1u);
+    assert(plan.observation_contract.expected_fill_paint_layers == 2u);
+    assert(plan.observation_contract.expected_edge_paint_layers == 1u);
+    assert(plan.resource_budget.max_paint_layer_inflate >= highlight.inflate);
+
+    auto const geometry =
+        material_paint_layer_execution_geometry(plan, highlight);
+    assert(geometry.active);
+    assert(geometry.x < plan.geometry.x + highlight.x_offset);
+    assert(geometry.y < plan.geometry.y + highlight.y_offset);
+    assert(geometry.w > plan.geometry.w);
+    assert(geometry.h > plan.geometry.h);
+
+    std::puts("PASS: interactive fallback material adds pointer highlight layer");
 }
 
 void test_materialize_transition_modulates_glass_optics_contract() {
@@ -1956,6 +2030,7 @@ int main() {
     test_foreground_contrast_gap_uses_absolute_contrast_candidate();
     test_increase_contrast_raises_foreground_readability_contract();
     test_interactive_material_modulates_optics_contract();
+    test_interactive_fallback_material_adds_pointer_highlight_layer();
     test_materialize_transition_modulates_glass_optics_contract();
     test_glass_effect_identity_marks_matched_transition_contract();
     test_glass_effect_identity_drives_matched_execution_contract();
