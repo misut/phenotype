@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 63;
+inline constexpr std::uint32_t material_plan_contract_version = 64;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -653,6 +653,7 @@ struct MaterialSpectralTintProfile {
     bool active = false;
     bool backdrop_driven = false;
     bool color_driven = false;
+    bool tint_driven = false;
     bool caustic_driven = false;
     bool bounded = true;
     float warmth = 0.0f;
@@ -660,6 +661,7 @@ struct MaterialSpectralTintProfile {
     float dispersion = 0.0f;
     float rim_tint = 0.0f;
     float balance = 0.5f;
+    float tint_influence = 0.0f;
 };
 
 struct MaterialDynamicLightingProfile {
@@ -882,6 +884,8 @@ struct MaterialOpticalComposition {
     float spectral_tint_coolness = 0.0f;
     float spectral_dispersion = 0.0f;
     float spectral_rim_tint = 0.0f;
+    float spectral_tint_balance = 0.5f;
+    float spectral_tint_influence = 0.0f;
     float dynamic_light_direction_x = 0.0f;
     float dynamic_light_direction_y = 0.0f;
     float dynamic_light_highlight = 0.0f;
@@ -6109,8 +6113,17 @@ inline MaterialEdgeOpticsProfile material_resolve_edge_optics_profile(
 }
 
 inline char const* material_spectral_tint_source_name(
+        bool tint_driven,
         bool color_driven,
         bool caustic_driven) noexcept {
+    if (tint_driven && color_driven && caustic_driven)
+        return "configured-tint-sampled-backdrop-spectral-caustics";
+    if (tint_driven && color_driven)
+        return "configured-tint-sampled-backdrop-spectral-tint";
+    if (tint_driven && caustic_driven)
+        return "configured-tint-spectral-caustics";
+    if (tint_driven)
+        return "configured-tint-spectral-rim";
     if (color_driven && caustic_driven)
         return "sampled-backdrop-spectral-caustics";
     if (color_driven)
@@ -6136,6 +6149,23 @@ inline MaterialSpectralTintProfile material_resolve_spectral_tint_profile(
     auto const blue = material_color_channel_fraction(source.b);
     auto const luma = std::clamp(material_color_luma(source), 0.0f, 1.0f);
     auto const colorfulness = material_colorfulness(source);
+    auto const configured_tint = plan.theme.tint;
+    auto const tint_alpha = material_alpha_fraction(configured_tint);
+    auto const tint_colorfulness = material_colorfulness(configured_tint);
+    auto const tint_influence =
+        std::clamp((tint_alpha - 0.12f) / 0.42f, 0.0f, 1.0f)
+        * std::clamp((tint_colorfulness - 0.04f) / 0.56f, 0.0f, 1.0f);
+    auto const tint_red = material_color_channel_fraction(configured_tint.r);
+    auto const tint_green = material_color_channel_fraction(configured_tint.g);
+    auto const tint_blue = material_color_channel_fraction(configured_tint.b);
+    auto const tint_warm_bias = std::clamp(
+        tint_red - tint_blue + 0.28f * std::max(0.0f, tint_red - tint_green),
+        0.0f,
+        1.0f);
+    auto const tint_cool_bias = std::clamp(
+        tint_blue - tint_red + 0.22f * std::max(0.0f, tint_green - tint_red),
+        0.0f,
+        1.0f);
     auto const warm_bias = std::clamp(
         red - blue + 0.25f * std::max(0.0f, red - green),
         0.0f,
@@ -6159,33 +6189,38 @@ inline MaterialSpectralTintProfile material_resolve_spectral_tint_profile(
             * motion_scale
             * (0.012f
                + 0.060f * colorfulness
+               + 0.052f * tint_influence
                + 0.50f * caustic
                + 0.025f * backdrop_response),
         0.0f,
         0.20f);
 
     profile.warmth = std::clamp(
-        base * (0.44f + 1.20f * warm_bias + 0.10f * luma),
+        base * (0.44f + 1.20f * warm_bias + 0.10f * luma)
+            + 0.085f * tint_influence * (0.34f + 1.15f * tint_warm_bias),
         0.0f,
-        0.18f);
+        0.22f);
     profile.coolness = std::clamp(
-        base * (0.44f + 1.20f * cool_bias + 0.10f * (1.0f - luma)),
+        base * (0.44f + 1.20f * cool_bias + 0.10f * (1.0f - luma))
+            + 0.085f * tint_influence * (0.34f + 1.15f * tint_cool_bias),
         0.0f,
-        0.18f);
+        0.22f);
     profile.dispersion = std::clamp(
         base * (0.52f + 0.70f * std::clamp(plan.refraction.strength,
                                            0.0f,
                                            0.35f))
             + 0.55f * plan.edge_optics.chromatic_fringe
-            + 0.24f * plan.refraction.edge_caustic_intensity,
+            + 0.24f * plan.refraction.edge_caustic_intensity
+            + 0.040f * tint_influence,
         0.0f,
-        0.18f);
+        0.22f);
     profile.rim_tint = std::clamp(
         0.040f
             + 0.45f * base
-            + 0.35f * std::max(profile.warmth, profile.coolness),
+            + 0.35f * std::max(profile.warmth, profile.coolness)
+            + 0.050f * tint_influence,
         0.0f,
-        0.22f);
+        0.28f);
 
     auto const tint_total = profile.warmth + profile.coolness;
     profile.balance = tint_total > 0.0001f
@@ -6205,10 +6240,13 @@ inline MaterialSpectralTintProfile material_resolve_spectral_tint_profile(
     profile.active = true;
     profile.backdrop_driven = true;
     profile.color_driven = colorfulness > 0.025f;
+    profile.tint_driven = tint_influence > 0.0001f;
     profile.caustic_driven = caustic > 0.0001f;
     profile.bounded = true;
+    profile.tint_influence = tint_influence;
     profile.model = "spectral-liquid-glass-tint";
     profile.source = material_spectral_tint_source_name(
+        profile.tint_driven,
         profile.color_driven,
         profile.caustic_driven);
     return profile;
@@ -7465,6 +7503,9 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.spectral_tint_coolness = plan.spectral_tint.coolness;
     composition.spectral_dispersion = plan.spectral_tint.dispersion;
     composition.spectral_rim_tint = plan.spectral_tint.rim_tint;
+    composition.spectral_tint_balance = plan.spectral_tint.balance;
+    composition.spectral_tint_influence =
+        plan.spectral_tint.tint_influence;
     composition.dynamic_light_direction_x =
         plan.dynamic_lighting.direction_x;
     composition.dynamic_light_direction_y =

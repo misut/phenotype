@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 63);
+    assert(material_plan_contract_version == 64);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -184,6 +184,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.spectral_tint.active);
     assert(plan.spectral_tint.backdrop_driven);
     assert(!plan.spectral_tint.color_driven);
+    assert(!plan.spectral_tint.tint_driven);
     assert(plan.spectral_tint.caustic_driven);
     assert(plan.spectral_tint.bounded);
     assert(std::string_view(plan.spectral_tint.model)
@@ -372,6 +373,10 @@ void test_sampled_backdrop_access_contract() {
            == plan.spectral_tint.dispersion);
     assert(plan.optical_composition.spectral_rim_tint
            == plan.spectral_tint.rim_tint);
+    assert(plan.optical_composition.spectral_tint_balance
+           == plan.spectral_tint.balance);
+    assert(plan.optical_composition.spectral_tint_influence
+           == plan.spectral_tint.tint_influence);
     assert(plan.optical_composition.dynamic_light_direction_x
            == plan.dynamic_lighting.direction_x);
     assert(plan.optical_composition.dynamic_light_direction_y
@@ -680,6 +685,56 @@ void test_toolbar_scroll_edge_separates_scrolled_content_contract() {
            == hard_plan.scroll_edge.hard_style_strength);
 
     std::puts("PASS: toolbar scroll edge separates scrolled content contract");
+}
+
+void test_configured_tint_drives_glass_chromatics_contract() {
+    auto env = sampled_environment();
+    env.backdrop.color_mean = Color{242, 242, 247, 255};
+    env.backdrop.luma_min = 0.42f;
+    env.backdrop.luma_max = 0.62f;
+    env.backdrop.luma_mean = 0.52f;
+
+    auto neutral = regular_request();
+    neutral.style.tint = Color{255, 255, 255, 96};
+    auto neutral_plan = plan_material_surface(neutral, env);
+    assert(!neutral_plan.spectral_tint.tint_driven);
+    assert(neutral_plan.spectral_tint.tint_influence == 0.0f);
+
+    auto cool = regular_request();
+    cool.style.tint = Color{64, 156, 255, 128};
+    auto cool_plan = plan_material_surface(cool, env);
+    assert(cool_plan.backdrop_sampling);
+    assert(cool_plan.spectral_tint.active);
+    assert(cool_plan.spectral_tint.tint_driven);
+    assert(!cool_plan.spectral_tint.color_driven);
+    assert(cool_plan.spectral_tint.caustic_driven);
+    assert(cool_plan.spectral_tint.tint_influence > 0.0f);
+    assert(std::string_view(cool_plan.spectral_tint.source)
+        == "configured-tint-spectral-caustics");
+    assert(cool_plan.spectral_tint.coolness
+           > neutral_plan.spectral_tint.coolness);
+    assert(cool_plan.spectral_tint.coolness
+           > cool_plan.spectral_tint.warmth);
+    assert(cool_plan.spectral_tint.rim_tint
+           > neutral_plan.spectral_tint.rim_tint);
+    assert(cool_plan.spectral_tint.dispersion
+           > neutral_plan.spectral_tint.dispersion);
+    assert(std::string_view(cool_plan.optical_composition.spectral_tint_source)
+           == cool_plan.spectral_tint.source);
+    assert(cool_plan.optical_composition.spectral_tint_influence
+           == cool_plan.spectral_tint.tint_influence);
+    assert(cool_plan.execution_stages[2].optics.spectral_tint_coolness
+           == cool_plan.spectral_tint.coolness);
+
+    auto warm = regular_request();
+    warm.style.tint = Color{255, 128, 48, 128};
+    auto warm_plan = plan_material_surface(warm, env);
+    assert(warm_plan.spectral_tint.tint_driven);
+    assert(warm_plan.spectral_tint.warmth
+           > warm_plan.spectral_tint.coolness);
+    assert(warm_plan.spectral_tint.balance > 0.5f);
+
+    std::puts("PASS: configured tint drives glass chromatics contract");
 }
 
 void test_glass_thickness_scales_lensing_contract() {
@@ -3420,6 +3475,7 @@ int main() {
     test_sampled_backdrop_access_contract();
     test_backdrop_optical_response_contract();
     test_toolbar_scroll_edge_separates_scrolled_content_contract();
+    test_configured_tint_drives_glass_chromatics_contract();
     test_glass_thickness_scales_lensing_contract();
     test_content_layer_stays_standard_material_contract();
     test_fallback_backdrop_access_contract();
