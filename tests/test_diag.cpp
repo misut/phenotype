@@ -1143,7 +1143,7 @@ void test_material_runtime_record_json_contract() {
                .at("radius")
                .as_float() == 0.0f);
     assert(first_member.at("group_execution_policy").as_string()
-           == "group-edge-continuity");
+           == "glass-effect-union");
     assert(first_member.at("shape_blend_execution").as_bool());
     assert(std::fabs(
                first_member.at("shape_blend_strength").as_float() - 0.75f)
