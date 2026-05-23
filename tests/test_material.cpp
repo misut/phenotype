@@ -912,6 +912,54 @@ void test_materialize_transition_modulates_glass_optics_contract() {
     assert(plan.optical_composition.refraction_strength
            == plan.refraction.strength);
 
+    auto disappearing_request = regular_request();
+    disappearing_request.style.transition = MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::Materialize,
+        .progress = 0.75f,
+        .appearing = false,
+    };
+    auto disappearing_plan =
+        plan_material_surface(disappearing_request, sampled_environment());
+    constexpr auto disappearing_gain = 0.15625f;
+    assert(disappearing_plan.transition.active);
+    assert(disappearing_plan.transition.materialize);
+    assert(!disappearing_plan.transition.matched_geometry);
+    assert(!disappearing_plan.transition.appearing);
+    assert(std::string_view(disappearing_plan.transition.policy)
+        == "materialize-out");
+    assert(std::fabs(disappearing_plan.transition.progress - 0.75f)
+           < 0.0001f);
+    assert(std::fabs(
+               disappearing_plan.transition.opacity_gain - disappearing_gain)
+           < 0.0001f);
+    assert(std::fabs(
+               disappearing_plan.transition.optical_gain - 0.341875f)
+           < 0.0001f);
+    assert(std::fabs(
+               disappearing_plan.transition.shadow_gain - 0.240625f)
+           < 0.0001f);
+    assert(std::fabs(
+               disappearing_plan.transition.refraction_gain
+                   - disappearing_gain)
+           < 0.0001f);
+    assert(disappearing_plan.opacity < baseline.opacity);
+    assert(disappearing_plan.tint.a < baseline.tint.a);
+    assert(disappearing_plan.blur_radius < baseline.blur_radius);
+    assert(disappearing_plan.refraction.strength
+           < baseline.refraction.strength);
+    assert(disappearing_plan.specular.intensity
+           < baseline.specular.intensity);
+    assert(disappearing_plan.optical_composition.transition_required);
+    assert(std::string_view(
+               disappearing_plan.optical_composition.transition_source)
+        == "glass-effect-materialize");
+    assert(disappearing_plan.optical_composition.transition_opacity_gain
+           == disappearing_plan.transition.opacity_gain);
+    assert(disappearing_plan.optical_composition.transition_optical_gain
+           == disappearing_plan.transition.optical_gain);
+    assert(disappearing_plan.optical_composition.transition_refraction_gain
+           == disappearing_plan.transition.refraction_gain);
+
     auto reduced_env = sampled_environment();
     reduced_env.capabilities.reduce_motion = true;
     auto reduced_baseline = plan_material_surface(regular_request(), reduced_env);
