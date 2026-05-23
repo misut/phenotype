@@ -2474,6 +2474,9 @@ namespace detail {
             "shape_blend_strength",
             json::Value{execution.shape_blend_strength});
         out.emplace(
+            "inner_edge_alpha_blend_strength",
+            json::Value{execution.inner_edge_alpha_blend_strength});
+        out.emplace(
             "reduced_motion_suppressed_morph",
             json::Value{plan.container.reduced_motion_suppressed_morph});
         out.emplace(
@@ -2497,6 +2500,8 @@ namespace detail {
             material_container_group_shape_blend_execution_active(group);
         auto const shape_blend_strength =
             material_container_group_shape_blend_strength(group);
+        auto const inner_edge_alpha_blend_strength =
+            material_container_group_inner_edge_alpha_blend_strength(group);
 
         json::Object bounds;
         bounds.emplace("valid", json::Value{group.has_bounds});
@@ -2559,6 +2564,9 @@ namespace detail {
         out.emplace(
             "shape_blend_strength",
             json::Value{shape_blend_strength});
+        out.emplace(
+            "inner_edge_alpha_blend_strength",
+            json::Value{inner_edge_alpha_blend_strength});
         out.emplace(
             "shape_pair_count",
             json::Value{static_cast<std::int64_t>(group.shape_pair_count)});
