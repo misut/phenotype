@@ -2782,6 +2782,34 @@ inline MaterialContainerDescriptor current_material_container() {
     return stack.empty() ? MaterialContainerDescriptor{} : stack.back();
 }
 
+inline bool material_transition_is_identity(
+        MaterialTransitionDescriptor descriptor) noexcept {
+    return descriptor.kind == MaterialGlassTransitionKind::Identity
+        && descriptor.progress == 1.0f
+        && descriptor.appearing;
+}
+
+inline std::vector<MaterialTransitionDescriptor>& material_transition_stack() {
+    static std::vector<MaterialTransitionDescriptor>& stack =
+        *new std::vector<MaterialTransitionDescriptor>();
+    return stack;
+}
+
+inline MaterialTransitionDescriptor current_material_transition() {
+    auto& stack = material_transition_stack();
+    return stack.empty() ? MaterialTransitionDescriptor{} : stack.back();
+}
+
+inline MaterialTransitionDescriptor resolve_material_transition(
+        MaterialTransitionDescriptor requested,
+        bool inherit_transition) {
+    if (!inherit_transition)
+        return requested;
+    if (!material_transition_is_identity(requested))
+        return requested;
+    return current_material_transition();
+}
+
 template<typename F>
     requires std::is_invocable_v<F>
 void material_container(MaterialContainerOptions options, F&& builder) {
@@ -2789,6 +2817,36 @@ void material_container(MaterialContainerOptions options, F&& builder) {
     stack.push_back(material_container_descriptor(options));
     builder();
     stack.pop_back();
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect_transition(MaterialTransitionDescriptor transition,
+                             F&& builder) {
+    auto& stack = material_transition_stack();
+    stack.push_back(transition);
+    builder();
+    stack.pop_back();
+}
+
+inline MaterialTransitionDescriptor glass_materialize_transition(
+        float progress,
+        bool appearing = true) noexcept {
+    return MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::Materialize,
+        .progress = progress,
+        .appearing = appearing,
+    };
+}
+
+inline MaterialTransitionDescriptor glass_matched_geometry_transition(
+        float progress,
+        bool appearing = true) noexcept {
+    return MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::MatchedGeometry,
+        .progress = progress,
+        .appearing = appearing,
+    };
 }
 
 // column — vertical flex container.
@@ -2931,6 +2989,7 @@ struct MaterialSurfaceOptions {
     MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
     MaterialInteractionDescriptor interaction{};
     MaterialTransitionDescriptor transition{};
+    bool inherit_material_transition = true;
     FlexDirection direction = FlexDirection::Column;
     SpaceToken padding = SpaceToken::Lg;
     SpaceToken gap = SpaceToken::Md;
@@ -2996,7 +3055,9 @@ inline void configure_material_surface(LayoutNode& node,
         : material_style(options.kind);
     node.material.role = options.role;
     node.material.interaction = options.interaction;
-    node.material.transition = options.transition;
+    node.material.transition = resolve_material_transition(
+        options.transition,
+        options.inherit_material_transition);
     node.material.container = options.inherit_material_container
         ? current_material_container()
         : options.container;
