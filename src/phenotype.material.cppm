@@ -1265,6 +1265,9 @@ struct MaterialContainerExecutionDescriptor {
     float glass_effect_match_progress = 1.0f;
     float glass_effect_match_blend_strength = 0.0f;
     bool glass_effect_match_source_valid = false;
+    float glass_effect_match_source_gap = 0.0f;
+    float glass_effect_match_source_spacing = 0.0f;
+    float glass_effect_match_source_proximity = 0.0f;
     float glass_effect_match_source_x = 0.0f;
     float glass_effect_match_source_y = 0.0f;
     float glass_effect_match_source_w = 0.0f;
@@ -1367,6 +1370,17 @@ struct MaterialRuntimeSummary {
     std::uint32_t stage_order_mismatch_count = 0;
     char const* first_execution_contract_mismatch = "none";
     char const* first_stage_order_mismatch = "none";
+};
+
+struct MaterialGlassEffectMatchSource {
+    MaterialRuntimeRecord const* record = nullptr;
+    float gap = 0.0f;
+    float spacing = 0.0f;
+    float proximity = 0.0f;
+
+    constexpr bool valid() const noexcept {
+        return record != nullptr;
+    }
 };
 
 struct MaterialExecutorSummary {
@@ -2154,12 +2168,11 @@ inline bool material_glass_effect_match_source_candidate(
         container_id);
 }
 
-inline MaterialRuntimeRecord const* material_nearest_glass_effect_match_source(
+inline MaterialGlassEffectMatchSource material_nearest_glass_effect_match_source(
         MaterialRuntimeRecord const& record,
         std::span<MaterialRuntimeRecord const> records,
         std::uint32_t container_id) noexcept {
-    auto const* best = static_cast<MaterialRuntimeRecord const*>(nullptr);
-    auto best_gap = 0.0f;
+    MaterialGlassEffectMatchSource best{};
     for (auto const& candidate : records) {
         if (!material_glass_effect_match_source_candidate(
                 record,
@@ -2170,9 +2183,18 @@ inline MaterialRuntimeRecord const* material_nearest_glass_effect_match_source(
         auto const gap = material_rect_gap(
             record.plan.geometry,
             candidate.plan.geometry);
-        if (!best || gap < best_gap) {
-            best = &candidate;
-            best_gap = gap;
+        auto const spacing = std::min(
+            record.plan.container.blend_distance,
+            candidate.plan.container.blend_distance);
+        auto const proximity =
+            material_container_shape_blend_strength_for_gap(gap, spacing);
+        if (proximity <= 0.0f)
+            continue;
+        if (!best.valid() || gap < best.gap) {
+            best.record = &candidate;
+            best.gap = gap;
+            best.spacing = spacing;
+            best.proximity = proximity;
         }
     }
     return best;
@@ -2221,14 +2243,23 @@ material_container_execution_descriptor_from_group(
         records,
         plan,
         group.container_id);
+    auto const match_source =
+        material_glass_effect_match_execution_active(glass_group)
+            ? material_nearest_glass_effect_match_source(
+                record,
+                records,
+                group.container_id)
+            : MaterialGlassEffectMatchSource{};
     descriptor.glass_effect_surface_count = glass_group.surface_count;
     descriptor.glass_effect_match_progress =
         glass_group.max_progress > 0.0f ? glass_group.max_progress : 1.0f;
     descriptor.glass_effect_match_blend_strength =
-        material_glass_effect_match_blend_strength(glass_group);
+        match_source.valid()
+            ? material_glass_effect_match_blend_strength(glass_group)
+            : 0.0f;
     descriptor.glass_effect_match_execution =
         descriptor.active
-        && material_glass_effect_match_execution_active(glass_group);
+        && match_source.valid();
     auto const group_shape_blend_execution =
         material_container_group_shape_blend_execution_active(group);
     descriptor.shape_blend_execution =
@@ -2265,11 +2296,12 @@ material_container_execution_descriptor_from_group(
                 group,
                 descriptor.shape_blend_strength);
     if (descriptor.glass_effect_match_execution) {
-        if (auto const* source = material_nearest_glass_effect_match_source(
-                record,
-                records,
-                group.container_id)) {
+        if (auto const* source = match_source.record) {
             descriptor.glass_effect_match_source_valid = true;
+            descriptor.glass_effect_match_source_gap = match_source.gap;
+            descriptor.glass_effect_match_source_spacing = match_source.spacing;
+            descriptor.glass_effect_match_source_proximity =
+                match_source.proximity;
             descriptor.glass_effect_match_source_x = source->plan.geometry.x;
             descriptor.glass_effect_match_source_y = source->plan.geometry.y;
             descriptor.glass_effect_match_source_w = source->plan.geometry.w;

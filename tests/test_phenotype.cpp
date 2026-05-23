@@ -3790,7 +3790,7 @@ void test_glass_effect_string_id_scope_emits_stable_context() {
     layout::glass_effect_container(
         layout::GlassEffectContainerOptions{
             .container_id = 901u,
-            .spacing = 12.0f,
+            .spacing = 128.0f,
             .morph_transitions = true,
         },
         [&] {

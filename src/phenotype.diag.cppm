@@ -2668,6 +2668,15 @@ namespace detail {
         match_source.emplace(
             "radius",
             json::Value{execution.glass_effect_match_source_radius});
+        match_source.emplace(
+            "gap",
+            json::Value{execution.glass_effect_match_source_gap});
+        match_source.emplace(
+            "spacing",
+            json::Value{execution.glass_effect_match_source_spacing});
+        match_source.emplace(
+            "proximity",
+            json::Value{execution.glass_effect_match_source_proximity});
         out.emplace(
             "glass_effect_match_source",
             json::Value{std::move(match_source)});
