@@ -1803,20 +1803,19 @@ inline bool material_plan_in_container(
         && plan.container.container_id == container_id;
 }
 
-inline bool material_plans_share_glass_effect_identity(
+inline bool material_plans_share_glass_effect_namespace(
         MaterialPlan const& a,
         MaterialPlan const& b) noexcept {
     return a.glass_identity.participates
         && b.glass_identity.participates
-        && a.glass_identity.namespace_id == b.glass_identity.namespace_id
-        && a.glass_identity.effect_id == b.glass_identity.effect_id;
+        && a.glass_identity.namespace_id == b.glass_identity.namespace_id;
 }
 
 inline bool material_plan_in_glass_effect_match_group(
         MaterialPlan const& plan,
         MaterialPlan const& anchor,
         std::uint32_t container_id) noexcept {
-    return material_plans_share_glass_effect_identity(plan, anchor)
+    return material_plans_share_glass_effect_namespace(plan, anchor)
         && material_plan_in_container(plan, container_id);
 }
 
