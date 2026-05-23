@@ -76,7 +76,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 61);
+    assert(material_plan_contract_version == 62);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -119,6 +119,7 @@ void test_sampled_backdrop_access_contract() {
     assert(std::string_view(plan.glass_identity.policy) == "unidentified");
     assert(!plan.reference_model.glass_effect_identified);
     assert(!plan.reference_model.glass_effect_matched_geometry);
+    assert(!plan.prominent_glass.active);
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(!plan.shape.capsule);
     assert(plan.theme.default_glass_tokens);
@@ -1482,6 +1483,77 @@ void test_interactive_material_modulates_optics_contract() {
     assert(reduced_plan.specular.intensity < plan.specular.intensity);
     assert(!reduced_plan.container.morph_transitions);
     std::puts("PASS: interactive material modulates optics contract");
+}
+
+void test_prominent_glass_action_optics_contract() {
+    auto request = regular_request();
+    request.style.role = MaterialSurfaceRole::Control;
+    request.style.tint = Color{64, 156, 255, 178};
+    request.style.prominence = MaterialProminenceDescriptor{
+        .enabled = true,
+        .intensity = 1.0f,
+    };
+
+    auto plan = plan_material_surface(request, sampled_environment());
+
+    assert(plan.backdrop_sampling);
+    assert(plan.command_descriptor.prominence.enabled);
+    assert(plan.prominent_glass.active);
+    assert(plan.prominent_glass.control_driven);
+    assert(plan.prominent_glass.tint_driven);
+    assert(plan.prominent_glass.backdrop_driven);
+    assert(plan.prominent_glass.bounded);
+    assert(std::string_view(plan.prominent_glass.model)
+        == "prominent-liquid-glass-action");
+    assert(std::string_view(plan.prominent_glass.source)
+        == "prominent-control-accent-glass");
+    assert(plan.prominent_glass.intensity > 0.99f);
+    assert(plan.prominent_glass.tint_weight > 0.0f);
+    assert(plan.prominent_glass.edge_lift > 0.0f);
+    assert(plan.prominent_glass.lensing_gain > 1.0f);
+    assert(plan.optical_composition.prominent_glass_required);
+    assert(std::string_view(plan.optical_composition.prominent_glass_source)
+        == "prominent-control-accent-glass");
+    assert(plan.optical_composition.prominent_glass_intensity
+           == plan.prominent_glass.intensity);
+    assert(plan.optical_composition.prominent_glass_tint_weight
+           == plan.prominent_glass.tint_weight);
+    assert(plan.optical_composition.prominent_glass_edge_lift
+           == plan.prominent_glass.edge_lift);
+    assert(plan.optical_composition.prominent_glass_lensing_gain
+           == plan.prominent_glass.lensing_gain);
+    assert(plan.optical_response.prominent_glass_active);
+
+    bool saw_primary_stage = false;
+    for (unsigned int i = 0; i < plan.execution_stage_count; ++i) {
+        auto const& stage = plan.execution_stages[i];
+        if (std::string_view(stage.executor) != "backdrop-filter")
+            continue;
+        saw_primary_stage = true;
+        assert(std::string_view(stage.optics.prominent_glass_model)
+            == "prominent-liquid-glass-action");
+        assert(stage.optics.prominent_glass_intensity
+               == plan.prominent_glass.intensity);
+        assert(stage.optics.prominent_glass_lensing_gain
+               == plan.prominent_glass.lensing_gain);
+    }
+    assert(saw_primary_stage);
+
+    auto reduced_env = sampled_environment();
+    reduced_env.capabilities.reduce_motion = true;
+    auto reduced_plan = plan_material_surface(request, reduced_env);
+    assert(reduced_plan.prominent_glass.active);
+    assert(reduced_plan.prominent_glass.reduced_motion_suppressed);
+    assert(reduced_plan.prominent_glass.intensity
+           < plan.prominent_glass.intensity);
+
+    auto disabled = request;
+    disabled.style.prominence.enabled = false;
+    auto disabled_plan = plan_material_surface(disabled, sampled_environment());
+    assert(!disabled_plan.prominent_glass.active);
+    assert(!disabled_plan.optical_response.prominent_glass_active);
+
+    std::puts("PASS: prominent glass action optics contract");
 }
 
 void test_interactive_fallback_material_adds_pointer_highlight_layer() {
@@ -3146,6 +3218,7 @@ int main() {
     test_foreground_contrast_gap_uses_absolute_contrast_candidate();
     test_increase_contrast_raises_foreground_readability_contract();
     test_interactive_material_modulates_optics_contract();
+    test_prominent_glass_action_optics_contract();
     test_interactive_fallback_material_adds_pointer_highlight_layer();
     test_materialize_transition_modulates_glass_optics_contract();
     test_glass_effect_identity_marks_matched_transition_contract();

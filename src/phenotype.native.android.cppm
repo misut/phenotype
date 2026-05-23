@@ -4478,6 +4478,8 @@ inline void decode_android_color_commands(unsigned char const* buf,
             auto const glass_background_kind = read_u32();
             auto const glass_background_feather_padding = read_f32();
             auto const glass_background_soft_edge_radius = read_f32();
+            auto const prominence_flags = read_u32();
+            auto const prominence_intensity = read_f32();
             auto material_env_for_command = material_env;
             material_env_for_command.debug_seed.node = current_command_index;
             ::phenotype::MaterialCommandDescriptor descriptor{
@@ -4513,7 +4515,10 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 ::phenotype::material_glass_background_from_wire(
                     glass_background_kind,
                     glass_background_feather_padding,
-                    glass_background_soft_edge_radius)};
+                    glass_background_soft_edge_radius),
+                ::phenotype::material_prominence_from_wire(
+                    prominence_flags,
+                    prominence_intensity)};
             auto plan = ::phenotype::plan_material_surface(
                 ::phenotype::material_request_for_command(
                     descriptor,

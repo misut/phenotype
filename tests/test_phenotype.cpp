@@ -4432,6 +4432,10 @@ void test_material_command_preserves_style_optics() {
     material.material.noise_opacity = 0.031f;
     material.material.shadow_alpha = 0.22f;
     material.material.shadow_radius = 17.0f;
+    material.material.prominence = MaterialProminenceDescriptor{
+        .enabled = true,
+        .intensity = 0.82f,
+    };
     material.background = material.material.tint;
     material.border_color = material.material.border;
     material.border_width = 1.0f;
@@ -4475,6 +4479,8 @@ void test_material_command_preserves_style_optics() {
     assert(std::fabs(descriptor.noise_opacity - 0.031f) < 0.0001f);
     assert(std::fabs(descriptor.shadow_alpha - 0.22f) < 0.0001f);
     assert(std::fabs(descriptor.shadow_radius - 17.0f) < 0.0001f);
+    assert(descriptor.prominence.enabled);
+    assert(std::fabs(descriptor.prominence.intensity - 0.82f) < 0.0001f);
 
     MaterialEnvironment env{};
     env.capabilities.material_surfaces = true;
@@ -5750,6 +5756,45 @@ void test_glass_control_button_style_material_contract() {
     assert(!disabled.debug_semantic_enabled);
 
     std::puts("PASS: glass control button style emits material contract");
+}
+
+void test_glass_prominent_button_style_material_contract() {
+    set_theme(Theme{});
+
+    auto style = widget::glass_prominent_button_style(
+        GlassControlStyleOptions{
+            .prominence = 1.0f,
+            .width = 120.0f,
+            .height = 36.0f,
+        });
+    assert(style.has_material);
+    assert(style.material.kind == MaterialKind::Regular);
+    assert(style.material.role == MaterialSurfaceRole::Control);
+    assert(style.material.prominence.enabled);
+    assert(std::fabs(style.material.prominence.intensity - 1.0f) < 0.0001f);
+    assert(std::string_view(style.material.contrast_intent)
+        == "prominent-action");
+    assert(style.material.tint.a > 0);
+    assert(style.has_background);
+    assert(style.has_hover_background);
+    assert(style.has_pressed_background);
+    assert(style.has_border_color);
+    assert(style.border_width == 1.0f);
+    assert(style.max_width == 120.0f);
+    assert(style.fixed_height == 36.0f);
+    assert(style.shape == MaterialSurfaceShape::Capsule);
+
+    auto btn_h = button_test::build_button_with_options(style);
+    auto& btn = detail::node_at(btn_h);
+    assert(btn.material.kind == MaterialKind::Regular);
+    assert(btn.material.role == MaterialSurfaceRole::Control);
+    assert(btn.material.prominence.enabled);
+    assert(btn.material_shape == MaterialSurfaceShape::Capsule);
+    assert(btn.material.tint == btn.background);
+    assert(btn.material.border == btn.border_color);
+    assert(btn.material.foreground == btn.text_color);
+
+    std::puts("PASS: glass prominent button style emits material contract");
 }
 
 void test_glass_split_button_style_material_contract() {
@@ -7172,6 +7217,7 @@ int main() {
     test_symbol_button_macos_contract();
     test_macos_control_button_style_contract();
     test_glass_control_button_style_material_contract();
+    test_glass_prominent_button_style_material_contract();
     test_glass_split_button_style_material_contract();
     test_glass_selection_button_style_material_contract();
     test_glass_outline_row_button_style_material_contract();

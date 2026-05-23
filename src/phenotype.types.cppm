@@ -314,6 +314,22 @@ struct MaterialGlassBackgroundDescriptor {
         default;
 };
 
+struct MaterialProminenceDescriptor {
+    bool enabled = false;
+    float intensity = 1.0f;
+};
+
+inline unsigned int material_prominence_flags(
+        MaterialProminenceDescriptor descriptor) noexcept {
+    return descriptor.enabled ? 1u : 0u;
+}
+
+inline MaterialProminenceDescriptor material_prominence_from_wire(
+        unsigned int flags,
+        float intensity) noexcept {
+    return MaterialProminenceDescriptor{(flags & 1u) != 0u, intensity};
+}
+
 inline MaterialGlassBackgroundDescriptor material_glass_background_from_wire(
         unsigned int kind,
         float feather_padding,
@@ -374,6 +390,7 @@ struct MaterialStyle {
     MaterialTransitionDescriptor transition{};
     MaterialGlassIdentityDescriptor glass_identity{};
     MaterialGlassBackgroundDescriptor glass_background{};
+    MaterialProminenceDescriptor prominence{};
 };
 
 struct MaterialCommandDescriptor {
@@ -395,6 +412,7 @@ struct MaterialCommandDescriptor {
     MaterialTransitionDescriptor transition{};
     MaterialGlassIdentityDescriptor glass_identity{};
     MaterialGlassBackgroundDescriptor glass_background{};
+    MaterialProminenceDescriptor prominence{};
 };
 
 // A solid convex quadrilateral in canvas-local coordinates. Intended
@@ -1428,6 +1446,8 @@ struct GlassControlStyleOptions {
     MaterialSurfaceRole role = MaterialSurfaceRole::Navigation;
     bool selected = false;
     bool disabled = false;
+    bool prominent = false;
+    float prominence = 1.0f;
     float width = 0.0f;
     float height = -1.0f;
     float border_radius = -1.0f;
