@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 53;
+inline constexpr std::uint32_t material_plan_contract_version = 54;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -449,6 +449,11 @@ struct MaterialStageOptics {
     float edge_inner_highlight = 0.0f;
     float edge_outer_shadow = 0.0f;
     float edge_chromatic_fringe = 0.0f;
+    char const* spectral_tint_model = "none";
+    float spectral_tint_warmth = 0.0f;
+    float spectral_tint_coolness = 0.0f;
+    float spectral_dispersion = 0.0f;
+    float spectral_rim_tint = 0.0f;
 };
 
 struct MaterialExecutionStage {
@@ -592,6 +597,21 @@ struct MaterialEdgeOpticsProfile {
     float chromatic_fringe = 0.0f;
 };
 
+struct MaterialSpectralTintProfile {
+    char const* model = "none";
+    char const* source = "none";
+    bool active = false;
+    bool backdrop_driven = false;
+    bool color_driven = false;
+    bool caustic_driven = false;
+    bool bounded = true;
+    float warmth = 0.0f;
+    float coolness = 0.0f;
+    float dispersion = 0.0f;
+    float rim_tint = 0.0f;
+    float balance = 0.5f;
+};
+
 struct MaterialInteractionResponse {
     bool enabled = false;
     bool active = false;
@@ -643,6 +663,7 @@ struct MaterialOpticalResponseContract {
     bool depth_shadow_active = false;
     bool noise_dither_active = false;
     bool refraction_active = false;
+    bool spectral_tint_active = false;
     bool foreground_vibrancy_active = false;
     bool interaction_active = false;
     bool interaction_modulates_optics = false;
@@ -658,6 +679,7 @@ struct MaterialOpticalComposition {
     char const* luminance_source = "none";
     char const* depth_source = "none";
     char const* refraction_source = "none";
+    char const* spectral_tint_source = "none";
     char const* interaction_source = "none";
     char const* transition_source = "identity";
     char const* fallback_source = "none";
@@ -674,6 +696,7 @@ struct MaterialOpticalComposition {
     bool shadow_required = false;
     bool noise_required = false;
     bool refraction_required = false;
+    bool spectral_tint_required = false;
     bool interaction_required = false;
     bool transition_required = false;
     bool fallback_required = false;
@@ -701,6 +724,10 @@ struct MaterialOpticalComposition {
     float edge_inner_highlight = 0.0f;
     float edge_outer_shadow = 0.0f;
     float edge_chromatic_fringe = 0.0f;
+    float spectral_tint_warmth = 0.0f;
+    float spectral_tint_coolness = 0.0f;
+    float spectral_dispersion = 0.0f;
+    float spectral_rim_tint = 0.0f;
     float interaction_response_strength = 0.0f;
     float transition_progress = 1.0f;
     float transition_opacity_gain = 1.0f;
@@ -896,6 +923,7 @@ struct MaterialPlan {
     MaterialRefractionProfile refraction{};
     MaterialSpecularProfile specular{};
     MaterialEdgeOpticsProfile edge_optics{};
+    MaterialSpectralTintProfile spectral_tint{};
     MaterialInteractionResponse interaction{};
     MaterialOpticalComposition optical_composition{};
     MaterialOpticalResponseContract optical_response{};
@@ -958,6 +986,11 @@ inline MaterialStageOptics material_primary_stage_optics(
     optics.edge_inner_highlight = plan.edge_optics.inner_highlight;
     optics.edge_outer_shadow = plan.edge_optics.outer_shadow;
     optics.edge_chromatic_fringe = plan.edge_optics.chromatic_fringe;
+    optics.spectral_tint_model = plan.spectral_tint.model;
+    optics.spectral_tint_warmth = plan.spectral_tint.warmth;
+    optics.spectral_tint_coolness = plan.spectral_tint.coolness;
+    optics.spectral_dispersion = plan.spectral_tint.dispersion;
+    optics.spectral_rim_tint = plan.spectral_tint.rim_tint;
     return optics;
 }
 
@@ -994,6 +1027,11 @@ inline MaterialStageOptics material_edge_stage_optics(
     optics.edge_inner_highlight = plan.edge_optics.inner_highlight;
     optics.edge_outer_shadow = plan.edge_optics.outer_shadow;
     optics.edge_chromatic_fringe = plan.edge_optics.chromatic_fringe;
+    optics.spectral_tint_model = plan.spectral_tint.model;
+    optics.spectral_tint_warmth = plan.spectral_tint.warmth;
+    optics.spectral_tint_coolness = plan.spectral_tint.coolness;
+    optics.spectral_dispersion = plan.spectral_tint.dispersion;
+    optics.spectral_rim_tint = plan.spectral_tint.rim_tint;
     return optics;
 }
 
@@ -5444,6 +5482,112 @@ inline MaterialEdgeOpticsProfile material_resolve_edge_optics_profile(
     return profile;
 }
 
+inline char const* material_spectral_tint_source_name(
+        bool color_driven,
+        bool caustic_driven) noexcept {
+    if (color_driven && caustic_driven)
+        return "sampled-backdrop-spectral-caustics";
+    if (color_driven)
+        return "sampled-backdrop-spectral-tint";
+    if (caustic_driven)
+        return "sampled-backdrop-spectral-rim";
+    return "sampled-backdrop-spectral-neutral";
+}
+
+inline MaterialSpectralTintProfile material_resolve_spectral_tint_profile(
+        MaterialPlan const& plan) noexcept {
+    MaterialSpectralTintProfile profile{};
+    if (!plan.backdrop_sampling
+        || plan.fallback()
+        || plan.kind == MaterialKind::None
+        || plan.backdrop.color_sample_count == 0u) {
+        return profile;
+    }
+
+    auto const source = plan.backdrop.color_mean;
+    auto const red = material_color_channel_fraction(source.r);
+    auto const green = material_color_channel_fraction(source.g);
+    auto const blue = material_color_channel_fraction(source.b);
+    auto const luma = std::clamp(material_color_luma(source), 0.0f, 1.0f);
+    auto const colorfulness = material_colorfulness(source);
+    auto const warm_bias = std::clamp(
+        red - blue + 0.25f * std::max(0.0f, red - green),
+        0.0f,
+        1.0f);
+    auto const cool_bias = std::clamp(
+        blue - red + 0.20f * std::max(0.0f, green - red),
+        0.0f,
+        1.0f);
+    auto const caustic = std::clamp(
+        plan.refraction.edge_caustic_intensity
+            + plan.edge_optics.chromatic_fringe,
+        0.0f,
+        0.35f);
+    auto const backdrop_response =
+        std::clamp(plan.backdrop.response_strength, 0.0f, 1.0f);
+    auto const motion_scale = plan.decision_trace.reduce_motion ? 0.72f : 1.0f;
+    auto const transition_gain =
+        plan.transition.active ? plan.transition.optical_gain : 1.0f;
+    auto const base = std::clamp(
+        transition_gain
+            * motion_scale
+            * (0.012f
+               + 0.060f * colorfulness
+               + 0.50f * caustic
+               + 0.025f * backdrop_response),
+        0.0f,
+        0.20f);
+
+    profile.warmth = std::clamp(
+        base * (0.44f + 1.20f * warm_bias + 0.10f * luma),
+        0.0f,
+        0.18f);
+    profile.coolness = std::clamp(
+        base * (0.44f + 1.20f * cool_bias + 0.10f * (1.0f - luma)),
+        0.0f,
+        0.18f);
+    profile.dispersion = std::clamp(
+        base * (0.52f + 0.70f * std::clamp(plan.refraction.strength,
+                                           0.0f,
+                                           0.35f))
+            + 0.55f * plan.edge_optics.chromatic_fringe
+            + 0.24f * plan.refraction.edge_caustic_intensity,
+        0.0f,
+        0.18f);
+    profile.rim_tint = std::clamp(
+        0.040f
+            + 0.45f * base
+            + 0.35f * std::max(profile.warmth, profile.coolness),
+        0.0f,
+        0.22f);
+
+    auto const tint_total = profile.warmth + profile.coolness;
+    profile.balance = tint_total > 0.0001f
+        ? std::clamp(
+            0.5f + 0.5f * ((profile.warmth - profile.coolness) / tint_total),
+            0.0f,
+            1.0f)
+        : 0.5f;
+
+    auto const strongest =
+        std::max(
+            std::max(profile.warmth, profile.coolness),
+            std::max(profile.dispersion, profile.rim_tint));
+    if (strongest <= 0.0001f)
+        return MaterialSpectralTintProfile{};
+
+    profile.active = true;
+    profile.backdrop_driven = true;
+    profile.color_driven = colorfulness > 0.025f;
+    profile.caustic_driven = caustic > 0.0001f;
+    profile.bounded = true;
+    profile.model = "spectral-liquid-glass-tint";
+    profile.source = material_spectral_tint_source_name(
+        profile.color_driven,
+        profile.caustic_driven);
+    return profile;
+}
+
 inline float material_base_specular_intensity(MaterialKind kind) noexcept {
     switch (kind) {
         case MaterialKind::Clear: return 0.050f;
@@ -5857,6 +6001,15 @@ inline char const* material_optical_refraction_source_name(
     return "none";
 }
 
+inline char const* material_optical_spectral_tint_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.spectral_tint.active
+        && plan.spectral_tint.source
+        && plan.spectral_tint.source[0])
+        return plan.spectral_tint.source;
+    return "none";
+}
+
 inline char const* material_optical_stage_order_name(
         MaterialPlan const& plan) noexcept {
     if (!plan.primary_pass.active)
@@ -5924,6 +6077,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.depth_source = material_optical_depth_strategy_name(plan);
     composition.refraction_source =
         material_optical_refraction_source_name(plan);
+    composition.spectral_tint_source =
+        material_optical_spectral_tint_source_name(plan);
     composition.interaction_source =
         material_optical_interaction_source_name(plan);
     composition.transition_source =
@@ -5955,6 +6110,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.noise_required =
         plan.backdrop_sampling && plan.noise_opacity > 0.0f;
     composition.refraction_required = plan.refraction.active;
+    composition.spectral_tint_required = plan.spectral_tint.active;
     composition.interaction_required = plan.interaction.active;
     composition.transition_required = plan.transition.active;
     composition.fallback_required = plan.fallback();
@@ -5972,6 +6128,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         && plan.backdrop_access.bounded
         && plan.refraction.bounded
         && plan.edge_optics.bounded
+        && plan.spectral_tint.bounded
         && plan.transition.bounded;
     composition.deterministic =
         plan.resource_budget.deterministic_fallback
@@ -5997,6 +6154,10 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.edge_inner_highlight = plan.edge_optics.inner_highlight;
     composition.edge_outer_shadow = plan.edge_optics.outer_shadow;
     composition.edge_chromatic_fringe = plan.edge_optics.chromatic_fringe;
+    composition.spectral_tint_warmth = plan.spectral_tint.warmth;
+    composition.spectral_tint_coolness = plan.spectral_tint.coolness;
+    composition.spectral_dispersion = plan.spectral_tint.dispersion;
+    composition.spectral_rim_tint = plan.spectral_tint.rim_tint;
     composition.interaction_response_strength =
         plan.interaction.response_strength;
     composition.transition_progress = plan.transition.progress;
@@ -6031,6 +6192,7 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
     response.depth_shadow_active = composition.shadow_required;
     response.noise_dither_active = composition.noise_required;
     response.refraction_active = composition.refraction_required;
+    response.spectral_tint_active = composition.spectral_tint_required;
     response.foreground_vibrancy_active = plan.foreground.uses_vibrancy;
     response.interaction_active = composition.interaction_required;
     response.interaction_modulates_optics =
@@ -6304,6 +6466,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.resource_budget.max_refraction_offset_pixels =
         plan.refraction.max_offset_pixels;
     plan.edge_optics = material_resolve_edge_optics_profile(plan);
+    plan.spectral_tint = material_resolve_spectral_tint_profile(plan);
     plan.specular = material_resolve_specular_profile(plan);
     plan.luminance_curve = material_resolve_luminance_curve(
         plan.backdrop_sampling,

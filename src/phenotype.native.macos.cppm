@@ -1635,6 +1635,8 @@ struct MaterialInstanceGPU {
     float refraction[4]{};
     // bevel width, inner highlight, outer shadow, chromatic fringe
     float edge_optics[4]{};
+    // spectral warmth, coolness, dispersion, rim tint
+    float spectral_tint[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
     // shape blend strength, inner-edge alpha blend strength, flags, command index
@@ -2376,6 +2378,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.edge_optics[1] = plan.edge_optics.inner_highlight;
     inst.edge_optics[2] = plan.edge_optics.outer_shadow;
     inst.edge_optics[3] = plan.edge_optics.chromatic_fringe;
+    inst.spectral_tint[0] = plan.spectral_tint.warmth;
+    inst.spectral_tint[1] = plan.spectral_tint.coolness;
+    inst.spectral_tint[2] = plan.spectral_tint.dispersion;
+    inst.spectral_tint[3] = plan.spectral_tint.rim_tint;
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];
@@ -2553,6 +2559,16 @@ inline void apply_material_container_execution_descriptors(
                             + 0.025f * match_motion.strength,
                         0.0f,
                         0.16f);
+                    inst.spectral_tint[2] = std::clamp(
+                        inst.spectral_tint[2]
+                            + 0.030f * match_motion.strength,
+                        0.0f,
+                        0.22f);
+                    inst.spectral_tint[3] = std::clamp(
+                        inst.spectral_tint[3]
+                            + 0.040f * match_motion.strength,
+                        0.0f,
+                        0.28f);
                 }
             } else {
                 inst.group_rect[0] = execution->group_x;
@@ -4501,6 +4517,7 @@ struct MaterialVsOut {
     float4 interaction_lens;
     float4 refraction;
     float4 edge_optics;
+    float4 spectral_tint;
     float4 group_rect;
     float4 group_effects;
 };
@@ -4517,6 +4534,7 @@ struct MaterialInstance {
     float4 interaction_lens;
     float4 refraction;
     float4 edge_optics;
+    float4 spectral_tint;
     float4 group_rect;
     float4 group_effects;
 };
@@ -4554,6 +4572,7 @@ vertex MaterialVsOut vs_material(
     out.interaction_lens = inst.interaction_lens;
     out.refraction = inst.refraction;
     out.edge_optics = inst.edge_optics;
+    out.spectral_tint = inst.spectral_tint;
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
     return out;
@@ -4655,6 +4674,10 @@ fragment float4 fs_material(
     float edge_inner_highlight = clamp(in.edge_optics.y, 0.0, 0.85);
     float edge_outer_shadow = clamp(in.edge_optics.z, 0.0, 0.60);
     float edge_chromatic_fringe = clamp(in.edge_optics.w, 0.0, 0.16);
+    float spectral_warmth = clamp(in.spectral_tint.x, 0.0, 0.22);
+    float spectral_coolness = clamp(in.spectral_tint.y, 0.0, 0.22);
+    float spectral_dispersion = clamp(in.spectral_tint.z, 0.0, 0.22);
+    float spectral_rim_tint = clamp(in.spectral_tint.w, 0.0, 0.28);
     float normalized_len = length(normalized_local);
     float2 refraction_dir = normalized_len > 0.0001
         ? normalized_local / normalized_len
@@ -4697,9 +4720,9 @@ fragment float4 fs_material(
         0.24);
     float fringe_weight = clamp(
         caustic_weight * (0.45 + 0.55 * refraction_edge_bias)
-            + edge_lens * edge_chromatic_fringe,
+            + edge_lens * (edge_chromatic_fringe + spectral_dispersion),
         0.0,
-        0.18);
+        0.26);
     float2 fringe_uv =
         refraction_uv * (0.55 + 0.65 * refraction_edge_bias)
         + refraction_dir
@@ -4750,8 +4773,21 @@ fragment float4 fs_material(
             float2(1.0));
         float4 warm_sample = backdrop.sample(samp, warm_uv);
         float4 cool_sample = backdrop.sample(samp, cool_uv);
-        refracted_rgb.r = mix(refracted_rgb.r, warm_sample.r, fringe_weight);
-        refracted_rgb.b = mix(refracted_rgb.b, cool_sample.b, fringe_weight);
+        refracted_rgb.r = mix(
+            refracted_rgb.r,
+            clamp(warm_sample.r + spectral_warmth, 0.0, 1.0),
+            fringe_weight);
+        refracted_rgb.g = mix(
+            refracted_rgb.g,
+            clamp((warm_sample.g + cool_sample.g) * 0.5
+                    + 0.22 * (spectral_warmth + spectral_coolness),
+                  0.0,
+                  1.0),
+            fringe_weight * spectral_rim_tint);
+        refracted_rgb.b = mix(
+            refracted_rgb.b,
+            clamp(cool_sample.b + spectral_coolness, 0.0, 1.0),
+            fringe_weight);
     }
     float luma = dot(refracted_rgb, float3(0.2126, 0.7152, 0.0722));
     float saturation = max(in.optics.x, 0.0);
@@ -4772,6 +4808,12 @@ fragment float4 fs_material(
     float3 rgb = mix(backdrop_rgb, in.tint.rgb, tint_strength);
     float edge = 1.0 - smoothstep(0.0, edge_width, signed_edge_distance);
     float edge_lift = clamp(in.luminance_curve.w, 0.0, 1.0);
+    float spectral_edge = edge_lens * spectral_rim_tint;
+    float3 spectral_rgb =
+        float3(spectral_warmth,
+               0.24 * (spectral_warmth + spectral_coolness),
+               spectral_coolness);
+    rgb += spectral_rgb * spectral_edge * (0.20 + 1.40 * caustic_weight);
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
@@ -4798,7 +4840,11 @@ fragment float4 fs_material(
             * (1.0 - inner_bevel * 0.58)
             * edge_outer_shadow
             * (0.28 + 0.72 * (1.0 - bevel_alignment));
-        rgb += float3(bright_band);
+        float3 bevel_tint =
+            float3(1.0 + spectral_warmth * 1.35,
+                   1.0 + (spectral_warmth + spectral_coolness) * 0.22,
+                   1.0 + spectral_coolness * 1.35);
+        rgb += bevel_tint * bright_band;
         rgb *= (1.0 - shadow_band_inner);
     }
     if (caustic_weight > 0.0001) {
@@ -4813,7 +4859,11 @@ fragment float4 fs_material(
         float rim_shadow = caustic_weight
             * (1.0 - rim_alignment)
             * clamp(in.effects.y + 0.16, 0.0, 0.42);
-        rgb += float3(rim_light);
+        float3 rim_tint =
+            float3(1.0 + spectral_warmth * 1.60,
+                   1.0 + (spectral_warmth + spectral_coolness) * 0.24,
+                   1.0 + spectral_coolness * 1.60);
+        rgb += rim_tint * rim_light;
         rgb *= (1.0 - rim_shadow);
     }
     float specular_intensity = clamp(in.interaction.w, 0.0, 1.0);
