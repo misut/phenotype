@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 68);
+    assert(material_plan_contract_version == 69);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -3133,6 +3133,15 @@ void test_container_group_surface_aggregates_member_interaction() {
            == records[1].plan.interaction.pointer_lens_radius);
     assert(first_execution.group_interaction_pointer_lens_strength
            == records[1].plan.interaction.pointer_lens_strength);
+    assert(first_execution.group_interaction_control_morph_active);
+    assert(first_execution.group_interaction_control_morph_scale_delta
+           == records[1].plan.interaction.control_morph_scale_delta);
+    assert(first_execution.group_interaction_control_morph_depth
+           == records[1].plan.interaction.control_morph_depth);
+    assert(first_execution.group_interaction_control_morph_edge
+           == records[1].plan.interaction.control_morph_edge);
+    assert(first_execution.group_interaction_control_morph_shadow
+           == records[1].plan.interaction.control_morph_shadow);
 
     std::puts("PASS: container group surface aggregates member interaction");
 }
@@ -3420,6 +3429,15 @@ void test_glass_effect_union_aggregates_member_interaction() {
     assert(first_execution.group_interaction_specular_anchor_y > 0.75f);
     assert(first_execution.group_interaction_pointer_lens_strength
            == records[1].plan.interaction.pointer_lens_strength);
+    assert(first_execution.group_interaction_control_morph_active);
+    assert(first_execution.group_interaction_control_morph_scale_delta
+           == records[1].plan.interaction.control_morph_scale_delta);
+    assert(first_execution.group_interaction_control_morph_depth
+           == records[1].plan.interaction.control_morph_depth);
+    assert(first_execution.group_interaction_control_morph_edge
+           == records[1].plan.interaction.control_morph_edge);
+    assert(first_execution.group_interaction_control_morph_shadow
+           == records[1].plan.interaction.control_morph_shadow);
 
     std::puts("PASS: glass effect union aggregates member interaction");
 }

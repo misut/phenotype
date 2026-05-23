@@ -2665,6 +2665,17 @@ inline void apply_material_container_execution_descriptors(
                             geometry,
                             record->plan.interaction.pointer_lens_anchor_y);
                 }
+                if (execution->group_interaction_control_morph_active) {
+                    inst.control_morph[0] =
+                        execution
+                            ->group_interaction_control_morph_scale_delta;
+                    inst.control_morph[1] =
+                        execution->group_interaction_control_morph_depth;
+                    inst.control_morph[2] =
+                        execution->group_interaction_control_morph_edge;
+                    inst.control_morph[3] =
+                        execution->group_interaction_control_morph_shadow;
+                }
                 if (container_motion.active) {
                     inst.refraction[0] = std::clamp(
                         inst.refraction[0]

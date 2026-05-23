@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 68;
+inline constexpr std::uint32_t material_plan_contract_version = 69;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1689,6 +1689,11 @@ struct MaterialContainerExecutionDescriptor {
     float group_interaction_pointer_lens_anchor_y = 0.5f;
     float group_interaction_pointer_lens_radius = 0.0f;
     float group_interaction_pointer_lens_strength = 0.0f;
+    bool group_interaction_control_morph_active = false;
+    float group_interaction_control_morph_scale_delta = 0.0f;
+    float group_interaction_control_morph_depth = 0.0f;
+    float group_interaction_control_morph_edge = 0.0f;
+    float group_interaction_control_morph_shadow = 0.0f;
 };
 
 struct MaterialPaintLayerExecutionGeometry {
@@ -3896,6 +3901,17 @@ inline void material_apply_container_group_interaction_source(
             source_plan.interaction.pointer_lens_radius;
         execution.group_interaction_pointer_lens_strength =
             source_plan.interaction.pointer_lens_strength;
+    }
+    if (source_plan.interaction.control_morph_active) {
+        execution.group_interaction_control_morph_active = true;
+        execution.group_interaction_control_morph_scale_delta =
+            source_plan.interaction.control_morph_scale_delta;
+        execution.group_interaction_control_morph_depth =
+            source_plan.interaction.control_morph_depth;
+        execution.group_interaction_control_morph_edge =
+            source_plan.interaction.control_morph_edge;
+        execution.group_interaction_control_morph_shadow =
+            source_plan.interaction.control_morph_shadow;
     }
 }
 
