@@ -7003,6 +7003,192 @@ void test_glass_effect_context_reaches_indicator_controls() {
     std::puts("PASS: glass effect context reaches indicator controls");
 }
 
+void test_glass_effect_context_reaches_tabs() {
+    set_theme(Theme{});
+
+    struct Select { std::size_t index; };
+    using Msg = std::variant<Select>;
+
+    auto const pill_identity =
+        layout::glass_effect_identity("tabs", "pill");
+    auto const indicator_identity =
+        layout::glass_effect_identity("tabs", "selection");
+    auto const container_id =
+        layout::glass_effect_stable_id("tabs.scope");
+    auto const union_id =
+        layout::glass_effect_stable_id("tabs.cluster");
+    auto const tint = Color{64, 156, 255, 96};
+    auto const border = Color{64, 156, 255, 160};
+    auto effect_glass = layout::glass_regular()
+        .tint(tint)
+        .border(border)
+        .effect_id(pill_identity)
+        .matched_geometry(0.55f, false)
+        .effect_union(
+            "tabs.scope",
+            "tabs.cluster",
+            17.0f,
+            true,
+            true);
+
+    TabsStyleOptions tabs_options{};
+    tabs_options.indicator_glass_identity = indicator_identity;
+    tabs_options = widget::glass_tabs_style_options(
+        effect_glass,
+        tabs_options);
+    assert(tabs_options.kind == MaterialKind::Regular);
+    assert(tabs_options.has_tint);
+    assert(tabs_options.tint == tint);
+    assert(tabs_options.has_border);
+    assert(tabs_options.border == border);
+    assert(tabs_options.has_effect_context);
+    assert(tabs_options.glass_identity == pill_identity);
+    assert(tabs_options.indicator_glass_identity == indicator_identity);
+    assert(tabs_options.container.container_id == container_id);
+    assert(tabs_options.container.union_id == union_id);
+
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    std::vector<str> items;
+    items.emplace_back("Overview", 8u);
+    items.emplace_back("Settings", 8u);
+    items.emplace_back("Activity", 8u);
+    widget::tabs<Msg>(
+        items,
+        1u,
+        [](std::size_t index) -> Msg { return Select{index}; },
+        effect_glass,
+        TabsStyleOptions{.indicator_glass_identity = indicator_identity});
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 420.0f);
+
+    auto const& root = detail::node_at(root_h);
+    assert(root.children.size() == 1u);
+    auto const& pill = detail::node_at(root.children[0]);
+    assert(pill.material.kind == MaterialKind::Regular);
+    assert(pill.material.role == MaterialSurfaceRole::Navigation);
+    assert(pill.material.tint == tint);
+    assert(pill.material.border == border);
+    assert(pill.material_shape == MaterialSurfaceShape::Capsule);
+    assert(pill.debug_semantic_label == "Segmented Control");
+    assert_glass_effect_context(
+        pill.material,
+        pill_identity,
+        container_id,
+        union_id,
+        17.0f,
+        MaterialGlassTransitionKind::MatchedGeometry,
+        0.55f,
+        false);
+
+    assert(pill.children.size() == 2u);
+    auto const& row = detail::node_at(pill.children[0]);
+    assert(row.children.size() == 3u);
+    auto const& first_tab = detail::node_at(row.children[0]);
+    auto const& selected_tab = detail::node_at(row.children[1]);
+    auto const& third_tab = detail::node_at(row.children[2]);
+    assert(first_tab.material.kind == MaterialKind::None);
+    assert(third_tab.material.kind == MaterialKind::None);
+    assert(selected_tab.debug_semantic_role == "tab");
+    assert(selected_tab.debug_semantic_label == "Settings");
+    assert(selected_tab.material.kind == MaterialKind::Clear);
+    assert(selected_tab.material.role == MaterialSurfaceRole::Navigation);
+    assert(selected_tab.material_shape == MaterialSurfaceShape::Capsule);
+    assert_glass_effect_context(
+        selected_tab.material,
+        indicator_identity,
+        container_id,
+        union_id,
+        17.0f,
+        MaterialGlassTransitionKind::MatchedGeometry,
+        0.55f,
+        false);
+
+    auto const& track = detail::node_at(pill.children[1]);
+    assert(track.children.size() == 3u);
+    auto const& indicator = detail::node_at(track.children[1]);
+    auto const indicator_tint = Color{64, 156, 255, 206};
+    assert(indicator.background == indicator_tint);
+
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+
+    auto scoped_root_h = detail::alloc_node();
+    detail::node_at(scoped_root_h).style.flex_direction = FlexDirection::Column;
+    Scope scoped_scope(scoped_root_h);
+    Scope::set_current(&scoped_scope);
+    layout::glass_effect_container(
+        layout::GlassEffectContainerOptions{
+            .container_id = 812u,
+            .union_id = 31u,
+            .spacing = 19.0f,
+            .interactive = false,
+            .morph_transitions = true,
+        },
+        [&] {
+            layout::glass_effect_transition(
+                layout::glass_materialize_transition(0.25f, true),
+                [&] {
+                    std::vector<str> scoped_items;
+                    scoped_items.emplace_back("One", 3u);
+                    scoped_items.emplace_back("Two", 3u);
+                    widget::glass_tabs<Msg>(
+                        scoped_items,
+                        0u,
+                        [](std::size_t index) -> Msg {
+                            return Select{index};
+                        },
+                        layout::glass_clear()
+                            .effect_id("tabs", "scoped-pill"),
+                        TabsStyleOptions{
+                            .indicator_glass_identity =
+                                layout::glass_effect_identity(
+                                    "tabs",
+                                    "scoped-selection"),
+                        });
+                });
+        });
+    Scope::set_current(nullptr);
+
+    auto const& scoped_root = detail::node_at(scoped_root_h);
+    assert(scoped_root.children.size() == 1u);
+    auto const& scoped_pill = detail::node_at(scoped_root.children[0]);
+    assert_glass_effect_context(
+        scoped_pill.material,
+        layout::glass_effect_identity("tabs", "scoped-pill"),
+        812u,
+        31u,
+        19.0f,
+        MaterialGlassTransitionKind::Materialize,
+        0.25f,
+        true);
+    auto const& scoped_row = detail::node_at(scoped_pill.children[0]);
+    auto const& scoped_selected = detail::node_at(scoped_row.children[0]);
+    assert_glass_effect_context(
+        scoped_selected.material,
+        layout::glass_effect_identity("tabs", "scoped-selection"),
+        812u,
+        31u,
+        19.0f,
+        MaterialGlassTransitionKind::Materialize,
+        0.25f,
+        true);
+
+    std::puts("PASS: glass effect context reaches tabs");
+}
+
 void test_symbol_button_minimum_hit_region_contract() {
     icons::SymbolButtonOptions options;
     options.role = icons::SymbolPresentationRole::Toolbar;
@@ -8143,6 +8329,7 @@ int main() {
     test_glass_disclosure_header_style_material_contract();
     test_glass_effect_context_reaches_control_styles();
     test_glass_effect_context_reaches_indicator_controls();
+    test_glass_effect_context_reaches_tabs();
     test_symbol_button_minimum_hit_region_contract();
     test_symbol_button_visual_state_token_contract();
     test_symbol_button_disabled_contract();

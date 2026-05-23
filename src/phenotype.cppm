@@ -1136,6 +1136,33 @@ inline void apply_glass_switch_effect_context(
     }
 }
 
+inline MaterialGlassIdentityDescriptor glass_tabs_indicator_identity(
+        TabsStyleOptions const& options) noexcept {
+    return options.indicator_glass_identity.participates()
+        ? options.indicator_glass_identity
+        : options.glass_identity;
+}
+
+inline void apply_glass_tabs_effect_context(
+        MaterialStyle& material,
+        TabsStyleOptions const& options,
+        MaterialGlassIdentityDescriptor identity) {
+    if (!options.has_effect_context || material.kind == MaterialKind::None)
+        return;
+
+    material.transition = options.transition;
+    material.glass_identity = identity;
+    if (options.container.participates()) {
+        auto const keep_interaction =
+            material.container.interactive
+            || options.container.interactive
+            || options.interactive;
+        material.container = options.container;
+        if (keep_interaction)
+            material.container.interactive = true;
+    }
+}
+
 template<typename Msg>
 inline void toggle(str label, bool active, Msg msg,
                    float corner_radius, Decoration active_decoration,
@@ -2169,12 +2196,21 @@ inline void tabs(std::vector<str> const& items,
         auto& pill = detail::node_at(pill_h);
         auto material = material_style_for_kind(options.kind, t);
         material.role = options.role;
+        material.fallback = options.kind != MaterialKind::None;
         material.container = MaterialContainerDescriptor{
             0u,
             0u,
             20.0f,
             options.interactive,
             true};
+        if (options.has_tint && options.kind != MaterialKind::None)
+            material.tint = options.tint;
+        if (options.has_border && options.kind != MaterialKind::None)
+            material.border = options.border;
+        _impl::apply_glass_tabs_effect_context(
+            material,
+            options,
+            options.glass_identity);
         pill.material = material;
         pill.style.flex_direction = FlexDirection::Column;
         pill.style.gap = 0;
@@ -2245,6 +2281,34 @@ inline void tabs(std::vector<str> const& items,
                 is_focused ? t.state_focus_ring_width : 0.0f, focus_ms);
             btn.border_color = animate_color(
                 is_focused ? t.state_focus_ring : ring_off, focus_ms);
+            if (is_selected && options.kind != MaterialKind::None) {
+                auto selected_material =
+                    material_style_for_kind(MaterialKind::Clear, t);
+                selected_material.role = options.role;
+                selected_material.fallback = true;
+                selected_material.tint = material_with_alpha(t.surface, 186);
+                selected_material.border = options.has_border
+                    ? options.border
+                    : material_with_alpha(t.border, 112);
+                selected_material.foreground = t.accent;
+                selected_material.accent_foreground = t.accent;
+                selected_material.strong_accent_foreground = t.accent_strong;
+                selected_material.container = MaterialContainerDescriptor{
+                    0u,
+                    0u,
+                    12.0f,
+                    options.interactive,
+                    true};
+                _impl::apply_glass_tabs_effect_context(
+                    selected_material,
+                    options,
+                    _impl::glass_tabs_indicator_identity(options));
+                btn.material = selected_material;
+                btn.material_shape = MaterialSurfaceShape::Capsule;
+                btn.background = selected_material.tint;
+                if (!is_focused)
+                    btn.border_color = selected_material.border;
+            }
             btn.style.padding[0] = t.space_xs;
             btn.style.padding[1] = t.space_sm;
             btn.style.padding[2] = t.space_xs;
@@ -2311,7 +2375,9 @@ inline void tabs(std::vector<str> const& items,
         // text-leaf branch picks it up; setting it on the parent
         // track wouldn't apply because that node has children.
         ln.style.fixed_height = 2.0f;
-        ln.background = t.accent;
+        ln.background = options.has_tint && options.tint.a > 0
+            ? glass_control_state_color(options.tint, 206)
+            : t.accent;
         detail::append_child(track_h, line_h);
     }
     {
@@ -5015,6 +5081,40 @@ inline GlassSwitchStyleOptions glass_switch_style_options(
     return options;
 }
 
+inline TabsStyleOptions glass_tabs_style_options(
+        layout::GlassEffectStyle glass,
+        TabsStyleOptions options = {}) {
+    options.kind = glass.kind;
+    if (glass.is_identity()) {
+        options.has_tint = false;
+        options.has_border = false;
+        options.has_effect_context = false;
+        options.glass_identity = {};
+        options.indicator_glass_identity = {};
+        options.container = {};
+        return options;
+    }
+    if (glass.has_tint) {
+        options.has_tint = true;
+        options.tint = glass.tint_color;
+    }
+    if (glass.has_border) {
+        options.has_border = true;
+        options.border = glass.border_color;
+    }
+    options.has_effect_context = true;
+    options.transition = layout::resolve_material_transition(
+        glass.transition_descriptor,
+        glass.inherit_transition);
+    options.glass_identity = layout::resolve_material_glass_identity(
+        glass.glass_identity_descriptor,
+        glass.inherit_identity);
+    options.container = glass.inherit_container
+        ? layout::current_material_container()
+        : glass.container_descriptor;
+    return options;
+}
+
 inline void apply_glass_effect_style_material(
         MaterialStyle& material,
         bool has_material,
@@ -5222,6 +5322,33 @@ inline void glass_switch(str label,
                          GlassSwitchStyleOptions options = {}) {
     auto style = glass_switch_style_options(glass, options);
     _impl::switch_control(label, on, std::move(msg), &style);
+}
+
+template<typename Msg>
+inline void glass_tabs(std::vector<str> const& items,
+                       std::size_t selected,
+                       Msg (*on_select)(std::size_t),
+                       layout::GlassEffectStyle glass,
+                       TabsStyleOptions options = {}) {
+    tabs<Msg>(
+        items,
+        selected,
+        on_select,
+        glass_tabs_style_options(glass, options));
+}
+
+template<typename Msg>
+inline void tabs(std::vector<str> const& items,
+                 std::size_t selected,
+                 Msg (*on_select)(std::size_t),
+                 layout::GlassEffectStyle glass,
+                 TabsStyleOptions options = {}) {
+    glass_tabs<Msg>(
+        items,
+        selected,
+        on_select,
+        glass,
+        options);
 }
 
 } // namespace widget
