@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 67);
+    assert(material_plan_contract_version == 68);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -3041,6 +3041,102 @@ void test_container_group_surface_preserves_radius_continuity() {
     std::puts("PASS: container group surface preserves radius continuity");
 }
 
+void test_container_group_surface_aggregates_member_interaction() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 16.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 907u,
+        .union_id = 0u,
+        .spacing = 20.0f,
+        .interactive = true,
+        .morph_transitions = true,
+    };
+
+    auto peer = request;
+    peer.geometry.x = 50.0f;
+    peer.style.interaction = MaterialInteractionDescriptor{
+        .hovered = true,
+        .pressed = false,
+        .focused = false,
+        .pointer_inside = true,
+        .pointer_x = 0.75f,
+        .pointer_y = 0.25f,
+    };
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(peer, sampled_environment()), 2u},
+    };
+    assert(!records[0].plan.specular.interaction_driven);
+    assert(!records[0].plan.interaction.pointer_lens_active);
+    assert(records[1].plan.specular.interaction_driven);
+    assert(records[1].plan.interaction.pointer_lens_active);
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const peer_execution =
+        material_container_execution_descriptor(records[1], records);
+    assert(first_execution.group_surface_execution);
+    assert(peer_execution.group_surface_execution);
+    assert(first_execution.surface_leader);
+    assert(!peer_execution.surface_leader);
+    assert(first_execution.group_interaction_source_valid);
+    assert(first_execution.group_interaction_source_command_index == 2u);
+    assert(first_execution.group_interaction_pointer_lens_active);
+
+    auto const leader_geometry =
+        material_surface_execution_geometry(records[0].plan, &first_execution);
+    assert(leader_geometry.active);
+    auto const expected_specular_x =
+        material_surface_execution_anchor_x(
+            records[1].plan,
+            leader_geometry,
+            records[1].plan.specular.anchor_x);
+    auto const expected_specular_y =
+        material_surface_execution_anchor_y(
+            records[1].plan,
+            leader_geometry,
+            records[1].plan.specular.anchor_y);
+    auto const expected_lens_x =
+        material_surface_execution_anchor_x(
+            records[1].plan,
+            leader_geometry,
+            records[1].plan.interaction.pointer_lens_anchor_x);
+    auto const expected_lens_y =
+        material_surface_execution_anchor_y(
+            records[1].plan,
+            leader_geometry,
+            records[1].plan.interaction.pointer_lens_anchor_y);
+    assert(std::fabs(
+               first_execution.group_interaction_specular_anchor_x
+                   - expected_specular_x)
+           < 0.0001f);
+    assert(std::fabs(
+               first_execution.group_interaction_specular_anchor_y
+                   - expected_specular_y)
+           < 0.0001f);
+    assert(std::fabs(
+               first_execution.group_interaction_pointer_lens_anchor_x
+                   - expected_lens_x)
+           < 0.0001f);
+    assert(std::fabs(
+               first_execution.group_interaction_pointer_lens_anchor_y
+                   - expected_lens_y)
+           < 0.0001f);
+    assert(first_execution.group_interaction_specular_anchor_x > 0.85f);
+    assert(first_execution.group_interaction_specular_anchor_y < 0.30f);
+    assert(first_execution.group_interaction_specular_radius
+           == records[1].plan.specular.radius);
+    assert(first_execution.group_interaction_specular_intensity
+           == records[1].plan.specular.intensity);
+    assert(first_execution.group_interaction_pointer_lens_radius
+           == records[1].plan.interaction.pointer_lens_radius);
+    assert(first_execution.group_interaction_pointer_lens_strength
+           == records[1].plan.interaction.pointer_lens_strength);
+
+    std::puts("PASS: container group surface aggregates member interaction");
+}
+
 void test_container_member_fallback_paint_uses_proximity_cluster() {
     auto request = regular_request();
     request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 16.0f};
@@ -3255,6 +3351,77 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     assert(!different_shape_execution.union_execution);
 
     std::puts("PASS: glass effect union uses compatible render bounds");
+}
+
+void test_glass_effect_union_aggregates_member_interaction() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 20.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 921u,
+        .union_id = 1u,
+        .spacing = 24.0f,
+        .interactive = true,
+        .morph_transitions = false,
+    };
+
+    auto peer = request;
+    peer.geometry.x = 50.0f;
+    peer.style.interaction = MaterialInteractionDescriptor{
+        .hovered = true,
+        .pressed = false,
+        .focused = false,
+        .pointer_inside = true,
+        .pointer_x = 0.20f,
+        .pointer_y = 0.80f,
+    };
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(peer, sampled_environment()), 2u},
+    };
+    assert(!records[0].plan.specular.interaction_driven);
+    assert(records[1].plan.specular.interaction_driven);
+    assert(records[1].plan.interaction.pointer_lens_active);
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const peer_execution =
+        material_container_execution_descriptor(records[1], records);
+    assert(first_execution.union_execution);
+    assert(peer_execution.union_execution);
+    assert(first_execution.surface_leader);
+    assert(!peer_execution.surface_leader);
+    assert(first_execution.group_interaction_source_valid);
+    assert(first_execution.group_interaction_source_command_index == 2u);
+    assert(first_execution.group_interaction_pointer_lens_active);
+
+    auto const leader_geometry =
+        material_surface_execution_geometry(records[0].plan, &first_execution);
+    assert(leader_geometry.active);
+    auto const expected_specular_x =
+        material_surface_execution_anchor_x(
+            records[1].plan,
+            leader_geometry,
+            records[1].plan.specular.anchor_x);
+    auto const expected_specular_y =
+        material_surface_execution_anchor_y(
+            records[1].plan,
+            leader_geometry,
+            records[1].plan.specular.anchor_y);
+    assert(std::fabs(
+               first_execution.group_interaction_specular_anchor_x
+                   - expected_specular_x)
+           < 0.0001f);
+    assert(std::fabs(
+               first_execution.group_interaction_specular_anchor_y
+                   - expected_specular_y)
+           < 0.0001f);
+    assert(first_execution.group_interaction_specular_anchor_x > 0.60f);
+    assert(first_execution.group_interaction_specular_anchor_y > 0.75f);
+    assert(first_execution.group_interaction_pointer_lens_strength
+           == records[1].plan.interaction.pointer_lens_strength);
+
+    std::puts("PASS: glass effect union aggregates member interaction");
 }
 
 void test_glass_effect_union_combines_at_rest_without_spacing() {
@@ -3590,8 +3757,10 @@ int main() {
     test_container_group_runtime_summary_contract();
     test_container_member_shape_blend_uses_spacing_falloff();
     test_container_group_surface_preserves_radius_continuity();
+    test_container_group_surface_aggregates_member_interaction();
     test_container_member_fallback_paint_uses_proximity_cluster();
     test_glass_effect_union_uses_compatible_render_bounds();
+    test_glass_effect_union_aggregates_member_interaction();
     test_glass_effect_union_combines_at_rest_without_spacing();
     test_glass_effect_union_sample_budget_uses_leader_bounds();
     test_glass_effect_union_fallback_paint_uses_group_leader();
