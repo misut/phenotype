@@ -3560,6 +3560,132 @@ void test_glass_effect_container_scope_emits_morph_context() {
     std::puts("PASS: glass effect container scope emits morph context");
 }
 
+void test_glass_effect_union_scope_emits_view_union_context() {
+    auto direct = layout::glass_effect_union_descriptor(
+        layout::GlassEffectUnionOptions{
+            .namespace_id = 701u,
+            .union_id = 9u,
+            .spacing = 14.0f,
+            .interactive = true,
+            .morph_transitions = true,
+        });
+    assert(direct.container_id == 701u);
+    assert(direct.union_id == 9u);
+    assert(std::fabs(direct.spacing - 14.0f) < 0.0001f);
+    assert(direct.interactive);
+    assert(direct.morph_transitions);
+    assert(direct.mode() == MaterialContainerMode::Union);
+
+    auto stable = layout::glass_effect_union_descriptor(
+        "showcase.controls",
+        "filters",
+        12.0f);
+    assert(stable.container_id
+           == layout::glass_effect_stable_id("showcase.controls"));
+    assert(stable.union_id == layout::glass_effect_stable_id("filters"));
+    assert(stable.mode() == MaterialContainerMode::Union);
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::glass_effect_container(
+        layout::GlassEffectContainerOptions{
+            .container_id = 702u,
+            .spacing = 18.0f,
+            .interactive = true,
+            .morph_transitions = true,
+        },
+        [] {
+            auto outside = layout::GlassEffectOptions{};
+            outside.role = MaterialSurfaceRole::Control;
+            outside.fixed_height = 36.0f;
+            outside.semantic_label = "Outside Glass Union";
+            layout::glass_effect(outside, [] {
+                widget::text("Outside");
+            });
+
+            layout::glass_effect_union(9u, [] {
+                auto first = layout::GlassEffectOptions{};
+                first.role = MaterialSurfaceRole::Control;
+                first.fixed_height = 36.0f;
+                first.semantic_label = "Union Glass One";
+                layout::glass_effect(first, [] {
+                    widget::text("One");
+                });
+
+                auto second = layout::GlassEffectOptions{};
+                second.role = MaterialSurfaceRole::Control;
+                second.fixed_height = 36.0f;
+                second.semantic_label = "Union Glass Two";
+                layout::glass_effect(second, [] {
+                    widget::text("Two");
+                });
+            });
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    std::vector<MaterialRectCmd> materials;
+    for (auto const& cmd : cmds) {
+        if (auto const* material = std::get_if<MaterialRectCmd>(&cmd))
+            materials.push_back(*material);
+    }
+
+    assert(materials.size() == 3u);
+    assert(materials[0].material.container.container_id == 702u);
+    assert(materials[0].material.container.union_id == 0u);
+    assert(materials[0].material.container.mode()
+           == MaterialContainerMode::Container);
+    for (auto index = std::size_t{1u}; index < materials.size(); ++index) {
+        auto const& material = materials[index].material;
+        assert(material.container.container_id == 702u);
+        assert(material.container.union_id == 9u);
+        assert(std::fabs(material.container.spacing - 18.0f) < 0.0001f);
+        assert(material.container.interactive);
+        assert(material.container.morph_transitions);
+        assert(material.container.mode() == MaterialContainerMode::Union);
+        assert(material.transition.kind
+               == MaterialGlassTransitionKind::MatchedGeometry);
+    }
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.render_target.width = 320;
+    env.render_target.height = 120;
+
+    auto union_plan = make_test_material_plan(
+        material_request_for_command(
+            materials[1].material,
+            MaterialGeometry{
+                materials[1].x,
+                materials[1].y,
+                materials[1].w,
+                materials[1].h,
+                materials[1].radius},
+            detail::g_app.theme),
+        env);
+    assert(union_plan->container.mode == MaterialContainerMode::Union);
+    assert(union_plan->container.shape_union_expected);
+    assert(union_plan->container.morph_transitions);
+    assert(union_plan->reference_model.container_union);
+
+    std::puts("PASS: glass effect union scope emits view union context");
+}
+
 void test_glass_effect_transition_scope_emits_command_context() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -6623,6 +6749,7 @@ int main() {
     test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();
     test_glass_effect_container_scope_emits_morph_context();
+    test_glass_effect_union_scope_emits_view_union_context();
     test_glass_effect_transition_scope_emits_command_context();
     test_glass_effect_container_default_transition_respects_explicit_scope();
     test_glass_effect_id_scope_emits_command_context();

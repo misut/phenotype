@@ -2787,6 +2787,14 @@ struct GlassEffectContainerOptions {
     bool morph_transitions = true;
 };
 
+struct GlassEffectUnionOptions {
+    std::uint32_t namespace_id = 0;
+    std::uint32_t union_id = 0;
+    float spacing = 0.0f;
+    bool interactive = false;
+    bool morph_transitions = true;
+};
+
 inline MaterialContainerDescriptor material_container_descriptor(
         MaterialContainerOptions const& options) noexcept {
     return MaterialContainerDescriptor{
@@ -2801,6 +2809,16 @@ inline MaterialContainerOptions glass_effect_container_options(
         GlassEffectContainerOptions const& options) noexcept {
     return MaterialContainerOptions{
         options.container_id,
+        options.union_id,
+        options.spacing,
+        options.interactive,
+        options.morph_transitions};
+}
+
+inline MaterialContainerDescriptor glass_effect_union_descriptor(
+        GlassEffectUnionOptions const& options) noexcept {
+    return MaterialContainerDescriptor{
+        options.namespace_id,
         options.union_id,
         options.spacing,
         options.interactive,
@@ -2880,6 +2898,28 @@ inline std::uint32_t glass_effect_stable_id(
     return hash == 0u ? 1u : hash;
 }
 
+inline MaterialContainerDescriptor glass_effect_union_descriptor(
+        std::uint32_t namespace_id,
+        std::uint32_t union_id,
+        float spacing = 0.0f) noexcept {
+    return glass_effect_union_descriptor(
+        GlassEffectUnionOptions{
+            .namespace_id = namespace_id,
+            .union_id = union_id,
+            .spacing = spacing,
+        });
+}
+
+inline MaterialContainerDescriptor glass_effect_union_descriptor(
+        std::string_view namespace_id,
+        std::string_view union_id,
+        float spacing = 0.0f) noexcept {
+    return glass_effect_union_descriptor(
+        glass_effect_stable_id(namespace_id),
+        glass_effect_stable_id(union_id),
+        spacing);
+}
+
 inline MaterialGlassIdentityDescriptor glass_effect_identity(
         std::string_view namespace_id,
         std::string_view effect_id) noexcept {
@@ -2938,6 +2978,61 @@ void glass_effect_container(GlassEffectContainerOptions options, F&& builder) {
         std::forward<F>(builder));
     if (push_default_transition)
         material_transition_stack().pop_back();
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect_union(GlassEffectUnionOptions options, F&& builder) {
+    material_container(
+        MaterialContainerOptions{
+            .container_id = options.namespace_id,
+            .union_id = options.union_id,
+            .spacing = options.spacing,
+            .interactive = options.interactive,
+            .morph_transitions = options.morph_transitions,
+        },
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect_union(std::uint32_t union_id, F&& builder) {
+    auto container = current_material_container();
+    container.union_id = union_id;
+    auto& stack = material_container_stack();
+    stack.push_back(container);
+    builder();
+    stack.pop_back();
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect_union(std::uint32_t namespace_id,
+                        std::uint32_t union_id,
+                        F&& builder,
+                        float spacing = 0.0f) {
+    glass_effect_union(
+        GlassEffectUnionOptions{
+            .namespace_id = namespace_id,
+            .union_id = union_id,
+            .spacing = spacing,
+        },
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect_union(std::string_view namespace_id,
+                        std::string_view union_id,
+                        F&& builder,
+                        float spacing = 0.0f) {
+    glass_effect_union(
+        GlassEffectUnionOptions{
+            .namespace_id = glass_effect_stable_id(namespace_id),
+            .union_id = glass_effect_stable_id(union_id),
+            .spacing = spacing,
+        },
+        std::forward<F>(builder));
 }
 
 template<typename F>
