@@ -258,6 +258,7 @@ inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
         && color_equal(a.background, b.background)
         && color_equal(a.text_color, b.text_color)
         && a.border_radius == b.border_radius
+        && a.material_shape == b.material_shape
         && color_equal(a.border_color, b.border_color)
         && a.border_width == b.border_width
         && a.decoration == b.decoration

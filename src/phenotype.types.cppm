@@ -1850,6 +1850,16 @@ struct ScrollState {
     float offset_y = 0;
 };
 
+// Shape request for Liquid Glass/material surfaces. `Default` uses the
+// resolved border radius; `Capsule` is resolved after layout from the
+// actual view bounds, mirroring shape-scoped glass effects.
+enum class MaterialSurfaceShape {
+    Default,
+    Rectangle,
+    RoundedRectangle,
+    Capsule,
+};
+
 struct LayoutNode {
     // Style
     Style style;
@@ -1858,6 +1868,7 @@ struct LayoutNode {
     float font_size = 16.0f;
     bool mono = false;
     float border_radius = 0;
+    MaterialSurfaceShape material_shape = MaterialSurfaceShape::Default;
     Color border_color = {0, 0, 0, 0};
     float border_width = 0;
     Decoration decoration = Decoration::None; // checkmark / inner dot glyph

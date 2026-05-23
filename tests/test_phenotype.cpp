@@ -2703,6 +2703,123 @@ void test_material_surface_shape_overrides() {
     std::puts("PASS: material surface shape overrides");
 }
 
+void test_material_surface_glass_effect_shape_options() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::Regular,
+            .fixed_height = 40.0f,
+            .border_radius = 7.5f,
+            .shape = MaterialSurfaceShape::RoundedRectangle,
+            .border_width = 0.0f,
+            .semantic_label = "Rounded Glass Shape",
+        },
+        [] {
+            widget::text("Rounded glass");
+        });
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::Regular,
+            .fixed_height = 40.0f,
+            .border_radius = 7.5f,
+            .shape = MaterialSurfaceShape::Capsule,
+            .border_width = 0.0f,
+            .semantic_label = "Capsule Glass Shape",
+        },
+        [] {
+            widget::text("Capsule glass");
+        });
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::Regular,
+            .fixed_height = 40.0f,
+            .border_radius = 7.5f,
+            .shape = MaterialSurfaceShape::Rectangle,
+            .border_width = 0.0f,
+            .semantic_label = "Rectangle Glass Shape",
+        },
+        [] {
+            widget::text("Rectangle glass");
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    std::vector<MaterialRectCmd> materials;
+    for (auto const& cmd : cmds) {
+        if (auto const* material = std::get_if<MaterialRectCmd>(&cmd))
+            materials.push_back(*material);
+    }
+
+    assert(materials.size() == 3u);
+    assert(std::fabs(materials[0].radius - 7.5f) < 0.0001f);
+    auto const capsule_expected_radius =
+        std::min(materials[1].w, materials[1].h) * 0.5f;
+    assert(std::fabs(materials[1].radius - capsule_expected_radius) < 0.0001f);
+    assert(std::fabs(materials[2].radius) < 0.0001f);
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.render_target.width = 320;
+    env.render_target.height = 120;
+
+    auto rounded_plan = make_test_material_plan(
+        material_request_for_command(
+            materials[0].material,
+            MaterialGeometry{
+                materials[0].x,
+                materials[0].y,
+                materials[0].w,
+                materials[0].h,
+                materials[0].radius},
+            detail::g_app.theme),
+        env);
+    auto capsule_plan = make_test_material_plan(
+        material_request_for_command(
+            materials[1].material,
+            MaterialGeometry{
+                materials[1].x,
+                materials[1].y,
+                materials[1].w,
+                materials[1].h,
+                materials[1].radius},
+            detail::g_app.theme),
+        env);
+    auto rectangle_plan = make_test_material_plan(
+        material_request_for_command(
+            materials[2].material,
+            MaterialGeometry{
+                materials[2].x,
+                materials[2].y,
+                materials[2].w,
+                materials[2].h,
+                materials[2].radius},
+            detail::g_app.theme),
+        env);
+
+    assert(rounded_plan->shape.kind == MaterialShapeKind::RoundedRectangle);
+    assert(capsule_plan->shape.kind == MaterialShapeKind::Capsule);
+    assert(capsule_plan->shape.capsule);
+    assert(rectangle_plan->shape.kind == MaterialShapeKind::Rectangle);
+
+    std::puts("PASS: material surface glass effect shape options");
+}
+
 void test_material_surface_style_override_emits_explicit_material_contract() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -2953,22 +3070,26 @@ void test_glass_surface_presets_emit_material_contract() {
     assert(toolbar.direction == FlexDirection::Row);
     assert(toolbar.cross_align == CrossAxisAlignment::Center);
     assert(toolbar.border_radius == 0.0f);
+    assert(toolbar.shape == MaterialSurfaceShape::Rectangle);
     assert(!toolbar.interactive);
     assert(std::string_view{toolbar.semantic_label} == "Toolbar");
     auto toolbar_group = layout::glass_surface_options(
         layout::GlassSurfacePreset::ToolbarGroup);
     assert(toolbar_group.interactive);
+    assert(toolbar_group.shape == MaterialSurfaceShape::Capsule);
     auto segmented = layout::glass_surface_options(
         layout::GlassSurfacePreset::SegmentedControl);
     assert(segmented.kind == MaterialKind::Regular);
     assert(segmented.role == MaterialSurfaceRole::Navigation);
     assert(segmented.direction == FlexDirection::Row);
     assert(segmented.interactive);
+    assert(segmented.shape == MaterialSurfaceShape::Capsule);
     assert(std::string_view{segmented.semantic_label}
            == "Segmented Control");
     auto navigation = layout::glass_surface_options(
         layout::GlassSurfacePreset::Navigation);
     assert(navigation.interactive);
+    assert(navigation.shape == MaterialSurfaceShape::Capsule);
     auto popover = layout::glass_surface_options(
         layout::GlassSurfacePreset::Popover,
         "Actions");
@@ -3041,6 +3162,7 @@ void test_glass_surface_presets_emit_material_contract() {
     assert(surface.material.role == MaterialSurfaceRole::Toolbar);
     assert(surface.border_width == 0.0f);
     assert(surface.border_radius == detail::g_app.theme.radius_lg);
+    assert(surface.material_shape == MaterialSurfaceShape::Capsule);
     assert(std::string_view{surface.debug_semantic_label}
            == "Preset Toolbar Group");
 
@@ -3059,6 +3181,8 @@ void test_glass_surface_presets_emit_material_contract() {
     assert(material->material.kind == MaterialKind::Thick);
     assert(material->material.role == MaterialSurfaceRole::Toolbar);
     assert(material->material.container.interactive);
+    auto const expected_radius = std::min(material->w, material->h) * 0.5f;
+    assert(std::fabs(material->radius - expected_radius) < 0.0001f);
 
     std::puts("PASS: glass surface presets emit material contract");
 }
@@ -5973,6 +6097,7 @@ int main() {
     test_material_text_foreground_resolution();
     test_material_surface_emits_material_rect_command();
     test_material_surface_shape_overrides();
+    test_material_surface_glass_effect_shape_options();
     test_material_surface_style_override_emits_explicit_material_contract();
     test_material_surface_resolves_live_input_interaction();
     test_material_surface_interactive_option_enables_plan_response();
