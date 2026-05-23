@@ -6097,6 +6097,12 @@ void test_glass_control_button_style_material_contract() {
     std::puts("PASS: glass control button style emits material contract");
 }
 
+void assert_material_interaction_state(MaterialStyle const& material,
+                                       bool hovered,
+                                       bool pressed,
+                                       bool focused,
+                                       bool pointer_inside);
+
 void test_glass_button_accepts_configurable_glass_style() {
     set_theme(Theme{});
 
@@ -6160,9 +6166,30 @@ void test_glass_button_accepts_configurable_glass_style() {
     assert(effect_style.material.container.interactive);
     assert(effect_style.material.container.morph_transitions);
 
+    auto interacted_h = button_test::build_button_with_options(
+        effect_style,
+        /*hovered_id=*/0u,
+        /*focused_id=*/0u,
+        /*pressed_id=*/0u,
+        /*focus_visible=*/true);
+    auto const& interacted_button = detail::node_at(interacted_h);
+    assert(interacted_button.material.kind == MaterialKind::Regular);
+    assert_material_interaction_state(
+        interacted_button.material,
+        true,
+        true,
+        true,
+        true);
+
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = false;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -6738,6 +6765,19 @@ void assert_glass_effect_context(
     assert(material.container.morph_transitions);
 }
 
+void assert_material_interaction_state(MaterialStyle const& material,
+                                       bool hovered,
+                                       bool pressed,
+                                       bool focused,
+                                       bool pointer_inside) {
+    assert(material.interaction.hovered == hovered);
+    assert(material.interaction.pressed == pressed);
+    assert(material.interaction.focused == focused);
+    assert(material.interaction.pointer_inside == pointer_inside);
+    assert(std::fabs(material.interaction.pointer_x - 0.5f) < 0.0001f);
+    assert(std::fabs(material.interaction.pointer_y - 0.5f) < 0.0001f);
+}
+
 void test_glass_effect_context_reaches_control_styles() {
     set_theme(Theme{});
 
@@ -7188,6 +7228,10 @@ void test_glass_effect_context_reaches_tabs() {
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
+    detail::g_app.hovered_id = 1u;
+    detail::g_app.focused_id = 1u;
+    detail::g_app.pressed_id = 1u;
+    detail::g_app.focus_visible = true;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -7248,6 +7292,12 @@ void test_glass_effect_context_reaches_tabs() {
         MaterialGlassTransitionKind::MatchedGeometry,
         0.55f,
         false);
+    assert_material_interaction_state(
+        selected_tab.material,
+        true,
+        true,
+        true,
+        true);
 
     auto const& track = detail::node_at(pill.children[1]);
     assert(track.children.size() == 3u);
@@ -7260,6 +7310,10 @@ void test_glass_effect_context_reaches_tabs() {
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = false;
 
     auto scoped_root_h = detail::alloc_node();
     detail::node_at(scoped_root_h).style.flex_direction = FlexDirection::Column;
@@ -7420,7 +7474,9 @@ inline NodeHandle build_text_field_with_options(
         std::string const& current,
         TextFieldStyleOptions options,
         unsigned int focused_id = 0xFFFFFFFFu,
-        bool focus_visible = false) {
+        bool focus_visible = false,
+        unsigned int hovered_id = 0xFFFFFFFFu,
+        unsigned int pressed_id = 0xFFFFFFFFu) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::g_app.input_handlers.clear();
@@ -7432,7 +7488,9 @@ inline NodeHandle build_text_field_with_options(
     // (default → error swap would otherwise return mid-fade colours).
     detail::local_store().clear();
     detail::bump_local_gen();
+    detail::g_app.hovered_id = hovered_id;
     detail::g_app.focused_id = focused_id;
+    detail::g_app.pressed_id = pressed_id;
     detail::g_app.focus_visible = focus_visible;
 
     auto root_h = detail::alloc_node();
@@ -7627,7 +7685,9 @@ void test_glass_text_field_style_material_contract() {
         "effect query",
         effect_style,
         /*focused_id=*/0u,
-        /*focus_visible=*/false);
+        /*focus_visible=*/true,
+        /*hovered_id=*/0u,
+        /*pressed_id=*/0u);
     auto& effect_field = detail::node_at(effect_h);
     assert(effect_field.is_input);
     assert(effect_field.focusable);
@@ -7643,6 +7703,12 @@ void test_glass_text_field_style_material_contract() {
         18.0f,
         MaterialGlassTransitionKind::MatchedGeometry,
         0.75f,
+        true);
+    assert_material_interaction_state(
+        effect_field.material,
+        true,
+        true,
+        true,
         true);
 
     detail::g_app.arena.reset();
