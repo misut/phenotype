@@ -1876,6 +1876,26 @@ inline bool material_plan_in_glass_effect_match_group(
         && material_plan_in_container(plan, container_id);
 }
 
+inline bool material_plans_share_glass_effect_union(
+        MaterialPlan const& a,
+        MaterialPlan const& b) noexcept {
+    return a.container.participates
+        && b.container.participates
+        && a.container.container_id == b.container.container_id
+        && a.container.union_id != 0u
+        && a.container.union_id == b.container.union_id
+        && a.kind == b.kind
+        && a.shape.valid
+        && b.shape.valid
+        && a.shape.kind == b.shape.kind;
+}
+
+inline bool material_plan_in_glass_effect_union_group(
+        MaterialPlan const& plan,
+        MaterialPlan const& anchor) noexcept {
+    return material_plans_share_glass_effect_union(plan, anchor);
+}
+
 inline float material_rect_gap(MaterialGeometry const& a,
                                MaterialGeometry const& b) noexcept {
     auto const ax2 = a.x + std::max(0.0f, a.w);
@@ -1960,9 +1980,7 @@ inline void accumulate_material_container_pair(
         ++group.blend_candidate_pair_count;
     else
         ++group.separated_pair_count;
-    if (blend_candidate
-        && (a.container.shape_union_expected
-            || b.container.shape_union_expected)) {
+    if (blend_candidate && material_plans_share_glass_effect_union(a, b)) {
         ++group.union_candidate_pair_count;
     }
     if (blend_candidate
@@ -2090,6 +2108,41 @@ inline float material_container_member_shape_blend_strength(
         best);
 }
 
+inline float material_glass_effect_union_member_shape_blend_strength(
+        MaterialRuntimeRecord const& record,
+        std::span<MaterialRuntimeRecord const> records,
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (!material_container_group_shape_blend_execution_active(group))
+        return 0.0f;
+    auto const& plan = record.plan;
+    if (!plan.primary_pass.active
+        || !material_plan_in_glass_effect_union_group(plan, plan)) {
+        return 0.0f;
+    }
+    auto best = 0.0f;
+    for (auto const& candidate_record : records) {
+        if (&candidate_record == &record)
+            continue;
+        auto const& candidate = candidate_record.plan;
+        if (!candidate.primary_pass.active
+            || !material_plan_in_glass_effect_union_group(candidate, plan)) {
+            continue;
+        }
+        auto const gap = material_rect_gap(plan.geometry, candidate.geometry);
+        auto const blend_distance = std::min(
+            plan.container.blend_distance,
+            candidate.container.blend_distance);
+        best = std::max(
+            best,
+            material_container_shape_blend_strength_for_gap(
+                gap,
+                blend_distance));
+    }
+    return std::min(
+        material_container_group_shape_blend_strength(group),
+        best);
+}
+
 inline std::uint32_t material_container_group_shape_blend_surface_count(
         std::span<MaterialRuntimeRecord const> records,
         MaterialContainerGroupAccumulator const& group) noexcept {
@@ -2170,6 +2223,50 @@ inline MaterialContainerGroupAccumulator accumulate_material_container_group(
         for (std::size_t right = left + 1; right < records.size(); ++right) {
             auto const& b = records[right].plan;
             if (!material_plan_in_container(b, container_id))
+                continue;
+            accumulate_material_container_pair(group, a, b);
+        }
+    }
+    return group;
+}
+
+inline MaterialContainerGroupAccumulator
+accumulate_material_glass_effect_union_group(
+        std::span<MaterialRuntimeRecord const> records,
+        MaterialPlan const& anchor) noexcept {
+    MaterialContainerGroupAccumulator group{
+        .container_id = anchor.container.container_id,
+    };
+    if (!material_plan_in_glass_effect_union_group(anchor, anchor))
+        return group;
+    for (auto const& candidate_record : records) {
+        auto const& candidate = candidate_record.plan;
+        if (!material_plan_in_glass_effect_union_group(candidate, anchor))
+            continue;
+        ++group.surface_count;
+        accumulate_material_container_bounds(group, candidate);
+        if (candidate.primary_pass.active)
+            ++group.active_surfaces;
+        if (candidate.backdrop_sampling)
+            ++group.sampled_backdrop_surfaces;
+        if (candidate.fallback())
+            ++group.fallback_surfaces;
+        if (candidate.container.shape_union_expected)
+            ++group.union_surfaces;
+        if (candidate.container.morph_transitions)
+            ++group.morph_surfaces;
+        if (candidate.container.interactive)
+            ++group.interactive_surfaces;
+        if (candidate.container.shared_backdrop_scope)
+            ++group.shared_backdrop_scope_surfaces;
+    }
+    for (std::size_t left = 0; left < records.size(); ++left) {
+        auto const& a = records[left].plan;
+        if (!material_plan_in_glass_effect_union_group(a, anchor))
+            continue;
+        for (std::size_t right = left + 1; right < records.size(); ++right) {
+            auto const& b = records[right].plan;
+            if (!material_plan_in_glass_effect_union_group(b, anchor))
                 continue;
             accumulate_material_container_pair(group, a, b);
         }
@@ -2318,13 +2415,19 @@ material_container_execution_descriptor_from_group(
         && match_source.valid();
     auto const group_shape_blend_execution =
         material_container_group_shape_blend_execution_active(group);
+    auto const union_group = accumulate_material_glass_effect_union_group(
+        records,
+        plan);
+    auto const union_group_shape_blend_execution =
+        material_container_group_shape_blend_execution_active(union_group);
     descriptor.shape_blend_execution =
         descriptor.active
-        && (group_shape_blend_execution
+        && (union_group_shape_blend_execution
+            || group_shape_blend_execution
             || descriptor.glass_effect_match_execution);
     descriptor.union_execution =
         descriptor.shape_blend_execution
-        && group.union_surfaces > 0u
+        && union_group_shape_blend_execution
         && !descriptor.glass_effect_match_execution;
     descriptor.morph_execution =
         descriptor.shape_blend_execution
@@ -2333,13 +2436,20 @@ material_container_execution_descriptor_from_group(
     descriptor.execution_policy =
         descriptor.glass_effect_match_execution
             ? "glass-effect-matched-geometry"
-            : material_container_execution_policy_name(group);
+            : (descriptor.union_execution
+                ? "glass-effect-union"
+                : material_container_execution_policy_name(group));
     descriptor.shape_blend_strength =
         std::max(
-            material_container_member_shape_blend_strength(
-                record,
-                records,
-                group),
+            std::max(
+                material_container_member_shape_blend_strength(
+                    record,
+                    records,
+                    group),
+                material_glass_effect_union_member_shape_blend_strength(
+                    record,
+                    records,
+                    union_group)),
             descriptor.glass_effect_match_blend_strength);
     descriptor.inner_edge_alpha_blend_strength =
         descriptor.glass_effect_match_execution
@@ -2385,6 +2495,16 @@ material_container_execution_descriptor_from_group(
         descriptor.group_h = std::max(
             0.0f,
             glass_group.max_y - glass_group.min_y);
+    } else if (descriptor.union_execution && union_group.has_bounds) {
+        descriptor.group_bounds_valid = true;
+        descriptor.group_x = union_group.min_x;
+        descriptor.group_y = union_group.min_y;
+        descriptor.group_w = std::max(
+            0.0f,
+            union_group.max_x - union_group.min_x);
+        descriptor.group_h = std::max(
+            0.0f,
+            union_group.max_y - union_group.min_y);
     } else if (group.has_bounds) {
         descriptor.group_x = group.min_x;
         descriptor.group_y = group.min_y;

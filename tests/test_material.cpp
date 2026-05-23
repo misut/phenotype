@@ -1552,7 +1552,7 @@ void test_container_group_runtime_summary_contract() {
     assert(groups.max_fallback_surfaces == 1u);
     assert(groups.total_shape_pair_count == 3u);
     assert(groups.blend_candidate_pair_count == 3u);
-    assert(groups.union_candidate_pair_count == 2u);
+    assert(groups.union_candidate_pair_count == 0u);
     assert(groups.morph_candidate_pair_count == 3u);
     assert(groups.separated_pair_count == 0u);
     assert(std::fabs(groups.min_shape_gap) < 0.0001f);
@@ -1574,7 +1574,7 @@ void test_container_group_runtime_summary_contract() {
     assert(execution.active);
     assert(execution.group_bounds_valid);
     assert(execution.shape_blend_execution);
-    assert(execution.union_execution);
+    assert(!execution.union_execution);
     assert(execution.morph_execution);
     assert(execution.shared_backdrop_scope);
     assert(std::string_view(execution.execution_policy)
@@ -1635,7 +1635,7 @@ void test_container_group_runtime_summary_contract() {
     finalize_material_executor_summary(executor_summary, records);
     assert(executor_summary.container_groups.group_count == groups.group_count);
     assert(executor_summary.container_groups.fallback_mixed_group_count == 1u);
-    assert(executor_summary.container_groups.union_candidate_pair_count == 2u);
+    assert(executor_summary.container_groups.union_candidate_pair_count == 0u);
     assert(executor_summary.container_groups.morph_candidate_pair_count == 3u);
     assert(executor_summary.container_groups.shared_capture_surface_count == 4u);
     assert(executor_summary.container_groups.shared_capture_saved_surface_count == 2u);
@@ -1720,6 +1720,79 @@ void test_container_member_shape_blend_uses_spacing_falloff() {
     std::puts("PASS: container member shape blend uses spacing falloff");
 }
 
+void test_glass_effect_union_uses_compatible_render_bounds() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 20.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 910u,
+        .union_id = 1u,
+        .spacing = 24.0f,
+        .interactive = false,
+        .morph_transitions = false,
+    };
+
+    auto peer = request;
+    peer.geometry.x = 50.0f;
+
+    auto different_union = request;
+    different_union.geometry.x = 160.0f;
+    different_union.style.container.union_id = 2u;
+
+    auto different_variant = request;
+    different_variant.geometry.x = 210.0f;
+    different_variant.style = material_style_for_kind(MaterialKind::Clear, Theme{});
+    different_variant.style.container = request.style.container;
+
+    auto different_shape = request;
+    different_shape.geometry.x = 260.0f;
+    different_shape.geometry.radius = 8.0f;
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(peer, sampled_environment()), 2u},
+        {plan_material_surface(different_union, sampled_environment()), 3u},
+        {plan_material_surface(different_variant, sampled_environment()), 4u},
+        {plan_material_surface(different_shape, sampled_environment()), 5u},
+    };
+
+    auto const union_group =
+        accumulate_material_glass_effect_union_group(records, records[0].plan);
+    assert(union_group.surface_count == 2u);
+    assert(union_group.shape_pair_count == 1u);
+    assert(union_group.union_candidate_pair_count == 1u);
+    assert(union_group.min_x == 0.0f);
+    assert(union_group.max_x == 90.0f);
+    assert(material_container_group_shape_blend_execution_active(union_group));
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const peer_execution =
+        material_container_execution_descriptor(records[1], records);
+    auto const different_union_execution =
+        material_container_execution_descriptor(records[2], records);
+    auto const different_variant_execution =
+        material_container_execution_descriptor(records[3], records);
+    auto const different_shape_execution =
+        material_container_execution_descriptor(records[4], records);
+
+    assert(first_execution.union_execution);
+    assert(peer_execution.union_execution);
+    assert(std::string_view(first_execution.execution_policy)
+           == "glass-effect-union");
+    assert(first_execution.group_bounds_valid);
+    assert(first_execution.group_x == 0.0f);
+    assert(first_execution.group_y == 0.0f);
+    assert(first_execution.group_w == 90.0f);
+    assert(first_execution.group_h == 40.0f);
+    assert(std::fabs(first_execution.shape_blend_strength
+                     - (14.0f / 24.0f)) < 0.0001f);
+    assert(!different_union_execution.union_execution);
+    assert(!different_variant_execution.union_execution);
+    assert(!different_shape_execution.union_execution);
+
+    std::puts("PASS: glass effect union uses compatible render bounds");
+}
+
 } // namespace
 
 int main() {
@@ -1744,6 +1817,7 @@ int main() {
     test_executor_sampled_status_contract();
     test_container_group_runtime_summary_contract();
     test_container_member_shape_blend_uses_spacing_falloff();
+    test_glass_effect_union_uses_compatible_render_bounds();
     std::puts("\nAll material tests passed.");
     return 0;
 }
