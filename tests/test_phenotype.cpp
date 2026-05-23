@@ -6812,6 +6812,197 @@ void test_glass_effect_context_reaches_control_styles() {
     std::puts("PASS: glass effect context reaches control styles");
 }
 
+void test_glass_effect_context_reaches_indicator_controls() {
+    set_theme(Theme{});
+
+    struct ToggleA {};
+    struct PickB { int idx; };
+    using Msg = std::variant<ToggleA, PickB>;
+
+    auto const identity =
+        layout::glass_effect_identity("indicators", "checkbox");
+    auto const container_id =
+        layout::glass_effect_stable_id("indicators.scope");
+    auto const union_id =
+        layout::glass_effect_stable_id("indicators.cluster");
+    auto const tint = Color{64, 156, 255, 128};
+    auto const border = Color{64, 156, 255, 220};
+    auto effect_glass = layout::glass_clear()
+        .tint(tint)
+        .border(border)
+        .effect_id(identity)
+        .matched_geometry(0.7f, false)
+        .effect_union(
+            "indicators.scope",
+            "indicators.cluster",
+            9.0f,
+            false,
+            true);
+
+    auto toggle_options = widget::glass_toggle_style_options(
+        effect_glass,
+        GlassToggleStyleOptions{.role = MaterialSurfaceRole::Toolbar});
+    assert(toggle_options.kind == MaterialKind::Clear);
+    assert(toggle_options.role == MaterialSurfaceRole::Toolbar);
+    assert(toggle_options.has_tint);
+    assert(toggle_options.tint == tint);
+    assert(toggle_options.has_border);
+    assert(toggle_options.border == border);
+    assert(toggle_options.has_effect_context);
+    assert(toggle_options.transition.kind
+           == MaterialGlassTransitionKind::MatchedGeometry);
+    assert(std::fabs(toggle_options.transition.progress - 0.7f) < 0.0001f);
+    assert(!toggle_options.transition.appearing);
+    assert(toggle_options.glass_identity == identity);
+    assert(toggle_options.container.container_id == container_id);
+    assert(toggle_options.container.union_id == union_id);
+    assert(std::fabs(toggle_options.container.spacing - 9.0f) < 0.0001f);
+
+    auto switch_options = widget::glass_switch_style_options(
+        effect_glass,
+        GlassSwitchStyleOptions{.role = MaterialSurfaceRole::Control});
+    assert(switch_options.kind == MaterialKind::Clear);
+    assert(switch_options.has_effect_context);
+    assert(switch_options.container.container_id == container_id);
+    assert(switch_options.container.union_id == union_id);
+
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::glass_checkbox<Msg>(
+        "Glass Check",
+        true,
+        ToggleA{},
+        effect_glass,
+        GlassToggleStyleOptions{.role = MaterialSurfaceRole::Toolbar});
+    widget::glass_radio<Msg>(
+        "Glass Radio",
+        false,
+        PickB{1},
+        effect_glass.effect_id("indicators", "radio"));
+    widget::glass_switch<Msg>(
+        "Glass Switch",
+        true,
+        ToggleA{},
+        effect_glass.effect_id("indicators", "switch"));
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 400.0f);
+
+    auto const& root = detail::node_at(root_h);
+    assert(root.children.size() == 3u);
+
+    auto const& check_row = detail::node_at(root.children[0]);
+    auto const& check_box = detail::node_at(check_row.children[0]);
+    assert(check_row.interaction_role == InteractionRole::Checkbox);
+    assert(check_box.material.kind == MaterialKind::Clear);
+    assert(check_box.material.role == MaterialSurfaceRole::Toolbar);
+    assert(check_box.material.tint == tint);
+    assert(check_box.material.border == border);
+    assert(check_box.debug_semantic_label == "Glass Check Indicator");
+    assert_glass_effect_context(
+        check_box.material,
+        identity,
+        container_id,
+        union_id,
+        9.0f,
+        MaterialGlassTransitionKind::MatchedGeometry,
+        0.7f,
+        false);
+
+    auto const& radio_row = detail::node_at(root.children[1]);
+    auto const& radio_box = detail::node_at(radio_row.children[0]);
+    assert(radio_row.interaction_role == InteractionRole::Radio);
+    assert(radio_box.material.kind == MaterialKind::Clear);
+    assert(radio_box.material.glass_identity
+           == layout::glass_effect_identity("indicators", "radio"));
+    assert(radio_box.material.container.container_id == container_id);
+    assert(radio_box.material.container.union_id == union_id);
+    assert(radio_box.material.transition.kind
+           == MaterialGlassTransitionKind::MatchedGeometry);
+
+    auto const& switch_row = detail::node_at(root.children[2]);
+    auto const& switch_track = detail::node_at(switch_row.children[0]);
+    assert(switch_row.debug_semantic_role == "switch");
+    assert(switch_track.material.kind == MaterialKind::Clear);
+    assert(switch_track.material.tint == tint);
+    assert(switch_track.material.border == border);
+    assert(switch_track.material.glass_identity
+           == layout::glass_effect_identity("indicators", "switch"));
+    assert_glass_effect_context(
+        switch_track.material,
+        layout::glass_effect_identity("indicators", "switch"),
+        container_id,
+        union_id,
+        9.0f,
+        MaterialGlassTransitionKind::MatchedGeometry,
+        0.7f,
+        false);
+
+    assert(check_row.callback_id != 0xFFFFFFFFu);
+    assert(check_row.focusable);
+    assert(radio_row.callback_id != 0xFFFFFFFFu);
+    assert(radio_row.focusable);
+    assert(switch_row.callback_id != 0xFFFFFFFFu);
+    assert(switch_row.focusable);
+
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+
+    auto scoped_root_h = detail::alloc_node();
+    detail::node_at(scoped_root_h).style.flex_direction = FlexDirection::Column;
+    Scope scoped_scope(scoped_root_h);
+    Scope::set_current(&scoped_scope);
+    layout::glass_effect_container(
+        layout::GlassEffectContainerOptions{
+            .container_id = 704u,
+            .union_id = 22u,
+            .spacing = 14.0f,
+            .interactive = false,
+            .morph_transitions = true,
+        },
+        [&] {
+            layout::glass_effect_transition(
+                layout::glass_materialize_transition(0.35f, true),
+                [&] {
+                    widget::glass_checkbox<Msg>(
+                        "Scoped Check",
+                        true,
+                        ToggleA{},
+                        layout::glass_regular()
+                            .effect_id("indicators", "scoped"));
+                });
+        });
+    Scope::set_current(nullptr);
+
+    auto const& scoped_root = detail::node_at(scoped_root_h);
+    assert(scoped_root.children.size() == 1u);
+    auto const& scoped_row = detail::node_at(scoped_root.children[0]);
+    auto const& scoped_box = detail::node_at(scoped_row.children[0]);
+    assert(scoped_box.material.kind == MaterialKind::Regular);
+    assert_glass_effect_context(
+        scoped_box.material,
+        layout::glass_effect_identity("indicators", "scoped"),
+        704u,
+        22u,
+        14.0f,
+        MaterialGlassTransitionKind::Materialize,
+        0.35f,
+        true);
+
+    std::puts("PASS: glass effect context reaches indicator controls");
+}
+
 void test_symbol_button_minimum_hit_region_contract() {
     icons::SymbolButtonOptions options;
     options.role = icons::SymbolPresentationRole::Toolbar;
@@ -7951,6 +8142,7 @@ int main() {
     test_glass_table_header_button_material_contract();
     test_glass_disclosure_header_style_material_contract();
     test_glass_effect_context_reaches_control_styles();
+    test_glass_effect_context_reaches_indicator_controls();
     test_symbol_button_minimum_hit_region_contract();
     test_symbol_button_visual_state_token_contract();
     test_symbol_button_disabled_contract();
