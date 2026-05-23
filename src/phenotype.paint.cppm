@@ -333,7 +333,7 @@ void emit_material_rect(R& r, float x, float y, float w, float h,
                         float radius, MaterialStyle const& material) {
     if (material.kind == MaterialKind::None || material.tint.a == 0)
         return;
-    if (!detail::ensure(r, 104, Cmd::MaterialRect)) return;
+    if (!detail::ensure(r, 116, Cmd::MaterialRect)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::MaterialRect));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, w); detail::write_f32(r, h);
@@ -358,6 +358,11 @@ void emit_material_rect(R& r, float x, float y, float w, float h,
     detail::write_u32(r, material_interaction_flags(material.interaction));
     detail::write_f32(r, material.interaction.pointer_x);
     detail::write_f32(r, material.interaction.pointer_y);
+    detail::write_u32(
+        r,
+        static_cast<unsigned int>(material.transition.kind));
+    detail::write_f32(r, material.transition.progress);
+    detail::write_u32(r, material_transition_flags(material.transition));
 }
 
 template <render_backend R>

@@ -2627,6 +2627,9 @@ void test_material_surface_emits_material_rect_command() {
     assert(descriptor.container.container_id == 0u);
     assert(descriptor.container.union_id == 0u);
     assert(!descriptor.container.interactive);
+    assert(descriptor.transition.kind == MaterialGlassTransitionKind::Identity);
+    assert(descriptor.transition.progress == 1.0f);
+    assert(descriptor.transition.appearing);
     assert(descriptor.opacity > 0.5f);
     assert(descriptor.blur_radius >= 20.0f);
     assert(descriptor.tint.a > 0);
@@ -2656,6 +2659,11 @@ void test_material_surface_shape_overrides() {
         layout::MaterialSurfaceOptions{
             .kind = MaterialKind::Regular,
             .role = MaterialSurfaceRole::Content,
+            .transition = MaterialTransitionDescriptor{
+                .kind = MaterialGlassTransitionKind::Materialize,
+                .progress = 0.5f,
+                .appearing = false,
+            },
             .fixed_height = 40.0f,
             .border_radius = 7.5f,
             .border_width = 0.0f,
@@ -2682,6 +2690,11 @@ void test_material_surface_shape_overrides() {
     assert(material != nullptr);
     assert(std::fabs(material->radius - 7.5f) < 0.0001f);
     assert(material->material.role == MaterialSurfaceRole::Content);
+    assert(material->material.transition.kind
+           == MaterialGlassTransitionKind::Materialize);
+    assert(std::fabs(material->material.transition.progress - 0.5f)
+           < 0.0001f);
+    assert(!material->material.transition.appearing);
     assert(!saw_stroke);
 
     std::puts("PASS: material surface shape overrides");
