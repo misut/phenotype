@@ -389,13 +389,37 @@ void view(State const& state) {
             layout::spacer(6);
             widget::text("Checkboxes and radios help verify focus order, pointer interaction, and persistent selection state.");
             layout::spacer(8);
-            widget::checkbox<Msg>("I agree to the terms", state.agreed, ToggleAgreed{});
+            auto indicator_glass = layout::glass_clear()
+                .tint(Color{64, 156, 255, 90})
+                .effect_union("native.showcase", "indicator.controls", 10.0f)
+                .matched_geometry();
+            widget::glass_checkbox<Msg>(
+                "I agree to the terms",
+                state.agreed,
+                ToggleAgreed{},
+                indicator_glass.effect_id("native.showcase", "agree"));
             layout::spacer(6);
-            widget::switch_<Msg>("Email notifications", state.notifications, ToggleNotifications{});
+            widget::glass_switch<Msg>(
+                "Email notifications",
+                state.notifications,
+                ToggleNotifications{},
+                indicator_glass.effect_id("native.showcase", "notifications"));
             layout::spacer(6);
-            widget::radio<Msg>("Option A", state.choice == 0, SetChoice{0});
-            widget::radio<Msg>("Option B", state.choice == 1, SetChoice{1});
-            widget::radio<Msg>("Option C", state.choice == 2, SetChoice{2});
+            widget::glass_radio<Msg>(
+                "Option A",
+                state.choice == 0,
+                SetChoice{0},
+                indicator_glass.effect_id("native.showcase", "option-a"));
+            widget::glass_radio<Msg>(
+                "Option B",
+                state.choice == 1,
+                SetChoice{1},
+                indicator_glass.effect_id("native.showcase", "option-b"));
+            widget::glass_radio<Msg>(
+                "Option C",
+                state.choice == 2,
+                SetChoice{2},
+                indicator_glass.effect_id("native.showcase", "option-c"));
             layout::spacer(10);
             widget::text(std::string("Agreement: ") + (state.agreed ? "enabled" : "disabled"));
             layout::spacer(4);

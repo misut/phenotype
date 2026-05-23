@@ -1102,6 +1102,40 @@ inline MaterialStyle glass_control_indicator_material(
     return material;
 }
 
+inline void apply_glass_toggle_effect_context(
+        MaterialStyle& material,
+        GlassToggleStyleOptions const& options) {
+    if (!options.has_effect_context || material.kind == MaterialKind::None)
+        return;
+
+    material.transition = options.transition;
+    material.glass_identity = options.glass_identity;
+    if (options.container.participates()) {
+        auto const keep_interaction =
+            material.container.interactive || options.container.interactive;
+        material.container = options.container;
+        if (keep_interaction)
+            material.container.interactive = true;
+    }
+}
+
+inline void apply_glass_switch_effect_context(
+        MaterialStyle& material,
+        GlassSwitchStyleOptions const& options) {
+    if (!options.has_effect_context || material.kind == MaterialKind::None)
+        return;
+
+    material.transition = options.transition;
+    material.glass_identity = options.glass_identity;
+    if (options.container.participates()) {
+        auto const keep_interaction =
+            material.container.interactive || options.container.interactive;
+        material.container = options.container;
+        if (keep_interaction)
+            material.container.interactive = true;
+    }
+}
+
 template<typename Msg>
 inline void toggle(str label, bool active, Msg msg,
                    float corner_radius, Decoration active_decoration,
@@ -1196,6 +1230,17 @@ inline void toggle(str label, bool active, Msg msg,
                 idle_tint,
                 material_with_alpha(t.accent_strong, 210),
                 material_with_alpha(t.border, 140));
+            material.container = MaterialContainerDescriptor{
+                0u,
+                0u,
+                8.0f,
+                true,
+                true};
+            if (glass_options->has_tint)
+                material.tint = glass_options->tint;
+            if (glass_options->has_border)
+                material.border = glass_options->border;
+            apply_glass_toggle_effect_context(material, *glass_options);
             box.material = material;
             box.background = material.tint;
             box.border_color = material.border;
@@ -2010,6 +2055,17 @@ inline void switch_control(str label, bool on, Msg msg,
                 animated_tint,
                 material_with_alpha(t.accent_strong, 210),
                 material_with_alpha(t.border, 150));
+            material.container = MaterialContainerDescriptor{
+                0u,
+                0u,
+                8.0f,
+                true,
+                true};
+            if (glass_options->has_tint)
+                material.tint = glass_options->tint;
+            if (glass_options->has_border)
+                material.border = glass_options->border;
+            apply_glass_switch_effect_context(material, *glass_options);
             tr.material = material;
             tr.background = material.tint;
             tr.border_color = material.border;
@@ -4885,6 +4941,80 @@ inline GlassControlStyleOptions glass_control_style_options(
     return options;
 }
 
+inline void apply_glass_effect_style_options(
+        GlassToggleStyleOptions& options,
+        layout::GlassEffectStyle glass) {
+    options.kind = glass.kind;
+    if (glass.is_identity()) {
+        options.has_tint = false;
+        options.has_border = false;
+        options.has_effect_context = false;
+        return;
+    }
+    if (glass.has_tint) {
+        options.has_tint = true;
+        options.tint = glass.tint_color;
+    }
+    if (glass.has_border) {
+        options.has_border = true;
+        options.border = glass.border_color;
+    }
+    options.has_effect_context = true;
+    options.transition = layout::resolve_material_transition(
+        glass.transition_descriptor,
+        glass.inherit_transition);
+    options.glass_identity = layout::resolve_material_glass_identity(
+        glass.glass_identity_descriptor,
+        glass.inherit_identity);
+    options.container = glass.inherit_container
+        ? layout::current_material_container()
+        : glass.container_descriptor;
+}
+
+inline void apply_glass_effect_style_options(
+        GlassSwitchStyleOptions& options,
+        layout::GlassEffectStyle glass) {
+    options.kind = glass.kind;
+    if (glass.is_identity()) {
+        options.has_tint = false;
+        options.has_border = false;
+        options.has_effect_context = false;
+        return;
+    }
+    if (glass.has_tint) {
+        options.has_tint = true;
+        options.tint = glass.tint_color;
+    }
+    if (glass.has_border) {
+        options.has_border = true;
+        options.border = glass.border_color;
+    }
+    options.has_effect_context = true;
+    options.transition = layout::resolve_material_transition(
+        glass.transition_descriptor,
+        glass.inherit_transition);
+    options.glass_identity = layout::resolve_material_glass_identity(
+        glass.glass_identity_descriptor,
+        glass.inherit_identity);
+    options.container = glass.inherit_container
+        ? layout::current_material_container()
+        : glass.container_descriptor;
+}
+
+inline GlassToggleStyleOptions glass_toggle_style_options(
+        layout::GlassEffectStyle glass,
+        GlassToggleStyleOptions options = {}) {
+    apply_glass_effect_style_options(options, glass);
+    return options;
+}
+
+inline GlassSwitchStyleOptions glass_switch_style_options(
+        layout::GlassEffectStyle glass,
+        GlassSwitchStyleOptions options = {}) {
+    apply_glass_effect_style_options(options, glass);
+    return options;
+}
+
 inline void apply_glass_effect_style_material(
         MaterialStyle& material,
         bool has_material,
@@ -5048,6 +5178,50 @@ inline void glass_text_field(str hint,
         current,
         mapper,
         glass_text_field_style(glass, options));
+}
+
+template<typename Msg>
+inline void glass_checkbox(str label,
+                           bool checked,
+                           Msg msg,
+                           layout::GlassEffectStyle glass,
+                           GlassToggleStyleOptions options = {}) {
+    auto style = glass_toggle_style_options(glass, options);
+    _impl::toggle(
+        label,
+        checked,
+        std::move(msg),
+        detail::g_app.theme.radius_xs,
+        Decoration::Check,
+        InteractionRole::Checkbox,
+        &style);
+}
+
+template<typename Msg>
+inline void glass_radio(str label,
+                        bool selected,
+                        Msg msg,
+                        layout::GlassEffectStyle glass,
+                        GlassToggleStyleOptions options = {}) {
+    auto style = glass_toggle_style_options(glass, options);
+    _impl::toggle(
+        label,
+        selected,
+        std::move(msg),
+        detail::g_app.theme.radius_lg,
+        Decoration::Dot,
+        InteractionRole::Radio,
+        &style);
+}
+
+template<typename Msg>
+inline void glass_switch(str label,
+                         bool on,
+                         Msg msg,
+                         layout::GlassEffectStyle glass,
+                         GlassSwitchStyleOptions options = {}) {
+    auto style = glass_switch_style_options(glass, options);
+    _impl::switch_control(label, on, std::move(msg), &style);
 }
 
 } // namespace widget

@@ -1463,11 +1463,27 @@ struct GlassControlStyleOptions {
 struct GlassToggleStyleOptions {
     MaterialKind kind = MaterialKind::Thin;
     MaterialSurfaceRole role = MaterialSurfaceRole::Control;
+    bool has_tint = false;
+    Color tint = {};
+    bool has_border = false;
+    Color border = {};
+    bool has_effect_context = false;
+    MaterialTransitionDescriptor transition{};
+    MaterialGlassIdentityDescriptor glass_identity{};
+    MaterialContainerDescriptor container{};
 };
 
 struct GlassSwitchStyleOptions {
     MaterialKind kind = MaterialKind::Thin;
     MaterialSurfaceRole role = MaterialSurfaceRole::Control;
+    bool has_tint = false;
+    Color tint = {};
+    bool has_border = false;
+    Color border = {};
+    bool has_effect_context = false;
+    MaterialTransitionDescriptor transition{};
+    MaterialGlassIdentityDescriptor glass_identity{};
+    MaterialContainerDescriptor container{};
 };
 
 enum class GlassSplitButtonSegment {
