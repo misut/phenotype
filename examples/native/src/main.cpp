@@ -474,6 +474,18 @@ void view(State const& state) {
                 layout::spacer(8);
                 widget::code("layout::glass_effect_container(options, builder);");
             });
+            layout::spacer(8);
+            auto chip_glass = layout::glass_clear()
+                .tint(Color{64, 156, 255, 88})
+                .effect_union("native.showcase", "chip.pair", 16.0f);
+            layout::row([&] {
+                layout::glass_effect(chip_glass, [] {
+                    widget::text("Unified");
+                });
+                layout::glass_effect(chip_glass, [] {
+                    widget::text("Capsules");
+                });
+            });
         });
 
         layout::spacer(12);

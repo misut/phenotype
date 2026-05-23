@@ -3750,6 +3750,113 @@ void test_glass_effect_style_carries_transition_and_identity() {
     std::puts("PASS: glass effect style carries transition and identity");
 }
 
+void test_glass_effect_style_carries_union_context() {
+    auto const union_descriptor = layout::glass_effect_union_descriptor(
+        layout::GlassEffectUnionOptions{
+            .namespace_id = 771u,
+            .union_id = 12u,
+            .spacing = 18.0f,
+            .interactive = true,
+            .morph_transitions = true,
+        });
+    auto style = layout::glass_regular()
+        .tint(Color{64, 156, 255, 96})
+        .effect_union(union_descriptor);
+    auto options = layout::glass_effect_options(style);
+    assert(options.kind == MaterialKind::Regular);
+    assert(options.container == union_descriptor);
+    assert(!options.inherit_material_container);
+
+    auto stable = layout::glass_effect_options(
+        layout::glass_clear()
+            .effect_union("showcase.union", "weather", 14.0f));
+    assert(stable.container.container_id
+           == layout::glass_effect_stable_id("showcase.union"));
+    assert(stable.container.union_id
+           == layout::glass_effect_stable_id("weather"));
+    assert(std::fabs(stable.container.spacing - 14.0f) < 0.0001f);
+    assert(stable.container.mode() == MaterialContainerMode::Union);
+    assert(stable.container.morph_transitions);
+    assert(!stable.inherit_material_container);
+
+    auto inherited = layout::glass_effect_options(layout::glass_regular());
+    assert(inherited.inherit_material_container);
+
+    auto ignored_identity = layout::glass_effect_options(
+        layout::glass_identity().effect_union(union_descriptor));
+    assert(ignored_identity.kind == MaterialKind::None);
+    assert(ignored_identity.inherit_material_container);
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::glass_effect(
+        layout::glass_regular().effect_union(union_descriptor),
+        [] {
+            widget::text("Union A");
+        });
+    layout::glass_effect(
+        layout::glass_regular().effect_union(771u, 12u, 18.0f, true),
+        [] {
+            widget::text("Union B");
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    std::vector<MaterialRectCmd> materials;
+    for (auto const& cmd : cmds) {
+        if (auto const* material = std::get_if<MaterialRectCmd>(&cmd))
+            materials.push_back(*material);
+    }
+
+    assert(materials.size() == 2u);
+    for (auto const& material : materials) {
+        auto const& container = material.material.container;
+        assert(container.container_id == 771u);
+        assert(container.union_id == 12u);
+        assert(std::fabs(container.spacing - 18.0f) < 0.0001f);
+        assert(container.interactive);
+        assert(container.morph_transitions);
+        assert(container.mode() == MaterialContainerMode::Union);
+    }
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.render_target.width = 320;
+    env.render_target.height = 120;
+
+    auto plan = make_test_material_plan(
+        material_request_for_command(
+            materials[0].material,
+            MaterialGeometry{
+                materials[0].x,
+                materials[0].y,
+                materials[0].w,
+                materials[0].h,
+                materials[0].radius},
+            detail::g_app.theme),
+        env);
+    assert(plan->container.mode == MaterialContainerMode::Union);
+    assert(plan->container.shape_union_expected);
+    assert(plan->reference_model.container_union);
+
+    std::puts("PASS: glass effect style carries union context");
+}
+
 void test_glass_surface_presets_emit_material_contract() {
     auto toolbar = layout::glass_surface_options(
         layout::GlassSurfacePreset::Toolbar);
@@ -7384,6 +7491,7 @@ int main() {
     test_glass_background_effect_variants_map_to_material_contract();
     test_glass_effect_style_variants_map_to_material_contract();
     test_glass_effect_style_carries_transition_and_identity();
+    test_glass_effect_style_carries_union_context();
     test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();
     test_glass_effect_container_scope_emits_morph_context();
