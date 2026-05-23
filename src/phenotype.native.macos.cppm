@@ -2464,6 +2464,8 @@ inline void apply_material_container_execution_descriptors(
                 inst.group_rect[1] = inst.rect[1];
                 inst.group_rect[2] = inst.rect[2];
                 inst.group_rect[3] = inst.rect[3];
+                auto const match_motion =
+                    material_glass_effect_match_motion_optics(*execution);
                 if (record->plan.specular.interaction_driven) {
                     inst.interaction[0] = material_surface_execution_anchor_x(
                         record->plan,
@@ -2473,6 +2475,22 @@ inline void apply_material_container_execution_descriptors(
                         record->plan,
                         geometry,
                         record->plan.specular.anchor_y);
+                } else if (match_motion.active) {
+                    inst.interaction[0] = match_motion.specular_anchor_x;
+                    inst.interaction[1] = match_motion.specular_anchor_y;
+                    inst.interaction[2] = std::clamp(
+                        std::max(
+                            inst.interaction[2],
+                            record->plan.specular.radius
+                                + 0.04f * match_motion.strength),
+                        0.0f,
+                        1.0f);
+                    inst.interaction[3] = std::clamp(
+                        inst.interaction[3]
+                            * match_motion.specular_intensity_gain
+                            + 0.06f * match_motion.strength,
+                        0.0f,
+                        1.0f);
                 } else {
                     inst.interaction[0] = 0.5f;
                     inst.interaction[1] = 0.5f;
@@ -2488,6 +2506,23 @@ inline void apply_material_container_execution_descriptors(
                             record->plan,
                             geometry,
                             record->plan.interaction.pointer_lens_anchor_y);
+                }
+                if (match_motion.active) {
+                    inst.refraction[0] = std::clamp(
+                        inst.refraction[0]
+                            * (1.0f + 0.18f * match_motion.strength),
+                        0.0f,
+                        0.35f);
+                    inst.refraction[2] = std::clamp(
+                        inst.refraction[2] * match_motion.refraction_gain
+                            + 0.12f * match_motion.strength,
+                        0.0f,
+                        5.0f);
+                    inst.refraction[3] = std::clamp(
+                        inst.refraction[3] * match_motion.caustic_gain
+                            + 0.035f * match_motion.strength,
+                        0.0f,
+                        0.35f);
                 }
             } else {
                 inst.group_rect[0] = execution->group_x;
