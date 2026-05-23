@@ -2444,7 +2444,8 @@ inline void apply_material_container_execution_descriptors(
         if (execution->group_bounds_valid && execution->shape_blend_execution) {
             if (record
                 && (execution->glass_effect_match_execution
-                    || execution->union_execution)) {
+                    || execution->union_execution
+                    || execution->group_surface_execution)) {
                 auto const geometry = material_surface_execution_geometry(
                     record->plan,
                     execution);
@@ -2502,7 +2503,8 @@ inline void apply_material_container_execution_descriptors(
                 + (execution->union_execution ? 2.0f : 0.0f)
                 + (execution->morph_execution ? 4.0f : 0.0f)
                 + (execution->shared_backdrop_scope ? 8.0f : 0.0f)
-                + (execution->glass_effect_match_execution ? 16.0f : 0.0f);
+                + (execution->glass_effect_match_execution ? 16.0f : 0.0f)
+                + (execution->group_surface_execution ? 32.0f : 0.0f);
         }
     }
 }

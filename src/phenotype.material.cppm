@@ -5,6 +5,7 @@ module;
 #include <cmath>
 #include <span>
 #include <string_view>
+#include <vector>
 
 export module phenotype.material;
 
@@ -1273,6 +1274,7 @@ struct MaterialContainerExecutionDescriptor {
     bool group_bounds_valid = false;
     bool shared_backdrop_scope = false;
     bool shape_blend_execution = false;
+    bool group_surface_execution = false;
     bool union_execution = false;
     bool surface_leader = true;
     bool paint_layer_leader = true;
@@ -1364,7 +1366,7 @@ material_paint_layer_execution_geometry(
     if (!layer.active)
         return {};
     if (execution
-        && execution->union_execution
+        && (execution->union_execution || execution->group_surface_execution)
         && !execution->paint_layer_leader) {
         return {};
     }
@@ -1383,7 +1385,7 @@ material_paint_layer_execution_geometry(
         h = execution->glass_effect_match_rect_h;
         radius = execution->glass_effect_match_rect_radius;
     } else if (execution
-        && execution->union_execution
+        && (execution->union_execution || execution->group_surface_execution)
         && execution->group_bounds_valid) {
         x = execution->group_x;
         y = execution->group_y;
@@ -1807,6 +1809,12 @@ inline bool material_plan_uses_deterministic_fallback_executor(
         && material_stage_matches(plan.primary_pass.executor, "fallback-fill");
 }
 
+inline bool material_plan_uses_group_surface_merge_executor(
+        MaterialPlan const& plan) noexcept {
+    return material_plan_uses_sampled_backdrop_executor(plan)
+        || material_plan_uses_deterministic_fallback_executor(plan);
+}
+
 inline Color material_paint_layer_color_with_alpha(
         Color color,
         float alpha) noexcept {
@@ -1868,7 +1876,7 @@ inline MaterialSurfaceExecutionGeometry material_surface_execution_geometry(
     if (!plan.primary_pass.active)
         return {};
     if (execution
-        && execution->union_execution
+        && (execution->union_execution || execution->group_surface_execution)
         && !execution->surface_leader) {
         return {};
     }
@@ -1887,7 +1895,7 @@ inline MaterialSurfaceExecutionGeometry material_surface_execution_geometry(
         h = execution->glass_effect_match_rect_h;
         radius = execution->glass_effect_match_rect_radius;
     } else if (execution
-        && execution->union_execution
+        && (execution->union_execution || execution->group_surface_execution)
         && execution->group_bounds_valid) {
         x = execution->group_x;
         y = execution->group_y;
@@ -2493,6 +2501,152 @@ inline std::uint32_t material_container_group_shape_blend_surface_count(
     return count;
 }
 
+inline bool material_container_shape_blend_edge(
+        MaterialPlan const& a,
+        MaterialPlan const& b,
+        std::uint32_t container_id) noexcept {
+    if (!a.primary_pass.active
+        || !b.primary_pass.active
+        || !a.shape.valid
+        || !b.shape.valid
+        || !material_plan_in_container(a, container_id)
+        || !material_plan_in_container(b, container_id)) {
+        return false;
+    }
+    auto const gap = material_rect_gap(a.geometry, b.geometry);
+    auto const blend_distance = std::min(
+        a.container.blend_distance,
+        b.container.blend_distance);
+    return material_container_shape_blend_strength_for_gap(gap, blend_distance)
+        > 0.0f;
+}
+
+inline MaterialContainerGroupAccumulator
+accumulate_material_container_shape_blend_cluster(
+        MaterialRuntimeRecord const& anchor,
+        std::span<MaterialRuntimeRecord const> records,
+        MaterialContainerGroupAccumulator const& group) {
+    MaterialContainerGroupAccumulator cluster{
+        .container_id = group.container_id,
+    };
+    if (!material_container_group_shape_blend_execution_active(group)
+        || !anchor.plan.primary_pass.active
+        || !anchor.plan.shape.valid
+        || !material_plan_in_container(anchor.plan, group.container_id)) {
+        return cluster;
+    }
+
+    std::vector<unsigned char> selected(records.size(), 0u);
+    auto anchor_found = false;
+    for (std::size_t index = 0; index < records.size(); ++index) {
+        if (records[index].command_index == anchor.command_index) {
+            selected[index] = 1u;
+            anchor_found = true;
+            break;
+        }
+    }
+    if (!anchor_found)
+        return cluster;
+
+    auto changed = true;
+    while (changed) {
+        changed = false;
+        for (std::size_t index = 0; index < records.size(); ++index) {
+            if (selected[index] != 0u)
+                continue;
+            auto const& candidate = records[index];
+            if (!material_plan_in_container(candidate.plan, group.container_id))
+                continue;
+            for (std::size_t selected_index = 0;
+                 selected_index < records.size();
+                 ++selected_index) {
+                if (selected[selected_index] == 0u)
+                    continue;
+                if (material_container_shape_blend_edge(
+                        candidate.plan,
+                        records[selected_index].plan,
+                        group.container_id)) {
+                    selected[index] = 1u;
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    for (std::size_t index = 0; index < records.size(); ++index) {
+        if (selected[index] == 0u)
+            continue;
+        auto const& candidate = records[index].plan;
+        ++cluster.surface_count;
+        accumulate_material_container_bounds(cluster, candidate);
+        if (candidate.primary_pass.active)
+            ++cluster.active_surfaces;
+        if (candidate.backdrop_sampling)
+            ++cluster.sampled_backdrop_surfaces;
+        if (candidate.fallback())
+            ++cluster.fallback_surfaces;
+        if (candidate.container.shape_union_expected)
+            ++cluster.union_surfaces;
+        if (candidate.container.morph_transitions)
+            ++cluster.morph_surfaces;
+        if (candidate.container.interactive)
+            ++cluster.interactive_surfaces;
+        if (candidate.container.shared_backdrop_scope)
+            ++cluster.shared_backdrop_scope_surfaces;
+    }
+    for (std::size_t left = 0; left < records.size(); ++left) {
+        if (selected[left] == 0u)
+            continue;
+        for (std::size_t right = left + 1; right < records.size(); ++right) {
+            if (selected[right] == 0u)
+                continue;
+            accumulate_material_container_pair(
+                cluster,
+                records[left].plan,
+                records[right].plan);
+        }
+    }
+    return cluster;
+}
+
+inline bool material_container_plan_inside_cluster_bounds(
+        MaterialPlan const& plan,
+        MaterialContainerGroupAccumulator const& cluster) noexcept {
+    if (!cluster.has_bounds || !plan.shape.valid)
+        return false;
+    auto const x1 = plan.geometry.x + std::max(0.0f, plan.geometry.w);
+    auto const y1 = plan.geometry.y + std::max(0.0f, plan.geometry.h);
+    return plan.geometry.x >= cluster.min_x
+        && plan.geometry.y >= cluster.min_y
+        && x1 <= cluster.max_x
+        && y1 <= cluster.max_y;
+}
+
+inline bool material_container_shape_blend_surface_leader(
+        MaterialRuntimeRecord const& record,
+        std::span<MaterialRuntimeRecord const> records,
+        MaterialContainerGroupAccumulator const& cluster) {
+    if (!material_plan_uses_group_surface_merge_executor(record.plan))
+        return true;
+    auto found = false;
+    auto leader_command_index = record.command_index;
+    for (auto const& candidate : records) {
+        if (!material_plan_uses_group_surface_merge_executor(candidate.plan)
+            || !material_plan_in_container(candidate.plan, cluster.container_id)
+            || !material_container_plan_inside_cluster_bounds(
+                candidate.plan,
+                cluster)) {
+            continue;
+        }
+        if (!found || candidate.command_index < leader_command_index) {
+            leader_command_index = candidate.command_index;
+            found = true;
+        }
+    }
+    return !found || record.command_index == leader_command_index;
+}
+
 inline float material_container_inner_edge_alpha_blend_strength(
         MaterialContainerGroupAccumulator const& group,
         float shape_blend) noexcept {
@@ -2800,6 +2954,11 @@ material_container_execution_descriptor_from_group(
         && match_source.valid();
     auto const group_shape_blend_execution =
         material_container_group_shape_blend_execution_active(group);
+    auto const shape_blend_cluster =
+        accumulate_material_container_shape_blend_cluster(
+            record,
+            records,
+            group);
     auto const union_group = accumulate_material_glass_effect_union_group(
         records,
         plan);
@@ -2814,12 +2973,30 @@ material_container_execution_descriptor_from_group(
         descriptor.shape_blend_execution
         && union_group_shape_blend_execution
         && !descriptor.glass_effect_match_execution;
+    descriptor.group_surface_execution =
+        descriptor.shape_blend_execution
+        && !descriptor.union_execution
+        && !descriptor.glass_effect_match_execution
+        && material_container_group_shape_blend_execution_active(
+            shape_blend_cluster)
+        && (shape_blend_cluster.sampled_backdrop_surfaces
+                + shape_blend_cluster.fallback_surfaces) > 1u
+        && material_plan_uses_group_surface_merge_executor(plan);
     descriptor.surface_leader =
-        !descriptor.union_execution
-        || material_glass_effect_union_surface_leader(record, records);
+        descriptor.group_surface_execution
+            ? material_container_shape_blend_surface_leader(
+                record,
+                records,
+                shape_blend_cluster)
+            : (!descriptor.union_execution
+                || material_glass_effect_union_surface_leader(record, records));
     descriptor.paint_layer_leader =
-        !descriptor.union_execution
-        || material_glass_effect_union_paint_layer_leader(record, records);
+        descriptor.group_surface_execution
+            ? descriptor.surface_leader
+            : (!descriptor.union_execution
+                || material_glass_effect_union_paint_layer_leader(
+                    record,
+                    records));
     descriptor.morph_execution =
         descriptor.shape_blend_execution
         && (group.morph_surfaces > 0u
@@ -2896,6 +3073,17 @@ material_container_execution_descriptor_from_group(
         descriptor.group_h = std::max(
             0.0f,
             union_group.max_y - union_group.min_y);
+    } else if (descriptor.group_surface_execution
+               && shape_blend_cluster.has_bounds) {
+        descriptor.group_bounds_valid = true;
+        descriptor.group_x = shape_blend_cluster.min_x;
+        descriptor.group_y = shape_blend_cluster.min_y;
+        descriptor.group_w = std::max(
+            0.0f,
+            shape_blend_cluster.max_x - shape_blend_cluster.min_x);
+        descriptor.group_h = std::max(
+            0.0f,
+            shape_blend_cluster.max_y - shape_blend_cluster.min_y);
     } else if (group.has_bounds) {
         descriptor.group_x = group.min_x;
         descriptor.group_y = group.min_y;
