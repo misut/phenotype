@@ -454,7 +454,6 @@ void view(State const& state) {
                 layout::glass_regular()
                     .tint(Color{64, 156, 255, 96})
                     .interactive());
-            glass.role = MaterialSurfaceRole::Content;
             glass.glass_identity =
                 layout::glass_effect_identity("native.showcase", "surface");
             glass.transition = layout::glass_matched_geometry_transition(1.0f);
@@ -468,7 +467,10 @@ void view(State const& state) {
                     widget::glass_prominent_button<Msg>(
                         "Glass action",
                         Increment{});
-                    widget::glass_button<Msg>("Secondary", Decrement{});
+                    widget::glass_button<Msg>(
+                        "Secondary",
+                        Decrement{},
+                        layout::glass_clear().tint(Color{64, 156, 255, 110}));
                 });
                 layout::spacer(8);
                 widget::code("layout::glass_effect_container(options, builder);");
