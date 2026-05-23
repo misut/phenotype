@@ -1863,6 +1863,86 @@ void test_glass_effect_union_fallback_paint_uses_group_leader() {
     std::puts("PASS: glass effect union fallback paint uses group leader");
 }
 
+void test_glass_effect_matched_fallback_paint_uses_match_rect() {
+    auto source = regular_request();
+    source.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 12.0f};
+    source.style.container = MaterialContainerDescriptor{
+        .container_id = 930u,
+        .union_id = 0u,
+        .spacing = 128.0f,
+        .interactive = false,
+        .morph_transitions = true,
+    };
+    source.style.transition = MaterialTransitionDescriptor{};
+    source.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 41u,
+        .effect_id = 930u,
+    };
+
+    auto target = source;
+    target.geometry = MaterialGeometry{120.0f, 0.0f, 40.0f, 40.0f, 24.0f};
+    target.style.transition = MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::MatchedGeometry,
+        .progress = 0.5f,
+        .appearing = true,
+    };
+    target.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 41u,
+        .effect_id = 931u,
+    };
+
+    auto env = sampled_environment();
+    env.capabilities.material_backdrop_blur = false;
+    env.capabilities.shader_blur = false;
+    env.capabilities.frame_history = false;
+    env.backdrop.available = false;
+    env.backdrop.stable = false;
+    env.backdrop.source = "none";
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(source, env), 1u},
+        {plan_material_surface(target, env), 2u},
+    };
+    assert(records[1].plan.paint_layer_count > 1u);
+
+    auto const source_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const target_execution =
+        material_container_execution_descriptor(records[1], records);
+    assert(!source_execution.glass_effect_match_execution);
+    assert(target_execution.glass_effect_match_execution);
+    assert(target_execution.glass_effect_match_source_valid);
+    assert(std::fabs(target_execution.glass_effect_match_rect_x - 60.0f)
+           < 0.0001f);
+    assert(std::fabs(target_execution.glass_effect_match_rect_radius - 18.0f)
+           < 0.0001f);
+
+    auto const& layer = records[1].plan.paint_layers[1];
+    auto const inflate = std::max(layer.inflate, 0.0f);
+    auto const base_geometry =
+        material_paint_layer_execution_geometry(records[1].plan, layer);
+    auto const matched_geometry =
+        material_paint_layer_execution_geometry(
+            records[1].plan,
+            layer,
+            &target_execution);
+    assert(base_geometry.active);
+    assert(matched_geometry.active);
+    assert(std::fabs(base_geometry.x - (target.geometry.x + layer.x_offset - inflate))
+           < 0.0001f);
+    assert(std::fabs(matched_geometry.x
+                     - (target_execution.glass_effect_match_rect_x
+                        + layer.x_offset
+                        - inflate))
+           < 0.0001f);
+    assert(std::fabs(matched_geometry.radius
+                     - (target_execution.glass_effect_match_rect_radius
+                        + layer.radius_delta))
+           < 0.0001f);
+
+    std::puts("PASS: glass effect matched fallback paint uses match rect");
+}
+
 } // namespace
 
 int main() {
@@ -1889,6 +1969,7 @@ int main() {
     test_container_member_shape_blend_uses_spacing_falloff();
     test_glass_effect_union_uses_compatible_render_bounds();
     test_glass_effect_union_fallback_paint_uses_group_leader();
+    test_glass_effect_matched_fallback_paint_uses_match_rect();
     std::puts("\nAll material tests passed.");
     return 0;
 }

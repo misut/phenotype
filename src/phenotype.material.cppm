@@ -1331,6 +1331,14 @@ material_paint_layer_execution_geometry(
     auto h = plan.geometry.h;
     auto radius = plan.shape.effective_radius;
     if (execution
+        && execution->glass_effect_match_execution
+        && execution->glass_effect_match_source_valid) {
+        x = execution->glass_effect_match_rect_x;
+        y = execution->glass_effect_match_rect_y;
+        w = execution->glass_effect_match_rect_w;
+        h = execution->glass_effect_match_rect_h;
+        radius = execution->glass_effect_match_rect_radius;
+    } else if (execution
         && execution->union_execution
         && execution->group_bounds_valid) {
         x = execution->group_x;
