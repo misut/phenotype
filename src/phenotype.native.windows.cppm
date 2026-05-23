@@ -3041,6 +3041,9 @@ inline bool decode_frame_commands(unsigned char const* buf,
             unsigned int transition_flags = 1u;
             unsigned int glass_namespace_id = 0;
             unsigned int glass_effect_id = 0;
+            unsigned int glass_background_kind = 0;
+            float glass_background_feather_padding = 0.0f;
+            float glass_background_soft_edge_radius = 0.0f;
             if (!reader.read_f32(x) || !reader.read_f32(y)
                 || !reader.read_f32(w) || !reader.read_f32(h)
                 || !reader.read_f32(radius)
@@ -3068,7 +3071,10 @@ inline bool decode_frame_commands(unsigned char const* buf,
                 || !reader.read_f32(transition_progress)
                 || !reader.read_u32(transition_flags)
                 || !reader.read_u32(glass_namespace_id)
-                || !reader.read_u32(glass_effect_id))
+                || !reader.read_u32(glass_effect_id)
+                || !reader.read_u32(glass_background_kind)
+                || !reader.read_f32(glass_background_feather_padding)
+                || !reader.read_f32(glass_background_soft_edge_radius))
                 return false;
             auto material_env_for_command = material_env;
             material_env_for_command.debug_seed.node = current_command_index;
@@ -3101,7 +3107,11 @@ inline bool decode_frame_commands(unsigned char const* buf,
                     transition_flags),
                 material_glass_identity_from_wire(
                     glass_namespace_id,
-                    glass_effect_id)};
+                    glass_effect_id),
+                material_glass_background_from_wire(
+                    glass_background_kind,
+                    glass_background_feather_padding,
+                    glass_background_soft_edge_radius)};
             auto plan = plan_material_surface(
                 material_request_for_command(
                     descriptor,

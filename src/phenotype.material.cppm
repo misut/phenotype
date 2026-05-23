@@ -13,7 +13,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 50;
+inline constexpr std::uint32_t material_plan_contract_version = 51;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -764,6 +764,20 @@ struct MaterialGlassIdentityAnalysis {
     char const* policy = "unidentified";
 };
 
+struct MaterialGlassBackgroundAnalysis {
+    bool active = false;
+    MaterialGlassBackgroundEffectKind kind =
+        MaterialGlassBackgroundEffectKind::None;
+    char const* kind_name = "none";
+    bool automatic = false;
+    bool plate = false;
+    bool feathered = false;
+    float feather_padding = 0.0f;
+    float soft_edge_radius = 0.0f;
+    char const* optical_profile = "none";
+    char const* edge_policy = "none";
+};
+
 struct MaterialReferenceModel {
     char const* technology = "liquid-glass";
     char const* layer = "functional-layer";
@@ -784,6 +798,9 @@ struct MaterialReferenceModel {
     bool container_morphing = false;
     bool glass_effect_identified = false;
     bool glass_effect_matched_geometry = false;
+    char const* glass_background_effect = "none";
+    bool glass_background_plate = false;
+    bool glass_background_feathered = false;
     bool legibility_preserved = true;
     bool vibrancy_expected = false;
     bool deterministic_degradation = true;
@@ -831,6 +848,7 @@ struct MaterialPlan {
     MaterialContainerAnalysis container{};
     MaterialTransitionAnalysis transition{};
     MaterialGlassIdentityAnalysis glass_identity{};
+    MaterialGlassBackgroundAnalysis glass_background{};
     MaterialReferenceModel reference_model{};
     MaterialDecisionTrace decision_trace{};
     float opacity = 0.0f;
@@ -3027,7 +3045,8 @@ inline MaterialCommandDescriptor material_command_descriptor(
         style.shadow_radius,
         style.interaction,
         style.transition,
-        style.glass_identity};
+        style.glass_identity,
+        style.glass_background};
 }
 
 inline MaterialStyle material_style_for_command(MaterialKind kind,
@@ -3098,6 +3117,7 @@ inline MaterialStyle material_style_for_command(
     style.interaction = descriptor.interaction;
     style.transition = descriptor.transition;
     style.glass_identity = descriptor.glass_identity;
+    style.glass_background = descriptor.glass_background;
     return style;
 }
 
@@ -3811,6 +3831,39 @@ inline MaterialGlassIdentityAnalysis analyze_material_glass_identity(
     } else {
         analysis.source = "glass-effect-id";
         analysis.policy = "view-identity";
+    }
+    return analysis;
+}
+
+inline MaterialGlassBackgroundAnalysis analyze_material_glass_background(
+        MaterialGlassBackgroundDescriptor descriptor) noexcept {
+    MaterialGlassBackgroundAnalysis analysis{};
+    analysis.kind = descriptor.kind;
+    analysis.kind_name =
+        material_glass_background_effect_kind_name(descriptor.kind);
+    analysis.active = descriptor.active();
+    analysis.automatic =
+        descriptor.kind == MaterialGlassBackgroundEffectKind::Automatic;
+    analysis.plate =
+        descriptor.kind == MaterialGlassBackgroundEffectKind::Plate;
+    analysis.feathered =
+        descriptor.kind == MaterialGlassBackgroundEffectKind::Feathered;
+    analysis.feather_padding =
+        material_glass_background_non_negative(descriptor.feather_padding);
+    analysis.soft_edge_radius =
+        material_glass_background_non_negative(descriptor.soft_edge_radius);
+    if (!analysis.active) {
+        analysis.optical_profile = "none";
+        analysis.edge_policy = "none";
+    } else if (analysis.plate) {
+        analysis.optical_profile = "plate";
+        analysis.edge_policy = "bounded-plate";
+    } else if (analysis.feathered) {
+        analysis.optical_profile = "feathered";
+        analysis.edge_policy = "soft-feathered-edge";
+    } else {
+        analysis.optical_profile = "automatic";
+        analysis.edge_policy = "container-relative";
     }
     return analysis;
 }
@@ -4664,6 +4717,9 @@ inline MaterialReferenceModel material_resolve_reference_model(
     model.glass_effect_identified = plan.glass_identity.participates;
     model.glass_effect_matched_geometry =
         plan.glass_identity.matched_geometry_candidate;
+    model.glass_background_effect = plan.glass_background.kind_name;
+    model.glass_background_plate = plan.glass_background.plate;
+    model.glass_background_feathered = plan.glass_background.feathered;
     model.legibility_preserved =
         plan.foreground.primary_contrast_ratio
             >= plan.foreground.minimum_contrast_ratio
@@ -5001,6 +5057,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         style.glass_identity,
         plan.container,
         plan.transition);
+    plan.glass_background = analyze_material_glass_background(
+        style.glass_background);
     plan.opacity = std::clamp(style.opacity, 0.0f, 1.0f);
     plan.blur_radius = std::clamp(
         style.blur_radius, 0.0f, max_blur_radius);

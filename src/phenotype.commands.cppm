@@ -190,6 +190,9 @@ inline std::vector<DrawCommand> parse_commands(
             auto transition_flags = read_u32();
             auto glass_namespace_id = read_u32();
             auto glass_effect_id = read_u32();
+            auto glass_background_kind = read_u32();
+            auto glass_background_feather_padding = read_f32();
+            auto glass_background_soft_edge_radius = read_f32();
             out.emplace_back(MaterialRectCmd{
                 x,
                 y,
@@ -225,7 +228,11 @@ inline std::vector<DrawCommand> parse_commands(
                         transition_flags),
                     material_glass_identity_from_wire(
                         glass_namespace_id,
-                        glass_effect_id)}});
+                        glass_effect_id),
+                    material_glass_background_from_wire(
+                        glass_background_kind,
+                        glass_background_feather_padding,
+                        glass_background_soft_edge_radius)}});
             break;
         }
         case Cmd::DrawText: {
