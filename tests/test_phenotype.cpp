@@ -3271,6 +3271,162 @@ void test_glass_effect_shape_argument_anchors_material_contract() {
     std::puts("PASS: glass effect shape argument anchors material contract");
 }
 
+void test_glass_background_effect_display_modes_follow_containment_contract() {
+    assert(std::string_view{
+        layout::glass_background_display_mode_name(
+            layout::GlassBackgroundDisplayMode::Always)}
+        == "always");
+    assert(std::string_view{
+        layout::glass_background_display_mode_name(
+            layout::GlassBackgroundDisplayMode::Implicit)}
+        == "implicit");
+    assert(std::string_view{
+        layout::glass_background_display_mode_name(
+            layout::GlassBackgroundDisplayMode::Never)}
+        == "never");
+    assert(layout::glass_background_effect_should_display(
+        layout::GlassBackgroundDisplayMode::Always,
+        true));
+    assert(layout::glass_background_effect_should_display(
+        layout::GlassBackgroundDisplayMode::Implicit,
+        false));
+    assert(!layout::glass_background_effect_should_display(
+        layout::GlassBackgroundDisplayMode::Implicit,
+        true));
+    assert(!layout::glass_background_effect_should_display(
+        layout::GlassBackgroundDisplayMode::Never,
+        false));
+
+    auto defaults = layout::glass_background_effect_surface_options(
+        layout::GlassBackgroundEffectOptions{});
+    assert(defaults.kind == MaterialKind::Regular);
+    assert(defaults.role == MaterialSurfaceRole::Surface);
+    assert(defaults.shape == MaterialSurfaceShape::RoundedRectangle);
+    assert(defaults.padding == SpaceToken::Md);
+    assert(defaults.border_width == 0.0f);
+    assert(std::string_view{defaults.semantic_label} == "Glass Background");
+
+    auto never = layout::glass_background_effect_surface_options(
+        layout::GlassBackgroundEffectOptions{
+            .display_mode = layout::GlassBackgroundDisplayMode::Never,
+            .interactive = true,
+        });
+    assert(never.kind == MaterialKind::None);
+    assert(!never.interactive);
+    assert(never.shape == MaterialSurfaceShape::RoundedRectangle);
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::glass_background_effect(
+        layout::GlassBackgroundEffectOptions{
+            .fixed_height = 36.0f,
+            .semantic_label = "Always Glass Background",
+        },
+        [] {
+            widget::text("Always background");
+        });
+    layout::glass_background_effect(
+        layout::GlassBackgroundEffectOptions{
+            .display_mode = layout::GlassBackgroundDisplayMode::Never,
+            .fixed_height = 36.0f,
+            .semantic_label = "Never Glass Background",
+        },
+        [] {
+            widget::text("Never background");
+        });
+    auto outer = layout::GlassEffectOptions{};
+    outer.fixed_height = 36.0f;
+    outer.semantic_label = "Outer Glass Effect";
+    layout::glass_effect(outer, [] {
+        layout::glass_background_effect(
+            layout::GlassBackgroundEffectOptions{
+                .display_mode = layout::GlassBackgroundDisplayMode::Implicit,
+                .fixed_height = 24.0f,
+                .semantic_label = "Nested Implicit Glass Background",
+            },
+            [] {
+                widget::text("Nested implicit background");
+            });
+    });
+    layout::glass_background_effect(
+        MaterialSurfaceShape::Rectangle,
+        [] {
+            widget::text("Outside implicit background");
+        },
+        layout::GlassBackgroundDisplayMode::Implicit);
+    Scope::set_current(nullptr);
+
+    auto const& root = detail::node_at(root_h);
+    assert(root.children.size() == 4u);
+    auto const& never_node = detail::node_at(root.children[1]);
+    assert(never_node.material.kind == MaterialKind::None);
+    assert(std::string_view{never_node.debug_semantic_label}
+           == "Never Glass Background");
+    auto const& outer_node = detail::node_at(root.children[2]);
+    assert(outer_node.children.size() == 1u);
+    auto const& nested_implicit =
+        detail::node_at(outer_node.children.front());
+    assert(nested_implicit.material.kind == MaterialKind::None);
+    assert(std::string_view{nested_implicit.debug_semantic_label}
+           == "Nested Implicit Glass Background");
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto const commands = parse_commands(CMD_BUF, CMD_LEN);
+    std::vector<MaterialRectCmd> materials;
+    for (auto const& cmd : commands) {
+        if (auto const* material = std::get_if<MaterialRectCmd>(&cmd))
+            materials.push_back(*material);
+    }
+
+    assert(materials.size() == 3u);
+    assert(materials[0].material.kind == MaterialKind::Regular);
+    assert(materials[0].material.role == MaterialSurfaceRole::Surface);
+    assert(materials[0].radius > 0.0f);
+    assert(materials[0].radius < std::min(materials[0].w, materials[0].h)
+           * 0.5f);
+    assert(materials[1].material.kind == MaterialKind::Regular);
+    assert(materials[1].material.role == MaterialSurfaceRole::Surface);
+    assert(materials[2].material.kind == MaterialKind::Regular);
+    assert(std::fabs(materials[2].radius) < 0.0001f);
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.render_target.width = 320;
+    env.render_target.height = 36;
+
+    auto background_plan = make_test_material_plan(
+        material_request_for_command(
+            materials[0].material,
+            MaterialGeometry{
+                materials[0].x,
+                materials[0].y,
+                materials[0].w,
+                materials[0].h,
+                materials[0].radius},
+            detail::g_app.theme),
+        env);
+    assert(background_plan->shape.kind == MaterialShapeKind::RoundedRectangle);
+    assert(background_plan->reference_model.view_bounds_anchored);
+    assert(std::string_view{background_plan->reference_model.technology}
+           == "liquid-glass");
+
+    std::puts("PASS: glass background effect display modes follow containment contract");
+}
+
 void test_glass_effect_style_variants_map_to_material_contract() {
     auto const accent_tint = Color{64, 156, 255, 112};
     auto regular = layout::glass_effect_options(
@@ -6843,6 +6999,7 @@ int main() {
     test_material_surface_interactive_option_enables_plan_response();
     test_glass_effect_surface_api_emits_capsule_tint_contract();
     test_glass_effect_shape_argument_anchors_material_contract();
+    test_glass_background_effect_display_modes_follow_containment_contract();
     test_glass_effect_style_variants_map_to_material_contract();
     test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();

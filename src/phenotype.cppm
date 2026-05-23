@@ -2795,6 +2795,44 @@ struct GlassEffectUnionOptions {
     bool morph_transitions = true;
 };
 
+enum class GlassBackgroundDisplayMode {
+    Always,
+    Implicit,
+    Never,
+};
+
+inline char const* glass_background_display_mode_name(
+        GlassBackgroundDisplayMode mode) noexcept {
+    switch (mode) {
+        case GlassBackgroundDisplayMode::Always:
+            return "always";
+        case GlassBackgroundDisplayMode::Implicit:
+            return "implicit";
+        case GlassBackgroundDisplayMode::Never:
+            return "never";
+    }
+    return "always";
+}
+
+struct GlassBackgroundEffectOptions {
+    MaterialKind kind = MaterialKind::Regular;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
+    GlassBackgroundDisplayMode display_mode =
+        GlassBackgroundDisplayMode::Always;
+    FlexDirection direction = FlexDirection::Column;
+    SpaceToken padding = SpaceToken::Md;
+    SpaceToken gap = SpaceToken::Md;
+    CrossAxisAlignment cross_align = CrossAxisAlignment::Start;
+    MainAxisAlignment main_align = MainAxisAlignment::Start;
+    float max_width = 0.0f;
+    float fixed_height = -1.0f;
+    float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::RoundedRectangle;
+    float border_width = 0.0f;
+    char const* semantic_label = "Glass Background";
+    bool interactive = false;
+};
+
 inline MaterialContainerDescriptor material_container_descriptor(
         MaterialContainerOptions const& options) noexcept {
     return MaterialContainerDescriptor{
@@ -2852,6 +2890,15 @@ inline std::vector<MaterialTransitionDescriptor>& material_transition_stack() {
 inline MaterialTransitionDescriptor current_material_transition() {
     auto& stack = material_transition_stack();
     return stack.empty() ? MaterialTransitionDescriptor{} : stack.back();
+}
+
+inline unsigned int& material_surface_scope_depth() {
+    static unsigned int& depth = *new unsigned int(0u);
+    return depth;
+}
+
+inline bool current_material_surface_contains_glass() noexcept {
+    return material_surface_scope_depth() != 0u;
 }
 
 inline MaterialTransitionDescriptor resolve_material_transition(
@@ -3420,6 +3467,43 @@ inline MaterialSurfaceOptions glass_effect_surface_options(
     return surface;
 }
 
+inline bool glass_background_effect_should_display(
+        GlassBackgroundDisplayMode mode,
+        bool contained_in_glass = current_material_surface_contains_glass())
+        noexcept {
+    switch (mode) {
+        case GlassBackgroundDisplayMode::Always:
+            return true;
+        case GlassBackgroundDisplayMode::Implicit:
+            return !contained_in_glass;
+        case GlassBackgroundDisplayMode::Never:
+            return false;
+    }
+    return true;
+}
+
+inline MaterialSurfaceOptions glass_background_effect_surface_options(
+        GlassBackgroundEffectOptions const& options) {
+    auto surface = MaterialSurfaceOptions{};
+    auto const displayed =
+        glass_background_effect_should_display(options.display_mode);
+    surface.kind = displayed ? options.kind : MaterialKind::None;
+    surface.role = options.role;
+    surface.direction = options.direction;
+    surface.padding = options.padding;
+    surface.gap = options.gap;
+    surface.cross_align = options.cross_align;
+    surface.main_align = options.main_align;
+    surface.max_width = options.max_width;
+    surface.fixed_height = options.fixed_height;
+    surface.border_radius = options.border_radius;
+    surface.shape = options.shape;
+    surface.border_width = options.border_width;
+    surface.semantic_label = options.semantic_label;
+    surface.interactive = displayed && options.interactive;
+    return surface;
+}
+
 enum class GlassSurfacePreset {
     Window,
     Toolbar,
@@ -3509,7 +3593,13 @@ void material_surface(MaterialSurfaceOptions options, F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     configure_material_surface(node, options);
+    auto& surface_depth = material_surface_scope_depth();
+    auto const pushes_surface_scope = options.kind != MaterialKind::None;
+    if (pushes_surface_scope)
+        ++surface_depth;
     detail::open_container(h, std::forward<F>(builder));
+    if (pushes_surface_scope)
+        --surface_depth;
 }
 
 template<typename F>
@@ -3556,6 +3646,39 @@ template<typename F>
     requires std::is_invocable_v<F>
 void glass_effect(F&& builder) {
     glass_effect(GlassEffectOptions{}, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_background_effect(GlassBackgroundEffectOptions options,
+                             F&& builder) {
+    material_surface(
+        glass_background_effect_surface_options(options),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_background_effect(F&& builder,
+                             GlassBackgroundDisplayMode display_mode =
+                                 GlassBackgroundDisplayMode::Always) {
+    glass_background_effect(
+        GlassBackgroundEffectOptions{.display_mode = display_mode},
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_background_effect(MaterialSurfaceShape shape,
+                             F&& builder,
+                             GlassBackgroundDisplayMode display_mode =
+                                 GlassBackgroundDisplayMode::Always) {
+    glass_background_effect(
+        GlassBackgroundEffectOptions{
+            .display_mode = display_mode,
+            .shape = shape,
+        },
+        std::forward<F>(builder));
 }
 
 inline char const* chrome_label_or(char const* label,
