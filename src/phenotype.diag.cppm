@@ -965,6 +965,35 @@ namespace detail {
         return json::Value{std::move(out)};
     }
 
+    inline json::Value material_clear_glass_legibility_profile_json(
+            MaterialClearGlassLegibilityProfile const& profile) {
+        json::Object out;
+        out.emplace("model", json::Value{profile.model});
+        out.emplace("source", json::Value{profile.source});
+        out.emplace("active", json::Value{profile.active});
+        out.emplace("backdrop_driven", json::Value{profile.backdrop_driven});
+        out.emplace(
+            "brightness_driven",
+            json::Value{profile.brightness_driven});
+        out.emplace("detail_driven", json::Value{profile.detail_driven});
+        out.emplace("contrast_driven", json::Value{profile.contrast_driven});
+        out.emplace(
+            "accessibility_driven",
+            json::Value{profile.accessibility_driven});
+        out.emplace("bounded", json::Value{profile.bounded});
+        out.emplace(
+            "dimming_strength",
+            json::Value{profile.dimming_strength});
+        out.emplace("contrast_lift", json::Value{profile.contrast_lift});
+        out.emplace(
+            "brightness_response",
+            json::Value{profile.brightness_response});
+        out.emplace(
+            "detail_response",
+            json::Value{profile.detail_response});
+        return json::Value{std::move(out)};
+    }
+
     inline json::Value material_plan_runtime_json(
             MaterialRuntimeRecord const& record) {
         auto const& plan = record.plan;
@@ -2379,6 +2408,10 @@ namespace detail {
             "prominent_glass_active",
             json::Value{plan.optical_response.prominent_glass_active});
         optical_response.emplace(
+            "clear_glass_legibility_active",
+            json::Value{
+                plan.optical_response.clear_glass_legibility_active});
+        optical_response.emplace(
             "foreground_vibrancy_active",
             json::Value{plan.optical_response.foreground_vibrancy_active});
         optical_response.emplace(
@@ -2434,6 +2467,9 @@ namespace detail {
         optical_composition.emplace(
             "prominent_glass_source",
             json::Value{composition.prominent_glass_source});
+        optical_composition.emplace(
+            "clear_glass_legibility_source",
+            json::Value{composition.clear_glass_legibility_source});
         optical_composition.emplace(
             "interaction_source",
             json::Value{composition.interaction_source});
@@ -2500,6 +2536,9 @@ namespace detail {
         optical_composition.emplace(
             "prominent_glass_required",
             json::Value{composition.prominent_glass_required});
+        optical_composition.emplace(
+            "clear_glass_legibility_required",
+            json::Value{composition.clear_glass_legibility_required});
         optical_composition.emplace(
             "interaction_required",
             json::Value{composition.interaction_required});
@@ -2650,6 +2689,18 @@ namespace detail {
         optical_composition.emplace(
             "prominent_glass_lensing_gain",
             json::Value{composition.prominent_glass_lensing_gain});
+        optical_composition.emplace(
+            "clear_glass_dimming",
+            json::Value{composition.clear_glass_dimming});
+        optical_composition.emplace(
+            "clear_glass_contrast",
+            json::Value{composition.clear_glass_contrast});
+        optical_composition.emplace(
+            "clear_glass_brightness_response",
+            json::Value{composition.clear_glass_brightness_response});
+        optical_composition.emplace(
+            "clear_glass_detail_response",
+            json::Value{composition.clear_glass_detail_response});
         optical_composition.emplace(
             "interaction_response_strength",
             json::Value{composition.interaction_response_strength});
@@ -2999,6 +3050,21 @@ namespace detail {
             optics_json.emplace(
                 "scroll_edge_hard_style",
                 json::Value{optics.scroll_edge_hard_style});
+            optics_json.emplace(
+                "clear_glass_legibility_model",
+                json::Value{optics.clear_glass_legibility_model});
+            optics_json.emplace(
+                "clear_glass_dimming",
+                json::Value{optics.clear_glass_dimming});
+            optics_json.emplace(
+                "clear_glass_contrast",
+                json::Value{optics.clear_glass_contrast});
+            optics_json.emplace(
+                "clear_glass_brightness_response",
+                json::Value{optics.clear_glass_brightness_response});
+            optics_json.emplace(
+                "clear_glass_detail_response",
+                json::Value{optics.clear_glass_detail_response});
             json::Object out_stage;
             out_stage.emplace("name", json::Value{stage.name});
             out_stage.emplace("active", json::Value{stage.active});
@@ -3117,6 +3183,10 @@ namespace detail {
         out.emplace(
             "scroll_edge",
             material_scroll_edge_profile_json(plan.scroll_edge));
+        out.emplace(
+            "clear_glass_legibility",
+            material_clear_glass_legibility_profile_json(
+                plan.clear_glass_legibility));
         out.emplace(
             "prominent_glass",
             json::Value{std::move(prominent_glass)});
