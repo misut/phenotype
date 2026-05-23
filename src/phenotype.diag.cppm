@@ -1826,6 +1826,9 @@ namespace detail {
         refraction.emplace(
             "max_offset_pixels",
             json::Value{plan.refraction.max_offset_pixels});
+        refraction.emplace(
+            "edge_caustic_intensity",
+            json::Value{plan.refraction.edge_caustic_intensity});
 
         json::Object interaction;
         interaction.emplace("enabled", json::Value{plan.interaction.enabled});
@@ -2081,6 +2084,10 @@ namespace detail {
             "refraction_offset_pixels",
             json::Value{composition.refraction_offset_pixels});
         optical_composition.emplace(
+            "refraction_edge_caustic_intensity",
+            json::Value{
+                composition.refraction_edge_caustic_intensity});
+        optical_composition.emplace(
             "interaction_response_strength",
             json::Value{composition.interaction_response_strength});
         optical_composition.emplace(
@@ -2250,6 +2257,10 @@ namespace detail {
             optics_json.emplace(
                 "refraction_offset_pixels",
                 json::Value{optics.refraction_offset_pixels});
+            optics_json.emplace(
+                "refraction_edge_caustic_intensity",
+                json::Value{
+                    optics.refraction_edge_caustic_intensity});
             json::Object out_stage;
             out_stage.emplace("name", json::Value{stage.name});
             out_stage.emplace("active", json::Value{stage.active});
