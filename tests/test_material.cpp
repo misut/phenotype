@@ -2754,6 +2754,36 @@ void test_container_member_shape_blend_uses_spacing_falloff() {
     assert(first_execution.fusion_shadow_gain > 1.0f);
     assert(!distant_execution.fusion_optics_active);
     assert(std::string_view(distant_execution.fusion_model) == "none");
+
+    auto const first_bridge_motion =
+        material_container_bridge_motion_optics(
+            records[0],
+            records,
+            first_execution);
+    auto const second_bridge_motion =
+        material_container_bridge_motion_optics(
+            records[1],
+            records,
+            second_execution);
+    auto const distant_bridge_motion =
+        material_container_bridge_motion_optics(
+            records[2],
+            records,
+            distant_execution);
+    assert(first_bridge_motion.active);
+    assert(first_bridge_motion.strength > 0.35f);
+    assert(first_bridge_motion.direction_x > 0.999f);
+    assert(std::fabs(first_bridge_motion.direction_y) < 0.0001f);
+    assert(std::fabs(first_bridge_motion.specular_anchor_x - 0.5f)
+           < 0.0001f);
+    assert(std::fabs(first_bridge_motion.specular_anchor_y - 0.5f)
+           < 0.0001f);
+    assert(first_bridge_motion.refraction_gain > 1.0f);
+    assert(first_bridge_motion.caustic_gain
+           > first_bridge_motion.refraction_gain);
+    assert(first_bridge_motion.specular_intensity_gain > 1.0f);
+    assert(!second_bridge_motion.active);
+    assert(!distant_bridge_motion.active);
     assert(first_execution.surface_leader);
     assert(!second_execution.surface_leader);
     assert(first_execution.group_bounds_valid);
@@ -2953,6 +2983,30 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     assert(first_execution.fusion_lensing_gain > 1.17f);
     assert(first_execution.fusion_edge_lift > 0.07f);
     assert(first_execution.fusion_shadow_gain > 1.15f);
+
+    auto const first_bridge_motion =
+        material_container_bridge_motion_optics(
+            records[0],
+            records,
+            first_execution);
+    auto const peer_bridge_motion =
+        material_container_bridge_motion_optics(
+            records[1],
+            records,
+            peer_execution);
+    assert(first_bridge_motion.active);
+    assert(first_bridge_motion.strength > 0.99f);
+    assert(first_bridge_motion.direction_x > 0.999f);
+    assert(std::fabs(first_bridge_motion.direction_y) < 0.0001f);
+    assert(std::fabs(first_bridge_motion.specular_anchor_x - 0.5f)
+           < 0.0001f);
+    assert(std::fabs(first_bridge_motion.specular_anchor_y - 0.5f)
+           < 0.0001f);
+    assert(first_bridge_motion.refraction_gain > 1.30f);
+    assert(first_bridge_motion.caustic_gain
+           > first_bridge_motion.refraction_gain);
+    assert(first_bridge_motion.specular_intensity_gain > 1.40f);
+    assert(!peer_bridge_motion.active);
     assert(first_execution.surface_leader);
     assert(!peer_execution.surface_leader);
     assert(first_execution.paint_layer_leader);

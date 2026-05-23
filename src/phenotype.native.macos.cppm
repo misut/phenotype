@@ -2522,6 +2522,15 @@ inline void apply_material_container_execution_descriptors(
                 inst.group_rect[3] = inst.rect[3];
                 auto const match_motion =
                     material_glass_effect_match_motion_optics(*execution);
+                auto const bridge_motion = match_motion.active
+                    ? MaterialGlassEffectMotionOptics{}
+                    : material_container_bridge_motion_optics(
+                        *record,
+                        scratch.material_records,
+                        *execution);
+                auto const& container_motion = match_motion.active
+                    ? match_motion
+                    : bridge_motion;
                 if (record->plan.specular.interaction_driven) {
                     inst.interaction[0] = material_surface_execution_anchor_x(
                         record->plan,
@@ -2531,20 +2540,20 @@ inline void apply_material_container_execution_descriptors(
                         record->plan,
                         geometry,
                         record->plan.specular.anchor_y);
-                } else if (match_motion.active) {
-                    inst.interaction[0] = match_motion.specular_anchor_x;
-                    inst.interaction[1] = match_motion.specular_anchor_y;
+                } else if (container_motion.active) {
+                    inst.interaction[0] = container_motion.specular_anchor_x;
+                    inst.interaction[1] = container_motion.specular_anchor_y;
                     inst.interaction[2] = std::clamp(
                         std::max(
                             inst.interaction[2],
                             record->plan.specular.radius
-                                + 0.04f * match_motion.strength),
+                                + 0.04f * container_motion.strength),
                         0.0f,
                         1.0f);
                     inst.interaction[3] = std::clamp(
                         inst.interaction[3]
-                            * match_motion.specular_intensity_gain
-                            + 0.06f * match_motion.strength,
+                            * container_motion.specular_intensity_gain
+                            + 0.06f * container_motion.strength,
                         0.0f,
                         1.0f);
                 } else {
@@ -2563,104 +2572,104 @@ inline void apply_material_container_execution_descriptors(
                             geometry,
                             record->plan.interaction.pointer_lens_anchor_y);
                 }
-                if (match_motion.active) {
+                if (container_motion.active) {
                     inst.refraction[0] = std::clamp(
                         inst.refraction[0]
-                            * (1.0f + 0.18f * match_motion.strength),
+                            * (1.0f + 0.18f * container_motion.strength),
                         0.0f,
                         0.35f);
                     inst.refraction[2] = std::clamp(
-                        inst.refraction[2] * match_motion.refraction_gain
-                            + 0.12f * match_motion.strength,
+                        inst.refraction[2] * container_motion.refraction_gain
+                            + 0.12f * container_motion.strength,
                         0.0f,
                         5.0f);
                     inst.refraction[3] = std::clamp(
-                        inst.refraction[3] * match_motion.caustic_gain
-                            + 0.035f * match_motion.strength,
+                        inst.refraction[3] * container_motion.caustic_gain
+                            + 0.035f * container_motion.strength,
                         0.0f,
                         0.35f);
                     inst.edge_optics[0] = std::clamp(
                         std::max(
                             inst.edge_optics[0],
                             record->plan.edge_optics.bevel_width
-                                + 0.80f * match_motion.strength),
+                                + 0.80f * container_motion.strength),
                         0.0f,
                         16.0f);
                     inst.edge_optics[1] = std::clamp(
                         inst.edge_optics[1]
-                            * (1.0f + 0.40f * match_motion.strength)
-                            + 0.040f * match_motion.strength,
+                            * (1.0f + 0.40f * container_motion.strength)
+                            + 0.040f * container_motion.strength,
                         0.0f,
                         0.85f);
                     inst.edge_optics[2] = std::clamp(
                         inst.edge_optics[2]
-                            * (1.0f + 0.32f * match_motion.strength)
-                            + 0.030f * match_motion.strength,
+                            * (1.0f + 0.32f * container_motion.strength)
+                            + 0.030f * container_motion.strength,
                         0.0f,
                         0.60f);
                     inst.edge_optics[3] = std::clamp(
                         inst.edge_optics[3]
-                            + 0.025f * match_motion.strength,
+                            + 0.025f * container_motion.strength,
                         0.0f,
                         0.16f);
                     inst.spectral_tint[2] = std::clamp(
                         inst.spectral_tint[2]
-                            + 0.030f * match_motion.strength,
+                            + 0.030f * container_motion.strength,
                         0.0f,
                         0.22f);
                     inst.spectral_tint[3] = std::clamp(
                         inst.spectral_tint[3]
-                            + 0.040f * match_motion.strength,
+                            + 0.040f * container_motion.strength,
                         0.0f,
                         0.28f);
                     inst.lighting[2] = std::clamp(
                         inst.lighting[2]
-                            + 0.055f * match_motion.strength,
+                            + 0.055f * container_motion.strength,
                         0.0f,
                         0.45f);
                     inst.lighting[3] = std::clamp(
                         inst.lighting[3]
-                            + 0.040f * match_motion.strength,
+                            + 0.040f * container_motion.strength,
                         0.0f,
                         0.36f);
                     inst.thickness[0] = std::clamp(
                         inst.thickness[0]
-                            + 0.080f * match_motion.strength,
+                            + 0.080f * container_motion.strength,
                         0.0f,
                         0.78f);
                     inst.thickness[1] = std::clamp(
                         inst.thickness[1]
-                            + 0.070f * match_motion.strength,
+                            + 0.070f * container_motion.strength,
                         1.0f,
                         1.48f);
                     inst.thickness[2] = std::clamp(
                         inst.thickness[2]
-                            + 0.055f * match_motion.strength,
+                            + 0.055f * container_motion.strength,
                         1.0f,
                         1.44f);
                     inst.thickness[3] = std::clamp(
                         inst.thickness[3]
-                            + 0.050f * match_motion.strength,
+                            + 0.050f * container_motion.strength,
                         1.0f,
                         1.40f);
                     inst.dispersion[0] = std::clamp(
                         inst.dispersion[0]
-                            + 0.16f * match_motion.strength,
+                            + 0.16f * container_motion.strength,
                         0.0f,
                         3.20f);
                     inst.dispersion[1] = std::clamp(
                         inst.dispersion[1]
-                            + 0.12f * match_motion.strength,
+                            + 0.12f * container_motion.strength,
                         0.0f,
                         2.45f);
                     inst.dispersion[2] = std::clamp(
                         inst.dispersion[2]
-                            + 0.08f * match_motion.strength,
+                            + 0.08f * container_motion.strength,
                         1.0f,
                         1.75f);
                     inst.dispersion[3] = std::clamp(
                         inst.dispersion[3]
-                            + 0.030f * match_motion.strength,
+                            + 0.030f * container_motion.strength,
                         0.0f,
                         0.40f);
                 }
