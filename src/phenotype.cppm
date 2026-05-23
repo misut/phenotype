@@ -3080,7 +3080,7 @@ glass_effect_container_default_transition() noexcept {
     };
 }
 
-inline MaterialGlassIdentityDescriptor glass_effect_identity(
+inline constexpr MaterialGlassIdentityDescriptor glass_effect_identity(
         std::uint32_t namespace_id,
         std::uint32_t effect_id) noexcept {
     return MaterialGlassIdentityDescriptor{namespace_id, effect_id};
@@ -3288,7 +3288,7 @@ void glass_effect_id(std::string_view namespace_id,
         std::forward<F>(builder));
 }
 
-inline MaterialTransitionDescriptor glass_materialize_transition(
+inline constexpr MaterialTransitionDescriptor glass_materialize_transition(
         float progress,
         bool appearing = true) noexcept {
     return MaterialTransitionDescriptor{
@@ -3298,11 +3298,12 @@ inline MaterialTransitionDescriptor glass_materialize_transition(
     };
 }
 
-inline MaterialTransitionDescriptor glass_materialize_transition() noexcept {
+inline constexpr MaterialTransitionDescriptor glass_materialize_transition()
+        noexcept {
     return glass_materialize_transition(1.0f);
 }
 
-inline MaterialTransitionDescriptor glass_matched_geometry_transition(
+inline constexpr MaterialTransitionDescriptor glass_matched_geometry_transition(
         float progress,
         bool appearing = true) noexcept {
     return MaterialTransitionDescriptor{
@@ -3312,11 +3313,13 @@ inline MaterialTransitionDescriptor glass_matched_geometry_transition(
     };
 }
 
-inline MaterialTransitionDescriptor glass_matched_geometry_transition() noexcept {
+inline constexpr MaterialTransitionDescriptor glass_matched_geometry_transition()
+        noexcept {
     return glass_matched_geometry_transition(1.0f);
 }
 
-inline MaterialTransitionDescriptor glass_identity_transition() noexcept {
+inline constexpr MaterialTransitionDescriptor glass_identity_transition()
+        noexcept {
     return MaterialTransitionDescriptor{};
 }
 
@@ -3516,6 +3519,10 @@ struct GlassEffectStyle {
     Color tint_color = {};
     bool has_border = false;
     Color border_color = {};
+    MaterialTransitionDescriptor transition_descriptor{};
+    bool inherit_transition = true;
+    MaterialGlassIdentityDescriptor glass_identity_descriptor{};
+    bool inherit_identity = true;
 
     constexpr bool is_identity() const noexcept {
         return kind == MaterialKind::None;
@@ -3543,6 +3550,48 @@ struct GlassEffectStyle {
         auto copy = *this;
         copy.interactive_enabled = enabled && !copy.is_identity();
         return copy;
+    }
+
+    constexpr GlassEffectStyle effect_id(
+            MaterialGlassIdentityDescriptor descriptor) const noexcept {
+        auto copy = *this;
+        if (!copy.is_identity() && descriptor.participates()) {
+            copy.glass_identity_descriptor = descriptor;
+            copy.inherit_identity = false;
+        }
+        return copy;
+    }
+
+    GlassEffectStyle effect_id(std::string_view namespace_id,
+                               std::string_view effect_id) const noexcept {
+        return this->effect_id(
+            glass_effect_identity(namespace_id, effect_id));
+    }
+
+    constexpr GlassEffectStyle transition(
+            MaterialTransitionDescriptor descriptor) const noexcept {
+        auto copy = *this;
+        if (!copy.is_identity()) {
+            copy.transition_descriptor = descriptor;
+            copy.inherit_transition = false;
+        }
+        return copy;
+    }
+
+    constexpr GlassEffectStyle matched_geometry(
+            float progress = 1.0f,
+            bool appearing = true) const noexcept {
+        return transition(glass_matched_geometry_transition(progress, appearing));
+    }
+
+    constexpr GlassEffectStyle materialize(
+            float progress = 1.0f,
+            bool appearing = true) const noexcept {
+        return transition(glass_materialize_transition(progress, appearing));
+    }
+
+    constexpr GlassEffectStyle identity_transition() const noexcept {
+        return transition(glass_identity_transition());
     }
 };
 
@@ -3573,6 +3622,10 @@ inline GlassEffectOptions glass_effect_options(
     options.tint = style.tint_color;
     options.has_border = style.has_border;
     options.border = style.border_color;
+    options.transition = style.transition_descriptor;
+    options.inherit_material_transition = style.inherit_transition;
+    options.glass_identity = style.glass_identity_descriptor;
+    options.inherit_material_identity = style.inherit_identity;
     return options;
 }
 
