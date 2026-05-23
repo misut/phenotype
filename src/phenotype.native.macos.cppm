@@ -2401,10 +2401,17 @@ inline void apply_material_container_execution_descriptors(
         if (!execution)
             continue;
         if (execution->group_bounds_valid && execution->shape_blend_execution) {
-            inst.group_rect[0] = execution->group_x;
-            inst.group_rect[1] = execution->group_y;
-            inst.group_rect[2] = execution->group_w;
-            inst.group_rect[3] = execution->group_h;
+            if (execution->glass_effect_match_source_valid) {
+                inst.group_rect[0] = execution->glass_effect_match_rect_x;
+                inst.group_rect[1] = execution->glass_effect_match_rect_y;
+                inst.group_rect[2] = execution->glass_effect_match_rect_w;
+                inst.group_rect[3] = execution->glass_effect_match_rect_h;
+            } else {
+                inst.group_rect[0] = execution->group_x;
+                inst.group_rect[1] = execution->group_y;
+                inst.group_rect[2] = execution->group_w;
+                inst.group_rect[3] = execution->group_h;
+            }
             inst.group_effects[0] = execution->shape_blend_strength;
             inst.group_effects[1] =
                 execution->inner_edge_alpha_blend_strength;

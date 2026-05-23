@@ -1264,6 +1264,15 @@ struct MaterialContainerExecutionDescriptor {
     float inner_edge_alpha_blend_strength = 0.0f;
     float glass_effect_match_progress = 1.0f;
     float glass_effect_match_blend_strength = 0.0f;
+    bool glass_effect_match_source_valid = false;
+    float glass_effect_match_source_x = 0.0f;
+    float glass_effect_match_source_y = 0.0f;
+    float glass_effect_match_source_w = 0.0f;
+    float glass_effect_match_source_h = 0.0f;
+    float glass_effect_match_rect_x = 0.0f;
+    float glass_effect_match_rect_y = 0.0f;
+    float glass_effect_match_rect_w = 0.0f;
+    float glass_effect_match_rect_h = 0.0f;
 };
 
 struct MaterialRuntimeSummary {
@@ -1924,12 +1933,24 @@ inline bool material_glass_effect_match_execution_active(
         && group.has_bounds;
 }
 
+inline float material_lerp(float a, float b, float t) noexcept {
+    return a + (b - a) * t;
+}
+
+inline float material_glass_effect_match_progress_gain(
+        float progress) noexcept {
+    progress = std::isfinite(progress)
+        ? std::clamp(progress, 0.0f, 1.0f)
+        : 1.0f;
+    return progress * progress * (3.0f - 2.0f * progress);
+}
+
 inline float material_glass_effect_match_blend_strength(
         MaterialGlassEffectMatchAccumulator const& group) noexcept {
     if (!material_glass_effect_match_execution_active(group))
         return 0.0f;
     auto const progress = std::clamp(group.max_progress, 0.0f, 1.0f);
-    auto const smooth = progress * progress * (3.0f - 2.0f * progress);
+    auto const smooth = material_glass_effect_match_progress_gain(progress);
     return std::clamp(std::max(0.25f, smooth), 0.0f, 1.0f);
 }
 
@@ -2119,6 +2140,59 @@ accumulate_material_glass_effect_match_group(
     return group;
 }
 
+inline bool material_glass_effect_match_source_candidate(
+        MaterialRuntimeRecord const& record,
+        MaterialRuntimeRecord const& candidate,
+        std::uint32_t container_id) noexcept {
+    if (&record == &candidate)
+        return false;
+    return material_plan_in_glass_effect_match_group(
+        candidate.plan,
+        record.plan,
+        container_id);
+}
+
+inline MaterialRuntimeRecord const* material_nearest_glass_effect_match_source(
+        MaterialRuntimeRecord const& record,
+        std::span<MaterialRuntimeRecord const> records,
+        std::uint32_t container_id) noexcept {
+    auto const* best = static_cast<MaterialRuntimeRecord const*>(nullptr);
+    auto best_gap = 0.0f;
+    for (auto const& candidate : records) {
+        if (!material_glass_effect_match_source_candidate(
+                record,
+                candidate,
+                container_id)) {
+            continue;
+        }
+        auto const gap = material_rect_gap(
+            record.plan.geometry,
+            candidate.plan.geometry);
+        if (!best || gap < best_gap) {
+            best = &candidate;
+            best_gap = gap;
+        }
+    }
+    return best;
+}
+
+inline MaterialGeometry material_glass_effect_match_rect(
+        MaterialGeometry const& source,
+        MaterialGeometry const& target,
+        MaterialTransitionAnalysis const& transition) noexcept {
+    auto const progress = transition.appearing
+        ? transition.progress
+        : 1.0f - transition.progress;
+    auto const t = material_glass_effect_match_progress_gain(progress);
+    return MaterialGeometry{
+        material_lerp(source.x, target.x, t),
+        material_lerp(source.y, target.y, t),
+        std::max(0.0f, material_lerp(source.w, target.w, t)),
+        std::max(0.0f, material_lerp(source.h, target.h, t)),
+        std::max(0.0f, material_lerp(source.radius, target.radius, t)),
+    };
+}
+
 inline MaterialContainerExecutionDescriptor
 material_container_execution_descriptor_from_group(
         MaterialRuntimeRecord const& record,
@@ -2188,6 +2262,26 @@ material_container_execution_descriptor_from_group(
             : material_container_inner_edge_alpha_blend_strength(
                 group,
                 descriptor.shape_blend_strength);
+    if (descriptor.glass_effect_match_execution) {
+        if (auto const* source = material_nearest_glass_effect_match_source(
+                record,
+                records,
+                group.container_id)) {
+            descriptor.glass_effect_match_source_valid = true;
+            descriptor.glass_effect_match_source_x = source->plan.geometry.x;
+            descriptor.glass_effect_match_source_y = source->plan.geometry.y;
+            descriptor.glass_effect_match_source_w = source->plan.geometry.w;
+            descriptor.glass_effect_match_source_h = source->plan.geometry.h;
+            auto const match_rect = material_glass_effect_match_rect(
+                source->plan.geometry,
+                plan.geometry,
+                plan.transition);
+            descriptor.glass_effect_match_rect_x = match_rect.x;
+            descriptor.glass_effect_match_rect_y = match_rect.y;
+            descriptor.glass_effect_match_rect_w = match_rect.w;
+            descriptor.glass_effect_match_rect_h = match_rect.h;
+        }
+    }
     if (descriptor.glass_effect_match_execution && glass_group.has_bounds) {
         descriptor.group_bounds_valid = true;
         descriptor.group_x = glass_group.min_x;
