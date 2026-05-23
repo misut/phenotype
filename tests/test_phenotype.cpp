@@ -3174,6 +3174,103 @@ void test_glass_effect_surface_api_emits_capsule_tint_contract() {
     std::puts("PASS: glass effect surface api emits capsule tint contract");
 }
 
+void test_glass_effect_shape_argument_anchors_material_contract() {
+    auto rectangular_options = layout::glass_effect_options(
+        layout::glass_regular(),
+        MaterialSurfaceShape::Rectangle);
+    assert(rectangular_options.kind == MaterialKind::Regular);
+    assert(rectangular_options.shape == MaterialSurfaceShape::Rectangle);
+
+    auto rounded_surface = layout::glass_effect_surface_options(
+        layout::glass_effect_options(
+            layout::glass_clear().interactive(),
+            MaterialSurfaceShape::RoundedRectangle));
+    assert(rounded_surface.kind == MaterialKind::Clear);
+    assert(rounded_surface.shape == MaterialSurfaceShape::RoundedRectangle);
+    assert(rounded_surface.interactive);
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::glass_effect(
+        layout::glass_regular(),
+        MaterialSurfaceShape::Rectangle,
+        [] {
+            widget::text("Rectangular glass");
+        });
+    layout::glass_effect(
+        layout::glass_clear().interactive(),
+        MaterialSurfaceShape::RoundedRectangle,
+        [] {
+            widget::text("Rounded glass");
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto const commands = parse_commands(CMD_BUF, CMD_LEN);
+    std::vector<MaterialRectCmd> materials;
+    for (auto const& cmd : commands) {
+        if (auto const* material = std::get_if<MaterialRectCmd>(&cmd))
+            materials.push_back(*material);
+    }
+
+    assert(materials.size() == 2u);
+    assert(std::fabs(materials[0].radius) < 0.0001f);
+    assert(materials[0].material.kind == MaterialKind::Regular);
+    assert(materials[1].radius > 0.0f);
+    assert(materials[1].radius < std::min(materials[1].w, materials[1].h)
+           * 0.5f);
+    assert(materials[1].material.kind == MaterialKind::Clear);
+    assert(materials[1].material.container.interactive);
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.render_target.width = 320;
+    env.render_target.height = 120;
+
+    auto rectangle_plan = make_test_material_plan(
+        material_request_for_command(
+            materials[0].material,
+            MaterialGeometry{
+                materials[0].x,
+                materials[0].y,
+                materials[0].w,
+                materials[0].h,
+                materials[0].radius},
+            detail::g_app.theme),
+        env);
+    auto rounded_plan = make_test_material_plan(
+        material_request_for_command(
+            materials[1].material,
+            MaterialGeometry{
+                materials[1].x,
+                materials[1].y,
+                materials[1].w,
+                materials[1].h,
+                materials[1].radius},
+            detail::g_app.theme),
+        env);
+    assert(rectangle_plan->shape.kind == MaterialShapeKind::Rectangle);
+    assert(rounded_plan->shape.kind == MaterialShapeKind::RoundedRectangle);
+    assert(rounded_plan->interaction.enabled);
+    assert(rounded_plan->reference_model.interactive_response);
+
+    std::puts("PASS: glass effect shape argument anchors material contract");
+}
+
 void test_glass_effect_style_variants_map_to_material_contract() {
     auto const accent_tint = Color{64, 156, 255, 112};
     auto regular = layout::glass_effect_options(
@@ -6745,6 +6842,7 @@ int main() {
     test_material_surface_resolves_live_input_interaction();
     test_material_surface_interactive_option_enables_plan_response();
     test_glass_effect_surface_api_emits_capsule_tint_contract();
+    test_glass_effect_shape_argument_anchors_material_contract();
     test_glass_effect_style_variants_map_to_material_contract();
     test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();
