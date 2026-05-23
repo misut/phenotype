@@ -2779,9 +2779,27 @@ struct MaterialContainerOptions {
     bool morph_transitions = true;
 };
 
+struct GlassEffectContainerOptions {
+    std::uint32_t container_id = 0;
+    std::uint32_t union_id = 0;
+    float spacing = 0.0f;
+    bool interactive = false;
+    bool morph_transitions = true;
+};
+
 inline MaterialContainerDescriptor material_container_descriptor(
         MaterialContainerOptions const& options) noexcept {
     return MaterialContainerDescriptor{
+        options.container_id,
+        options.union_id,
+        options.spacing,
+        options.interactive,
+        options.morph_transitions};
+}
+
+inline MaterialContainerOptions glass_effect_container_options(
+        GlassEffectContainerOptions const& options) noexcept {
+    return MaterialContainerOptions{
         options.container_id,
         options.union_id,
         options.spacing,
@@ -2868,6 +2886,27 @@ void material_container(MaterialContainerOptions options, F&& builder) {
     stack.push_back(material_container_descriptor(options));
     builder();
     stack.pop_back();
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect_container(GlassEffectContainerOptions options, F&& builder) {
+    material_container(
+        glass_effect_container_options(options),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect_container(std::uint32_t container_id,
+                            F&& builder,
+                            float spacing = 0.0f) {
+    glass_effect_container(
+        GlassEffectContainerOptions{
+            .container_id = container_id,
+            .spacing = spacing,
+        },
+        std::forward<F>(builder));
 }
 
 template<typename F>

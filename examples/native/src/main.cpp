@@ -445,23 +445,28 @@ void view(State const& state) {
 
         layout::spacer(12);
 
-        auto glass = layout::GlassEffectOptions{};
-        glass.role = MaterialSurfaceRole::Content;
-        glass.interactive = true;
-        glass.has_tint = true;
-        glass.tint = Color{64, 156, 255, 96};
-        glass.semantic_label = "Glass Effect Surface";
-        layout::glass_effect(glass, [&] {
-            widget::text("Glass Effect Surface");
-            layout::spacer(6);
-            widget::text("Regular Liquid Glass now defaults to a capsule shape and supports interactive tinted custom surfaces.");
-            layout::spacer(8);
-            layout::row([&] {
-                widget::button<Msg>("Glass action", Increment{}, ButtonVariant::Primary);
-                widget::button<Msg>("Secondary", Decrement{});
+        auto glass_group = layout::GlassEffectContainerOptions{};
+        glass_group.container_id = 1201u;
+        glass_group.spacing = 16.0f;
+        glass_group.interactive = true;
+        layout::glass_effect_container(glass_group, [&] {
+            auto glass = layout::GlassEffectOptions{};
+            glass.role = MaterialSurfaceRole::Content;
+            glass.has_tint = true;
+            glass.tint = Color{64, 156, 255, 96};
+            glass.semantic_label = "Glass Effect Surface";
+            layout::glass_effect(glass, [&] {
+                widget::text("Glass Effect Surface");
+                layout::spacer(6);
+                widget::text("Regular Liquid Glass now defaults to a capsule shape and can participate in a morphing effect container.");
+                layout::spacer(8);
+                layout::row([&] {
+                    widget::button<Msg>("Glass action", Increment{}, ButtonVariant::Primary);
+                    widget::button<Msg>("Secondary", Decrement{});
+                });
+                layout::spacer(8);
+                widget::code("layout::glass_effect_container(options, builder);");
             });
-            layout::spacer(8);
-            widget::code("layout::glass_effect(options, builder);");
         });
 
         layout::spacer(12);

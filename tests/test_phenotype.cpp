@@ -3347,6 +3347,113 @@ void test_material_container_scope_emits_command_context() {
     std::puts("PASS: material container scope emits command context");
 }
 
+void test_glass_effect_container_scope_emits_morph_context() {
+    auto defaults = layout::glass_effect_container_options(
+        layout::GlassEffectContainerOptions{
+            .container_id = 601u,
+        });
+    assert(defaults.container_id == 601u);
+    assert(defaults.union_id == 0u);
+    assert(defaults.spacing == 0.0f);
+    assert(!defaults.interactive);
+    assert(defaults.morph_transitions);
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::glass_effect_container(
+        layout::GlassEffectContainerOptions{
+            .container_id = 602u,
+            .union_id = 17u,
+            .spacing = 18.0f,
+            .interactive = true,
+            .morph_transitions = true,
+        },
+        [] {
+            auto first = layout::GlassEffectOptions{};
+            first.role = MaterialSurfaceRole::Control;
+            first.fixed_height = 36.0f;
+            first.semantic_label = "First Glass Effect";
+            layout::glass_effect(first, [] {
+                widget::text("One");
+            });
+
+            auto second = layout::GlassEffectOptions{};
+            second.role = MaterialSurfaceRole::Control;
+            second.fixed_height = 36.0f;
+            second.semantic_label = "Second Glass Effect";
+            layout::glass_effect(second, [] {
+                widget::text("Two");
+            });
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    std::vector<MaterialRectCmd> materials;
+    for (auto const& cmd : cmds) {
+        if (auto const* material = std::get_if<MaterialRectCmd>(&cmd))
+            materials.push_back(*material);
+    }
+
+    assert(materials.size() == 2u);
+    for (auto const& material : materials) {
+        auto const& container = material.material.container;
+        assert(container.container_id == 602u);
+        assert(container.union_id == 17u);
+        assert(std::fabs(container.spacing - 18.0f) < 0.0001f);
+        assert(container.interactive);
+        assert(container.morph_transitions);
+        assert(container.mode() == MaterialContainerMode::Union);
+        assert(material.material.kind == MaterialKind::Regular);
+        assert(material.material.role == MaterialSurfaceRole::Control);
+    }
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.render_target.width = 320;
+    env.render_target.height = 80;
+
+    auto plan = make_test_material_plan(
+        material_request_for_command(
+            materials[0].material,
+            MaterialGeometry{
+                materials[0].x,
+                materials[0].y,
+                materials[0].w,
+                materials[0].h,
+                materials[0].radius},
+            detail::g_app.theme),
+        env);
+    assert(plan->container.mode == MaterialContainerMode::Union);
+    assert(plan->container.shared_backdrop_scope);
+    assert(plan->container.shape_union_expected);
+    assert(plan->container.shape_blending_expected);
+    assert(plan->container.morph_transitions);
+    assert(std::string_view{plan->container.blend_policy}
+           == "union-shape-proximity");
+    assert(std::string_view{plan->container.morph_policy} == "union-morph");
+    assert(plan->reference_model.container_grouped);
+    assert(plan->reference_model.container_union);
+    assert(plan->reference_model.container_morphing);
+    assert(plan->reference_model.interactive_response);
+
+    std::puts("PASS: glass effect container scope emits morph context");
+}
+
 void test_glass_effect_transition_scope_emits_command_context() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -6232,6 +6339,7 @@ int main() {
     test_glass_effect_surface_api_emits_capsule_tint_contract();
     test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();
+    test_glass_effect_container_scope_emits_morph_context();
     test_glass_effect_transition_scope_emits_command_context();
     test_glass_effect_id_scope_emits_command_context();
     test_material_command_preserves_style_optics();
