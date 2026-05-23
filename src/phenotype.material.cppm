@@ -13,7 +13,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 49;
+inline constexpr std::uint32_t material_plan_contract_version = 50;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -751,6 +751,19 @@ struct MaterialTransitionAnalysis {
     char const* policy = "identity";
 };
 
+struct MaterialGlassIdentityAnalysis {
+    std::uint32_t namespace_id = 0;
+    std::uint32_t effect_id = 0;
+    bool namespace_scoped = false;
+    bool effect_identified = false;
+    bool participates = false;
+    bool container_scoped = false;
+    bool matched_geometry_candidate = false;
+    bool bounded = true;
+    char const* source = "none";
+    char const* policy = "unidentified";
+};
+
 struct MaterialReferenceModel {
     char const* technology = "liquid-glass";
     char const* layer = "functional-layer";
@@ -769,6 +782,8 @@ struct MaterialReferenceModel {
     bool container_grouped = false;
     bool container_union = false;
     bool container_morphing = false;
+    bool glass_effect_identified = false;
+    bool glass_effect_matched_geometry = false;
     bool legibility_preserved = true;
     bool vibrancy_expected = false;
     bool deterministic_degradation = true;
@@ -815,6 +830,7 @@ struct MaterialPlan {
     MaterialCapabilityAnalysis capability_snapshot{};
     MaterialContainerAnalysis container{};
     MaterialTransitionAnalysis transition{};
+    MaterialGlassIdentityAnalysis glass_identity{};
     MaterialReferenceModel reference_model{};
     MaterialDecisionTrace decision_trace{};
     float opacity = 0.0f;
@@ -2728,7 +2744,8 @@ inline MaterialCommandDescriptor material_command_descriptor(
         style.shadow_alpha,
         style.shadow_radius,
         style.interaction,
-        style.transition};
+        style.transition,
+        style.glass_identity};
 }
 
 inline MaterialStyle material_style_for_command(MaterialKind kind,
@@ -2798,6 +2815,7 @@ inline MaterialStyle material_style_for_command(
     style.container = descriptor.container;
     style.interaction = descriptor.interaction;
     style.transition = descriptor.transition;
+    style.glass_identity = descriptor.glass_identity;
     return style;
 }
 
@@ -3473,6 +3491,41 @@ inline MaterialTransitionAnalysis analyze_material_transition(
         analysis.refraction_gain =
             std::clamp(0.70f + 0.30f * gain, 0.0f, 1.0f);
         analysis.policy = "matched-geometry";
+    }
+    return analysis;
+}
+
+inline MaterialGlassIdentityAnalysis analyze_material_glass_identity(
+        MaterialGlassIdentityDescriptor descriptor,
+        MaterialContainerAnalysis const& container,
+        MaterialTransitionAnalysis const& transition) noexcept {
+    MaterialGlassIdentityAnalysis analysis{};
+    analysis.namespace_id = descriptor.namespace_id;
+    analysis.effect_id = descriptor.effect_id;
+    analysis.namespace_scoped = descriptor.namespace_id != 0u;
+    analysis.effect_identified = descriptor.effect_id != 0u;
+    analysis.participates = descriptor.participates();
+    analysis.container_scoped = analysis.participates && container.participates;
+    analysis.matched_geometry_candidate =
+        analysis.participates && transition.matched_geometry;
+    if (!analysis.namespace_scoped && !analysis.effect_identified) {
+        analysis.source = "none";
+        analysis.policy = "unidentified";
+    } else if (!analysis.participates) {
+        analysis.source = "partial-glass-effect-id";
+        analysis.policy = "incomplete-effect-id";
+    } else if (analysis.matched_geometry_candidate && analysis.container_scoped) {
+        analysis.source = "glass-effect-id";
+        analysis.policy = "matched-geometry-container";
+    } else if (analysis.matched_geometry_candidate) {
+        analysis.source = "glass-effect-id";
+        analysis.policy = "matched-geometry";
+    } else if (analysis.container_scoped) {
+        analysis.source = "glass-effect-id";
+        analysis.policy = "container-identity";
+    } else {
+        analysis.source = "glass-effect-id";
+        analysis.policy = "view-identity";
     }
     return analysis;
 }
@@ -4323,6 +4376,9 @@ inline MaterialReferenceModel material_resolve_reference_model(
     model.container_grouped = plan.container.participates;
     model.container_union = plan.container.shape_union_expected;
     model.container_morphing = plan.container.morph_transitions;
+    model.glass_effect_identified = plan.glass_identity.participates;
+    model.glass_effect_matched_geometry =
+        plan.glass_identity.matched_geometry_candidate;
     model.legibility_preserved =
         plan.foreground.primary_contrast_ratio
             >= plan.foreground.minimum_contrast_ratio
@@ -4656,6 +4712,10 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.transition = analyze_material_transition(
         style.transition,
         environment.capabilities.reduce_motion);
+    plan.glass_identity = analyze_material_glass_identity(
+        style.glass_identity,
+        plan.container,
+        plan.transition);
     plan.opacity = std::clamp(style.opacity, 0.0f, 1.0f);
     plan.blur_radius = std::clamp(
         style.blur_radius, 0.0f, max_blur_radius);

@@ -1147,6 +1147,17 @@ void test_material_runtime_record_json_contract() {
     assert(container.at("blend_policy").as_string() == "isolated");
     assert(container.at("morph_policy").as_string() == "isolated");
     assert(container.at("performance_policy").as_string() == "single-surface");
+    auto const& glass_identity = obj.at("glass_identity").as_object();
+    assert(glass_identity.at("namespace_id").as_integer() == 0);
+    assert(glass_identity.at("effect_id").as_integer() == 0);
+    assert(glass_identity.at("namespace_scoped").as_bool() == false);
+    assert(glass_identity.at("effect_identified").as_bool() == false);
+    assert(glass_identity.at("participates").as_bool() == false);
+    assert(glass_identity.at("container_scoped").as_bool() == false);
+    assert(glass_identity.at("matched_geometry_candidate").as_bool() == false);
+    assert(glass_identity.at("bounded").as_bool() == true);
+    assert(glass_identity.at("source").as_string() == "none");
+    assert(glass_identity.at("policy").as_string() == "unidentified");
     auto const& reference_model = obj.at("reference_model").as_object();
     assert(reference_model.at("technology").as_string() == "liquid-glass");
     assert(reference_model.at("layer").as_string() == "functional-layer");
@@ -1169,6 +1180,9 @@ void test_material_runtime_record_json_contract() {
     assert(reference_model.at("container_grouped").as_bool() == false);
     assert(reference_model.at("container_union").as_bool() == false);
     assert(reference_model.at("container_morphing").as_bool() == false);
+    assert(reference_model.at("glass_effect_identified").as_bool() == false);
+    assert(reference_model.at("glass_effect_matched_geometry").as_bool()
+           == false);
     assert(reference_model.at("legibility_preserved").as_bool() == true);
     assert(reference_model.at("vibrancy_expected").as_bool() == false);
     assert(reference_model.at("deterministic_degradation").as_bool() == true);
@@ -1200,6 +1214,11 @@ void test_material_runtime_record_json_contract() {
     assert(descriptor_interaction.at("active").as_bool() == false);
     assert(descriptor_interaction.at("pointer_x").as_float() == 0.5f);
     assert(descriptor_interaction.at("pointer_y").as_float() == 0.5f);
+    auto const& descriptor_identity =
+        descriptor.at("glass_identity").as_object();
+    assert(descriptor_identity.at("namespace_id").as_integer() == 0);
+    assert(descriptor_identity.at("effect_id").as_integer() == 0);
+    assert(descriptor_identity.at("participates").as_bool() == false);
     assert(descriptor.at("opacity").as_float() == 0.5f);
     assert(descriptor.at("blur_radius").as_float() == 14.0f);
     auto const& descriptor_tint = descriptor.at("tint").as_object();

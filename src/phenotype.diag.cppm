@@ -845,6 +845,19 @@ namespace detail {
         return json::Value{std::move(out)};
     }
 
+    inline json::Value material_glass_identity_descriptor_json(
+            MaterialGlassIdentityDescriptor const& descriptor) {
+        json::Object out;
+        out.emplace(
+            "namespace_id",
+            json::Value{static_cast<std::int64_t>(descriptor.namespace_id)});
+        out.emplace(
+            "effect_id",
+            json::Value{static_cast<std::int64_t>(descriptor.effect_id)});
+        out.emplace("participates", json::Value{descriptor.participates()});
+        return json::Value{std::move(out)};
+    }
+
     inline json::Value material_transition_analysis_json(
             MaterialTransitionAnalysis const& analysis) {
         json::Object out;
@@ -864,6 +877,28 @@ namespace detail {
         out.emplace(
             "refraction_gain",
             json::Value{analysis.refraction_gain});
+        out.emplace("policy", json::Value{analysis.policy});
+        return json::Value{std::move(out)};
+    }
+
+    inline json::Value material_glass_identity_analysis_json(
+            MaterialGlassIdentityAnalysis const& analysis) {
+        json::Object out;
+        out.emplace(
+            "namespace_id",
+            json::Value{static_cast<std::int64_t>(analysis.namespace_id)});
+        out.emplace(
+            "effect_id",
+            json::Value{static_cast<std::int64_t>(analysis.effect_id)});
+        out.emplace("namespace_scoped", json::Value{analysis.namespace_scoped});
+        out.emplace("effect_identified", json::Value{analysis.effect_identified});
+        out.emplace("participates", json::Value{analysis.participates});
+        out.emplace("container_scoped", json::Value{analysis.container_scoped});
+        out.emplace(
+            "matched_geometry_candidate",
+            json::Value{analysis.matched_geometry_candidate});
+        out.emplace("bounded", json::Value{analysis.bounded});
+        out.emplace("source", json::Value{analysis.source});
         out.emplace("policy", json::Value{analysis.policy});
         return json::Value{std::move(out)};
     }
@@ -1125,6 +1160,10 @@ namespace detail {
             material_transition_descriptor_json(
                 plan.command_descriptor.transition));
         command_descriptor.emplace(
+            "glass_identity",
+            material_glass_identity_descriptor_json(
+                plan.command_descriptor.glass_identity));
+        command_descriptor.emplace(
             "opacity",
             json::Value{plan.command_descriptor.opacity});
         command_descriptor.emplace(
@@ -1210,6 +1249,13 @@ namespace detail {
         reference_model.emplace(
             "container_morphing",
             json::Value{plan.reference_model.container_morphing});
+        reference_model.emplace(
+            "glass_effect_identified",
+            json::Value{plan.reference_model.glass_effect_identified});
+        reference_model.emplace(
+            "glass_effect_matched_geometry",
+            json::Value{
+                plan.reference_model.glass_effect_matched_geometry});
         reference_model.emplace(
             "legibility_preserved",
             json::Value{plan.reference_model.legibility_preserved});
@@ -2426,6 +2472,9 @@ namespace detail {
         out.emplace(
             "transition",
             material_transition_analysis_json(plan.transition));
+        out.emplace(
+            "glass_identity",
+            material_glass_identity_analysis_json(plan.glass_identity));
         out.emplace("reference_model", json::Value{std::move(reference_model)});
         out.emplace("plan_id", json::Value{plan.plan_id});
         out.emplace(

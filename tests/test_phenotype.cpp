@@ -2630,6 +2630,9 @@ void test_material_surface_emits_material_rect_command() {
     assert(descriptor.transition.kind == MaterialGlassTransitionKind::Identity);
     assert(descriptor.transition.progress == 1.0f);
     assert(descriptor.transition.appearing);
+    assert(descriptor.glass_identity.namespace_id == 0u);
+    assert(descriptor.glass_identity.effect_id == 0u);
+    assert(!descriptor.glass_identity.participates());
     assert(descriptor.opacity > 0.5f);
     assert(descriptor.blur_radius >= 20.0f);
     assert(descriptor.tint.a > 0);
@@ -3185,6 +3188,78 @@ void test_glass_effect_transition_scope_emits_command_context() {
     std::puts("PASS: glass effect transition scope emits command context");
 }
 
+void test_glass_effect_id_scope_emits_command_context() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::glass_effect_id(12u, 34u, [] {
+        layout::material_surface(
+            layout::MaterialSurfaceOptions{
+                .kind = MaterialKind::Regular,
+                .fixed_height = 36.0f,
+                .border_width = 0.0f,
+                .semantic_label = "Inherited Glass ID",
+            },
+            [] {
+                widget::text("Inherited glass id");
+            });
+        layout::material_surface(
+            layout::MaterialSurfaceOptions{
+                .kind = MaterialKind::Thin,
+                .glass_identity = layout::glass_effect_identity(12u, 99u),
+                .fixed_height = 36.0f,
+                .border_width = 0.0f,
+                .semantic_label = "Overridden Glass ID",
+            },
+            [] {
+                widget::text("Overridden glass id");
+            });
+        layout::material_surface(
+            layout::MaterialSurfaceOptions{
+                .kind = MaterialKind::Clear,
+                .inherit_material_identity = false,
+                .fixed_height = 36.0f,
+                .border_width = 0.0f,
+                .semantic_label = "No Glass ID",
+            },
+            [] {
+                widget::text("No glass id");
+            });
+    });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    std::vector<MaterialCommandDescriptor> materials;
+    for (auto const& cmd : cmds) {
+        if (auto const* m = std::get_if<MaterialRectCmd>(&cmd))
+            materials.push_back(m->material);
+    }
+
+    assert(materials.size() == 3u);
+    assert(materials[0].glass_identity.namespace_id == 12u);
+    assert(materials[0].glass_identity.effect_id == 34u);
+    assert(materials[0].glass_identity.participates());
+
+    assert(materials[1].glass_identity.namespace_id == 12u);
+    assert(materials[1].glass_identity.effect_id == 99u);
+    assert(materials[1].glass_identity.participates());
+
+    assert(materials[2].glass_identity.namespace_id == 0u);
+    assert(materials[2].glass_identity.effect_id == 0u);
+    assert(!materials[2].glass_identity.participates());
+
+    std::puts("PASS: glass effect id scope emits command context");
+}
+
 void test_material_command_preserves_style_optics() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -3206,6 +3281,10 @@ void test_material_command_preserves_style_optics() {
         18.0f,
         true,
         true};
+    material.material.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 44u,
+        .effect_id = 144u,
+    };
     material.material.opacity = 0.63f;
     material.material.blur_radius = 18.0f;
     material.material.tint = Color{32, 64, 96, 144};
@@ -3244,6 +3323,9 @@ void test_material_command_preserves_style_optics() {
     assert(std::fabs(descriptor.container.spacing - 18.0f) < 0.0001f);
     assert(descriptor.container.interactive);
     assert(descriptor.container.morph_transitions);
+    assert(descriptor.glass_identity.namespace_id == 44u);
+    assert(descriptor.glass_identity.effect_id == 144u);
+    assert(descriptor.glass_identity.participates());
     assert(std::fabs(descriptor.opacity - 0.63f) < 0.0001f);
     assert(std::fabs(descriptor.blur_radius - 18.0f) < 0.0001f);
     assert(descriptor.tint.r == 32 && descriptor.tint.g == 64
@@ -3303,6 +3385,10 @@ void test_material_command_preserves_style_optics() {
     assert(plan.container.union_id == 12u);
     assert(plan.container.interactive);
     assert(plan.container.morph_transitions);
+    assert(plan.glass_identity.namespace_id == 44u);
+    assert(plan.glass_identity.effect_id == 144u);
+    assert(plan.glass_identity.participates);
+    assert(plan.glass_identity.container_scoped);
     assert(plan.blur_radius == 0.0f);
     assert(plan.sample_taps == 0u);
     assert(plan.saturation == 1.0f);
@@ -5893,6 +5979,7 @@ int main() {
     test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();
     test_glass_effect_transition_scope_emits_command_context();
+    test_glass_effect_id_scope_emits_command_context();
     test_material_command_preserves_style_optics();
     test_radio_paint_cache_stale_descendant_after_subtree_blit();
     test_row_cross_align_center_default();

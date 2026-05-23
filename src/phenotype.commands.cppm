@@ -188,6 +188,8 @@ inline std::vector<DrawCommand> parse_commands(
             auto transition_kind = read_u32();
             auto transition_progress = read_f32();
             auto transition_flags = read_u32();
+            auto glass_namespace_id = read_u32();
+            auto glass_effect_id = read_u32();
             out.emplace_back(MaterialRectCmd{
                 x,
                 y,
@@ -220,7 +222,10 @@ inline std::vector<DrawCommand> parse_commands(
                     material_transition_descriptor_from_wire(
                         transition_kind,
                         transition_progress,
-                        transition_flags)}});
+                        transition_flags),
+                    material_glass_identity_from_wire(
+                        glass_namespace_id,
+                        glass_effect_id)}});
             break;
         }
         case Cmd::DrawText: {
