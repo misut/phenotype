@@ -3108,6 +3108,83 @@ void test_material_container_scope_emits_command_context() {
     std::puts("PASS: material container scope emits command context");
 }
 
+void test_glass_effect_transition_scope_emits_command_context() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::glass_effect_transition(
+        layout::glass_materialize_transition(0.35f, false),
+        [] {
+            layout::material_surface(
+                layout::MaterialSurfaceOptions{
+                    .kind = MaterialKind::Regular,
+                    .fixed_height = 36.0f,
+                    .border_width = 0.0f,
+                    .semantic_label = "Inherited Transition",
+                },
+                [] {
+                    widget::text("Inherited transition");
+                });
+            layout::material_surface(
+                layout::MaterialSurfaceOptions{
+                    .kind = MaterialKind::Thin,
+                    .transition = layout::glass_matched_geometry_transition(
+                        0.8f),
+                    .fixed_height = 36.0f,
+                    .border_width = 0.0f,
+                    .semantic_label = "Matched Transition",
+                },
+                [] {
+                    widget::text("Matched transition");
+                });
+            layout::material_surface(
+                layout::MaterialSurfaceOptions{
+                    .kind = MaterialKind::Clear,
+                    .inherit_material_transition = false,
+                    .fixed_height = 36.0f,
+                    .border_width = 0.0f,
+                    .semantic_label = "Identity Transition",
+                },
+                [] {
+                    widget::text("Identity transition");
+                });
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    std::vector<MaterialCommandDescriptor> materials;
+    for (auto const& cmd : cmds) {
+        if (auto const* m = std::get_if<MaterialRectCmd>(&cmd))
+            materials.push_back(m->material);
+    }
+
+    assert(materials.size() == 3u);
+    assert(materials[0].transition.kind
+           == MaterialGlassTransitionKind::Materialize);
+    assert(std::fabs(materials[0].transition.progress - 0.35f) < 0.0001f);
+    assert(!materials[0].transition.appearing);
+
+    assert(materials[1].transition.kind
+           == MaterialGlassTransitionKind::MatchedGeometry);
+    assert(std::fabs(materials[1].transition.progress - 0.8f) < 0.0001f);
+    assert(materials[1].transition.appearing);
+
+    assert(materials[2].transition.kind == MaterialGlassTransitionKind::Identity);
+    assert(materials[2].transition.progress == 1.0f);
+    assert(materials[2].transition.appearing);
+
+    std::puts("PASS: glass effect transition scope emits command context");
+}
+
 void test_material_command_preserves_style_optics() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -5815,6 +5892,7 @@ int main() {
     test_material_surface_interactive_option_enables_plan_response();
     test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();
+    test_glass_effect_transition_scope_emits_command_context();
     test_material_command_preserves_style_optics();
     test_radio_paint_cache_stale_descendant_after_subtree_blit();
     test_row_cross_align_center_default();
