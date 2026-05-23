@@ -2787,6 +2787,151 @@ inline void apply_material_container_execution_descriptors(
                         0.0f,
                         0.40f);
                 }
+                if (execution->glass_effect_match_appearance_active) {
+                    auto const blend = std::clamp(
+                        execution->glass_effect_match_appearance_blend,
+                        0.0f,
+                        1.0f);
+                    if (execution->glass_effect_match_appearance_tint_active) {
+                        inst.tint[0] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_tint_r,
+                                inst.tint[0],
+                                blend),
+                            0.0f,
+                            1.0f);
+                        inst.tint[1] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_tint_g,
+                                inst.tint[1],
+                                blend),
+                            0.0f,
+                            1.0f);
+                        inst.tint[2] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_tint_b,
+                                inst.tint[2],
+                                blend),
+                            0.0f,
+                            1.0f);
+                        inst.tint[3] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_tint_a,
+                                inst.tint[3],
+                                blend),
+                            0.0f,
+                            1.0f);
+                    }
+                    if (execution
+                            ->glass_effect_match_appearance_spectral_tint_active) {
+                        inst.spectral_tint[0] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_spectral_tint_warmth,
+                                inst.spectral_tint[0],
+                                blend),
+                            0.0f,
+                            0.22f);
+                        inst.spectral_tint[1] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_spectral_tint_coolness,
+                                inst.spectral_tint[1],
+                                blend),
+                            0.0f,
+                            0.22f);
+                        inst.spectral_tint[2] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_spectral_tint_dispersion,
+                                inst.spectral_tint[2],
+                                blend),
+                            0.0f,
+                            0.22f);
+                        inst.spectral_tint[3] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_spectral_tint_rim,
+                                inst.spectral_tint[3],
+                                blend),
+                            0.0f,
+                            0.28f);
+                    }
+                    if (execution
+                            ->glass_effect_match_appearance_prominent_glass_active) {
+                        inst.prominent_glass[0] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_prominent_glass_intensity,
+                                inst.prominent_glass[0],
+                                blend),
+                            0.0f,
+                            1.0f);
+                        inst.prominent_glass[1] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_prominent_glass_tint_weight,
+                                inst.prominent_glass[1],
+                                blend),
+                            0.0f,
+                            0.64f);
+                        inst.prominent_glass[2] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_prominent_glass_edge_lift,
+                                inst.prominent_glass[2],
+                                blend),
+                            0.0f,
+                            0.20f);
+                        inst.prominent_glass[3] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_prominent_glass_lensing_gain,
+                                inst.prominent_glass[3],
+                                blend),
+                            1.0f,
+                            1.24f);
+                    }
+                    if (execution
+                            ->glass_effect_match_appearance_clear_glass_active) {
+                        inst.clear_glass[0] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_clear_glass_dimming,
+                                inst.clear_glass[0],
+                                blend),
+                            0.0f,
+                            0.34f);
+                        inst.clear_glass[1] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_clear_glass_contrast,
+                                inst.clear_glass[1],
+                                blend),
+                            0.0f,
+                            0.28f);
+                        inst.clear_glass[2] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_clear_glass_brightness_response,
+                                inst.clear_glass[2],
+                                blend),
+                            0.0f,
+                            1.0f);
+                        inst.clear_glass[3] = std::clamp(
+                            material_lerp(
+                                execution
+                                    ->glass_effect_match_appearance_clear_glass_detail_response,
+                                inst.clear_glass[3],
+                                blend),
+                            0.0f,
+                            1.0f);
+                    }
+                }
                 if (execution->group_appearance_tint_active) {
                     inst.tint[0] = std::clamp(
                         execution->group_appearance_tint_r,

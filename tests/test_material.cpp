@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 71);
+    assert(material_plan_contract_version == 72);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -2475,8 +2475,14 @@ void test_glass_effect_matched_geometry_respects_container_spacing() {
 }
 
 void test_glass_effect_matched_geometry_uses_nearby_namespace_source() {
-    auto source = regular_request();
+    auto source = clear_request();
     source.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 12.0f};
+    source.style.role = MaterialSurfaceRole::Control;
+    source.style.tint = Color{64, 156, 255, 178};
+    source.style.prominence = MaterialProminenceDescriptor{
+        .enabled = true,
+        .intensity = 1.0f,
+    };
     source.style.container = MaterialContainerDescriptor{
         .container_id = 91u,
         .union_id = 0u,
@@ -2490,8 +2496,9 @@ void test_glass_effect_matched_geometry_uses_nearby_namespace_source() {
         .effect_id = 801u,
     };
 
-    auto target = source;
+    auto target = regular_request();
     target.geometry = MaterialGeometry{120.0f, 0.0f, 40.0f, 40.0f, 24.0f};
+    target.style.container = source.style.container;
     target.style.transition = MaterialTransitionDescriptor{
         .kind = MaterialGlassTransitionKind::MatchedGeometry,
         .progress = 0.5f,
@@ -2502,10 +2509,21 @@ void test_glass_effect_matched_geometry_uses_nearby_namespace_source() {
         .effect_id = 802u,
     };
 
+    auto env = sampled_environment();
+    env.backdrop.luma_min = 0.70f;
+    env.backdrop.luma_max = 0.98f;
+    env.backdrop.luma_mean = 0.90f;
+    env.backdrop.color_mean = Color{236, 244, 255, 255};
+
     std::vector<MaterialRuntimeRecord> records{
-        {plan_material_surface(source, sampled_environment()), 1u},
-        {plan_material_surface(target, sampled_environment()), 2u},
+        {plan_material_surface(source, env), 1u},
+        {plan_material_surface(target, env), 2u},
     };
+    assert(records[0].plan.spectral_tint.tint_driven);
+    assert(records[0].plan.prominent_glass.active);
+    assert(records[0].plan.clear_glass_legibility.active);
+    assert(!records[1].plan.prominent_glass.active);
+    assert(!records[1].plan.clear_glass_legibility.active);
 
     auto const source_execution =
         material_container_execution_descriptor(records[0], records);
@@ -2530,6 +2548,52 @@ void test_glass_effect_matched_geometry_uses_nearby_namespace_source() {
            < 0.0001f);
     assert(std::fabs(target_execution.glass_effect_match_rect_radius - 18.0f)
            < 0.0001f);
+    assert(target_execution.glass_effect_match_appearance_active);
+    assert(target_execution.glass_effect_match_appearance_source_command_index
+           == 1u);
+    assert(std::fabs(target_execution.glass_effect_match_appearance_blend
+                     - 0.5f)
+           < 0.0001f);
+    assert(target_execution.glass_effect_match_appearance_tint_active);
+    assert(std::fabs(
+               target_execution.glass_effect_match_appearance_tint_r
+                   - static_cast<float>(records[0].plan.tint.r) / 255.0f)
+           < 0.0001f);
+    assert(std::fabs(
+               target_execution.glass_effect_match_appearance_tint_g
+                   - static_cast<float>(records[0].plan.tint.g) / 255.0f)
+           < 0.0001f);
+    assert(std::fabs(
+               target_execution.glass_effect_match_appearance_tint_b
+                   - static_cast<float>(records[0].plan.tint.b) / 255.0f)
+           < 0.0001f);
+    assert(std::fabs(
+               target_execution.glass_effect_match_appearance_tint_a
+                   - static_cast<float>(records[0].plan.tint.a) / 255.0f)
+           < 0.0001f);
+    assert(target_execution
+               .glass_effect_match_appearance_spectral_tint_active);
+    assert(target_execution
+               .glass_effect_match_appearance_spectral_tint_coolness
+           == records[0].plan.spectral_tint.coolness);
+    assert(target_execution
+               .glass_effect_match_appearance_spectral_tint_dispersion
+           == records[0].plan.spectral_tint.dispersion);
+    assert(target_execution
+               .glass_effect_match_appearance_prominent_glass_active);
+    assert(target_execution
+               .glass_effect_match_appearance_prominent_glass_intensity
+           == records[0].plan.prominent_glass.intensity);
+    assert(target_execution
+               .glass_effect_match_appearance_prominent_glass_lensing_gain
+           == records[0].plan.prominent_glass.lensing_gain);
+    assert(target_execution
+               .glass_effect_match_appearance_clear_glass_active);
+    assert(target_execution.glass_effect_match_appearance_clear_glass_dimming
+           == records[0].plan.clear_glass_legibility.dimming_strength);
+    assert(target_execution.glass_effect_match_appearance_clear_glass_contrast
+           == records[0].plan.clear_glass_legibility.contrast_lift);
+    assert(!target_execution.group_appearance_source_valid);
     assert(std::string_view{target_execution.execution_policy}
            == "glass-effect-matched-geometry");
 
