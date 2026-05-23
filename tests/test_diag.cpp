@@ -1081,6 +1081,10 @@ void test_material_runtime_record_json_contract() {
     assert(group.at("shape_blend_execution_surfaces").as_integer() == 2);
     assert(std::fabs(group.at("shape_blend_strength").as_float() - 0.75f)
            < 0.0001f);
+    assert(std::fabs(
+               group.at("inner_edge_alpha_blend_strength").as_float()
+                   - 0.75f)
+           < 0.0001f);
     auto const& members = group.at("members").as_array();
     assert(members.size() == 2);
     auto const& first_member = members[0].as_object();
@@ -1095,6 +1099,12 @@ void test_material_runtime_record_json_contract() {
     assert(first_member.at("shape_blend_execution").as_bool());
     assert(std::fabs(
                first_member.at("shape_blend_strength").as_float() - 0.75f)
+           < 0.0001f);
+    assert(std::fabs(
+               first_member
+                   .at("inner_edge_alpha_blend_strength")
+                   .as_float()
+                   - 0.75f)
            < 0.0001f);
     assert(first_member.at("geometry").as_object().at("w").as_float()
            == 44.0f);

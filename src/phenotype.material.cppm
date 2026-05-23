@@ -1187,6 +1187,7 @@ struct MaterialContainerExecutionDescriptor {
     float group_w = 0.0f;
     float group_h = 0.0f;
     float shape_blend_strength = 0.0f;
+    float inner_edge_alpha_blend_strength = 0.0f;
 };
 
 struct MaterialRuntimeSummary {
@@ -1780,6 +1781,24 @@ inline float material_container_group_shape_blend_strength(
     return std::clamp(std::max(0.25f, proximity), 0.0f, 1.0f);
 }
 
+inline float material_container_group_inner_edge_alpha_blend_strength(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    auto const shape_blend =
+        material_container_group_shape_blend_strength(group);
+    if (shape_blend <= 0.0f)
+        return 0.0f;
+    float continuity = 0.0f;
+    if (group.union_surfaces > 0u)
+        continuity = 1.0f;
+    else if (group.morph_surfaces > 0u)
+        continuity = 0.85f;
+    else if (group.shared_backdrop_scope_surfaces > 1u)
+        continuity = 0.65f;
+    else if (group.interactive_surfaces > 0u)
+        continuity = 0.50f;
+    return std::clamp(shape_blend * continuity, 0.0f, 1.0f);
+}
+
 inline char const* material_container_execution_policy_name(
         MaterialContainerGroupAccumulator const& group) noexcept {
     if (material_container_group_shape_blend_execution_active(group))
@@ -1864,6 +1883,8 @@ material_container_execution_descriptor_from_group(
         material_container_execution_policy_name(group);
     descriptor.shape_blend_strength =
         material_container_group_shape_blend_strength(group);
+    descriptor.inner_edge_alpha_blend_strength =
+        material_container_group_inner_edge_alpha_blend_strength(group);
     if (group.has_bounds) {
         descriptor.group_x = group.min_x;
         descriptor.group_y = group.min_y;

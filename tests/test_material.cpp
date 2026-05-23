@@ -996,6 +996,9 @@ void test_container_group_runtime_summary_contract() {
     assert(groups.max_group_bounds_height == 96.0f);
     assert(groups.max_group_bounds_area == 240.0f * 96.0f);
     assert(groups.max_shape_blend_strength == 1.0f);
+    auto container_group = accumulate_material_container_group(records, 42u);
+    assert(material_container_group_inner_edge_alpha_blend_strength(
+               container_group) == 1.0f);
 
     auto execution =
         material_container_execution_descriptor(records[0], records);
@@ -1015,6 +1018,7 @@ void test_container_group_runtime_summary_contract() {
     assert(execution.group_w == 240.0f);
     assert(execution.group_h == 96.0f);
     assert(execution.shape_blend_strength == 1.0f);
+    assert(execution.inner_edge_alpha_blend_strength == 1.0f);
 
     MaterialRuntimeSummary runtime_summary{};
     for (auto const& record : records)

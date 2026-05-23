@@ -1633,7 +1633,7 @@ struct MaterialInstanceGPU {
     float refraction[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
-    // shape blend strength, surface count, flags, command index
+    // shape blend strength, inner-edge alpha blend strength, flags, command index
     float group_effects[4]{};
 };
 
@@ -2399,7 +2399,8 @@ inline void apply_material_container_execution_descriptors(
             inst.group_rect[2] = execution->group_w;
             inst.group_rect[3] = execution->group_h;
             inst.group_effects[0] = execution->shape_blend_strength;
-            inst.group_effects[1] = static_cast<float>(execution->surface_count);
+            inst.group_effects[1] =
+                execution->inner_edge_alpha_blend_strength;
             inst.group_effects[2] =
                 (execution->shape_blend_execution ? 1.0f : 0.0f)
                 + (execution->union_execution ? 2.0f : 0.0f)
@@ -4288,6 +4289,8 @@ fragment float4 fs_material(
     float2 normalized_local =
         (in.local_pos / max(in.rect_size, float2(1.0)) - float2(0.5)) * 2.0;
     float group_blend_strength = clamp(in.group_effects.x, 0.0, 1.0);
+    float inner_edge_alpha_blend_strength =
+        clamp(in.group_effects.y, 0.0, 1.0);
     if (group_blend_strength > 0.0
         && in.group_rect.z > 0.0
         && in.group_rect.w > 0.0) {
@@ -4313,6 +4316,11 @@ fragment float4 fs_material(
                 + float2(group_radius);
             float group_d = length(max(group_p, float2(0.0))) - group_radius;
             group_signed_edge_distance = abs(group_d);
+            float group_edge_alpha = clamp(0.5 - group_d, 0.0, 1.0);
+            edge_alpha = mix(
+                edge_alpha,
+                max(edge_alpha, group_edge_alpha),
+                inner_edge_alpha_blend_strength);
         }
         signed_edge_distance = mix(
             signed_edge_distance,
