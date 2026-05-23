@@ -3200,6 +3200,12 @@ namespace detail {
             "group_execution_policy",
             json::Value{execution.execution_policy});
         out.emplace(
+            "fusion_model",
+            json::Value{execution.fusion_model});
+        out.emplace(
+            "fusion_optics_active",
+            json::Value{execution.fusion_optics_active});
+        out.emplace(
             "shape_blend_execution",
             json::Value{execution.shape_blend_execution});
         out.emplace(
@@ -3208,6 +3214,18 @@ namespace detail {
         out.emplace(
             "inner_edge_alpha_blend_strength",
             json::Value{execution.inner_edge_alpha_blend_strength});
+        out.emplace(
+            "fusion_strength",
+            json::Value{execution.fusion_strength});
+        out.emplace(
+            "fusion_lensing_gain",
+            json::Value{execution.fusion_lensing_gain});
+        out.emplace(
+            "fusion_edge_lift",
+            json::Value{execution.fusion_edge_lift});
+        out.emplace(
+            "fusion_shadow_gain",
+            json::Value{execution.fusion_shadow_gain});
         out.emplace(
             "reduced_motion_suppressed_morph",
             json::Value{plan.container.reduced_motion_suppressed_morph});

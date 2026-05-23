@@ -1651,6 +1651,8 @@ struct MaterialInstanceGPU {
     float group_rect[4]{};
     // shape blend strength, inner-edge alpha blend strength, flags, command index
     float group_effects[4]{};
+    // fusion strength, lensing gain, edge lift, shadow gain
+    float fusion_optics[4]{};
 };
 
 // Per-vertex GPU layout for the triangle pipeline (FillPath fast path).
@@ -2666,6 +2668,10 @@ inline void apply_material_container_execution_descriptors(
                 + (execution->shared_backdrop_scope ? 8.0f : 0.0f)
                 + (execution->glass_effect_match_execution ? 16.0f : 0.0f)
                 + (execution->group_surface_execution ? 32.0f : 0.0f);
+            inst.fusion_optics[0] = execution->fusion_strength;
+            inst.fusion_optics[1] = execution->fusion_lensing_gain;
+            inst.fusion_optics[2] = execution->fusion_edge_lift;
+            inst.fusion_optics[3] = execution->fusion_shadow_gain;
         }
     }
 }
@@ -4605,6 +4611,7 @@ struct MaterialVsOut {
     float4 scroll_edge;
     float4 group_rect;
     float4 group_effects;
+    float4 fusion_optics;
 };
 
 struct MaterialInstance {
@@ -4627,6 +4634,7 @@ struct MaterialInstance {
     float4 scroll_edge;
     float4 group_rect;
     float4 group_effects;
+    float4 fusion_optics;
 };
 
 vertex MaterialVsOut vs_material(
@@ -4682,6 +4690,7 @@ vertex MaterialVsOut vs_material(
     out.scroll_edge = inst.scroll_edge;
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
+    out.fusion_optics = inst.fusion_optics;
     return out;
 }
 
@@ -4712,6 +4721,10 @@ fragment float4 fs_material(
     float group_blend_strength = clamp(in.group_effects.x, 0.0, 1.0);
     float inner_edge_alpha_blend_strength =
         clamp(in.group_effects.y, 0.0, 1.0);
+    float fusion_strength = clamp(in.fusion_optics.x, 0.0, 1.0);
+    float fusion_lensing_gain = clamp(in.fusion_optics.y, 1.0, 1.35);
+    float fusion_edge_lift = clamp(in.fusion_optics.z, 0.0, 0.16);
+    float fusion_shadow_gain = clamp(in.fusion_optics.w, 1.0, 1.32);
     if (group_blend_strength > 0.0
         && in.group_rect.z > 0.0
         && in.group_rect.w > 0.0) {
@@ -4780,16 +4793,27 @@ fragment float4 fs_material(
     float refraction_edge_bias = clamp(in.refraction.y, 0.0, 1.0);
     float refraction_offset_pixels = clamp(in.refraction.z, 0.0, 8.0)
         * (refraction_strength > 0.0 ? 1.0 : 0.0)
-        * glass_lensing_gain;
+        * glass_lensing_gain
+        * fusion_lensing_gain;
     float refraction_edge_caustic =
-        clamp(in.refraction.w * glass_lensing_gain, 0.0, 0.42);
+        clamp(
+            in.refraction.w
+                * glass_lensing_gain
+                * (1.0 + 0.34 * fusion_strength),
+            0.0,
+            0.46);
     float edge_bevel_width = clamp(
         in.edge_optics.x * (1.0 + 0.16 * glass_thickness),
         0.0,
         18.0);
-    float edge_inner_highlight = clamp(in.edge_optics.y, 0.0, 0.85);
+    float edge_inner_highlight =
+        clamp(in.edge_optics.y + fusion_edge_lift, 0.0, 0.88);
     float edge_outer_shadow =
-        clamp(in.edge_optics.z * glass_shadow_gain, 0.0, 0.72);
+        clamp(
+            in.edge_optics.z * glass_shadow_gain * fusion_shadow_gain
+                + 0.035 * fusion_strength,
+            0.0,
+            0.78);
     float edge_chromatic_fringe = clamp(in.edge_optics.w, 0.0, 0.16);
     float spectral_warmth = clamp(in.spectral_tint.x, 0.0, 0.22);
     float spectral_coolness = clamp(in.spectral_tint.y, 0.0, 0.22);
@@ -5024,6 +5048,27 @@ fragment float4 fs_material(
             * control_rim
             * control_morph_edge_lift
             * 0.18;
+        backdrop_rgb = clamp(backdrop_rgb, 0.0, 1.0);
+    }
+    if (fusion_strength > 0.0001) {
+        float fusion_center =
+            1.0 - smoothstep(0.18, 1.18, normalized_len);
+        float fusion_rim =
+            edge_lens
+            * (0.52
+               + 0.48
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_width * 1.6, 0.5),
+                       signed_edge_distance)));
+        backdrop_rgb = mix(
+            backdrop_rgb,
+            backdrop_rgb * (1.0 - 0.055 * fusion_strength * fusion_center),
+            0.55 * fusion_strength);
+        backdrop_rgb += float3(1.0)
+            * fusion_rim
+            * fusion_edge_lift
+            * (0.42 + 0.58 * group_blend_strength);
         backdrop_rgb = clamp(backdrop_rgb, 0.0, 1.0);
     }
     float tint_strength = clamp(in.tint.a, 0.0, 1.0);
