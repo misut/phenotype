@@ -1659,6 +1659,10 @@ struct MaterialInstanceGPU {
     float group_effects[4]{};
     // fusion strength, lensing gain, edge lift, shadow gain
     float fusion_optics[4]{};
+    // bridge direction x/y, anchor x/y for container/matched flow
+    float bridge_motion[4]{};
+    // bridge strength, flow offset gain, ribbon width, highlight gain
+    float bridge_optics[4]{};
 };
 
 // Per-vertex GPU layout for the triangle pipeline (FillPath fast path).
@@ -2537,6 +2541,20 @@ inline void apply_material_container_execution_descriptors(
                 auto const& container_motion = match_motion.active
                     ? match_motion
                     : bridge_motion;
+                if (container_motion.active) {
+                    inst.bridge_motion[0] = container_motion.direction_x;
+                    inst.bridge_motion[1] = container_motion.direction_y;
+                    inst.bridge_motion[2] =
+                        container_motion.specular_anchor_x;
+                    inst.bridge_motion[3] =
+                        container_motion.specular_anchor_y;
+                    inst.bridge_optics[0] = container_motion.strength;
+                    inst.bridge_optics[1] =
+                        container_motion.flow_offset_gain;
+                    inst.bridge_optics[2] = container_motion.ribbon_width;
+                    inst.bridge_optics[3] =
+                        container_motion.highlight_gain;
+                }
                 if (record->plan.specular.interaction_driven) {
                     inst.interaction[0] = material_surface_execution_anchor_x(
                         record->plan,
@@ -4649,6 +4667,8 @@ struct MaterialVsOut {
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
+    float4 bridge_motion;
+    float4 bridge_optics;
 };
 
 struct MaterialInstance {
@@ -4675,6 +4695,8 @@ struct MaterialInstance {
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
+    float4 bridge_motion;
+    float4 bridge_optics;
 };
 
 vertex MaterialVsOut vs_material(
@@ -4734,6 +4756,8 @@ vertex MaterialVsOut vs_material(
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
     out.fusion_optics = inst.fusion_optics;
+    out.bridge_motion = inst.bridge_motion;
+    out.bridge_optics = inst.bridge_optics;
     return out;
 }
 
@@ -4768,6 +4792,12 @@ fragment float4 fs_material(
     float fusion_lensing_gain = clamp(in.fusion_optics.y, 1.0, 1.35);
     float fusion_edge_lift = clamp(in.fusion_optics.z, 0.0, 0.16);
     float fusion_shadow_gain = clamp(in.fusion_optics.w, 1.0, 1.32);
+    float bridge_motion_strength = clamp(in.bridge_optics.x, 0.0, 1.0);
+    float bridge_flow_offset_gain = clamp(in.bridge_optics.y, 0.0, 0.60);
+    float bridge_ribbon_width = clamp(in.bridge_optics.z, 0.08, 0.32);
+    float bridge_caustic_gain =
+        clamp(1.0 + bridge_motion_strength * 0.60, 1.0, 1.80);
+    float bridge_highlight_gain = clamp(in.bridge_optics.w, 0.0, 0.30);
     float materialize_wave_strength =
         clamp(in.transition_optics.x, 0.0, 1.0);
     float materialize_edge_lift =
@@ -4919,10 +4949,45 @@ fragment float4 fs_material(
     float edge_span = max(edge_width * (2.0 + 5.0 * refraction_edge_bias),
                           min(in.rect_size.x, in.rect_size.y) * 0.035);
     float edge_lens = 1.0 - smoothstep(0.0, edge_span, signed_edge_distance);
+    float2 bridge_dir_raw = in.bridge_motion.xy;
+    float bridge_dir_length = length(bridge_dir_raw);
+    float2 bridge_dir = bridge_dir_length > 0.0001
+        ? bridge_dir_raw / bridge_dir_length
+        : float2(0.0);
+    float bridge_band = 0.0;
+    if (bridge_motion_strength > 0.0001 && bridge_dir_length > 0.0001) {
+        float2 bridge_anchor =
+            clamp(in.bridge_motion.zw, float2(0.0), float2(1.0))
+            * max(in.rect_size, float2(1.0));
+        float2 bridge_delta =
+            (in.local_pos - bridge_anchor)
+            / max(in.rect_size, float2(1.0));
+        float2 bridge_tangent = float2(-bridge_dir.y, bridge_dir.x);
+        float bridge_axial = abs(dot(bridge_delta, bridge_dir));
+        float bridge_lateral = abs(dot(bridge_delta, bridge_tangent));
+        float bridge_width = bridge_ribbon_width;
+        float bridge_length = clamp(
+            0.34 + group_blend_strength * 0.32,
+            0.34,
+            0.72);
+        bridge_band =
+            (1.0 - smoothstep(bridge_width,
+                              bridge_width + 0.18,
+                              bridge_lateral))
+            * (1.0 - smoothstep(bridge_length,
+                                bridge_length + 0.20,
+                                bridge_axial))
+            * bridge_motion_strength;
+    }
     float2 refraction_uv =
         refraction_dir * texel
         * (refraction_offset_pixels * content_scale)
         * edge_lens;
+    refraction_uv += bridge_dir
+        * texel
+        * (refraction_offset_pixels * content_scale)
+        * bridge_band
+        * bridge_flow_offset_gain;
     float pointer_lens_strength = clamp(in.interaction_lens.w, 0.0, 0.35);
     refraction_uv *= prominent_lensing_gain;
     if (pointer_lens_strength > 0.0001) {
@@ -4954,7 +5019,8 @@ fragment float4 fs_material(
         edge_lens
             * refraction_edge_caustic
             * glass_prismatic_gain
-            * (1.0 + 0.22 * prominent_intensity),
+            * (1.0 + 0.22 * prominent_intensity)
+            * (1.0 + bridge_band * (bridge_caustic_gain - 1.0)),
         0.0,
         0.36);
     float2 dispersion_tangent = float2(-refraction_dir.y, refraction_dir.x);
@@ -4974,7 +5040,8 @@ fragment float4 fs_material(
                 * (edge_chromatic_fringe
                    + spectral_dispersion
                    + 0.12 * (glass_prismatic_gain - 1.0)
-                   + glass_caustic_spread),
+                   + glass_caustic_spread
+                   + bridge_band * 0.030 * (bridge_caustic_gain - 1.0)),
         0.0,
         0.34);
     float2 fringe_uv =
@@ -5211,6 +5278,25 @@ fragment float4 fs_material(
     float3 rgb = mix(backdrop_rgb, in.tint.rgb, tint_strength);
     float edge = 1.0 - smoothstep(0.0, edge_width, signed_edge_distance);
     float edge_lift = clamp(in.luminance_curve.w, 0.0, 1.0);
+    if (bridge_band > 0.0001) {
+        float bridge_rim =
+            bridge_band
+            * (0.38 + 0.62 * group_blend_strength)
+            * (0.52 + 0.48 * edge_lens);
+        float3 bridge_tint =
+            float3(1.0 + spectral_warmth * 1.20,
+                   1.0 + spectral_rim_tint * 0.34,
+                   1.0 + spectral_coolness * 1.20);
+        bridge_tint = mix(
+            bridge_tint,
+            bridge_tint * (float3(1.0) + in.tint.rgb * 0.36),
+            tint_chroma);
+        rgb += bridge_tint
+            * bridge_rim
+            * bridge_highlight_gain
+            * (0.34 + 0.66 * bridge_motion_strength);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     if (prominent_intensity > 0.0001) {
         float prominent_center =
             1.0 - smoothstep(0.18, 1.12, normalized_len);

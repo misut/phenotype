@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 64;
+inline constexpr std::uint32_t material_plan_contract_version = 65;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1695,6 +1695,9 @@ struct MaterialGlassEffectMotionOptics {
     float refraction_gain = 1.0f;
     float caustic_gain = 1.0f;
     float specular_intensity_gain = 1.0f;
+    float flow_offset_gain = 0.0f;
+    float ribbon_width = 0.0f;
+    float highlight_gain = 0.0f;
 };
 
 inline float material_surface_materialize_geometry_scale(
@@ -3456,6 +3459,9 @@ inline MaterialGlassEffectMotionOptics material_glass_effect_match_motion_optics
     optics.refraction_gain = 1.0f + 0.45f * strength;
     optics.caustic_gain = 1.0f + 0.70f * strength;
     optics.specular_intensity_gain = 1.0f + 0.55f * strength;
+    optics.flow_offset_gain = 0.18f + 0.34f * strength;
+    optics.ribbon_width = 0.12f + 0.18f * strength;
+    optics.highlight_gain = 0.08f + 0.16f * strength;
     return optics;
 }
 
@@ -3586,6 +3592,9 @@ inline MaterialGlassEffectMotionOptics material_container_bridge_motion_optics(
     optics.refraction_gain = 1.0f + 0.32f * strength;
     optics.caustic_gain = 1.0f + 0.48f * strength;
     optics.specular_intensity_gain = 1.0f + 0.42f * strength;
+    optics.flow_offset_gain = 0.14f + 0.30f * strength;
+    optics.ribbon_width = 0.10f + 0.16f * strength;
+    optics.highlight_gain = 0.06f + 0.14f * strength;
     return optics;
 }
 
