@@ -1177,6 +1177,68 @@ void test_glass_effect_matched_geometry_respects_container_spacing() {
     std::puts("PASS: glass effect matched geometry respects container spacing");
 }
 
+void test_glass_effect_matched_geometry_uses_nearby_namespace_source() {
+    auto source = regular_request();
+    source.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 12.0f};
+    source.style.container = MaterialContainerDescriptor{
+        .container_id = 91u,
+        .union_id = 0u,
+        .spacing = 128.0f,
+        .interactive = false,
+        .morph_transitions = true,
+    };
+    source.style.transition = MaterialTransitionDescriptor{};
+    source.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 33u,
+        .effect_id = 801u,
+    };
+
+    auto target = source;
+    target.geometry = MaterialGeometry{120.0f, 0.0f, 40.0f, 40.0f, 24.0f};
+    target.style.transition = MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::MatchedGeometry,
+        .progress = 0.5f,
+        .appearing = true,
+    };
+    target.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 33u,
+        .effect_id = 802u,
+    };
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(source, sampled_environment()), 1u},
+        {plan_material_surface(target, sampled_environment()), 2u},
+    };
+
+    auto const source_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const target_execution =
+        material_container_execution_descriptor(records[1], records);
+
+    assert(!source_execution.glass_effect_match_execution);
+    assert(source_execution.glass_effect_surface_count == 0u);
+
+    assert(target_execution.glass_effect_match_execution);
+    assert(target_execution.glass_namespace_id == 33u);
+    assert(target_execution.glass_effect_id == 802u);
+    assert(target_execution.glass_effect_surface_count == 2u);
+    assert(target_execution.glass_effect_match_source_valid);
+    assert(target_execution.glass_effect_match_source_x == 0.0f);
+    assert(target_execution.glass_effect_match_source_radius == 12.0f);
+    assert(std::fabs(target_execution.glass_effect_match_source_gap - 80.0f)
+           < 0.0001f);
+    assert(std::fabs(target_execution.glass_effect_match_source_spacing - 128.0f)
+           < 0.0001f);
+    assert(std::fabs(target_execution.glass_effect_match_rect_x - 60.0f)
+           < 0.0001f);
+    assert(std::fabs(target_execution.glass_effect_match_rect_radius - 18.0f)
+           < 0.0001f);
+    assert(std::string_view{target_execution.execution_policy}
+           == "glass-effect-matched-geometry");
+
+    std::puts("PASS: glass effect matched geometry uses nearby namespace source");
+}
+
 void test_warmup_backdrop_access_contract() {
     auto env = sampled_environment();
     env.capabilities.frame_history = false;
@@ -1570,6 +1632,7 @@ int main() {
     test_glass_effect_identity_marks_matched_transition_contract();
     test_glass_effect_identity_drives_matched_execution_contract();
     test_glass_effect_matched_geometry_respects_container_spacing();
+    test_glass_effect_matched_geometry_uses_nearby_namespace_source();
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     test_executor_frame_capture_policy_contract();
