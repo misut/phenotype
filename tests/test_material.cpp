@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 65);
+    assert(material_plan_contract_version == 66);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -2935,6 +2935,7 @@ void test_container_member_shape_blend_uses_spacing_falloff() {
     assert(first_execution.group_y == 0.0f);
     assert(first_execution.group_w == 90.0f);
     assert(first_execution.group_h == 40.0f);
+    assert(first_execution.group_radius == 16.0f);
 
     auto const first_surface_geometry =
         material_surface_execution_geometry(records[0].plan, &first_execution);
@@ -2946,6 +2947,7 @@ void test_container_member_shape_blend_uses_spacing_falloff() {
     assert(first_surface_geometry.x == 0.0f);
     assert(first_surface_geometry.w == 90.0f);
     assert(first_surface_geometry.h == 40.0f);
+    assert(first_surface_geometry.radius == 16.0f);
     assert(!second_surface_geometry.active);
     assert(distant_surface_geometry.active);
     assert(distant_surface_geometry.x == 200.0f);
@@ -2963,6 +2965,57 @@ void test_container_member_shape_blend_uses_spacing_falloff() {
     assert(summary.shape_blend_execution_surface_count == 2u);
     assert(std::fabs(summary.max_shape_blend_strength - 0.5f) < 0.0001f);
     std::puts("PASS: container member shape blend uses spacing falloff");
+}
+
+void test_container_group_surface_preserves_radius_continuity() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 8.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 906u,
+        .union_id = 0u,
+        .spacing = 20.0f,
+        .interactive = false,
+        .morph_transitions = true,
+    };
+    auto capsule = request;
+    capsule.geometry.x = 50.0f;
+    capsule.geometry.radius = 20.0f;
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(capsule, sampled_environment()), 2u},
+    };
+
+    auto const group = accumulate_material_container_group(records, 906u);
+    assert(group.has_bounds);
+    assert(group.max_effective_radius == 20.0f);
+    assert(material_container_group_execution_radius(group) == 20.0f);
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const second_execution =
+        material_container_execution_descriptor(records[1], records);
+    assert(first_execution.group_surface_execution);
+    assert(second_execution.group_surface_execution);
+    assert(first_execution.surface_leader);
+    assert(!second_execution.surface_leader);
+    assert(first_execution.group_x == 0.0f);
+    assert(first_execution.group_w == 90.0f);
+    assert(first_execution.group_h == 40.0f);
+    assert(first_execution.group_radius == 20.0f);
+    assert(second_execution.group_radius == 20.0f);
+
+    auto const first_surface_geometry =
+        material_surface_execution_geometry(records[0].plan, &first_execution);
+    auto const second_surface_geometry =
+        material_surface_execution_geometry(records[1].plan, &second_execution);
+    assert(first_surface_geometry.active);
+    assert(first_surface_geometry.w == 90.0f);
+    assert(first_surface_geometry.h == 40.0f);
+    assert(first_surface_geometry.radius == 20.0f);
+    assert(!second_surface_geometry.active);
+
+    std::puts("PASS: container group surface preserves radius continuity");
 }
 
 void test_container_member_fallback_paint_uses_proximity_cluster() {
@@ -3119,6 +3172,7 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     assert(first_execution.group_y == 0.0f);
     assert(first_execution.group_w == 90.0f);
     assert(first_execution.group_h == 40.0f);
+    assert(first_execution.group_radius == 20.0f);
     assert(first_execution.shape_blend_strength == 1.0f);
     assert(std::string_view(first_execution.fusion_model)
            == "union-liquid-glass-fusion");
@@ -3220,6 +3274,7 @@ void test_glass_effect_union_combines_at_rest_without_spacing() {
     assert(first_execution.group_y == 0.0f);
     assert(first_execution.group_w == 200.0f);
     assert(first_execution.group_h == 40.0f);
+    assert(first_execution.group_radius == 20.0f);
     assert(first_execution.shape_blend_strength == 1.0f);
     assert(first_execution.inner_edge_alpha_blend_strength == 1.0f);
     assert(std::string_view(first_execution.fusion_model)
@@ -3238,6 +3293,7 @@ void test_glass_effect_union_combines_at_rest_without_spacing() {
     assert(first_surface_geometry.active);
     assert(first_surface_geometry.w == 200.0f);
     assert(first_surface_geometry.h == 40.0f);
+    assert(first_surface_geometry.radius == 20.0f);
     assert(!peer_surface_geometry.active);
 
     MaterialRuntimeSummary runtime_summary{};
@@ -3351,6 +3407,7 @@ void test_glass_effect_union_fallback_paint_uses_group_leader() {
     assert(!peer_execution.paint_layer_leader);
     assert(first_execution.group_x == 0.0f);
     assert(first_execution.group_w == 90.0f);
+    assert(first_execution.group_radius == 20.0f);
 
     auto const& layer = records[0].plan.paint_layers[1];
     auto const inflate = std::max(layer.inflate, 0.0f);
@@ -3365,6 +3422,9 @@ void test_glass_effect_union_fallback_paint_uses_group_leader() {
            < 0.0001f);
     assert(std::fabs(first_geometry.w
                      - (first_execution.group_w + inflate * 2.0f))
+           < 0.0001f);
+    assert(std::fabs(first_geometry.radius
+                     - (first_execution.group_radius + layer.radius_delta))
            < 0.0001f);
 
     auto const peer_base_geometry =
@@ -3506,6 +3566,7 @@ int main() {
     test_executor_sampled_status_contract();
     test_container_group_runtime_summary_contract();
     test_container_member_shape_blend_uses_spacing_falloff();
+    test_container_group_surface_preserves_radius_continuity();
     test_container_member_fallback_paint_uses_proximity_cluster();
     test_glass_effect_union_uses_compatible_render_bounds();
     test_glass_effect_union_combines_at_rest_without_spacing();
