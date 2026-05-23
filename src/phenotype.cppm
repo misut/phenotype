@@ -4885,11 +4885,41 @@ inline GlassControlStyleOptions glass_control_style_options(
     return options;
 }
 
+inline void apply_glass_effect_style_material(
+        ButtonStyleOptions& style,
+        layout::GlassEffectStyle glass) {
+    if (!style.has_material
+        || style.material.kind == MaterialKind::None
+        || glass.is_identity()) {
+        return;
+    }
+
+    style.material.transition = layout::resolve_material_transition(
+        glass.transition_descriptor,
+        glass.inherit_transition);
+    style.material.glass_identity = layout::resolve_material_glass_identity(
+        glass.glass_identity_descriptor,
+        glass.inherit_identity);
+
+    auto const container = glass.inherit_container
+        ? layout::current_material_container()
+        : glass.container_descriptor;
+    if (container.participates()) {
+        auto const keep_button_interaction =
+            style.material.container.interactive || glass.interactive_enabled;
+        style.material.container = container;
+        if (!style.disabled && keep_button_interaction)
+            style.material.container.interactive = true;
+    }
+}
+
 inline ButtonStyleOptions glass_button_style(
         layout::GlassEffectStyle glass,
         GlassControlStyleOptions options = {}) {
-    return glass_control_button_style(
+    auto style = glass_control_button_style(
         glass_control_style_options(glass, options));
+    apply_glass_effect_style_material(style, glass);
+    return style;
 }
 
 template<typename Msg>
