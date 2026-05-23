@@ -3759,10 +3759,13 @@ inline MaterialTransitionAnalysis analyze_material_transition(
         return analysis;
     auto const gain = material_smooth_transition_gain(analysis.progress);
     if (analysis.materialize) {
-        analysis.opacity_gain = gain;
-        analysis.optical_gain = std::clamp(0.22f + 0.78f * gain, 0.0f, 1.0f);
-        analysis.shadow_gain = std::clamp(0.10f + 0.90f * gain, 0.0f, 1.0f);
-        analysis.refraction_gain = std::clamp(gain, 0.0f, 1.0f);
+        auto const material_gain = analysis.appearing ? gain : 1.0f - gain;
+        analysis.opacity_gain = material_gain;
+        analysis.optical_gain =
+            std::clamp(0.22f + 0.78f * material_gain, 0.0f, 1.0f);
+        analysis.shadow_gain =
+            std::clamp(0.10f + 0.90f * material_gain, 0.0f, 1.0f);
+        analysis.refraction_gain = std::clamp(material_gain, 0.0f, 1.0f);
         analysis.policy = analysis.appearing
             ? "materialize-in"
             : "materialize-out";
