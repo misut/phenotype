@@ -1060,6 +1060,16 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
     assert(first_execution.group_y == 0.0f);
     assert(first_execution.group_w == 160.0f);
     assert(first_execution.group_h == 40.0f);
+    assert(first_execution.glass_effect_match_source_valid);
+    assert(first_execution.glass_effect_match_source_x == 120.0f);
+    assert(first_execution.glass_effect_match_source_y == 0.0f);
+    assert(first_execution.glass_effect_match_source_w == 40.0f);
+    assert(first_execution.glass_effect_match_source_h == 40.0f);
+    assert(std::fabs(first_execution.glass_effect_match_rect_x - 60.0f)
+           < 0.0001f);
+    assert(first_execution.glass_effect_match_rect_y == 0.0f);
+    assert(first_execution.glass_effect_match_rect_w == 40.0f);
+    assert(first_execution.glass_effect_match_rect_h == 40.0f);
     assert(std::fabs(first_execution.glass_effect_match_progress - 0.5f)
            < 0.0001f);
     assert(std::fabs(first_execution.glass_effect_match_blend_strength - 0.5f)
@@ -1072,6 +1082,10 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
 
     assert(second_execution.glass_effect_match_execution);
     assert(second_execution.glass_effect_surface_count == 2u);
+    assert(second_execution.glass_effect_match_source_valid);
+    assert(second_execution.glass_effect_match_source_x == 0.0f);
+    assert(std::fabs(second_execution.glass_effect_match_rect_x - 60.0f)
+           < 0.0001f);
     assert(std::fabs(second_execution.shape_blend_strength - 0.5f)
            < 0.0001f);
 

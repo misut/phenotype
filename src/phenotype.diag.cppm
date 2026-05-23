@@ -2649,6 +2649,44 @@ namespace detail {
         out.emplace(
             "glass_effect_match_blend_strength",
             json::Value{execution.glass_effect_match_blend_strength});
+        json::Object match_source;
+        match_source.emplace(
+            "valid",
+            json::Value{execution.glass_effect_match_source_valid});
+        match_source.emplace(
+            "x",
+            json::Value{execution.glass_effect_match_source_x});
+        match_source.emplace(
+            "y",
+            json::Value{execution.glass_effect_match_source_y});
+        match_source.emplace(
+            "w",
+            json::Value{execution.glass_effect_match_source_w});
+        match_source.emplace(
+            "h",
+            json::Value{execution.glass_effect_match_source_h});
+        out.emplace(
+            "glass_effect_match_source",
+            json::Value{std::move(match_source)});
+        json::Object match_rect;
+        match_rect.emplace(
+            "valid",
+            json::Value{execution.glass_effect_match_source_valid});
+        match_rect.emplace(
+            "x",
+            json::Value{execution.glass_effect_match_rect_x});
+        match_rect.emplace(
+            "y",
+            json::Value{execution.glass_effect_match_rect_y});
+        match_rect.emplace(
+            "w",
+            json::Value{execution.glass_effect_match_rect_w});
+        match_rect.emplace(
+            "h",
+            json::Value{execution.glass_effect_match_rect_h});
+        out.emplace(
+            "glass_effect_match_rect",
+            json::Value{std::move(match_rect)});
         out.emplace(
             "shared_backdrop_scope",
             json::Value{plan.container.shared_backdrop_scope});
