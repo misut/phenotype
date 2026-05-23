@@ -4134,13 +4134,13 @@ inline MaterialRenderTargetAnalysis analyze_material_render_target(
     return analysis;
 }
 
-inline std::int64_t material_estimate_surface_sample_pixels(
-        MaterialShapeAnalysis shape,
+inline std::int64_t material_estimate_surface_sample_pixels_from_area(
+        double surface_area,
         MaterialRenderTargetAnalysis target) noexcept {
-    if (!shape.valid || !target.ready)
+    if (!target.ready)
         return 0;
     auto const scaled =
-        static_cast<double>(shape.surface_area)
+        surface_area
         * static_cast<double>(target.scale)
         * static_cast<double>(target.scale);
     if (!std::isfinite(scaled) || scaled <= 0.0)
@@ -4149,6 +4149,40 @@ inline std::int64_t material_estimate_surface_sample_pixels(
         scaled,
         static_cast<double>(target.pixel_count));
     return static_cast<std::int64_t>(std::ceil(bounded));
+}
+
+inline std::int64_t material_estimate_surface_sample_pixels(
+        MaterialShapeAnalysis shape,
+        MaterialRenderTargetAnalysis target) noexcept {
+    if (!shape.valid)
+        return 0;
+    return material_estimate_surface_sample_pixels_from_area(
+        static_cast<double>(shape.surface_area),
+        target);
+}
+
+inline std::int64_t material_estimate_surface_sample_pixels(
+        MaterialPlan const& plan) noexcept {
+    if (!plan.shape.valid)
+        return 0;
+    auto x = plan.geometry.x;
+    auto y = plan.geometry.y;
+    auto w = plan.geometry.w;
+    auto h = plan.geometry.h;
+    auto radius = plan.shape.effective_radius;
+    material_apply_materialize_execution_geometry(
+        plan.transition,
+        x,
+        y,
+        w,
+        h,
+        radius);
+    auto const inflate = material_background_paint_inflate(plan);
+    w = std::max(0.0f, w + inflate * 2.0f);
+    h = std::max(0.0f, h + inflate * 2.0f);
+    return material_estimate_surface_sample_pixels_from_area(
+        static_cast<double>(w) * static_cast<double>(h),
+        plan.render_target);
 }
 
 inline MaterialShapeAnalysis analyze_material_shape(
@@ -5044,9 +5078,7 @@ inline MaterialBackdropAccess material_resolve_backdrop_access(
     access.max_frame_capture_count = 1;
     access.max_frame_capture_pixels = plan.render_target.pixel_count;
     access.max_surface_sample_pixels = plan.backdrop_sampling
-        ? material_estimate_surface_sample_pixels(
-            plan.shape,
-            plan.render_target)
+        ? material_estimate_surface_sample_pixels(plan)
         : 0;
     access.bounded = true;
     return access;
