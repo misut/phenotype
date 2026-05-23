@@ -384,6 +384,22 @@ inline void apply_text_field_material(LayoutNode& node,
     node.material.foreground = node.text_color;
 }
 
+inline void apply_material_interaction_state(LayoutNode& node,
+                                             bool hovered,
+                                             bool pressed,
+                                             bool focused) {
+    if (node.material.kind == MaterialKind::None)
+        return;
+    node.material.interaction = MaterialInteractionDescriptor{
+        .hovered = hovered,
+        .pressed = pressed,
+        .focused = focused,
+        .pointer_inside = hovered || pressed,
+        .pointer_x = 0.5f,
+        .pointer_y = 0.5f,
+    };
+}
+
 inline Color glass_control_state_color(Color base,
                                        unsigned char minimum_alpha) noexcept {
     if (base.a < minimum_alpha)
@@ -1034,6 +1050,11 @@ inline void button(str label, Msg msg, ButtonStyleOptions options) {
     node.border_color = animate_color(
         is_focused ? t.state_focus_ring : base_border, focus_ms);
     apply_button_material(node, options);
+    apply_material_interaction_state(
+        node,
+        is_hovered,
+        is_pressed,
+        is_focused);
     node.cursor_type = 1;
 
     detail::g_app.callbacks.push_back([msg = std::move(msg)] {
@@ -1408,7 +1429,9 @@ inline void text_field(str hint, std::string const& current,
     node.cursor_type = 1;
 
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
+    bool const is_hovered = id == detail::g_app.hovered_id;
     bool const is_focused = detail::focus_ring_visible(id);
+    bool const is_pressed = id == detail::g_app.pressed_id;
     float const base_border_width = options.border_width >= 0.0f
         ? options.border_width
         : 1.0f;
@@ -1422,6 +1445,11 @@ inline void text_field(str hint, std::string const& current,
     node.border_color = animate_color(
         is_focused ? t.state_focus_ring : resting_border, focus_ms);
     apply_text_field_material(node, options);
+    apply_material_interaction_state(
+        node,
+        is_hovered,
+        is_pressed,
+        is_focused);
     detail::g_app.callbacks.push_back([] {});
     detail::g_app.callback_roles.push_back(InteractionRole::TextField);
     using MapperFn = Msg(*)(std::string);
@@ -1800,6 +1828,11 @@ inline void canvas_button(str label,
         node.border_color = animate_color(
             is_focused ? t.state_focus_ring : base_border, focus_ms);
         apply_button_material(node, options);
+        apply_material_interaction_state(
+            node,
+            is_hovered,
+            is_pressed,
+            is_focused);
         node.cursor_type = 1;
 
         detail::g_app.callbacks.push_back([msg = std::move(msg)] {
@@ -2250,7 +2283,9 @@ inline void tabs(std::vector<str> const& items,
         bool is_selected = (i == selected);
         auto id = static_cast<unsigned int>(
             detail::g_app.callbacks.size());
+        bool const is_hovered = id == detail::g_app.hovered_id;
         bool const is_focused = detail::focus_ring_visible(id);
+        bool const is_pressed = id == detail::g_app.pressed_id;
 
         auto btn_h = detail::alloc_node();
         {
@@ -2304,6 +2339,11 @@ inline void tabs(std::vector<str> const& items,
                     options,
                     _impl::glass_tabs_indicator_identity(options));
                 btn.material = selected_material;
+                apply_material_interaction_state(
+                    btn,
+                    is_hovered,
+                    is_pressed,
+                    is_focused);
                 btn.material_shape = MaterialSurfaceShape::Capsule;
                 btn.background = selected_material.tint;
                 if (!is_focused)
