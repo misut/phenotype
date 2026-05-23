@@ -1633,6 +1633,8 @@ struct MaterialInstanceGPU {
     float interaction_lens[4]{};
     // control morph scale delta, depth, edge lift, shadow compression
     float control_morph[4]{};
+    // materialize wave strength, edge lift, lensing gain, rim position
+    float transition_optics[4]{};
     // refraction strength, edge bias, max offset pixels, edge caustic intensity
     float refraction[4]{};
     // bevel width, inner highlight, outer shadow, chromatic fringe
@@ -2386,6 +2388,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.control_morph[1] = plan.interaction.control_morph_depth;
     inst.control_morph[2] = plan.interaction.control_morph_edge;
     inst.control_morph[3] = plan.interaction.control_morph_shadow;
+    inst.transition_optics[0] = plan.transition.materialize_wave_strength;
+    inst.transition_optics[1] = plan.transition.materialize_edge_lift;
+    inst.transition_optics[2] = plan.transition.materialize_lensing_gain;
+    inst.transition_optics[3] = plan.transition.materialize_rim_position;
     inst.refraction[0] = plan.refraction.strength;
     inst.refraction[1] = plan.refraction.edge_bias;
     inst.refraction[2] = plan.refraction.max_offset_pixels;
@@ -4602,6 +4608,7 @@ struct MaterialVsOut {
     float4 interaction;
     float4 interaction_lens;
     float4 control_morph;
+    float4 transition_optics;
     float4 refraction;
     float4 edge_optics;
     float4 spectral_tint;
@@ -4625,6 +4632,7 @@ struct MaterialInstance {
     float4 interaction;
     float4 interaction_lens;
     float4 control_morph;
+    float4 transition_optics;
     float4 refraction;
     float4 edge_optics;
     float4 spectral_tint;
@@ -4681,6 +4689,7 @@ vertex MaterialVsOut vs_material(
     out.interaction = inst.interaction;
     out.interaction_lens = inst.interaction_lens;
     out.control_morph = inst.control_morph;
+    out.transition_optics = inst.transition_optics;
     out.refraction = inst.refraction;
     out.edge_optics = inst.edge_optics;
     out.spectral_tint = inst.spectral_tint;
@@ -4725,6 +4734,14 @@ fragment float4 fs_material(
     float fusion_lensing_gain = clamp(in.fusion_optics.y, 1.0, 1.35);
     float fusion_edge_lift = clamp(in.fusion_optics.z, 0.0, 0.16);
     float fusion_shadow_gain = clamp(in.fusion_optics.w, 1.0, 1.32);
+    float materialize_wave_strength =
+        clamp(in.transition_optics.x, 0.0, 1.0);
+    float materialize_edge_lift =
+        clamp(in.transition_optics.y, 0.0, 0.18);
+    float materialize_lensing_gain =
+        clamp(in.transition_optics.z, 1.0, 1.32);
+    float materialize_rim_position =
+        clamp(in.transition_optics.w, 0.0, 1.0);
     if (group_blend_strength > 0.0
         && in.group_rect.z > 0.0
         && in.group_rect.w > 0.0) {
@@ -4794,12 +4811,15 @@ fragment float4 fs_material(
     float refraction_offset_pixels = clamp(in.refraction.z, 0.0, 8.0)
         * (refraction_strength > 0.0 ? 1.0 : 0.0)
         * glass_lensing_gain
-        * fusion_lensing_gain;
+        * fusion_lensing_gain
+        * materialize_lensing_gain;
     float refraction_edge_caustic =
         clamp(
             in.refraction.w
                 * glass_lensing_gain
-                * (1.0 + 0.34 * fusion_strength),
+                * (1.0
+                   + 0.34 * fusion_strength
+                   + 0.24 * materialize_wave_strength),
             0.0,
             0.46);
     float edge_bevel_width = clamp(
@@ -4807,13 +4827,17 @@ fragment float4 fs_material(
         0.0,
         18.0);
     float edge_inner_highlight =
-        clamp(in.edge_optics.y + fusion_edge_lift, 0.0, 0.88);
+        clamp(
+            in.edge_optics.y + fusion_edge_lift + materialize_edge_lift,
+            0.0,
+            0.90);
     float edge_outer_shadow =
         clamp(
             in.edge_optics.z * glass_shadow_gain * fusion_shadow_gain
-                + 0.035 * fusion_strength,
+                + 0.035 * fusion_strength
+                + 0.028 * materialize_wave_strength,
             0.0,
-            0.78);
+            0.80);
     float edge_chromatic_fringe = clamp(in.edge_optics.w, 0.0, 0.16);
     float spectral_warmth = clamp(in.spectral_tint.x, 0.0, 0.22);
     float spectral_coolness = clamp(in.spectral_tint.y, 0.0, 0.22);
@@ -5069,6 +5093,36 @@ fragment float4 fs_material(
             * fusion_rim
             * fusion_edge_lift
             * (0.42 + 0.58 * group_blend_strength);
+        backdrop_rgb = clamp(backdrop_rgb, 0.0, 1.0);
+    }
+    if (materialize_wave_strength > 0.0001) {
+        float materialize_band = 1.0 - smoothstep(
+            0.0,
+            0.24,
+            abs(normalized_len - materialize_rim_position));
+        float materialize_edge = edge_lens
+            * (0.45
+               + 0.55
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_width * 1.8, 0.5),
+                       signed_edge_distance)));
+        float materialize_rim =
+            max(materialize_band * 0.72, materialize_edge * 0.42)
+            * materialize_wave_strength;
+        float materialize_luma =
+            dot(backdrop_rgb, float3(0.2126, 0.7152, 0.0722));
+        backdrop_rgb = mix(
+            backdrop_rgb,
+            mix(backdrop_rgb, float3(materialize_luma), 0.46),
+            0.10 * materialize_wave_strength);
+        backdrop_rgb += float3(1.0)
+            * materialize_rim
+            * materialize_edge_lift
+            * 0.68;
+        backdrop_rgb += float3(spectral_warmth, 0.0, spectral_coolness)
+            * materialize_rim
+            * 0.055;
         backdrop_rgb = clamp(backdrop_rgb, 0.0, 1.0);
     }
     float tint_strength = clamp(in.tint.a, 0.0, 1.0);

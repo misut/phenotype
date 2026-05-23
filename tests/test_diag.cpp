@@ -1207,6 +1207,13 @@ void test_material_runtime_record_json_contract() {
     assert(glass_identity.at("bounded").as_bool() == true);
     assert(glass_identity.at("source").as_string() == "none");
     assert(glass_identity.at("policy").as_string() == "unidentified");
+    auto const& transition = obj.at("transition").as_object();
+    assert(transition.at("materialize_optics_model").as_string() == "none");
+    assert(transition.at("materialize_optics_active").as_bool() == false);
+    assert(transition.at("materialize_wave_strength").as_float() == 0.0f);
+    assert(transition.at("materialize_edge_lift").as_float() == 0.0f);
+    assert(transition.at("materialize_lensing_gain").as_float() == 1.0f);
+    assert(transition.at("materialize_rim_position").as_float() == 0.0f);
     auto const& reference_model = obj.at("reference_model").as_object();
     assert(reference_model.at("technology").as_string() == "liquid-glass");
     assert(reference_model.at("layer").as_string() == "functional-layer");
@@ -1442,6 +1449,22 @@ void test_material_runtime_record_json_contract() {
         optical_composition
             .at("refraction_edge_caustic_intensity")
             .as_float()) < 0.0001f);
+    assert(optical_composition
+               .at("transition_materialize_wave_strength")
+               .as_float()
+           == 0.0f);
+    assert(optical_composition
+               .at("transition_materialize_edge_lift")
+               .as_float()
+           == 0.0f);
+    assert(optical_composition
+               .at("transition_materialize_lensing_gain")
+               .as_float()
+           == 1.0f);
+    assert(optical_composition
+               .at("transition_materialize_rim_position")
+               .as_float()
+           == 0.0f);
     assert(optical_composition.at("backdrop_capture_required").as_bool()
            == false);
     assert(optical_composition.at("foreground_excluded_from_backdrop").as_bool()

@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 60;
+inline constexpr std::uint32_t material_plan_contract_version = 61;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -860,6 +860,10 @@ struct MaterialOpticalComposition {
     float transition_opacity_gain = 1.0f;
     float transition_optical_gain = 1.0f;
     float transition_refraction_gain = 1.0f;
+    float transition_materialize_wave_strength = 0.0f;
+    float transition_materialize_edge_lift = 0.0f;
+    float transition_materialize_lensing_gain = 1.0f;
+    float transition_materialize_rim_position = 0.0f;
     unsigned int sample_taps = 0;
     std::int64_t max_texture_copy_pixels = 0;
     std::int64_t max_surface_sample_pixels = 0;
@@ -927,6 +931,12 @@ struct MaterialTransitionAnalysis {
     float optical_gain = 1.0f;
     float shadow_gain = 1.0f;
     float refraction_gain = 1.0f;
+    char const* materialize_optics_model = "none";
+    bool materialize_optics_active = false;
+    float materialize_wave_strength = 0.0f;
+    float materialize_edge_lift = 0.0f;
+    float materialize_lensing_gain = 1.0f;
+    float materialize_rim_position = 0.0f;
     char const* policy = "identity";
 };
 
@@ -1601,6 +1611,14 @@ inline float material_surface_materialize_geometry_scale(
     if (!transition.active || !transition.materialize)
         return 1.0f;
     return std::clamp(0.72f + 0.28f * transition.optical_gain, 0.72f, 1.0f);
+}
+
+inline float material_transition_materialize_wave(float material_gain) noexcept {
+    material_gain = std::clamp(material_gain, 0.0f, 1.0f);
+    return std::clamp(
+        4.0f * material_gain * (1.0f - material_gain),
+        0.0f,
+        1.0f);
 }
 
 inline void material_apply_centered_geometry_scale(float& x,
@@ -5022,6 +5040,23 @@ inline MaterialTransitionAnalysis analyze_material_transition(
         analysis.shadow_gain =
             std::clamp(0.10f + 0.90f * material_gain, 0.0f, 1.0f);
         analysis.refraction_gain = std::clamp(material_gain, 0.0f, 1.0f);
+        auto const wave =
+            material_transition_materialize_wave(material_gain);
+        analysis.materialize_optics_model =
+            "materialize-liquid-glass-optics";
+        analysis.materialize_optics_active = wave > 0.0001f;
+        analysis.materialize_wave_strength = wave;
+        analysis.materialize_edge_lift =
+            std::clamp(0.11f * wave + 0.035f * analysis.optical_gain,
+                       0.0f,
+                       0.16f);
+        analysis.materialize_lensing_gain =
+            1.0f + 0.20f * wave + 0.08f * analysis.refraction_gain;
+        analysis.materialize_rim_position = analysis.appearing
+            ? std::clamp(0.18f + 0.82f * material_gain, 0.0f, 1.0f)
+            : std::clamp(0.18f + 0.82f * (1.0f - material_gain),
+                         0.0f,
+                         1.0f);
         analysis.policy = analysis.appearing
             ? "materialize-in"
             : "materialize-out";
@@ -7043,6 +7078,14 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.transition_optical_gain = plan.transition.optical_gain;
     composition.transition_refraction_gain =
         plan.transition.refraction_gain;
+    composition.transition_materialize_wave_strength =
+        plan.transition.materialize_wave_strength;
+    composition.transition_materialize_edge_lift =
+        plan.transition.materialize_edge_lift;
+    composition.transition_materialize_lensing_gain =
+        plan.transition.materialize_lensing_gain;
+    composition.transition_materialize_rim_position =
+        plan.transition.materialize_rim_position;
     composition.sample_taps = plan.sample_taps;
     composition.max_texture_copy_pixels =
         plan.primary_pass.max_texture_copy_pixels;

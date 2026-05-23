@@ -877,6 +877,24 @@ namespace detail {
         out.emplace(
             "refraction_gain",
             json::Value{analysis.refraction_gain});
+        out.emplace(
+            "materialize_optics_model",
+            json::Value{analysis.materialize_optics_model});
+        out.emplace(
+            "materialize_optics_active",
+            json::Value{analysis.materialize_optics_active});
+        out.emplace(
+            "materialize_wave_strength",
+            json::Value{analysis.materialize_wave_strength});
+        out.emplace(
+            "materialize_edge_lift",
+            json::Value{analysis.materialize_edge_lift});
+        out.emplace(
+            "materialize_lensing_gain",
+            json::Value{analysis.materialize_lensing_gain});
+        out.emplace(
+            "materialize_rim_position",
+            json::Value{analysis.materialize_rim_position});
         out.emplace("policy", json::Value{analysis.policy});
         return json::Value{std::move(out)};
     }
@@ -2592,6 +2610,21 @@ namespace detail {
         optical_composition.emplace(
             "transition_refraction_gain",
             json::Value{composition.transition_refraction_gain});
+        optical_composition.emplace(
+            "transition_materialize_wave_strength",
+            json::Value{
+                composition.transition_materialize_wave_strength});
+        optical_composition.emplace(
+            "transition_materialize_edge_lift",
+            json::Value{composition.transition_materialize_edge_lift});
+        optical_composition.emplace(
+            "transition_materialize_lensing_gain",
+            json::Value{
+                composition.transition_materialize_lensing_gain});
+        optical_composition.emplace(
+            "transition_materialize_rim_position",
+            json::Value{
+                composition.transition_materialize_rim_position});
         optical_composition.emplace(
             "sample_taps",
             json::Value{
