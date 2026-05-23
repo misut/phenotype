@@ -3603,6 +3603,115 @@ void test_glass_effect_id_scope_emits_command_context() {
     std::puts("PASS: glass effect id scope emits command context");
 }
 
+void test_glass_effect_string_id_scope_emits_stable_context() {
+    auto const expected = layout::glass_effect_identity("showcase", "pencil");
+    assert(expected.namespace_id != 0u);
+    assert(expected.effect_id != 0u);
+    assert(expected == layout::glass_effect_identity("showcase", "pencil"));
+    assert(expected != layout::glass_effect_identity("showcase", "note"));
+    assert(!layout::glass_effect_identity("", "pencil").participates());
+    assert(!layout::glass_effect_identity("showcase", "").participates());
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::glass_effect_container(
+        layout::GlassEffectContainerOptions{
+            .container_id = 901u,
+            .spacing = 12.0f,
+            .morph_transitions = true,
+        },
+        [&] {
+            layout::glass_effect_id("showcase", "pencil", [&] {
+                auto first = layout::GlassEffectOptions{};
+                first.role = MaterialSurfaceRole::Control;
+                first.transition = layout::glass_matched_geometry_transition(
+                    0.5f);
+                first.fixed_height = 36.0f;
+                first.semantic_label = "String Glass ID A";
+                layout::glass_effect(first, [] {
+                    widget::text("A");
+                });
+            });
+            auto second = layout::GlassEffectOptions{};
+            second.role = MaterialSurfaceRole::Control;
+            second.glass_identity =
+                layout::glass_effect_identity("showcase", "pencil");
+            second.transition = layout::glass_matched_geometry_transition(0.5f);
+            second.fixed_height = 36.0f;
+            second.semantic_label = "String Glass ID B";
+            layout::glass_effect(second, [] {
+                widget::text("B");
+            });
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    std::vector<MaterialRectCmd> materials;
+    for (auto const& cmd : cmds) {
+        if (auto const* material = std::get_if<MaterialRectCmd>(&cmd))
+            materials.push_back(*material);
+    }
+
+    assert(materials.size() == 2u);
+    for (auto const& material : materials) {
+        assert(material.material.glass_identity == expected);
+        assert(material.material.glass_identity.participates());
+        assert(material.material.container.container_id == 901u);
+        assert(material.material.transition.kind
+               == MaterialGlassTransitionKind::MatchedGeometry);
+    }
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.render_target.width = 320;
+    env.render_target.height = 80;
+
+    std::vector<MaterialRuntimeRecord> records;
+    auto command_index = std::uint32_t{1u};
+    for (auto const& material : materials) {
+        auto plan = make_test_material_plan(
+            material_request_for_command(
+                material.material,
+                MaterialGeometry{
+                    material.x,
+                    material.y,
+                    material.w,
+                    material.h,
+                    material.radius},
+                detail::g_app.theme),
+            env);
+        records.push_back(MaterialRuntimeRecord{*plan, command_index++});
+    }
+
+    auto first_execution =
+        material_container_execution_descriptor(records[0], records);
+    assert(first_execution.glass_effect_match_execution);
+    assert(first_execution.glass_namespace_id == expected.namespace_id);
+    assert(first_execution.glass_effect_id == expected.effect_id);
+    assert(first_execution.glass_effect_surface_count == 2u);
+    assert(std::string_view{first_execution.execution_policy}
+           == "glass-effect-matched-geometry");
+    assert(std::fabs(first_execution.glass_effect_match_blend_strength - 0.5f)
+           < 0.0001f);
+
+    std::puts("PASS: glass effect string id scope emits stable context");
+}
+
 void test_material_command_preserves_style_optics() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -6342,6 +6451,7 @@ int main() {
     test_glass_effect_container_scope_emits_morph_context();
     test_glass_effect_transition_scope_emits_command_context();
     test_glass_effect_id_scope_emits_command_context();
+    test_glass_effect_string_id_scope_emits_stable_context();
     test_material_command_preserves_style_optics();
     test_radio_paint_cache_stale_descendant_after_subtree_blit();
     test_row_cross_align_center_default();

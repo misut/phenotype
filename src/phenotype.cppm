@@ -2852,6 +2852,27 @@ inline MaterialGlassIdentityDescriptor glass_effect_identity(
     return MaterialGlassIdentityDescriptor{namespace_id, effect_id};
 }
 
+inline std::uint32_t glass_effect_stable_id(
+        std::string_view value) noexcept {
+    if (value.empty())
+        return 0u;
+
+    auto hash = std::uint32_t{2166136261u};
+    for (auto ch : value) {
+        hash ^= static_cast<unsigned char>(ch);
+        hash *= 16777619u;
+    }
+    return hash == 0u ? 1u : hash;
+}
+
+inline MaterialGlassIdentityDescriptor glass_effect_identity(
+        std::string_view namespace_id,
+        std::string_view effect_id) noexcept {
+    return glass_effect_identity(
+        glass_effect_stable_id(namespace_id),
+        glass_effect_stable_id(effect_id));
+}
+
 inline bool material_glass_identity_is_empty(
         MaterialGlassIdentityDescriptor descriptor) noexcept {
     return descriptor.namespace_id == 0u && descriptor.effect_id == 0u;
@@ -2932,6 +2953,16 @@ template<typename F>
     requires std::is_invocable_v<F>
 void glass_effect_id(std::uint32_t namespace_id,
                      std::uint32_t effect_id,
+                     F&& builder) {
+    glass_effect_id(
+        glass_effect_identity(namespace_id, effect_id),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect_id(std::string_view namespace_id,
+                     std::string_view effect_id,
                      F&& builder) {
     glass_effect_id(
         glass_effect_identity(namespace_id, effect_id),
