@@ -69,7 +69,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 56);
+    assert(material_plan_contract_version == 57);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -207,6 +207,22 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.glass_thickness.lensing_gain > 1.0f);
     assert(plan.glass_thickness.shadow_gain > 1.0f);
     assert(plan.glass_thickness.scattering_gain > 1.0f);
+    assert(plan.glass_dispersion.active);
+    assert(plan.glass_dispersion.spectral_driven);
+    assert(plan.glass_dispersion.thickness_driven);
+    assert(!plan.glass_dispersion.transition_driven);
+    assert(plan.glass_dispersion.lighting_driven);
+    assert(!plan.glass_dispersion.interaction_driven);
+    assert(!plan.glass_dispersion.reduced_motion_suppressed);
+    assert(plan.glass_dispersion.bounded);
+    assert(std::string_view(plan.glass_dispersion.model)
+        == "prismatic-glass-dispersion");
+    assert(std::string_view(plan.glass_dispersion.source)
+        == "directional-thickness-prismatic-dispersion");
+    assert(plan.glass_dispersion.axial_offset_pixels > 0.0f);
+    assert(plan.glass_dispersion.tangential_offset_pixels > 0.0f);
+    assert(plan.glass_dispersion.prismatic_gain > 1.0f);
+    assert(plan.glass_dispersion.caustic_spread > 0.0f);
     assert(plan.specular.active);
     assert(plan.specular.ambient);
     assert(!plan.specular.interaction_driven);
@@ -263,6 +279,8 @@ void test_sampled_backdrop_access_contract() {
         == "sampled-backdrop-caustic-lighting");
     assert(std::string_view(plan.optical_composition.glass_thickness_source)
         == "size-adaptive-thickness-lensing");
+    assert(std::string_view(plan.optical_composition.glass_dispersion_source)
+        == "directional-thickness-prismatic-dispersion");
     assert(std::string_view(plan.optical_composition.fallback_source)
         == "none");
     assert(std::string_view(plan.optical_composition.stage_order)
@@ -284,6 +302,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_composition.spectral_tint_required);
     assert(plan.optical_composition.dynamic_lighting_required);
     assert(plan.optical_composition.glass_thickness_required);
+    assert(plan.optical_composition.glass_dispersion_required);
     assert(!plan.optical_composition.fallback_required);
     assert(plan.optical_composition.backdrop_capture_required);
     assert(plan.optical_composition.foreground_excluded_from_backdrop);
@@ -335,6 +354,14 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_thickness.shadow_gain);
     assert(plan.optical_composition.glass_scattering_gain
            == plan.glass_thickness.scattering_gain);
+    assert(plan.optical_composition.glass_dispersion_axial_offset
+           == plan.glass_dispersion.axial_offset_pixels);
+    assert(plan.optical_composition.glass_dispersion_tangential_offset
+           == plan.glass_dispersion.tangential_offset_pixels);
+    assert(plan.optical_composition.glass_dispersion_prismatic_gain
+           == plan.glass_dispersion.prismatic_gain);
+    assert(plan.optical_composition.glass_dispersion_caustic_spread
+           == plan.glass_dispersion.caustic_spread);
     assert(plan.optical_response.backdrop_driven);
     assert(plan.optical_response.blur_active);
     assert(plan.optical_response.frosting_active);
@@ -348,6 +375,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_response.spectral_tint_active);
     assert(plan.optical_response.dynamic_lighting_active);
     assert(plan.optical_response.glass_thickness_active);
+    assert(plan.optical_response.glass_dispersion_active);
     assert(plan.optical_response.foreground_vibrancy_active);
     assert(plan.optical_response.deterministic_fallback);
     assert(material_plan_uses_sampled_backdrop_executor(plan));
@@ -406,6 +434,17 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_thickness.shadow_gain);
     assert(plan.execution_stages[2].optics.glass_scattering_gain
            == plan.glass_thickness.scattering_gain);
+    assert(std::string_view(
+               plan.execution_stages[2].optics.glass_dispersion_model)
+        == "prismatic-glass-dispersion");
+    assert(plan.execution_stages[2].optics.glass_dispersion_axial_offset
+           == plan.glass_dispersion.axial_offset_pixels);
+    assert(plan.execution_stages[2].optics.glass_dispersion_tangential_offset
+           == plan.glass_dispersion.tangential_offset_pixels);
+    assert(plan.execution_stages[2].optics.glass_dispersion_prismatic_gain
+           == plan.glass_dispersion.prismatic_gain);
+    assert(plan.execution_stages[2].optics.glass_dispersion_caustic_spread
+           == plan.glass_dispersion.caustic_spread);
     assert(plan.paint_layer_count == 0u);
     assert(plan.dropped_paint_layer_count == 0u);
     assert(plan.resource_budget.max_paint_layers == material_max_paint_layers);
@@ -563,10 +602,27 @@ void test_glass_thickness_scales_lensing_contract() {
            > baseline.glass_thickness.shadow_gain);
     assert(large.glass_thickness.scattering_gain
            > baseline.glass_thickness.scattering_gain);
+    assert(baseline.glass_dispersion.active);
+    assert(large.glass_dispersion.active);
+    assert(large.glass_dispersion.thickness_driven);
+    assert(std::string_view(large.glass_dispersion.model)
+        == "prismatic-glass-dispersion");
+    assert(large.glass_dispersion.axial_offset_pixels
+           > baseline.glass_dispersion.axial_offset_pixels);
+    assert(large.glass_dispersion.tangential_offset_pixels
+           > baseline.glass_dispersion.tangential_offset_pixels);
+    assert(large.glass_dispersion.prismatic_gain
+           > baseline.glass_dispersion.prismatic_gain);
+    assert(large.glass_dispersion.caustic_spread
+           > baseline.glass_dispersion.caustic_spread);
     assert(large.optical_composition.glass_thickness_required);
     assert(large.optical_composition.glass_lensing_gain
            == large.glass_thickness.lensing_gain);
+    assert(large.optical_composition.glass_dispersion_required);
+    assert(large.optical_composition.glass_dispersion_prismatic_gain
+           == large.glass_dispersion.prismatic_gain);
     assert(large.optical_response.glass_thickness_active);
+    assert(large.optical_response.glass_dispersion_active);
 
     auto transition_request = large_surface_request();
     transition_request.style.transition = MaterialTransitionDescriptor{
@@ -585,6 +641,14 @@ void test_glass_thickness_scales_lensing_contract() {
            > large.glass_thickness.thickness);
     assert(transition.optical_composition.glass_shadow_gain
            == transition.glass_thickness.shadow_gain);
+    assert(transition.glass_dispersion.active);
+    assert(transition.glass_dispersion.transition_driven);
+    assert(std::string_view(transition.glass_dispersion.source)
+        == "transition-directional-prismatic-dispersion");
+    assert(transition.glass_dispersion.axial_offset_pixels
+           >= large.glass_dispersion.axial_offset_pixels);
+    assert(transition.glass_dispersion.prismatic_gain
+           >= large.glass_dispersion.prismatic_gain);
 
     std::puts("PASS: glass thickness scales lensing contract");
 }
@@ -687,6 +751,11 @@ void test_content_layer_stays_standard_material_contract() {
     assert(std::string_view(plan.glass_thickness.source) == "none");
     assert(plan.glass_thickness.thickness == 0.0f);
     assert(plan.glass_thickness.lensing_gain == 1.0f);
+    assert(!plan.glass_dispersion.active);
+    assert(std::string_view(plan.glass_dispersion.model) == "none");
+    assert(std::string_view(plan.glass_dispersion.source) == "none");
+    assert(plan.glass_dispersion.axial_offset_pixels == 0.0f);
+    assert(plan.glass_dispersion.prismatic_gain == 1.0f);
     assert(!plan.optical_response.backdrop_driven);
     assert(!plan.optical_response.blur_active);
     assert(!plan.optical_response.frosting_active);
@@ -700,6 +769,7 @@ void test_content_layer_stays_standard_material_contract() {
     assert(!plan.optical_response.spectral_tint_active);
     assert(!plan.optical_response.dynamic_lighting_active);
     assert(!plan.optical_response.glass_thickness_active);
+    assert(!plan.optical_response.glass_dispersion_active);
     assert(!plan.optical_response.foreground_vibrancy_active);
     assert(plan.optical_response.deterministic_fallback);
     assert(!material_plan_uses_sampled_backdrop_executor(plan));
@@ -785,6 +855,8 @@ void test_fallback_backdrop_access_contract() {
         == "none");
     assert(std::string_view(plan.optical_composition.glass_thickness_source)
         == "none");
+    assert(std::string_view(plan.optical_composition.glass_dispersion_source)
+        == "none");
     assert(std::string_view(plan.optical_composition.fallback_source)
         == "unsupported-backend");
     assert(std::string_view(plan.optical_composition.stage_order)
@@ -806,6 +878,7 @@ void test_fallback_backdrop_access_contract() {
     assert(!plan.optical_composition.spectral_tint_required);
     assert(!plan.optical_composition.dynamic_lighting_required);
     assert(!plan.optical_composition.glass_thickness_required);
+    assert(!plan.optical_composition.glass_dispersion_required);
     assert(plan.optical_composition.fallback_required);
     assert(!plan.optical_composition.backdrop_capture_required);
     assert(!plan.optical_composition.foreground_excluded_from_backdrop);
@@ -824,6 +897,7 @@ void test_fallback_backdrop_access_contract() {
     assert(!plan.optical_response.refraction_active);
     assert(!plan.optical_response.spectral_tint_active);
     assert(!plan.optical_response.glass_thickness_active);
+    assert(!plan.optical_response.glass_dispersion_active);
     assert(!plan.optical_response.foreground_vibrancy_active);
     assert(!plan.refraction.active);
     assert(plan.refraction.bounded);
@@ -838,6 +912,9 @@ void test_fallback_backdrop_access_contract() {
     assert(!plan.glass_thickness.active);
     assert(std::string_view(plan.glass_thickness.source) == "none");
     assert(plan.glass_thickness.lensing_gain == 1.0f);
+    assert(!plan.glass_dispersion.active);
+    assert(std::string_view(plan.glass_dispersion.source) == "none");
+    assert(plan.glass_dispersion.prismatic_gain == 1.0f);
     assert(plan.optical_response.deterministic_fallback);
     assert(!material_plan_uses_sampled_backdrop_executor(plan));
     assert(!material_plan_uses_standard_fill_executor(plan));
@@ -1183,6 +1260,14 @@ void test_interactive_material_modulates_optics_contract() {
            > baseline_plan.glass_thickness.thickness);
     assert(plan.glass_thickness.scattering_gain
            > baseline_plan.glass_thickness.scattering_gain);
+    assert(plan.glass_dispersion.active);
+    assert(plan.glass_dispersion.interaction_driven);
+    assert(std::string_view(plan.glass_dispersion.source)
+        == "interactive-prismatic-glass-dispersion");
+    assert(plan.glass_dispersion.axial_offset_pixels
+           > baseline_plan.glass_dispersion.axial_offset_pixels);
+    assert(plan.glass_dispersion.prismatic_gain
+           > baseline_plan.glass_dispersion.prismatic_gain);
     assert(plan.specular.active);
     assert(plan.specular.ambient);
     assert(plan.specular.interaction_driven);
@@ -1213,11 +1298,15 @@ void test_interactive_material_modulates_optics_contract() {
     assert(plan.optical_composition.glass_thickness_required);
     assert(plan.optical_composition.glass_scattering_gain
            == plan.glass_thickness.scattering_gain);
+    assert(plan.optical_composition.glass_dispersion_required);
+    assert(plan.optical_composition.glass_dispersion_axial_offset
+           == plan.glass_dispersion.axial_offset_pixels);
     assert(plan.optical_response.interaction_active);
     assert(plan.optical_response.interaction_modulates_optics);
     assert(plan.optical_response.refraction_active);
     assert(plan.optical_response.dynamic_lighting_active);
     assert(plan.optical_response.glass_thickness_active);
+    assert(plan.optical_response.glass_dispersion_active);
 
     auto reduced_env = sampled_environment();
     reduced_env.capabilities.reduce_motion = true;
@@ -1254,6 +1343,12 @@ void test_interactive_material_modulates_optics_contract() {
     assert(reduced_plan.glass_thickness.reduced_motion_suppressed);
     assert(reduced_plan.glass_thickness.thickness
            < plan.glass_thickness.thickness);
+    assert(reduced_plan.glass_dispersion.active);
+    assert(reduced_plan.glass_dispersion.reduced_motion_suppressed);
+    assert(reduced_plan.glass_dispersion.axial_offset_pixels
+           < plan.glass_dispersion.axial_offset_pixels);
+    assert(reduced_plan.glass_dispersion.prismatic_gain
+           < plan.glass_dispersion.prismatic_gain);
     assert(reduced_plan.specular.active);
     assert(reduced_plan.specular.interaction_driven);
     assert(reduced_plan.specular.intensity < plan.specular.intensity);

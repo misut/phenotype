@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 56;
+inline constexpr std::uint32_t material_plan_contract_version = 57;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -464,6 +464,11 @@ struct MaterialStageOptics {
     float glass_lensing_gain = 1.0f;
     float glass_shadow_gain = 1.0f;
     float glass_scattering_gain = 1.0f;
+    char const* glass_dispersion_model = "none";
+    float glass_dispersion_axial_offset = 0.0f;
+    float glass_dispersion_tangential_offset = 0.0f;
+    float glass_dispersion_prismatic_gain = 1.0f;
+    float glass_dispersion_caustic_spread = 0.0f;
 };
 
 struct MaterialExecutionStage {
@@ -653,6 +658,23 @@ struct MaterialGlassThicknessProfile {
     float scattering_gain = 1.0f;
 };
 
+struct MaterialGlassDispersionProfile {
+    char const* model = "none";
+    char const* source = "none";
+    bool active = false;
+    bool spectral_driven = false;
+    bool thickness_driven = false;
+    bool transition_driven = false;
+    bool lighting_driven = false;
+    bool interaction_driven = false;
+    bool reduced_motion_suppressed = false;
+    bool bounded = true;
+    float axial_offset_pixels = 0.0f;
+    float tangential_offset_pixels = 0.0f;
+    float prismatic_gain = 1.0f;
+    float caustic_spread = 0.0f;
+};
+
 struct MaterialInteractionResponse {
     bool enabled = false;
     bool active = false;
@@ -707,6 +729,7 @@ struct MaterialOpticalResponseContract {
     bool spectral_tint_active = false;
     bool dynamic_lighting_active = false;
     bool glass_thickness_active = false;
+    bool glass_dispersion_active = false;
     bool foreground_vibrancy_active = false;
     bool interaction_active = false;
     bool interaction_modulates_optics = false;
@@ -725,6 +748,7 @@ struct MaterialOpticalComposition {
     char const* spectral_tint_source = "none";
     char const* dynamic_lighting_source = "none";
     char const* glass_thickness_source = "none";
+    char const* glass_dispersion_source = "none";
     char const* interaction_source = "none";
     char const* transition_source = "identity";
     char const* fallback_source = "none";
@@ -744,6 +768,7 @@ struct MaterialOpticalComposition {
     bool spectral_tint_required = false;
     bool dynamic_lighting_required = false;
     bool glass_thickness_required = false;
+    bool glass_dispersion_required = false;
     bool interaction_required = false;
     bool transition_required = false;
     bool fallback_required = false;
@@ -783,6 +808,10 @@ struct MaterialOpticalComposition {
     float glass_lensing_gain = 1.0f;
     float glass_shadow_gain = 1.0f;
     float glass_scattering_gain = 1.0f;
+    float glass_dispersion_axial_offset = 0.0f;
+    float glass_dispersion_tangential_offset = 0.0f;
+    float glass_dispersion_prismatic_gain = 1.0f;
+    float glass_dispersion_caustic_spread = 0.0f;
     float interaction_response_strength = 0.0f;
     float transition_progress = 1.0f;
     float transition_opacity_gain = 1.0f;
@@ -981,6 +1010,7 @@ struct MaterialPlan {
     MaterialSpectralTintProfile spectral_tint{};
     MaterialDynamicLightingProfile dynamic_lighting{};
     MaterialGlassThicknessProfile glass_thickness{};
+    MaterialGlassDispersionProfile glass_dispersion{};
     MaterialInteractionResponse interaction{};
     MaterialOpticalComposition optical_composition{};
     MaterialOpticalResponseContract optical_response{};
@@ -1059,6 +1089,15 @@ inline MaterialStageOptics material_primary_stage_optics(
     optics.glass_lensing_gain = plan.glass_thickness.lensing_gain;
     optics.glass_shadow_gain = plan.glass_thickness.shadow_gain;
     optics.glass_scattering_gain = plan.glass_thickness.scattering_gain;
+    optics.glass_dispersion_model = plan.glass_dispersion.model;
+    optics.glass_dispersion_axial_offset =
+        plan.glass_dispersion.axial_offset_pixels;
+    optics.glass_dispersion_tangential_offset =
+        plan.glass_dispersion.tangential_offset_pixels;
+    optics.glass_dispersion_prismatic_gain =
+        plan.glass_dispersion.prismatic_gain;
+    optics.glass_dispersion_caustic_spread =
+        plan.glass_dispersion.caustic_spread;
     return optics;
 }
 
@@ -1111,6 +1150,15 @@ inline MaterialStageOptics material_edge_stage_optics(
     optics.glass_lensing_gain = plan.glass_thickness.lensing_gain;
     optics.glass_shadow_gain = plan.glass_thickness.shadow_gain;
     optics.glass_scattering_gain = plan.glass_thickness.scattering_gain;
+    optics.glass_dispersion_model = plan.glass_dispersion.model;
+    optics.glass_dispersion_axial_offset =
+        plan.glass_dispersion.axial_offset_pixels;
+    optics.glass_dispersion_tangential_offset =
+        plan.glass_dispersion.tangential_offset_pixels;
+    optics.glass_dispersion_prismatic_gain =
+        plan.glass_dispersion.prismatic_gain;
+    optics.glass_dispersion_caustic_spread =
+        plan.glass_dispersion.caustic_spread;
     return optics;
 }
 
@@ -5898,6 +5946,167 @@ inline MaterialGlassThicknessProfile material_resolve_glass_thickness_profile(
     return profile;
 }
 
+inline char const* material_glass_dispersion_source_name(
+        bool spectral_driven,
+        bool thickness_driven,
+        bool transition_driven,
+        bool lighting_driven,
+        bool interaction_driven) noexcept {
+    if (transition_driven && interaction_driven)
+        return "transition-interactive-prismatic-dispersion";
+    if (interaction_driven)
+        return "interactive-prismatic-glass-dispersion";
+    if (transition_driven && lighting_driven)
+        return "transition-directional-prismatic-dispersion";
+    if (transition_driven)
+        return "transition-prismatic-dispersion";
+    if (thickness_driven && lighting_driven)
+        return "directional-thickness-prismatic-dispersion";
+    if (thickness_driven)
+        return "thickness-prismatic-dispersion";
+    if (spectral_driven)
+        return "spectral-prismatic-dispersion";
+    return "edge-prismatic-dispersion";
+}
+
+inline MaterialGlassDispersionProfile material_resolve_glass_dispersion_profile(
+        MaterialPlan const& plan) noexcept {
+    MaterialGlassDispersionProfile profile{};
+    profile.bounded = true;
+    if (!plan.backdrop_sampling
+        || plan.fallback()
+        || plan.kind == MaterialKind::None
+        || !plan.refraction.active) {
+        return profile;
+    }
+
+    auto const spectral_energy = plan.spectral_tint.active
+        ? std::clamp(
+            plan.spectral_tint.dispersion
+                + 0.35f * plan.spectral_tint.rim_tint
+                + 0.20f * std::max(plan.spectral_tint.warmth,
+                                    plan.spectral_tint.coolness),
+            0.0f,
+            0.36f)
+        : 0.0f;
+    auto const thickness = plan.glass_thickness.active
+        ? std::clamp(plan.glass_thickness.thickness, 0.0f, 1.0f)
+        : 0.0f;
+    auto const lensing = plan.glass_thickness.active
+        ? std::clamp(plan.glass_thickness.lensing_gain - 1.0f, 0.0f, 0.60f)
+        : 0.0f;
+    auto const caustic = std::clamp(
+        plan.refraction.edge_caustic_intensity
+            + plan.edge_optics.chromatic_fringe,
+        0.0f,
+        0.42f);
+    auto const lighting = plan.dynamic_lighting.active
+        ? std::clamp(
+            plan.dynamic_lighting.highlight_strength
+                + plan.dynamic_lighting.shadow_strength,
+            0.0f,
+            0.74f)
+        : 0.0f;
+    auto const interaction_response = plan.interaction.active
+        ? std::clamp(plan.interaction.response_strength, 0.0f, 1.0f)
+        : 0.0f;
+    auto const transition_response = plan.transition.active
+        ? std::clamp(
+            0.24f
+                + 0.34f * (1.0f - plan.transition.optical_gain)
+                + 0.28f * (1.0f - plan.transition.refraction_gain)
+                + (plan.transition.matched_geometry ? 0.20f : 0.0f),
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const motion_scale = plan.decision_trace.reduce_motion ? 0.58f : 1.0f;
+    auto const transition_gain = plan.transition.active
+        ? std::clamp(
+            1.0f
+                + 0.16f * (1.0f - plan.transition.optical_gain)
+                + 0.12f * (1.0f - plan.transition.refraction_gain)
+                + (plan.transition.matched_geometry ? 0.10f : 0.0f),
+            1.0f,
+            1.28f)
+        : 1.0f;
+    auto const response = std::clamp(
+        spectral_energy
+            + 0.26f * thickness
+            + 0.58f * caustic
+            + 0.22f * lensing
+            + 0.12f * transition_response
+            + 0.10f * lighting
+            + 0.08f * interaction_response,
+        0.0f,
+        1.0f);
+    if (response <= 0.0001f)
+        return profile;
+
+    profile.axial_offset_pixels = std::clamp(
+        motion_scale
+            * transition_gain
+            * (0.10f
+               + plan.refraction.max_offset_pixels
+                   * (0.20f + 0.90f * spectral_energy)
+               + 1.45f * thickness * caustic
+               + 0.64f * transition_response
+               + 0.38f * lensing),
+        0.0f,
+        2.80f);
+    profile.tangential_offset_pixels = std::clamp(
+        motion_scale
+            * (0.08f
+               + 0.50f * profile.axial_offset_pixels
+               + 0.80f * caustic
+               + 0.26f * transition_response
+               + 0.22f * lighting),
+        0.0f,
+        2.10f);
+    profile.prismatic_gain = std::clamp(
+        1.0f
+            + motion_scale
+                * (0.52f * spectral_energy
+                   + 0.34f * thickness
+                   + 0.62f * caustic
+                   + 0.20f * transition_response
+                   + 0.18f * lighting
+                   + 0.12f * interaction_response),
+        1.0f,
+        1.66f);
+    profile.caustic_spread = std::clamp(
+        motion_scale
+            * (0.18f * caustic
+               + 0.12f * spectral_energy
+               + 0.08f * thickness
+               + 0.08f * transition_response
+               + 0.06f * interaction_response),
+        0.0f,
+        0.34f);
+
+    if (profile.axial_offset_pixels <= 0.0001f
+        && profile.tangential_offset_pixels <= 0.0001f
+        && profile.caustic_spread <= 0.0001f) {
+        return MaterialGlassDispersionProfile{};
+    }
+
+    profile.active = true;
+    profile.spectral_driven = spectral_energy > 0.0001f;
+    profile.thickness_driven = thickness > 0.0001f;
+    profile.transition_driven = transition_response > 0.0001f;
+    profile.lighting_driven = lighting > 0.0001f;
+    profile.interaction_driven = interaction_response > 0.0001f;
+    profile.reduced_motion_suppressed =
+        plan.decision_trace.reduce_motion && motion_scale < 1.0f;
+    profile.model = "prismatic-glass-dispersion";
+    profile.source = material_glass_dispersion_source_name(
+        profile.spectral_driven,
+        profile.thickness_driven,
+        profile.transition_driven,
+        profile.lighting_driven,
+        profile.interaction_driven);
+    return profile;
+}
+
 inline float material_base_specular_intensity(MaterialKind kind) noexcept {
     switch (kind) {
         case MaterialKind::Clear: return 0.050f;
@@ -6338,6 +6547,15 @@ inline char const* material_optical_glass_thickness_source_name(
     return "none";
 }
 
+inline char const* material_optical_glass_dispersion_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.glass_dispersion.active
+        && plan.glass_dispersion.source
+        && plan.glass_dispersion.source[0])
+        return plan.glass_dispersion.source;
+    return "none";
+}
+
 inline char const* material_optical_stage_order_name(
         MaterialPlan const& plan) noexcept {
     if (!plan.primary_pass.active)
@@ -6411,6 +6629,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         material_optical_dynamic_lighting_source_name(plan);
     composition.glass_thickness_source =
         material_optical_glass_thickness_source_name(plan);
+    composition.glass_dispersion_source =
+        material_optical_glass_dispersion_source_name(plan);
     composition.interaction_source =
         material_optical_interaction_source_name(plan);
     composition.transition_source =
@@ -6445,6 +6665,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.spectral_tint_required = plan.spectral_tint.active;
     composition.dynamic_lighting_required = plan.dynamic_lighting.active;
     composition.glass_thickness_required = plan.glass_thickness.active;
+    composition.glass_dispersion_required = plan.glass_dispersion.active;
     composition.interaction_required = plan.interaction.active;
     composition.transition_required = plan.transition.active;
     composition.fallback_required = plan.fallback();
@@ -6465,6 +6686,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         && plan.spectral_tint.bounded
         && plan.dynamic_lighting.bounded
         && plan.glass_thickness.bounded
+        && plan.glass_dispersion.bounded
         && plan.transition.bounded;
     composition.deterministic =
         plan.resource_budget.deterministic_fallback
@@ -6506,6 +6728,14 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.glass_lensing_gain = plan.glass_thickness.lensing_gain;
     composition.glass_shadow_gain = plan.glass_thickness.shadow_gain;
     composition.glass_scattering_gain = plan.glass_thickness.scattering_gain;
+    composition.glass_dispersion_axial_offset =
+        plan.glass_dispersion.axial_offset_pixels;
+    composition.glass_dispersion_tangential_offset =
+        plan.glass_dispersion.tangential_offset_pixels;
+    composition.glass_dispersion_prismatic_gain =
+        plan.glass_dispersion.prismatic_gain;
+    composition.glass_dispersion_caustic_spread =
+        plan.glass_dispersion.caustic_spread;
     composition.interaction_response_strength =
         plan.interaction.response_strength;
     composition.transition_progress = plan.transition.progress;
@@ -6545,6 +6775,8 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
         composition.dynamic_lighting_required;
     response.glass_thickness_active =
         composition.glass_thickness_required;
+    response.glass_dispersion_active =
+        composition.glass_dispersion_required;
     response.foreground_vibrancy_active = plan.foreground.uses_vibrancy;
     response.interaction_active = composition.interaction_required;
     response.interaction_modulates_optics =
@@ -6821,6 +7053,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.spectral_tint = material_resolve_spectral_tint_profile(plan);
     plan.dynamic_lighting = material_resolve_dynamic_lighting_profile(plan);
     plan.glass_thickness = material_resolve_glass_thickness_profile(plan);
+    plan.glass_dispersion = material_resolve_glass_dispersion_profile(plan);
     plan.specular = material_resolve_specular_profile(plan);
     plan.luminance_curve = material_resolve_luminance_curve(
         plan.backdrop_sampling,

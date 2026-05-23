@@ -1641,6 +1641,8 @@ struct MaterialInstanceGPU {
     float lighting[4]{};
     // glass thickness, lensing gain, shadow gain, scattering gain
     float thickness[4]{};
+    // axial offset, tangential offset, prismatic gain, caustic spread
+    float dispersion[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
     // shape blend strength, inner-edge alpha blend strength, flags, command index
@@ -2394,6 +2396,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.thickness[1] = plan.glass_thickness.lensing_gain;
     inst.thickness[2] = plan.glass_thickness.shadow_gain;
     inst.thickness[3] = plan.glass_thickness.scattering_gain;
+    inst.dispersion[0] = plan.glass_dispersion.axial_offset_pixels;
+    inst.dispersion[1] = plan.glass_dispersion.tangential_offset_pixels;
+    inst.dispersion[2] = plan.glass_dispersion.prismatic_gain;
+    inst.dispersion[3] = plan.glass_dispersion.caustic_spread;
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];
@@ -2611,6 +2617,26 @@ inline void apply_material_container_execution_descriptors(
                             + 0.050f * match_motion.strength,
                         1.0f,
                         1.40f);
+                    inst.dispersion[0] = std::clamp(
+                        inst.dispersion[0]
+                            + 0.16f * match_motion.strength,
+                        0.0f,
+                        3.20f);
+                    inst.dispersion[1] = std::clamp(
+                        inst.dispersion[1]
+                            + 0.12f * match_motion.strength,
+                        0.0f,
+                        2.45f);
+                    inst.dispersion[2] = std::clamp(
+                        inst.dispersion[2]
+                            + 0.08f * match_motion.strength,
+                        1.0f,
+                        1.75f);
+                    inst.dispersion[3] = std::clamp(
+                        inst.dispersion[3]
+                            + 0.030f * match_motion.strength,
+                        0.0f,
+                        0.40f);
                 }
             } else {
                 inst.group_rect[0] = execution->group_x;
@@ -4562,6 +4588,7 @@ struct MaterialVsOut {
     float4 spectral_tint;
     float4 lighting;
     float4 thickness;
+    float4 dispersion;
     float4 group_rect;
     float4 group_effects;
 };
@@ -4581,6 +4608,7 @@ struct MaterialInstance {
     float4 spectral_tint;
     float4 lighting;
     float4 thickness;
+    float4 dispersion;
     float4 group_rect;
     float4 group_effects;
 };
@@ -4621,6 +4649,7 @@ vertex MaterialVsOut vs_material(
     out.spectral_tint = inst.spectral_tint;
     out.lighting = inst.lighting;
     out.thickness = inst.thickness;
+    out.dispersion = inst.dispersion;
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
     return out;
@@ -4736,6 +4765,10 @@ fragment float4 fs_material(
     float spectral_coolness = clamp(in.spectral_tint.y, 0.0, 0.22);
     float spectral_dispersion = clamp(in.spectral_tint.z, 0.0, 0.22);
     float spectral_rim_tint = clamp(in.spectral_tint.w, 0.0, 0.28);
+    float glass_dispersion_axial = clamp(in.dispersion.x, 0.0, 3.5);
+    float glass_dispersion_tangential = clamp(in.dispersion.y, 0.0, 2.75);
+    float glass_prismatic_gain = clamp(in.dispersion.z, 1.0, 1.80);
+    float glass_caustic_spread = clamp(in.dispersion.w, 0.0, 0.44);
     float2 default_light_dir = normalize(float2(-0.58, -0.82));
     float2 dynamic_light_raw = in.lighting.xy;
     float2 dynamic_light_dir = length(dynamic_light_raw) > 0.0001
@@ -4780,14 +4813,29 @@ fragment float4 fs_material(
             * 1.65;
     }
     float caustic_weight = clamp(
-        edge_lens * refraction_edge_caustic,
+        edge_lens * refraction_edge_caustic * glass_prismatic_gain,
         0.0,
-        0.24);
+        0.30);
+    float2 dispersion_tangent = float2(-refraction_dir.y, refraction_dir.x);
+    float dispersion_alignment = abs(dot(dispersion_tangent,
+                                         dynamic_light_dir));
+    float2 dispersion_uv =
+        (refraction_dir * glass_dispersion_axial
+            + dispersion_tangent
+                * glass_dispersion_tangential
+                * (0.48 + 0.52 * dispersion_alignment))
+        * texel
+        * content_scale
+        * edge_lens;
     float fringe_weight = clamp(
         caustic_weight * (0.45 + 0.55 * refraction_edge_bias)
-            + edge_lens * (edge_chromatic_fringe + spectral_dispersion),
+            + edge_lens
+                * (edge_chromatic_fringe
+                   + spectral_dispersion
+                   + 0.12 * (glass_prismatic_gain - 1.0)
+                   + glass_caustic_spread),
         0.0,
-        0.26);
+        0.34);
     float2 fringe_uv =
         refraction_uv * (0.55 + 0.65 * refraction_edge_bias)
         + refraction_dir
@@ -4795,7 +4843,8 @@ fragment float4 fs_material(
             * content_scale
             * edge_lens
             * edge_chromatic_fringe
-            * 2.0;
+            * 2.0
+        + dispersion_uv;
     float4 acc = float4(0.0);
     float weight_sum = 0.0;
     for (int y = -2; y <= 2; ++y) {
@@ -4836,19 +4885,36 @@ fragment float4 fs_material(
             in.screen_uv + refraction_uv - fringe_uv,
             float2(0.0),
             float2(1.0));
+        float2 prism_uv = clamp(
+            in.screen_uv
+                + refraction_uv
+                + dispersion_tangent
+                    * texel
+                    * content_scale
+                    * glass_dispersion_tangential
+                    * edge_lens,
+            float2(0.0),
+            float2(1.0));
         float4 warm_sample = backdrop.sample(samp, warm_uv);
         float4 cool_sample = backdrop.sample(samp, cool_uv);
+        float4 prism_sample = backdrop.sample(samp, prism_uv);
         refracted_rgb.r = mix(
             refracted_rgb.r,
             clamp(warm_sample.r + spectral_warmth, 0.0, 1.0),
             fringe_weight);
         refracted_rgb.g = mix(
             refracted_rgb.g,
-            clamp((warm_sample.g + cool_sample.g) * 0.5
+            clamp((warm_sample.g + cool_sample.g + prism_sample.g) / 3.0
                     + 0.22 * (spectral_warmth + spectral_coolness),
                   0.0,
                   1.0),
-            fringe_weight * spectral_rim_tint);
+            fringe_weight
+                * clamp(
+                    spectral_rim_tint
+                        + 0.36 * (glass_prismatic_gain - 1.0)
+                        + 0.20 * glass_caustic_spread,
+                    0.0,
+                    0.70));
         refracted_rgb.b = mix(
             refracted_rgb.b,
             clamp(cool_sample.b + spectral_coolness, 0.0, 1.0),
@@ -4887,6 +4953,23 @@ fragment float4 fs_material(
                0.24 * (spectral_warmth + spectral_coolness),
                spectral_coolness);
     rgb += spectral_rgb * spectral_edge * (0.20 + 1.40 * caustic_weight);
+    float prismatic_edge = edge_lens * glass_caustic_spread;
+    if (prismatic_edge > 0.0001) {
+        float prism_band = smoothstep(
+            -0.58,
+            0.98,
+            dot(normalized_local, normalize(dispersion_tangent
+                                            - dynamic_light_dir * 0.38)));
+        prism_band *= 1.0 - smoothstep(0.36, 1.20, normalized_len);
+        float3 prism_rgb =
+            float3(1.0 + spectral_warmth * 1.70,
+                   1.0 + spectral_rim_tint * 0.48,
+                   1.0 + spectral_coolness * 1.70);
+        rgb += prism_rgb
+            * prismatic_edge
+            * prism_band
+            * (0.10 + 0.34 * (glass_prismatic_gain - 1.0));
+    }
     float light_sweep = smoothstep(
         -0.72,
         0.96,
