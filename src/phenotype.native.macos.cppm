@@ -2507,6 +2507,40 @@ inline void apply_material_container_execution_descriptors(
                 break;
             }
         }
+        if (record && execution->glass_effect_materialize_execution) {
+            auto const transition =
+                material_execution_transition(
+                    record->plan.transition,
+                    execution);
+            auto const geometry =
+                material_surface_execution_geometry(record->plan, execution);
+            if (!geometry.active) {
+                inst.rect[2] = 0.0f;
+                inst.rect[3] = 0.0f;
+                inst.params[2] = 0.0f;
+                continue;
+            }
+            inst.rect[0] = geometry.x;
+            inst.rect[1] = geometry.y;
+            inst.rect[2] = geometry.w;
+            inst.rect[3] = geometry.h;
+            inst.params[0] = geometry.radius;
+            inst.params[2] = std::clamp(
+                inst.params[2] * transition.opacity_gain,
+                0.0f,
+                1.0f);
+            inst.group_rect[0] = inst.rect[0];
+            inst.group_rect[1] = inst.rect[1];
+            inst.group_rect[2] = inst.rect[2];
+            inst.group_rect[3] = inst.rect[3];
+            inst.transition_optics[0] =
+                transition.materialize_wave_strength;
+            inst.transition_optics[1] = transition.materialize_edge_lift;
+            inst.transition_optics[2] =
+                transition.materialize_lensing_gain;
+            inst.transition_optics[3] =
+                transition.materialize_rim_position;
+        }
         if (execution->group_bounds_valid && execution->shape_blend_execution) {
             if (record
                 && (execution->glass_effect_match_execution

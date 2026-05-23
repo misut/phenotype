@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 66;
+inline constexpr std::uint32_t material_plan_contract_version = 67;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1645,6 +1645,7 @@ struct MaterialContainerExecutionDescriptor {
     bool paint_layer_leader = true;
     bool morph_execution = false;
     bool glass_effect_match_execution = false;
+    bool glass_effect_materialize_execution = false;
     char const* execution_policy = "isolated";
     char const* fusion_model = "none";
     bool fusion_optics_active = false;
@@ -1661,6 +1662,8 @@ struct MaterialContainerExecutionDescriptor {
     float fusion_shadow_gain = 1.0f;
     float glass_effect_match_progress = 1.0f;
     float glass_effect_match_blend_strength = 0.0f;
+    float glass_effect_materialize_progress = 1.0f;
+    float glass_effect_materialize_wave_strength = 0.0f;
     bool glass_effect_match_source_valid = false;
     float glass_effect_match_source_gap = 0.0f;
     float glass_effect_match_source_spacing = 0.0f;
@@ -1714,6 +1717,52 @@ inline float material_transition_materialize_wave(float material_gain) noexcept 
         4.0f * material_gain * (1.0f - material_gain),
         0.0f,
         1.0f);
+}
+
+inline MaterialTransitionAnalysis material_transition_as_materialize(
+        MaterialTransitionAnalysis transition) noexcept {
+    if (!transition.active || transition.reduced_motion_suppressed)
+        return transition;
+    auto const progress = std::clamp(transition.progress, 0.0f, 1.0f);
+    auto const gain = progress * progress * (3.0f - 2.0f * progress);
+    auto const material_gain = transition.appearing ? gain : 1.0f - gain;
+    transition.kind = MaterialGlassTransitionKind::Materialize;
+    transition.kind_name = "materialize";
+    transition.materialize = true;
+    transition.matched_geometry = false;
+    transition.opacity_gain = material_gain;
+    transition.optical_gain =
+        std::clamp(0.22f + 0.78f * material_gain, 0.0f, 1.0f);
+    transition.shadow_gain =
+        std::clamp(0.10f + 0.90f * material_gain, 0.0f, 1.0f);
+    transition.refraction_gain = std::clamp(material_gain, 0.0f, 1.0f);
+    auto const wave = material_transition_materialize_wave(material_gain);
+    transition.materialize_optics_model = "materialize-liquid-glass-optics";
+    transition.materialize_optics_active = wave > 0.0001f;
+    transition.materialize_wave_strength = wave;
+    transition.materialize_edge_lift =
+        std::clamp(0.11f * wave + 0.035f * transition.optical_gain,
+                   0.0f,
+                   0.16f);
+    transition.materialize_lensing_gain =
+        1.0f + 0.20f * wave + 0.08f * transition.refraction_gain;
+    transition.materialize_rim_position = transition.appearing
+        ? std::clamp(0.18f + 0.82f * material_gain, 0.0f, 1.0f)
+        : std::clamp(0.18f + 0.82f * (1.0f - material_gain),
+                     0.0f,
+                     1.0f);
+    transition.policy = transition.appearing
+        ? "materialize-in"
+        : "materialize-out";
+    return transition;
+}
+
+inline MaterialTransitionAnalysis material_execution_transition(
+        MaterialTransitionAnalysis transition,
+        MaterialContainerExecutionDescriptor const* execution) noexcept {
+    if (execution && execution->glass_effect_materialize_execution)
+        return material_transition_as_materialize(transition);
+    return transition;
 }
 
 inline void material_apply_centered_geometry_scale(float& x,
@@ -1790,8 +1839,11 @@ material_paint_layer_execution_geometry(
         h = execution->group_h;
         radius = execution->group_radius;
     }
-    material_apply_materialize_execution_geometry(
+    auto const transition = material_execution_transition(
         plan.transition,
+        execution);
+    material_apply_materialize_execution_geometry(
+        transition,
         x,
         y,
         w,
@@ -2303,8 +2355,11 @@ inline MaterialSurfaceExecutionGeometry material_surface_execution_geometry(
         h = execution->group_h;
         radius = execution->group_radius;
     }
-    material_apply_materialize_execution_geometry(
+    auto const transition = material_execution_transition(
         plan.transition,
+        execution);
+    material_apply_materialize_execution_geometry(
+        transition,
         x,
         y,
         w,
@@ -3739,6 +3794,21 @@ material_container_execution_descriptor_from_group(
     descriptor.glass_effect_match_execution =
         descriptor.active
         && match_source.valid();
+    descriptor.glass_effect_materialize_execution =
+        descriptor.active
+        && !descriptor.glass_effect_match_execution
+        && material_glass_effect_match_execution_active(glass_group)
+        && plan.glass_identity.matched_geometry_candidate
+        && plan.container.morph_transitions
+        && plan.transition.active
+        && plan.transition.matched_geometry;
+    if (descriptor.glass_effect_materialize_execution) {
+        auto const transition =
+            material_transition_as_materialize(plan.transition);
+        descriptor.glass_effect_materialize_progress = transition.progress;
+        descriptor.glass_effect_materialize_wave_strength =
+            transition.materialize_wave_strength;
+    }
     auto const group_shape_blend_execution =
         material_container_group_shape_blend_execution_active(group);
     auto const shape_blend_cluster =
@@ -3753,6 +3823,7 @@ material_container_execution_descriptor_from_group(
         material_glass_effect_union_execution_active(union_group);
     descriptor.shape_blend_execution =
         descriptor.active
+        && !descriptor.glass_effect_materialize_execution
         && (union_group_shape_blend_execution
             || group_shape_blend_execution
             || descriptor.glass_effect_match_execution);
@@ -3799,9 +3870,11 @@ material_container_execution_descriptor_from_group(
     descriptor.execution_policy =
         descriptor.glass_effect_match_execution
             ? "glass-effect-matched-geometry"
-            : (descriptor.union_execution
-                ? "glass-effect-union"
-                : material_container_execution_policy_name(group));
+            : (descriptor.glass_effect_materialize_execution
+                ? "glass-effect-materialize"
+                : (descriptor.union_execution
+                    ? "glass-effect-union"
+                    : material_container_execution_policy_name(group)));
     descriptor.shape_blend_strength =
         std::max(
             std::max(
@@ -5357,33 +5430,7 @@ inline MaterialTransitionAnalysis analyze_material_transition(
         return analysis;
     auto const gain = material_smooth_transition_gain(analysis.progress);
     if (analysis.materialize) {
-        auto const material_gain = analysis.appearing ? gain : 1.0f - gain;
-        analysis.opacity_gain = material_gain;
-        analysis.optical_gain =
-            std::clamp(0.22f + 0.78f * material_gain, 0.0f, 1.0f);
-        analysis.shadow_gain =
-            std::clamp(0.10f + 0.90f * material_gain, 0.0f, 1.0f);
-        analysis.refraction_gain = std::clamp(material_gain, 0.0f, 1.0f);
-        auto const wave =
-            material_transition_materialize_wave(material_gain);
-        analysis.materialize_optics_model =
-            "materialize-liquid-glass-optics";
-        analysis.materialize_optics_active = wave > 0.0001f;
-        analysis.materialize_wave_strength = wave;
-        analysis.materialize_edge_lift =
-            std::clamp(0.11f * wave + 0.035f * analysis.optical_gain,
-                       0.0f,
-                       0.16f);
-        analysis.materialize_lensing_gain =
-            1.0f + 0.20f * wave + 0.08f * analysis.refraction_gain;
-        analysis.materialize_rim_position = analysis.appearing
-            ? std::clamp(0.18f + 0.82f * material_gain, 0.0f, 1.0f)
-            : std::clamp(0.18f + 0.82f * (1.0f - material_gain),
-                         0.0f,
-                         1.0f);
-        analysis.policy = analysis.appearing
-            ? "materialize-in"
-            : "materialize-out";
+        analysis = material_transition_as_materialize(analysis);
     } else if (analysis.matched_geometry) {
         analysis.opacity_gain = 1.0f;
         analysis.optical_gain = std::clamp(0.65f + 0.35f * gain, 0.0f, 1.0f);
