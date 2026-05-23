@@ -2074,6 +2074,50 @@ namespace detail {
             "scattering_gain",
             json::Value{plan.glass_thickness.scattering_gain});
 
+        json::Object glass_dispersion;
+        glass_dispersion.emplace(
+            "model",
+            json::Value{plan.glass_dispersion.model});
+        glass_dispersion.emplace(
+            "source",
+            json::Value{plan.glass_dispersion.source});
+        glass_dispersion.emplace(
+            "active",
+            json::Value{plan.glass_dispersion.active});
+        glass_dispersion.emplace(
+            "spectral_driven",
+            json::Value{plan.glass_dispersion.spectral_driven});
+        glass_dispersion.emplace(
+            "thickness_driven",
+            json::Value{plan.glass_dispersion.thickness_driven});
+        glass_dispersion.emplace(
+            "transition_driven",
+            json::Value{plan.glass_dispersion.transition_driven});
+        glass_dispersion.emplace(
+            "lighting_driven",
+            json::Value{plan.glass_dispersion.lighting_driven});
+        glass_dispersion.emplace(
+            "interaction_driven",
+            json::Value{plan.glass_dispersion.interaction_driven});
+        glass_dispersion.emplace(
+            "reduced_motion_suppressed",
+            json::Value{plan.glass_dispersion.reduced_motion_suppressed});
+        glass_dispersion.emplace(
+            "bounded",
+            json::Value{plan.glass_dispersion.bounded});
+        glass_dispersion.emplace(
+            "axial_offset_pixels",
+            json::Value{plan.glass_dispersion.axial_offset_pixels});
+        glass_dispersion.emplace(
+            "tangential_offset_pixels",
+            json::Value{plan.glass_dispersion.tangential_offset_pixels});
+        glass_dispersion.emplace(
+            "prismatic_gain",
+            json::Value{plan.glass_dispersion.prismatic_gain});
+        glass_dispersion.emplace(
+            "caustic_spread",
+            json::Value{plan.glass_dispersion.caustic_spread});
+
         json::Object interaction;
         interaction.emplace("enabled", json::Value{plan.interaction.enabled});
         interaction.emplace("active", json::Value{plan.interaction.active});
@@ -2213,6 +2257,9 @@ namespace detail {
             "glass_thickness_active",
             json::Value{plan.optical_response.glass_thickness_active});
         optical_response.emplace(
+            "glass_dispersion_active",
+            json::Value{plan.optical_response.glass_dispersion_active});
+        optical_response.emplace(
             "foreground_vibrancy_active",
             json::Value{plan.optical_response.foreground_vibrancy_active});
         optical_response.emplace(
@@ -2259,6 +2306,9 @@ namespace detail {
         optical_composition.emplace(
             "glass_thickness_source",
             json::Value{composition.glass_thickness_source});
+        optical_composition.emplace(
+            "glass_dispersion_source",
+            json::Value{composition.glass_dispersion_source});
         optical_composition.emplace(
             "interaction_source",
             json::Value{composition.interaction_source});
@@ -2316,6 +2366,9 @@ namespace detail {
         optical_composition.emplace(
             "glass_thickness_required",
             json::Value{composition.glass_thickness_required});
+        optical_composition.emplace(
+            "glass_dispersion_required",
+            json::Value{composition.glass_dispersion_required});
         optical_composition.emplace(
             "interaction_required",
             json::Value{composition.interaction_required});
@@ -2430,6 +2483,18 @@ namespace detail {
         optical_composition.emplace(
             "glass_scattering_gain",
             json::Value{composition.glass_scattering_gain});
+        optical_composition.emplace(
+            "glass_dispersion_axial_offset",
+            json::Value{composition.glass_dispersion_axial_offset});
+        optical_composition.emplace(
+            "glass_dispersion_tangential_offset",
+            json::Value{composition.glass_dispersion_tangential_offset});
+        optical_composition.emplace(
+            "glass_dispersion_prismatic_gain",
+            json::Value{composition.glass_dispersion_prismatic_gain});
+        optical_composition.emplace(
+            "glass_dispersion_caustic_spread",
+            json::Value{composition.glass_dispersion_caustic_spread});
         optical_composition.emplace(
             "interaction_response_strength",
             json::Value{composition.interaction_response_strength});
@@ -2691,6 +2756,21 @@ namespace detail {
             optics_json.emplace(
                 "glass_scattering_gain",
                 json::Value{optics.glass_scattering_gain});
+            optics_json.emplace(
+                "glass_dispersion_model",
+                json::Value{optics.glass_dispersion_model});
+            optics_json.emplace(
+                "glass_dispersion_axial_offset",
+                json::Value{optics.glass_dispersion_axial_offset});
+            optics_json.emplace(
+                "glass_dispersion_tangential_offset",
+                json::Value{optics.glass_dispersion_tangential_offset});
+            optics_json.emplace(
+                "glass_dispersion_prismatic_gain",
+                json::Value{optics.glass_dispersion_prismatic_gain});
+            optics_json.emplace(
+                "glass_dispersion_caustic_spread",
+                json::Value{optics.glass_dispersion_caustic_spread});
             json::Object out_stage;
             out_stage.emplace("name", json::Value{stage.name});
             out_stage.emplace("active", json::Value{stage.active});
@@ -2803,6 +2883,9 @@ namespace detail {
         out.emplace(
             "glass_thickness",
             json::Value{std::move(glass_thickness)});
+        out.emplace(
+            "glass_dispersion",
+            json::Value{std::move(glass_dispersion)});
         out.emplace("interaction", json::Value{std::move(interaction)});
         out.emplace(
             "optical_response",
