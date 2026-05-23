@@ -465,8 +465,10 @@ void view(State const& state) {
                 widget::text("Regular Liquid Glass now defaults to a capsule shape and can participate in a morphing effect container.");
                 layout::spacer(8);
                 layout::row([&] {
-                    widget::button<Msg>("Glass action", Increment{}, ButtonVariant::Primary);
-                    widget::button<Msg>("Secondary", Decrement{});
+                    widget::glass_prominent_button<Msg>(
+                        "Glass action",
+                        Increment{});
+                    widget::glass_button<Msg>("Secondary", Decrement{});
                 });
                 layout::spacer(8);
                 widget::code("layout::glass_effect_container(options, builder);");
