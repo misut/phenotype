@@ -5762,6 +5762,83 @@ void test_glass_control_button_style_material_contract() {
     std::puts("PASS: glass control button style emits material contract");
 }
 
+void test_glass_button_accepts_configurable_glass_style() {
+    set_theme(Theme{});
+
+    auto const tint = Color{255, 149, 0, 132};
+    auto const border = Color{255, 149, 0, 196};
+    auto glass = layout::glass_regular().tint(tint).border(border);
+    auto options = GlassControlStyleOptions{
+        .role = MaterialSurfaceRole::Control,
+        .width = 116.0f,
+        .height = 34.0f,
+    };
+
+    auto converted = widget::glass_control_style_options(glass, options);
+    assert(converted.kind == MaterialKind::Regular);
+    assert(converted.has_tint);
+    assert(converted.tint == tint);
+    assert(converted.has_border);
+    assert(converted.border == border);
+
+    auto style = widget::glass_button_style(glass, options);
+    assert(style.has_material);
+    assert(style.material.kind == MaterialKind::Regular);
+    assert(style.material.role == MaterialSurfaceRole::Control);
+    assert(style.material.tint == tint);
+    assert(style.material.border == border);
+    assert(style.background == tint);
+    assert(style.hover_background.r == tint.r);
+    assert(style.hover_background.g == tint.g);
+    assert(style.hover_background.b == tint.b);
+    assert(style.hover_background.a >= 174);
+    assert(style.pressed_background.a >= 204);
+    assert(style.text_color == Theme{}.foreground);
+    assert(std::string_view(style.material.contrast_intent)
+           == "tinted-glass-control");
+    assert(std::string_view(style.material.plan_id)
+           == "material.glass.control.tinted");
+    assert(style.max_width == 116.0f);
+    assert(style.fixed_height == 34.0f);
+
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::glass_button<button_test::ButtonMsg>(
+        "Tinted",
+        button_test::Click{},
+        glass,
+        options);
+    Scope::set_current(nullptr);
+
+    auto const& root = detail::node_at(root_h);
+    assert(root.children.size() == 1u);
+    auto const& wrapped = detail::node_at(root.children[0]);
+    assert(wrapped.interaction_role == InteractionRole::Button);
+    assert(wrapped.material.kind == MaterialKind::Regular);
+    assert(wrapped.material.role == MaterialSurfaceRole::Control);
+    assert(wrapped.material.tint == tint);
+    assert(wrapped.material.border == border);
+    assert(wrapped.material.container.interactive);
+    assert(wrapped.style.max_width == 116.0f);
+    assert(wrapped.style.fixed_height == 34.0f);
+
+    auto clear = widget::glass_button_style(layout::glass_clear(), {});
+    assert(clear.has_material);
+    assert(clear.material.kind == MaterialKind::Clear);
+
+    auto identity = widget::glass_button_style(layout::glass_identity(), {});
+    assert(!identity.has_material);
+    assert(identity.material.kind == MaterialKind::None);
+
+    std::puts("PASS: glass button accepts configurable glass style");
+}
+
 void test_glass_prominent_button_style_material_contract() {
     set_theme(Theme{});
 
@@ -7252,6 +7329,7 @@ int main() {
     test_symbol_button_macos_contract();
     test_macos_control_button_style_contract();
     test_glass_control_button_style_material_contract();
+    test_glass_button_accepts_configurable_glass_style();
     test_glass_prominent_button_style_material_contract();
     test_glass_split_button_style_material_contract();
     test_glass_selection_button_style_material_contract();

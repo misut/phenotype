@@ -1448,6 +1448,10 @@ struct GlassControlStyleOptions {
     bool disabled = false;
     bool prominent = false;
     float prominence = 1.0f;
+    bool has_tint = false;
+    Color tint = {};
+    bool has_border = false;
+    Color border = {};
     float width = 0.0f;
     float height = -1.0f;
     float border_radius = -1.0f;

@@ -384,6 +384,13 @@ inline void apply_text_field_material(LayoutNode& node,
     node.material.foreground = node.text_color;
 }
 
+inline Color glass_control_state_color(Color base,
+                                       unsigned char minimum_alpha) noexcept {
+    if (base.a < minimum_alpha)
+        base.a = minimum_alpha;
+    return base;
+}
+
 inline ButtonStyleOptions glass_control_button_style(
         GlassControlStyleOptions options = {}) {
     auto const& t = detail::g_app.theme;
@@ -392,6 +399,10 @@ inline ButtonStyleOptions glass_control_button_style(
         : (options.prominent && options.kind == MaterialKind::Clear
             ? MaterialKind::Regular
             : options.kind);
+    bool const custom_tint =
+        options.has_tint && options.tint.a > 0 && kind != MaterialKind::None;
+    bool const custom_border =
+        options.has_border && options.border.a > 0 && kind != MaterialKind::None;
     auto material = material_style_for_kind(kind, t);
     material.role = options.role;
     material.fallback = kind != MaterialKind::None;
@@ -414,12 +425,21 @@ inline ButtonStyleOptions glass_control_button_style(
         material.plan_id = "material.glass.prominent.action";
         material.verifier_profile = "prominent-action-glass";
     } else {
-        material.tint = options.selected
-            ? material_with_alpha(t.surface, 198)
-            : material.tint;
-        material.border = material_with_alpha(
-            t.border,
-            static_cast<unsigned char>(options.selected ? 190 : 120));
+        if (custom_tint) {
+            material.tint = options.tint;
+            material.edge_highlight =
+                std::max(material.edge_highlight, 0.30f);
+            material.contrast_intent = "tinted-glass-control";
+            material.plan_id = "material.glass.control.tinted";
+            material.verifier_profile = "tinted-control-glass";
+        } else if (options.selected) {
+            material.tint = material_with_alpha(t.surface, 198);
+        }
+        material.border = custom_border
+            ? options.border
+            : material_with_alpha(
+                t.border,
+                static_cast<unsigned char>(options.selected ? 190 : 120));
     }
 
     ButtonStyleOptions style;
@@ -431,21 +451,29 @@ inline ButtonStyleOptions glass_control_button_style(
     style.has_hover_background = true;
     style.hover_background = options.prominent && kind != MaterialKind::None
         ? material_with_alpha(t.accent_strong, 204)
-        : material_with_alpha(
-            t.surface,
-            static_cast<unsigned char>(options.selected ? 222 : 150));
+        : (custom_tint
+            ? glass_control_state_color(
+                options.tint,
+                static_cast<unsigned char>(options.selected ? 222 : 174))
+            : material_with_alpha(
+                t.surface,
+                static_cast<unsigned char>(options.selected ? 222 : 150)));
     style.has_pressed_background = true;
     style.pressed_background = options.prominent && kind != MaterialKind::None
         ? material_with_alpha(t.accent_strong, 228)
-        : material_with_alpha(
-            t.surface,
-            static_cast<unsigned char>(options.selected ? 238 : 176));
+        : (custom_tint
+            ? glass_control_state_color(
+                options.tint,
+                static_cast<unsigned char>(options.selected ? 238 : 204))
+            : material_with_alpha(
+                t.surface,
+                static_cast<unsigned char>(options.selected ? 238 : 176)));
     style.has_border_color = true;
     style.border_color = material.border;
     style.has_text_color = true;
     style.text_color = options.prominent && kind != MaterialKind::None
         ? t.state_active_fg
-        : (options.selected ? t.foreground : t.muted);
+        : (custom_tint || options.selected ? t.foreground : t.muted);
     style.border_width = options.prominent || options.selected ? 1.0f : 0.0f;
     style.border_radius = options.border_radius >= 0.0f
         ? options.border_radius
@@ -4742,6 +4770,43 @@ inline void spacer(unsigned int height_px) {
 }
 
 } // namespace layout
+
+namespace widget {
+
+inline GlassControlStyleOptions glass_control_style_options(
+        layout::GlassEffectStyle glass,
+        GlassControlStyleOptions options = {}) noexcept {
+    options.kind = glass.kind;
+    if (glass.has_tint) {
+        options.has_tint = true;
+        options.tint = glass.tint_color;
+    }
+    if (glass.has_border) {
+        options.has_border = true;
+        options.border = glass.border_color;
+    }
+    return options;
+}
+
+inline ButtonStyleOptions glass_button_style(
+        layout::GlassEffectStyle glass,
+        GlassControlStyleOptions options = {}) {
+    return glass_control_button_style(
+        glass_control_style_options(glass, options));
+}
+
+template<typename Msg>
+inline void glass_button(str label,
+                         Msg msg,
+                         layout::GlassEffectStyle glass,
+                         GlassControlStyleOptions options = {}) {
+    button(
+        label,
+        std::move(msg),
+        glass_button_style(glass, options));
+}
+
+} // namespace widget
 
 // ============================================================
 // Event dispatch — pure functions (no host dependency).
