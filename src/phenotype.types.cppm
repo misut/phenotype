@@ -1315,6 +1315,16 @@ enum class ButtonVariant {
 
 inline constexpr float minimum_button_activation_size = 44.0f;
 
+// Shape request for Liquid Glass/material surfaces. `Default` uses the
+// resolved border radius; `Capsule` is resolved after layout from the
+// actual view bounds, mirroring shape-scoped glass effects.
+enum class MaterialSurfaceShape {
+    Default,
+    Rectangle,
+    RoundedRectangle,
+    Capsule,
+};
+
 struct ButtonStyleOptions {
     ButtonVariant variant = ButtonVariant::Default;
     bool disabled = false;
@@ -1332,6 +1342,7 @@ struct ButtonStyleOptions {
     Color text_color = {};
     float border_width = -1.0f;
     float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Default;
     float font_size = 0.0f;
     float padding_top = -1.0f;
     float padding_right = -1.0f;
@@ -1352,6 +1363,7 @@ struct GlassControlStyleOptions {
     float width = 0.0f;
     float height = -1.0f;
     float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Capsule;
     float font_size = 0.0f;
     TextAlign text_align = TextAlign::Center;
 };
@@ -1385,6 +1397,7 @@ struct GlassSplitButtonStyleOptions {
     float width = 0.0f;
     float height = -1.0f;
     float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Capsule;
     float font_size = 0.0f;
     TextAlign text_align = TextAlign::Center;
 };
@@ -1404,6 +1417,7 @@ struct GlassSelectionStyleOptions {
     float width = 0.0f;
     float height = -1.0f;
     float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Default;
     float font_size = 0.0f;
     TextAlign text_align = TextAlign::Start;
 };
@@ -1427,6 +1441,7 @@ struct GlassOutlineRowStyleOptions {
     float width = 0.0f;
     float height = -1.0f;
     float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Default;
     float font_size = 0.0f;
     TextAlign text_align = TextAlign::Start;
 };
@@ -1438,6 +1453,7 @@ struct GlassMenuItemStyleOptions {
     float width = 0.0f;
     float height = -1.0f;
     float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Default;
 };
 
 struct GlassTableHeaderStyleOptions {
@@ -1448,6 +1464,7 @@ struct GlassTableHeaderStyleOptions {
     float width = 0.0f;
     float height = -1.0f;
     float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Default;
     float font_size = 0.0f;
     TextAlign text_align = TextAlign::Start;
 };
@@ -1460,6 +1477,7 @@ struct GlassDisclosureStyleOptions {
     float width = 0.0f;
     float height = -1.0f;
     float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Default;
     float font_size = 0.0f;
     TextAlign text_align = TextAlign::Start;
 };
@@ -1469,6 +1487,7 @@ struct TabsStyleOptions {
     MaterialSurfaceRole role = MaterialSurfaceRole::Navigation;
     bool interactive = true;
     float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Capsule;
     float border_width = 0.0f;
     char const* semantic_label = "Segmented Control";
 };
@@ -1486,6 +1505,7 @@ struct TextFieldStyleOptions {
     Color text_color = {};
     float border_width = -1.0f;
     float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Default;
     float font_size = 0.0f;
     float padding_top = -1.0f;
     float padding_right = -1.0f;
@@ -1504,6 +1524,7 @@ struct GlassTextFieldStyleOptions {
     float width = 0.0f;
     float height = -1.0f;
     float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Capsule;
     float font_size = 0.0f;
     char const* semantic_label = nullptr;
 };
@@ -1848,16 +1869,6 @@ public:
 struct ScrollState {
     float offset_x = 0;
     float offset_y = 0;
-};
-
-// Shape request for Liquid Glass/material surfaces. `Default` uses the
-// resolved border radius; `Capsule` is resolved after layout from the
-// actual view bounds, mirroring shape-scoped glass effects.
-enum class MaterialSurfaceShape {
-    Default,
-    Rectangle,
-    RoundedRectangle,
-    Capsule,
 };
 
 struct LayoutNode {

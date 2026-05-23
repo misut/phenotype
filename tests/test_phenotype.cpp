@@ -4707,6 +4707,7 @@ void test_glass_control_button_style_material_contract() {
     assert(style.has_pressed_background);
     assert(style.max_width == 104.0f);
     assert(style.fixed_height == 32.0f);
+    assert(style.shape == MaterialSurfaceShape::Capsule);
     assert(style.text_align == TextAlign::Center);
 
     auto btn_h = button_test::build_button_with_options(style);
@@ -4718,6 +4719,7 @@ void test_glass_control_button_style_material_contract() {
     assert(btn.material.tint == btn.background);
     assert(btn.material.border == btn.border_color);
     assert(btn.material.foreground == btn.text_color);
+    assert(btn.material_shape == MaterialSurfaceShape::Capsule);
     assert(btn.min_hit_width == minimum_button_activation_size);
     assert(btn.min_hit_height == minimum_button_activation_size);
 
@@ -4731,6 +4733,7 @@ void test_glass_control_button_style_material_contract() {
     auto& disabled = detail::node_at(disabled_h);
     assert(disabled.material.kind == MaterialKind::Regular);
     assert(disabled.material.role == MaterialSurfaceRole::Navigation);
+    assert(disabled.material_shape == MaterialSurfaceShape::Capsule);
     assert(!disabled.focusable);
     assert(!disabled.debug_semantic_enabled);
 
@@ -4765,6 +4768,7 @@ void test_glass_split_button_style_material_contract() {
     assert(style.material.container.morph_transitions);
     assert(style.border_width == 1.0f);
     assert(style.border_radius == 14.0f);
+    assert(style.shape == MaterialSurfaceShape::Capsule);
     assert(style.max_width == 44.0f);
     assert(style.fixed_height == 36.0f);
     assert(style.text_align == TextAlign::Center);
@@ -4805,6 +4809,7 @@ void test_glass_split_button_style_material_contract() {
     assert(btn.material.container.interactive);
     assert(btn.material.container.morph_transitions);
     assert(btn.material.tint == btn.background);
+    assert(btn.material_shape == MaterialSurfaceShape::Capsule);
     assert(btn.children.size() == 1);
 
     auto disabled = widget::glass_split_button_style(
@@ -4848,6 +4853,7 @@ void test_glass_selection_button_style_material_contract() {
     assert(style.pressed_background.a == 196);
     assert(style.border_width == 0.0f);
     assert(style.border_radius == 9.0f);
+    assert(style.shape == MaterialSurfaceShape::Capsule);
     assert(style.max_width == 188.0f);
     assert(style.fixed_height == 30.0f);
     assert(style.text_color == detail::g_app.theme.accent);
@@ -4862,6 +4868,7 @@ void test_glass_selection_button_style_material_contract() {
     assert(btn.material.tint == btn.background);
     assert(btn.material.border == btn.border_color);
     assert(btn.material.foreground == btn.text_color);
+    assert(btn.material_shape == MaterialSurfaceShape::Capsule);
     assert(btn.children.size() == 1);
 
     auto unselected = widget::glass_selection_button_style(
@@ -4934,6 +4941,7 @@ void test_glass_outline_row_button_style_material_contract() {
     assert(sidebar.material.role == MaterialSurfaceRole::Sidebar);
     assert(sidebar.text_color == detail::g_app.theme.accent);
     assert(sidebar.border_width == 0.0f);
+    assert(sidebar.shape == MaterialSurfaceShape::Capsule);
 
     auto expanded = widget::glass_outline_row_button_style(
         GlassOutlineRowStyleOptions{
@@ -4972,6 +4980,7 @@ void test_glass_menu_item_symbol_button_material_contract() {
     assert(style.material.container.interactive);
     assert(style.border_width == 0.0f);
     assert(style.border_radius == 11.0f);
+    assert(style.shape == MaterialSurfaceShape::Default);
 
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
@@ -5006,6 +5015,7 @@ void test_glass_menu_item_symbol_button_material_contract() {
     assert(btn.material.role == MaterialSurfaceRole::Overlay);
     assert(btn.material.container.interactive);
     assert(btn.material.tint == btn.background);
+    assert(btn.material_shape == MaterialSurfaceShape::Default);
     assert(btn.children.size() == 1);
 
     auto disabled = widget::glass_menu_item_button_style(
@@ -5034,6 +5044,7 @@ void test_glass_table_header_button_material_contract() {
     assert(style.material.container.interactive);
     assert(style.border_width == 1.0f);
     assert(style.border_radius == 8.0f);
+    assert(style.shape == MaterialSurfaceShape::Default);
     assert(style.font_size == 12.0f);
     assert(style.max_width == 160.0f);
     assert(style.fixed_height == 28.0f);
@@ -5065,6 +5076,7 @@ void test_glass_table_header_button_material_contract() {
     assert(btn.material.role == MaterialSurfaceRole::Content);
     assert(btn.material.container.interactive);
     assert(btn.material.tint == btn.background);
+    assert(btn.material_shape == MaterialSurfaceShape::Default);
 
     auto unsorted = widget::glass_table_header_button_style(
         GlassTableHeaderStyleOptions{.sorted = false});
@@ -5097,6 +5109,7 @@ void test_glass_disclosure_header_style_material_contract() {
     assert(collapsed.material.container.interactive);
     assert(collapsed.border_width == 1.0f);
     assert(collapsed.border_radius == 9.0f);
+    assert(collapsed.shape == MaterialSurfaceShape::Default);
     assert(collapsed.font_size == 13.0f);
     assert(collapsed.max_width == 240.0f);
     assert(collapsed.fixed_height == 34.0f);
@@ -5357,6 +5370,7 @@ void test_glass_text_field_style_material_contract() {
     assert(style.border_width == 0.0f);
     assert(style.max_width == 220.0f);
     assert(style.fixed_height == 34.0f);
+    assert(style.shape == MaterialSurfaceShape::Capsule);
 
     auto h = text_field_test::build_text_field_with_options(
         "query",
@@ -5374,6 +5388,7 @@ void test_glass_text_field_style_material_contract() {
     assert(f.material.tint == f.background);
     assert(f.material.border == f.border_color);
     assert(f.material.foreground == f.text_color);
+    assert(f.material_shape == MaterialSurfaceShape::Capsule);
     assert(f.border_width == 0.0f);
     assert(f.style.max_width == 220.0f);
     assert(f.style.fixed_height == 34.0f);
@@ -5393,6 +5408,7 @@ void test_glass_text_field_style_material_contract() {
     assert(disabled.material.kind == MaterialKind::Thin);
     assert(disabled.material.role == MaterialSurfaceRole::Navigation);
     assert(!disabled.material.container.interactive);
+    assert(disabled.material_shape == MaterialSurfaceShape::Capsule);
     assert(!disabled.focusable);
     assert(!disabled.is_input);
     assert(disabled.debug_semantic_label == "Disabled Search");

@@ -366,6 +366,7 @@ inline void apply_button_material(LayoutNode& node,
                                   ButtonStyleOptions const& options) {
     if (!options.has_material || options.material.kind == MaterialKind::None)
         return;
+    node.material_shape = options.shape;
     node.material = options.material;
     node.material.tint = node.background;
     node.material.border = node.border_color;
@@ -376,6 +377,7 @@ inline void apply_text_field_material(LayoutNode& node,
                                       TextFieldStyleOptions const& options) {
     if (!options.has_material || options.material.kind == MaterialKind::None)
         return;
+    node.material_shape = options.shape;
     node.material = options.material;
     node.material.tint = node.background;
     node.material.border = node.border_color;
@@ -420,6 +422,7 @@ inline ButtonStyleOptions glass_control_button_style(
     style.border_radius = options.border_radius >= 0.0f
         ? options.border_radius
         : t.radius_md;
+    style.shape = options.shape;
     style.font_size = options.font_size;
     style.max_width = options.width;
     style.fixed_height = options.height;
@@ -484,6 +487,7 @@ inline ButtonStyleOptions glass_split_button_style(
     style.border_radius = options.border_radius >= 0.0f
         ? options.border_radius
         : t.radius_md;
+    style.shape = options.shape;
     style.font_size = options.font_size;
     style.max_width = options.width;
     style.fixed_height = options.height;
@@ -553,6 +557,11 @@ inline ButtonStyleOptions glass_selection_button_style(
     style.border_radius = options.border_radius >= 0.0f
         ? options.border_radius
         : t.radius_md;
+    style.shape = options.shape != MaterialSurfaceShape::Default
+        ? options.shape
+        : (options.chrome == GlassSelectionChrome::SidebarPill
+            ? MaterialSurfaceShape::Capsule
+            : MaterialSurfaceShape::Default);
     style.font_size = options.font_size;
     style.max_width = options.width;
     style.fixed_height = options.height;
@@ -638,6 +647,10 @@ inline ButtonStyleOptions glass_outline_row_button_style(
     style.border_radius = options.border_radius >= 0.0f
         ? options.border_radius
         : t.radius_md;
+    style.shape = options.shape != MaterialSurfaceShape::Default
+        ? options.shape
+        : (sidebar ? MaterialSurfaceShape::Capsule
+                   : MaterialSurfaceShape::Default);
     style.font_size = options.font_size;
     style.max_width = options.width;
     style.fixed_height = options.height;
@@ -685,6 +698,7 @@ inline ButtonStyleOptions glass_menu_item_button_style(
     style.border_radius = options.border_radius >= 0.0f
         ? options.border_radius
         : t.radius_md;
+    style.shape = options.shape;
     style.max_width = options.width;
     style.fixed_height = options.height;
     style.min_hit_width = minimum_button_activation_size;
@@ -740,6 +754,7 @@ inline ButtonStyleOptions glass_table_header_button_style(
     style.border_radius = options.border_radius >= 0.0f
         ? options.border_radius
         : t.radius_sm;
+    style.shape = options.shape;
     style.font_size = options.font_size;
     style.max_width = options.width;
     style.fixed_height = options.height;
@@ -792,6 +807,7 @@ inline ButtonStyleOptions glass_disclosure_header_style(
     style.border_radius = options.border_radius >= 0.0f
         ? options.border_radius
         : t.radius_sm;
+    style.shape = options.shape;
     style.font_size = options.font_size;
     style.max_width = options.width;
     style.fixed_height = options.height;
@@ -827,6 +843,7 @@ inline TextFieldStyleOptions glass_text_field_style(
     style.border_radius = options.border_radius >= 0.0f
         ? options.border_radius
         : t.radius_lg;
+    style.shape = options.shape;
     style.font_size = options.font_size;
     style.max_width = options.width;
     style.fixed_height = options.height;
@@ -2044,6 +2061,7 @@ inline void tabs(std::vector<str> const& items,
         pill.border_radius = options.border_radius >= 0.0f
             ? options.border_radius
             : t.radius_md;
+        pill.material_shape = options.shape;
         pill.style.padding[0] = t.space_xs;
         pill.style.padding[1] = t.space_xs;
         pill.style.padding[2] = t.space_xs;
