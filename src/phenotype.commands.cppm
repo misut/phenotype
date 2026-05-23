@@ -193,6 +193,8 @@ inline std::vector<DrawCommand> parse_commands(
             auto glass_background_kind = read_u32();
             auto glass_background_feather_padding = read_f32();
             auto glass_background_soft_edge_radius = read_f32();
+            auto prominence_flags = read_u32();
+            auto prominence_intensity = read_f32();
             out.emplace_back(MaterialRectCmd{
                 x,
                 y,
@@ -232,7 +234,10 @@ inline std::vector<DrawCommand> parse_commands(
                     material_glass_background_from_wire(
                         glass_background_kind,
                         glass_background_feather_padding,
-                        glass_background_soft_edge_radius)}});
+                        glass_background_soft_edge_radius),
+                    material_prominence_from_wire(
+                        prominence_flags,
+                        prominence_intensity)}});
             break;
         }
         case Cmd::DrawText: {

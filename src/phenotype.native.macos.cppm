@@ -1649,6 +1649,8 @@ struct MaterialInstanceGPU {
     float dispersion[4]{};
     // fade extent, dissolve, dimming, hard style
     float scroll_edge[4]{};
+    // intensity, tint weight, edge lift, lensing gain
+    float prominent_glass[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
     // shape blend strength, inner-edge alpha blend strength, flags, command index
@@ -2420,6 +2422,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.scroll_edge[1] = plan.scroll_edge.dissolve_strength;
     inst.scroll_edge[2] = plan.scroll_edge.dimming_strength;
     inst.scroll_edge[3] = plan.scroll_edge.hard_style_strength;
+    inst.prominent_glass[0] = plan.prominent_glass.intensity;
+    inst.prominent_glass[1] = plan.prominent_glass.tint_weight;
+    inst.prominent_glass[2] = plan.prominent_glass.edge_lift;
+    inst.prominent_glass[3] = plan.prominent_glass.lensing_gain;
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];
@@ -3167,6 +3173,8 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 unsigned int glass_background_kind = 0;
                 float glass_background_feather_padding = 0.0f;
                 float glass_background_soft_edge_radius = 0.0f;
+                unsigned int prominence_flags = 0;
+                float prominence_intensity = 1.0f;
                 if (!reader.read_f32(x) || !reader.read_f32(y)
                     || !reader.read_f32(w) || !reader.read_f32(h)
                     || !reader.read_f32(radius)
@@ -3197,7 +3205,9 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     || !reader.read_u32(glass_effect_id)
                     || !reader.read_u32(glass_background_kind)
                     || !reader.read_f32(glass_background_feather_padding)
-                    || !reader.read_f32(glass_background_soft_edge_radius))
+                    || !reader.read_f32(glass_background_soft_edge_radius)
+                    || !reader.read_u32(prominence_flags)
+                    || !reader.read_f32(prominence_intensity))
                     return false;
                 auto material_env_for_command = material_env;
                 material_env_for_command.debug_seed.node =
@@ -3235,7 +3245,10 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     material_glass_background_from_wire(
                         glass_background_kind,
                         glass_background_feather_padding,
-                        glass_background_soft_edge_radius)};
+                        glass_background_soft_edge_radius),
+                    material_prominence_from_wire(
+                        prominence_flags,
+                        prominence_intensity)};
                 auto plan = plan_material_surface(
                     material_request_for_command(
                         descriptor,
@@ -4616,6 +4629,7 @@ struct MaterialVsOut {
     float4 thickness;
     float4 dispersion;
     float4 scroll_edge;
+    float4 prominent_glass;
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
@@ -4640,6 +4654,7 @@ struct MaterialInstance {
     float4 thickness;
     float4 dispersion;
     float4 scroll_edge;
+    float4 prominent_glass;
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
@@ -4697,6 +4712,7 @@ vertex MaterialVsOut vs_material(
     out.thickness = inst.thickness;
     out.dispersion = inst.dispersion;
     out.scroll_edge = inst.scroll_edge;
+    out.prominent_glass = inst.prominent_glass;
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
     out.fusion_optics = inst.fusion_optics;
@@ -4851,6 +4867,18 @@ fragment float4 fs_material(
     float scroll_edge_dissolve = clamp(in.scroll_edge.y, 0.0, 0.60);
     float scroll_edge_dimming = clamp(in.scroll_edge.z, 0.0, 0.45);
     float scroll_edge_hard_style = clamp(in.scroll_edge.w, 0.0, 0.70);
+    float prominent_intensity = clamp(in.prominent_glass.x, 0.0, 1.0);
+    float prominent_tint_weight = clamp(in.prominent_glass.y, 0.0, 0.64);
+    float prominent_edge_lift = clamp(in.prominent_glass.z, 0.0, 0.20);
+    float prominent_lensing_gain = clamp(in.prominent_glass.w, 1.0, 1.24);
+    edge_inner_highlight = clamp(
+        edge_inner_highlight + prominent_edge_lift,
+        0.0,
+        0.96);
+    edge_outer_shadow = clamp(
+        edge_outer_shadow + 0.040 * prominent_intensity,
+        0.0,
+        0.84);
     float control_morph_depth = clamp(in.control_morph.y, 0.0, 0.40);
     float control_morph_edge_lift = clamp(in.control_morph.z, 0.0, 0.35);
     float control_morph_shadow_compression =
@@ -4874,6 +4902,7 @@ fragment float4 fs_material(
         * (refraction_offset_pixels * content_scale)
         * edge_lens;
     float pointer_lens_strength = clamp(in.interaction_lens.w, 0.0, 0.35);
+    refraction_uv *= prominent_lensing_gain;
     if (pointer_lens_strength > 0.0001) {
         float2 pointer_anchor =
             clamp(in.interaction_lens.xy, float2(0.0), float2(1.0))
@@ -4896,12 +4925,16 @@ fragment float4 fs_material(
             * (refraction_offset_pixels * content_scale)
             * pointer_lens
             * pointer_lens_strength
-            * 1.65;
+            * 1.65
+            * prominent_lensing_gain;
     }
     float caustic_weight = clamp(
-        edge_lens * refraction_edge_caustic * glass_prismatic_gain,
+        edge_lens
+            * refraction_edge_caustic
+            * glass_prismatic_gain
+            * (1.0 + 0.22 * prominent_intensity),
         0.0,
-        0.30);
+        0.36);
     float2 dispersion_tangent = float2(-refraction_dir.y, refraction_dir.x);
     float dispersion_alignment = abs(dot(dispersion_tangent,
                                          dynamic_light_dir));
@@ -5130,6 +5163,29 @@ fragment float4 fs_material(
     float3 rgb = mix(backdrop_rgb, in.tint.rgb, tint_strength);
     float edge = 1.0 - smoothstep(0.0, edge_width, signed_edge_distance);
     float edge_lift = clamp(in.luminance_curve.w, 0.0, 1.0);
+    if (prominent_intensity > 0.0001) {
+        float prominent_center =
+            1.0 - smoothstep(0.18, 1.12, normalized_len);
+        float prominent_rim =
+            edge_lens
+            * (0.46
+               + 0.54
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_width * 1.55, 0.5),
+                       signed_edge_distance)));
+        float prominent_mix =
+            prominent_tint_weight
+            * prominent_intensity
+            * (0.38 + 0.62 * prominent_center);
+        rgb = mix(rgb, mix(rgb, in.tint.rgb, prominent_tint_weight),
+                  prominent_mix);
+        rgb += (float3(1.0) + in.tint.rgb * 0.72)
+            * prominent_rim
+            * prominent_edge_lift
+            * (0.58 + 0.42 * prominent_intensity);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float spectral_edge = edge_lens * spectral_rim_tint;
     float3 spectral_rgb =
         float3(spectral_warmth,
@@ -5162,6 +5218,12 @@ fragment float4 fs_material(
         * dynamic_light_highlight
         * light_sweep
         * (0.16 * glass_scattering_gain);
+    if (prominent_intensity > 0.0001) {
+        rgb += (float3(1.0) + in.tint.rgb * 0.48)
+            * light_sweep
+            * prominent_intensity
+            * 0.035;
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {

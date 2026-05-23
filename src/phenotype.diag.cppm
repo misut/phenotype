@@ -615,6 +615,7 @@ struct SemanticNodeSnapshot {
         float shadow_alpha = 0.0f;
         float shadow_radius = 0.0f;
         MaterialContainerDescriptor container{};
+        MaterialProminenceDescriptor prominence{};
         bool fallback = false;
         std::string fallback_reason;
         std::string contrast_intent;
@@ -1240,6 +1241,16 @@ namespace detail {
         command_descriptor.emplace(
             "shadow_radius",
             json::Value{plan.command_descriptor.shadow_radius});
+        json::Object descriptor_prominence;
+        descriptor_prominence.emplace(
+            "enabled",
+            json::Value{plan.command_descriptor.prominence.enabled});
+        descriptor_prominence.emplace(
+            "intensity",
+            json::Value{plan.command_descriptor.prominence.intensity});
+        command_descriptor.emplace(
+            "prominence",
+            json::Value{std::move(descriptor_prominence)});
 
         json::Object reference_model;
         reference_model.emplace(
@@ -2162,6 +2173,42 @@ namespace detail {
             "caustic_spread",
             json::Value{plan.glass_dispersion.caustic_spread});
 
+        json::Object prominent_glass;
+        prominent_glass.emplace("model", json::Value{plan.prominent_glass.model});
+        prominent_glass.emplace(
+            "source",
+            json::Value{plan.prominent_glass.source});
+        prominent_glass.emplace(
+            "active",
+            json::Value{plan.prominent_glass.active});
+        prominent_glass.emplace(
+            "control_driven",
+            json::Value{plan.prominent_glass.control_driven});
+        prominent_glass.emplace(
+            "tint_driven",
+            json::Value{plan.prominent_glass.tint_driven});
+        prominent_glass.emplace(
+            "backdrop_driven",
+            json::Value{plan.prominent_glass.backdrop_driven});
+        prominent_glass.emplace(
+            "reduced_motion_suppressed",
+            json::Value{plan.prominent_glass.reduced_motion_suppressed});
+        prominent_glass.emplace(
+            "bounded",
+            json::Value{plan.prominent_glass.bounded});
+        prominent_glass.emplace(
+            "intensity",
+            json::Value{plan.prominent_glass.intensity});
+        prominent_glass.emplace(
+            "tint_weight",
+            json::Value{plan.prominent_glass.tint_weight});
+        prominent_glass.emplace(
+            "edge_lift",
+            json::Value{plan.prominent_glass.edge_lift});
+        prominent_glass.emplace(
+            "lensing_gain",
+            json::Value{plan.prominent_glass.lensing_gain});
+
         json::Object interaction;
         interaction.emplace("enabled", json::Value{plan.interaction.enabled});
         interaction.emplace("active", json::Value{plan.interaction.active});
@@ -2329,6 +2376,9 @@ namespace detail {
             "scroll_edge_active",
             json::Value{plan.optical_response.scroll_edge_active});
         optical_response.emplace(
+            "prominent_glass_active",
+            json::Value{plan.optical_response.prominent_glass_active});
+        optical_response.emplace(
             "foreground_vibrancy_active",
             json::Value{plan.optical_response.foreground_vibrancy_active});
         optical_response.emplace(
@@ -2381,6 +2431,9 @@ namespace detail {
         optical_composition.emplace(
             "scroll_edge_source",
             json::Value{composition.scroll_edge_source});
+        optical_composition.emplace(
+            "prominent_glass_source",
+            json::Value{composition.prominent_glass_source});
         optical_composition.emplace(
             "interaction_source",
             json::Value{composition.interaction_source});
@@ -2444,6 +2497,9 @@ namespace detail {
         optical_composition.emplace(
             "scroll_edge_required",
             json::Value{composition.scroll_edge_required});
+        optical_composition.emplace(
+            "prominent_glass_required",
+            json::Value{composition.prominent_glass_required});
         optical_composition.emplace(
             "interaction_required",
             json::Value{composition.interaction_required});
@@ -2582,6 +2638,18 @@ namespace detail {
         optical_composition.emplace(
             "scroll_edge_hard_style",
             json::Value{composition.scroll_edge_hard_style});
+        optical_composition.emplace(
+            "prominent_glass_intensity",
+            json::Value{composition.prominent_glass_intensity});
+        optical_composition.emplace(
+            "prominent_glass_tint_weight",
+            json::Value{composition.prominent_glass_tint_weight});
+        optical_composition.emplace(
+            "prominent_glass_edge_lift",
+            json::Value{composition.prominent_glass_edge_lift});
+        optical_composition.emplace(
+            "prominent_glass_lensing_gain",
+            json::Value{composition.prominent_glass_lensing_gain});
         optical_composition.emplace(
             "interaction_response_strength",
             json::Value{composition.interaction_response_strength});
@@ -2811,6 +2879,21 @@ namespace detail {
                 "control_morph_shadow",
                 json::Value{optics.control_morph_shadow});
             optics_json.emplace(
+                "prominent_glass_model",
+                json::Value{optics.prominent_glass_model});
+            optics_json.emplace(
+                "prominent_glass_intensity",
+                json::Value{optics.prominent_glass_intensity});
+            optics_json.emplace(
+                "prominent_glass_tint_weight",
+                json::Value{optics.prominent_glass_tint_weight});
+            optics_json.emplace(
+                "prominent_glass_edge_lift",
+                json::Value{optics.prominent_glass_edge_lift});
+            optics_json.emplace(
+                "prominent_glass_lensing_gain",
+                json::Value{optics.prominent_glass_lensing_gain});
+            optics_json.emplace(
                 "refraction_model",
                 json::Value{optics.refraction_model});
             optics_json.emplace(
@@ -3034,6 +3117,9 @@ namespace detail {
         out.emplace(
             "scroll_edge",
             material_scroll_edge_profile_json(plan.scroll_edge));
+        out.emplace(
+            "prominent_glass",
+            json::Value{std::move(prominent_glass)});
         out.emplace("interaction", json::Value{std::move(interaction)});
         out.emplace(
             "optical_response",
@@ -4626,6 +4712,14 @@ inline json::Value semantic_node_to_json(SemanticNodeSnapshot const& node) {
             "container",
             detail::material_container_descriptor_json(
                 node.material->container));
+        json::Object prominence;
+        prominence.emplace(
+            "enabled",
+            json::Value{node.material->prominence.enabled});
+        prominence.emplace(
+            "intensity",
+            json::Value{node.material->prominence.intensity});
+        material.emplace("prominence", json::Value{std::move(prominence)});
         material.emplace("fallback", json::Value{node.material->fallback});
         material.emplace(
             "fallback_reason",

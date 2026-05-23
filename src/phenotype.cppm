@@ -389,16 +389,32 @@ inline ButtonStyleOptions glass_control_button_style(
     auto const& t = detail::g_app.theme;
     auto const kind = options.selected && options.kind == MaterialKind::None
         ? MaterialKind::Thin
-        : options.kind;
+        : (options.prominent && options.kind == MaterialKind::Clear
+            ? MaterialKind::Regular
+            : options.kind);
     auto material = material_style_for_kind(kind, t);
     material.role = options.role;
     material.fallback = kind != MaterialKind::None;
-    material.tint = options.selected
-        ? material_with_alpha(t.surface, 198)
-        : material.tint;
-    material.border = material_with_alpha(
-        t.border,
-        static_cast<unsigned char>(options.selected ? 190 : 120));
+    material.prominence = MaterialProminenceDescriptor{
+        options.prominent && !options.disabled && kind != MaterialKind::None,
+        options.prominence};
+    if (options.prominent && kind != MaterialKind::None) {
+        material.tint = material_with_alpha(t.accent, 178);
+        material.border = material_with_alpha(t.accent_strong, 190);
+        material.foreground = t.state_active_fg;
+        material.edge_highlight = std::max(material.edge_highlight, 0.42f);
+        material.shadow_alpha = std::max(material.shadow_alpha, 0.16f);
+        material.contrast_intent = "prominent-action";
+        material.plan_id = "material.glass.prominent.action";
+        material.verifier_profile = "prominent-action-glass";
+    } else {
+        material.tint = options.selected
+            ? material_with_alpha(t.surface, 198)
+            : material.tint;
+        material.border = material_with_alpha(
+            t.border,
+            static_cast<unsigned char>(options.selected ? 190 : 120));
+    }
 
     ButtonStyleOptions style;
     style.disabled = options.disabled;
@@ -407,18 +423,24 @@ inline ButtonStyleOptions glass_control_button_style(
     style.has_background = true;
     style.background = material.tint;
     style.has_hover_background = true;
-    style.hover_background = material_with_alpha(
-        t.surface,
-        static_cast<unsigned char>(options.selected ? 222 : 150));
+    style.hover_background = options.prominent && kind != MaterialKind::None
+        ? material_with_alpha(t.accent_strong, 204)
+        : material_with_alpha(
+            t.surface,
+            static_cast<unsigned char>(options.selected ? 222 : 150));
     style.has_pressed_background = true;
-    style.pressed_background = material_with_alpha(
-        t.surface,
-        static_cast<unsigned char>(options.selected ? 238 : 176));
+    style.pressed_background = options.prominent && kind != MaterialKind::None
+        ? material_with_alpha(t.accent_strong, 228)
+        : material_with_alpha(
+            t.surface,
+            static_cast<unsigned char>(options.selected ? 238 : 176));
     style.has_border_color = true;
     style.border_color = material.border;
     style.has_text_color = true;
-    style.text_color = options.selected ? t.foreground : t.muted;
-    style.border_width = options.selected ? 1.0f : 0.0f;
+    style.text_color = options.prominent && kind != MaterialKind::None
+        ? t.state_active_fg
+        : (options.selected ? t.foreground : t.muted);
+    style.border_width = options.prominent || options.selected ? 1.0f : 0.0f;
     style.border_radius = options.border_radius >= 0.0f
         ? options.border_radius
         : t.radius_md;
@@ -430,6 +452,16 @@ inline ButtonStyleOptions glass_control_button_style(
     style.min_hit_height = minimum_button_activation_size;
     style.text_align = options.text_align;
     return style;
+}
+
+inline ButtonStyleOptions glass_prominent_button_style(
+        GlassControlStyleOptions options = {}) {
+    options.kind = options.kind == MaterialKind::None
+        ? MaterialKind::None
+        : MaterialKind::Regular;
+    options.role = MaterialSurfaceRole::Control;
+    options.prominent = true;
+    return glass_control_button_style(options);
 }
 
 inline ButtonStyleOptions glass_split_button_style(
@@ -5663,6 +5695,7 @@ inline void collect_semantic_nodes(NodeHandle node_h,
             .shadow_alpha = node.material.shadow_alpha,
             .shadow_radius = node.material.shadow_radius,
             .container = node.material.container,
+            .prominence = node.material.prominence,
             .fallback = node.material.fallback,
             .fallback_reason = node.material.fallback_reason,
             .contrast_intent = node.material.contrast_intent,
