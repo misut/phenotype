@@ -13,7 +13,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 44;
+inline constexpr std::uint32_t material_plan_contract_version = 45;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -437,6 +437,7 @@ struct MaterialStageOptics {
     float refraction_strength = 0.0f;
     float refraction_edge_bias = 0.0f;
     float refraction_offset_pixels = 0.0f;
+    float refraction_edge_caustic_intensity = 0.0f;
 };
 
 struct MaterialExecutionStage {
@@ -549,6 +550,7 @@ struct MaterialRefractionProfile {
     float strength = 0.0f;
     float edge_bias = 0.0f;
     float max_offset_pixels = 0.0f;
+    float edge_caustic_intensity = 0.0f;
 };
 
 struct MaterialInteractionResponse {
@@ -647,6 +649,7 @@ struct MaterialOpticalComposition {
     float refraction_strength = 0.0f;
     float refraction_edge_bias = 0.0f;
     float refraction_offset_pixels = 0.0f;
+    float refraction_edge_caustic_intensity = 0.0f;
     float interaction_response_strength = 0.0f;
     unsigned int sample_taps = 0;
     std::int64_t max_texture_copy_pixels = 0;
@@ -839,6 +842,8 @@ inline MaterialStageOptics material_primary_stage_optics(
     optics.refraction_strength = plan.refraction.strength;
     optics.refraction_edge_bias = plan.refraction.edge_bias;
     optics.refraction_offset_pixels = plan.refraction.max_offset_pixels;
+    optics.refraction_edge_caustic_intensity =
+        plan.refraction.edge_caustic_intensity;
     return optics;
 }
 
@@ -3702,6 +3707,27 @@ inline MaterialRefractionProfile material_resolve_refraction_profile(
         motion_scale * (blur_offset + edge_offset) * profile.strength,
         0.0f,
         3.50f);
+    auto const backdrop_response =
+        plan.backdrop_sampling
+            ? std::clamp(plan.backdrop.response_strength, 0.0f, 1.0f)
+            : 0.0f;
+    auto const interaction_light =
+        plan.interaction.active
+            ? 0.10f * std::clamp(
+                plan.interaction.response_strength,
+                0.0f,
+                1.0f)
+            : 0.0f;
+    auto const caustic_shape =
+        0.18f
+        + 0.22f * std::clamp(plan.edge_highlight, 0.0f, 1.0f)
+        + 0.14f * std::clamp(plan.shape.normalized_radius, 0.0f, 1.0f)
+        + 0.08f * backdrop_response
+        + interaction_light;
+    profile.edge_caustic_intensity = std::clamp(
+        motion_scale * profile.strength * caustic_shape,
+        0.0f,
+        0.20f);
     return profile;
 }
 
@@ -4161,6 +4187,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.refraction_strength = plan.refraction.strength;
     composition.refraction_edge_bias = plan.refraction.edge_bias;
     composition.refraction_offset_pixels = plan.refraction.max_offset_pixels;
+    composition.refraction_edge_caustic_intensity =
+        plan.refraction.edge_caustic_intensity;
     composition.interaction_response_strength =
         plan.interaction.response_strength;
     composition.sample_taps = plan.sample_taps;

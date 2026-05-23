@@ -61,7 +61,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 44);
+    assert(material_plan_contract_version == 45);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -128,6 +128,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.refraction.strength > 0.0f);
     assert(plan.refraction.edge_bias > 0.0f);
     assert(plan.refraction.max_offset_pixels > 0.0f);
+    assert(plan.refraction.edge_caustic_intensity > 0.0f);
     assert(plan.resource_budget.max_refraction_offset_pixels
            == plan.refraction.max_offset_pixels);
     assert(plan.observation_contract.shared_frame_capture_required);
@@ -201,6 +202,8 @@ void test_sampled_backdrop_access_contract() {
            == plan.refraction.edge_bias);
     assert(plan.optical_composition.refraction_offset_pixels
            == plan.refraction.max_offset_pixels);
+    assert(plan.optical_composition.refraction_edge_caustic_intensity
+           == plan.refraction.edge_caustic_intensity);
     assert(plan.optical_response.backdrop_driven);
     assert(plan.optical_response.blur_active);
     assert(plan.optical_response.frosting_active);
@@ -408,6 +411,7 @@ void test_content_layer_stays_standard_material_contract() {
     assert(plan.refraction.bounded);
     assert(std::string_view(plan.refraction.model) == "none");
     assert(std::string_view(plan.refraction.source) == "none");
+    assert(plan.refraction.edge_caustic_intensity == 0.0f);
     assert(plan.resource_budget.max_refraction_offset_pixels == 0.0f);
     assert(!plan.optical_response.backdrop_driven);
     assert(!plan.optical_response.blur_active);
@@ -539,6 +543,7 @@ void test_fallback_backdrop_access_contract() {
     assert(plan.refraction.bounded);
     assert(std::string_view(plan.refraction.model) == "none");
     assert(std::string_view(plan.refraction.source) == "none");
+    assert(plan.refraction.edge_caustic_intensity == 0.0f);
     assert(plan.resource_budget.max_refraction_offset_pixels == 0.0f);
     assert(plan.optical_response.deterministic_fallback);
     assert(!material_plan_uses_sampled_backdrop_executor(plan));
@@ -727,6 +732,8 @@ void test_interactive_material_modulates_optics_contract() {
     assert(plan.refraction.strength > baseline_plan.refraction.strength);
     assert(plan.refraction.max_offset_pixels
            > baseline_plan.refraction.max_offset_pixels);
+    assert(plan.refraction.edge_caustic_intensity
+           > baseline_plan.refraction.edge_caustic_intensity);
     assert(plan.interaction.opacity_delta
            == plan.opacity - baseline_plan.opacity);
     assert(plan.interaction.blur_radius_delta
@@ -764,6 +771,8 @@ void test_interactive_material_modulates_optics_contract() {
     assert(reduced_plan.refraction.strength < plan.refraction.strength);
     assert(reduced_plan.refraction.max_offset_pixels
            < plan.refraction.max_offset_pixels);
+    assert(reduced_plan.refraction.edge_caustic_intensity
+           < plan.refraction.edge_caustic_intensity);
     assert(!reduced_plan.container.morph_transitions);
     std::puts("PASS: interactive material modulates optics contract");
 }

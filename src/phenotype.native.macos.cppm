@@ -1629,7 +1629,7 @@ struct MaterialInstanceGPU {
     float luminance_curve[4]{};
     // specular anchor x/y, radius, intensity
     float interaction[4]{};
-    // refraction strength, edge bias, max offset pixels, reserved
+    // refraction strength, edge bias, max offset pixels, edge caustic intensity
     float refraction[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
@@ -2333,6 +2333,7 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.refraction[0] = plan.refraction.strength;
     inst.refraction[1] = plan.refraction.edge_bias;
     inst.refraction[2] = plan.refraction.max_offset_pixels;
+    inst.refraction[3] = plan.refraction.edge_caustic_intensity;
     inst.group_rect[0] = plan.geometry.x;
     inst.group_rect[1] = plan.geometry.y;
     inst.group_rect[2] = plan.geometry.w;
@@ -4338,6 +4339,7 @@ fragment float4 fs_material(
     float refraction_edge_bias = clamp(in.refraction.y, 0.0, 1.0);
     float refraction_offset_pixels = clamp(in.refraction.z, 0.0, 8.0)
         * (refraction_strength > 0.0 ? 1.0 : 0.0);
+    float refraction_edge_caustic = clamp(in.refraction.w, 0.0, 0.35);
     float normalized_len = length(normalized_local);
     float2 refraction_dir = normalized_len > 0.0001
         ? normalized_local / normalized_len
@@ -4349,6 +4351,15 @@ fragment float4 fs_material(
         refraction_dir * texel
         * (refraction_offset_pixels * content_scale)
         * edge_lens;
+    float caustic_weight = clamp(
+        edge_lens * refraction_edge_caustic,
+        0.0,
+        0.24);
+    float fringe_weight = clamp(
+        caustic_weight * (0.45 + 0.55 * refraction_edge_bias),
+        0.0,
+        0.14);
+    float2 fringe_uv = refraction_uv * (0.55 + 0.65 * refraction_edge_bias);
     float4 acc = float4(0.0);
     float weight_sum = 0.0;
     for (int y = -2; y <= 2; ++y) {
@@ -4379,11 +4390,26 @@ fragment float4 fs_material(
         }
     }
     float4 blurred = acc / weight_sum;
-    float luma = dot(blurred.rgb, float3(0.2126, 0.7152, 0.0722));
+    float3 refracted_rgb = blurred.rgb;
+    if (fringe_weight > 0.0001) {
+        float2 warm_uv = clamp(
+            in.screen_uv + refraction_uv + fringe_uv,
+            float2(0.0),
+            float2(1.0));
+        float2 cool_uv = clamp(
+            in.screen_uv + refraction_uv - fringe_uv,
+            float2(0.0),
+            float2(1.0));
+        float4 warm_sample = backdrop.sample(samp, warm_uv);
+        float4 cool_sample = backdrop.sample(samp, cool_uv);
+        refracted_rgb.r = mix(refracted_rgb.r, warm_sample.r, fringe_weight);
+        refracted_rgb.b = mix(refracted_rgb.b, cool_sample.b, fringe_weight);
+    }
+    float luma = dot(refracted_rgb, float3(0.2126, 0.7152, 0.0722));
     float saturation = max(in.optics.x, 0.0);
     float luminance_floor = clamp(in.optics.y, 0.0, 1.0);
     float luminance_gain = max(in.optics.z, 0.0);
-    float3 backdrop_rgb = mix(float3(luma), blurred.rgb, saturation);
+    float3 backdrop_rgb = mix(float3(luma), refracted_rgb, saturation);
     float gamma = clamp(in.luminance_curve.x, 0.25, 4.0);
     float midpoint = clamp(in.luminance_curve.y, 0.0, 1.0);
     float contrast = clamp(in.luminance_curve.z, 0.0, 4.0);
@@ -4399,6 +4425,21 @@ fragment float4 fs_material(
     float edge = 1.0 - smoothstep(0.0, edge_width, signed_edge_distance);
     float edge_lift = clamp(in.luminance_curve.w, 0.0, 1.0);
     rgb += float3(edge * edge_lift);
+    if (caustic_weight > 0.0001) {
+        float2 light_dir = normalize(float2(-0.58, -0.82));
+        float rim_alignment = clamp(
+            dot(refraction_dir, light_dir) * 0.5 + 0.5,
+            0.0,
+            1.0);
+        float rim_light = caustic_weight
+            * (0.55 + 0.45 * rim_alignment * rim_alignment)
+            * (0.60 + 0.40 * edge_lift);
+        float rim_shadow = caustic_weight
+            * (1.0 - rim_alignment)
+            * clamp(in.effects.y + 0.16, 0.0, 0.42);
+        rgb += float3(rim_light);
+        rgb *= (1.0 - rim_shadow);
+    }
     float specular_intensity = clamp(in.interaction.w, 0.0, 1.0);
     if (specular_intensity > 0.0) {
         float2 anchor = clamp(in.interaction.xy, float2(0.0), float2(1.0))

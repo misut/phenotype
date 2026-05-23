@@ -1289,6 +1289,8 @@ void test_material_runtime_record_json_contract() {
     assert(refraction.at("bounded").as_bool() == true);
     assert(std::fabs(refraction.at("strength").as_float()) < 0.0001f);
     assert(std::fabs(refraction.at("max_offset_pixels").as_float()) < 0.0001f);
+    assert(std::fabs(refraction.at("edge_caustic_intensity").as_float())
+           < 0.0001f);
     auto const& optical_response = obj.at("optical_response").as_object();
     assert(optical_response.at("response_model").as_string()
            == "deterministic-fallback");
@@ -1324,6 +1326,10 @@ void test_material_runtime_record_json_contract() {
            == "no-capture");
     assert(optical_composition.at("foreground_sampling_policy").as_string()
            == "not-applicable");
+    assert(std::fabs(
+        optical_composition
+            .at("refraction_edge_caustic_intensity")
+            .as_float()) < 0.0001f);
     assert(optical_composition.at("backdrop_capture_required").as_bool()
            == false);
     assert(optical_composition.at("foreground_excluded_from_backdrop").as_bool()
@@ -1471,6 +1477,10 @@ void test_material_runtime_record_json_contract() {
            == obj.at("blur_radius").as_float());
     assert(primary_optics.at("saturation").as_float()
            == obj.at("saturation").as_float());
+    assert(std::fabs(
+        primary_optics
+            .at("refraction_edge_caustic_intensity")
+            .as_float()) < 0.0001f);
     auto const& edge_stage = stages[2].as_object();
     auto const& edge_optics = edge_stage.at("optics").as_object();
     assert(edge_optics.at("channel").as_string() == "edge-highlight");
