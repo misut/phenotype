@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 71;
+inline constexpr std::uint32_t material_plan_contract_version = 72;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1678,6 +1678,29 @@ struct MaterialContainerExecutionDescriptor {
     float glass_effect_match_rect_w = 0.0f;
     float glass_effect_match_rect_h = 0.0f;
     float glass_effect_match_rect_radius = 0.0f;
+    bool glass_effect_match_appearance_active = false;
+    std::uint32_t glass_effect_match_appearance_source_command_index = 0;
+    float glass_effect_match_appearance_blend = 1.0f;
+    bool glass_effect_match_appearance_tint_active = false;
+    float glass_effect_match_appearance_tint_r = 0.0f;
+    float glass_effect_match_appearance_tint_g = 0.0f;
+    float glass_effect_match_appearance_tint_b = 0.0f;
+    float glass_effect_match_appearance_tint_a = 0.0f;
+    bool glass_effect_match_appearance_spectral_tint_active = false;
+    float glass_effect_match_appearance_spectral_tint_warmth = 0.0f;
+    float glass_effect_match_appearance_spectral_tint_coolness = 0.0f;
+    float glass_effect_match_appearance_spectral_tint_dispersion = 0.0f;
+    float glass_effect_match_appearance_spectral_tint_rim = 0.0f;
+    bool glass_effect_match_appearance_prominent_glass_active = false;
+    float glass_effect_match_appearance_prominent_glass_intensity = 0.0f;
+    float glass_effect_match_appearance_prominent_glass_tint_weight = 0.0f;
+    float glass_effect_match_appearance_prominent_glass_edge_lift = 0.0f;
+    float glass_effect_match_appearance_prominent_glass_lensing_gain = 1.0f;
+    bool glass_effect_match_appearance_clear_glass_active = false;
+    float glass_effect_match_appearance_clear_glass_dimming = 0.0f;
+    float glass_effect_match_appearance_clear_glass_contrast = 0.0f;
+    float glass_effect_match_appearance_clear_glass_brightness_response = 0.0f;
+    float glass_effect_match_appearance_clear_glass_detail_response = 0.0f;
     bool group_interaction_source_valid = false;
     std::uint32_t group_interaction_source_command_index = 0;
     float group_interaction_specular_anchor_x = 0.5f;
@@ -3611,6 +3634,72 @@ inline MaterialGeometry material_glass_effect_match_rect(
     };
 }
 
+inline float material_glass_effect_match_appearance_blend(
+        MaterialTransitionAnalysis const& transition) noexcept {
+    auto const progress = transition.appearing
+        ? transition.progress
+        : 1.0f - transition.progress;
+    return material_glass_effect_match_progress_gain(progress);
+}
+
+inline void material_apply_glass_effect_match_appearance_source(
+        MaterialContainerExecutionDescriptor& execution,
+        MaterialRuntimeRecord const& target,
+        MaterialRuntimeRecord const& source) noexcept {
+    auto const& source_plan = source.plan;
+    auto const& target_plan = target.plan;
+    execution.glass_effect_match_appearance_active = true;
+    execution.glass_effect_match_appearance_source_command_index =
+        source.command_index;
+    execution.glass_effect_match_appearance_blend =
+        material_glass_effect_match_appearance_blend(target_plan.transition);
+
+    execution.glass_effect_match_appearance_tint_active =
+        source_plan.tint != target_plan.tint;
+    execution.glass_effect_match_appearance_tint_r =
+        static_cast<float>(source_plan.tint.r) / 255.0f;
+    execution.glass_effect_match_appearance_tint_g =
+        static_cast<float>(source_plan.tint.g) / 255.0f;
+    execution.glass_effect_match_appearance_tint_b =
+        static_cast<float>(source_plan.tint.b) / 255.0f;
+    execution.glass_effect_match_appearance_tint_a =
+        static_cast<float>(source_plan.tint.a) / 255.0f;
+
+    execution.glass_effect_match_appearance_spectral_tint_active =
+        source_plan.spectral_tint.active || target_plan.spectral_tint.active;
+    execution.glass_effect_match_appearance_spectral_tint_warmth =
+        source_plan.spectral_tint.warmth;
+    execution.glass_effect_match_appearance_spectral_tint_coolness =
+        source_plan.spectral_tint.coolness;
+    execution.glass_effect_match_appearance_spectral_tint_dispersion =
+        source_plan.spectral_tint.dispersion;
+    execution.glass_effect_match_appearance_spectral_tint_rim =
+        source_plan.spectral_tint.rim_tint;
+
+    execution.glass_effect_match_appearance_prominent_glass_active =
+        source_plan.prominent_glass.active || target_plan.prominent_glass.active;
+    execution.glass_effect_match_appearance_prominent_glass_intensity =
+        source_plan.prominent_glass.intensity;
+    execution.glass_effect_match_appearance_prominent_glass_tint_weight =
+        source_plan.prominent_glass.tint_weight;
+    execution.glass_effect_match_appearance_prominent_glass_edge_lift =
+        source_plan.prominent_glass.edge_lift;
+    execution.glass_effect_match_appearance_prominent_glass_lensing_gain =
+        source_plan.prominent_glass.lensing_gain;
+
+    execution.glass_effect_match_appearance_clear_glass_active =
+        source_plan.clear_glass_legibility.active
+        || target_plan.clear_glass_legibility.active;
+    execution.glass_effect_match_appearance_clear_glass_dimming =
+        source_plan.clear_glass_legibility.dimming_strength;
+    execution.glass_effect_match_appearance_clear_glass_contrast =
+        source_plan.clear_glass_legibility.contrast_lift;
+    execution.glass_effect_match_appearance_clear_glass_brightness_response =
+        source_plan.clear_glass_legibility.brightness_response;
+    execution.glass_effect_match_appearance_clear_glass_detail_response =
+        source_plan.clear_glass_legibility.detail_response;
+}
+
 inline MaterialGlassEffectMotionOptics material_glass_effect_match_motion_optics(
         MaterialContainerExecutionDescriptor const& execution) noexcept {
     MaterialGlassEffectMotionOptics optics{};
@@ -3834,12 +3923,6 @@ inline bool material_container_group_interaction_candidate(
                 plan,
                 shape_blend_cluster);
     }
-    if (execution.glass_effect_match_execution) {
-        return material_plan_in_glass_effect_match_group(
-            plan,
-            record.plan,
-            execution.container_id);
-    }
     return false;
 }
 
@@ -3872,8 +3955,7 @@ inline void material_apply_container_group_interaction_source(
         || !execution.surface_leader
         || !execution.group_bounds_valid
         || (!execution.union_execution
-            && !execution.group_surface_execution
-            && !execution.glass_effect_match_execution)) {
+            && !execution.group_surface_execution)) {
         return;
     }
 
@@ -4028,12 +4110,6 @@ inline bool material_container_group_appearance_candidate(
                 plan,
                 shape_blend_cluster);
     }
-    if (execution.glass_effect_match_execution) {
-        return material_plan_in_glass_effect_match_group(
-            plan,
-            record.plan,
-            execution.container_id);
-    }
     return false;
 }
 
@@ -4088,8 +4164,7 @@ inline void material_apply_container_group_appearance_source(
         || !execution.surface_leader
         || !execution.group_bounds_valid
         || (!execution.union_execution
-            && !execution.group_surface_execution
-            && !execution.glass_effect_match_execution)) {
+            && !execution.group_surface_execution)) {
         return;
     }
 
@@ -4361,6 +4436,10 @@ material_container_execution_descriptor_from_group(
             descriptor.glass_effect_match_rect_w = match_rect.w;
             descriptor.glass_effect_match_rect_h = match_rect.h;
             descriptor.glass_effect_match_rect_radius = match_rect.radius;
+            material_apply_glass_effect_match_appearance_source(
+                descriptor,
+                record,
+                *source);
         }
     }
     if (descriptor.glass_effect_match_execution && glass_group.has_bounds) {
