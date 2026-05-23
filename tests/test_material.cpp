@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 70);
+    assert(material_plan_contract_version == 71);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -3054,6 +3054,12 @@ void test_container_group_surface_aggregates_member_interaction() {
 
     auto peer = request;
     peer.geometry.x = 50.0f;
+    peer.style.role = MaterialSurfaceRole::Control;
+    peer.style.tint = Color{64, 156, 255, 178};
+    peer.style.prominence = MaterialProminenceDescriptor{
+        .enabled = true,
+        .intensity = 1.0f,
+    };
     peer.style.interaction = MaterialInteractionDescriptor{
         .hovered = true,
         .pressed = false,
@@ -3075,6 +3081,8 @@ void test_container_group_surface_aggregates_member_interaction() {
     assert(records[1].plan.dynamic_lighting.interaction_driven);
     assert(records[1].plan.glass_thickness.interaction_driven);
     assert(records[1].plan.glass_dispersion.interaction_driven);
+    assert(records[1].plan.spectral_tint.tint_driven);
+    assert(records[1].plan.prominent_glass.active);
 
     auto const first_execution =
         material_container_execution_descriptor(records[0], records);
@@ -3087,6 +3095,43 @@ void test_container_group_surface_aggregates_member_interaction() {
     assert(first_execution.group_interaction_source_valid);
     assert(first_execution.group_interaction_source_command_index == 2u);
     assert(first_execution.group_interaction_pointer_lens_active);
+    assert(first_execution.group_appearance_source_valid);
+    assert(first_execution.group_appearance_source_command_index == 2u);
+    assert(first_execution.group_appearance_tint_active);
+    assert(std::fabs(
+               first_execution.group_appearance_tint_r
+                   - static_cast<float>(peer.style.tint.r) / 255.0f)
+           < 0.0001f);
+    assert(std::fabs(
+               first_execution.group_appearance_tint_g
+                   - static_cast<float>(peer.style.tint.g) / 255.0f)
+           < 0.0001f);
+    assert(std::fabs(
+               first_execution.group_appearance_tint_b
+                   - static_cast<float>(peer.style.tint.b) / 255.0f)
+           < 0.0001f);
+    assert(std::fabs(
+               first_execution.group_appearance_tint_a
+                   - static_cast<float>(peer.style.tint.a) / 255.0f)
+           < 0.0001f);
+    assert(first_execution.group_appearance_spectral_tint_active);
+    assert(first_execution.group_appearance_spectral_tint_warmth
+           == records[1].plan.spectral_tint.warmth);
+    assert(first_execution.group_appearance_spectral_tint_coolness
+           == records[1].plan.spectral_tint.coolness);
+    assert(first_execution.group_appearance_spectral_tint_dispersion
+           == records[1].plan.spectral_tint.dispersion);
+    assert(first_execution.group_appearance_spectral_tint_rim
+           == records[1].plan.spectral_tint.rim_tint);
+    assert(first_execution.group_appearance_prominent_glass_active);
+    assert(first_execution.group_appearance_prominent_glass_intensity
+           == records[1].plan.prominent_glass.intensity);
+    assert(first_execution.group_appearance_prominent_glass_tint_weight
+           == records[1].plan.prominent_glass.tint_weight);
+    assert(first_execution.group_appearance_prominent_glass_edge_lift
+           == records[1].plan.prominent_glass.edge_lift);
+    assert(first_execution.group_appearance_prominent_glass_lensing_gain
+           == records[1].plan.prominent_glass.lensing_gain);
 
     auto const leader_geometry =
         material_surface_execution_geometry(records[0].plan, &first_execution);
@@ -3184,6 +3229,59 @@ void test_container_group_surface_aggregates_member_interaction() {
            == records[1].plan.glass_dispersion.caustic_spread);
 
     std::puts("PASS: container group surface aggregates member interaction");
+}
+
+void test_container_group_surface_aggregates_clear_member_appearance() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 16.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 908u,
+        .union_id = 0u,
+        .spacing = 20.0f,
+        .interactive = true,
+        .morph_transitions = true,
+    };
+
+    auto peer = clear_request();
+    peer.geometry = request.geometry;
+    peer.geometry.x = 50.0f;
+    peer.style.container = request.style.container;
+
+    auto env = sampled_environment();
+    env.backdrop.luma_min = 0.70f;
+    env.backdrop.luma_max = 0.98f;
+    env.backdrop.luma_mean = 0.90f;
+    env.backdrop.color_mean = Color{236, 244, 255, 255};
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, env), 1u},
+        {plan_material_surface(peer, env), 2u},
+    };
+    assert(!records[0].plan.clear_glass_legibility.active);
+    assert(records[1].plan.clear_glass_legibility.active);
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const peer_execution =
+        material_container_execution_descriptor(records[1], records);
+    assert(first_execution.group_surface_execution);
+    assert(peer_execution.group_surface_execution);
+    assert(first_execution.surface_leader);
+    assert(!peer_execution.surface_leader);
+    assert(first_execution.group_appearance_source_valid);
+    assert(first_execution.group_appearance_source_command_index == 2u);
+    assert(first_execution.group_appearance_clear_glass_active);
+    assert(first_execution.group_appearance_clear_glass_dimming
+           == records[1].plan.clear_glass_legibility.dimming_strength);
+    assert(first_execution.group_appearance_clear_glass_contrast
+           == records[1].plan.clear_glass_legibility.contrast_lift);
+    assert(first_execution.group_appearance_clear_glass_brightness_response
+           == records[1].plan.clear_glass_legibility.brightness_response);
+    assert(first_execution.group_appearance_clear_glass_detail_response
+           == records[1].plan.clear_glass_legibility.detail_response);
+
+    std::puts(
+        "PASS: container group surface aggregates clear member appearance");
 }
 
 void test_container_member_fallback_paint_uses_proximity_cluster() {
@@ -3415,6 +3513,12 @@ void test_glass_effect_union_aggregates_member_interaction() {
 
     auto peer = request;
     peer.geometry.x = 50.0f;
+    peer.style.role = MaterialSurfaceRole::Control;
+    peer.style.tint = Color{64, 156, 255, 178};
+    peer.style.prominence = MaterialProminenceDescriptor{
+        .enabled = true,
+        .intensity = 1.0f,
+    };
     peer.style.interaction = MaterialInteractionDescriptor{
         .hovered = true,
         .pressed = false,
@@ -3435,6 +3539,8 @@ void test_glass_effect_union_aggregates_member_interaction() {
     assert(records[1].plan.dynamic_lighting.interaction_driven);
     assert(records[1].plan.glass_thickness.interaction_driven);
     assert(records[1].plan.glass_dispersion.interaction_driven);
+    assert(records[1].plan.spectral_tint.tint_driven);
+    assert(records[1].plan.prominent_glass.active);
 
     auto const first_execution =
         material_container_execution_descriptor(records[0], records);
@@ -3447,6 +3553,30 @@ void test_glass_effect_union_aggregates_member_interaction() {
     assert(first_execution.group_interaction_source_valid);
     assert(first_execution.group_interaction_source_command_index == 2u);
     assert(first_execution.group_interaction_pointer_lens_active);
+    assert(first_execution.group_appearance_source_valid);
+    assert(first_execution.group_appearance_source_command_index == 2u);
+    assert(first_execution.group_appearance_tint_active);
+    assert(std::fabs(
+               first_execution.group_appearance_tint_r
+                   - static_cast<float>(peer.style.tint.r) / 255.0f)
+           < 0.0001f);
+    assert(std::fabs(
+               first_execution.group_appearance_tint_g
+                   - static_cast<float>(peer.style.tint.g) / 255.0f)
+           < 0.0001f);
+    assert(std::fabs(
+               first_execution.group_appearance_tint_b
+                   - static_cast<float>(peer.style.tint.b) / 255.0f)
+           < 0.0001f);
+    assert(std::fabs(
+               first_execution.group_appearance_tint_a
+                   - static_cast<float>(peer.style.tint.a) / 255.0f)
+           < 0.0001f);
+    assert(first_execution.group_appearance_prominent_glass_active);
+    assert(first_execution.group_appearance_prominent_glass_intensity
+           == records[1].plan.prominent_glass.intensity);
+    assert(first_execution.group_appearance_prominent_glass_tint_weight
+           == records[1].plan.prominent_glass.tint_weight);
 
     auto const leader_geometry =
         material_surface_execution_geometry(records[0].plan, &first_execution);
@@ -3836,6 +3966,7 @@ int main() {
     test_container_member_shape_blend_uses_spacing_falloff();
     test_container_group_surface_preserves_radius_continuity();
     test_container_group_surface_aggregates_member_interaction();
+    test_container_group_surface_aggregates_clear_member_appearance();
     test_container_member_fallback_paint_uses_proximity_cluster();
     test_glass_effect_union_uses_compatible_render_bounds();
     test_glass_effect_union_aggregates_member_interaction();

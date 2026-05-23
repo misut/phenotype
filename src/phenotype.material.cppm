@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 70;
+inline constexpr std::uint32_t material_plan_contract_version = 71;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1714,6 +1714,28 @@ struct MaterialContainerExecutionDescriptor {
     float group_interaction_glass_dispersion_tangential_offset = 0.0f;
     float group_interaction_glass_dispersion_prismatic_gain = 1.0f;
     float group_interaction_glass_dispersion_caustic_spread = 0.0f;
+    bool group_appearance_source_valid = false;
+    std::uint32_t group_appearance_source_command_index = 0;
+    bool group_appearance_tint_active = false;
+    float group_appearance_tint_r = 0.0f;
+    float group_appearance_tint_g = 0.0f;
+    float group_appearance_tint_b = 0.0f;
+    float group_appearance_tint_a = 0.0f;
+    bool group_appearance_spectral_tint_active = false;
+    float group_appearance_spectral_tint_warmth = 0.0f;
+    float group_appearance_spectral_tint_coolness = 0.0f;
+    float group_appearance_spectral_tint_dispersion = 0.0f;
+    float group_appearance_spectral_tint_rim = 0.0f;
+    bool group_appearance_prominent_glass_active = false;
+    float group_appearance_prominent_glass_intensity = 0.0f;
+    float group_appearance_prominent_glass_tint_weight = 0.0f;
+    float group_appearance_prominent_glass_edge_lift = 0.0f;
+    float group_appearance_prominent_glass_lensing_gain = 1.0f;
+    bool group_appearance_clear_glass_active = false;
+    float group_appearance_clear_glass_dimming = 0.0f;
+    float group_appearance_clear_glass_contrast = 0.0f;
+    float group_appearance_clear_glass_brightness_response = 0.0f;
+    float group_appearance_clear_glass_detail_response = 0.0f;
 };
 
 struct MaterialPaintLayerExecutionGeometry {
@@ -3983,6 +4005,193 @@ inline void material_apply_container_group_interaction_source(
     }
 }
 
+inline bool material_container_group_appearance_candidate(
+        MaterialRuntimeRecord const& record,
+        MaterialRuntimeRecord const& candidate,
+        MaterialContainerExecutionDescriptor const& execution,
+        MaterialContainerGroupAccumulator const& shape_blend_cluster)
+        noexcept {
+    auto const& plan = candidate.plan;
+    if (!plan.primary_pass.active
+        || !plan.shape.valid
+        || !material_plan_in_container(plan, execution.container_id)) {
+        return false;
+    }
+    if (execution.union_execution) {
+        return material_plan_in_glass_effect_union_group(
+            plan,
+            record.plan);
+    }
+    if (execution.group_surface_execution) {
+        return material_plan_uses_group_surface_merge_executor(plan)
+            && material_container_plan_inside_cluster_bounds(
+                plan,
+                shape_blend_cluster);
+    }
+    if (execution.glass_effect_match_execution) {
+        return material_plan_in_glass_effect_match_group(
+            plan,
+            record.plan,
+            execution.container_id);
+    }
+    return false;
+}
+
+inline float material_container_appearance_tint_score(
+        MaterialPlan const& plan) noexcept {
+    auto const red = static_cast<float>(plan.tint.r) / 255.0f;
+    auto const green = static_cast<float>(plan.tint.g) / 255.0f;
+    auto const blue = static_cast<float>(plan.tint.b) / 255.0f;
+    auto const chroma = std::max(
+        std::max(std::fabs(red - green), std::fabs(green - blue)),
+        std::fabs(blue - red));
+    auto const alpha = material_alpha_fraction(plan.tint);
+    return alpha * (0.20f + chroma)
+        + (plan.theme.tint_matches_surface ? 0.0f : 1.0f);
+}
+
+inline float material_container_group_appearance_score(
+        MaterialPlan const& plan) noexcept {
+    auto score = material_container_appearance_tint_score(plan);
+    if (plan.spectral_tint.active) {
+        score += std::max(
+            plan.spectral_tint.warmth,
+            plan.spectral_tint.coolness)
+            + plan.spectral_tint.dispersion
+            + 0.75f * plan.spectral_tint.rim_tint
+            + (plan.spectral_tint.tint_driven ? 0.50f : 0.0f);
+    }
+    if (plan.prominent_glass.active) {
+        score += 1.25f
+            + 1.50f * std::clamp(plan.prominent_glass.intensity, 0.0f, 1.0f)
+            + plan.prominent_glass.tint_weight
+            + plan.prominent_glass.edge_lift
+            + std::max(0.0f, plan.prominent_glass.lensing_gain - 1.0f);
+    }
+    if (plan.clear_glass_legibility.active) {
+        score += 0.75f
+            + plan.clear_glass_legibility.dimming_strength
+            + plan.clear_glass_legibility.contrast_lift
+            + 0.25f * plan.clear_glass_legibility.brightness_response
+            + 0.25f * plan.clear_glass_legibility.detail_response;
+    }
+    return score;
+}
+
+inline void material_apply_container_group_appearance_source(
+        MaterialContainerExecutionDescriptor& execution,
+        MaterialRuntimeRecord const& record,
+        std::span<MaterialRuntimeRecord const> records,
+        MaterialContainerGroupAccumulator const& shape_blend_cluster)
+        noexcept {
+    if (!execution.shape_blend_execution
+        || !execution.surface_leader
+        || !execution.group_bounds_valid
+        || (!execution.union_execution
+            && !execution.group_surface_execution
+            && !execution.glass_effect_match_execution)) {
+        return;
+    }
+
+    auto const geometry =
+        material_surface_execution_geometry(record.plan, &execution);
+    if (!geometry.active)
+        return;
+
+    MaterialRuntimeRecord const* source = nullptr;
+    auto best_score = 0.0f;
+    auto best_tint_score = 0.0f;
+    for (auto const& candidate : records) {
+        if (candidate.command_index == record.command_index
+            || !material_container_group_appearance_candidate(
+                record,
+                candidate,
+                execution,
+                shape_blend_cluster)) {
+            continue;
+        }
+        auto const& plan = candidate.plan;
+        auto const score = material_container_group_appearance_score(plan);
+        auto const better_source =
+            score > 0.0001f
+            && (source == nullptr
+                || score > best_score + 0.0001f
+                || (std::fabs(score - best_score) <= 0.0001f
+                    && candidate.command_index < source->command_index));
+        if (better_source) {
+            source = &candidate;
+            best_score = score;
+        }
+
+        auto const tint_score =
+            material_container_appearance_tint_score(plan);
+        if (tint_score > best_tint_score + 0.0001f) {
+            best_tint_score = tint_score;
+            execution.group_appearance_tint_active = true;
+            execution.group_appearance_tint_r =
+                static_cast<float>(plan.tint.r) / 255.0f;
+            execution.group_appearance_tint_g =
+                static_cast<float>(plan.tint.g) / 255.0f;
+            execution.group_appearance_tint_b =
+                static_cast<float>(plan.tint.b) / 255.0f;
+            execution.group_appearance_tint_a =
+                static_cast<float>(plan.tint.a) / 255.0f;
+        }
+        if (plan.spectral_tint.active) {
+            execution.group_appearance_spectral_tint_active = true;
+            execution.group_appearance_spectral_tint_warmth = std::max(
+                execution.group_appearance_spectral_tint_warmth,
+                plan.spectral_tint.warmth);
+            execution.group_appearance_spectral_tint_coolness = std::max(
+                execution.group_appearance_spectral_tint_coolness,
+                plan.spectral_tint.coolness);
+            execution.group_appearance_spectral_tint_dispersion = std::max(
+                execution.group_appearance_spectral_tint_dispersion,
+                plan.spectral_tint.dispersion);
+            execution.group_appearance_spectral_tint_rim = std::max(
+                execution.group_appearance_spectral_tint_rim,
+                plan.spectral_tint.rim_tint);
+        }
+        if (plan.prominent_glass.active) {
+            execution.group_appearance_prominent_glass_active = true;
+            execution.group_appearance_prominent_glass_intensity = std::max(
+                execution.group_appearance_prominent_glass_intensity,
+                plan.prominent_glass.intensity);
+            execution.group_appearance_prominent_glass_tint_weight = std::max(
+                execution.group_appearance_prominent_glass_tint_weight,
+                plan.prominent_glass.tint_weight);
+            execution.group_appearance_prominent_glass_edge_lift = std::max(
+                execution.group_appearance_prominent_glass_edge_lift,
+                plan.prominent_glass.edge_lift);
+            execution.group_appearance_prominent_glass_lensing_gain =
+                std::max(
+                    execution.group_appearance_prominent_glass_lensing_gain,
+                    plan.prominent_glass.lensing_gain);
+        }
+        if (plan.clear_glass_legibility.active) {
+            execution.group_appearance_clear_glass_active = true;
+            execution.group_appearance_clear_glass_dimming = std::max(
+                execution.group_appearance_clear_glass_dimming,
+                plan.clear_glass_legibility.dimming_strength);
+            execution.group_appearance_clear_glass_contrast = std::max(
+                execution.group_appearance_clear_glass_contrast,
+                plan.clear_glass_legibility.contrast_lift);
+            execution.group_appearance_clear_glass_brightness_response =
+                std::max(
+                    execution.group_appearance_clear_glass_brightness_response,
+                    plan.clear_glass_legibility.brightness_response);
+            execution.group_appearance_clear_glass_detail_response = std::max(
+                execution.group_appearance_clear_glass_detail_response,
+                plan.clear_glass_legibility.detail_response);
+        }
+    }
+    if (!source)
+        return;
+
+    execution.group_appearance_source_valid = true;
+    execution.group_appearance_source_command_index = source->command_index;
+}
+
 inline MaterialContainerExecutionDescriptor
 material_container_execution_descriptor_from_group(
         MaterialRuntimeRecord const& record,
@@ -4171,6 +4380,11 @@ material_container_execution_descriptor_from_group(
         material_apply_container_group_execution_bounds(descriptor, group);
     }
     material_apply_container_group_interaction_source(
+        descriptor,
+        record,
+        records,
+        shape_blend_cluster);
+    material_apply_container_group_appearance_source(
         descriptor,
         record,
         records,

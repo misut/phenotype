@@ -2787,6 +2787,111 @@ inline void apply_material_container_execution_descriptors(
                         0.0f,
                         0.40f);
                 }
+                if (execution->group_appearance_tint_active) {
+                    inst.tint[0] = std::clamp(
+                        execution->group_appearance_tint_r,
+                        0.0f,
+                        1.0f);
+                    inst.tint[1] = std::clamp(
+                        execution->group_appearance_tint_g,
+                        0.0f,
+                        1.0f);
+                    inst.tint[2] = std::clamp(
+                        execution->group_appearance_tint_b,
+                        0.0f,
+                        1.0f);
+                    inst.tint[3] = std::clamp(
+                        execution->group_appearance_tint_a,
+                        0.0f,
+                        1.0f);
+                }
+                if (execution->group_appearance_spectral_tint_active) {
+                    inst.spectral_tint[0] = std::clamp(
+                        std::max(
+                            inst.spectral_tint[0],
+                            execution
+                                ->group_appearance_spectral_tint_warmth),
+                        0.0f,
+                        0.22f);
+                    inst.spectral_tint[1] = std::clamp(
+                        std::max(
+                            inst.spectral_tint[1],
+                            execution
+                                ->group_appearance_spectral_tint_coolness),
+                        0.0f,
+                        0.22f);
+                    inst.spectral_tint[2] = std::clamp(
+                        std::max(
+                            inst.spectral_tint[2],
+                            execution
+                                ->group_appearance_spectral_tint_dispersion),
+                        0.0f,
+                        0.22f);
+                    inst.spectral_tint[3] = std::clamp(
+                        std::max(
+                            inst.spectral_tint[3],
+                            execution->group_appearance_spectral_tint_rim),
+                        0.0f,
+                        0.28f);
+                }
+                if (execution->group_appearance_prominent_glass_active) {
+                    inst.prominent_glass[0] = std::clamp(
+                        std::max(
+                            inst.prominent_glass[0],
+                            execution
+                                ->group_appearance_prominent_glass_intensity),
+                        0.0f,
+                        1.0f);
+                    inst.prominent_glass[1] = std::clamp(
+                        std::max(
+                            inst.prominent_glass[1],
+                            execution
+                                ->group_appearance_prominent_glass_tint_weight),
+                        0.0f,
+                        0.64f);
+                    inst.prominent_glass[2] = std::clamp(
+                        std::max(
+                            inst.prominent_glass[2],
+                            execution
+                                ->group_appearance_prominent_glass_edge_lift),
+                        0.0f,
+                        0.20f);
+                    inst.prominent_glass[3] = std::clamp(
+                        std::max(
+                            inst.prominent_glass[3],
+                            execution
+                                ->group_appearance_prominent_glass_lensing_gain),
+                        1.0f,
+                        1.24f);
+                }
+                if (execution->group_appearance_clear_glass_active) {
+                    inst.clear_glass[0] = std::clamp(
+                        std::max(
+                            inst.clear_glass[0],
+                            execution->group_appearance_clear_glass_dimming),
+                        0.0f,
+                        0.34f);
+                    inst.clear_glass[1] = std::clamp(
+                        std::max(
+                            inst.clear_glass[1],
+                            execution->group_appearance_clear_glass_contrast),
+                        0.0f,
+                        0.28f);
+                    inst.clear_glass[2] = std::clamp(
+                        std::max(
+                            inst.clear_glass[2],
+                            execution
+                                ->group_appearance_clear_glass_brightness_response),
+                        0.0f,
+                        1.0f);
+                    inst.clear_glass[3] = std::clamp(
+                        std::max(
+                            inst.clear_glass[3],
+                            execution
+                                ->group_appearance_clear_glass_detail_response),
+                        0.0f,
+                        1.0f);
+                }
                 if (container_motion.active) {
                     inst.refraction[0] = std::clamp(
                         inst.refraction[0]
