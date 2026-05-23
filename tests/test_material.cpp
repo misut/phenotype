@@ -2099,6 +2099,67 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     std::puts("PASS: glass effect union uses compatible render bounds");
 }
 
+void test_glass_effect_union_sample_budget_uses_leader_bounds() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 20.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 915u,
+        .union_id = 1u,
+        .spacing = 24.0f,
+        .interactive = false,
+        .morph_transitions = false,
+    };
+
+    auto peer = request;
+    peer.geometry.x = 50.0f;
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(peer, sampled_environment()), 2u},
+    };
+    assert(records[0].plan.backdrop_access.max_surface_sample_pixels
+           == 40 * 40);
+    assert(records[1].plan.backdrop_access.max_surface_sample_pixels
+           == 40 * 40);
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const peer_execution =
+        material_container_execution_descriptor(records[1], records);
+    assert(first_execution.union_execution);
+    assert(peer_execution.union_execution);
+    assert(first_execution.surface_leader);
+    assert(!peer_execution.surface_leader);
+
+    auto const first_pixels =
+        material_estimate_surface_sample_pixels(
+            records[0].plan,
+            &first_execution);
+    auto const peer_pixels =
+        material_estimate_surface_sample_pixels(
+            records[1].plan,
+            &peer_execution);
+    assert(first_pixels == 90 * 40);
+    assert(peer_pixels == 0);
+
+    MaterialRuntimeSummary runtime_summary{};
+    for (auto const& record : records)
+        accumulate_material_runtime_summary(runtime_summary, record);
+    assert(runtime_summary.total_surface_sample_pixels == 2 * 40 * 40);
+    finalize_material_runtime_summary(runtime_summary, records);
+    assert(runtime_summary.total_surface_sample_pixels == 90 * 40);
+    assert(runtime_summary.max_surface_sample_pixels == 90 * 40);
+
+    MaterialExecutorSummary executor_summary{};
+    for (auto const& record : records)
+        accumulate_material_executor_plan_summary(executor_summary, record.plan);
+    assert(executor_summary.planned_surface_sample_pixels == 2 * 40 * 40);
+    finalize_material_executor_summary(executor_summary, records);
+    assert(executor_summary.planned_surface_sample_pixels == 90 * 40);
+
+    std::puts("PASS: glass effect union sample budget uses leader bounds");
+}
+
 void test_glass_effect_union_fallback_paint_uses_group_leader() {
     auto request = regular_request();
     request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 20.0f};
@@ -2275,6 +2336,7 @@ int main() {
     test_container_group_runtime_summary_contract();
     test_container_member_shape_blend_uses_spacing_falloff();
     test_glass_effect_union_uses_compatible_render_bounds();
+    test_glass_effect_union_sample_budget_uses_leader_bounds();
     test_glass_effect_union_fallback_paint_uses_group_leader();
     test_glass_effect_matched_fallback_paint_uses_match_rect();
     std::puts("\nAll material tests passed.");
