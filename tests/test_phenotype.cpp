@@ -6000,6 +6000,30 @@ void test_glass_button_accepts_configurable_glass_style() {
     assert(style.max_width == 116.0f);
     assert(style.fixed_height == 34.0f);
 
+    auto const effect_identity =
+        layout::glass_effect_identity("button", "primary");
+    auto effect_glass = layout::glass_regular()
+        .tint(tint)
+        .border(border)
+        .effect_id(effect_identity)
+        .matched_geometry(0.55f, false)
+        .effect_union("button.toolbar", "primary-actions", 10.0f);
+    auto effect_style = widget::glass_button_style(effect_glass, options);
+    assert(effect_style.material.glass_identity == effect_identity);
+    assert(effect_style.material.transition.kind
+           == MaterialGlassTransitionKind::MatchedGeometry);
+    assert(std::fabs(effect_style.material.transition.progress - 0.55f)
+           < 0.0001f);
+    assert(!effect_style.material.transition.appearing);
+    assert(effect_style.material.container.container_id
+           == layout::glass_effect_stable_id("button.toolbar"));
+    assert(effect_style.material.container.union_id
+           == layout::glass_effect_stable_id("primary-actions"));
+    assert(std::fabs(effect_style.material.container.spacing - 10.0f)
+           < 0.0001f);
+    assert(effect_style.material.container.interactive);
+    assert(effect_style.material.container.morph_transitions);
+
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::msg_queue().clear();
@@ -6011,7 +6035,7 @@ void test_glass_button_accepts_configurable_glass_style() {
     widget::glass_button<button_test::ButtonMsg>(
         "Tinted",
         button_test::Click{},
-        glass,
+        effect_glass,
         options);
     Scope::set_current(nullptr);
 
@@ -6024,8 +6048,70 @@ void test_glass_button_accepts_configurable_glass_style() {
     assert(wrapped.material.tint == tint);
     assert(wrapped.material.border == border);
     assert(wrapped.material.container.interactive);
+    assert(wrapped.material.container.container_id
+           == layout::glass_effect_stable_id("button.toolbar"));
+    assert(wrapped.material.container.union_id
+           == layout::glass_effect_stable_id("primary-actions"));
+    assert(std::fabs(wrapped.material.container.spacing - 10.0f)
+           < 0.0001f);
+    assert(wrapped.material.transition.kind
+           == MaterialGlassTransitionKind::MatchedGeometry);
+    assert(std::fabs(wrapped.material.transition.progress - 0.55f)
+           < 0.0001f);
+    assert(wrapped.material.glass_identity == effect_identity);
     assert(wrapped.style.max_width == 116.0f);
     assert(wrapped.style.fixed_height == 34.0f);
+
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+    CMD_LEN = 0;
+
+    auto scoped_root_h = detail::alloc_node();
+    detail::node_at(scoped_root_h).style.flex_direction = FlexDirection::Column;
+    Scope scoped_scope(scoped_root_h);
+    Scope::set_current(&scoped_scope);
+    layout::glass_effect_container(
+        layout::GlassEffectContainerOptions{
+            .container_id = 804u,
+            .union_id = 3u,
+            .spacing = 11.0f,
+            .interactive = false,
+            .morph_transitions = true,
+        },
+        [&] {
+            layout::glass_effect_transition(
+                layout::glass_materialize_transition(0.25f, false),
+                [&] {
+                    widget::glass_button<button_test::ButtonMsg>(
+                        "Scoped",
+                        button_test::Click{},
+                        layout::glass_regular()
+                            .effect_id("button", "scoped"),
+                        GlassControlStyleOptions{
+                            .role = MaterialSurfaceRole::Toolbar,
+                            .height = 32.0f,
+                        });
+                });
+        });
+    Scope::set_current(nullptr);
+
+    auto const& scoped_root = detail::node_at(scoped_root_h);
+    assert(scoped_root.children.size() == 1u);
+    auto const& scoped_button = detail::node_at(scoped_root.children[0]);
+    assert(scoped_button.material.container.container_id == 804u);
+    assert(scoped_button.material.container.union_id == 3u);
+    assert(std::fabs(scoped_button.material.container.spacing - 11.0f)
+           < 0.0001f);
+    assert(scoped_button.material.container.interactive);
+    assert(scoped_button.material.container.morph_transitions);
+    assert(scoped_button.material.transition.kind
+           == MaterialGlassTransitionKind::Materialize);
+    assert(std::fabs(scoped_button.material.transition.progress - 0.25f)
+           < 0.0001f);
+    assert(!scoped_button.material.transition.appearing);
+    assert(scoped_button.material.glass_identity
+           == layout::glass_effect_identity("button", "scoped"));
 
     auto clear = widget::glass_button_style(layout::glass_clear(), {});
     assert(clear.has_material);
