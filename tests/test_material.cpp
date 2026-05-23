@@ -76,7 +76,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 60);
+    assert(material_plan_contract_version == 61);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -1584,6 +1584,17 @@ void test_materialize_transition_modulates_glass_optics_contract() {
     assert(plan.transition.shadow_gain > plan.transition.opacity_gain);
     assert(plan.transition.shadow_gain < 1.0f);
     assert(std::fabs(plan.transition.refraction_gain - 0.5f) < 0.0001f);
+    assert(std::string_view(plan.transition.materialize_optics_model)
+           == "materialize-liquid-glass-optics");
+    assert(plan.transition.materialize_optics_active);
+    assert(std::fabs(plan.transition.materialize_wave_strength - 1.0f)
+           < 0.0001f);
+    assert(plan.transition.materialize_edge_lift > 0.13f);
+    assert(plan.transition.materialize_edge_lift < 0.14f);
+    assert(std::fabs(plan.transition.materialize_lensing_gain - 1.24f)
+           < 0.0001f);
+    assert(std::fabs(plan.transition.materialize_rim_position - 0.59f)
+           < 0.0001f);
 
     assert(plan.backdrop_sampling);
     assert(!plan.fallback());
@@ -1616,6 +1627,14 @@ void test_materialize_transition_modulates_glass_optics_contract() {
            == plan.transition.optical_gain);
     assert(plan.optical_composition.transition_refraction_gain
            == plan.transition.refraction_gain);
+    assert(plan.optical_composition.transition_materialize_wave_strength
+           == plan.transition.materialize_wave_strength);
+    assert(plan.optical_composition.transition_materialize_edge_lift
+           == plan.transition.materialize_edge_lift);
+    assert(plan.optical_composition.transition_materialize_lensing_gain
+           == plan.transition.materialize_lensing_gain);
+    assert(plan.optical_composition.transition_materialize_rim_position
+           == plan.transition.materialize_rim_position);
     assert(plan.optical_composition.opacity == plan.opacity);
     assert(plan.optical_composition.blur_radius == plan.blur_radius);
     assert(plan.optical_composition.refraction_strength
@@ -1729,6 +1748,19 @@ void test_materialize_transition_modulates_glass_optics_contract() {
                disappearing_plan.transition.refraction_gain
                    - disappearing_gain)
            < 0.0001f);
+    assert(std::string_view(
+               disappearing_plan.transition.materialize_optics_model)
+           == "materialize-liquid-glass-optics");
+    assert(disappearing_plan.transition.materialize_optics_active);
+    assert(disappearing_plan.transition.materialize_wave_strength > 0.52f);
+    assert(disappearing_plan.transition.materialize_wave_strength < 0.54f);
+    assert(disappearing_plan.transition.materialize_edge_lift > 0.06f);
+    assert(disappearing_plan.transition.materialize_lensing_gain > 1.11f);
+    assert(disappearing_plan.transition.materialize_lensing_gain < 1.12f);
+    assert(std::fabs(
+               disappearing_plan.transition.materialize_rim_position
+                   - 0.871875f)
+           < 0.0001f);
     assert(disappearing_plan.opacity < baseline.opacity);
     assert(disappearing_plan.tint.a < baseline.tint.a);
     assert(disappearing_plan.blur_radius < baseline.blur_radius);
@@ -1746,6 +1778,14 @@ void test_materialize_transition_modulates_glass_optics_contract() {
            == disappearing_plan.transition.optical_gain);
     assert(disappearing_plan.optical_composition.transition_refraction_gain
            == disappearing_plan.transition.refraction_gain);
+    assert(disappearing_plan
+               .optical_composition
+               .transition_materialize_wave_strength
+           == disappearing_plan.transition.materialize_wave_strength);
+    assert(disappearing_plan
+               .optical_composition
+               .transition_materialize_lensing_gain
+           == disappearing_plan.transition.materialize_lensing_gain);
     auto const disappearing_geometry =
         material_surface_execution_geometry(disappearing_plan);
     assert(disappearing_geometry.active);
@@ -1807,6 +1847,11 @@ void test_materialize_transition_modulates_glass_optics_contract() {
     assert(reduced_plan.transition.progress == 1.0f);
     assert(std::string_view(reduced_plan.transition.policy)
         == "reduced-motion-static");
+    assert(std::string_view(reduced_plan.transition.materialize_optics_model)
+           == "none");
+    assert(!reduced_plan.transition.materialize_optics_active);
+    assert(reduced_plan.transition.materialize_wave_strength == 0.0f);
+    assert(reduced_plan.transition.materialize_lensing_gain == 1.0f);
     assert(reduced_plan.opacity == reduced_baseline.opacity);
     assert(reduced_plan.tint.a == reduced_baseline.tint.a);
     assert(reduced_plan.blur_radius == reduced_baseline.blur_radius);
