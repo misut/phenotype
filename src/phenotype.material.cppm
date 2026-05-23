@@ -13,7 +13,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 46;
+inline constexpr std::uint32_t material_plan_contract_version = 47;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1803,22 +1803,101 @@ inline float material_container_group_shape_blend_strength(
     return std::clamp(std::max(0.25f, proximity), 0.0f, 1.0f);
 }
 
-inline float material_container_group_inner_edge_alpha_blend_strength(
+inline float material_container_group_blend_continuity(
         MaterialContainerGroupAccumulator const& group) noexcept {
-    auto const shape_blend =
-        material_container_group_shape_blend_strength(group);
+    if (group.union_surfaces > 0u)
+        return 1.0f;
+    if (group.morph_surfaces > 0u)
+        return 0.85f;
+    if (group.shared_backdrop_scope_surfaces > 1u)
+        return 0.65f;
+    if (group.interactive_surfaces > 0u)
+        return 0.50f;
+    return 0.0f;
+}
+
+inline float material_container_shape_blend_strength_for_gap(
+        float gap,
+        float blend_distance) noexcept {
+    if (blend_distance <= 0.0f)
+        return gap <= 0.5f ? 1.0f : 0.0f;
+    if (gap > blend_distance)
+        return 0.0f;
+    auto const proximity = std::clamp(
+        (blend_distance - gap) / blend_distance,
+        0.0f,
+        1.0f);
+    return std::clamp(std::max(0.25f, proximity), 0.0f, 1.0f);
+}
+
+inline float material_container_member_shape_blend_strength(
+        MaterialRuntimeRecord const& record,
+        std::span<MaterialRuntimeRecord const> records,
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (!material_container_group_shape_blend_execution_active(group))
+        return 0.0f;
+    auto const& plan = record.plan;
+    if (!plan.primary_pass.active
+        || !plan.shape.valid
+        || !material_plan_in_container(plan, group.container_id)) {
+        return 0.0f;
+    }
+    auto best = 0.0f;
+    for (auto const& candidate_record : records) {
+        if (&candidate_record == &record)
+            continue;
+        auto const& candidate = candidate_record.plan;
+        if (!candidate.primary_pass.active
+            || !candidate.shape.valid
+            || !material_plan_in_container(candidate, group.container_id)) {
+            continue;
+        }
+        auto const gap = material_rect_gap(plan.geometry, candidate.geometry);
+        auto const blend_distance = std::min(
+            plan.container.blend_distance,
+            candidate.container.blend_distance);
+        best = std::max(
+            best,
+            material_container_shape_blend_strength_for_gap(
+                gap,
+                blend_distance));
+    }
+    return std::min(
+        material_container_group_shape_blend_strength(group),
+        best);
+}
+
+inline std::uint32_t material_container_group_shape_blend_surface_count(
+        std::span<MaterialRuntimeRecord const> records,
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (!material_container_group_shape_blend_execution_active(group))
+        return 0u;
+    std::uint32_t count = 0;
+    for (auto const& record : records) {
+        if (material_container_member_shape_blend_strength(
+                record,
+                records,
+                group) > 0.0f) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+inline float material_container_inner_edge_alpha_blend_strength(
+        MaterialContainerGroupAccumulator const& group,
+        float shape_blend) noexcept {
     if (shape_blend <= 0.0f)
         return 0.0f;
-    float continuity = 0.0f;
-    if (group.union_surfaces > 0u)
-        continuity = 1.0f;
-    else if (group.morph_surfaces > 0u)
-        continuity = 0.85f;
-    else if (group.shared_backdrop_scope_surfaces > 1u)
-        continuity = 0.65f;
-    else if (group.interactive_surfaces > 0u)
-        continuity = 0.50f;
+    auto const continuity = material_container_group_blend_continuity(group);
     return std::clamp(shape_blend * continuity, 0.0f, 1.0f);
+}
+
+inline float material_container_group_inner_edge_alpha_blend_strength(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    return material_container_inner_edge_alpha_blend_strength(
+        group,
+        material_container_group_shape_blend_strength(group));
 }
 
 inline char const* material_container_execution_policy_name(
@@ -1878,6 +1957,7 @@ inline MaterialContainerGroupAccumulator accumulate_material_container_group(
 inline MaterialContainerExecutionDescriptor
 material_container_execution_descriptor_from_group(
         MaterialRuntimeRecord const& record,
+        std::span<MaterialRuntimeRecord const> records,
         MaterialContainerGroupAccumulator const& group) noexcept {
     MaterialContainerExecutionDescriptor descriptor{};
     descriptor.command_index = record.command_index;
@@ -1904,9 +1984,14 @@ material_container_execution_descriptor_from_group(
     descriptor.execution_policy =
         material_container_execution_policy_name(group);
     descriptor.shape_blend_strength =
-        material_container_group_shape_blend_strength(group);
+        material_container_member_shape_blend_strength(
+            record,
+            records,
+            group);
     descriptor.inner_edge_alpha_blend_strength =
-        material_container_group_inner_edge_alpha_blend_strength(group);
+        material_container_inner_edge_alpha_blend_strength(
+            group,
+            descriptor.shape_blend_strength);
     if (group.has_bounds) {
         descriptor.group_x = group.min_x;
         descriptor.group_y = group.min_y;
@@ -1929,7 +2014,10 @@ material_container_execution_descriptor(
     auto const group = accumulate_material_container_group(
         records,
         plan.container.container_id);
-    return material_container_execution_descriptor_from_group(record, group);
+    return material_container_execution_descriptor_from_group(
+        record,
+        records,
+        group);
 }
 
 inline MaterialContainerGroupRuntimeSummary summarize_material_container_groups(
@@ -2023,7 +2111,9 @@ inline MaterialContainerGroupRuntimeSummary summarize_material_container_groups(
         if (material_container_group_shape_blend_execution_active(group)) {
             ++summary.shape_blend_execution_group_count;
             summary.shape_blend_execution_surface_count +=
-                group.active_surfaces;
+                material_container_group_shape_blend_surface_count(
+                    records,
+                    group);
             summary.max_shape_blend_strength = std::max(
                 summary.max_shape_blend_strength,
                 material_container_group_shape_blend_strength(group));

@@ -2381,6 +2381,7 @@ inline void apply_material_container_execution_descriptors(
             scratch.material_container_execution_descriptors.push_back(
                 material_container_execution_descriptor_from_group(
                     candidate,
+                    scratch.material_records,
                     group));
         }
     }

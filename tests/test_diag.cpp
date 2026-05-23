@@ -1060,21 +1060,27 @@ void test_material_runtime_record_json_contract() {
     grouped_request_b.geometry.x = 58.0f;
     grouped_request_b.style.container.union_id = 4u;
     auto grouped_plan_b = plan_material_surface(grouped_request_b, env);
+    auto grouped_request_c = grouped_request;
+    grouped_request_c.geometry.x = 140.0f;
+    grouped_request_c.style.container.union_id = 4u;
+    auto grouped_plan_c = plan_material_surface(grouped_request_c, env);
     std::vector<MaterialRuntimeRecord> grouped_records{
         MaterialRuntimeRecord{grouped_plan_a, 7u},
         MaterialRuntimeRecord{grouped_plan_b, 8u},
+        MaterialRuntimeRecord{grouped_plan_c, 9u},
     };
     auto group_details =
         diag::detail::material_container_group_details_json(grouped_records);
     assert(group_details.size() == 1);
     auto const& group = group_details[0].as_object();
     assert(group.at("container_id").as_integer() == 77);
-    assert(group.at("surface_count").as_integer() == 2);
-    assert(group.at("union_surfaces").as_integer() == 2);
-    assert(group.at("morph_surfaces").as_integer() == 2);
+    assert(group.at("surface_count").as_integer() == 3);
+    assert(group.at("union_surfaces").as_integer() == 3);
+    assert(group.at("morph_surfaces").as_integer() == 3);
     assert(group.at("blend_candidate_pair_count").as_integer() == 1);
     assert(group.at("union_candidate_pair_count").as_integer() == 1);
     assert(group.at("morph_candidate_pair_count").as_integer() == 1);
+    assert(group.at("separated_pair_count").as_integer() == 2);
     assert(group.at("execution_policy").as_string()
            == "group-edge-continuity");
     assert(group.at("shape_blend_execution").as_bool());
@@ -1086,7 +1092,7 @@ void test_material_runtime_record_json_contract() {
                    - 0.75f)
            < 0.0001f);
     auto const& members = group.at("members").as_array();
-    assert(members.size() == 2);
+    assert(members.size() == 3);
     auto const& first_member = members[0].as_object();
     assert(first_member.at("command_index").as_integer() == 7);
     assert(first_member.at("plan_id").as_string() == grouped_plan_a.plan_id);
@@ -1108,6 +1114,15 @@ void test_material_runtime_record_json_contract() {
            < 0.0001f);
     assert(first_member.at("geometry").as_object().at("w").as_float()
            == 44.0f);
+    auto const& third_member = members[2].as_object();
+    assert(third_member.at("command_index").as_integer() == 9);
+    assert(third_member.at("shape_blend_execution").as_bool());
+    assert(std::fabs(third_member.at("shape_blend_strength").as_float())
+           < 0.0001f);
+    assert(std::fabs(
+               third_member
+                   .at("inner_edge_alpha_blend_strength")
+                   .as_float()) < 0.0001f);
 
     assert(obj.at("command_index").as_integer() == 3);
     assert(obj.at("contract_version").as_integer()
