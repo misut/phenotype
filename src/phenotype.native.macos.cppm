@@ -1633,6 +1633,8 @@ struct MaterialInstanceGPU {
     float interaction_lens[4]{};
     // refraction strength, edge bias, max offset pixels, edge caustic intensity
     float refraction[4]{};
+    // bevel width, inner highlight, outer shadow, chromatic fringe
+    float edge_optics[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
     // shape blend strength, inner-edge alpha blend strength, flags, command index
@@ -2370,6 +2372,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.refraction[1] = plan.refraction.edge_bias;
     inst.refraction[2] = plan.refraction.max_offset_pixels;
     inst.refraction[3] = plan.refraction.edge_caustic_intensity;
+    inst.edge_optics[0] = plan.edge_optics.bevel_width;
+    inst.edge_optics[1] = plan.edge_optics.inner_highlight;
+    inst.edge_optics[2] = plan.edge_optics.outer_shadow;
+    inst.edge_optics[3] = plan.edge_optics.chromatic_fringe;
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];
@@ -2523,6 +2529,30 @@ inline void apply_material_container_execution_descriptors(
                             + 0.035f * match_motion.strength,
                         0.0f,
                         0.35f);
+                    inst.edge_optics[0] = std::clamp(
+                        std::max(
+                            inst.edge_optics[0],
+                            record->plan.edge_optics.bevel_width
+                                + 0.80f * match_motion.strength),
+                        0.0f,
+                        16.0f);
+                    inst.edge_optics[1] = std::clamp(
+                        inst.edge_optics[1]
+                            * (1.0f + 0.40f * match_motion.strength)
+                            + 0.040f * match_motion.strength,
+                        0.0f,
+                        0.85f);
+                    inst.edge_optics[2] = std::clamp(
+                        inst.edge_optics[2]
+                            * (1.0f + 0.32f * match_motion.strength)
+                            + 0.030f * match_motion.strength,
+                        0.0f,
+                        0.60f);
+                    inst.edge_optics[3] = std::clamp(
+                        inst.edge_optics[3]
+                            + 0.025f * match_motion.strength,
+                        0.0f,
+                        0.16f);
                 }
             } else {
                 inst.group_rect[0] = execution->group_x;
@@ -4470,6 +4500,7 @@ struct MaterialVsOut {
     float4 interaction;
     float4 interaction_lens;
     float4 refraction;
+    float4 edge_optics;
     float4 group_rect;
     float4 group_effects;
 };
@@ -4485,6 +4516,7 @@ struct MaterialInstance {
     float4 interaction;
     float4 interaction_lens;
     float4 refraction;
+    float4 edge_optics;
     float4 group_rect;
     float4 group_effects;
 };
@@ -4521,6 +4553,7 @@ vertex MaterialVsOut vs_material(
     out.interaction = inst.interaction;
     out.interaction_lens = inst.interaction_lens;
     out.refraction = inst.refraction;
+    out.edge_optics = inst.edge_optics;
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
     return out;
@@ -4618,6 +4651,10 @@ fragment float4 fs_material(
     float refraction_offset_pixels = clamp(in.refraction.z, 0.0, 8.0)
         * (refraction_strength > 0.0 ? 1.0 : 0.0);
     float refraction_edge_caustic = clamp(in.refraction.w, 0.0, 0.35);
+    float edge_bevel_width = clamp(in.edge_optics.x, 0.0, 16.0);
+    float edge_inner_highlight = clamp(in.edge_optics.y, 0.0, 0.85);
+    float edge_outer_shadow = clamp(in.edge_optics.z, 0.0, 0.60);
+    float edge_chromatic_fringe = clamp(in.edge_optics.w, 0.0, 0.16);
     float normalized_len = length(normalized_local);
     float2 refraction_dir = normalized_len > 0.0001
         ? normalized_local / normalized_len
@@ -4659,10 +4696,18 @@ fragment float4 fs_material(
         0.0,
         0.24);
     float fringe_weight = clamp(
-        caustic_weight * (0.45 + 0.55 * refraction_edge_bias),
+        caustic_weight * (0.45 + 0.55 * refraction_edge_bias)
+            + edge_lens * edge_chromatic_fringe,
         0.0,
-        0.14);
-    float2 fringe_uv = refraction_uv * (0.55 + 0.65 * refraction_edge_bias);
+        0.18);
+    float2 fringe_uv =
+        refraction_uv * (0.55 + 0.65 * refraction_edge_bias)
+        + refraction_dir
+            * texel
+            * content_scale
+            * edge_lens
+            * edge_chromatic_fringe
+            * 2.0;
     float4 acc = float4(0.0);
     float weight_sum = 0.0;
     for (int y = -2; y <= 2; ++y) {
@@ -4728,6 +4773,34 @@ fragment float4 fs_material(
     float edge = 1.0 - smoothstep(0.0, edge_width, signed_edge_distance);
     float edge_lift = clamp(in.luminance_curve.w, 0.0, 1.0);
     rgb += float3(edge * edge_lift);
+    if (edge_bevel_width > 0.0001
+        && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
+        float bevel_span = max(edge_bevel_width, edge_width);
+        float bevel = 1.0 - smoothstep(
+            0.0,
+            max(bevel_span, 0.5),
+            signed_edge_distance);
+        float inner_bevel = 1.0 - smoothstep(
+            0.0,
+            max(edge_width * 1.25, 0.5),
+            signed_edge_distance);
+        float2 bevel_light_dir = normalize(float2(-0.58, -0.82));
+        float bevel_alignment = clamp(
+            dot(refraction_dir, bevel_light_dir) * 0.5 + 0.5,
+            0.0,
+            1.0);
+        float corner_focus = clamp(length(normalized_local) * 0.52, 0.0, 1.0);
+        float bright_band = inner_bevel
+            * edge_inner_highlight
+            * (0.34 + 0.66 * bevel_alignment)
+            * (0.82 + 0.18 * corner_focus);
+        float shadow_band_inner = bevel
+            * (1.0 - inner_bevel * 0.58)
+            * edge_outer_shadow
+            * (0.28 + 0.72 * (1.0 - bevel_alignment));
+        rgb += float3(bright_band);
+        rgb *= (1.0 - shadow_band_inner);
+    }
     if (caustic_weight > 0.0001) {
         float2 light_dir = normalize(float2(-0.58, -0.82));
         float rim_alignment = clamp(
