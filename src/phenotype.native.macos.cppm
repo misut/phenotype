@@ -2420,31 +2420,61 @@ inline void apply_material_container_execution_descriptors(
         }
         if (!execution)
             continue;
+        auto const* record =
+            static_cast<MaterialRuntimeRecord const*>(nullptr);
+        for (auto const& candidate : scratch.material_records) {
+            if (candidate.command_index == command_index) {
+                record = &candidate;
+                break;
+            }
+        }
         if (execution->group_bounds_valid && execution->shape_blend_execution) {
-            if (execution->glass_effect_match_source_valid) {
-                inst.rect[0] = execution->glass_effect_match_rect_x;
-                inst.rect[1] = execution->glass_effect_match_rect_y;
-                inst.rect[2] = execution->glass_effect_match_rect_w;
-                inst.rect[3] = execution->glass_effect_match_rect_h;
-                auto const background_inflate = std::max(0.0f, inst.sampling[3]);
-                if (background_inflate > 0.0f) {
-                    inst.rect[0] -= background_inflate;
-                    inst.rect[1] -= background_inflate;
-                    inst.rect[2] += background_inflate * 2.0f;
-                    inst.rect[3] += background_inflate * 2.0f;
+            if (record
+                && (execution->glass_effect_match_execution
+                    || execution->union_execution)) {
+                auto const geometry = material_surface_execution_geometry(
+                    record->plan,
+                    execution);
+                if (!geometry.active) {
+                    inst.rect[2] = 0.0f;
+                    inst.rect[3] = 0.0f;
+                    inst.params[2] = 0.0f;
+                    continue;
                 }
-                inst.params[0] = std::min(
-                    std::max(
-                        0.0f,
-                        execution->glass_effect_match_rect_radius
-                            + background_inflate),
-                    std::max(
-                        0.0f,
-                        std::min(inst.rect[2], inst.rect[3]) * 0.5f));
+                inst.rect[0] = geometry.x;
+                inst.rect[1] = geometry.y;
+                inst.rect[2] = geometry.w;
+                inst.rect[3] = geometry.h;
+                inst.params[0] = geometry.radius;
                 inst.group_rect[0] = inst.rect[0];
                 inst.group_rect[1] = inst.rect[1];
                 inst.group_rect[2] = inst.rect[2];
                 inst.group_rect[3] = inst.rect[3];
+                if (record->plan.specular.interaction_driven) {
+                    inst.interaction[0] = material_surface_execution_anchor_x(
+                        record->plan,
+                        geometry,
+                        record->plan.specular.anchor_x);
+                    inst.interaction[1] = material_surface_execution_anchor_y(
+                        record->plan,
+                        geometry,
+                        record->plan.specular.anchor_y);
+                } else {
+                    inst.interaction[0] = 0.5f;
+                    inst.interaction[1] = 0.5f;
+                }
+                if (record->plan.interaction.pointer_lens_active) {
+                    inst.interaction_lens[0] =
+                        material_surface_execution_anchor_x(
+                            record->plan,
+                            geometry,
+                            record->plan.interaction.pointer_lens_anchor_x);
+                    inst.interaction_lens[1] =
+                        material_surface_execution_anchor_y(
+                            record->plan,
+                            geometry,
+                            record->plan.interaction.pointer_lens_anchor_y);
+                }
             } else {
                 inst.group_rect[0] = execution->group_x;
                 inst.group_rect[1] = execution->group_y;

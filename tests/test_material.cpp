@@ -1861,6 +1861,25 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     assert(first_execution.group_h == 40.0f);
     assert(std::fabs(first_execution.shape_blend_strength
                      - (14.0f / 24.0f)) < 0.0001f);
+    assert(first_execution.surface_leader);
+    assert(!peer_execution.surface_leader);
+    assert(first_execution.paint_layer_leader);
+    assert(peer_execution.paint_layer_leader);
+    auto const first_surface_geometry =
+        material_surface_execution_geometry(
+            records[0].plan,
+            &first_execution);
+    auto const peer_surface_geometry =
+        material_surface_execution_geometry(
+            records[1].plan,
+            &peer_execution);
+    assert(first_surface_geometry.active);
+    assert(first_surface_geometry.x == 0.0f);
+    assert(first_surface_geometry.y == 0.0f);
+    assert(first_surface_geometry.w == 90.0f);
+    assert(first_surface_geometry.h == 40.0f);
+    assert(first_surface_geometry.radius == 20.0f);
+    assert(!peer_surface_geometry.active);
     assert(!different_union_execution.union_execution);
     assert(!different_variant_execution.union_execution);
     assert(!different_shape_execution.union_execution);
