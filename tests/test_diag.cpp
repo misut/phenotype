@@ -1291,6 +1291,14 @@ void test_material_runtime_record_json_contract() {
     assert(interaction.at("specular_anchor_y").as_float() == 0.5f);
     assert(std::fabs(interaction.at("specular_radius").as_float()) < 0.0001f);
     assert(std::fabs(interaction.at("specular_intensity").as_float()) < 0.0001f);
+    assert(interaction.at("pointer_lens_model").as_string() == "none");
+    assert(interaction.at("pointer_lens_active").as_bool() == false);
+    assert(interaction.at("pointer_lens_anchor_x").as_float() == 0.5f);
+    assert(interaction.at("pointer_lens_anchor_y").as_float() == 0.5f);
+    assert(std::fabs(interaction.at("pointer_lens_radius").as_float())
+           < 0.0001f);
+    assert(std::fabs(interaction.at("pointer_lens_strength").as_float())
+           < 0.0001f);
     assert(interaction.at("deterministic").as_bool() == true);
     auto const& refraction = obj.at("refraction").as_object();
     assert(refraction.at("model").as_string() == "none");
@@ -1505,6 +1513,13 @@ void test_material_runtime_record_json_contract() {
            < 0.0001f);
     assert(std::fabs(edge_optics.at("specular_intensity").as_float())
            < 0.0001f);
+    assert(edge_optics.at("pointer_lens_model").as_string() == "none");
+    assert(edge_optics.at("pointer_lens_anchor_x").as_float() == 0.5f);
+    assert(edge_optics.at("pointer_lens_anchor_y").as_float() == 0.5f);
+    assert(std::fabs(edge_optics.at("pointer_lens_radius").as_float())
+           < 0.0001f);
+    assert(std::fabs(edge_optics.at("pointer_lens_strength").as_float())
+           < 0.0001f);
 
     std::vector<MaterialRuntimeRecord> records{record};
     auto plans = diag::detail::material_plans_runtime_json(records);
@@ -1596,9 +1611,15 @@ void test_material_runtime_record_json_contract() {
            == obj.at("shadow_radius").as_float());
     assert(summary_obj.at("interaction_specular_highlight_count").as_integer()
            == 0);
+    assert(summary_obj.at("interaction_pointer_lens_count").as_integer()
+           == 0);
     assert(std::fabs(summary_obj.at("max_interaction_specular_radius").as_float())
            < 0.0001f);
     assert(std::fabs(summary_obj.at("max_interaction_specular_intensity")
+                         .as_float()) < 0.0001f);
+    assert(std::fabs(summary_obj.at("max_interaction_pointer_lens_radius")
+                         .as_float()) < 0.0001f);
+    assert(std::fabs(summary_obj.at("max_interaction_pointer_lens_strength")
                          .as_float()) < 0.0001f);
     assert(summary_obj.at("max_container_spacing").as_float() == 0.0f);
     assert(summary_obj.at("stage_order_match_count").as_integer() == 1);
@@ -1689,9 +1710,15 @@ void test_material_runtime_record_json_contract() {
            == 0.0f);
     assert(executor_obj.at("interaction_specular_highlight_count").as_integer()
            == 0);
+    assert(executor_obj.at("interaction_pointer_lens_count").as_integer()
+           == 0);
     assert(std::fabs(executor_obj.at("max_interaction_specular_radius")
                          .as_float()) < 0.0001f);
     assert(std::fabs(executor_obj.at("max_interaction_specular_intensity")
+                         .as_float()) < 0.0001f);
+    assert(std::fabs(executor_obj.at("max_interaction_pointer_lens_radius")
+                         .as_float()) < 0.0001f);
+    assert(std::fabs(executor_obj.at("max_interaction_pointer_lens_strength")
                          .as_float()) < 0.0001f);
     assert(executor_obj.at("cpu_decode_ns").as_integer() == 120);
 
