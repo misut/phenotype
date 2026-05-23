@@ -76,6 +76,7 @@ void test_tabs_renders_one_button_per_item() {
     assert(pill.material.kind == MaterialKind::Regular);
     assert(pill.material.role == MaterialSurfaceRole::Navigation);
     assert(pill.material.container.interactive);
+    assert(pill.material_shape == MaterialSurfaceShape::Capsule);
     assert(std::string_view{pill.debug_semantic_label}
            == "Segmented Control");
     assert(pill.children.size() == 2);
