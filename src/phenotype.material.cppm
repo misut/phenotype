@@ -3406,6 +3406,136 @@ inline MaterialGlassEffectMotionOptics material_glass_effect_match_motion_optics
     return optics;
 }
 
+inline bool material_container_bridge_motion_candidate(
+        MaterialRuntimeRecord const& record,
+        MaterialRuntimeRecord const& candidate,
+        MaterialContainerExecutionDescriptor const& execution) noexcept {
+    if (&record == &candidate)
+        return false;
+    if (!candidate.plan.primary_pass.active
+        || !candidate.plan.shape.valid
+        || !material_plan_in_container(
+            candidate.plan,
+            execution.container_id)) {
+        return false;
+    }
+    if (execution.union_execution) {
+        return material_plan_in_glass_effect_union_group(
+            candidate.plan,
+            record.plan);
+    }
+    return material_container_shape_blend_edge(
+        record.plan,
+        candidate.plan,
+        execution.container_id);
+}
+
+inline MaterialGlassEffectMotionOptics material_container_bridge_motion_optics(
+        MaterialRuntimeRecord const& record,
+        std::span<MaterialRuntimeRecord const> records,
+        MaterialContainerExecutionDescriptor const& execution) noexcept {
+    MaterialGlassEffectMotionOptics optics{};
+    if (execution.glass_effect_match_execution
+        || !execution.shape_blend_execution
+        || !execution.fusion_optics_active
+        || !record.plan.primary_pass.active
+        || !record.plan.shape.valid) {
+        return optics;
+    }
+
+    auto const geometry =
+        material_surface_execution_geometry(record.plan, &execution);
+    if (!geometry.active || geometry.w <= 0.0f || geometry.h <= 0.0f)
+        return optics;
+
+    auto const record_center_x =
+        record.plan.geometry.x + record.plan.geometry.w * 0.5f;
+    auto const record_center_y =
+        record.plan.geometry.y + record.plan.geometry.h * 0.5f;
+    auto const geometry_center_x = geometry.x + geometry.w * 0.5f;
+    auto const geometry_center_y = geometry.y + geometry.h * 0.5f;
+
+    auto best_pair_strength = 0.0f;
+    auto best_gap = 0.0f;
+    auto best_candidate_center_x = record_center_x;
+    auto best_candidate_center_y = record_center_y;
+    auto found = false;
+    for (auto const& candidate : records) {
+        if (!material_container_bridge_motion_candidate(
+                record,
+                candidate,
+                execution)) {
+            continue;
+        }
+        auto const gap = material_rect_gap(record.plan.geometry,
+                                           candidate.plan.geometry);
+        auto const blend_distance = std::min(
+            record.plan.container.blend_distance,
+            candidate.plan.container.blend_distance);
+        auto const pair_strength = execution.union_execution
+            ? 1.0f
+            : material_container_shape_blend_strength_for_gap(
+                gap,
+                blend_distance);
+        if (pair_strength <= 0.0f)
+            continue;
+        auto const better =
+            !found
+            || pair_strength > best_pair_strength + 0.0001f
+            || (std::fabs(pair_strength - best_pair_strength) <= 0.0001f
+                && gap < best_gap);
+        if (!better)
+            continue;
+        found = true;
+        best_pair_strength = pair_strength;
+        best_gap = gap;
+        best_candidate_center_x =
+            candidate.plan.geometry.x + candidate.plan.geometry.w * 0.5f;
+        best_candidate_center_y =
+            candidate.plan.geometry.y + candidate.plan.geometry.h * 0.5f;
+    }
+    if (!found)
+        return optics;
+
+    auto const bridge_x = (record_center_x + best_candidate_center_x) * 0.5f;
+    auto const bridge_y = (record_center_y + best_candidate_center_y) * 0.5f;
+    auto dx = bridge_x - geometry_center_x;
+    auto dy = bridge_y - geometry_center_y;
+    auto length = std::sqrt(dx * dx + dy * dy);
+    if (length <= 0.0001f) {
+        dx = best_candidate_center_x - record_center_x;
+        dy = best_candidate_center_y - record_center_y;
+        length = std::sqrt(dx * dx + dy * dy);
+    }
+    if (length <= 0.0001f)
+        return optics;
+
+    auto const fusion = std::clamp(execution.fusion_strength, 0.0f, 1.0f);
+    auto const strength = std::clamp(
+        fusion * (0.55f + 0.45f * best_pair_strength),
+        0.0f,
+        1.0f);
+    if (strength <= 0.0001f)
+        return optics;
+
+    optics.active = true;
+    optics.strength = strength;
+    optics.direction_x = dx / length;
+    optics.direction_y = dy / length;
+    optics.specular_anchor_x = std::clamp(
+        (bridge_x - geometry.x) / geometry.w,
+        0.16f,
+        0.84f);
+    optics.specular_anchor_y = std::clamp(
+        (bridge_y - geometry.y) / geometry.h,
+        0.16f,
+        0.84f);
+    optics.refraction_gain = 1.0f + 0.32f * strength;
+    optics.caustic_gain = 1.0f + 0.48f * strength;
+    optics.specular_intensity_gain = 1.0f + 0.42f * strength;
+    return optics;
+}
+
 inline MaterialContainerExecutionDescriptor
 material_container_execution_descriptor_from_group(
         MaterialRuntimeRecord const& record,
