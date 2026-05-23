@@ -3375,6 +3375,14 @@ inline GlassEffectOptions glass_effect_options(
     return options;
 }
 
+inline GlassEffectOptions glass_effect_options(
+        GlassEffectStyle style,
+        MaterialSurfaceShape shape) noexcept {
+    auto options = glass_effect_options(style);
+    options.shape = shape;
+    return options;
+}
+
 inline MaterialSurfaceOptions glass_effect_surface_options(
         GlassEffectOptions const& options) {
     MaterialSurfaceOptions surface{};
@@ -3531,6 +3539,16 @@ template<typename F>
 void glass_effect(GlassEffectStyle style, F&& builder) {
     glass_effect(
         glass_effect_options(style),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect(GlassEffectStyle style,
+                  MaterialSurfaceShape shape,
+                  F&& builder) {
+    glass_effect(
+        glass_effect_options(style, shape),
         std::forward<F>(builder));
 }
 
