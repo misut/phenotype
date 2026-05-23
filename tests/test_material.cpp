@@ -1401,7 +1401,7 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
     request.style.transition = MaterialTransitionDescriptor{
         .kind = MaterialGlassTransitionKind::MatchedGeometry,
         .progress = 0.5f,
-        .appearing = true,
+        .appearing = false,
     };
     request.style.glass_identity = MaterialGlassIdentityDescriptor{
         .namespace_id = 19u,
@@ -1410,6 +1410,7 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
 
     auto peer = request;
     peer.geometry = MaterialGeometry{120.0f, 0.0f, 40.0f, 40.0f, 24.0f};
+    peer.style.transition.appearing = true;
 
     auto unrelated = request;
     unrelated.geometry = MaterialGeometry{240.0f, 0.0f, 40.0f, 40.0f, 12.0f};
@@ -1481,6 +1482,8 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
     assert(std::fabs(
                first_execution.inner_edge_alpha_blend_strength - 0.5f)
            < 0.0001f);
+    assert(!first_execution.surface_leader);
+    assert(!first_execution.paint_layer_leader);
 
     assert(second_execution.glass_effect_match_execution);
     assert(second_execution.glass_effect_surface_count == 2u);
@@ -1500,6 +1503,24 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
            < 0.0001f);
     assert(std::fabs(second_execution.shape_blend_strength - 0.5f)
            < 0.0001f);
+    assert(second_execution.surface_leader);
+    assert(second_execution.paint_layer_leader);
+
+    auto const first_geometry =
+        material_surface_execution_geometry(records[0].plan, &first_execution);
+    auto const second_geometry =
+        material_surface_execution_geometry(records[1].plan, &second_execution);
+    assert(!first_geometry.active);
+    assert(second_geometry.active);
+    assert(std::fabs(second_geometry.x - 60.0f) < 0.0001f);
+    assert(second_geometry.w == 40.0f);
+
+    MaterialRuntimeSummary runtime_summary{};
+    for (auto const& record : records)
+        accumulate_material_runtime_summary(runtime_summary, record);
+    finalize_material_runtime_summary(runtime_summary, records);
+    assert(runtime_summary.total_surface_sample_pixels == 40 * 40 + 40 * 40);
+    assert(runtime_summary.max_surface_sample_pixels == 40 * 40);
 
     assert(!unrelated_execution.glass_effect_match_execution);
     assert(unrelated_execution.glass_effect_surface_count == 1u);
@@ -2426,7 +2447,11 @@ void test_glass_effect_matched_fallback_paint_uses_match_rect() {
         .interactive = false,
         .morph_transitions = true,
     };
-    source.style.transition = MaterialTransitionDescriptor{};
+    source.style.transition = MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::MatchedGeometry,
+        .progress = 0.5f,
+        .appearing = false,
+    };
     source.style.glass_identity = MaterialGlassIdentityDescriptor{
         .namespace_id = 41u,
         .effect_id = 930u,
@@ -2462,8 +2487,12 @@ void test_glass_effect_matched_fallback_paint_uses_match_rect() {
         material_container_execution_descriptor(records[0], records);
     auto const target_execution =
         material_container_execution_descriptor(records[1], records);
-    assert(!source_execution.glass_effect_match_execution);
+    assert(source_execution.glass_effect_match_execution);
+    assert(!source_execution.surface_leader);
+    assert(!source_execution.paint_layer_leader);
     assert(target_execution.glass_effect_match_execution);
+    assert(target_execution.surface_leader);
+    assert(target_execution.paint_layer_leader);
     assert(target_execution.glass_effect_match_source_valid);
     assert(std::fabs(target_execution.glass_effect_match_rect_x - 60.0f)
            < 0.0001f);
@@ -2472,6 +2501,12 @@ void test_glass_effect_matched_fallback_paint_uses_match_rect() {
 
     auto const& layer = records[1].plan.paint_layers[1];
     auto const inflate = std::max(layer.inflate, 0.0f);
+    auto const& source_layer = records[0].plan.paint_layers[1];
+    auto const source_cluster_geometry =
+        material_paint_layer_execution_geometry(
+            records[0].plan,
+            source_layer,
+            &source_execution);
     auto const base_geometry =
         material_paint_layer_execution_geometry(records[1].plan, layer);
     auto const matched_geometry =
@@ -2479,6 +2514,7 @@ void test_glass_effect_matched_fallback_paint_uses_match_rect() {
             records[1].plan,
             layer,
             &target_execution);
+    assert(!source_cluster_geometry.active);
     assert(base_geometry.active);
     assert(matched_geometry.active);
     assert(std::fabs(base_geometry.x - (target.geometry.x + layer.x_offset - inflate))

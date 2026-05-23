@@ -1366,7 +1366,9 @@ material_paint_layer_execution_geometry(
     if (!layer.active)
         return {};
     if (execution
-        && (execution->union_execution || execution->group_surface_execution)
+        && (execution->union_execution
+            || execution->group_surface_execution
+            || execution->glass_effect_match_execution)
         && !execution->paint_layer_leader) {
         return {};
     }
@@ -1876,7 +1878,9 @@ inline MaterialSurfaceExecutionGeometry material_surface_execution_geometry(
     if (!plan.primary_pass.active)
         return {};
     if (execution
-        && (execution->union_execution || execution->group_surface_execution)
+        && (execution->union_execution
+            || execution->group_surface_execution
+            || execution->glass_effect_match_execution)
         && !execution->surface_leader) {
         return {};
     }
@@ -2647,6 +2651,51 @@ inline bool material_container_shape_blend_surface_leader(
     return !found || record.command_index == leader_command_index;
 }
 
+inline bool material_glass_effect_match_surface_leader(
+        MaterialRuntimeRecord const& record,
+        std::span<MaterialRuntimeRecord const> records,
+        std::uint32_t container_id) noexcept {
+    auto const& plan = record.plan;
+    if (!plan.glass_identity.matched_geometry_candidate)
+        return true;
+
+    auto found = false;
+    auto leader_command_index = record.command_index;
+    auto leader_appearing = false;
+    auto leader_progress = 0.0f;
+    for (auto const& candidate_record : records) {
+        auto const& candidate = candidate_record.plan;
+        if (!candidate.primary_pass.active
+            || !candidate.glass_identity.matched_geometry_candidate
+            || !material_plan_in_glass_effect_match_group(
+                candidate,
+                plan,
+                container_id)) {
+            continue;
+        }
+        auto const candidate_appearing = candidate.transition.appearing;
+        auto const candidate_progress = std::isfinite(
+            candidate.transition.progress)
+            ? std::clamp(candidate.transition.progress, 0.0f, 1.0f)
+            : 1.0f;
+        auto const better =
+            !found
+            || (candidate_appearing && !leader_appearing)
+            || (candidate_appearing == leader_appearing
+                && candidate_progress > leader_progress + 0.0001f)
+            || (candidate_appearing == leader_appearing
+                && std::fabs(candidate_progress - leader_progress) <= 0.0001f
+                && candidate_record.command_index < leader_command_index);
+        if (better) {
+            found = true;
+            leader_command_index = candidate_record.command_index;
+            leader_appearing = candidate_appearing;
+            leader_progress = candidate_progress;
+        }
+    }
+    return !found || record.command_index == leader_command_index;
+}
+
 inline float material_container_inner_edge_alpha_blend_strength(
         MaterialContainerGroupAccumulator const& group,
         float shape_blend) noexcept {
@@ -2982,16 +3031,24 @@ material_container_execution_descriptor_from_group(
         && (shape_blend_cluster.sampled_backdrop_surfaces
                 + shape_blend_cluster.fallback_surfaces) > 1u
         && material_plan_uses_group_surface_merge_executor(plan);
-    descriptor.surface_leader =
-        descriptor.group_surface_execution
-            ? material_container_shape_blend_surface_leader(
-                record,
-                records,
-                shape_blend_cluster)
-            : (!descriptor.union_execution
-                || material_glass_effect_union_surface_leader(record, records));
+    if (descriptor.glass_effect_match_execution) {
+        descriptor.surface_leader = material_glass_effect_match_surface_leader(
+            record,
+            records,
+            group.container_id);
+    } else if (descriptor.group_surface_execution) {
+        descriptor.surface_leader = material_container_shape_blend_surface_leader(
+            record,
+            records,
+            shape_blend_cluster);
+    } else {
+        descriptor.surface_leader =
+            !descriptor.union_execution
+            || material_glass_effect_union_surface_leader(record, records);
+    }
     descriptor.paint_layer_leader =
-        descriptor.group_surface_execution
+        (descriptor.glass_effect_match_execution
+            || descriptor.group_surface_execution)
             ? descriptor.surface_leader
             : (!descriptor.union_execution
                 || material_glass_effect_union_paint_layer_leader(
