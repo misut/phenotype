@@ -5203,6 +5203,11 @@ fragment float4 fs_material(
     }
     float tint_strength = clamp(in.tint.a, 0.0, 1.0);
     float opacity = clamp(in.params.z, 0.0, 1.0);
+    float tint_chroma = max(
+        max(abs(in.tint.r - in.tint.g), abs(in.tint.g - in.tint.b)),
+        abs(in.tint.b - in.tint.r));
+    tint_chroma *= smoothstep(0.10, 0.52, tint_strength);
+    float3 tint_chromatic_rgb = in.tint.rgb * tint_chroma;
     float3 rgb = mix(backdrop_rgb, in.tint.rgb, tint_strength);
     float edge = 1.0 - smoothstep(0.0, edge_width, signed_edge_distance);
     float edge_lift = clamp(in.luminance_curve.w, 0.0, 1.0);
@@ -5234,7 +5239,11 @@ fragment float4 fs_material(
         float3(spectral_warmth,
                0.24 * (spectral_warmth + spectral_coolness),
                spectral_coolness);
-    rgb += spectral_rgb * spectral_edge * (0.20 + 1.40 * caustic_weight);
+    float3 spectral_edge_rgb =
+        spectral_rgb + tint_chromatic_rgb * (0.10 + 0.45 * spectral_edge);
+    rgb += spectral_edge_rgb
+        * spectral_edge
+        * (0.20 + 1.40 * caustic_weight);
     float prismatic_edge = edge_lens * glass_caustic_spread;
     if (prismatic_edge > 0.0001) {
         float prism_band = smoothstep(
@@ -5247,6 +5256,10 @@ fragment float4 fs_material(
             float3(1.0 + spectral_warmth * 1.70,
                    1.0 + spectral_rim_tint * 0.48,
                    1.0 + spectral_coolness * 1.70);
+        prism_rgb = mix(
+            prism_rgb,
+            prism_rgb * (float3(1.0) + in.tint.rgb * 0.42),
+            tint_chroma);
         rgb += prism_rgb
             * prismatic_edge
             * prism_band
@@ -5257,7 +5270,7 @@ fragment float4 fs_material(
         0.96,
         dot(normalized_local, -dynamic_light_dir));
     light_sweep *= 1.0 - smoothstep(0.28, 1.18, normalized_len);
-    rgb += (float3(1.0) + spectral_rgb * 2.0)
+    rgb += (float3(1.0) + spectral_rgb * 2.0 + tint_chromatic_rgb * 0.55)
         * dynamic_light_highlight
         * light_sweep
         * (0.16 * glass_scattering_gain);

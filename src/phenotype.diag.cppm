@@ -2060,6 +2060,9 @@ namespace detail {
             "color_driven",
             json::Value{plan.spectral_tint.color_driven});
         spectral_tint.emplace(
+            "tint_driven",
+            json::Value{plan.spectral_tint.tint_driven});
+        spectral_tint.emplace(
             "caustic_driven",
             json::Value{plan.spectral_tint.caustic_driven});
         spectral_tint.emplace(
@@ -2078,6 +2081,9 @@ namespace detail {
         spectral_tint.emplace(
             "balance",
             json::Value{plan.spectral_tint.balance});
+        spectral_tint.emplace(
+            "tint_influence",
+            json::Value{plan.spectral_tint.tint_influence});
 
         json::Object dynamic_lighting;
         dynamic_lighting.emplace(
@@ -2629,6 +2635,12 @@ namespace detail {
         optical_composition.emplace(
             "spectral_rim_tint",
             json::Value{composition.spectral_rim_tint});
+        optical_composition.emplace(
+            "spectral_tint_balance",
+            json::Value{composition.spectral_tint_balance});
+        optical_composition.emplace(
+            "spectral_tint_influence",
+            json::Value{composition.spectral_tint_influence});
         optical_composition.emplace(
             "dynamic_light_direction_x",
             json::Value{composition.dynamic_light_direction_x});
