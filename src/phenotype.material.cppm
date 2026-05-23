@@ -1314,6 +1314,18 @@ struct MaterialPaintLayerExecutionGeometry {
     float radius = 0.0f;
 };
 
+struct MaterialGlassEffectMotionOptics {
+    bool active = false;
+    float strength = 0.0f;
+    float direction_x = 0.0f;
+    float direction_y = 0.0f;
+    float specular_anchor_x = 0.5f;
+    float specular_anchor_y = 0.5f;
+    float refraction_gain = 1.0f;
+    float caustic_gain = 1.0f;
+    float specular_intensity_gain = 1.0f;
+};
+
 inline float material_surface_materialize_geometry_scale(
         MaterialTransitionAnalysis const& transition) noexcept {
     if (!transition.active || !transition.materialize)
@@ -2956,6 +2968,68 @@ inline MaterialGeometry material_glass_effect_match_rect(
         std::max(0.0f, material_lerp(source.h, target.h, t)),
         std::max(0.0f, material_lerp(source.radius, target.radius, t)),
     };
+}
+
+inline MaterialGlassEffectMotionOptics material_glass_effect_match_motion_optics(
+        MaterialContainerExecutionDescriptor const& execution) noexcept {
+    MaterialGlassEffectMotionOptics optics{};
+    if (!execution.glass_effect_match_execution
+        || !execution.surface_leader
+        || !execution.glass_effect_match_source_valid
+        || execution.glass_effect_match_rect_w <= 0.0f
+        || execution.glass_effect_match_rect_h <= 0.0f) {
+        return optics;
+    }
+
+    auto const source_center_x =
+        execution.glass_effect_match_source_x
+        + execution.glass_effect_match_source_w * 0.5f;
+    auto const source_center_y =
+        execution.glass_effect_match_source_y
+        + execution.glass_effect_match_source_h * 0.5f;
+    auto const match_center_x =
+        execution.glass_effect_match_rect_x
+        + execution.glass_effect_match_rect_w * 0.5f;
+    auto const match_center_y =
+        execution.glass_effect_match_rect_y
+        + execution.glass_effect_match_rect_h * 0.5f;
+    auto const dx = match_center_x - source_center_x;
+    auto const dy = match_center_y - source_center_y;
+    auto const length = std::sqrt(dx * dx + dy * dy);
+    if (length <= 0.0001f)
+        return optics;
+
+    auto const proximity = std::clamp(
+        execution.glass_effect_match_source_proximity,
+        0.0f,
+        1.0f);
+    auto const blend = std::clamp(
+        execution.glass_effect_match_blend_strength,
+        0.0f,
+        1.0f);
+    auto const strength = std::clamp(
+        blend * (0.65f + 0.35f * proximity),
+        0.0f,
+        1.0f);
+    if (strength <= 0.0001f)
+        return optics;
+
+    optics.active = true;
+    optics.strength = strength;
+    optics.direction_x = dx / length;
+    optics.direction_y = dy / length;
+    optics.specular_anchor_x = std::clamp(
+        0.5f + optics.direction_x * 0.22f * strength,
+        0.18f,
+        0.82f);
+    optics.specular_anchor_y = std::clamp(
+        0.5f + optics.direction_y * 0.22f * strength,
+        0.18f,
+        0.82f);
+    optics.refraction_gain = 1.0f + 0.45f * strength;
+    optics.caustic_gain = 1.0f + 0.70f * strength;
+    optics.specular_intensity_gain = 1.0f + 0.55f * strength;
+    return optics;
 }
 
 inline MaterialContainerExecutionDescriptor

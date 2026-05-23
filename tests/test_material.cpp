@@ -1506,6 +1506,21 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
     assert(second_execution.surface_leader);
     assert(second_execution.paint_layer_leader);
 
+    auto const source_motion =
+        material_glass_effect_match_motion_optics(first_execution);
+    auto const target_motion =
+        material_glass_effect_match_motion_optics(second_execution);
+    assert(!source_motion.active);
+    assert(target_motion.active);
+    assert(std::fabs(target_motion.strength - 0.390625f) < 0.0001f);
+    assert(target_motion.direction_x > 0.999f);
+    assert(std::fabs(target_motion.direction_y) < 0.0001f);
+    assert(target_motion.specular_anchor_x > 0.58f);
+    assert(target_motion.specular_anchor_y == 0.5f);
+    assert(target_motion.refraction_gain > 1.17f);
+    assert(target_motion.caustic_gain > target_motion.refraction_gain);
+    assert(target_motion.specular_intensity_gain > 1.21f);
+
     auto const first_geometry =
         material_surface_execution_geometry(records[0].plan, &first_execution);
     auto const second_geometry =
