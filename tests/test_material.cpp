@@ -61,7 +61,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 46);
+    assert(material_plan_contract_version == 47);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -1115,6 +1115,59 @@ void test_container_group_runtime_summary_contract() {
     std::puts("PASS: container group runtime summary contract");
 }
 
+void test_container_member_shape_blend_uses_spacing_falloff() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 16.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 900u,
+        .union_id = 1u,
+        .spacing = 20.0f,
+        .interactive = false,
+        .morph_transitions = true,
+    };
+    auto nearby = request;
+    nearby.geometry.x = 50.0f;
+    auto distant = request;
+    distant.geometry.x = 200.0f;
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(nearby, sampled_environment()), 2u},
+        {plan_material_surface(distant, sampled_environment()), 3u},
+    };
+    auto const group = accumulate_material_container_group(records, 900u);
+    assert(group.shape_pair_count == 3u);
+    assert(group.blend_candidate_pair_count == 1u);
+    assert(group.separated_pair_count == 2u);
+    assert(std::fabs(group.min_shape_gap - 10.0f) < 0.0001f);
+    assert(material_container_group_shape_blend_execution_active(group));
+    assert(std::fabs(
+               material_container_group_shape_blend_strength(group) - 0.5f)
+           < 0.0001f);
+    assert(material_container_group_shape_blend_surface_count(records, group)
+           == 2u);
+
+    auto first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto second_execution =
+        material_container_execution_descriptor(records[1], records);
+    auto distant_execution =
+        material_container_execution_descriptor(records[2], records);
+    assert(std::fabs(first_execution.shape_blend_strength - 0.5f)
+           < 0.0001f);
+    assert(std::fabs(second_execution.shape_blend_strength - 0.5f)
+           < 0.0001f);
+    assert(std::fabs(distant_execution.shape_blend_strength) < 0.0001f);
+    assert(std::fabs(distant_execution.inner_edge_alpha_blend_strength)
+           < 0.0001f);
+
+    auto summary = summarize_material_container_groups(records);
+    assert(summary.shape_blend_execution_group_count == 1u);
+    assert(summary.shape_blend_execution_surface_count == 2u);
+    assert(std::fabs(summary.max_shape_blend_strength - 0.5f) < 0.0001f);
+    std::puts("PASS: container member shape blend uses spacing falloff");
+}
+
 } // namespace
 
 int main() {
@@ -1132,6 +1185,7 @@ int main() {
     test_executor_frame_capture_policy_contract();
     test_executor_sampled_status_contract();
     test_container_group_runtime_summary_contract();
+    test_container_member_shape_blend_uses_spacing_falloff();
     std::puts("\nAll material tests passed.");
     return 0;
 }

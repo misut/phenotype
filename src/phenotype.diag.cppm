@@ -29,6 +29,7 @@ module;
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -2522,6 +2523,7 @@ namespace detail {
 
     inline json::Value material_container_group_detail_json(
             MaterialContainerGroupAccumulator const& group,
+            std::span<MaterialRuntimeRecord const> records,
             json::Array members) {
         auto const bounds_width = group.has_bounds
             ? std::max(0.0f, group.max_x - group.min_x)
@@ -2593,7 +2595,9 @@ namespace detail {
             "shape_blend_execution_surfaces",
             json::Value{
                 static_cast<std::int64_t>(
-                    shape_blend_execution ? group.active_surfaces : 0u)});
+                    material_container_group_shape_blend_surface_count(
+                        records,
+                        group))});
         out.emplace(
             "shape_blend_strength",
             json::Value{shape_blend_strength});
@@ -2712,7 +2716,10 @@ namespace detail {
                 }
             }
             groups.push_back(
-                material_container_group_detail_json(group, std::move(members)));
+                material_container_group_detail_json(
+                    group,
+                    records,
+                    std::move(members)));
         }
         return groups;
     }
