@@ -3062,6 +3062,118 @@ void test_material_surface_interactive_option_enables_plan_response() {
     std::puts("PASS: material surface interactive option enables plan response");
 }
 
+void test_glass_effect_surface_api_emits_capsule_tint_contract() {
+    auto defaults = layout::glass_effect_surface_options(
+        layout::GlassEffectOptions{});
+    assert(defaults.kind == MaterialKind::Regular);
+    assert(defaults.role == MaterialSurfaceRole::Surface);
+    assert(defaults.shape == MaterialSurfaceShape::Capsule);
+    assert(defaults.padding == SpaceToken::Md);
+    assert(defaults.border_width == 0.0f);
+    assert(!defaults.interactive);
+    assert(!defaults.has_material_override);
+
+    auto options = layout::GlassEffectOptions{};
+    options.kind = MaterialKind::Clear;
+    options.role = MaterialSurfaceRole::Control;
+    options.interaction = MaterialInteractionDescriptor{
+        .hovered = true,
+        .pressed = false,
+        .focused = true,
+        .pointer_inside = true,
+        .pointer_x = 0.25f,
+        .pointer_y = 0.75f,
+    };
+    options.fixed_height = 44.0f;
+    options.semantic_label = "Tinted Glass Effect";
+    options.interactive = true;
+    options.has_tint = true;
+    auto const glass_tint = Color{64, 156, 255, 118};
+    options.tint = glass_tint;
+    options.has_border = true;
+    auto const glass_border = Color{255, 255, 255, 96};
+    options.border = glass_border;
+
+    auto tinted = layout::glass_effect_surface_options(options);
+    assert(tinted.kind == MaterialKind::Clear);
+    assert(tinted.role == MaterialSurfaceRole::Control);
+    assert(tinted.shape == MaterialSurfaceShape::Capsule);
+    assert(tinted.interactive);
+    assert(tinted.has_material_override);
+    assert(tinted.material_override.kind == MaterialKind::Clear);
+    assert(tinted.material_override.tint == glass_tint);
+    assert(tinted.material_override.border == glass_border);
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::glass_effect(options, [] {
+        widget::text("Tinted glass");
+    });
+    Scope::set_current(nullptr);
+
+    auto const& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    auto const& surface = detail::node_at(root.children[0]);
+    assert(surface.material.kind == MaterialKind::Clear);
+    assert(surface.material.role == MaterialSurfaceRole::Control);
+    assert(surface.material.tint == glass_tint);
+    assert(surface.material.border == glass_border);
+    assert(surface.material.container.interactive);
+    assert(surface.material.interaction.focused);
+    assert(surface.background == glass_tint);
+    assert(surface.border_color == glass_border);
+    assert(surface.border_width == 0.0f);
+    assert(surface.material_shape == MaterialSurfaceShape::Capsule);
+    assert(std::string_view{surface.debug_semantic_label}
+           == "Tinted Glass Effect");
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto const commands = parse_commands(CMD_BUF, CMD_LEN);
+    auto const& cmd = first_material_command(commands);
+    auto const expected_radius = std::min(cmd.w, cmd.h) * 0.5f;
+    assert(std::fabs(cmd.radius - expected_radius) < 0.0001f);
+    assert(cmd.material.kind == MaterialKind::Clear);
+    assert(cmd.material.role == MaterialSurfaceRole::Control);
+    assert(cmd.material.tint == glass_tint);
+    assert(cmd.material.container.interactive);
+    assert(cmd.material.interaction.pointer_inside);
+    assert(std::fabs(cmd.material.interaction.pointer_x - 0.25f) < 0.0001f);
+    assert(std::fabs(cmd.material.interaction.pointer_y - 0.75f) < 0.0001f);
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.render_target.width = 320;
+    env.render_target.height = 44;
+
+    auto plan = make_test_material_plan(
+        material_request_for_command(
+            cmd.material,
+            MaterialGeometry{cmd.x, cmd.y, cmd.w, cmd.h, cmd.radius},
+            detail::g_app.theme),
+        env);
+    assert(plan->shape.kind == MaterialShapeKind::Capsule);
+    assert(plan->interaction.enabled);
+    assert(plan->interaction.active);
+    assert(plan->reference_model.interactive_response);
+    assert(plan->optical_response.interaction_modulates_optics);
+
+    std::puts("PASS: glass effect surface api emits capsule tint contract");
+}
+
 void test_glass_surface_presets_emit_material_contract() {
     auto toolbar = layout::glass_surface_options(
         layout::GlassSurfacePreset::Toolbar);
@@ -6117,6 +6229,7 @@ int main() {
     test_material_surface_style_override_emits_explicit_material_contract();
     test_material_surface_resolves_live_input_interaction();
     test_material_surface_interactive_option_enables_plan_response();
+    test_glass_effect_surface_api_emits_capsule_tint_contract();
     test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();
     test_glass_effect_transition_scope_emits_command_context();

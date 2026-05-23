@@ -3080,6 +3080,71 @@ struct MaterialSurfaceOptions {
     MaterialContainerDescriptor container{};
 };
 
+struct GlassEffectOptions {
+    MaterialKind kind = MaterialKind::Regular;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
+    MaterialInteractionDescriptor interaction{};
+    MaterialTransitionDescriptor transition{};
+    MaterialGlassIdentityDescriptor glass_identity{};
+    bool inherit_material_transition = true;
+    bool inherit_material_identity = true;
+    FlexDirection direction = FlexDirection::Column;
+    SpaceToken padding = SpaceToken::Md;
+    SpaceToken gap = SpaceToken::Md;
+    CrossAxisAlignment cross_align = CrossAxisAlignment::Start;
+    MainAxisAlignment main_align = MainAxisAlignment::Start;
+    float max_width = 0.0f;
+    float fixed_height = -1.0f;
+    float border_radius = -1.0f;
+    MaterialSurfaceShape shape = MaterialSurfaceShape::Capsule;
+    float border_width = 0.0f;
+    char const* semantic_label = "";
+    bool inherit_material_container = true;
+    bool interactive = false;
+    bool has_tint = false;
+    Color tint = {};
+    bool has_border = false;
+    Color border = {};
+    MaterialContainerDescriptor container{};
+};
+
+inline MaterialSurfaceOptions glass_effect_surface_options(
+        GlassEffectOptions const& options) {
+    MaterialSurfaceOptions surface{};
+    surface.kind = options.kind;
+    surface.role = options.role;
+    surface.interaction = options.interaction;
+    surface.transition = options.transition;
+    surface.glass_identity = options.glass_identity;
+    surface.inherit_material_transition = options.inherit_material_transition;
+    surface.inherit_material_identity = options.inherit_material_identity;
+    surface.direction = options.direction;
+    surface.padding = options.padding;
+    surface.gap = options.gap;
+    surface.cross_align = options.cross_align;
+    surface.main_align = options.main_align;
+    surface.max_width = options.max_width;
+    surface.fixed_height = options.fixed_height;
+    surface.border_radius = options.border_radius;
+    surface.shape = options.shape;
+    surface.border_width = options.border_width;
+    surface.semantic_label = options.semantic_label;
+    surface.inherit_material_container = options.inherit_material_container;
+    surface.interactive = options.interactive;
+    surface.container = options.container;
+
+    if (options.has_tint || options.has_border) {
+        surface.has_material_override = true;
+        surface.material_override = material_style(options.kind);
+        if (options.has_tint)
+            surface.material_override.tint = options.tint;
+        if (options.has_border)
+            surface.material_override.border = options.border;
+    }
+
+    return surface;
+}
+
 enum class GlassSurfacePreset {
     Window,
     Toolbar,
@@ -3184,6 +3249,20 @@ void material_surface(MaterialKind kind, F&& builder,
             .gap = gap,
         },
         std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect(GlassEffectOptions options, F&& builder) {
+    material_surface(
+        glass_effect_surface_options(options),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_effect(F&& builder) {
+    glass_effect(GlassEffectOptions{}, std::forward<F>(builder));
 }
 
 inline char const* chrome_label_or(char const* label,

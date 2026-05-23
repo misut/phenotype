@@ -445,17 +445,23 @@ void view(State const& state) {
 
         layout::spacer(12);
 
-        layout::material_surface(MaterialKind::Regular, [&] {
-            widget::text("Material Surface");
+        auto glass = layout::GlassEffectOptions{};
+        glass.role = MaterialSurfaceRole::Content;
+        glass.interactive = true;
+        glass.has_tint = true;
+        glass.tint = Color{64, 156, 255, 96};
+        glass.semantic_label = "Glass Effect Surface";
+        layout::glass_effect(glass, [&] {
+            widget::text("Glass Effect Surface");
             layout::spacer(6);
-            widget::text("Regular material is represented in semantic debug output; macOS samples the captured backdrop while unsupported backends use the translucent fallback.");
+            widget::text("Regular Liquid Glass now defaults to a capsule shape and supports interactive tinted custom surfaces.");
             layout::spacer(8);
             layout::row([&] {
                 widget::button<Msg>("Glass action", Increment{}, ButtonVariant::Primary);
                 widget::button<Msg>("Secondary", Decrement{});
             });
             layout::spacer(8);
-            widget::code("layout::material_surface(MaterialKind::Regular, builder);");
+            widget::code("layout::glass_effect(options, builder);");
         });
 
         layout::spacer(12);
