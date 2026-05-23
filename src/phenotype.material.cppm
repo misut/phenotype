@@ -5610,6 +5610,20 @@ inline MaterialInteractionResponse material_resolve_interaction_response(
             0.0f,
             0.32f);
     }
+    auto const focus_only =
+        response.focused && !pointer_driven && response.active;
+    if (focus_only) {
+        auto const focus_motion_scale = reduce_motion ? 0.55f : 1.0f;
+        response.specular_model = "focus-specular";
+        response.specular_highlight_active = true;
+        response.specular_anchor_x = 0.5f;
+        response.specular_anchor_y = 0.5f;
+        response.specular_radius = 0.52f;
+        response.specular_intensity = std::clamp(
+            focus_motion_scale * 0.30f * strength,
+            0.0f,
+            0.22f);
+    }
     return response;
 }
 
@@ -6575,7 +6589,10 @@ inline MaterialSpecularProfile material_resolve_specular_profile(
 
     if (plan.interaction.specular_highlight_active) {
         profile.model = plan.interaction.specular_model;
-        profile.source = "sampled-backdrop-pointer-lighting";
+        profile.source = std::string_view{plan.interaction.specular_model}
+                == "focus-specular"
+            ? "sampled-backdrop-focus-lighting"
+            : "sampled-backdrop-pointer-lighting";
         profile.interaction_driven = true;
         profile.anchor_x = plan.interaction.specular_anchor_x;
         profile.anchor_y = plan.interaction.specular_anchor_y;
