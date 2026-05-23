@@ -2346,12 +2346,24 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.luminance_curve[1] = plan.luminance_curve.midpoint;
     inst.luminance_curve[2] = plan.luminance_curve.contrast;
     inst.luminance_curve[3] = plan.luminance_curve.edge_lift;
-    inst.interaction[0] = plan.specular.anchor_x;
-    inst.interaction[1] = plan.specular.anchor_y;
+    inst.interaction[0] = material_surface_execution_anchor_x(
+        plan,
+        geometry,
+        plan.specular.anchor_x);
+    inst.interaction[1] = material_surface_execution_anchor_y(
+        plan,
+        geometry,
+        plan.specular.anchor_y);
     inst.interaction[2] = plan.specular.radius;
     inst.interaction[3] = plan.specular.intensity;
-    inst.interaction_lens[0] = plan.interaction.pointer_lens_anchor_x;
-    inst.interaction_lens[1] = plan.interaction.pointer_lens_anchor_y;
+    inst.interaction_lens[0] = material_surface_execution_anchor_x(
+        plan,
+        geometry,
+        plan.interaction.pointer_lens_anchor_x);
+    inst.interaction_lens[1] = material_surface_execution_anchor_y(
+        plan,
+        geometry,
+        plan.interaction.pointer_lens_anchor_y);
     inst.interaction_lens[2] = plan.interaction.pointer_lens_radius;
     inst.interaction_lens[3] = plan.interaction.pointer_lens_strength;
     inst.refraction[0] = plan.refraction.strength;

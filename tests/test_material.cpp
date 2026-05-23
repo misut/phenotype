@@ -1063,6 +1063,63 @@ void test_materialize_transition_modulates_glass_optics_contract() {
     assert(std::fabs(transition_geometry.h - baseline_geometry.h * geometry_scale)
            < 0.0001f);
     assert(transition_geometry.radius < baseline_geometry.radius);
+    auto interactive_request = request;
+    interactive_request.style.container = MaterialContainerDescriptor{
+        .container_id = 940u,
+        .union_id = 0u,
+        .spacing = 20.0f,
+        .interactive = true,
+        .morph_transitions = true,
+    };
+    interactive_request.style.interaction = MaterialInteractionDescriptor{
+        .hovered = true,
+        .pressed = false,
+        .focused = false,
+        .pointer_inside = true,
+        .pointer_x = 0.75f,
+        .pointer_y = 0.25f,
+    };
+    auto interactive_plan =
+        plan_material_surface(interactive_request, sampled_environment());
+    auto const interactive_geometry =
+        material_surface_execution_geometry(interactive_plan);
+    assert(interactive_geometry.active);
+    assert(interactive_plan.specular.interaction_driven);
+    assert(interactive_plan.interaction.pointer_lens_active);
+    auto const specular_anchor_x = material_surface_execution_anchor_x(
+        interactive_plan,
+        interactive_geometry,
+        interactive_plan.specular.anchor_x);
+    auto const specular_anchor_y = material_surface_execution_anchor_y(
+        interactive_plan,
+        interactive_geometry,
+        interactive_plan.specular.anchor_y);
+    auto const lens_anchor_x = material_surface_execution_anchor_x(
+        interactive_plan,
+        interactive_geometry,
+        interactive_plan.interaction.pointer_lens_anchor_x);
+    auto const lens_anchor_y = material_surface_execution_anchor_y(
+        interactive_plan,
+        interactive_geometry,
+        interactive_plan.interaction.pointer_lens_anchor_y);
+    assert(specular_anchor_x > interactive_plan.specular.anchor_x);
+    assert(specular_anchor_y < interactive_plan.specular.anchor_y);
+    assert(specular_anchor_x == lens_anchor_x);
+    assert(specular_anchor_y == lens_anchor_y);
+    auto const absolute_pointer_x =
+        interactive_plan.geometry.x
+        + interactive_plan.specular.anchor_x * interactive_plan.geometry.w;
+    auto const absolute_pointer_y =
+        interactive_plan.geometry.y
+        + interactive_plan.specular.anchor_y * interactive_plan.geometry.h;
+    assert(std::fabs(
+               (interactive_geometry.x + specular_anchor_x * interactive_geometry.w)
+                   - absolute_pointer_x)
+           < 0.0001f);
+    assert(std::fabs(
+               (interactive_geometry.y + specular_anchor_y * interactive_geometry.h)
+                   - absolute_pointer_y)
+           < 0.0001f);
 
     auto disappearing_request = regular_request();
     disappearing_request.style.transition = MaterialTransitionDescriptor{
