@@ -3378,6 +3378,10 @@ namespace detail {
         match_source.emplace(
             "proximity",
             json::Value{execution.glass_effect_match_source_proximity});
+        match_source.emplace(
+            "effect_id_match",
+            json::Value{
+                execution.glass_effect_match_source_effect_id_match});
         out.emplace(
             "glass_effect_match_source",
             json::Value{std::move(match_source)});
