@@ -18993,6 +18993,282 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(caustic_shadow, 0.0, 0.034);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float transition_clarity_strength = clamp(
+        0.012 * clear_glass_contrast
+            + 0.010 * clear_glass_dimming
+            + 0.008 * clear_glass_detail
+            + 0.008 * clear_glass_brightness
+            + 0.012 * glass_effect_match_execution * group_blend_strength
+            + 0.010 * morph_execution * group_blend_strength
+            + 0.008 * materialize_wave_strength
+            + 0.010 * transmission_caustic_strength
+            + 0.008 * reflection_wake_strength
+            + 0.008 * specular_handoff_strength
+            + 0.006 * matched_tether_sheath_strength
+            + 0.006 * pointer_lens_strength
+                * (0.38 * pointer_lens_raw + 0.62 * pointer_lens),
+        0.0,
+        0.068);
+    if (transition_clarity_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 clarity_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 clarity_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            clarity_group_size);
+        float2 clarity_group_norm =
+            (clarity_group_local / clarity_group_size - float2(0.5)) * 2.0;
+        float clarity_group_len = length(clarity_group_norm);
+        float clarity_center =
+            1.0 - smoothstep(0.12, 1.08, clarity_group_len);
+        float2 clarity_group_edge = min(
+            clarity_group_local,
+            max(clarity_group_size - clarity_group_local, float2(0.0)));
+        float clarity_edge_distance =
+            min(clarity_group_edge.x, clarity_group_edge.y);
+        float clarity_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.4, 1.0),
+                clarity_edge_distance);
+        float clarity_pointer = clamp(
+            pointer_lens_strength
+                * (0.36 * pointer_lens_raw + 0.64 * pointer_lens),
+            0.0,
+            1.0);
+        float clarity_bridge =
+            bridge_band * (0.36 + 0.64 * bridge_core);
+        float clarity_transition = clamp(
+            glass_effect_match_execution * 0.32
+                + morph_execution * 0.24
+                + materialize_wave_strength * 0.16
+                + union_execution * 0.12
+                + shape_blend_execution * 0.10
+                + transmission_caustic_strength * 1.9
+                + reflection_wake_strength * 1.7
+                + specular_handoff_strength * 1.5
+                + clarity_pointer * 0.22,
+            0.0,
+            1.0);
+        float clarity_gate = clamp(
+            clarity_center * 0.20
+                + clarity_edge * 0.20
+                + clarity_bridge * 0.24
+                + clarity_pointer * 0.18
+                + clarity_transition * group_blend_strength * 0.24,
+            0.0,
+            1.0);
+        float2 clarity_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 clarity_group_center_screen =
+            in.group_rect.xy + clarity_group_size * 0.5;
+        float2 clarity_group_center_uv = clamp(
+            clarity_group_center_screen / clarity_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 clarity_to_center = clarity_group_center_uv - in.screen_uv;
+        float clarity_center_distance = length(clarity_to_center);
+        float2 clarity_center_dir =
+            clarity_center_distance > 0.0001
+                ? clarity_to_center / clarity_center_distance
+                : refraction_dir;
+        float2 clarity_axis_raw =
+            bridge_dir * (0.34 + 0.24 * clarity_bridge)
+            + refraction_dir * (0.26 + 0.18 * clarity_edge)
+            + clarity_center_dir * (0.24 + 0.18 * clarity_center)
+            + pointer_dir * (0.18 + 0.18 * clarity_pointer)
+            - dynamic_light_dir
+                * (0.16 + 0.12 * dynamic_light_highlight);
+        float clarity_axis_len = length(clarity_axis_raw);
+        float2 clarity_axis = clarity_axis_len > 0.0001
+            ? clarity_axis_raw / clarity_axis_len
+            : refraction_dir;
+        float2 clarity_cross =
+            float2(-clarity_axis.y, clarity_axis.x);
+        float clarity_alignment =
+            smoothstep(-0.24, 0.86, dot(clarity_axis, bridge_dir));
+        float clarity_span =
+            (0.72
+             + 1.4 * glass_thickness
+             + 1.2 * clear_glass_detail
+             + 1.0 * clarity_transition
+             + 0.032 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float clarity_cross_span =
+            (0.54
+             + 1.0 * glass_dispersion_tangential
+             + 0.9 * spectral_dispersion
+             + 0.8 * clarity_bridge)
+            * content_scale;
+        float2 clarity_focus_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                + clarity_axis
+                    * texel
+                    * clarity_span
+                    * (0.28 + 0.18 * clarity_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 clarity_fold_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.12
+                - clarity_axis
+                    * texel
+                    * clarity_span
+                    * (0.24 + 0.16 * clarity_edge)
+                + bridge_tangent
+                    * texel
+                    * clarity_cross_span
+                    * bridge_shear
+                    * clarity_bridge
+                    * (0.14 + 0.12 * clarity_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 clarity_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.13
+                + clarity_cross
+                    * texel
+                    * clarity_cross_span
+                    * (0.28 + 0.16 * clarity_pointer),
+            float2(0.0),
+            float2(1.0));
+        float2 clarity_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - clarity_cross
+                    * texel
+                    * clarity_cross_span
+                    * (0.24 + 0.14 * clarity_center)
+                - clarity_center_dir
+                    * texel
+                    * clarity_span
+                    * (0.10 + 0.10 * clarity_transition),
+            float2(0.0),
+            float2(1.0));
+        float3 clarity_focus_rgb =
+            backdrop.sample(samp, clarity_focus_uv).rgb;
+        float3 clarity_fold_rgb =
+            backdrop.sample(samp, clarity_fold_uv).rgb;
+        float3 clarity_cross_rgb =
+            backdrop.sample(samp, clarity_cross_uv).rgb;
+        float3 clarity_return_rgb =
+            backdrop.sample(samp, clarity_return_uv).rgb;
+        float3 clarity_probe =
+            clarity_focus_rgb * 0.32
+            + clarity_fold_rgb * 0.28
+            + clarity_cross_rgb * 0.22
+            + clarity_return_rgb * 0.18;
+        float clarity_luma =
+            dot(clarity_probe, float3(0.2126, 0.7152, 0.0722));
+        float clarity_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float clarity_range = clamp(
+            length(clarity_focus_rgb - clarity_fold_rgb) * 0.30
+                + length(clarity_cross_rgb - clarity_return_rgb) * 0.24
+                + abs(clarity_luma - clarity_surface_luma) * 0.24
+                + clarity_transition * 0.08
+                + clarity_pointer * 0.06,
+            0.0,
+            1.0);
+        float clarity_coherence =
+            1.0 - smoothstep(0.08, 0.34, clarity_range);
+        float clarity_midband =
+            1.0 - smoothstep(
+                0.16,
+                0.48,
+                abs(clarity_surface_luma - 0.50));
+        float clarity_overbright = smoothstep(
+            0.62,
+            0.90,
+            clarity_surface_luma + clarity_luma * 0.22);
+        float clarity_overdark =
+            1.0 - smoothstep(
+                0.12,
+                0.42,
+                clarity_surface_luma - clarity_luma * 0.14);
+        float clarity_protection = clamp(
+            clarity_midband * 0.32
+                + clarity_coherence * 0.22
+                + clarity_overbright * 0.24
+                + clarity_overdark * 0.18
+                + clarity_alignment * 0.12,
+            0.0,
+            1.0);
+        float3 clarity_guard = mix(
+            clarity_probe,
+            float3(clarity_luma),
+            clarity_coherence * 0.16
+                + clarity_overbright * 0.18
+                + clarity_overdark * (0.10 + 0.14 * glass_shadow_gain));
+        float clarity_contrast = 1.0
+            + clear_glass_contrast * 0.055
+            + clarity_transition * 0.045
+            + clarity_alignment * 0.020;
+        clarity_guard = clamp(
+            (clarity_guard - float3(0.50)) * clarity_contrast
+                + float3(0.50),
+            0.0,
+            1.0);
+        float3 clarity_tint =
+            float3(1.0)
+            + in.tint.rgb
+                * (0.014
+                   + 0.026 * tint_chroma * prominent_intensity);
+        float3 clarity_layer = clarity_guard * clarity_tint;
+        float3 clarity_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        float clarity_rim = clamp(
+            clarity_edge * 0.24
+                + clarity_bridge * 0.20
+                + clarity_pointer * 0.18
+                + clarity_alignment * 0.16
+                + clarity_transition * 0.16,
+            0.0,
+            1.0);
+        clarity_layer += clarity_prism
+            * clarity_rim
+            * (0.002
+               + 0.006 * spectral_rim_tint
+               + 0.005 * glass_prismatic_gain);
+        float clarity_weight = transition_clarity_strength
+            * clarity_gate
+            * (0.34
+               + 0.22 * clarity_protection
+               + 0.18 * clarity_midband
+               + 0.14 * clarity_pointer
+               + 0.12 * clarity_transition);
+        rgb = mix(
+            rgb,
+            mix(rgb, clamp(clarity_layer, 0.0, 1.0),
+                0.10 + 0.14 * clarity_protection),
+            clarity_weight * 0.32);
+        float clarity_shadow =
+            clarity_overbright
+            * clarity_weight
+            * (0.004 + 0.010 * glass_shadow_gain)
+            * (0.52 + 0.48 * clarity_rim);
+        rgb *= 1.0 - clamp(clarity_shadow, 0.0, 0.026);
+        rgb += clarity_prism
+            * clarity_weight
+            * clarity_rim
+            * clarity_midband
+            * (0.0015
+               + 0.004 * dynamic_light_highlight
+               + 0.004 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
