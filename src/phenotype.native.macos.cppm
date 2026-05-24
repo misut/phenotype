@@ -13648,6 +13648,177 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(union_shadow_trim, 0.0, 0.030);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float liquid_response_strength = clamp(
+        0.012 * clear_glass_detail
+            + 0.010 * clear_glass_contrast
+            + 0.012 * glass_thickness
+            + 0.018 * chroma_governor_strength
+            + 0.018 * glass_union_glow_strength
+            + 0.014 * clarity_balance_strength
+            + 0.014 * optical_equilibrium_strength
+            + 0.018 * pointer_lens_strength * pointer_lens_raw
+            + 0.016 * bridge_motion_strength * bridge_band
+            + 0.010 * union_execution * group_blend_strength,
+        0.0,
+        0.095);
+    if (liquid_response_strength > 0.0001) {
+        float response_pointer = pointer_lens
+            * pointer_lens_strength
+            * (0.46 + 0.54 * pointer_lens_raw);
+        float response_bridge = bridge_band
+            * (0.34 + 0.66 * bridge_core)
+            * (0.70 + 0.30 * union_execution);
+        float response_rim = edge_lens
+            * (0.30 + 0.70 * clear_glass_detail)
+            * (0.48 + 0.52 * max(response_pointer, response_bridge));
+        float response_gate = clamp(
+            response_pointer * 0.34
+                + response_bridge * 0.32
+                + response_rim * 0.18
+                + surface_tension_strength * 0.12
+                + prominent_intensity * tint_chroma * 0.10,
+            0.0,
+            1.0);
+        float2 response_axis_raw =
+            pointer_dir * response_pointer
+            + bridge_dir * response_bridge
+            + refraction_dir * response_rim * 0.42
+            - dynamic_light_dir * specular_intensity * 0.18;
+        float response_axis_len = length(response_axis_raw);
+        float2 response_axis = response_axis_len > 0.0001
+            ? response_axis_raw / response_axis_len
+            : refraction_dir;
+        float2 response_cross = float2(-response_axis.y, response_axis.x);
+        float response_phase =
+            clamp(
+                pointer_lens_raw * pointer_lens_strength * 2.8
+                    + bridge_axial * (7.0 + 3.0 * union_execution)
+                    + bridge_shear * bridge_band * 2.2
+                    + specular_intensity * 1.4,
+                -8.0,
+                8.0);
+        float response_wave =
+            0.5
+            + 0.5
+                * sin(
+                    response_phase
+                    + dot(normalized_local,
+                          response_axis)
+                        * (5.5 + 4.0 * clear_glass_detail));
+        float response_span =
+            (0.9
+             + 1.8 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.2 * response_gate
+             + 0.04 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float2 response_head_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.22
+                + response_axis
+                    * texel
+                    * response_span
+                    * (0.26 + 0.16 * response_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 response_tail_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                - response_axis
+                    * texel
+                    * response_span
+                    * (0.30 + 0.14 * response_gate),
+            float2(0.0),
+            float2(1.0));
+        float2 response_side_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + response_cross
+                    * texel
+                    * response_span
+                    * (0.22
+                       + 0.16 * abs(bridge_shear) * bridge_band
+                       + 0.12 * response_pointer),
+            float2(0.0),
+            float2(1.0));
+        float3 response_head_rgb =
+            backdrop.sample(samp, response_head_uv).rgb;
+        float3 response_tail_rgb =
+            backdrop.sample(samp, response_tail_uv).rgb;
+        float3 response_side_rgb =
+            backdrop.sample(samp, response_side_uv).rgb;
+        float3 response_probe =
+            response_head_rgb * 0.40
+            + response_tail_rgb * 0.34
+            + response_side_rgb * 0.26;
+        float response_probe_luma =
+            dot(response_probe, float3(0.2126, 0.7152, 0.0722));
+        float response_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float response_motion_edge = clamp(
+            length(response_head_rgb - response_tail_rgb) * 0.32
+                + length(response_side_rgb - response_probe) * 0.22
+                + abs(response_probe_luma - response_surface_luma) * 0.22,
+            0.0,
+            1.0);
+        float response_shimmer = smoothstep(
+            0.12,
+            0.72,
+            response_motion_edge * 0.56
+                + response_wave * 0.28
+                + response_gate * 0.30);
+        float3 response_neutral =
+            mix(response_probe,
+                float3(response_probe_luma),
+                0.28 + 0.18 * clear_glass_dimming);
+        float3 response_tinted =
+            response_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.030
+                      + 0.055 * tint_chroma * prominent_intensity));
+        float3 response_layer = mix(
+            rgb,
+            response_tinted,
+            0.05
+                + 0.11 * response_shimmer
+                + 0.07 * response_gate);
+        float3 response_luma_rgb =
+            float3(dot(response_layer, float3(0.2126, 0.7152, 0.0722)));
+        response_layer =
+            response_luma_rgb
+            + (response_layer - response_luma_rgb)
+                * (0.90
+                   + 0.08 * response_shimmer
+                   + 0.04 * tint_chroma);
+        response_layer += response_neutral
+            * response_shimmer
+            * response_gate
+            * (0.004
+               + 0.012 * glass_scattering_gain
+               + 0.008 * dynamic_light_highlight);
+        float response_weight = liquid_response_strength
+            * response_gate
+            * (0.32
+               + 0.22 * response_shimmer
+               + 0.18 * response_pointer
+               + 0.18 * response_bridge
+               + 0.10 * response_rim);
+        rgb = mix(
+            rgb,
+            clamp(response_layer, 0.0, 1.0),
+            response_weight * 0.34);
+        float response_bright_trim =
+            response_weight
+            * response_shimmer
+            * smoothstep(0.74,
+                         1.02,
+                         max(max(rgb.r, rgb.g), rgb.b))
+            * (0.008 + 0.014 * clear_glass_dimming);
+        rgb *= 1.0 - clamp(response_bright_trim, 0.0, 0.026);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
