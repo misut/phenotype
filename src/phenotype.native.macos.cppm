@@ -14715,6 +14715,208 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(sheen_glare_trim, 0.0, 0.022);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float parallax_depth_strength = clamp(
+        0.012 * clear_glass_detail
+            + 0.010 * clear_glass_contrast
+            + 0.014 * glass_thickness
+            + 0.014 * glass_lensing_gain
+            + 0.012 * depth_aperture_strength
+            + 0.012 * content_focus_strength
+            + 0.012 * edge_caustic_strength
+            + 0.010 * surface_sheen_strength
+            + 0.010 * liquid_response_strength
+            + 0.008 * bridge_motion_strength * bridge_band,
+        0.0,
+        0.095);
+    if (parallax_depth_strength > 0.0001) {
+        float parallax_center =
+            1.0 - smoothstep(0.22, 1.18, normalized_len);
+        float parallax_rim = edge_lens
+            * (0.28
+               + 0.72
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.42, 0.5),
+                       signed_edge_distance)));
+        float parallax_motion = clamp(
+            pointer_lens * pointer_lens_strength * 0.36
+                + bridge_band * (0.30 + 0.70 * bridge_core)
+                + surface_tension_strength * 0.42
+                + specular_intensity * 0.20,
+            0.0,
+            1.0);
+        float parallax_gate = clamp(
+            parallax_center * 0.28
+                + parallax_rim * 0.28
+                + parallax_motion * 0.22
+                + clear_glass_detail * 0.16
+                + dynamic_light_highlight * 0.14,
+            0.0,
+            1.0);
+        float2 parallax_axis_raw =
+            refraction_dir * (0.46 + 0.18 * parallax_center)
+            + bridge_dir * bridge_band * (0.18 + 0.12 * bridge_core)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.16
+            - dynamic_light_dir * (0.16 + 0.12 * dynamic_light_highlight);
+        float parallax_axis_len = length(parallax_axis_raw);
+        float2 parallax_axis = parallax_axis_len > 0.0001
+            ? parallax_axis_raw / parallax_axis_len
+            : refraction_dir;
+        float2 parallax_cross =
+            float2(-parallax_axis.y, parallax_axis.x);
+        float parallax_phase = clamp(
+            dot(normalized_local, parallax_axis)
+                    * (4.8 + 3.2 * clear_glass_detail)
+                + dot(normalized_local, parallax_cross)
+                    * (2.0 + 1.0 * glass_thickness)
+                + bridge_shear * bridge_band * 1.8
+                + pointer_lens_raw * pointer_lens_strength * 1.4,
+            -8.0,
+            8.0);
+        float parallax_wave = 0.5 + 0.5 * sin(parallax_phase);
+        float parallax_span =
+            (0.9
+             + 2.4 * glass_thickness
+             + 1.6 * clear_glass_detail
+             + 1.0 * parallax_gate
+             + 0.045 * blur_points)
+            * content_scale
+            * (0.82 + 0.18 * glass_lensing_gain);
+        float2 parallax_near_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + parallax_axis
+                    * texel
+                    * parallax_span
+                    * (0.22 + 0.14 * parallax_center),
+            float2(0.0),
+            float2(1.0));
+        float2 parallax_far_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - parallax_axis
+                    * texel
+                    * parallax_span
+                    * (0.30 + 0.14 * parallax_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 parallax_horizon_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                + parallax_cross
+                    * texel
+                    * parallax_span
+                    * (0.22
+                       + 0.12 * parallax_motion
+                       + 0.10 * abs(bridge_shear) * bridge_band)
+                - dynamic_light_dir
+                    * texel
+                    * parallax_span
+                    * (0.10 + 0.08 * dynamic_light_highlight),
+            float2(0.0),
+            float2(1.0));
+        float3 parallax_near_rgb =
+            backdrop.sample(samp, parallax_near_uv).rgb;
+        float3 parallax_far_rgb =
+            backdrop.sample(samp, parallax_far_uv).rgb;
+        float3 parallax_horizon_rgb =
+            backdrop.sample(samp, parallax_horizon_uv).rgb;
+        float3 parallax_probe =
+            parallax_near_rgb * 0.38
+            + parallax_far_rgb * 0.36
+            + parallax_horizon_rgb * 0.26;
+        float parallax_probe_luma =
+            dot(parallax_probe, float3(0.2126, 0.7152, 0.0722));
+        float parallax_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float parallax_depth_delta = clamp(
+            length(parallax_near_rgb - parallax_far_rgb) * 0.36
+                + length(parallax_horizon_rgb - parallax_probe) * 0.22
+                + abs(parallax_probe_luma - parallax_surface_luma) * 0.20,
+            0.0,
+            1.0);
+        float parallax_depth = smoothstep(
+            0.08,
+            0.56,
+            parallax_depth_delta * 0.46
+                + parallax_rim * 0.24
+                + parallax_motion * 0.20
+                + parallax_wave * 0.18);
+        float parallax_stability =
+            1.0 - smoothstep(
+                0.28,
+                0.86,
+                parallax_depth_delta * 0.50
+                    + clear_glass_dimming * 0.24
+                    + parallax_motion * 0.14);
+        float3 parallax_neutral =
+            mix(parallax_probe,
+                float3(parallax_probe_luma),
+                0.30 + 0.18 * clear_glass_dimming);
+        float3 parallax_layer = mix(
+            parallax_neutral,
+            parallax_near_rgb,
+            parallax_center * (0.20 + 0.18 * parallax_depth));
+        parallax_layer = mix(
+            parallax_layer,
+            parallax_far_rgb,
+            parallax_rim * (0.16 + 0.18 * parallax_depth));
+        float3 parallax_luma_rgb =
+            float3(dot(parallax_layer, float3(0.2126, 0.7152, 0.0722)));
+        parallax_layer =
+            parallax_luma_rgb
+            + (parallax_layer - parallax_luma_rgb)
+                * (0.89
+                   + 0.08 * parallax_depth
+                   + 0.04 * clear_glass_detail);
+        parallax_layer = clamp(
+            (parallax_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast
+                           * (0.10 + 0.12 * parallax_stability))
+                + float3(0.50),
+            0.0,
+            1.0);
+        parallax_layer = mix(
+            parallax_layer,
+            parallax_layer
+                * (float3(1.0)
+                   + in.tint.rgb
+                       * (0.018
+                          + 0.030 * tint_chroma * prominent_intensity)),
+            tint_chroma * (0.10 + 0.10 * parallax_motion));
+        parallax_layer += parallax_neutral
+            * parallax_depth
+            * parallax_gate
+            * (0.004
+               + 0.008 * glass_scattering_gain
+               + 0.006 * dynamic_light_highlight);
+        float parallax_weight = parallax_depth_strength
+            * parallax_gate
+            * (0.30
+               + 0.22 * parallax_depth
+               + 0.18 * parallax_stability
+               + 0.16 * parallax_motion
+               + 0.14 * max(parallax_center, parallax_rim));
+        rgb = mix(
+            rgb,
+            clamp(parallax_layer, 0.0, 1.0),
+            parallax_weight * 0.31);
+        float parallax_shadow_trim =
+            parallax_weight
+            * (1.0 - parallax_stability)
+            * (0.005 + 0.012 * glass_shadow_gain);
+        float parallax_dark_lift =
+            parallax_weight
+            * parallax_stability
+            * smoothstep(0.0,
+                         0.34,
+                         0.34 - min(min(rgb.r, rgb.g), rgb.b))
+            * (0.004 + 0.008 * glass_scattering_gain);
+        rgb *= 1.0 - clamp(parallax_shadow_trim, 0.0, 0.024);
+        rgb += parallax_neutral * clamp(parallax_dark_lift, 0.0, 0.018);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
