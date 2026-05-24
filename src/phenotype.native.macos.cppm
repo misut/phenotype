@@ -17947,6 +17947,254 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(pressure_shadow, 0.0, 0.040);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float matched_tether_sheath_strength = clamp(
+        0.016 * glass_effect_match_execution * group_blend_strength
+            + 0.014 * morph_execution * group_blend_strength
+            + 0.012 * materialize_wave_strength
+            + 0.012 * container_pressure_halo_strength
+            + 0.010 * spacing_meniscus_strength
+            + 0.010 * edge_contact_caustic_strength
+            + 0.008 * shared_shell_strength
+            + 0.008 * surrounding_light_wrap_strength,
+        0.0,
+        0.082);
+    if (matched_tether_sheath_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 tether_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 tether_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            tether_group_size);
+        float2 tether_group_norm =
+            (tether_group_local / tether_group_size - float2(0.5)) * 2.0;
+        float tether_group_len = length(tether_group_norm);
+        float tether_center =
+            1.0 - smoothstep(0.18, 1.16, tether_group_len);
+        float2 tether_group_edge = min(
+            tether_group_local,
+            max(tether_group_size - tether_group_local, float2(0.0)));
+        float tether_edge_distance =
+            min(tether_group_edge.x, tether_group_edge.y);
+        float tether_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.4, 1.0),
+                tether_edge_distance);
+        float tether_bridge = bridge_band
+            * (0.32 + 0.68 * bridge_core);
+        float tether_transition = clamp(
+            glass_effect_match_execution * 0.36
+                + morph_execution * 0.28
+                + materialize_wave_strength * 0.22
+                + union_execution * 0.14
+                + shape_blend_execution * 0.12,
+            0.0,
+            1.0);
+        float tether_gate = clamp(
+            tether_bridge * 0.30
+                + tether_edge * 0.22
+                + tether_center * 0.18
+                + tether_transition * group_blend_strength * 0.26
+                + container_pressure_halo_strength * 2.4
+                + spacing_meniscus_strength * 2.6,
+            0.0,
+            1.0);
+        float2 tether_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 tether_group_center_screen =
+            in.group_rect.xy + tether_group_size * 0.5;
+        float2 tether_group_center_uv = clamp(
+            tether_group_center_screen / tether_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 tether_to_center =
+            tether_group_center_uv - in.screen_uv;
+        float tether_center_distance = length(tether_to_center);
+        float2 tether_center_dir =
+            tether_center_distance > 0.0001
+                ? tether_to_center / tether_center_distance
+                : refraction_dir;
+        float2 tether_axis_raw =
+            bridge_dir * (0.46 + 0.28 * tether_bridge)
+            + tether_center_dir * (0.30 + 0.20 * tether_center)
+            + refraction_dir * (0.20 + 0.16 * tether_edge)
+            - dynamic_light_dir
+                * (0.18 + 0.12 * dynamic_light_highlight);
+        float tether_axis_len = length(tether_axis_raw);
+        float2 tether_axis = tether_axis_len > 0.0001
+            ? tether_axis_raw / tether_axis_len
+            : refraction_dir;
+        float2 tether_cross = float2(-tether_axis.y, tether_axis.x);
+        float tether_alignment =
+            smoothstep(-0.28, 0.86, dot(tether_axis, bridge_dir));
+        float tether_phase = clamp(
+            bridge_axial * (10.0 + 4.0 * tether_transition)
+                + dot(tether_group_norm, tether_axis)
+                    * (4.2 + 2.0 * materialize_wave_strength)
+                + dot(tether_group_norm, tether_cross)
+                    * (2.8 + 1.6 * tether_bridge)
+                + materialize_rim_position * materialize_wave_strength * 3.0
+                + bridge_shear * tether_bridge * 2.8,
+            -10.0,
+            10.0);
+        float tether_wave = 0.5 + 0.5 * sin(tether_phase);
+        float tether_strand =
+            1.0 - smoothstep(0.0, 0.31, abs(tether_wave - 0.56));
+        float tether_span =
+            (0.88
+             + 2.0 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.2 * tether_gate
+             + 0.045 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float tether_cross_span =
+            (0.62
+             + 1.2 * glass_dispersion_tangential
+             + 1.5 * spectral_dispersion
+             + 0.9 * tether_transition)
+            * content_scale;
+        float2 tether_lead_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.20
+                + tether_axis
+                    * texel
+                    * tether_span
+                    * (0.30 + 0.16 * tether_wave)
+                - dynamic_light_dir
+                    * texel
+                    * tether_span
+                    * (0.10 + 0.08 * tether_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 tether_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - tether_axis
+                    * texel
+                    * tether_span
+                    * (0.32 + 0.14 * tether_strand)
+                + bridge_tangent
+                    * texel
+                    * tether_cross_span
+                    * bridge_shear
+                    * tether_bridge
+                    * (0.16 + 0.14 * tether_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 tether_upper_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                + tether_cross
+                    * texel
+                    * tether_cross_span
+                    * (0.30 + 0.16 * tether_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 tether_lower_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                - tether_cross
+                    * texel
+                    * tether_cross_span
+                    * (0.28 + 0.16 * tether_strand),
+            float2(0.0),
+            float2(1.0));
+        float3 tether_lead_rgb =
+            backdrop.sample(samp, tether_lead_uv).rgb;
+        float3 tether_return_rgb =
+            backdrop.sample(samp, tether_return_uv).rgb;
+        float3 tether_upper_rgb =
+            backdrop.sample(samp, tether_upper_uv).rgb;
+        float3 tether_lower_rgb =
+            backdrop.sample(samp, tether_lower_uv).rgb;
+        float3 tether_probe =
+            tether_lead_rgb * 0.34
+            + tether_return_rgb * 0.30
+            + tether_upper_rgb * 0.18
+            + tether_lower_rgb * 0.18;
+        float tether_luma =
+            dot(tether_probe, float3(0.2126, 0.7152, 0.0722));
+        float tether_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float tether_range = clamp(
+            length(tether_lead_rgb - tether_return_rgb) * 0.32
+                + length(tether_upper_rgb - tether_lower_rgb) * 0.26
+                + abs(tether_luma - tether_surface_luma) * 0.22
+                + tether_strand * 0.10,
+            0.0,
+            1.0);
+        float tether_coherence =
+            1.0 - smoothstep(0.08, 0.38, tether_range);
+        float tether_bright = smoothstep(
+            tether_surface_luma - 0.07,
+            tether_surface_luma + 0.30,
+            tether_luma);
+        float tether_dark = smoothstep(
+            0.08,
+            0.34,
+            tether_surface_luma - tether_luma);
+        float tether_fresnel = clamp(
+            tether_strand * 0.34
+                + tether_edge * 0.24
+                + tether_transition * 0.18
+                + tether_alignment * 0.14
+                + materialize_wave_strength * 0.10,
+            0.0,
+            1.0);
+        float3 tether_neutral = mix(
+            tether_probe,
+            float3(tether_luma),
+            tether_dark * (0.14 + 0.16 * glass_shadow_gain)
+                + tether_coherence * 0.16);
+        float3 tether_layer =
+            tether_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.024
+                      + 0.038 * tint_chroma * prominent_intensity));
+        tether_layer += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * tether_fresnel
+            * (0.005
+               + 0.012 * spectral_rim_tint
+               + 0.008 * glass_prismatic_gain);
+        float tether_weight = matched_tether_sheath_strength
+            * tether_gate
+            * (0.30
+               + 0.20 * tether_fresnel
+               + 0.18 * tether_coherence
+               + 0.16 * tether_bright
+               + 0.16 * tether_strand);
+        rgb = mix(
+            rgb,
+            mix(rgb, clamp(tether_layer, 0.0, 1.0),
+                0.16 + 0.18 * tether_fresnel),
+            tether_weight * 0.40);
+        rgb += tether_layer
+            * tether_weight
+            * tether_strand
+            * (0.004
+               + 0.012 * dynamic_light_highlight
+               + 0.010 * glass_scattering_gain);
+        float tether_shadow =
+            tether_dark
+            * tether_weight
+            * (0.007 + 0.016 * glass_shadow_gain)
+            * (0.58 + 0.42 * (1.0 - tether_alignment));
+        rgb *= 1.0 - clamp(tether_shadow, 0.0, 0.040);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
