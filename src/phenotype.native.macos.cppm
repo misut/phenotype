@@ -10587,6 +10587,170 @@ fragment float4 fs_material(
         rgb += clarity_neutral * clarity_shadow_lift;
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float contour_seal_strength = clamp(
+        0.022 * glass_thickness
+            + 0.016 * (glass_lensing_gain - 1.0)
+            + 0.020 * (glass_shadow_gain - 1.0)
+            + 0.014 * glass_caustic_spread
+            + 0.012 * clear_glass_contrast
+            + 0.10 * clarity_film_strength
+            + 0.08 * adaptive_contrast_strength
+            + 0.06 * volumetric_absorption_strength,
+        0.0,
+        0.13);
+    if (contour_seal_strength > 0.0001 && edge_bevel_width > 0.0001) {
+        float seal_outer = 1.0 - smoothstep(
+            0.0,
+            max(edge_bevel_width * 1.92, 0.5),
+            signed_edge_distance);
+        float seal_inner = 1.0 - smoothstep(
+            0.0,
+            max(edge_width * 0.92, 0.5),
+            signed_edge_distance);
+        float seal_rim = clamp(
+            seal_outer - seal_inner * 0.58,
+            0.0,
+            1.0)
+            * (0.58 + 0.42 * edge_lens);
+        float seal_surface =
+            (1.0 - smoothstep(0.12, 1.10, normalized_len))
+            * (0.34 + 0.66 * seal_outer);
+        float seal_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.34 + 0.66 * bridge_core)
+                + surface_tension_strength * 1.20,
+            0.0,
+            1.0);
+        float seal_gate = clamp(
+            seal_rim * 0.64
+                + seal_surface * 0.22
+                + seal_contact * 0.22,
+            0.0,
+            1.0);
+        float2 seal_raw_dir =
+            refraction_dir * (0.56 + 0.32 * edge_lens)
+            - dynamic_light_dir * (0.32 + 0.20 * dynamic_light_shadow)
+            + bridge_dir * bridge_band * 0.26
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.20;
+        float seal_dir_len = length(seal_raw_dir);
+        float2 seal_dir = seal_dir_len > 0.0001
+            ? seal_raw_dir / seal_dir_len
+            : refraction_dir;
+        seal_dir = length(seal_dir) > 0.0001 ? seal_dir : -dynamic_light_dir;
+        float2 seal_tangent = float2(-seal_dir.y, seal_dir.x);
+        float seal_span =
+            (1.4
+             + 3.8 * glass_thickness
+             + 2.8 * glass_caustic_spread
+             + 0.08 * blur_points)
+            * content_scale
+            * (0.78 + 0.22 * glass_lensing_gain);
+        float2 seal_outer_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.28
+                + seal_dir * texel * seal_span,
+            float2(0.0),
+            float2(1.0));
+        float2 seal_inner_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.42
+                - seal_dir * texel * seal_span * 0.72,
+            float2(0.0),
+            float2(1.0));
+        float2 seal_glint_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.36
+                + seal_tangent
+                    * texel
+                    * seal_span
+                    * (0.48 + 0.24 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 seal_outer_rgb =
+            backdrop.sample(samp, seal_outer_uv).rgb;
+        float3 seal_inner_rgb =
+            backdrop.sample(samp, seal_inner_uv).rgb;
+        float3 seal_glint_rgb =
+            backdrop.sample(samp, seal_glint_uv).rgb;
+        float seal_outer_luma =
+            dot(seal_outer_rgb, float3(0.2126, 0.7152, 0.0722));
+        float seal_inner_luma =
+            dot(seal_inner_rgb, float3(0.2126, 0.7152, 0.0722));
+        float seal_glint_luma =
+            dot(seal_glint_rgb, float3(0.2126, 0.7152, 0.0722));
+        float seal_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float seal_contrast = clamp(
+            abs(seal_outer_luma - seal_inner_luma)
+                + abs(seal_glint_luma - seal_surface_luma) * 0.60,
+            0.0,
+            1.0);
+        float seal_bright_backdrop = smoothstep(
+            seal_surface_luma - 0.08,
+            seal_surface_luma + 0.28,
+            seal_outer_luma);
+        float seal_dark_backdrop = smoothstep(
+            0.08,
+            0.36,
+            seal_surface_luma - seal_outer_luma);
+        float seal_light_side = smoothstep(
+            -0.20,
+            0.92,
+            dot(seal_dir, -dynamic_light_dir));
+        float seal_shadow_side = smoothstep(
+            -0.10,
+            0.88,
+            dot(seal_dir, dynamic_light_dir));
+        float seal_luma =
+            seal_outer_luma * 0.36
+            + seal_inner_luma * 0.40
+            + seal_glint_luma * 0.24;
+        float3 seal_tint = seal_inner_rgb * 0.48
+            + seal_outer_rgb * 0.34
+            + seal_glint_rgb * 0.18;
+        seal_tint = mix(
+            seal_tint,
+            float3(seal_luma),
+            0.30 + 0.22 * seal_bright_backdrop);
+        seal_tint = mix(
+            seal_tint,
+            seal_tint * (float3(1.0) + 0.16 * in.tint.rgb),
+            tint_chroma * (0.24 + 0.26 * prominent_intensity));
+        seal_tint += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * seal_rim
+            * (0.08 + 0.24 * spectral_rim_tint);
+        float seal_occlusion = contour_seal_strength
+            * seal_gate
+            * (0.18
+               + 0.18 * seal_bright_backdrop
+               + 0.16 * seal_contrast
+               + 0.14 * seal_shadow_side)
+            * (0.72 + 0.28 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(
+            seal_occlusion * (0.08 + 0.12 * seal_rim),
+            0.0,
+            0.085);
+        float seal_lift = contour_seal_strength
+            * seal_gate
+            * seal_light_side
+            * (0.12
+               + 0.16 * seal_dark_backdrop
+               + 0.10 * dynamic_light_highlight);
+        rgb = mix(
+            rgb,
+            mix(rgb, seal_tint, 0.12 + 0.12 * seal_contrast),
+            seal_lift * 0.34);
+        rgb += seal_tint
+            * seal_lift
+            * seal_rim
+            * (0.006
+               + 0.018 * edge_inner_highlight
+               + 0.012 * glass_prismatic_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
