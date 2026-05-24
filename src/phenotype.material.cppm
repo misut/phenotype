@@ -8693,6 +8693,53 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
     return response;
 }
 
+inline void apply_material_reduced_transparency_policy(
+        MaterialPlan& plan) noexcept {
+    if (!plan.decision_trace.reduced_transparency
+        || plan.kind == MaterialKind::None) {
+        return;
+    }
+
+    plan.opacity = std::clamp(std::max(plan.opacity, 0.88f), 0.0f, 1.0f);
+    plan.tint.a = static_cast<unsigned char>(
+        std::max(static_cast<int>(plan.tint.a), 224));
+    plan.luminance_floor = std::clamp(
+        std::max(plan.luminance_floor, 0.14f),
+        0.0f,
+        1.0f);
+    plan.edge_highlight = std::clamp(
+        std::max(plan.edge_highlight, 0.46f),
+        0.0f,
+        1.0f);
+    plan.edge_width = std::max(plan.edge_width, 1.35f);
+    if (plan.quality_policy.allow_shadow) {
+        plan.shadow_alpha = std::clamp(
+            std::max(plan.shadow_alpha, 0.16f),
+            0.0f,
+            0.4f);
+        plan.shadow_radius = std::max(plan.shadow_radius, 12.0f);
+    }
+}
+
+inline void apply_material_increased_contrast_policy(
+        MaterialPlan& plan) noexcept {
+    if (!plan.decision_trace.increase_contrast
+        || plan.kind == MaterialKind::None) {
+        return;
+    }
+
+    plan.opacity = std::clamp(plan.opacity + 0.12f, 0.0f, 1.0f);
+    plan.luminance_floor = std::clamp(
+        plan.luminance_floor + 0.05f,
+        0.0f,
+        1.0f);
+    plan.saturation = std::min(plan.saturation, 1.0f);
+    plan.edge_highlight = std::clamp(plan.edge_highlight + 0.10f, 0.0f, 1.0f);
+    plan.edge_width = std::clamp(plan.edge_width + 0.35f, 0.5f, 8.0f);
+    if (plan.quality_policy.allow_shadow)
+        plan.shadow_alpha = std::clamp(plan.shadow_alpha + 0.02f, 0.0f, 0.4f);
+}
+
 inline MaterialPlan plan_material_surface(MaterialRequest request,
                                           MaterialEnvironment environment) noexcept {
     MaterialPlan plan{};
@@ -8916,6 +8963,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     }
     if (has_material)
         apply_material_transition_policy(plan);
+    apply_material_reduced_transparency_policy(plan);
     plan.decision_trace.first_blocker =
         material_fallback_path_name(plan.fallback_path);
 
@@ -8941,11 +8989,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     if (environment.capabilities.reduce_motion) {
         plan.noise_opacity = 0.0f;
     }
-    if (environment.capabilities.increase_contrast) {
-        plan.opacity = std::clamp(plan.opacity + 0.12f, 0.0f, 1.0f);
-        plan.luminance_floor = std::clamp(plan.luminance_floor + 0.05f, 0.0f, 1.0f);
-        plan.saturation = std::min(plan.saturation, 1.0f);
-    }
+    apply_material_increased_contrast_policy(plan);
     apply_material_interaction_policy(plan);
     plan.prominent_glass = material_resolve_prominent_glass_profile(plan);
     plan.refraction = material_resolve_refraction_profile(plan);
