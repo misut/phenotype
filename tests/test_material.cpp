@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 74);
+    assert(material_plan_contract_version == 75);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -1762,6 +1762,7 @@ void test_prominent_glass_action_optics_contract() {
     assert(plan.prominent_glass.control_driven);
     assert(plan.prominent_glass.tint_driven);
     assert(plan.prominent_glass.backdrop_driven);
+    assert(!plan.prominent_glass.interaction_driven);
     assert(plan.prominent_glass.bounded);
     assert(std::string_view(plan.prominent_glass.model)
         == "prominent-liquid-glass-action");
@@ -1826,6 +1827,50 @@ void test_prominent_glass_action_optics_contract() {
     assert(std::string_view(
                high_contrast_plan.reference_model.accessibility_response)
            == "increased-contrast");
+
+    auto interactive = request;
+    interactive.style.container.interactive = true;
+    interactive.style.interaction = MaterialInteractionDescriptor{
+        .hovered = true,
+        .pressed = false,
+        .focused = true,
+        .pointer_inside = true,
+        .pointer_x = 0.82f,
+        .pointer_y = 0.18f,
+    };
+    auto interactive_plan =
+        plan_material_surface(interactive, sampled_environment());
+    assert(interactive_plan.interaction.active);
+    assert(interactive_plan.interaction.pointer_lens_active);
+    assert(interactive_plan.prominent_glass.active);
+    assert(interactive_plan.prominent_glass.interaction_driven);
+    assert(std::string_view(interactive_plan.prominent_glass.source)
+        == "interactive-prominent-control-accent-glass");
+    assert(interactive_plan.prominent_glass.tint_weight
+           > plan.prominent_glass.tint_weight);
+    assert(interactive_plan.prominent_glass.edge_lift
+           > plan.prominent_glass.edge_lift);
+    assert(interactive_plan.prominent_glass.lensing_gain
+           > plan.prominent_glass.lensing_gain);
+    assert(std::string_view(
+               interactive_plan.optical_composition.prominent_glass_source)
+           == interactive_plan.prominent_glass.source);
+    auto const& interactive_primary_stage =
+        interactive_plan.execution_stages[1];
+    assert(interactive_primary_stage.optics.prominent_glass_tint_weight
+           == interactive_plan.prominent_glass.tint_weight);
+
+    auto pressed = interactive;
+    pressed.style.interaction.hovered = false;
+    pressed.style.interaction.pressed = true;
+    auto pressed_plan = plan_material_surface(pressed, sampled_environment());
+    assert(pressed_plan.prominent_glass.interaction_driven);
+    assert(pressed_plan.prominent_glass.tint_weight
+           > interactive_plan.prominent_glass.tint_weight);
+    assert(pressed_plan.prominent_glass.edge_lift
+           > interactive_plan.prominent_glass.edge_lift);
+    assert(pressed_plan.prominent_glass.lensing_gain
+           > interactive_plan.prominent_glass.lensing_gain);
 
     auto disabled = request;
     disabled.style.prominence.enabled = false;

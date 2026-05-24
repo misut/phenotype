@@ -2226,6 +2226,9 @@ namespace detail {
             "backdrop_driven",
             json::Value{plan.prominent_glass.backdrop_driven});
         prominent_glass.emplace(
+            "interaction_driven",
+            json::Value{plan.prominent_glass.interaction_driven});
+        prominent_glass.emplace(
             "reduced_motion_suppressed",
             json::Value{plan.prominent_glass.reduced_motion_suppressed});
         prominent_glass.emplace(

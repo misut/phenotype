@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 74;
+inline constexpr std::uint32_t material_plan_contract_version = 75;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -639,6 +639,7 @@ struct MaterialProminentGlassProfile {
     bool control_driven = false;
     bool tint_driven = false;
     bool backdrop_driven = false;
+    bool interaction_driven = false;
     bool reduced_motion_suppressed = false;
     bool bounded = true;
     float intensity = 0.0f;
@@ -6961,7 +6962,16 @@ inline void apply_material_interaction_policy(MaterialPlan& plan) noexcept {
 
 inline char const* material_prominent_glass_source_name(
         bool control_driven,
-        bool tint_driven) noexcept {
+        bool tint_driven,
+        bool interaction_driven) noexcept {
+    if (interaction_driven && control_driven && tint_driven)
+        return "interactive-prominent-control-accent-glass";
+    if (interaction_driven && control_driven)
+        return "interactive-prominent-control-glass";
+    if (interaction_driven && tint_driven)
+        return "interactive-prominent-accent-glass";
+    if (interaction_driven)
+        return "interactive-prominent-glass";
     if (control_driven && tint_driven)
         return "prominent-control-accent-glass";
     if (control_driven)
@@ -6996,32 +7006,61 @@ inline MaterialProminentGlassProfile material_resolve_prominent_glass_profile(
     auto const tint_alpha = material_alpha_fraction(plan.tint);
     auto const contrast_response =
         plan.decision_trace.increase_contrast ? 1.0f : 0.0f;
+    auto const interaction_response = plan.interaction.active
+        ? std::clamp(plan.interaction.response_strength, 0.0f, 1.0f)
+        : 0.0f;
+    auto const pointer_lens_response = plan.interaction.pointer_lens_active
+        ? std::clamp(
+            plan.interaction.pointer_lens_strength / 0.32f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const press_response =
+        plan.interaction.pressed ? interaction_response : 0.0f;
     profile.active = true;
     profile.control_driven = plan.role == MaterialSurfaceRole::Control;
     profile.tint_driven = !plan.theme.tint_matches_surface;
     profile.backdrop_driven = plan.backdrop_sampling;
+    profile.interaction_driven = interaction_response > 0.0001f;
     profile.reduced_motion_suppressed =
         plan.decision_trace.reduce_motion && motion_scale < 1.0f;
     profile.model = "prominent-liquid-glass-action";
     profile.source = material_prominent_glass_source_name(
         profile.control_driven,
-        profile.tint_driven);
-    profile.intensity = intensity;
+        profile.tint_driven,
+        profile.interaction_driven);
+    profile.intensity = std::clamp(
+        intensity + 0.10f * interaction_response,
+        0.0f,
+        1.0f);
     profile.tint_weight = std::clamp(
         0.12f
-            + 0.28f * intensity
+            + 0.28f * profile.intensity
             + 0.18f * tint_alpha
-            + 0.08f * contrast_response,
+            + 0.08f * contrast_response
+            + 0.050f * interaction_response
+            + 0.040f * press_response
+            + 0.030f * pointer_lens_response,
         0.0f,
-        0.64f);
+        0.74f);
     profile.edge_lift = std::clamp(
-        0.035f + 0.095f * intensity + 0.045f * contrast_response,
+        0.035f
+            + 0.095f * profile.intensity
+            + 0.045f * contrast_response
+            + 0.040f * interaction_response
+            + 0.035f * press_response
+            + 0.025f * pointer_lens_response,
         0.0f,
-        0.20f);
+        0.30f);
     profile.lensing_gain = std::clamp(
-        1.0f + 0.16f * intensity + 0.040f * contrast_response,
+        1.0f
+            + 0.16f * profile.intensity
+            + 0.040f * contrast_response
+            + 0.050f * interaction_response
+            + 0.050f * press_response
+            + 0.060f * pointer_lens_response,
         1.0f,
-        1.24f);
+        1.36f);
     return profile;
 }
 

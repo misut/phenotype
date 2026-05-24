@@ -2968,7 +2968,7 @@ inline void apply_material_container_execution_descriptors(
                                 inst.prominent_glass[1],
                                 blend),
                             0.0f,
-                            0.64f);
+                            0.74f);
                         inst.prominent_glass[2] = std::clamp(
                             material_lerp(
                                 execution
@@ -2976,7 +2976,7 @@ inline void apply_material_container_execution_descriptors(
                                 inst.prominent_glass[2],
                                 blend),
                             0.0f,
-                            0.20f);
+                            0.30f);
                         inst.prominent_glass[3] = std::clamp(
                             material_lerp(
                                 execution
@@ -2984,7 +2984,7 @@ inline void apply_material_container_execution_descriptors(
                                 inst.prominent_glass[3],
                                 blend),
                             1.0f,
-                            1.24f);
+                            1.36f);
                     }
                     if (execution
                             ->glass_effect_match_appearance_clear_glass_active) {
@@ -3223,21 +3223,21 @@ inline void apply_material_container_execution_descriptors(
                             execution
                                 ->group_appearance_prominent_glass_tint_weight),
                         0.0f,
-                        0.64f);
+                        0.74f);
                     inst.prominent_glass[2] = std::clamp(
                         std::max(
                             inst.prominent_glass[2],
                             execution
                                 ->group_appearance_prominent_glass_edge_lift),
                         0.0f,
-                        0.20f);
+                        0.30f);
                     inst.prominent_glass[3] = std::clamp(
                         std::max(
                             inst.prominent_glass[3],
                             execution
                                 ->group_appearance_prominent_glass_lensing_gain),
                         1.0f,
-                        1.24f);
+                        1.36f);
                 }
                 if (execution->group_appearance_clear_glass_active) {
                     inst.clear_glass[0] = std::clamp(
@@ -5741,9 +5741,9 @@ fragment float4 fs_material(
     float scroll_edge_dimming = clamp(in.scroll_edge.z, 0.0, 0.45);
     float scroll_edge_hard_style = clamp(in.scroll_edge.w, 0.0, 0.70);
     float prominent_intensity = clamp(in.prominent_glass.x, 0.0, 1.0);
-    float prominent_tint_weight = clamp(in.prominent_glass.y, 0.0, 0.64);
-    float prominent_edge_lift = clamp(in.prominent_glass.z, 0.0, 0.20);
-    float prominent_lensing_gain = clamp(in.prominent_glass.w, 1.0, 1.24);
+    float prominent_tint_weight = clamp(in.prominent_glass.y, 0.0, 0.74);
+    float prominent_edge_lift = clamp(in.prominent_glass.z, 0.0, 0.30);
+    float prominent_lensing_gain = clamp(in.prominent_glass.w, 1.0, 1.36);
     float clear_glass_dimming = clamp(in.clear_glass.x, 0.0, 0.34);
     float clear_glass_contrast = clamp(in.clear_glass.y, 0.0, 0.28);
     float clear_glass_brightness = clamp(in.clear_glass.z, 0.0, 1.0);
