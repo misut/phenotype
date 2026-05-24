@@ -6599,6 +6599,123 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(bridge_flow_shadow, 0.0, 0.10);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float coalescence_strength = clamp(
+        bridge_flow_strength * (0.34 + 0.66 * group_blend_strength)
+            + bridge_band * fusion_strength * 0.30
+            + bridge_band * union_execution * 0.24,
+        0.0,
+        0.80);
+    if (coalescence_strength > 0.0001 && bridge_dir_length > 0.0001) {
+        float membrane_core = 1.0 - smoothstep(
+            max(bridge_width * 0.22, 0.001),
+            bridge_width + 0.08,
+            bridge_lateral);
+        float membrane_edge =
+            smoothstep(
+                max(bridge_width * 0.34, 0.001),
+                bridge_width + 0.04,
+                bridge_lateral)
+            * (1.0 - smoothstep(
+                bridge_width + 0.04,
+                bridge_width + 0.20,
+                bridge_lateral));
+        float membrane_axial = 1.0 - smoothstep(
+            max(bridge_length * 0.56, 0.001),
+            bridge_length + 0.22,
+            bridge_axial);
+        float membrane_gate = clamp(
+            membrane_axial
+                * (0.52 * membrane_core + 0.48 * membrane_edge)
+                * (0.72 + 0.28 * edge_lens),
+            0.0,
+            1.0);
+        float membrane_alignment = smoothstep(
+            -0.28,
+            1.0,
+            dot(bridge_dir, -dynamic_light_dir));
+        float membrane_ripple = sin(
+            bridge_axial * 18.0
+                + bridge_lateral_signed * 23.0
+                + group_blend_strength * 7.0
+                + fusion_strength * 5.0);
+        float membrane_span =
+            (2.0
+             + 4.8 * glass_thickness
+             + 3.2 * glass_caustic_spread
+             + 0.10 * blur_points)
+            * content_scale
+            * (0.74 + 0.26 * glass_lensing_gain);
+        float2 membrane_forward_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.62
+                + bridge_dir * texel * membrane_span
+                + bridge_tangent
+                    * texel
+                    * membrane_span
+                    * bridge_shear
+                    * (0.22 + 0.18 * membrane_ripple),
+            float2(0.0),
+            float2(1.0));
+        float2 membrane_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.38
+                - bridge_dir * texel * membrane_span * 0.68
+                - bridge_tangent
+                    * texel
+                    * membrane_span
+                    * bridge_shear
+                    * 0.28,
+            float2(0.0),
+            float2(1.0));
+        float3 membrane_forward =
+            backdrop.sample(samp, membrane_forward_uv).rgb;
+        float3 membrane_back =
+            backdrop.sample(samp, membrane_back_uv).rgb;
+        float3 membrane_rgb =
+            membrane_forward * 0.58 + membrane_back * 0.42;
+        float membrane_luma =
+            dot(membrane_rgb, float3(0.2126, 0.7152, 0.0722));
+        float rgb_luma = dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float membrane_bright = smoothstep(
+            rgb_luma - 0.08,
+            rgb_luma + 0.28,
+            membrane_luma);
+        float membrane_dark = smoothstep(
+            0.10,
+            0.34,
+            rgb_luma - membrane_luma);
+        float3 membrane_tint = mix(
+            float3(membrane_luma),
+            membrane_rgb,
+            0.78 + 0.12 * glass_caustic_spread);
+        membrane_tint = mix(
+            membrane_tint,
+            membrane_tint * (float3(1.0) + 0.24 * in.tint.rgb),
+            tint_chroma);
+        rgb = mix(
+            rgb,
+            mix(rgb, membrane_tint, 0.28 + 0.20 * membrane_bright),
+            coalescence_strength * membrane_gate * 0.26);
+        rgb += membrane_tint
+            * coalescence_strength
+            * membrane_gate
+            * (0.032
+               + 0.052 * membrane_alignment
+               + 0.030 * bridge_highlight_gain);
+        rgb += float3(spectral_warmth,
+                      0.18 * (spectral_warmth + spectral_coolness),
+                      spectral_coolness)
+            * coalescence_strength
+            * membrane_gate
+            * (0.018 + 0.034 * abs(bridge_shear));
+        float membrane_shadow = membrane_dark
+            * coalescence_strength
+            * membrane_gate
+            * membrane_edge
+            * (0.026 + 0.044 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(membrane_shadow, 0.0, 0.08);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     if (prominent_intensity > 0.0001) {
         float prominent_center =
             1.0 - smoothstep(0.18, 1.12, normalized_len);
