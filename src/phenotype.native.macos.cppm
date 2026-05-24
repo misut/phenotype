@@ -19269,6 +19269,257 @@ fragment float4 fs_material(
                + 0.004 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float depth_seal_strength = clamp(
+        0.012 * clear_glass_dimming
+            + 0.010 * clear_glass_contrast
+            + 0.008 * clear_glass_detail
+            + 0.010 * glass_thickness
+            + 0.010 * (glass_shadow_gain - 1.0)
+            + 0.010 * glass_effect_match_execution * group_blend_strength
+            + 0.008 * morph_execution * group_blend_strength
+            + 0.008 * materialize_wave_strength
+            + 0.008 * container_pressure_halo_strength
+            + 0.007 * matched_tether_sheath_strength
+            + 0.007 * transmission_caustic_strength
+            + 0.006 * reflection_wake_strength
+            + 0.006 * transition_clarity_strength
+            + 0.006 * pointer_lens_strength
+                * (0.36 * pointer_lens_raw + 0.64 * pointer_lens),
+        0.0,
+        0.064);
+    if (depth_seal_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 seal_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 seal_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            seal_group_size);
+        float2 seal_group_norm =
+            (seal_group_local / seal_group_size - float2(0.5)) * 2.0;
+        float seal_group_len = length(seal_group_norm);
+        float seal_center =
+            1.0 - smoothstep(0.18, 1.14, seal_group_len);
+        float2 seal_group_edge = min(
+            seal_group_local,
+            max(seal_group_size - seal_group_local, float2(0.0)));
+        float seal_edge_distance =
+            min(seal_group_edge.x, seal_group_edge.y);
+        float seal_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.8, 1.0),
+                seal_edge_distance);
+        float seal_lower =
+            smoothstep(-0.16, 0.96, seal_group_norm.y);
+        float seal_outer =
+            smoothstep(0.34, 1.18, seal_group_len);
+        float seal_pointer = clamp(
+            pointer_lens_strength
+                * (0.36 * pointer_lens_raw + 0.64 * pointer_lens),
+            0.0,
+            1.0);
+        float seal_bridge =
+            bridge_band * (0.38 + 0.62 * bridge_core);
+        float seal_transition = clamp(
+            glass_effect_match_execution * 0.34
+                + morph_execution * 0.24
+                + materialize_wave_strength * 0.16
+                + union_execution * 0.10
+                + shape_blend_execution * 0.10
+                + container_pressure_halo_strength * 2.0
+                + matched_tether_sheath_strength * 1.8
+                + transmission_caustic_strength * 1.6
+                + transition_clarity_strength * 1.4
+                + seal_pointer * 0.18,
+            0.0,
+            1.0);
+        float seal_gate = clamp(
+            seal_edge * 0.28
+                + seal_lower * seal_outer * 0.20
+                + seal_bridge * 0.22
+                + seal_pointer * 0.14
+                + seal_transition * group_blend_strength * 0.22
+                + seal_center * 0.10,
+            0.0,
+            1.0);
+        float2 seal_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 seal_group_center_screen =
+            in.group_rect.xy + seal_group_size * 0.5;
+        float2 seal_group_center_uv = clamp(
+            seal_group_center_screen / seal_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 seal_to_center = seal_group_center_uv - in.screen_uv;
+        float seal_center_distance = length(seal_to_center);
+        float2 seal_center_dir =
+            seal_center_distance > 0.0001
+                ? seal_to_center / seal_center_distance
+                : refraction_dir;
+        float2 seal_cast_raw =
+            float2(0.0, 1.0) * (0.38 + 0.22 * seal_lower)
+            - dynamic_light_dir
+                * (0.24 + 0.16 * dynamic_light_highlight)
+            + bridge_dir * (0.22 + 0.24 * seal_bridge)
+            + pointer_dir * (0.10 + 0.16 * seal_pointer)
+            - seal_center_dir * (0.10 + 0.12 * seal_center);
+        float seal_cast_len = length(seal_cast_raw);
+        float2 seal_cast_dir = seal_cast_len > 0.0001
+            ? seal_cast_raw / seal_cast_len
+            : float2(0.0, 1.0);
+        float2 seal_cross =
+            float2(-seal_cast_dir.y, seal_cast_dir.x);
+        float seal_alignment =
+            smoothstep(-0.28, 0.88, dot(seal_cast_dir, bridge_dir));
+        float seal_span =
+            (0.84
+             + 1.6 * glass_thickness
+             + 1.1 * clear_glass_detail
+             + 0.9 * seal_transition
+             + 0.038 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float seal_cross_span =
+            (0.54
+             + 0.9 * glass_dispersion_tangential
+             + 0.8 * spectral_dispersion
+             + 0.8 * seal_bridge)
+            * content_scale;
+        float2 seal_under_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + seal_cast_dir
+                    * texel
+                    * seal_span
+                    * (0.34 + 0.18 * seal_lower),
+            float2(0.0),
+            float2(1.0));
+        float2 seal_inner_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - seal_cast_dir
+                    * texel
+                    * seal_span
+                    * (0.20 + 0.16 * seal_center),
+            float2(0.0),
+            float2(1.0));
+        float2 seal_lateral_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + seal_cross
+                    * texel
+                    * seal_cross_span
+                    * (0.28 + 0.16 * seal_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 seal_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.06
+                - seal_cross
+                    * texel
+                    * seal_cross_span
+                    * (0.24 + 0.14 * seal_bridge)
+                - seal_center_dir
+                    * texel
+                    * seal_span
+                    * (0.10 + 0.10 * seal_transition),
+            float2(0.0),
+            float2(1.0));
+        float3 seal_under_rgb =
+            backdrop.sample(samp, seal_under_uv).rgb;
+        float3 seal_inner_rgb =
+            backdrop.sample(samp, seal_inner_uv).rgb;
+        float3 seal_lateral_rgb =
+            backdrop.sample(samp, seal_lateral_uv).rgb;
+        float3 seal_return_rgb =
+            backdrop.sample(samp, seal_return_uv).rgb;
+        float3 seal_probe =
+            seal_under_rgb * 0.34
+            + seal_inner_rgb * 0.26
+            + seal_lateral_rgb * 0.22
+            + seal_return_rgb * 0.18;
+        float seal_luma =
+            dot(seal_probe, float3(0.2126, 0.7152, 0.0722));
+        float seal_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float seal_range = clamp(
+            length(seal_under_rgb - seal_inner_rgb) * 0.30
+                + length(seal_lateral_rgb - seal_return_rgb) * 0.22
+                + abs(seal_luma - seal_surface_luma) * 0.24
+                + seal_transition * 0.08
+                + seal_edge * 0.06,
+            0.0,
+            1.0);
+        float seal_backdrop_dark = smoothstep(
+            0.04,
+            0.30,
+            seal_surface_luma - seal_luma);
+        float seal_backdrop_lift = smoothstep(
+            0.05,
+            0.34,
+            seal_luma - seal_surface_luma);
+        float seal_coherence =
+            1.0 - smoothstep(0.08, 0.34, seal_range);
+        float seal_contact = clamp(
+            seal_backdrop_dark * 0.30
+                + seal_edge * seal_lower * 0.24
+                + seal_outer * 0.18
+                + seal_bridge * 0.14
+                + seal_transition * 0.16
+                + seal_pointer * 0.10,
+            0.0,
+            1.0);
+        float seal_shadow = depth_seal_strength
+            * seal_gate
+            * (0.34
+               + 0.22 * seal_contact
+               + 0.18 * seal_lower
+               + 0.14 * seal_alignment
+               + 0.12 * seal_coherence)
+            * (0.68 + 0.32 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(seal_shadow, 0.0, 0.040);
+        float3 seal_neutral = mix(
+            seal_probe,
+            float3(seal_luma),
+            seal_coherence * 0.14
+                + seal_backdrop_dark * (0.12 + 0.12 * glass_shadow_gain));
+        float3 seal_layer =
+            seal_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.012
+                      + 0.022 * tint_chroma * prominent_intensity));
+        float seal_recovery = depth_seal_strength
+            * seal_gate
+            * seal_backdrop_lift
+            * (0.08 + 0.10 * seal_coherence + 0.08 * seal_transition);
+        rgb = mix(
+            rgb,
+            clamp(seal_layer, 0.0, 1.0),
+            clamp(seal_recovery, 0.0, 0.040));
+        float3 seal_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        rgb += seal_prism
+            * depth_seal_strength
+            * seal_gate
+            * (seal_edge * 0.34
+               + seal_bridge * 0.24
+               + seal_alignment * 0.18)
+            * (0.0015
+               + 0.004 * glass_prismatic_gain
+               + 0.004 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
