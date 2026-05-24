@@ -20019,6 +20019,251 @@ fragment float4 fs_material(
                + 0.004 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float catchlight_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.008 * clear_glass_brightness
+            + 0.008 * glass_thickness
+            + 0.008 * (glass_prismatic_gain - 1.0)
+            + 0.008 * dynamic_light_highlight
+            + 0.007 * specular_intensity
+            + 0.008 * rim_compression_strength
+            + 0.007 * continuity_finish_strength
+            + 0.006 * depth_seal_strength
+            + 0.006 * transition_clarity_strength
+            + 0.006 * reflection_wake_strength
+            + 0.006 * glass_effect_match_execution * group_blend_strength,
+        0.0,
+        0.058);
+    if (catchlight_strength > 0.0001) {
+        float2 catch_half_size = max(in.rect_size * 0.5, float2(0.5));
+        float2 catch_center_local = in.local_pos - catch_half_size;
+        float2 catch_rect_normal =
+            rect_edge_distance.x < rect_edge_distance.y
+                ? float2(catch_center_local.x >= 0.0 ? 1.0 : -1.0, 0.0)
+                : float2(0.0, catch_center_local.y >= 0.0 ? 1.0 : -1.0);
+        float2 catch_round_normal =
+            length(catch_center_local) > 0.0001
+                ? catch_center_local / length(catch_center_local)
+                : catch_rect_normal;
+        float catch_corner_mix = smoothstep(
+            0.50,
+            0.90,
+            min(abs(normalized_local.x), abs(normalized_local.y)));
+        float2 catch_normal_raw = mix(
+            catch_rect_normal,
+            catch_round_normal,
+            catch_corner_mix);
+        float catch_normal_len = length(catch_normal_raw);
+        float2 catch_normal = catch_normal_len > 0.0001
+            ? catch_normal_raw / catch_normal_len
+            : refraction_dir;
+        float2 catch_tangent =
+            float2(-catch_normal.y, catch_normal.x);
+        float catch_edge = 1.0 - smoothstep(
+            0.0,
+            max(edge_bevel_width * 2.6, 1.0),
+            signed_edge_distance);
+        float catch_inner = smoothstep(
+            max(edge_bevel_width * 0.20, 0.10),
+            max(edge_bevel_width * 1.60, 1.0),
+            signed_edge_distance);
+        float catch_rim_band = clamp(
+            catch_edge * 0.52
+                + catch_inner * edge_lens * 0.24
+                + edge_lens * 0.20,
+            0.0,
+            1.0);
+        float catch_pointer = clamp(
+            pointer_lens_strength
+                * (0.34 * pointer_lens_raw + 0.66 * pointer_lens),
+            0.0,
+            1.0);
+        float catch_transition = clamp(
+            glass_effect_match_execution * 0.30
+                + morph_execution * 0.22
+                + materialize_wave_strength * 0.16
+                + rim_compression_strength * 1.7
+                + continuity_finish_strength * 1.4
+                + transition_clarity_strength * 1.2
+                + specular_handoff_strength * 1.0
+                + catch_pointer * 0.16,
+            0.0,
+            1.0);
+        float catch_light_face =
+            smoothstep(-0.22, 0.92, dot(catch_normal, -dynamic_light_dir));
+        float catch_grazing =
+            1.0 - smoothstep(
+                0.18,
+                0.86,
+                abs(dot(catch_normal, -dynamic_light_dir)));
+        float catch_bridge_alignment =
+            smoothstep(-0.28, 0.88, abs(dot(catch_tangent, bridge_dir)));
+        float catch_gate = clamp(
+            catch_rim_band
+                * (0.34
+                   + 0.22 * catch_light_face
+                   + 0.18 * catch_grazing
+                   + 0.14 * catch_bridge_alignment
+                   + 0.12 * catch_transition
+                   + 0.10 * catch_pointer),
+            0.0,
+            1.0);
+        float catch_span =
+            (0.66
+             + 1.3 * glass_thickness
+             + 1.0 * clear_glass_detail
+             + 0.8 * catch_transition
+             + 0.028 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float catch_tangent_span =
+            (0.48
+             + 0.9 * glass_dispersion_tangential
+             + 0.8 * spectral_dispersion
+             + 0.6 * catch_bridge_alignment)
+            * content_scale;
+        float2 catch_key_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - dynamic_light_dir
+                    * texel
+                    * catch_span
+                    * (0.26 + 0.18 * catch_light_face)
+                + catch_normal
+                    * texel
+                    * catch_span
+                    * (0.10 + 0.10 * catch_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 catch_fill_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + dynamic_light_dir
+                    * texel
+                    * catch_span
+                    * (0.18 + 0.14 * catch_grazing)
+                - catch_normal
+                    * texel
+                    * catch_span
+                    * (0.12 + 0.10 * catch_inner),
+            float2(0.0),
+            float2(1.0));
+        float2 catch_tangent_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.07
+                + catch_tangent
+                    * texel
+                    * catch_tangent_span
+                    * (0.24 + 0.16 * catch_bridge_alignment),
+            float2(0.0),
+            float2(1.0));
+        float2 catch_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.06
+                - catch_tangent
+                    * texel
+                    * catch_tangent_span
+                    * (0.22 + 0.14 * catch_transition),
+            float2(0.0),
+            float2(1.0));
+        float3 catch_key_rgb =
+            backdrop.sample(samp, catch_key_uv).rgb;
+        float3 catch_fill_rgb =
+            backdrop.sample(samp, catch_fill_uv).rgb;
+        float3 catch_tangent_rgb =
+            backdrop.sample(samp, catch_tangent_uv).rgb;
+        float3 catch_return_rgb =
+            backdrop.sample(samp, catch_return_uv).rgb;
+        float3 catch_probe =
+            catch_key_rgb * 0.36
+            + catch_fill_rgb * 0.26
+            + catch_tangent_rgb * 0.22
+            + catch_return_rgb * 0.16;
+        float catch_luma =
+            dot(catch_probe, float3(0.2126, 0.7152, 0.0722));
+        float catch_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float catch_range = clamp(
+            length(catch_key_rgb - catch_fill_rgb) * 0.30
+                + length(catch_tangent_rgb - catch_return_rgb) * 0.22
+                + abs(catch_luma - catch_surface_luma) * 0.20
+                + catch_grazing * 0.08
+                + catch_rim_band * 0.06,
+            0.0,
+            1.0);
+        float catch_coherence =
+            1.0 - smoothstep(0.08, 0.36, catch_range);
+        float catch_probe_peak =
+            max(max(catch_probe.r, catch_probe.g), catch_probe.b);
+        float catch_surface_peak =
+            max(max(rgb.r, rgb.g), rgb.b);
+        float catch_lift = smoothstep(
+            catch_surface_luma - 0.04,
+            catch_surface_luma + 0.26,
+            catch_luma);
+        float catch_hot = smoothstep(
+            0.76,
+            1.04,
+            catch_surface_peak + catch_probe_peak * 0.16);
+        float3 catch_neutral = mix(
+            catch_probe,
+            float3(catch_luma),
+            catch_coherence * 0.14
+                + catch_hot * 0.12);
+        float3 catch_layer = clamp(
+            (catch_neutral - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.036
+                       + catch_transition * 0.030)
+                + float3(0.50),
+            0.0,
+            1.0);
+        catch_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.010
+                   + 0.020 * tint_chroma * prominent_intensity);
+        float3 catch_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        float catch_prism_gate = clamp(
+            catch_edge * 0.28
+                + catch_light_face * 0.24
+                + catch_grazing * 0.22
+                + catch_bridge_alignment * 0.16
+                + catch_transition * 0.14,
+            0.0,
+            1.0);
+        catch_layer += catch_prism
+            * catch_prism_gate
+            * (0.002
+               + 0.006 * spectral_rim_tint
+               + 0.005 * glass_prismatic_gain);
+        float catch_weight = catchlight_strength
+            * catch_gate
+            * (0.32
+               + 0.22 * catch_lift
+               + 0.18 * catch_coherence
+               + 0.16 * catch_grazing
+               + 0.12 * catch_transition);
+        rgb = mix(
+            rgb,
+            mix(rgb, catch_layer, 0.08 + 0.12 * catch_lift),
+            catch_weight * 0.28);
+        float catch_trim =
+            catch_hot
+            * catch_weight
+            * (0.003 + 0.008 * clear_glass_dimming)
+            * (0.52 + 0.48 * catch_prism_gate);
+        rgb *= 1.0 - clamp(catch_trim, 0.0, 0.020);
+        rgb += catch_prism
+            * catch_weight
+            * catch_prism_gate
+            * (0.0015
+               + 0.004 * dynamic_light_highlight
+               + 0.004 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
