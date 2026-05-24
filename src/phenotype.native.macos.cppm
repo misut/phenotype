@@ -8384,6 +8384,205 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(morph_shadow, 0.0, 0.078);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float matched_transition_memory_strength = clamp(
+        0.016 * glass_effect_match_execution
+            * (0.42 + 0.58 * group_blend_strength)
+            + 0.014 * materialize_wave_strength
+            + 0.012 * shared_sample_envelope_strength
+            + 0.012 * transition_echo_strength
+            + 0.010 * morph_field_strength
+            + 0.010 * fusion_strength * group_blend_strength
+            + 0.008 * bridge_band * (0.36 + 0.64 * bridge_core),
+        0.0,
+        0.095);
+    if (matched_transition_memory_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 memory_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 memory_group_center_screen =
+            in.group_rect.xy + memory_group_size * 0.5;
+        float2 memory_backdrop_viewport_size =
+            float2(float(backdrop.get_width()), float(backdrop.get_height()))
+            / content_scale;
+        float2 memory_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : memory_backdrop_viewport_size.x,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : memory_backdrop_viewport_size.y),
+            float2(1.0));
+        float2 memory_group_center_uv = clamp(
+            memory_group_center_screen / memory_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 memory_delta =
+            (in.screen_pos - memory_group_center_screen)
+            / memory_group_size;
+        float memory_group_distance =
+            clamp(length(memory_delta) * 1.28, 0.0, 1.0);
+        float2 memory_center_delta =
+            memory_group_center_uv - in.screen_uv;
+        float memory_center_distance = length(memory_center_delta);
+        float2 memory_center_dir =
+            memory_center_distance > 0.0001
+                ? memory_center_delta / memory_center_distance
+                : refraction_dir;
+        float memory_match_pull = clamp(
+            glass_effect_match_execution * 0.42
+                + shared_backdrop_scope * 0.26
+                + group_blend_strength * 0.20
+                + materialize_wave_strength * 0.18,
+            0.0,
+            1.0);
+        float2 memory_axis_raw =
+            memory_center_dir * (0.46 + 0.54 * memory_match_pull)
+            + bridge_dir * bridge_band * (0.42 + 0.58 * bridge_core)
+            + refraction_dir * (0.20 + 0.18 * edge_lens)
+            - dynamic_light_dir * dynamic_light_highlight * 0.16;
+        float memory_axis_length = length(memory_axis_raw);
+        float2 memory_axis = memory_axis_length > 0.0001
+            ? memory_axis_raw / memory_axis_length
+            : refraction_dir;
+        float2 memory_cross = float2(-memory_axis.y, memory_axis.x);
+        float memory_progress = clamp(
+            max(materialize_rim_position * materialize_wave_strength,
+                group_blend_strength * glass_effect_match_execution),
+            0.0,
+            1.0);
+        float memory_phase =
+            dot(normalized_local, memory_axis)
+                * (5.8 + 3.2 * group_blend_strength)
+            + dot(normalized_local, memory_cross)
+                * (2.4 + 1.6 * fusion_strength)
+            + memory_progress * 6.28318
+            + bridge_shear * bridge_band * 2.4;
+        float memory_wave = 0.5 + 0.5 * sin(memory_phase);
+        float memory_reabsorb = 1.0 - smoothstep(
+            0.0,
+            0.34,
+            abs(memory_wave - (0.42 + 0.18 * memory_progress)));
+        float memory_center_gate =
+            1.0 - smoothstep(0.24, 1.05, memory_group_distance);
+        float memory_span =
+            (1.2
+             + 2.2 * glass_thickness
+             + 1.8 * clear_glass_detail
+             + 1.4 * memory_match_pull
+             + 0.05 * blur_points)
+            * content_scale
+            * (0.80 + 0.20 * fusion_lensing_gain);
+        float2 memory_source_uv = clamp(
+            mix(in.screen_uv,
+                memory_group_center_uv,
+                memory_match_pull * (0.18 + 0.16 * memory_reabsorb))
+                + refraction_uv * 0.20
+                + memory_axis
+                    * texel
+                    * memory_span
+                    * (0.28 + 0.18 * memory_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 memory_sink_uv = clamp(
+            mix(in.screen_uv,
+                memory_group_center_uv,
+                memory_match_pull * (0.28 + 0.14 * memory_center_gate))
+                + refraction_uv * 0.14
+                - memory_axis
+                    * texel
+                    * memory_span
+                    * (0.30 + 0.18 * memory_reabsorb),
+            float2(0.0),
+            float2(1.0));
+        float2 memory_cross_uv = clamp(
+            mix(in.screen_uv,
+                memory_group_center_uv,
+                memory_match_pull * 0.22)
+                + refraction_uv * 0.16
+                + memory_cross
+                    * texel
+                    * memory_span
+                    * (0.22
+                       + 0.16 * abs(bridge_shear) * bridge_band
+                       + 0.12 * memory_reabsorb),
+            float2(0.0),
+            float2(1.0));
+        float3 memory_source =
+            backdrop.sample(samp, memory_source_uv).rgb;
+        float3 memory_sink =
+            backdrop.sample(samp, memory_sink_uv).rgb;
+        float3 memory_cross_rgb =
+            backdrop.sample(samp, memory_cross_uv).rgb;
+        float3 memory_rgb =
+            memory_source * 0.38
+            + memory_sink * 0.36
+            + memory_cross_rgb * 0.26;
+        float memory_luma =
+            dot(memory_rgb, float3(0.2126, 0.7152, 0.0722));
+        float memory_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float memory_bright = smoothstep(
+            memory_surface_luma - 0.08,
+            memory_surface_luma + 0.28,
+            memory_luma);
+        float memory_dark = smoothstep(
+            0.08,
+            0.34,
+            memory_surface_luma - memory_luma);
+        float memory_detail = smoothstep(
+            0.02,
+            0.32,
+            length(memory_source - memory_sink) * 0.34
+                + length(memory_cross_rgb - memory_rgb) * 0.22
+                + memory_reabsorb * 0.18);
+        float3 memory_tint = mix(
+            memory_rgb,
+            float3(memory_luma),
+            memory_dark * (0.14 + 0.18 * glass_shadow_gain));
+        memory_tint = mix(
+            memory_tint,
+            memory_tint * (float3(1.0) + 0.20 * in.tint.rgb),
+            tint_chroma * (0.34 + 0.24 * group_blend_strength));
+        float memory_gate = clamp(
+            memory_center_gate * 0.28
+                + memory_reabsorb * 0.30
+                + memory_match_pull * 0.24
+                + edge_lens * 0.18,
+            0.0,
+            1.0);
+        float memory_weight = matched_transition_memory_strength
+            * memory_gate
+            * (0.36
+               + 0.22 * memory_detail
+               + 0.18 * memory_bright
+               + 0.14 * memory_match_pull
+               + 0.10 * clear_glass_detail);
+        rgb = mix(
+            rgb,
+            mix(rgb, memory_tint, 0.18 + 0.16 * memory_detail),
+            memory_weight * 0.46);
+        rgb += memory_tint
+            * memory_weight
+            * memory_reabsorb
+            * (0.012
+               + 0.024 * dynamic_light_highlight
+               + 0.018 * glass_prismatic_gain);
+        rgb += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * memory_weight
+            * (0.10 + 0.24 * spectral_rim_tint)
+            * (memory_reabsorb + memory_detail * 0.42);
+        float memory_shadow = memory_dark
+            * matched_transition_memory_strength
+            * memory_gate
+            * (0.016 + 0.034 * glass_shadow_gain)
+            * (0.58 + 0.42 * (1.0 - memory_center_gate));
+        rgb *= 1.0 - clamp(memory_shadow, 0.0, 0.060);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     if (prominent_intensity > 0.0001) {
         float prominent_center =
             1.0 - smoothstep(0.18, 1.12, normalized_len);
