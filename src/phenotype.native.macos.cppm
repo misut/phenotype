@@ -6602,6 +6602,186 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(reflection_shadow, 0.0, 0.07);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float polarized_reflection_strength = clamp(
+        0.020 * glass_thickness
+            + 0.024 * (glass_lensing_gain - 1.0)
+            + 0.018 * glass_caustic_spread
+            + 0.018 * dynamic_light_highlight
+            + 0.014 * prominent_intensity
+            + 0.012 * pointer_lens_strength * pointer_lens_raw
+            + 0.014 * bridge_band,
+        0.0,
+        0.13);
+    if (polarized_reflection_strength > 0.0001) {
+        float2 polar_raw_dir =
+            -dynamic_light_dir
+            + refraction_dir * (0.40 + 0.32 * edge_lens)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.34
+            + bridge_tangent * bridge_shear * bridge_band * 0.26;
+        float polar_dir_len = length(polar_raw_dir);
+        float2 polar_dir = polar_dir_len > 0.0001
+            ? polar_raw_dir / polar_dir_len
+            : -dynamic_light_dir;
+        float2 polar_tangent = float2(-polar_dir.y, polar_dir.x);
+        float polar_surface =
+            1.0 - smoothstep(0.18, 1.12, normalized_len);
+        float polar_rim = edge_lens
+            * (0.36
+               + 0.64
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.28, 0.5),
+                       signed_edge_distance)));
+        float polar_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.28 + 0.72 * bridge_core),
+            0.0,
+            1.0);
+        float polar_gate = clamp(
+            polar_surface * 0.34
+                + polar_rim * 0.48
+                + polar_contact * 0.26,
+            0.0,
+            1.0);
+        float polar_angle = clamp(
+            dot(refraction_dir, -dynamic_light_dir) * 0.5 + 0.5,
+            0.0,
+            1.0);
+        float polar_band = smoothstep(0.18, 0.92, polar_angle)
+            * (1.0 - smoothstep(0.76, 1.18, normalized_len));
+        float polar_phase =
+            dot(normalized_local, polar_tangent)
+                * (8.0 + 4.0 * glass_caustic_spread)
+            + dot(normalized_local, polar_dir) * 2.8
+            + bridge_shear * bridge_band * 3.0;
+        float polar_lattice =
+            (0.5 + 0.5 * cos(polar_phase))
+            * (0.40 + 0.60 * polar_rim);
+        float polar_span =
+            (2.0
+             + 7.6 * glass_thickness
+             + 3.4 * glass_caustic_spread
+             + 0.10 * blur_points)
+            * content_scale
+            * (0.82 + 0.18 * glass_lensing_gain);
+        float polar_cross_span =
+            (0.9
+             + 2.2 * glass_thickness
+             + 1.6 * glass_dispersion_tangential
+             + 2.4 * spectral_dispersion)
+            * content_scale;
+        float2 polar_forward_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.40
+                - polar_dir
+                    * texel
+                    * polar_span
+                    * (0.62 + 0.24 * polar_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 polar_grazing_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.52
+                + polar_dir
+                    * texel
+                    * polar_span
+                    * (0.32 + 0.24 * polar_band),
+            float2(0.0),
+            float2(1.0));
+        float2 polar_left_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                + polar_tangent
+                    * texel
+                    * polar_cross_span
+                    * (0.74 + 0.18 * polar_lattice)
+                + dispersion_tangent
+                    * texel
+                    * polar_cross_span
+                    * (0.22 + 0.28 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float2 polar_right_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                - polar_tangent
+                    * texel
+                    * polar_cross_span
+                    * (0.66 + 0.22 * polar_gate)
+                - dispersion_tangent
+                    * texel
+                    * polar_cross_span
+                    * (0.18 + 0.24 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float3 polar_forward =
+            backdrop.sample(samp, polar_forward_uv).rgb;
+        float3 polar_grazing =
+            backdrop.sample(samp, polar_grazing_uv).rgb;
+        float3 polar_left =
+            backdrop.sample(samp, polar_left_uv).rgb;
+        float3 polar_right =
+            backdrop.sample(samp, polar_right_uv).rgb;
+        float3 polar_rgb =
+            polar_forward * 0.36
+            + polar_grazing * 0.28
+            + polar_left * 0.18
+            + polar_right * 0.18;
+        float polar_luma =
+            dot(polar_rgb, float3(0.2126, 0.7152, 0.0722));
+        float polar_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float polar_light = smoothstep(
+            polar_surface_luma - 0.08,
+            polar_surface_luma + 0.28,
+            polar_luma);
+        float polar_dark = smoothstep(
+            0.08,
+            0.34,
+            polar_surface_luma - polar_luma);
+        float polar_color_pickup = smoothstep(
+            0.02,
+            0.30,
+            length(polar_left - polar_right) * 0.34
+                + length(polar_forward - polar_grazing) * 0.24
+                + polar_lattice * 0.14);
+        float3 polar_tint = mix(
+            polar_rgb,
+            float3(polar_luma),
+            polar_dark * (0.18 + 0.18 * glass_shadow_gain));
+        polar_tint = mix(
+            polar_tint,
+            polar_tint * (float3(1.0) + 0.18 * in.tint.rgb),
+            tint_chroma * (0.34 + 0.22 * prominent_intensity));
+        polar_tint += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (polar_lattice * 0.34 + polar_rim * 0.26)
+            * (0.10 + 0.30 * spectral_rim_tint);
+        float polar_weight = polarized_reflection_strength
+            * polar_gate
+            * (0.38
+               + 0.22 * polar_light
+               + 0.22 * polar_color_pickup
+               + 0.18 * polar_band);
+        rgb = mix(
+            rgb,
+            mix(rgb, polar_tint, 0.14 + 0.16 * polar_color_pickup),
+            polar_weight);
+        rgb += polar_tint
+            * polar_weight
+            * (0.012
+               + 0.024 * dynamic_light_highlight
+               + 0.018 * glass_prismatic_gain);
+        float polar_shadow = polar_dark
+            * polarized_reflection_strength
+            * polar_gate
+            * (0.018 + 0.034 * glass_shadow_gain)
+            * (0.66 + 0.34 * polar_rim);
+        rgb *= 1.0 - clamp(polar_shadow, 0.0, 0.055);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float viscous_strain_strength = clamp(
         pointer_lens_strength * (0.42 * pointer_lens_raw + 0.58 * pointer_lens)
             + bridge_band
