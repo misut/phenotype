@@ -4134,6 +4134,61 @@ void test_glass_effect_union_aggregates_member_optics() {
     std::puts("PASS: glass effect union aggregates member optics");
 }
 
+void test_glass_effect_union_bridge_motion_uses_member_centroid() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 20.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 923u,
+        .union_id = 1u,
+        .spacing = 24.0f,
+        .interactive = false,
+        .morph_transitions = false,
+    };
+
+    auto peer = request;
+    peer.geometry.x = 50.0f;
+
+    auto wide_peer = request;
+    wide_peer.geometry = MaterialGeometry{120.0f, 0.0f, 120.0f, 40.0f, 20.0f};
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(peer, sampled_environment()), 2u},
+        {plan_material_surface(wide_peer, sampled_environment()), 3u},
+    };
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const peer_execution =
+        material_container_execution_descriptor(records[1], records);
+    auto const wide_peer_execution =
+        material_container_execution_descriptor(records[2], records);
+    assert(first_execution.union_execution);
+    assert(peer_execution.union_execution);
+    assert(wide_peer_execution.union_execution);
+    assert(first_execution.surface_leader);
+    assert(!peer_execution.surface_leader);
+    assert(!wide_peer_execution.surface_leader);
+    assert(first_execution.group_w == 240.0f);
+    assert(first_execution.group_h == 40.0f);
+
+    auto const first_bridge_motion =
+        material_container_bridge_motion_optics(
+            records[0],
+            records,
+            first_execution);
+    assert(first_bridge_motion.active);
+    assert(first_bridge_motion.strength > 0.99f);
+    assert(first_bridge_motion.direction_x > 0.999f);
+    assert(std::fabs(first_bridge_motion.direction_y) < 0.0001f);
+    assert(first_bridge_motion.specular_anchor_x > 0.50f);
+    assert(first_bridge_motion.specular_anchor_x < 0.55f);
+    assert(std::fabs(first_bridge_motion.specular_anchor_y - 0.5f)
+           < 0.0001f);
+
+    std::puts("PASS: glass effect union bridge motion uses member centroid");
+}
+
 void test_glass_effect_union_sample_budget_uses_leader_bounds() {
     auto request = regular_request();
     request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 20.0f};
@@ -4405,6 +4460,7 @@ int main() {
     test_glass_effect_union_aggregates_member_interaction();
     test_glass_effect_union_combines_at_rest_without_spacing();
     test_glass_effect_union_aggregates_member_optics();
+    test_glass_effect_union_bridge_motion_uses_member_centroid();
     test_glass_effect_union_sample_budget_uses_leader_bounds();
     test_glass_effect_union_fallback_paint_uses_group_leader();
     test_glass_effect_matched_fallback_paint_uses_match_rect();

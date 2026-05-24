@@ -4039,6 +4039,17 @@ inline MaterialGlassEffectMotionOptics material_container_bridge_motion_optics(
     auto best_gap = 0.0f;
     auto best_candidate_center_x = record_center_x;
     auto best_candidate_center_y = record_center_y;
+    auto const record_weight = std::max(
+        std::max(record.plan.geometry.w, 0.0f)
+            * std::max(record.plan.geometry.h, 0.0f),
+        1.0f);
+    auto union_weight = execution.union_execution ? record_weight : 0.0f;
+    auto union_center_x = execution.union_execution
+        ? record_center_x * record_weight
+        : 0.0f;
+    auto union_center_y = execution.union_execution
+        ? record_center_y * record_weight
+        : 0.0f;
     auto found = false;
     for (auto const& candidate : records) {
         if (!material_container_bridge_motion_candidate(
@@ -4059,6 +4070,25 @@ inline MaterialGlassEffectMotionOptics material_container_bridge_motion_optics(
                 blend_distance);
         if (pair_strength <= 0.0f)
             continue;
+        if (execution.union_execution) {
+            auto const candidate_w = std::max(candidate.plan.geometry.w, 0.0f);
+            auto const candidate_h = std::max(candidate.plan.geometry.h, 0.0f);
+            auto const candidate_weight =
+                std::max(candidate_w * candidate_h, 1.0f)
+                * pair_strength;
+            auto const candidate_center_x =
+                candidate.plan.geometry.x + candidate_w * 0.5f;
+            auto const candidate_center_y =
+                candidate.plan.geometry.y + candidate_h * 0.5f;
+            union_weight += candidate_weight;
+            union_center_x += candidate_center_x * candidate_weight;
+            union_center_y += candidate_center_y * candidate_weight;
+            found = true;
+            best_pair_strength = std::max(
+                best_pair_strength,
+                pair_strength);
+            continue;
+        }
         auto const better =
             !found
             || pair_strength > best_pair_strength + 0.0001f
@@ -4076,9 +4106,17 @@ inline MaterialGlassEffectMotionOptics material_container_bridge_motion_optics(
     }
     if (!found)
         return optics;
+    if (execution.union_execution && union_weight > 0.0001f) {
+        best_candidate_center_x = union_center_x / union_weight;
+        best_candidate_center_y = union_center_y / union_weight;
+    }
 
-    auto const bridge_x = (record_center_x + best_candidate_center_x) * 0.5f;
-    auto const bridge_y = (record_center_y + best_candidate_center_y) * 0.5f;
+    auto const bridge_x = execution.union_execution
+        ? best_candidate_center_x
+        : (record_center_x + best_candidate_center_x) * 0.5f;
+    auto const bridge_y = execution.union_execution
+        ? best_candidate_center_y
+        : (record_center_y + best_candidate_center_y) * 0.5f;
     auto dx = bridge_x - geometry_center_x;
     auto dy = bridge_y - geometry_center_y;
     auto length = std::sqrt(dx * dx + dy * dy);
