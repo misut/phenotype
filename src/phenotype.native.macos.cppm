@@ -14995,6 +14995,274 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(membrane_shadow, 0.0, 0.044);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float shared_shell_strength = clamp(
+        0.012 * clear_glass_detail
+            + 0.012 * glass_thickness
+            + 0.014 * shared_membrane_strength
+            + 0.014 * shared_backdrop_scope * group_blend_strength
+            + 0.012 * group_surface_execution * group_blend_strength
+            + 0.010 * glass_effect_match_execution * group_blend_strength
+            + 0.010 * morph_execution * group_blend_strength
+            + 0.010 * container_field_strength
+            + 0.008 * cohesion_wake_strength,
+        0.0,
+        0.10);
+    if (shared_shell_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 shell_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 shell_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            shell_group_size);
+        float2 shell_group_norm =
+            (shell_group_local / shell_group_size - float2(0.5)) * 2.0;
+        float shell_group_len = length(shell_group_norm);
+        float shell_center =
+            1.0 - smoothstep(0.16, 1.16, shell_group_len);
+        float2 shell_group_edge = min(
+            shell_group_local,
+            max(shell_group_size - shell_group_local, float2(0.0)));
+        float shell_edge_distance =
+            min(shell_group_edge.x, shell_group_edge.y);
+        float shell_edge_band =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 3.1, 1.0),
+                shell_edge_distance);
+        float shell_bridge = bridge_band
+            * (0.30 + 0.70 * bridge_core);
+        float shell_transition = clamp(
+            glass_effect_match_execution * 0.32
+                + morph_execution * 0.28
+                + shape_blend_execution * 0.20
+                + union_execution * 0.20,
+            0.0,
+            1.0);
+        float shell_gate = clamp(
+            shared_backdrop_scope * group_blend_strength * 0.28
+                + group_surface_execution * group_blend_strength * 0.26
+                + shell_transition * group_blend_strength * 0.22
+                + shared_membrane_strength * 2.2
+                + shell_bridge * 0.18
+                + shell_edge_band * 0.14
+                + shell_center * 0.10,
+            0.0,
+            1.0);
+        float2 shell_backdrop_viewport_size =
+            float2(float(backdrop.get_width()), float(backdrop.get_height()))
+            / content_scale;
+        float2 shell_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : shell_backdrop_viewport_size.x,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : shell_backdrop_viewport_size.y),
+            float2(1.0));
+        float2 shell_group_center_screen =
+            in.group_rect.xy + shell_group_size * 0.5;
+        float2 shell_group_center_uv = clamp(
+            shell_group_center_screen / shell_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 shell_center_delta =
+            shell_group_center_uv - in.screen_uv;
+        float shell_center_distance = length(shell_center_delta);
+        float2 shell_center_dir =
+            shell_center_distance > 0.0001
+                ? shell_center_delta / shell_center_distance
+                : refraction_dir;
+        float2 shell_axis_raw =
+            shell_center_dir * (0.40 + 0.30 * shell_center)
+            + refraction_dir * (0.26 + 0.20 * shell_edge_band)
+            + bridge_dir * shell_bridge * (0.40 + 0.60 * bridge_core)
+            - dynamic_light_dir
+                * (0.18 + 0.12 * dynamic_light_highlight);
+        float shell_axis_len = length(shell_axis_raw);
+        float2 shell_axis = shell_axis_len > 0.0001
+            ? shell_axis_raw / shell_axis_len
+            : refraction_dir;
+        float2 shell_cross = float2(-shell_axis.y, shell_axis.x);
+        float shell_depth = clamp(
+            shell_edge_band * 0.38
+                + shell_center * 0.20
+                + shell_bridge * 0.22
+                + shell_transition * group_blend_strength * 0.20,
+            0.0,
+            1.0);
+        float shell_span =
+            (1.25
+             + 2.6 * glass_thickness
+             + 1.8 * clear_glass_detail
+             + 1.2 * shell_depth
+             + 0.05 * blur_points)
+            * content_scale
+            * (0.82 + 0.18 * glass_lensing_gain);
+        float shell_cross_span =
+            (0.80
+             + 1.4 * glass_dispersion_tangential
+             + 1.8 * spectral_dispersion
+             + 1.0 * shell_bridge)
+            * content_scale;
+        float shell_phase =
+            clamp(
+                dot(shell_group_norm, shell_axis)
+                    * (4.4 + 2.2 * shell_transition)
+                + dot(shell_group_norm, shell_cross)
+                    * (2.6 + 1.4 * shell_bridge)
+                + bridge_shear * shell_bridge * 2.4,
+                -8.0,
+                8.0);
+        float shell_wave = 0.5 + 0.5 * sin(shell_phase);
+        float2 shell_inner_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.22
+                + shell_center_dir
+                    * texel
+                    * shell_span
+                    * (0.18 + 0.16 * shell_center),
+            float2(0.0),
+            float2(1.0));
+        float2 shell_outer_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                - shell_axis
+                    * texel
+                    * shell_span
+                    * (0.32 + 0.18 * shell_edge_band)
+                + shell_cross
+                    * texel
+                    * shell_cross_span
+                    * bridge_shear
+                    * (0.10 + 0.14 * shell_bridge),
+            float2(0.0),
+            float2(1.0));
+        float2 shell_glint_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + shell_cross
+                    * texel
+                    * shell_cross_span
+                    * (0.32 + 0.18 * shell_wave + 0.12 * shell_depth)
+                - dynamic_light_dir
+                    * texel
+                    * shell_span
+                    * (0.10 + 0.10 * dynamic_light_highlight),
+            float2(0.0),
+            float2(1.0));
+        float2 shell_shadow_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - shell_center_dir
+                    * texel
+                    * shell_span
+                    * (0.22 + 0.16 * shell_depth)
+                - shell_cross
+                    * texel
+                    * shell_cross_span
+                    * (0.20 + 0.12 * shell_wave),
+            float2(0.0),
+            float2(1.0));
+        float3 shell_inner_rgb =
+            backdrop.sample(samp, shell_inner_uv).rgb;
+        float3 shell_outer_rgb =
+            backdrop.sample(samp, shell_outer_uv).rgb;
+        float3 shell_glint_rgb =
+            backdrop.sample(samp, shell_glint_uv).rgb;
+        float3 shell_shadow_rgb =
+            backdrop.sample(samp, shell_shadow_uv).rgb;
+        float3 shell_probe =
+            shell_inner_rgb * 0.32
+            + shell_outer_rgb * 0.30
+            + shell_glint_rgb * 0.22
+            + shell_shadow_rgb * 0.16;
+        float shell_luma =
+            dot(shell_probe, float3(0.2126, 0.7152, 0.0722));
+        float shell_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float shell_range = clamp(
+            length(shell_inner_rgb - shell_outer_rgb) * 0.30
+                + length(shell_glint_rgb - shell_shadow_rgb) * 0.24
+                + abs(shell_luma - shell_surface_luma) * 0.24
+                + shell_wave * shell_transition * 0.08,
+            0.0,
+            1.0);
+        float shell_calm =
+            1.0 - smoothstep(0.08, 0.38, shell_range);
+        float shell_bright = smoothstep(
+            shell_surface_luma - 0.07,
+            shell_surface_luma + 0.30,
+            shell_luma);
+        float shell_dark = smoothstep(
+            0.08,
+            0.34,
+            shell_surface_luma - shell_luma);
+        float shell_fresnel = smoothstep(
+            0.04,
+            0.86,
+            shell_edge_band * 0.46
+                + shell_depth * 0.30
+                + shell_bridge * 0.18
+                + dynamic_light_highlight * 0.12);
+        float3 shell_neutral =
+            mix(shell_probe,
+                float3(shell_luma),
+                0.28 + 0.22 * shell_calm);
+        float3 shell_tint =
+            shell_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.028
+                      + 0.044
+                          * prominent_intensity
+                          * tint_chroma));
+        float3 shell_layer = mix(
+            rgb,
+            shell_tint,
+            0.06
+                + 0.10 * shell_fresnel
+                + 0.08 * shell_calm);
+        float3 shell_luma_rgb =
+            float3(dot(shell_layer, float3(0.2126, 0.7152, 0.0722)));
+        shell_layer =
+            shell_luma_rgb
+            + (shell_layer - shell_luma_rgb)
+                * (0.90 + 0.10 * shell_gate);
+        shell_layer += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * shell_fresnel
+            * (0.004
+               + 0.012 * spectral_rim_tint
+               + 0.008 * glass_prismatic_gain);
+        shell_layer += shell_neutral
+            * shell_bright
+            * shell_fresnel
+            * (0.003
+               + 0.009 * dynamic_light_highlight
+               + 0.008 * glass_scattering_gain);
+        float shell_weight = shared_shell_strength
+            * shell_gate
+            * (0.32
+               + 0.20 * shell_fresnel
+               + 0.18 * shell_depth
+               + 0.16 * shell_calm
+               + 0.14 * shell_bright);
+        rgb = mix(
+            rgb,
+            clamp(shell_layer, 0.0, 1.0),
+            shell_weight * 0.34);
+        float shell_shadow =
+            shell_dark
+            * shell_weight
+            * (0.008 + 0.020 * glass_shadow_gain)
+            * (0.52 + 0.48 * shell_fresnel);
+        rgb *= 1.0 - clamp(shell_shadow, 0.0, 0.048);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float liquid_response_strength = clamp(
         0.012 * clear_glass_detail
             + 0.010 * clear_glass_contrast
@@ -15004,6 +15272,7 @@ fragment float4 fs_material(
             + 0.014 * clarity_balance_strength
             + 0.014 * optical_equilibrium_strength
             + 0.016 * shared_membrane_strength
+            + 0.014 * shared_shell_strength
             + 0.018 * pointer_lens_strength * pointer_lens_raw
             + 0.016 * bridge_motion_strength * bridge_band
             + 0.010 * union_execution * group_blend_strength,
@@ -15174,6 +15443,7 @@ fragment float4 fs_material(
             + 0.014 * chroma_governor_strength
             + 0.016 * glass_union_glow_strength
             + 0.018 * liquid_response_strength
+            + 0.014 * shared_shell_strength
             + 0.014 * clarity_balance_strength
             + 0.012 * optical_equilibrium_strength
             + 0.012 * legibility_veil_strength,
