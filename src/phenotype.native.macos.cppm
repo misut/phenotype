@@ -8258,6 +8258,170 @@ fragment float4 fs_material(
         rgb *= 1.0 - shadow_sheen;
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float elevation_projection_strength = clamp(
+        0.040 * glass_thickness
+            + 0.034 * (glass_lensing_gain - 1.0)
+            + 0.024 * glass_shadow_gain
+            + 0.026 * depth_parallax_strength
+            + 0.020 * background_extension_strength
+            + 0.018 * morph_field_strength
+            + 0.018 * prominent_intensity,
+        0.0,
+        0.18);
+    if (elevation_projection_strength > 0.0001) {
+        float2 projection_dir = dynamic_light_dir;
+        float projection_dir_len = length(projection_dir);
+        projection_dir = projection_dir_len > 0.0001
+            ? projection_dir / projection_dir_len
+            : normalize(float2(0.58, 0.82));
+        float2 projection_tangent = float2(-projection_dir.y,
+                                           projection_dir.x);
+        float projection_surface =
+            1.0 - smoothstep(0.20, 1.22, normalized_len);
+        float projection_rim = edge_lens
+            * (0.36
+               + 0.64
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.50, 0.5),
+                       signed_edge_distance)));
+        float projection_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.34 + 0.66 * bridge_core)
+                + morph_field_strength * 1.20,
+            0.0,
+            1.0);
+        float projection_gate = clamp(
+            projection_surface * 0.30
+                + projection_rim * 0.52
+                + projection_contact * 0.24,
+            0.0,
+            1.0);
+        float projection_alignment = clamp(
+            dot(refraction_dir, projection_dir) * 0.5 + 0.5,
+            0.0,
+            1.0);
+        float projection_span =
+            (2.0
+             + 8.2 * glass_thickness
+             + 3.2 * glass_caustic_spread
+             + 0.12 * blur_points)
+            * content_scale
+            * (0.78 + 0.22 * glass_lensing_gain);
+        float projection_cross_span =
+            (1.0
+             + 2.8 * glass_thickness
+             + 1.4 * glass_dispersion_tangential
+             + 2.8 * spectral_dispersion)
+            * content_scale;
+        float2 cast_shadow_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.24
+                + projection_dir
+                    * texel
+                    * projection_span
+                    * (0.72 + 0.28 * projection_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 cast_lift_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.46
+                - projection_dir
+                    * texel
+                    * projection_span
+                    * (0.44 + 0.26 * projection_contact),
+            float2(0.0),
+            float2(1.0));
+        float2 cast_side_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                + projection_tangent
+                    * texel
+                    * projection_cross_span
+                    * (0.62 + 0.24 * abs(bridge_shear)),
+            float2(0.0),
+            float2(1.0));
+        float3 cast_shadow_rgb =
+            backdrop.sample(samp, cast_shadow_uv).rgb;
+        float3 cast_lift_rgb =
+            backdrop.sample(samp, cast_lift_uv).rgb;
+        float3 cast_side_rgb =
+            backdrop.sample(samp, cast_side_uv).rgb;
+        float3 projection_rgb =
+            cast_shadow_rgb * 0.44
+            + cast_lift_rgb * 0.34
+            + cast_side_rgb * 0.22;
+        float projection_luma =
+            dot(projection_rgb, float3(0.2126, 0.7152, 0.0722));
+        float projection_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float projection_dark = smoothstep(
+            0.08,
+            0.34,
+            projection_surface_luma - projection_luma);
+        float projection_light = smoothstep(
+            projection_surface_luma - 0.10,
+            projection_surface_luma + 0.32,
+            projection_luma);
+        float projection_detail = smoothstep(
+            0.03,
+            0.32,
+            length(cast_shadow_rgb - cast_lift_rgb) * 0.34
+                + length(cast_side_rgb - projection_rgb) * 0.26);
+        float shadow_side = smoothstep(
+            -0.70,
+            0.86,
+            dot(normalized_local, projection_dir));
+        float lift_side = smoothstep(
+            -0.50,
+            0.92,
+            dot(normalized_local, -projection_dir));
+        float cast_shadow = elevation_projection_strength
+            * projection_gate
+            * shadow_side
+            * (0.34
+               + 0.24 * projection_dark
+               + 0.22 * glass_shadow_gain
+               + 0.20 * projection_contact);
+        float cast_lift = elevation_projection_strength
+            * projection_gate
+            * lift_side
+            * (0.20
+               + 0.24 * projection_light
+               + 0.18 * dynamic_light_highlight
+               + 0.14 * projection_detail);
+        float3 projection_tint = mix(
+            projection_rgb,
+            float3(projection_luma),
+            projection_dark * (0.20 + 0.20 * glass_shadow_gain));
+        projection_tint = mix(
+            projection_tint,
+            projection_tint * (float3(1.0) + 0.14 * in.tint.rgb),
+            tint_chroma * (0.30 + 0.22 * prominent_intensity));
+        projection_tint += float3(
+            spectral_warmth,
+            0.10 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * projection_rim
+            * (0.08 + 0.24 * spectral_rim_tint);
+        rgb *= 1.0 - clamp(cast_shadow * 0.42, 0.0, 0.090);
+        rgb = mix(
+            rgb,
+            mix(rgb, projection_tint, 0.16 + 0.14 * projection_detail),
+            cast_lift * 0.38);
+        rgb += projection_tint
+            * cast_lift
+            * (0.010
+               + 0.020 * dynamic_light_highlight
+               + 0.014 * glass_prismatic_gain);
+        float projection_occlusion = projection_dark
+            * elevation_projection_strength
+            * projection_gate
+            * (1.0 - projection_alignment)
+            * (0.020 + 0.036 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(projection_occlusion, 0.0, 0.060);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float glass_sidewall_strength = clamp(
         glass_thickness * (0.42 + 0.58 * edge_inner_highlight)
             + 0.18 * (glass_prismatic_gain - 1.0)
