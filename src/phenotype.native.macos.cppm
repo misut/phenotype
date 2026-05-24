@@ -6010,6 +6010,36 @@ fragment float4 fs_material(
             overlap_settled,
             0.10 + 0.18 * overlap_response_strength);
     }
+    if (union_execution > 0.5 && bridge_band > 0.0001) {
+        float bridge_settle_strength = clamp(
+            bridge_band
+                * bridge_motion_strength
+                * (0.44 + 0.56 * bridge_flow_offset_gain),
+            0.0,
+            1.0);
+        float bridge_luma =
+            dot(backdrop_rgb, float3(0.2126, 0.7152, 0.0722));
+        float3 bridge_settled =
+            mix(
+                backdrop_rgb,
+                float3(bridge_luma),
+                0.30 + 0.18 * bridge_flow_offset_gain);
+        bridge_settled = clamp(
+            (bridge_settled - float3(0.50))
+                    * (1.0 + 0.10 * bridge_flow_offset_gain)
+                + float3(0.50),
+            0.0,
+            1.0);
+        bridge_settled *=
+            1.0 - 0.030 * bridge_settle_strength;
+        backdrop_rgb = mix(
+            backdrop_rgb,
+            bridge_settled,
+            clamp(
+                0.10 * bridge_band + 0.24 * bridge_settle_strength,
+                0.0,
+                0.38));
+    }
     float scattering_strength = clamp(
         (glass_scattering_gain - 1.0) * 0.22 + glass_thickness * 0.035,
         0.0,
