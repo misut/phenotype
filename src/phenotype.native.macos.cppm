@@ -5611,8 +5611,16 @@ fragment float4 fs_material(
     float bridge_motion_strength = clamp(in.bridge_optics.x, 0.0, 1.0);
     float bridge_flow_offset_gain = clamp(in.bridge_optics.y, 0.0, 0.60);
     float bridge_ribbon_width = clamp(in.bridge_optics.z, 0.08, 0.32);
+    float union_execution =
+        floor(fmod(floor(in.group_effects.z / 2.0), 2.0));
     float bridge_caustic_gain =
-        clamp(1.0 + bridge_motion_strength * 0.60, 1.0, 1.80);
+        clamp(
+            1.0
+                + bridge_motion_strength
+                    * (0.60
+                       + 0.24 * union_execution * bridge_flow_offset_gain),
+            1.0,
+            1.95);
     float bridge_highlight_gain = clamp(in.bridge_optics.w, 0.0, 0.30);
     float materialize_wave_strength =
         clamp(in.transition_optics.x, 0.0, 1.0);
@@ -5790,9 +5798,11 @@ fragment float4 fs_material(
         float bridge_lateral = abs(dot(bridge_delta, bridge_tangent));
         float bridge_width = bridge_ribbon_width;
         float bridge_length = clamp(
-            0.34 + group_blend_strength * 0.32,
+            0.34
+                + group_blend_strength * 0.32
+                + union_execution * bridge_flow_offset_gain * 0.18,
             0.34,
-            0.72);
+            mix(0.72, 0.84, union_execution));
         bridge_band =
             (1.0 - smoothstep(bridge_width,
                               bridge_width + 0.18,
