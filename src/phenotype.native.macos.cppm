@@ -6298,6 +6298,61 @@ fragment float4 fs_material(
             * prominent_intensity
             * 0.035;
     }
+    float optical_light_energy = clamp(
+        dynamic_light_highlight
+            + 0.34 * edge_inner_highlight
+            + 0.24 * spectral_rim_tint
+            + 0.18 * (glass_prismatic_gain - 1.0)
+            + 0.12 * glass_caustic_spread,
+        0.0,
+        1.0);
+    if (optical_light_energy > 0.0001) {
+        float2 light_tangent = float2(-dynamic_light_dir.y,
+                                      dynamic_light_dir.x);
+        float directional_sheen = smoothstep(
+            -0.42,
+            0.92,
+            dot(normalized_local, -dynamic_light_dir));
+        float tangent_sheen = smoothstep(
+            0.12,
+            0.96,
+            abs(dot(normalized_local, light_tangent)));
+        float surface_gate =
+            1.0 - smoothstep(0.18, 1.24, normalized_len);
+        float rim_gate = edge_lens
+            * (0.42
+               + 0.58
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.12, 0.5),
+                       signed_edge_distance)));
+        float sheen = clamp(
+            surface_gate * directional_sheen * (0.55 + 0.45 * tangent_sheen)
+                + 0.62 * rim_gate,
+            0.0,
+            1.0);
+        float3 environment_tint =
+            float3(1.0 + 1.45 * spectral_warmth,
+                   1.0 + 0.42 * spectral_rim_tint,
+                   1.0 + 1.45 * spectral_coolness);
+        environment_tint = mix(
+            environment_tint,
+            environment_tint * (float3(1.0) + 0.36 * in.tint.rgb),
+            tint_chroma);
+        rgb += environment_tint
+            * optical_light_energy
+            * sheen
+            * (0.020 + 0.045 * glass_thickness);
+        float shadow_sheen = clamp(
+            (1.0 - directional_sheen)
+                * surface_gate
+                * dynamic_light_shadow
+                * (0.26 + 0.24 * glass_thickness),
+            0.0,
+            0.12);
+        rgb *= 1.0 - shadow_sheen;
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
