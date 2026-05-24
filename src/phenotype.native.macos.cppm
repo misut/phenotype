@@ -11263,6 +11263,183 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(lamination_occlusion, 0.0, 0.050);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float chromatic_polish_strength = clamp(
+        0.018 * spectral_dispersion
+            + 0.010 * edge_chromatic_fringe
+            + 0.010 * (glass_prismatic_gain - 1.0)
+            + 0.008 * glass_dispersion_tangential
+            + 0.06 * surface_lamination_strength
+            + 0.05 * caustic_lattice_strength
+            + 0.03 * thin_film_strength
+            + 0.03 * adaptive_contrast_strength,
+        0.0,
+        0.12);
+    if (chromatic_polish_strength > 0.0001) {
+        float polish_center =
+            1.0 - smoothstep(0.18, 1.14, normalized_len);
+        float polish_rim = edge_lens
+            * (0.32
+               + 0.68
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.58, 0.5),
+                       signed_edge_distance)));
+        float polish_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.26 + 0.74 * bridge_core)
+                + surface_tension_strength * 1.05,
+            0.0,
+            1.0);
+        float polish_gate = clamp(
+            polish_center * 0.30
+                + polish_rim * 0.46
+                + polish_contact * 0.24,
+            0.0,
+            1.0);
+        float2 polish_raw_dir =
+            dispersion_tangent * (0.48 + 0.36 * spectral_dispersion)
+            + refraction_dir * (0.26 + 0.30 * edge_lens)
+            - dynamic_light_dir * (0.18 + 0.18 * dynamic_light_highlight)
+            + bridge_tangent * bridge_shear * bridge_band * 0.18;
+        float polish_dir_len = length(polish_raw_dir);
+        float2 polish_dir = polish_dir_len > 0.0001
+            ? polish_raw_dir / polish_dir_len
+            : dispersion_tangent;
+        float2 polish_cross = float2(-polish_dir.y, polish_dir.x);
+        float polish_span =
+            (0.9
+             + 2.8 * glass_thickness
+             + 2.4 * glass_dispersion_tangential
+             + 4.8 * spectral_dispersion
+             + 0.06 * blur_points)
+            * content_scale
+            * (0.78 + 0.22 * glass_lensing_gain);
+        float polish_micro_span =
+            (0.7
+             + 1.4 * glass_dispersion_axial
+             + 2.8 * spectral_dispersion)
+            * content_scale;
+        float2 polish_warm_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.38
+                + polish_dir
+                    * texel
+                    * polish_span
+                    * (0.54 + 0.24 * polish_rim)
+                + polish_cross
+                    * texel
+                    * polish_micro_span
+                    * 0.22,
+            float2(0.0),
+            float2(1.0));
+        float2 polish_cool_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.32
+                - polish_dir
+                    * texel
+                    * polish_span
+                    * (0.48 + 0.22 * polish_contact)
+                - polish_cross
+                    * texel
+                    * polish_micro_span
+                    * 0.20,
+            float2(0.0),
+            float2(1.0));
+        float2 polish_anchor_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.28
+                + polish_cross
+                    * texel
+                    * polish_micro_span
+                    * (0.30 + 0.20 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 polish_warm =
+            backdrop.sample(samp, polish_warm_uv).rgb;
+        float3 polish_cool =
+            backdrop.sample(samp, polish_cool_uv).rgb;
+        float3 polish_anchor =
+            backdrop.sample(samp, polish_anchor_uv).rgb;
+        float3 polish_split =
+            float3(polish_warm.r,
+                   polish_anchor.g,
+                   polish_cool.b);
+        float polish_luma =
+            dot(polish_split, float3(0.2126, 0.7152, 0.0722));
+        float polish_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float polish_sample_chroma =
+            max(max(polish_split.r, polish_split.g), polish_split.b)
+            - min(min(polish_split.r, polish_split.g), polish_split.b);
+        float polish_surface_chroma =
+            max(max(rgb.r, rgb.g), rgb.b)
+            - min(min(rgb.r, rgb.g), rgb.b);
+        float polish_aberration = smoothstep(
+            0.04,
+            0.36,
+            length(polish_warm - polish_cool) * 0.34
+                + polish_sample_chroma * 0.34
+                + polish_surface_chroma * 0.24);
+        float polish_balance = smoothstep(
+            0.04,
+            0.32,
+            abs(polish_luma - polish_surface_luma)
+                + length(polish_anchor - polish_split) * 0.24);
+        float3 polish_neutral = mix(
+            polish_split,
+            float3(polish_luma),
+            0.34 + 0.26 * polish_aberration);
+        float3 polish_layer = mix(
+            rgb,
+            polish_neutral,
+            0.08
+                + 0.12 * polish_balance
+                + 0.10 * polish_aberration);
+        polish_layer = mix(
+            polish_layer,
+            polish_layer * (float3(1.0) + 0.10 * in.tint.rgb),
+            tint_chroma * (0.20 + 0.22 * prominent_intensity));
+        float3 polish_luma_rgb =
+            float3(dot(polish_layer, float3(0.2126, 0.7152, 0.0722)));
+        polish_layer = mix(
+            polish_layer,
+            polish_luma_rgb
+                + (polish_layer - polish_luma_rgb)
+                    * (1.0 - 0.18 * polish_aberration),
+            clamp(polish_aberration + polish_balance, 0.0, 1.0));
+        polish_layer += float3(
+            spectral_warmth,
+            0.10 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * polish_rim
+            * (0.006 + 0.020 * spectral_rim_tint);
+        float polish_weight = chromatic_polish_strength
+            * polish_gate
+            * (0.38
+               + 0.24 * polish_aberration
+               + 0.20 * polish_balance
+               + 0.18 * polish_contact);
+        rgb = mix(
+            rgb,
+            clamp(polish_layer, 0.0, 1.0),
+            polish_weight * 0.44);
+        float3 surface_luma_rgb =
+            float3(dot(rgb, float3(0.2126, 0.7152, 0.0722)));
+        rgb = mix(
+            rgb,
+            surface_luma_rgb
+                + (rgb - surface_luma_rgb)
+                    * (1.0 - 0.16 * polish_aberration),
+            polish_weight * 0.30);
+        rgb += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * polish_weight
+            * polish_rim
+            * (0.006 + 0.018 * glass_prismatic_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
