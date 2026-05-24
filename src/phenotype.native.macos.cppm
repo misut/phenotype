@@ -5876,6 +5876,77 @@ fragment float4 fs_material(
             * 1.65
             * prominent_lensing_gain;
     }
+    float surface_tension_strength = clamp(
+        0.014 * glass_thickness
+            + 0.018 * (glass_lensing_gain - 1.0)
+            + 0.020 * glass_caustic_spread
+            + 0.014 * fusion_strength
+            + 0.018 * materialize_wave_strength
+            + 0.012 * control_morph_depth
+            + 0.022 * pointer_lens_strength * pointer_lens_raw
+            + 0.014 * bridge_band,
+        0.0,
+        0.090);
+    if (surface_tension_strength > 0.0001) {
+        float2 surface_tangent = float2(-refraction_dir.y, refraction_dir.x);
+        float2 tension_raw_dir =
+            refraction_dir * (0.50 + 0.50 * edge_lens)
+            - dynamic_light_dir * 0.34
+            + bridge_dir * bridge_band * 0.56
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.82;
+        float tension_dir_len = length(tension_raw_dir);
+        float2 tension_dir = tension_dir_len > 0.0001
+            ? tension_raw_dir / tension_dir_len
+            : -dynamic_light_dir;
+        float2 tension_cross = float2(-tension_dir.y, tension_dir.x);
+        float tension_surface =
+            1.0 - smoothstep(0.16, 1.18, normalized_len);
+        float tension_rim = edge_lens
+            * (0.36
+               + 0.64
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_width * 1.30, 0.5),
+                       signed_edge_distance)));
+        float tension_contact =
+            pointer_lens_raw * pointer_lens_strength
+            + bridge_band * (0.55 + 0.45 * bridge_core);
+        float tension_gate = clamp(
+            tension_surface * 0.34
+                + tension_rim * 0.46
+                + tension_contact * 0.30,
+            0.0,
+            1.0);
+        float tension_wave = sin(
+            dot(normalized_local, tension_dir) * 7.5
+                + dot(normalized_local, surface_tangent) * 3.0
+                + normalized_len * 5.0
+                + glass_caustic_spread * 19.0);
+        float tension_fold = sin(
+            dot(normalized_local, tension_cross) * 5.5
+                - normalized_len * 4.0
+                + glass_thickness * 13.0);
+        float tension_span =
+            (1.4
+             + 3.4 * glass_thickness
+             + 3.0 * glass_caustic_spread
+             + 0.10 * blur_points)
+            * content_scale
+            * (0.70 + 0.30 * prominent_lensing_gain);
+        refraction_uv += tension_dir
+            * texel
+            * tension_span
+            * surface_tension_strength
+            * tension_gate
+            * tension_wave;
+        refraction_uv += tension_cross
+            * texel
+            * tension_span
+            * surface_tension_strength
+            * tension_gate
+            * tension_fold
+            * (0.46 + 0.54 * edge_lens);
+    }
     float caustic_weight = clamp(
         edge_lens
             * refraction_edge_caustic
