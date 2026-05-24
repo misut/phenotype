@@ -8203,6 +8203,180 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(extension_shadow, 0.0, 0.070);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float refractive_aperture_strength = clamp(
+        0.026 * glass_thickness
+            + 0.026 * (glass_lensing_gain - 1.0)
+            + 0.020 * glass_caustic_spread
+            + 0.022 * depth_parallax_strength
+            + 0.020 * background_extension_strength
+            + 0.018 * morph_field_strength
+            + 0.018 * dynamic_light_highlight
+            + 0.016 * prominent_intensity,
+        0.0,
+        0.15);
+    if (refractive_aperture_strength > 0.0001) {
+        float aperture_surface =
+            1.0 - smoothstep(0.12, 1.08, normalized_len);
+        float aperture_rim = edge_lens
+            * (0.34
+               + 0.66
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.42, 0.5),
+                       signed_edge_distance)));
+        float aperture_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.30 + 0.70 * bridge_core)
+                + pressure_caustic_strength * 0.44
+                + anisotropic_highlight_strength * 0.32,
+            0.0,
+            1.0);
+        float aperture_gate = clamp(
+            aperture_surface * 0.42
+                + aperture_rim * 0.34
+                + aperture_contact * 0.30,
+            0.0,
+            1.0);
+        float2 aperture_raw_dir =
+            refraction_dir * (0.46 + 0.54 * edge_lens)
+            - dynamic_light_dir * (0.28 + 0.30 * dynamic_light_highlight)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.42
+            + bridge_tangent * bridge_shear * bridge_band * 0.34;
+        float aperture_dir_length = length(aperture_raw_dir);
+        float2 aperture_dir = aperture_dir_length > 0.0001
+            ? aperture_raw_dir / aperture_dir_length
+            : -dynamic_light_dir;
+        float2 aperture_tangent = float2(-aperture_dir.y,
+                                         aperture_dir.x);
+        float aperture_span =
+            (1.6
+             + 5.6 * glass_thickness
+             + 3.6 * glass_caustic_spread
+             + 0.12 * blur_points)
+            * content_scale
+            * (0.82 + 0.18 * glass_lensing_gain);
+        float aperture_ring_span =
+            (0.9
+             + 2.4 * glass_thickness
+             + 2.0 * spectral_dispersion
+             + 1.6 * glass_dispersion_tangential)
+            * content_scale;
+        float aperture_focus_phase =
+            dot(normalized_local, aperture_dir)
+                * (6.0 + 4.0 * glass_caustic_spread)
+            + dot(normalized_local, aperture_tangent) * 2.4
+            + bridge_shear * bridge_band * 2.2;
+        float aperture_ring =
+            (0.5 + 0.5 * cos(aperture_focus_phase))
+            * aperture_gate
+            * (0.38 + 0.62 * aperture_rim);
+        float2 aperture_core_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.62
+                - aperture_dir
+                    * texel
+                    * aperture_span
+                    * (0.24 + 0.24 * aperture_surface),
+            float2(0.0),
+            float2(1.0));
+        float2 aperture_inner_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.44
+                + aperture_dir
+                    * texel
+                    * aperture_span
+                    * (0.50 + 0.20 * aperture_contact),
+            float2(0.0),
+            float2(1.0));
+        float2 aperture_outer_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                - aperture_tangent
+                    * texel
+                    * aperture_ring_span
+                    * (0.72 + 0.22 * aperture_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 aperture_chroma_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.48
+                + aperture_tangent
+                    * texel
+                    * aperture_ring_span
+                    * (0.58 + 0.28 * aperture_ring)
+                + dispersion_tangent
+                    * texel
+                    * aperture_ring_span
+                    * (0.42 + spectral_dispersion * 1.80),
+            float2(0.0),
+            float2(1.0));
+        float3 aperture_core =
+            backdrop.sample(samp, aperture_core_uv).rgb;
+        float3 aperture_inner =
+            backdrop.sample(samp, aperture_inner_uv).rgb;
+        float3 aperture_outer =
+            backdrop.sample(samp, aperture_outer_uv).rgb;
+        float3 aperture_chroma =
+            backdrop.sample(samp, aperture_chroma_uv).rgb;
+        float3 aperture_rgb =
+            aperture_core * 0.34
+            + aperture_inner * 0.30
+            + aperture_outer * 0.22
+            + aperture_chroma * 0.14;
+        float aperture_luma =
+            dot(aperture_rgb, float3(0.2126, 0.7152, 0.0722));
+        float aperture_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float aperture_bright = smoothstep(
+            aperture_surface_luma - 0.10,
+            aperture_surface_luma + 0.30,
+            aperture_luma);
+        float aperture_dark = smoothstep(
+            0.08,
+            0.34,
+            aperture_surface_luma - aperture_luma);
+        float aperture_focus = smoothstep(
+            0.02,
+            0.28,
+            length(aperture_core - aperture_inner) * 0.32
+                + length(aperture_outer - aperture_chroma) * 0.30
+                + aperture_ring * 0.18);
+        float3 aperture_tint = mix(
+            aperture_rgb,
+            float3(aperture_luma),
+            aperture_dark * (0.18 + 0.20 * glass_shadow_gain));
+        aperture_tint = mix(
+            aperture_tint,
+            aperture_tint * (float3(1.0) + 0.15 * in.tint.rgb),
+            tint_chroma * (0.32 + 0.22 * prominent_intensity));
+        aperture_tint += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (aperture_ring * 0.42 + aperture_rim * 0.28)
+            * (0.10 + 0.30 * spectral_rim_tint);
+        float aperture_weight = refractive_aperture_strength
+            * aperture_gate
+            * (0.42
+               + 0.20 * aperture_focus
+               + 0.20 * aperture_bright
+               + 0.18 * aperture_contact);
+        rgb = mix(
+            rgb,
+            mix(rgb, aperture_tint, 0.18 + 0.14 * aperture_focus),
+            aperture_weight);
+        rgb += aperture_tint
+            * aperture_weight
+            * (0.010
+               + 0.024 * dynamic_light_highlight
+               + 0.016 * glass_prismatic_gain);
+        float aperture_shadow = aperture_dark
+            * aperture_weight
+            * (0.020 + 0.036 * glass_shadow_gain)
+            * (0.62 + 0.38 * aperture_rim);
+        rgb *= 1.0 - clamp(aperture_shadow, 0.0, 0.065);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float optical_light_energy = clamp(
         dynamic_light_highlight
             + 0.34 * edge_inner_highlight
