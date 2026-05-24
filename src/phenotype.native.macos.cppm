@@ -18450,6 +18450,277 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(handoff_shadow, 0.0, 0.034);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float reflection_wake_strength = clamp(
+        0.012 * clear_glass_detail
+            + 0.010 * clear_glass_brightness
+            + 0.014 * pointer_lens_strength
+                * (0.42 * pointer_lens_raw + 0.58 * pointer_lens)
+            + 0.012 * glass_effect_match_execution * group_blend_strength
+            + 0.010 * morph_execution * group_blend_strength
+            + 0.010 * specular_handoff_strength
+            + 0.008 * matched_tether_sheath_strength
+            + 0.008 * container_pressure_halo_strength
+            + 0.006 * surrounding_light_wrap_strength,
+        0.0,
+        0.078);
+    if (reflection_wake_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 wake_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 wake_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            wake_group_size);
+        float2 wake_group_norm =
+            (wake_group_local / wake_group_size - float2(0.5)) * 2.0;
+        float wake_group_len = length(wake_group_norm);
+        float wake_center =
+            1.0 - smoothstep(0.20, 1.18, wake_group_len);
+        float2 wake_group_edge = min(
+            wake_group_local,
+            max(wake_group_size - wake_group_local, float2(0.0)));
+        float wake_edge_distance =
+            min(wake_group_edge.x, wake_group_edge.y);
+        float wake_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.4, 1.0),
+                wake_edge_distance);
+        float wake_pointer = clamp(
+            pointer_lens_strength
+                * (0.40 * pointer_lens_raw + 0.60 * pointer_lens),
+            0.0,
+            1.0);
+        float wake_bridge = bridge_band
+            * (0.32 + 0.68 * bridge_core);
+        float wake_transition = clamp(
+            glass_effect_match_execution * 0.30
+                + morph_execution * 0.22
+                + materialize_wave_strength * 0.14
+                + union_execution * 0.12
+                + shape_blend_execution * 0.10
+                + specular_handoff_strength * 2.2
+                + wake_pointer * 0.26,
+            0.0,
+            1.0);
+        float wake_gate = clamp(
+            wake_pointer * 0.26
+                + wake_bridge * 0.24
+                + wake_edge * 0.20
+                + wake_center * 0.14
+                + wake_transition * group_blend_strength * 0.22
+                + specular_handoff_strength * 2.0
+                + matched_tether_sheath_strength * 1.8,
+            0.0,
+            1.0);
+        float2 wake_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 wake_group_center_screen =
+            in.group_rect.xy + wake_group_size * 0.5;
+        float2 wake_group_center_uv = clamp(
+            wake_group_center_screen / wake_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 wake_to_center =
+            wake_group_center_uv - in.screen_uv;
+        float wake_center_distance = length(wake_to_center);
+        float2 wake_center_dir =
+            wake_center_distance > 0.0001
+                ? wake_to_center / wake_center_distance
+                : refraction_dir;
+        float2 wake_axis_raw =
+            pointer_dir * (0.36 + 0.26 * wake_pointer)
+            + bridge_dir * (0.30 + 0.24 * wake_bridge)
+            + wake_center_dir * (0.22 + 0.16 * wake_center)
+            - dynamic_light_dir
+                * (0.18 + 0.14 * dynamic_light_highlight);
+        float wake_axis_len = length(wake_axis_raw);
+        float2 wake_axis = wake_axis_len > 0.0001
+            ? wake_axis_raw / wake_axis_len
+            : refraction_dir;
+        float2 wake_cross = float2(-wake_axis.y, wake_axis.x);
+        float wake_alignment =
+            smoothstep(-0.28, 0.88, dot(wake_axis, bridge_dir));
+        float wake_pointer_ratio =
+            pointer_distance / max(pointer_lens_radius, 0.001);
+        float wake_pointer_ring =
+            pointer_lens_strength > 0.0001
+                ? 1.0 - smoothstep(0.0,
+                                   0.40,
+                                   abs(wake_pointer_ratio - 0.56))
+                : 0.0;
+        wake_pointer_ring *= pointer_lens_raw;
+        float wake_phase = clamp(
+            dot(wake_group_norm, wake_axis)
+                    * (6.2 + 2.8 * wake_transition)
+                + dot(wake_group_norm, wake_cross)
+                    * (2.6 + 1.8 * wake_bridge)
+                + bridge_axial * (3.0 + 2.4 * wake_bridge)
+                + bridge_shear * wake_bridge * 2.0
+                + wake_pointer_ring * 3.8
+                + dynamic_light_highlight * 1.8,
+            -10.0,
+            10.0);
+        float wake_wave = 0.5 + 0.5 * sin(wake_phase);
+        float wake_filament =
+            1.0 - smoothstep(0.0, 0.30, abs(wake_wave - 0.58));
+        float wake_span =
+            (0.78
+             + 1.6 * glass_thickness
+             + 1.2 * clear_glass_detail
+             + 1.0 * wake_gate
+             + 0.040 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float wake_cross_span =
+            (0.56
+             + 1.0 * glass_dispersion_tangential
+             + 1.2 * spectral_dispersion
+             + 0.8 * wake_transition)
+            * content_scale;
+        float2 wake_pointer_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + pointer_dir
+                    * texel
+                    * wake_span
+                    * (0.30 + 0.22 * wake_pointer)
+                - dynamic_light_dir
+                    * texel
+                    * wake_span
+                    * (0.10 + 0.08 * wake_filament),
+            float2(0.0),
+            float2(1.0));
+        float2 wake_bridge_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - wake_axis
+                    * texel
+                    * wake_span
+                    * (0.28 + 0.14 * wake_wave)
+                + bridge_tangent
+                    * texel
+                    * wake_cross_span
+                    * bridge_shear
+                    * wake_bridge
+                    * (0.16 + 0.12 * wake_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 wake_center_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                + wake_center_dir
+                    * texel
+                    * wake_span
+                    * (0.22 + 0.14 * wake_center),
+            float2(0.0),
+            float2(1.0));
+        float2 wake_lateral_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.15
+                + wake_cross
+                    * texel
+                    * wake_cross_span
+                    * (0.28 + 0.16 * wake_edge)
+                    * (bridge_shear >= 0.0 ? 1.0 : -1.0),
+            float2(0.0),
+            float2(1.0));
+        float3 wake_pointer_rgb =
+            backdrop.sample(samp, wake_pointer_uv).rgb;
+        float3 wake_bridge_rgb =
+            backdrop.sample(samp, wake_bridge_uv).rgb;
+        float3 wake_center_rgb =
+            backdrop.sample(samp, wake_center_uv).rgb;
+        float3 wake_lateral_rgb =
+            backdrop.sample(samp, wake_lateral_uv).rgb;
+        float3 wake_probe =
+            wake_pointer_rgb * 0.34
+            + wake_bridge_rgb * 0.28
+            + wake_center_rgb * 0.22
+            + wake_lateral_rgb * 0.16;
+        float wake_luma =
+            dot(wake_probe, float3(0.2126, 0.7152, 0.0722));
+        float wake_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float wake_range = clamp(
+            length(wake_pointer_rgb - wake_bridge_rgb) * 0.30
+                + length(wake_center_rgb - wake_lateral_rgb) * 0.24
+                + abs(wake_luma - wake_surface_luma) * 0.22
+                + wake_filament * 0.10
+                + wake_pointer_ring * 0.08,
+            0.0,
+            1.0);
+        float wake_coherence =
+            1.0 - smoothstep(0.08, 0.36, wake_range);
+        float wake_bright = smoothstep(
+            wake_surface_luma - 0.07,
+            wake_surface_luma + 0.28,
+            wake_luma);
+        float wake_dark = smoothstep(
+            0.08,
+            0.34,
+            wake_surface_luma - wake_luma);
+        float wake_fresnel = clamp(
+            wake_filament * 0.34
+                + wake_pointer_ring * 0.24
+                + wake_edge * 0.20
+                + wake_alignment * 0.16
+                + wake_transition * 0.12,
+            0.0,
+            1.0);
+        float3 wake_neutral = mix(
+            wake_probe,
+            float3(wake_luma),
+            wake_dark * (0.12 + 0.16 * glass_shadow_gain)
+                + wake_coherence * 0.15);
+        float3 wake_layer =
+            wake_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.022
+                      + 0.034 * tint_chroma * prominent_intensity));
+        float3 wake_prism = float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        wake_layer += wake_prism
+            * wake_fresnel
+            * (0.004
+               + 0.010 * spectral_rim_tint
+               + 0.008 * glass_prismatic_gain);
+        float wake_weight = reflection_wake_strength
+            * wake_gate
+            * (0.30
+               + 0.20 * wake_fresnel
+               + 0.18 * wake_coherence
+               + 0.16 * wake_bright
+               + 0.16 * wake_pointer);
+        rgb = mix(
+            rgb,
+            mix(rgb, clamp(wake_layer, 0.0, 1.0),
+                0.14 + 0.18 * wake_fresnel),
+            wake_weight * 0.38);
+        rgb += wake_prism
+            * wake_weight
+            * wake_filament
+            * (0.003
+               + 0.010 * dynamic_light_highlight
+               + 0.010 * glass_scattering_gain);
+        float wake_shadow =
+            wake_dark
+            * wake_weight
+            * (0.006 + 0.014 * glass_shadow_gain)
+            * (0.56 + 0.44 * (1.0 - wake_alignment));
+        rgb *= 1.0 - clamp(wake_shadow, 0.0, 0.034);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
