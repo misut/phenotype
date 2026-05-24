@@ -13289,6 +13289,194 @@ fragment float4 fs_material(
         rgb += balance_neutral * balance_dark_lift;
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float chroma_governor_strength = clamp(
+        0.012 * clear_glass_contrast
+            + 0.018 * clear_glass_detail
+            + 0.016 * clear_glass_dimming
+            + 0.012 * glass_thickness
+            + 0.020 * legibility_veil_strength
+            + 0.022 * optical_equilibrium_strength
+            + 0.026 * clarity_balance_strength
+            + 0.020 * horizon_glint_strength
+            + 0.018 * contact_caustic_strength
+            + 0.014 * volumetric_parallax_strength
+            + 0.018 * chromatic_polish_strength
+            + 0.006 * glass_prismatic_gain,
+        0.0,
+        0.105);
+    if (chroma_governor_strength > 0.0001) {
+        float governor_center =
+            1.0 - smoothstep(0.18, 1.10, normalized_len);
+        float governor_rim = edge_lens
+            * (0.36
+               + 0.64
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.48, 0.5),
+                       signed_edge_distance)));
+        float governor_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.34 + 0.66 * bridge_core)
+                + surface_tension_strength * 0.68
+                + specular_intensity * 0.20,
+            0.0,
+            1.0);
+        float governor_gate = clamp(
+            governor_center * 0.32
+                + governor_rim * 0.30
+                + governor_contact * 0.24
+                + clear_glass_detail * 0.18
+                + prominent_intensity * tint_chroma * 0.12,
+            0.0,
+            1.0);
+        float2 governor_raw_axis =
+            refraction_dir * (0.36 + 0.24 * governor_rim)
+            - dynamic_light_dir
+                * (0.22 + 0.18 * specular_intensity)
+            + bridge_dir * bridge_band * (0.14 + 0.12 * bridge_core)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.16;
+        float governor_axis_len = length(governor_raw_axis);
+        float2 governor_axis = governor_axis_len > 0.0001
+            ? governor_raw_axis / governor_axis_len
+            : refraction_dir;
+        float2 governor_cross =
+            float2(-governor_axis.y, governor_axis.x);
+        float governor_span =
+            (1.0
+             + 2.4 * clear_glass_detail
+             + 1.8 * glass_thickness
+             + 0.05 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float2 governor_near_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.22
+                + governor_axis
+                    * texel
+                    * governor_span
+                    * (0.28 + 0.18 * governor_center),
+            float2(0.0),
+            float2(1.0));
+        float2 governor_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                - governor_axis
+                    * texel
+                    * governor_span
+                    * (0.34 + 0.16 * governor_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 governor_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.20
+                + governor_cross
+                    * texel
+                    * governor_span
+                    * (0.26 + 0.18 * governor_contact),
+            float2(0.0),
+            float2(1.0));
+        float3 governor_near_rgb =
+            backdrop.sample(samp, governor_near_uv).rgb;
+        float3 governor_back_rgb =
+            backdrop.sample(samp, governor_back_uv).rgb;
+        float3 governor_cross_rgb =
+            backdrop.sample(samp, governor_cross_uv).rgb;
+        float3 governor_probe =
+            governor_near_rgb * 0.40
+            + governor_back_rgb * 0.34
+            + governor_cross_rgb * 0.26;
+        float governor_probe_luma =
+            dot(governor_probe, float3(0.2126, 0.7152, 0.0722));
+        float governor_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float3 governor_probe_neutral =
+            mix(governor_probe,
+                float3(governor_probe_luma),
+                0.34 + 0.18 * clear_glass_dimming);
+        float governor_probe_chroma =
+            length(governor_probe - float3(governor_probe_luma));
+        float governor_surface_chroma =
+            length(rgb - float3(governor_surface_luma));
+        float governor_chroma_excess = smoothstep(
+            0.08,
+            0.40,
+            governor_surface_chroma
+                - governor_probe_chroma * 0.42
+                + spectral_dispersion * 0.06
+                + spectral_rim_tint * 0.04);
+        float governor_surface_peak = max(max(rgb.r, rgb.g), rgb.b);
+        float governor_surface_floor = min(min(rgb.r, rgb.g), rgb.b);
+        float governor_overbright = smoothstep(
+            0.70,
+            1.02,
+            governor_surface_peak * 0.60
+                + governor_surface_luma * 0.40);
+        float governor_underclear =
+            1.0 - smoothstep(
+                0.11,
+                0.42,
+                governor_surface_floor * 0.45
+                    + governor_surface_luma * 0.55);
+        float governor_midclarity =
+            1.0 - max(governor_overbright, governor_underclear);
+        float3 governor_anchor = mix(
+            governor_probe_neutral,
+            governor_probe_neutral
+                * (float3(1.0) + in.tint.rgb * 0.04),
+            tint_chroma * prominent_intensity);
+        float3 governor_layer = mix(
+            rgb,
+            governor_anchor,
+            0.08
+                + 0.16 * governor_chroma_excess
+                + 0.08 * max(governor_overbright, governor_underclear));
+        float3 governor_luma_rgb =
+            float3(dot(governor_layer,
+                       float3(0.2126, 0.7152, 0.0722)));
+        governor_layer = mix(
+            governor_layer,
+            governor_luma_rgb
+                + (governor_layer - governor_luma_rgb)
+                    * (0.88 - 0.08 * governor_chroma_excess),
+            clamp(
+                governor_chroma_excess * 0.72
+                    + governor_overbright * 0.32,
+                0.0,
+                1.0));
+        governor_layer = mix(
+            governor_layer,
+            clamp(
+                (governor_layer - float3(0.50))
+                        * (1.0 + clear_glass_contrast * 0.14)
+                    + float3(0.50),
+                0.0,
+                1.0),
+            governor_midclarity * (0.20 + 0.18 * clear_glass_detail));
+        float governor_weight = chroma_governor_strength
+            * governor_gate
+            * (0.34
+               + 0.24 * governor_chroma_excess
+               + 0.18 * max(governor_overbright, governor_underclear)
+               + 0.16 * governor_contact
+               + 0.08 * governor_midclarity);
+        rgb = mix(
+            rgb,
+            clamp(governor_layer, 0.0, 1.0),
+            governor_weight * 0.34);
+        float governor_bright_trim =
+            governor_overbright
+            * governor_weight
+            * (0.010 + 0.020 * clear_glass_dimming);
+        float governor_dark_lift =
+            governor_underclear
+            * governor_weight
+            * (0.006 + 0.012 * glass_scattering_gain);
+        rgb *= 1.0 - clamp(governor_bright_trim, 0.0, 0.034);
+        rgb += governor_anchor
+            * governor_dark_lift
+            * (0.72 + 0.28 * glass_shadow_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
