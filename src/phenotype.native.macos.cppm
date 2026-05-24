@@ -12221,6 +12221,182 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(specular_cavity, 0.0, 0.050);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float optical_equilibrium_strength = clamp(
+        0.020 * glass_thickness
+            + 0.018 * clear_glass_dimming
+            + 0.020 * clear_glass_contrast
+            + 0.018 * prominent_intensity
+            + 0.050 * substrate_coupling_strength
+            + 0.044 * meniscus_coherence_strength
+            + 0.038 * surface_lamination_strength
+            + 0.032 * chromatic_polish_strength
+            + 0.026 * adaptive_contrast_strength
+            + 0.020 * specular_intensity,
+        0.0,
+        0.13);
+    if (optical_equilibrium_strength > 0.0001) {
+        float equilibrium_center =
+            1.0 - smoothstep(0.18, 1.20, normalized_len);
+        float equilibrium_edge = edge_lens
+            * (0.32
+               + 0.68
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.85, 0.5),
+                       signed_edge_distance)));
+        float equilibrium_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.32 + 0.68 * bridge_core)
+                + surface_tension_strength * 1.10
+                + specular_intensity * 0.24,
+            0.0,
+            1.0);
+        float equilibrium_gate = clamp(
+            equilibrium_center * 0.34
+                + equilibrium_edge * 0.42
+                + equilibrium_contact * 0.28,
+            0.0,
+            1.0);
+        float2 equilibrium_raw_dir =
+            -dynamic_light_dir * (0.40 + 0.20 * dynamic_light_highlight)
+            + refraction_dir * (0.34 + 0.30 * edge_lens)
+            + bridge_dir * bridge_band * 0.22
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.20;
+        float equilibrium_dir_len = length(equilibrium_raw_dir);
+        float2 equilibrium_dir = equilibrium_dir_len > 0.0001
+            ? equilibrium_raw_dir / equilibrium_dir_len
+            : -dynamic_light_dir;
+        float2 equilibrium_cross = float2(-equilibrium_dir.y,
+                                          equilibrium_dir.x);
+        float equilibrium_span =
+            (1.6
+             + 3.8 * glass_thickness
+             + 2.2 * glass_caustic_spread
+             + 0.08 * blur_points)
+            * content_scale
+            * (0.78 + 0.22 * glass_lensing_gain);
+        float equilibrium_micro_span =
+            (0.8
+             + 1.2 * glass_dispersion_tangential
+             + 2.6 * spectral_dispersion)
+            * content_scale;
+        float2 equilibrium_bright_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.36
+                + equilibrium_dir
+                    * texel
+                    * equilibrium_span
+                    * (0.40 + 0.20 * equilibrium_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 equilibrium_dark_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.28
+                - equilibrium_dir
+                    * texel
+                    * equilibrium_span
+                    * (0.44 + 0.20 * equilibrium_contact),
+            float2(0.0),
+            float2(1.0));
+        float2 equilibrium_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.32
+                + equilibrium_cross
+                    * texel
+                    * equilibrium_micro_span
+                    * (0.44 + 0.20 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 equilibrium_bright_rgb =
+            backdrop.sample(samp, equilibrium_bright_uv).rgb;
+        float3 equilibrium_dark_rgb =
+            backdrop.sample(samp, equilibrium_dark_uv).rgb;
+        float3 equilibrium_cross_rgb =
+            backdrop.sample(samp, equilibrium_cross_uv).rgb;
+        float3 equilibrium_probe =
+            equilibrium_bright_rgb * 0.38
+            + equilibrium_dark_rgb * 0.38
+            + equilibrium_cross_rgb * 0.24;
+        float equilibrium_luma =
+            dot(equilibrium_probe, float3(0.2126, 0.7152, 0.0722));
+        float equilibrium_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float equilibrium_surface_peak = max(max(rgb.r, rgb.g), rgb.b);
+        float equilibrium_surface_floor = min(min(rgb.r, rgb.g), rgb.b);
+        float equilibrium_probe_range = clamp(
+            length(equilibrium_bright_rgb - equilibrium_dark_rgb) * 0.28
+                + length(equilibrium_cross_rgb - equilibrium_probe) * 0.22
+                + abs(equilibrium_luma - equilibrium_surface_luma) * 0.34,
+            0.0,
+            1.0);
+        float equilibrium_overbright = smoothstep(
+            0.72,
+            1.02,
+            equilibrium_surface_peak * 0.62
+                + equilibrium_surface_luma * 0.38);
+        float equilibrium_under =
+            1.0 - smoothstep(
+                0.10,
+                0.40,
+                equilibrium_surface_floor * 0.44
+                    + equilibrium_surface_luma * 0.56);
+        float equilibrium_flat =
+            1.0 - smoothstep(0.08, 0.34, equilibrium_probe_range);
+        float3 equilibrium_neutral = mix(
+            equilibrium_probe,
+            float3(equilibrium_luma),
+            0.36 + 0.24 * equilibrium_flat);
+        float3 equilibrium_layer = mix(
+            rgb,
+            equilibrium_neutral,
+            0.08
+                + 0.12 * equilibrium_probe_range
+                + 0.10 * max(equilibrium_overbright, equilibrium_under));
+        equilibrium_layer = clamp(
+            (equilibrium_layer - float3(0.50))
+                    * (1.0 + clear_glass_contrast * 0.24)
+                + float3(0.50),
+            0.0,
+            1.0);
+        equilibrium_layer = mix(
+            equilibrium_layer,
+            equilibrium_layer * (1.0 - 0.08 * equilibrium_overbright)
+                + equilibrium_neutral * (0.05 + 0.06 * equilibrium_under),
+            clamp(equilibrium_overbright + equilibrium_under, 0.0, 1.0));
+        equilibrium_layer = mix(
+            equilibrium_layer,
+            equilibrium_layer * (float3(1.0) + 0.10 * in.tint.rgb),
+            tint_chroma * (0.18 + 0.24 * prominent_intensity));
+        equilibrium_layer += float3(
+            spectral_warmth,
+            0.10 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * equilibrium_edge
+            * (0.006 + 0.018 * spectral_rim_tint);
+        float equilibrium_weight = optical_equilibrium_strength
+            * equilibrium_gate
+            * (0.38
+               + 0.22 * equilibrium_probe_range
+               + 0.20 * max(equilibrium_overbright, equilibrium_under)
+               + 0.20 * equilibrium_contact);
+        rgb = mix(
+            rgb,
+            clamp(equilibrium_layer, 0.0, 1.0),
+            equilibrium_weight * 0.38);
+        rgb += equilibrium_neutral
+            * equilibrium_weight
+            * equilibrium_under
+            * (0.004
+               + 0.010 * glass_scattering_gain
+               + 0.010 * dynamic_light_highlight);
+        float equilibrium_absorption = equilibrium_overbright
+            * optical_equilibrium_strength
+            * equilibrium_gate
+            * (0.010 + 0.026 * glass_shadow_gain)
+            * (0.56 + 0.44 * equilibrium_edge);
+        rgb *= 1.0 - clamp(equilibrium_absorption, 0.0, 0.046);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
