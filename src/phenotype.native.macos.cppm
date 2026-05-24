@@ -9253,6 +9253,192 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(projection_occlusion, 0.0, 0.060);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float shadow_diffusion_strength = clamp(
+        0.030 * glass_thickness
+            + 0.024 * glass_shadow_gain
+            + 0.024 * elevation_projection_strength
+            + 0.020 * refractive_aperture_strength
+            + 0.018 * background_extension_strength
+            + 0.014 * depth_parallax_strength
+            + 0.012 * prominent_intensity,
+        0.0,
+        0.15);
+    if (shadow_diffusion_strength > 0.0001) {
+        float2 diffusion_raw_dir =
+            dynamic_light_dir
+            + refraction_dir * (0.16 + 0.24 * edge_lens)
+            + bridge_dir * bridge_band * 0.22
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.18;
+        float diffusion_dir_len = length(diffusion_raw_dir);
+        float2 diffusion_dir = diffusion_dir_len > 0.0001
+            ? diffusion_raw_dir / diffusion_dir_len
+            : normalize(float2(0.52, 0.84));
+        float2 diffusion_tangent = float2(-diffusion_dir.y,
+                                          diffusion_dir.x);
+        float diffusion_surface =
+            1.0 - smoothstep(0.18, 1.24, normalized_len);
+        float diffusion_rim = edge_lens
+            * (0.34
+               + 0.66
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.58, 0.5),
+                       signed_edge_distance)));
+        float diffusion_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.34 + 0.66 * bridge_core)
+                + morph_field_strength * 0.88
+                + elevation_projection_strength * 0.70,
+            0.0,
+            1.0);
+        float diffusion_gate = clamp(
+            diffusion_surface * 0.24
+                + diffusion_rim * 0.46
+                + diffusion_contact * 0.34,
+            0.0,
+            1.0);
+        float diffusion_span =
+            (2.8
+             + 10.0 * glass_thickness
+             + 4.4 * glass_caustic_spread
+             + 0.16 * blur_points)
+            * content_scale
+            * (0.78 + 0.22 * glass_lensing_gain);
+        float diffusion_far_span =
+            diffusion_span * (1.32 + 0.34 * diffusion_contact);
+        float diffusion_cross_span =
+            (1.4
+             + 3.2 * glass_thickness
+             + 1.8 * spectral_dispersion
+             + 1.3 * glass_dispersion_tangential)
+            * content_scale;
+        float2 diffusion_shadow_near_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.22
+                + diffusion_dir
+                    * texel
+                    * diffusion_span
+                    * (0.62 + 0.26 * diffusion_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 diffusion_shadow_far_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                + diffusion_dir
+                    * texel
+                    * diffusion_far_span
+                    * (0.78 + 0.20 * glass_shadow_gain),
+            float2(0.0),
+            float2(1.0));
+        float2 diffusion_lift_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.48
+                - diffusion_dir
+                    * texel
+                    * diffusion_span
+                    * (0.38 + 0.28 * diffusion_contact),
+            float2(0.0),
+            float2(1.0));
+        float2 diffusion_halo_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                + diffusion_tangent
+                    * texel
+                    * diffusion_cross_span
+                    * (0.70 + 0.26 * abs(bridge_shear))
+                + dispersion_tangent
+                    * texel
+                    * diffusion_cross_span
+                    * (0.22 + 0.42 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float3 diffusion_shadow_near =
+            backdrop.sample(samp, diffusion_shadow_near_uv).rgb;
+        float3 diffusion_shadow_far =
+            backdrop.sample(samp, diffusion_shadow_far_uv).rgb;
+        float3 diffusion_lift =
+            backdrop.sample(samp, diffusion_lift_uv).rgb;
+        float3 diffusion_halo =
+            backdrop.sample(samp, diffusion_halo_uv).rgb;
+        float3 diffusion_rgb =
+            diffusion_shadow_near * 0.34
+            + diffusion_shadow_far * 0.25
+            + diffusion_lift * 0.24
+            + diffusion_halo * 0.17;
+        float diffusion_luma =
+            dot(diffusion_rgb, float3(0.2126, 0.7152, 0.0722));
+        float diffusion_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float diffusion_dark = smoothstep(
+            0.06,
+            0.32,
+            diffusion_surface_luma - diffusion_luma);
+        float diffusion_light = smoothstep(
+            diffusion_surface_luma - 0.10,
+            diffusion_surface_luma + 0.30,
+            diffusion_luma);
+        float diffusion_softness = smoothstep(
+            0.02,
+            0.28,
+            length(diffusion_shadow_near - diffusion_shadow_far) * 0.28
+                + length(diffusion_lift - diffusion_halo) * 0.24
+                + diffusion_contact * 0.12);
+        float diffusion_shadow_side = smoothstep(
+            -0.70,
+            0.88,
+            dot(normalized_local, diffusion_dir));
+        float diffusion_lift_side = smoothstep(
+            -0.50,
+            0.92,
+            dot(normalized_local, -diffusion_dir));
+        float3 diffusion_tint = mix(
+            diffusion_rgb,
+            float3(diffusion_luma),
+            diffusion_dark * (0.22 + 0.22 * glass_shadow_gain));
+        diffusion_tint = mix(
+            diffusion_tint,
+            diffusion_tint * (float3(1.0) + 0.14 * in.tint.rgb),
+            tint_chroma * (0.30 + 0.22 * prominent_intensity));
+        diffusion_tint += float3(
+            spectral_warmth,
+            0.10 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * diffusion_rim
+            * (0.08 + 0.26 * spectral_rim_tint);
+        float contact_shadow = shadow_diffusion_strength
+            * diffusion_gate
+            * diffusion_shadow_side
+            * (0.24
+               + 0.26 * diffusion_dark
+               + 0.20 * glass_shadow_gain
+               + 0.16 * diffusion_softness
+               + 0.14 * diffusion_contact);
+        float contact_lift = shadow_diffusion_strength
+            * diffusion_gate
+            * diffusion_lift_side
+            * (0.16
+               + 0.20 * diffusion_light
+               + 0.18 * dynamic_light_highlight
+               + 0.14 * diffusion_softness
+               + 0.12 * diffusion_contact);
+        rgb *= 1.0 - clamp(contact_shadow * 0.36, 0.0, 0.080);
+        rgb = mix(
+            rgb,
+            mix(rgb, diffusion_tint, 0.14 + 0.14 * diffusion_softness),
+            contact_lift * 0.40);
+        rgb += diffusion_tint
+            * contact_lift
+            * (0.008
+               + 0.018 * dynamic_light_highlight
+               + 0.014 * glass_prismatic_gain);
+        float contact_occlusion = diffusion_dark
+            * shadow_diffusion_strength
+            * diffusion_gate
+            * (0.020 + 0.034 * glass_shadow_gain)
+            * (0.64 + 0.36 * diffusion_rim);
+        rgb *= 1.0 - clamp(contact_occlusion, 0.0, 0.058);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float glass_sidewall_strength = clamp(
         glass_thickness * (0.42 + 0.58 * edge_inner_highlight)
             + 0.18 * (glass_prismatic_gain - 1.0)
