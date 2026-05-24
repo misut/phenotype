@@ -7136,6 +7136,188 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(well_absorption, 0.0, 0.052);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float thin_film_strength = clamp(
+        0.018 * glass_thickness
+            + 0.018 * spectral_dispersion
+            + 0.016 * glass_dispersion_tangential
+            + 0.014 * glass_caustic_spread
+            + 0.014 * specular_envelope_strength
+            + 0.012 * light_well_strength
+            + 0.010 * polarized_reflection_strength
+            + 0.010 * prominent_intensity,
+        0.0,
+        0.12);
+    if (thin_film_strength > 0.0001) {
+        float2 film_raw_dir =
+            dispersion_tangent * (0.58 + 0.42 * spectral_dispersion)
+            - dynamic_light_dir * (0.30 + 0.26 * dynamic_light_highlight)
+            + refraction_dir * (0.20 + 0.32 * edge_lens)
+            + bridge_tangent * bridge_shear * bridge_band * 0.18;
+        float film_dir_len = length(film_raw_dir);
+        float2 film_dir = film_dir_len > 0.0001
+            ? film_raw_dir / film_dir_len
+            : dispersion_tangent;
+        float2 film_tangent = float2(-film_dir.y, film_dir.x);
+        float film_surface =
+            1.0 - smoothstep(0.14, 1.20, normalized_len);
+        float film_rim = edge_lens
+            * (0.30
+               + 0.70
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.50, 0.5),
+                       signed_edge_distance)));
+        float film_grazing = smoothstep(
+            -0.26,
+            0.96,
+            dot(normalized_local, -film_dir));
+        float film_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.24 + 0.76 * bridge_core)
+                + light_well_strength * 1.30,
+            0.0,
+            1.0);
+        float film_gate = clamp(
+            film_surface * (0.24 + 0.40 * film_grazing)
+                + film_rim * 0.46
+                + film_contact * 0.24,
+            0.0,
+            1.0);
+        float film_span =
+            (1.2
+             + 4.8 * glass_thickness
+             + 3.0 * glass_caustic_spread
+             + 0.10 * blur_points)
+            * content_scale
+            * (0.78 + 0.22 * glass_lensing_gain);
+        float film_cross_span =
+            (0.8
+             + 2.4 * glass_thickness
+             + 1.8 * glass_dispersion_tangential
+             + 3.8 * spectral_dispersion)
+            * content_scale;
+        float film_phase =
+            dot(normalized_local, film_dir)
+                * (8.0 + 5.0 * spectral_dispersion)
+            + dot(normalized_local, film_tangent)
+                * (3.2 + 2.0 * glass_caustic_spread)
+            + film_rim * 2.6
+            + bridge_shear * bridge_band * 2.8;
+        float film_band =
+            (0.5 + 0.5 * cos(film_phase))
+            * (0.44 + 0.56 * film_gate);
+        float film_pin = 1.0 - smoothstep(
+            0.0,
+            0.34,
+            abs(film_band - 0.56));
+        float2 film_base_uv =
+            in.screen_uv + refraction_uv * (0.34 + 0.18 * film_rim);
+        float2 film_warm_uv = clamp(
+            film_base_uv
+                + film_dir
+                    * texel
+                    * film_span
+                    * (0.50 + 0.26 * film_band)
+                + film_tangent
+                    * texel
+                    * film_cross_span
+                    * 0.24,
+            float2(0.0),
+            float2(1.0));
+        float2 film_cool_uv = clamp(
+            film_base_uv
+                - film_dir
+                    * texel
+                    * film_span
+                    * (0.46 + 0.24 * film_gate)
+                - film_tangent
+                    * texel
+                    * film_cross_span
+                    * 0.22,
+            float2(0.0),
+            float2(1.0));
+        float2 film_green_uv = clamp(
+            film_base_uv
+                + film_tangent
+                    * texel
+                    * film_cross_span
+                    * (0.54 + 0.22 * film_pin)
+                - dispersion_tangent
+                    * texel
+                    * film_cross_span
+                    * (0.18 + 0.30 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float3 film_warm =
+            backdrop.sample(samp, film_warm_uv).rgb;
+        float3 film_cool =
+            backdrop.sample(samp, film_cool_uv).rgb;
+        float3 film_green =
+            backdrop.sample(samp, film_green_uv).rgb;
+        float3 film_rgb =
+            float3(film_warm.r,
+                   film_green.g,
+                   film_cool.b);
+        film_rgb = mix(
+            film_rgb,
+            film_warm * 0.28 + film_green * 0.32 + film_cool * 0.40,
+            0.34);
+        float film_luma =
+            dot(film_rgb, float3(0.2126, 0.7152, 0.0722));
+        float film_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float film_light = smoothstep(
+            film_surface_luma - 0.08,
+            film_surface_luma + 0.30,
+            film_luma);
+        float film_dark = smoothstep(
+            0.08,
+            0.34,
+            film_surface_luma - film_luma);
+        float film_color_split = smoothstep(
+            0.02,
+            0.32,
+            length(film_warm - film_cool) * 0.30
+                + length(film_green - film_rgb) * 0.26
+                + film_pin * 0.14);
+        float3 film_tint = mix(
+            film_rgb,
+            float3(film_luma),
+            film_dark * (0.12 + 0.16 * glass_shadow_gain));
+        film_tint = mix(
+            film_tint,
+            film_tint * (float3(1.0) + 0.14 * in.tint.rgb),
+            tint_chroma * (0.30 + 0.22 * prominent_intensity));
+        film_tint += float3(
+            spectral_warmth,
+            0.18 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (film_band * 0.26 + film_rim * 0.24)
+            * (0.12 + 0.34 * spectral_rim_tint);
+        float film_weight = thin_film_strength
+            * film_gate
+            * (0.32
+               + 0.24 * film_light
+               + 0.22 * film_color_split
+               + 0.12 * film_pin
+               + 0.10 * film_contact);
+        rgb = mix(
+            rgb,
+            mix(rgb, film_tint, 0.13 + 0.15 * film_color_split),
+            film_weight);
+        rgb += film_tint
+            * film_weight
+            * (0.008
+               + 0.018 * dynamic_light_highlight
+               + 0.018 * glass_prismatic_gain);
+        float film_absorption = film_dark
+            * thin_film_strength
+            * film_gate
+            * (0.012 + 0.028 * glass_shadow_gain)
+            * (0.58 + 0.42 * film_rim);
+        rgb *= 1.0 - clamp(film_absorption, 0.0, 0.052);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float viscous_strain_strength = clamp(
         pointer_lens_strength * (0.42 * pointer_lens_raw + 0.58 * pointer_lens)
             + bridge_band
