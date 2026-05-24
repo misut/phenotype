@@ -14336,6 +14336,199 @@ fragment float4 fs_material(
         rgb += focus_neutral * clamp(focus_dark_lift, 0.0, 0.020);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float edge_caustic_strength = clamp(
+        0.012 * clear_glass_detail
+            + 0.010 * clear_glass_contrast
+            + 0.012 * glass_thickness
+            + 0.016 * refraction_edge_caustic
+            + 0.014 * spectral_dispersion
+            + 0.014 * glass_union_glow_strength
+            + 0.014 * liquid_response_strength
+            + 0.012 * depth_aperture_strength
+            + 0.012 * reflection_finish_strength
+            + 0.012 * content_focus_strength,
+        0.0,
+        0.095);
+    if (edge_caustic_strength > 0.0001) {
+        float caustic_rim = edge_lens
+            * (0.36
+               + 0.64
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.28, 0.5),
+                       signed_edge_distance)));
+        float caustic_interaction = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.28 + 0.72 * bridge_core)
+                + surface_tension_strength * 0.46
+                + specular_intensity * 0.24,
+            0.0,
+            1.0);
+        float caustic_gate = clamp(
+            caustic_rim * 0.42
+                + caustic_interaction * 0.24
+                + dynamic_light_highlight * 0.20
+                + spectral_dispersion * 0.16
+                + clear_glass_detail * 0.14,
+            0.0,
+            1.0);
+        float2 caustic_tangent_raw =
+            float2(-refraction_dir.y, refraction_dir.x)
+            + bridge_dir * bridge_band * (0.18 + 0.12 * bridge_core)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.14
+            + float2(-dynamic_light_dir.y, dynamic_light_dir.x)
+                * (0.18 + 0.12 * dynamic_light_highlight);
+        float caustic_tangent_len = length(caustic_tangent_raw);
+        float2 caustic_tangent = caustic_tangent_len > 0.0001
+            ? caustic_tangent_raw / caustic_tangent_len
+            : float2(-refraction_dir.y, refraction_dir.x);
+        float2 caustic_normal =
+            length(refraction_dir) > 0.0001
+                ? refraction_dir
+                : float2(caustic_tangent.y, -caustic_tangent.x);
+        float caustic_phase = clamp(
+            dot(normalized_local, caustic_tangent)
+                    * (7.0 + 4.0 * clear_glass_detail)
+                + dot(normalized_local, dynamic_light_dir) * 2.8
+                + bridge_shear * bridge_band * 2.2
+                + specular_intensity * 1.6,
+            -9.0,
+            9.0);
+        float caustic_wave =
+            0.5 + 0.5 * sin(caustic_phase);
+        float caustic_span =
+            (0.8
+             + 2.2 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.0 * caustic_gate
+             + 0.04 * blur_points)
+            * content_scale
+            * (0.82 + 0.18 * glass_lensing_gain);
+        float2 caustic_light_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                + caustic_tangent
+                    * texel
+                    * caustic_span
+                    * (0.24 + 0.14 * caustic_wave)
+                - dynamic_light_dir
+                    * texel
+                    * caustic_span
+                    * (0.16 + 0.10 * caustic_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 caustic_shadow_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - caustic_tangent
+                    * texel
+                    * caustic_span
+                    * (0.26 + 0.12 * caustic_gate)
+                + caustic_normal
+                    * texel
+                    * caustic_span
+                    * (0.12 + 0.10 * caustic_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 caustic_prism_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                + float2(-dynamic_light_dir.y, dynamic_light_dir.x)
+                    * texel
+                    * caustic_span
+                    * (0.18
+                       + 0.12 * spectral_dispersion
+                       + 0.10 * caustic_interaction),
+            float2(0.0),
+            float2(1.0));
+        float3 caustic_light_rgb =
+            backdrop.sample(samp, caustic_light_uv).rgb;
+        float3 caustic_shadow_rgb =
+            backdrop.sample(samp, caustic_shadow_uv).rgb;
+        float3 caustic_prism_rgb =
+            backdrop.sample(samp, caustic_prism_uv).rgb;
+        float3 caustic_probe =
+            caustic_light_rgb * 0.42
+            + caustic_shadow_rgb * 0.32
+            + caustic_prism_rgb * 0.26;
+        float caustic_probe_luma =
+            dot(caustic_probe, float3(0.2126, 0.7152, 0.0722));
+        float caustic_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float caustic_contrast = clamp(
+            length(caustic_light_rgb - caustic_shadow_rgb) * 0.34
+                + length(caustic_prism_rgb - caustic_probe) * 0.22
+                + abs(caustic_probe_luma - caustic_surface_luma) * 0.20,
+            0.0,
+            1.0);
+        float caustic_spark = smoothstep(
+            0.10,
+            0.62,
+            caustic_contrast * 0.46
+                + caustic_rim * 0.26
+                + caustic_wave * 0.22
+                + dynamic_light_highlight * 0.22);
+        float3 caustic_neutral =
+            mix(caustic_probe,
+                float3(caustic_probe_luma),
+                0.28 + 0.18 * clear_glass_dimming);
+        float3 caustic_layer = mix(
+            rgb,
+            caustic_neutral,
+            0.04
+                + 0.10 * caustic_spark
+                + 0.07 * caustic_gate);
+        float3 caustic_luma_rgb =
+            float3(dot(caustic_layer, float3(0.2126, 0.7152, 0.0722)));
+        caustic_layer =
+            caustic_luma_rgb
+            + (caustic_layer - caustic_luma_rgb)
+                * (0.90
+                   + 0.08 * caustic_spark
+                   + 0.05 * spectral_dispersion);
+        float3 caustic_highlight =
+            max(caustic_light_rgb - caustic_shadow_rgb, float3(0.0));
+        caustic_layer += caustic_highlight
+            * caustic_spark
+            * caustic_gate
+            * (0.006
+               + 0.012 * glass_scattering_gain
+               + 0.010 * spectral_dispersion);
+        caustic_layer = mix(
+            caustic_layer,
+            caustic_layer
+                * (float3(1.0)
+                   + in.tint.rgb
+                       * (0.020
+                          + 0.034 * tint_chroma * prominent_intensity)),
+            tint_chroma * (0.10 + 0.12 * caustic_interaction));
+        float caustic_weight = edge_caustic_strength
+            * caustic_gate
+            * (0.30
+               + 0.24 * caustic_spark
+               + 0.18 * caustic_rim
+               + 0.16 * caustic_interaction
+               + 0.12 * caustic_contrast);
+        rgb = mix(
+            rgb,
+            clamp(caustic_layer, 0.0, 1.0),
+            caustic_weight * 0.32);
+        float caustic_glare_trim =
+            caustic_weight
+            * caustic_spark
+            * smoothstep(0.78,
+                         1.02,
+                         max(max(rgb.r, rgb.g), rgb.b))
+            * (0.006 + 0.012 * clear_glass_dimming);
+        float caustic_dark_lift =
+            caustic_weight
+            * caustic_rim
+            * (1.0 - caustic_spark)
+            * (0.004 + 0.008 * glass_scattering_gain);
+        rgb *= 1.0 - clamp(caustic_glare_trim, 0.0, 0.024);
+        rgb += caustic_neutral * clamp(caustic_dark_lift, 0.0, 0.018);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
