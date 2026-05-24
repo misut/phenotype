@@ -12947,6 +12947,181 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(contact_occlusion, 0.0, 0.060);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float horizon_glint_strength = clamp(
+        0.016 * glass_thickness
+            + 0.014 * (glass_lensing_gain - 1.0)
+            + 0.012 * edge_inner_highlight
+            + 0.012 * prominent_intensity
+            + 0.030 * contact_caustic_strength
+            + 0.026 * volumetric_parallax_strength
+            + 0.022 * optical_equilibrium_strength
+            + 0.018 * chromatic_polish_strength
+            + 0.014 * specular_intensity,
+        0.0,
+        0.11);
+    if (horizon_glint_strength > 0.0001) {
+        float surface_y =
+            clamp(in.local_pos.y / max(in.rect_size.y, 1.0), 0.0, 1.0);
+        float horizon_upper = 1.0 - smoothstep(0.18, 0.70, surface_y);
+        float horizon_lower = smoothstep(0.46, 1.0, surface_y);
+        float horizon_rim = edge_lens
+            * (0.28
+               + 0.72
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.48, 0.5),
+                       signed_edge_distance)));
+        float horizon_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.28 + 0.72 * bridge_core)
+                + surface_tension_strength * 0.84
+                + specular_intensity * 0.32,
+            0.0,
+            1.0);
+        float horizon_gate = clamp(
+            horizon_upper * 0.34
+                + horizon_rim * 0.36
+                + horizon_contact * 0.24
+                + horizon_lower * contact_caustic_strength * 0.72,
+            0.0,
+            1.0);
+        float2 horizon_raw_dir =
+            -dynamic_light_dir * (0.44 + 0.24 * dynamic_light_highlight)
+            + refraction_dir * (0.24 + 0.30 * horizon_rim)
+            + bridge_dir * bridge_band * 0.18
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.20;
+        float horizon_dir_len = length(horizon_raw_dir);
+        float2 horizon_dir = horizon_dir_len > 0.0001
+            ? horizon_raw_dir / horizon_dir_len
+            : -dynamic_light_dir;
+        float2 horizon_cross = float2(-horizon_dir.y,
+                                      horizon_dir.x);
+        float horizon_span =
+            (1.2
+             + 3.2 * glass_thickness
+             + 1.8 * glass_caustic_spread
+             + 0.07 * blur_points)
+            * content_scale
+            * (0.80 + 0.20 * glass_lensing_gain);
+        float horizon_micro_span =
+            (0.6
+             + 1.1 * glass_dispersion_tangential
+             + 2.4 * spectral_dispersion)
+            * content_scale;
+        float2 horizon_gloss_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                + horizon_dir
+                    * texel
+                    * horizon_span
+                    * (0.44 + 0.18 * horizon_upper),
+            float2(0.0),
+            float2(1.0));
+        float2 horizon_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.26
+                - horizon_dir
+                    * texel
+                    * horizon_span
+                    * (0.30 + 0.18 * horizon_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 horizon_prism_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                + horizon_cross
+                    * texel
+                    * horizon_micro_span
+                    * (0.40 + 0.18 * horizon_contact),
+            float2(0.0),
+            float2(1.0));
+        float3 horizon_gloss_rgb =
+            backdrop.sample(samp, horizon_gloss_uv).rgb;
+        float3 horizon_base_rgb =
+            backdrop.sample(samp, horizon_base_uv).rgb;
+        float3 horizon_prism_rgb =
+            backdrop.sample(samp, horizon_prism_uv).rgb;
+        float3 horizon_probe =
+            horizon_gloss_rgb * 0.44
+            + horizon_base_rgb * 0.34
+            + horizon_prism_rgb * 0.22;
+        float horizon_luma =
+            dot(horizon_probe, float3(0.2126, 0.7152, 0.0722));
+        float horizon_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float horizon_range = clamp(
+            length(horizon_gloss_rgb - horizon_base_rgb) * 0.32
+                + length(horizon_prism_rgb - horizon_probe) * 0.22
+                + abs(horizon_luma - horizon_surface_luma) * 0.28,
+            0.0,
+            1.0);
+        float horizon_alignment = smoothstep(
+            -0.10,
+            0.94,
+            dot(horizon_dir, -dynamic_light_dir) * 0.52
+                + horizon_upper * 0.26
+                + horizon_rim * 0.22);
+        float horizon_bright = smoothstep(
+            horizon_surface_luma - 0.06,
+            horizon_surface_luma + 0.30,
+            horizon_luma);
+        float horizon_dark =
+            smoothstep(
+                0.06,
+                0.30,
+                horizon_surface_luma - horizon_luma);
+        float3 horizon_neutral = mix(
+            horizon_probe,
+            float3(horizon_luma),
+            0.28 + 0.20 * (1.0 - horizon_range));
+        float3 horizon_layer = mix(
+            rgb,
+            horizon_neutral,
+            0.05
+                + 0.10 * horizon_range
+                + 0.12 * horizon_alignment);
+        horizon_layer = clamp(
+            (horizon_layer - float3(0.50))
+                    * (1.0 + clear_glass_contrast * 0.22)
+                + float3(0.50),
+            0.0,
+            1.0);
+        horizon_layer = mix(
+            horizon_layer,
+            horizon_layer * (float3(1.0) + 0.10 * in.tint.rgb),
+            tint_chroma * (0.18 + 0.22 * prominent_intensity));
+        horizon_layer += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * horizon_rim
+            * (0.006
+               + 0.016 * spectral_rim_tint
+               + 0.010 * glass_prismatic_gain);
+        float horizon_weight = horizon_glint_strength
+            * horizon_gate
+            * (0.34
+               + 0.24 * horizon_alignment
+               + 0.20 * horizon_bright
+               + 0.22 * horizon_contact);
+        rgb = mix(
+            rgb,
+            clamp(horizon_layer, 0.0, 1.0),
+            horizon_weight * 0.32);
+        rgb += horizon_neutral
+            * horizon_weight
+            * horizon_bright
+            * (0.006
+               + 0.012 * dynamic_light_highlight
+               + 0.010 * glass_scattering_gain);
+        float horizon_absorption =
+            horizon_dark
+            * horizon_weight
+            * (0.010 + 0.022 * glass_shadow_gain)
+            * (0.50 + 0.50 * max(horizon_rim, horizon_lower));
+        rgb *= 1.0 - clamp(horizon_absorption, 0.0, 0.046);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
