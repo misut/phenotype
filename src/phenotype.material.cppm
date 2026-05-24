@@ -6994,6 +6994,8 @@ inline MaterialProminentGlassProfile material_resolve_prominent_glass_profile(
     auto const motion_scale = plan.decision_trace.reduce_motion ? 0.74f : 1.0f;
     auto const intensity = std::clamp(base_intensity * motion_scale, 0.0f, 1.0f);
     auto const tint_alpha = material_alpha_fraction(plan.tint);
+    auto const contrast_response =
+        plan.decision_trace.increase_contrast ? 1.0f : 0.0f;
     profile.active = true;
     profile.control_driven = plan.role == MaterialSurfaceRole::Control;
     profile.tint_driven = !plan.theme.tint_matches_surface;
@@ -7006,17 +7008,20 @@ inline MaterialProminentGlassProfile material_resolve_prominent_glass_profile(
         profile.tint_driven);
     profile.intensity = intensity;
     profile.tint_weight = std::clamp(
-        0.12f + 0.28f * intensity + 0.18f * tint_alpha,
+        0.12f
+            + 0.28f * intensity
+            + 0.18f * tint_alpha
+            + 0.08f * contrast_response,
         0.0f,
-        0.58f);
+        0.64f);
     profile.edge_lift = std::clamp(
-        0.035f + 0.095f * intensity,
+        0.035f + 0.095f * intensity + 0.045f * contrast_response,
         0.0f,
-        0.16f);
+        0.20f);
     profile.lensing_gain = std::clamp(
-        1.0f + 0.16f * intensity,
+        1.0f + 0.16f * intensity + 0.040f * contrast_response,
         1.0f,
-        1.22f);
+        1.24f);
     return profile;
 }
 
