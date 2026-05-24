@@ -13477,6 +13477,177 @@ fragment float4 fs_material(
             * (0.72 + 0.28 * glass_shadow_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float glass_union_glow_strength = clamp(
+        0.014 * clear_glass_detail
+            + 0.010 * clear_glass_contrast
+            + 0.012 * glass_thickness
+            + 0.020 * clarity_balance_strength
+            + 0.022 * chroma_governor_strength
+            + 0.018 * optical_equilibrium_strength
+            + 0.018 * legibility_veil_strength
+            + 0.018 * bridge_band * (0.36 + 0.64 * bridge_core)
+            + 0.012 * pointer_lens_strength * pointer_lens_raw
+            + 0.008 * group_blend_strength * union_execution,
+        0.0,
+        0.10);
+    if (glass_union_glow_strength > 0.0001) {
+        float union_channel = clamp(
+            bridge_band * (0.42 + 0.58 * bridge_core)
+                + pointer_lens * pointer_lens_strength * 0.36
+                + edge_lens * surface_tension_strength * 0.24,
+            0.0,
+            1.0);
+        float union_neck = clamp(
+            bridge_core
+                * (1.0 - smoothstep(
+                    bridge_width * 0.18,
+                    bridge_width + 0.10,
+                    bridge_lateral))
+                * (1.0 - smoothstep(
+                    bridge_length * 0.72,
+                    bridge_length + 0.12,
+                    bridge_axial)),
+            0.0,
+            1.0);
+        float union_interactive = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * union_execution
+                + prominent_intensity * tint_chroma * 0.18,
+            0.0,
+            1.0);
+        float union_gate = clamp(
+            union_channel * 0.40
+                + union_neck * 0.30
+                + union_interactive * 0.20
+                + clear_glass_detail * 0.14,
+            0.0,
+            1.0);
+        float2 union_axis = length(bridge_dir) > 0.0001
+            ? bridge_dir
+            : refraction_dir;
+        float2 union_cross = float2(-union_axis.y, union_axis.x);
+        float2 union_pointer_bias =
+            pointer_dir
+            * pointer_lens
+            * pointer_lens_strength
+            * (0.12 + 0.12 * clear_glass_detail);
+        float union_span =
+            (1.0
+             + 2.2 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.2 * union_channel
+             + 0.045 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float2 union_front_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.20
+                + union_axis
+                    * texel
+                    * union_span
+                    * (0.26 + 0.16 * union_neck)
+                + union_pointer_bias * texel * union_span,
+            float2(0.0),
+            float2(1.0));
+        float2 union_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                - union_axis
+                    * texel
+                    * union_span
+                    * (0.30 + 0.16 * bridge_band)
+                + union_cross
+                    * texel
+                    * union_span
+                    * bridge_shear
+                    * 0.10,
+            float2(0.0),
+            float2(1.0));
+        float2 union_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + union_cross
+                    * texel
+                    * union_span
+                    * (0.24 + 0.18 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 union_front_rgb =
+            backdrop.sample(samp, union_front_uv).rgb;
+        float3 union_back_rgb =
+            backdrop.sample(samp, union_back_uv).rgb;
+        float3 union_cross_rgb =
+            backdrop.sample(samp, union_cross_uv).rgb;
+        float3 union_probe =
+            union_front_rgb * 0.38
+            + union_back_rgb * 0.36
+            + union_cross_rgb * 0.26;
+        float union_probe_luma =
+            dot(union_probe, float3(0.2126, 0.7152, 0.0722));
+        float union_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float union_gradient = clamp(
+            length(union_front_rgb - union_back_rgb) * 0.34
+                + length(union_cross_rgb - union_probe) * 0.20
+                + abs(union_probe_luma - union_surface_luma) * 0.24,
+            0.0,
+            1.0);
+        float union_softness =
+            1.0 - smoothstep(0.08, 0.34, union_gradient);
+        float3 union_neutral =
+            mix(union_probe,
+                float3(union_probe_luma),
+                0.30 + 0.18 * union_softness);
+        float3 union_warm =
+            union_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.035
+                      + 0.040
+                          * prominent_intensity
+                          * tint_chroma));
+        float union_edge_light = clamp(
+            (0.42 + 0.58 * union_neck)
+                * union_gate
+                * (0.48 + 0.52 * union_softness),
+            0.0,
+            1.0);
+        float3 union_layer = mix(
+            rgb,
+            union_warm,
+            0.06
+                + 0.10 * union_softness
+                + 0.08 * union_channel);
+        float3 union_luma_rgb =
+            float3(dot(union_layer, float3(0.2126, 0.7152, 0.0722)));
+        union_layer =
+            union_luma_rgb
+            + (union_layer - union_luma_rgb)
+                * (0.92 + 0.08 * union_channel);
+        union_layer += union_neutral
+            * union_edge_light
+            * (0.006
+               + 0.012 * clear_glass_detail
+               + 0.010 * glass_scattering_gain);
+        float union_weight = glass_union_glow_strength
+            * union_gate
+            * (0.34
+               + 0.22 * union_neck
+               + 0.18 * union_interactive
+               + 0.16 * union_softness
+               + 0.10 * union_channel);
+        rgb = mix(
+            rgb,
+            clamp(union_layer, 0.0, 1.0),
+            union_weight * 0.32);
+        float union_shadow_trim =
+            union_weight
+            * union_channel
+            * (0.006 + 0.012 * glass_shadow_gain)
+            * (1.0 - union_softness * 0.42);
+        rgb *= 1.0 - clamp(union_shadow_trim, 0.0, 0.030);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
