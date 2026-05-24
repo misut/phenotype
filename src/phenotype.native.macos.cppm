@@ -19520,6 +19520,272 @@ fragment float4 fs_material(
                + 0.004 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float continuity_finish_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.010 * clear_glass_contrast
+            + 0.008 * clear_glass_dimming
+            + 0.008 * glass_thickness
+            + 0.010 * glass_effect_match_execution * group_blend_strength
+            + 0.008 * morph_execution * group_blend_strength
+            + 0.008 * materialize_wave_strength
+            + 0.008 * depth_seal_strength
+            + 0.008 * transition_clarity_strength
+            + 0.007 * transmission_caustic_strength
+            + 0.007 * reflection_wake_strength
+            + 0.006 * specular_handoff_strength
+            + 0.006 * matched_tether_sheath_strength
+            + 0.006 * container_pressure_halo_strength,
+        0.0,
+        0.060);
+    if (continuity_finish_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 finish_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 finish_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            finish_group_size);
+        float2 finish_group_norm =
+            (finish_group_local / finish_group_size - float2(0.5)) * 2.0;
+        float finish_group_len = length(finish_group_norm);
+        float finish_center =
+            1.0 - smoothstep(0.18, 1.12, finish_group_len);
+        float2 finish_group_edge = min(
+            finish_group_local,
+            max(finish_group_size - finish_group_local, float2(0.0)));
+        float finish_edge_distance =
+            min(finish_group_edge.x, finish_group_edge.y);
+        float finish_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.5, 1.0),
+                finish_edge_distance);
+        float finish_pointer = clamp(
+            pointer_lens_strength
+                * (0.34 * pointer_lens_raw + 0.66 * pointer_lens),
+            0.0,
+            1.0);
+        float finish_bridge =
+            bridge_band * (0.36 + 0.64 * bridge_core);
+        float finish_transition = clamp(
+            glass_effect_match_execution * 0.34
+                + morph_execution * 0.24
+                + materialize_wave_strength * 0.16
+                + union_execution * 0.12
+                + shape_blend_execution * 0.10
+                + depth_seal_strength * 1.8
+                + transition_clarity_strength * 1.7
+                + transmission_caustic_strength * 1.5
+                + reflection_wake_strength * 1.3
+                + finish_pointer * 0.16,
+            0.0,
+            1.0);
+        float finish_gate = clamp(
+            finish_center * 0.22
+                + finish_edge * 0.20
+                + finish_bridge * 0.22
+                + finish_transition * group_blend_strength * 0.24
+                + finish_pointer * 0.14,
+            0.0,
+            1.0);
+        float2 finish_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 finish_group_center_screen =
+            in.group_rect.xy + finish_group_size * 0.5;
+        float2 finish_group_center_uv = clamp(
+            finish_group_center_screen / finish_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 finish_to_center = finish_group_center_uv - in.screen_uv;
+        float finish_center_distance = length(finish_to_center);
+        float2 finish_center_dir =
+            finish_center_distance > 0.0001
+                ? finish_to_center / finish_center_distance
+                : refraction_dir;
+        float2 finish_axis_raw =
+            finish_center_dir * (0.32 + 0.18 * finish_center)
+            + bridge_dir * (0.28 + 0.24 * finish_bridge)
+            + refraction_dir * (0.24 + 0.18 * finish_edge)
+            + pointer_dir * (0.14 + 0.18 * finish_pointer)
+            - dynamic_light_dir
+                * (0.16 + 0.10 * dynamic_light_highlight);
+        float finish_axis_len = length(finish_axis_raw);
+        float2 finish_axis = finish_axis_len > 0.0001
+            ? finish_axis_raw / finish_axis_len
+            : refraction_dir;
+        float2 finish_cross =
+            float2(-finish_axis.y, finish_axis.x);
+        float finish_alignment =
+            smoothstep(-0.26, 0.88, dot(finish_axis, bridge_dir));
+        float finish_span =
+            (0.78
+             + 1.3 * glass_thickness
+             + 1.1 * clear_glass_detail
+             + 0.9 * finish_transition
+             + 0.030 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float finish_cross_span =
+            (0.50
+             + 0.8 * glass_dispersion_tangential
+             + 0.7 * spectral_dispersion
+             + 0.8 * finish_bridge)
+            * content_scale;
+        float2 finish_center_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + finish_center_dir
+                    * texel
+                    * finish_span
+                    * (0.20 + 0.16 * finish_center),
+            float2(0.0),
+            float2(1.0));
+        float2 finish_flow_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.11
+                + finish_axis
+                    * texel
+                    * finish_span
+                    * (0.24 + 0.16 * finish_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 finish_counter_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - finish_axis
+                    * texel
+                    * finish_span
+                    * (0.22 + 0.14 * finish_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 finish_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                + finish_cross
+                    * texel
+                    * finish_cross_span
+                    * (0.24 + 0.16 * finish_bridge),
+            float2(0.0),
+            float2(1.0));
+        float3 finish_center_rgb =
+            backdrop.sample(samp, finish_center_uv).rgb;
+        float3 finish_flow_rgb =
+            backdrop.sample(samp, finish_flow_uv).rgb;
+        float3 finish_counter_rgb =
+            backdrop.sample(samp, finish_counter_uv).rgb;
+        float3 finish_cross_rgb =
+            backdrop.sample(samp, finish_cross_uv).rgb;
+        float3 finish_probe =
+            finish_center_rgb * 0.30
+            + finish_flow_rgb * 0.28
+            + finish_counter_rgb * 0.24
+            + finish_cross_rgb * 0.18;
+        float finish_luma =
+            dot(finish_probe, float3(0.2126, 0.7152, 0.0722));
+        float finish_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float finish_range = clamp(
+            length(finish_flow_rgb - finish_counter_rgb) * 0.28
+                + length(finish_center_rgb - finish_cross_rgb) * 0.22
+                + abs(finish_luma - finish_surface_luma) * 0.24
+                + finish_transition * 0.08
+                + finish_edge * 0.06,
+            0.0,
+            1.0);
+        float finish_coherence =
+            1.0 - smoothstep(0.08, 0.34, finish_range);
+        float finish_surface_peak = max(max(rgb.r, rgb.g), rgb.b);
+        float finish_surface_floor = min(min(rgb.r, rgb.g), rgb.b);
+        float finish_probe_peak =
+            max(max(finish_probe.r, finish_probe.g), finish_probe.b);
+        float finish_probe_floor =
+            min(min(finish_probe.r, finish_probe.g), finish_probe.b);
+        float finish_overbright = smoothstep(
+            0.72,
+            1.02,
+            finish_surface_peak
+                - finish_probe_peak * 0.18
+                + finish_surface_luma * 0.18);
+        float finish_underfilled =
+            1.0 - smoothstep(
+                0.06,
+                0.32,
+                finish_surface_floor
+                    + finish_surface_luma * 0.24
+                    - finish_probe_floor * 0.10);
+        float finish_chroma = clamp(
+            length(
+                (rgb - float3(finish_surface_luma))
+                - (finish_probe - float3(finish_luma))) * 0.36,
+            0.0,
+            1.0);
+        float3 finish_neutral = mix(
+            finish_probe,
+            float3(finish_luma),
+            finish_coherence * 0.16
+                + finish_overbright * 0.12
+                + finish_underfilled * 0.10);
+        float finish_contrast = 1.0
+            + clear_glass_contrast * 0.040
+            + finish_transition * 0.035
+            + finish_alignment * 0.018;
+        float3 finish_layer = clamp(
+            (finish_neutral - float3(0.50)) * finish_contrast
+                + float3(0.50),
+            0.0,
+            1.0);
+        finish_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.012
+                   + 0.022 * tint_chroma * prominent_intensity);
+        float3 finish_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        float finish_rim = clamp(
+            finish_edge * 0.24
+                + finish_bridge * 0.22
+                + finish_alignment * 0.18
+                + finish_transition * 0.16
+                + finish_pointer * 0.14,
+            0.0,
+            1.0);
+        finish_layer += finish_prism
+            * finish_rim
+            * (0.0015
+               + 0.005 * spectral_rim_tint
+               + 0.004 * glass_prismatic_gain);
+        float finish_weight = continuity_finish_strength
+            * finish_gate
+            * (0.34
+               + 0.20 * finish_coherence
+               + 0.16 * finish_chroma
+               + 0.14 * max(finish_overbright, finish_underfilled)
+               + 0.12 * finish_transition);
+        rgb = mix(
+            rgb,
+            mix(rgb, clamp(finish_layer, 0.0, 1.0),
+                0.08 + 0.12 * finish_coherence + 0.08 * finish_chroma),
+            finish_weight * 0.28);
+        float finish_trim =
+            finish_overbright
+            * finish_weight
+            * (0.003 + 0.008 * clear_glass_dimming)
+            * (0.52 + 0.48 * finish_rim);
+        rgb *= 1.0 - clamp(finish_trim, 0.0, 0.022);
+        rgb += finish_neutral
+            * finish_underfilled
+            * finish_weight
+            * (0.002 + 0.006 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
