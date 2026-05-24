@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 73);
+    assert(material_plan_contract_version == 74);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -2290,6 +2290,7 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
     assert(first_execution.group_w == 160.0f);
     assert(first_execution.group_h == 40.0f);
     assert(first_execution.glass_effect_match_source_valid);
+    assert(first_execution.glass_effect_match_source_effect_id_match);
     assert(first_execution.glass_effect_match_source_x == 120.0f);
     assert(first_execution.glass_effect_match_source_y == 0.0f);
     assert(first_execution.glass_effect_match_source_w == 40.0f);
@@ -2331,6 +2332,7 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
     assert(second_execution.glass_effect_match_execution);
     assert(second_execution.glass_effect_surface_count == 2u);
     assert(second_execution.glass_effect_match_source_valid);
+    assert(second_execution.glass_effect_match_source_effect_id_match);
     assert(second_execution.glass_effect_match_source_x == 0.0f);
     assert(second_execution.glass_effect_match_source_radius == 12.0f);
     assert(std::fabs(second_execution.glass_effect_match_source_gap - 80.0f)
@@ -2538,6 +2540,7 @@ void test_glass_effect_matched_geometry_uses_nearby_namespace_source() {
     assert(target_execution.glass_effect_id == 802u);
     assert(target_execution.glass_effect_surface_count == 2u);
     assert(target_execution.glass_effect_match_source_valid);
+    assert(!target_execution.glass_effect_match_source_effect_id_match);
     assert(target_execution.glass_effect_match_source_x == 0.0f);
     assert(target_execution.glass_effect_match_source_radius == 12.0f);
     assert(std::fabs(target_execution.glass_effect_match_source_gap - 80.0f)
@@ -2598,6 +2601,68 @@ void test_glass_effect_matched_geometry_uses_nearby_namespace_source() {
            == "glass-effect-matched-geometry");
 
     std::puts("PASS: glass effect matched geometry uses nearby namespace source");
+}
+
+void test_glass_effect_matched_geometry_prefers_effect_id_source() {
+    auto target = regular_request();
+    target.geometry = MaterialGeometry{120.0f, 0.0f, 40.0f, 40.0f, 20.0f};
+    target.style.container = MaterialContainerDescriptor{
+        .container_id = 94u,
+        .union_id = 0u,
+        .spacing = 128.0f,
+        .interactive = false,
+        .morph_transitions = true,
+    };
+    target.style.transition = MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::MatchedGeometry,
+        .progress = 0.5f,
+        .appearing = true,
+    };
+    target.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 44u,
+        .effect_id = 944u,
+    };
+
+    auto same_id_source = regular_request();
+    same_id_source.geometry =
+        MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 12.0f};
+    same_id_source.style.container = target.style.container;
+    same_id_source.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 44u,
+        .effect_id = 944u,
+    };
+
+    auto nearby_different_id = regular_request();
+    nearby_different_id.geometry =
+        MaterialGeometry{70.0f, 0.0f, 40.0f, 40.0f, 28.0f};
+    nearby_different_id.style.container = target.style.container;
+    nearby_different_id.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 44u,
+        .effect_id = 945u,
+    };
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(same_id_source, sampled_environment()), 1u},
+        {plan_material_surface(nearby_different_id, sampled_environment()), 2u},
+        {plan_material_surface(target, sampled_environment()), 3u},
+    };
+
+    auto const target_execution =
+        material_container_execution_descriptor(records[2], records);
+    assert(target_execution.glass_effect_match_execution);
+    assert(target_execution.glass_effect_match_source_valid);
+    assert(target_execution.glass_effect_match_source_effect_id_match);
+    assert(target_execution.glass_effect_match_source_x == 0.0f);
+    assert(target_execution.glass_effect_match_source_radius == 12.0f);
+    assert(std::fabs(target_execution.glass_effect_match_source_gap - 80.0f)
+           < 0.0001f);
+    assert(std::fabs(target_execution.glass_effect_match_rect_x - 60.0f)
+           < 0.0001f);
+    assert(std::fabs(target_execution.glass_effect_match_rect_radius - 16.0f)
+           < 0.0001f);
+
+    std::puts(
+        "PASS: glass effect matched geometry prefers effect id source");
 }
 
 void test_warmup_backdrop_access_contract() {
@@ -4084,6 +4149,7 @@ int main() {
     test_glass_effect_identity_drives_matched_execution_contract();
     test_glass_effect_matched_geometry_respects_container_spacing();
     test_glass_effect_matched_geometry_uses_nearby_namespace_source();
+    test_glass_effect_matched_geometry_prefers_effect_id_source();
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     test_executor_frame_capture_policy_contract();

@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 73;
+inline constexpr std::uint32_t material_plan_contract_version = 74;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1673,6 +1673,7 @@ struct MaterialContainerExecutionDescriptor {
     float glass_effect_match_source_gap = 0.0f;
     float glass_effect_match_source_spacing = 0.0f;
     float glass_effect_match_source_proximity = 0.0f;
+    bool glass_effect_match_source_effect_id_match = false;
     float glass_effect_match_source_x = 0.0f;
     float glass_effect_match_source_y = 0.0f;
     float glass_effect_match_source_w = 0.0f;
@@ -2046,6 +2047,7 @@ struct MaterialGlassEffectMatchSource {
     float gap = 0.0f;
     float spacing = 0.0f;
     float proximity = 0.0f;
+    bool effect_id_match = false;
 
     constexpr bool valid() const noexcept {
         return record != nullptr;
@@ -2765,6 +2767,14 @@ inline bool material_plan_in_glass_effect_match_group(
         std::uint32_t container_id) noexcept {
     return material_plans_share_glass_effect_namespace(plan, anchor)
         && material_plan_in_container(plan, container_id);
+}
+
+inline bool material_plans_share_glass_effect_id(
+        MaterialPlan const& a,
+        MaterialPlan const& b) noexcept {
+    return material_plans_share_glass_effect_namespace(a, b)
+        && a.glass_identity.effect_id != 0u
+        && a.glass_identity.effect_id == b.glass_identity.effect_id;
 }
 
 inline bool material_plans_share_glass_effect_union(
@@ -3662,6 +3672,7 @@ inline MaterialGlassEffectMatchSource material_nearest_glass_effect_match_source
         MaterialRuntimeRecord const& record,
         std::span<MaterialRuntimeRecord const> records,
         std::uint32_t container_id) noexcept {
+    auto constexpr gap_epsilon = 0.0001f;
     MaterialGlassEffectMatchSource best{};
     for (auto const& candidate : records) {
         if (!material_glass_effect_match_source_candidate(
@@ -3680,11 +3691,21 @@ inline MaterialGlassEffectMatchSource material_nearest_glass_effect_match_source
             material_container_shape_blend_strength_for_gap(gap, spacing);
         if (proximity <= 0.0f)
             continue;
-        if (!best.valid() || gap < best.gap) {
+        auto const effect_id_match =
+            material_plans_share_glass_effect_id(candidate.plan, record.plan);
+        auto const better = !best.valid()
+            || (effect_id_match && !best.effect_id_match)
+            || (effect_id_match == best.effect_id_match
+                && (gap < best.gap - gap_epsilon
+                    || (std::fabs(gap - best.gap) <= gap_epsilon
+                        && candidate.command_index
+                            < best.record->command_index)));
+        if (better) {
             best.record = &candidate;
             best.gap = gap;
             best.spacing = spacing;
             best.proximity = proximity;
+            best.effect_id_match = effect_id_match;
         }
     }
     return best;
@@ -4494,6 +4515,8 @@ material_container_execution_descriptor_from_group(
             descriptor.glass_effect_match_source_spacing = match_source.spacing;
             descriptor.glass_effect_match_source_proximity =
                 match_source.proximity;
+            descriptor.glass_effect_match_source_effect_id_match =
+                match_source.effect_id_match;
             descriptor.glass_effect_match_source_x = source->plan.geometry.x;
             descriptor.glass_effect_match_source_y = source->plan.geometry.y;
             descriptor.glass_effect_match_source_w = source->plan.geometry.w;
