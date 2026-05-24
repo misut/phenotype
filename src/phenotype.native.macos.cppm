@@ -14736,6 +14736,265 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(surface_shadow, 0.0, 0.024);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float shared_membrane_strength = clamp(
+        0.012 * clear_glass_detail
+            + 0.010 * glass_thickness
+            + 0.016 * shared_backdrop_scope * group_blend_strength
+            + 0.014 * group_surface_execution * group_blend_strength
+            + 0.012 * glass_effect_match_execution * group_blend_strength
+            + 0.010 * morph_execution * group_blend_strength
+            + 0.012 * container_field_strength
+            + 0.010 * group_surface_skin_strength
+            + 0.010 * cohesion_wake_strength,
+        0.0,
+        0.10);
+    if (shared_membrane_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 membrane_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 membrane_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            membrane_group_size);
+        float2 membrane_group_norm =
+            (membrane_group_local / membrane_group_size - float2(0.5)) * 2.0;
+        float membrane_group_len = length(membrane_group_norm);
+        float membrane_center =
+            1.0 - smoothstep(0.12, 1.18, membrane_group_len);
+        float2 membrane_group_edge = min(
+            membrane_group_local,
+            max(membrane_group_size - membrane_group_local, float2(0.0)));
+        float membrane_edge_distance =
+            min(membrane_group_edge.x, membrane_group_edge.y);
+        float membrane_edge_band =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.8, 1.0),
+                membrane_edge_distance);
+        float membrane_bridge = bridge_band
+            * (0.32 + 0.68 * bridge_core);
+        float membrane_transition = clamp(
+            glass_effect_match_execution * 0.34
+                + morph_execution * 0.28
+                + shape_blend_execution * 0.20
+                + union_execution * 0.18,
+            0.0,
+            1.0);
+        float membrane_gate = clamp(
+            shared_backdrop_scope * group_blend_strength * 0.30
+                + group_surface_execution * group_blend_strength * 0.28
+                + membrane_transition * group_blend_strength * 0.22
+                + fusion_strength * 0.16
+                + membrane_bridge * 0.20
+                + membrane_center * 0.12
+                + membrane_edge_band * 0.10,
+            0.0,
+            1.0);
+        float2 membrane_backdrop_viewport_size =
+            float2(float(backdrop.get_width()), float(backdrop.get_height()))
+            / content_scale;
+        float2 membrane_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : membrane_backdrop_viewport_size.x,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : membrane_backdrop_viewport_size.y),
+            float2(1.0));
+        float2 membrane_group_center_screen =
+            in.group_rect.xy + membrane_group_size * 0.5;
+        float2 membrane_group_center_uv = clamp(
+            membrane_group_center_screen / membrane_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 membrane_center_delta =
+            membrane_group_center_uv - in.screen_uv;
+        float membrane_center_distance = length(membrane_center_delta);
+        float2 membrane_center_dir =
+            membrane_center_distance > 0.0001
+                ? membrane_center_delta / membrane_center_distance
+                : refraction_dir;
+        float2 membrane_axis_raw =
+            membrane_center_dir * (0.44 + 0.30 * membrane_center)
+            + bridge_dir * membrane_bridge * (0.42 + 0.58 * bridge_core)
+            + refraction_dir * (0.20 + 0.22 * membrane_edge_band)
+            - dynamic_light_dir
+                * (0.16 + 0.10 * dynamic_light_highlight);
+        float membrane_axis_len = length(membrane_axis_raw);
+        float2 membrane_axis =
+            membrane_axis_len > 0.0001
+                ? membrane_axis_raw / membrane_axis_len
+                : refraction_dir;
+        float2 membrane_cross = float2(-membrane_axis.y, membrane_axis.x);
+        float membrane_span =
+            (1.15
+             + 2.2 * glass_thickness
+             + 1.6 * clear_glass_detail
+             + 1.2 * membrane_gate
+             + 0.05 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float membrane_cross_span =
+            (0.72
+             + 1.2 * glass_dispersion_tangential
+             + 1.8 * spectral_dispersion
+             + 1.2 * membrane_bridge)
+            * content_scale;
+        float membrane_pulse =
+            0.5
+            + 0.5
+                * sin(
+                    dot(membrane_group_norm, membrane_axis)
+                        * (4.8 + 2.2 * membrane_transition)
+                    + membrane_bridge * 3.2
+                    + fusion_strength * 2.4);
+        float2 membrane_center_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.20
+                + membrane_center_dir
+                    * texel
+                    * membrane_span
+                    * (0.18 + 0.14 * membrane_center),
+            float2(0.0),
+            float2(1.0));
+        float2 membrane_edge_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                - membrane_axis
+                    * texel
+                    * membrane_span
+                    * (0.28 + 0.18 * membrane_edge_band)
+                + membrane_cross
+                    * texel
+                    * membrane_cross_span
+                    * bridge_shear
+                    * (0.12 + 0.16 * membrane_bridge),
+            float2(0.0),
+            float2(1.0));
+        float2 membrane_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                + membrane_cross
+                    * texel
+                    * membrane_cross_span
+                    * (0.34
+                       + 0.18 * membrane_pulse
+                       + 0.14 * membrane_gate),
+            float2(0.0),
+            float2(1.0));
+        float2 membrane_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                - membrane_cross
+                    * texel
+                    * membrane_cross_span
+                    * (0.28 + 0.16 * membrane_center)
+                - membrane_axis
+                    * texel
+                    * membrane_span
+                    * (0.12 + 0.12 * membrane_pulse),
+            float2(0.0),
+            float2(1.0));
+        float3 membrane_center_rgb =
+            backdrop.sample(samp, membrane_center_uv).rgb;
+        float3 membrane_edge_rgb =
+            backdrop.sample(samp, membrane_edge_uv).rgb;
+        float3 membrane_cross_rgb =
+            backdrop.sample(samp, membrane_cross_uv).rgb;
+        float3 membrane_return_rgb =
+            backdrop.sample(samp, membrane_return_uv).rgb;
+        float3 membrane_probe =
+            membrane_center_rgb * 0.34
+            + membrane_edge_rgb * 0.28
+            + membrane_cross_rgb * 0.20
+            + membrane_return_rgb * 0.18;
+        float membrane_luma =
+            dot(membrane_probe, float3(0.2126, 0.7152, 0.0722));
+        float membrane_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float membrane_range = clamp(
+            length(membrane_center_rgb - membrane_edge_rgb) * 0.28
+                + length(membrane_cross_rgb - membrane_return_rgb) * 0.24
+                + abs(membrane_luma - membrane_surface_luma) * 0.26
+                + membrane_pulse * membrane_transition * 0.08,
+            0.0,
+            1.0);
+        float membrane_calm =
+            1.0 - smoothstep(0.08, 0.36, membrane_range);
+        float membrane_bright = smoothstep(
+            membrane_surface_luma - 0.07,
+            membrane_surface_luma + 0.28,
+            membrane_luma);
+        float membrane_dark = smoothstep(
+            0.08,
+            0.32,
+            membrane_surface_luma - membrane_luma);
+        float membrane_fresnel = clamp(
+            membrane_edge_band * 0.38
+                + membrane_center * 0.24
+                + membrane_bridge * 0.22
+                + membrane_transition * group_blend_strength * 0.18,
+            0.0,
+            1.0);
+        float3 membrane_neutral = mix(
+            membrane_probe,
+            float3(membrane_luma),
+            0.30 + 0.22 * membrane_calm);
+        float3 membrane_tint =
+            membrane_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.030
+                      + 0.042
+                          * prominent_intensity
+                          * tint_chroma));
+        float3 membrane_layer = mix(
+            rgb,
+            membrane_tint,
+            0.07
+                + 0.09 * membrane_calm
+                + 0.08 * membrane_fresnel);
+        float3 membrane_luma_rgb =
+            float3(dot(membrane_layer,
+                       float3(0.2126, 0.7152, 0.0722)));
+        membrane_layer =
+            membrane_luma_rgb
+            + (membrane_layer - membrane_luma_rgb)
+                * (0.91 + 0.09 * membrane_gate);
+        membrane_layer += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * membrane_fresnel
+            * (0.004
+               + 0.012 * spectral_rim_tint
+               + 0.008 * glass_prismatic_gain);
+        float membrane_weight = shared_membrane_strength
+            * membrane_gate
+            * (0.34
+               + 0.18 * membrane_calm
+               + 0.18 * membrane_fresnel
+               + 0.16 * membrane_transition
+               + 0.14 * membrane_bright);
+        rgb = mix(
+            rgb,
+            clamp(membrane_layer, 0.0, 1.0),
+            membrane_weight * 0.34);
+        rgb += membrane_neutral
+            * membrane_weight
+            * membrane_bright
+            * (0.004
+               + 0.010 * dynamic_light_highlight
+               + 0.008 * glass_scattering_gain);
+        float membrane_shadow =
+            membrane_dark
+            * membrane_weight
+            * (0.008 + 0.018 * glass_shadow_gain)
+            * (0.54 + 0.46 * membrane_fresnel);
+        rgb *= 1.0 - clamp(membrane_shadow, 0.0, 0.044);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float liquid_response_strength = clamp(
         0.012 * clear_glass_detail
             + 0.010 * clear_glass_contrast
@@ -14744,6 +15003,7 @@ fragment float4 fs_material(
             + 0.018 * glass_union_glow_strength
             + 0.014 * clarity_balance_strength
             + 0.014 * optical_equilibrium_strength
+            + 0.016 * shared_membrane_strength
             + 0.018 * pointer_lens_strength * pointer_lens_raw
             + 0.016 * bridge_motion_strength * bridge_band
             + 0.010 * union_execution * group_blend_strength,
