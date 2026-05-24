@@ -5611,8 +5611,13 @@ fragment float4 fs_material(
     float bridge_motion_strength = clamp(in.bridge_optics.x, 0.0, 1.0);
     float bridge_flow_offset_gain = clamp(in.bridge_optics.y, 0.0, 0.60);
     float bridge_ribbon_width = clamp(in.bridge_optics.z, 0.08, 0.32);
+    float group_effect_flags = floor(max(in.group_effects.z, 0.0) + 0.5);
     float union_execution =
-        floor(fmod(floor(in.group_effects.z / 2.0), 2.0));
+        floor(fmod(floor(group_effect_flags / 2.0), 2.0));
+    float shared_backdrop_scope =
+        floor(fmod(floor(group_effect_flags / 8.0), 2.0));
+    float glass_effect_match_execution =
+        floor(fmod(floor(group_effect_flags / 16.0), 2.0));
     float bridge_caustic_gain =
         clamp(
             1.0
@@ -6106,6 +6111,138 @@ fragment float4 fs_material(
     }
     float4 blurred = acc / weight_sum;
     float3 refracted_rgb = blurred.rgb;
+    float shared_sample_envelope_strength = clamp(
+        0.012 * clear_glass_detail
+            + 0.012 * glass_thickness
+            + 0.020 * group_blend_strength * shared_backdrop_scope
+            + 0.018 * fusion_strength * shared_backdrop_scope
+            + 0.014 * glass_effect_match_execution
+            + 0.014 * union_execution * group_blend_strength
+            + 0.012 * overlap_response_strength
+            + 0.012 * bridge_band * (0.38 + 0.62 * bridge_core),
+        0.0,
+        0.095);
+    if (shared_sample_envelope_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 group_size = max(in.group_rect.zw, float2(1.0));
+        float2 group_center_screen = in.group_rect.xy + group_size * 0.5;
+        float2 backdrop_viewport_size =
+            float2(float(backdrop.get_width()), float(backdrop.get_height()))
+            / content_scale;
+        float2 viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : backdrop_viewport_size.x,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : backdrop_viewport_size.y),
+            float2(1.0));
+        float2 group_center_uv = clamp(
+            group_center_screen / viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 group_delta =
+            (in.screen_pos - group_center_screen) / group_size;
+        float group_distance =
+            clamp(length(group_delta) * 1.35, 0.0, 1.0);
+        float group_center_pull =
+            (1.0 - smoothstep(0.28, 1.08, group_distance))
+            * (0.42 + 0.58 * shared_backdrop_scope);
+        float2 envelope_center_delta = group_center_uv - in.screen_uv;
+        float envelope_center_distance = length(envelope_center_delta);
+        float2 envelope_center_dir =
+            envelope_center_distance > 0.0001
+                ? envelope_center_delta / envelope_center_distance
+                : refraction_dir;
+        float2 envelope_axis_raw =
+            bridge_dir * bridge_band
+            + envelope_center_dir * group_center_pull
+            + refraction_dir * 0.22;
+        float envelope_axis_length = length(envelope_axis_raw);
+        float2 envelope_axis = envelope_axis_length > 0.0001
+            ? envelope_axis_raw / envelope_axis_length
+            : refraction_dir;
+        float2 envelope_cross =
+            float2(-envelope_axis.y, envelope_axis.x);
+        float envelope_span =
+            (1.0
+             + 1.8 * glass_thickness
+             + 1.3 * clear_glass_detail
+             + 1.2 * group_blend_strength
+             + 0.05 * blur_points)
+            * content_scale
+            * (0.82 + 0.18 * fusion_lensing_gain);
+        float2 envelope_near_uv = clamp(
+            mix(in.screen_uv, group_center_uv, group_center_pull * 0.20)
+                + refraction_uv * 0.20
+                + envelope_axis
+                    * texel
+                    * envelope_span
+                    * (0.28 + 0.18 * bridge_core),
+            float2(0.0),
+            float2(1.0));
+        float2 envelope_far_uv = clamp(
+            mix(in.screen_uv, group_center_uv, group_center_pull * 0.30)
+                + refraction_uv * 0.14
+                - envelope_axis
+                    * texel
+                    * envelope_span
+                    * (0.32 + 0.16 * group_blend_strength),
+            float2(0.0),
+            float2(1.0));
+        float2 envelope_cross_uv = clamp(
+            mix(in.screen_uv, group_center_uv, group_center_pull * 0.24)
+                + refraction_uv * 0.16
+                + envelope_cross
+                    * texel
+                    * envelope_span
+                    * (0.24
+                       + 0.14 * overlap_response_strength
+                       + 0.16 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 envelope_near =
+            backdrop.sample(samp, envelope_near_uv).rgb;
+        float3 envelope_far =
+            backdrop.sample(samp, envelope_far_uv).rgb;
+        float3 envelope_cross_rgb =
+            backdrop.sample(samp, envelope_cross_uv).rgb;
+        float3 envelope_rgb =
+            envelope_near * 0.38
+            + envelope_far * 0.34
+            + envelope_cross_rgb * 0.28;
+        float envelope_luma =
+            dot(envelope_rgb, float3(0.2126, 0.7152, 0.0722));
+        float refracted_luma =
+            dot(refracted_rgb, float3(0.2126, 0.7152, 0.0722));
+        float envelope_range = clamp(
+            length(envelope_near - envelope_far) * 0.30
+                + length(envelope_cross_rgb - envelope_rgb) * 0.20
+                + abs(envelope_luma - refracted_luma) * 0.22,
+            0.0,
+            1.0);
+        float envelope_calm =
+            1.0 - smoothstep(0.10, 0.38, envelope_range);
+        float3 envelope_neutral =
+            mix(envelope_rgb,
+                float3(envelope_luma),
+                0.26 + 0.20 * envelope_calm);
+        float envelope_weight = shared_sample_envelope_strength
+            * clamp(
+                0.36
+                    + 0.24 * group_center_pull
+                    + 0.18 * envelope_calm
+                    + 0.14 * fusion_strength
+                    + 0.12 * shared_backdrop_scope,
+                0.0,
+                1.0);
+        refracted_rgb = mix(
+            refracted_rgb,
+            envelope_neutral,
+            envelope_weight * 0.36);
+    }
     if (fringe_weight > 0.0001) {
         float2 warm_uv = clamp(
             in.screen_uv + refraction_uv + fringe_uv,
