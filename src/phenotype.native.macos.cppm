@@ -10751,6 +10751,158 @@ fragment float4 fs_material(
                + 0.012 * glass_prismatic_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float focal_plane_strength = clamp(
+        0.020 * glass_thickness
+            + 0.016 * (glass_lensing_gain - 1.0)
+            + 0.012 * clear_glass_detail
+            + 0.012 * prominent_intensity
+            + 0.010 * glass_caustic_spread
+            + 0.08 * clarity_film_strength
+            + 0.06 * contour_seal_strength
+            + 0.04 * light_well_strength,
+        0.0,
+        0.11);
+    if (focal_plane_strength > 0.0001) {
+        float focal_center =
+            1.0 - smoothstep(0.14, 1.12, normalized_len);
+        float focal_rim = edge_lens
+            * (0.28
+               + 0.72
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.55, 0.5),
+                       signed_edge_distance)));
+        float focal_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.28 + 0.72 * bridge_core)
+                + surface_tension_strength * 1.10,
+            0.0,
+            1.0);
+        float focal_gate = clamp(
+            focal_center * 0.38
+                + focal_rim * 0.40
+                + focal_contact * 0.24,
+            0.0,
+            1.0);
+        float2 focal_raw_dir =
+            refraction_dir * (0.38 + 0.34 * edge_lens)
+            - dynamic_light_dir * (0.24 + 0.20 * dynamic_light_highlight)
+            + bridge_dir * bridge_band * 0.22
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.20;
+        float focal_dir_len = length(focal_raw_dir);
+        float2 focal_dir = focal_dir_len > 0.0001
+            ? focal_raw_dir / focal_dir_len
+            : -dynamic_light_dir;
+        float2 focal_tangent = float2(-focal_dir.y, focal_dir.x);
+        float focal_span =
+            (2.0
+             + 4.2 * glass_thickness
+             + 2.2 * glass_caustic_spread
+             + 0.08 * blur_points)
+            * content_scale
+            * (0.78 + 0.22 * prominent_lensing_gain);
+        float2 focal_center_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                - focal_dir * texel * focal_span * 0.28,
+            float2(0.0),
+            float2(1.0));
+        float2 focal_forward_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.48
+                + focal_dir * texel * focal_span * 0.52,
+            float2(0.0),
+            float2(1.0));
+        float2 focal_tangent_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.36
+                + focal_tangent
+                    * texel
+                    * focal_span
+                    * (0.46 + 0.22 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 focal_center_rgb =
+            backdrop.sample(samp, focal_center_uv).rgb;
+        float3 focal_forward_rgb =
+            backdrop.sample(samp, focal_forward_uv).rgb;
+        float3 focal_tangent_rgb =
+            backdrop.sample(samp, focal_tangent_uv).rgb;
+        float3 focal_probe =
+            focal_center_rgb * 0.46
+            + focal_forward_rgb * 0.32
+            + focal_tangent_rgb * 0.22;
+        float focal_luma =
+            dot(focal_probe, float3(0.2126, 0.7152, 0.0722));
+        float focal_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float focal_detail = clamp(
+            length(focal_forward_rgb - focal_center_rgb) * 0.30
+                + length(focal_tangent_rgb - focal_probe) * 0.28
+                + abs(focal_luma - focal_surface_luma) * 0.42,
+            0.0,
+            1.0);
+        float focal_softness =
+            1.0 - smoothstep(0.10, 0.42, focal_detail);
+        float focal_legibility = smoothstep(
+            0.04,
+            0.34,
+            abs(focal_luma - focal_surface_luma)
+                + focal_detail * 0.55);
+        float focal_bright = smoothstep(
+            focal_surface_luma - 0.08,
+            focal_surface_luma + 0.30,
+            focal_luma);
+        float focal_dark = smoothstep(
+            0.08,
+            0.36,
+            focal_surface_luma - focal_luma);
+        float3 focal_neutral = mix(
+            focal_probe,
+            float3(focal_luma),
+            0.28 + 0.24 * focal_softness);
+        float3 focal_layer = mix(
+            rgb,
+            focal_neutral,
+            0.08 + 0.12 * focal_softness + 0.10 * focal_legibility);
+        focal_layer = clamp(
+            (focal_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.22
+                       + clear_glass_detail * 0.18)
+                + float3(0.50),
+            0.0,
+            1.0);
+        focal_layer = mix(
+            focal_layer,
+            focal_layer * (1.0 - 0.07 * focal_bright)
+                + focal_neutral * (0.04 + 0.06 * focal_dark),
+            clamp(focal_bright + focal_dark, 0.0, 1.0));
+        focal_layer = mix(
+            focal_layer,
+            focal_layer * (float3(1.0) + 0.14 * in.tint.rgb),
+            tint_chroma * (0.24 + 0.24 * prominent_intensity));
+        focal_layer += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * focal_rim
+            * (0.010 + 0.028 * spectral_rim_tint);
+        float focal_weight = focal_plane_strength
+            * focal_gate
+            * (0.42
+               + 0.22 * focal_softness
+               + 0.18 * focal_legibility
+               + 0.18 * focal_contact);
+        rgb = mix(rgb, clamp(focal_layer, 0.0, 1.0), focal_weight);
+        rgb += focal_neutral
+            * focal_plane_strength
+            * focal_rim
+            * (0.006
+               + 0.014 * clear_glass_detail
+               + 0.012 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
