@@ -7542,6 +7542,154 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(ambient_absorption, 0.0, 0.055);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float depth_parallax_strength = clamp(
+        0.034 * glass_thickness
+            + 0.028 * (glass_lensing_gain - 1.0)
+            + 0.026 * glass_caustic_spread
+            + 0.036 * ambient_chroma_bleed_strength
+            + 0.044 * anisotropic_highlight_strength
+            + 0.032 * pressure_caustic_strength
+            + 0.020 * prominent_intensity,
+        0.0,
+        0.17);
+    if (depth_parallax_strength > 0.0001) {
+        float depth_center =
+            1.0 - smoothstep(0.16, 1.20, normalized_len);
+        float depth_rim = edge_lens
+            * (0.30
+               + 0.70
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.40, 0.5),
+                       signed_edge_distance)));
+        float depth_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.30 + 0.70 * bridge_core)
+                + pressure_caustic_strength * 0.56,
+            0.0,
+            1.0);
+        float depth_gate = clamp(
+            depth_center * 0.34
+                + depth_rim * 0.44
+                + depth_contact * 0.30,
+            0.0,
+            1.0);
+        float2 depth_raw_dir =
+            refraction_dir * (0.52 + 0.48 * edge_lens)
+            - dynamic_light_dir * (0.20 + 0.35 * dynamic_light_highlight)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.40
+            + bridge_dir * bridge_band * 0.34;
+        float depth_dir_length = length(depth_raw_dir);
+        float2 depth_dir = depth_dir_length > 0.0001
+            ? depth_raw_dir / depth_dir_length
+            : refraction_dir;
+        float2 depth_tangent = float2(-depth_dir.y, depth_dir.x);
+        float depth_span =
+            (2.0
+             + 6.8 * glass_thickness
+             + 3.8 * glass_caustic_spread
+             + 0.12 * blur_points)
+            * content_scale
+            * (0.80 + 0.20 * glass_lensing_gain);
+        float depth_split =
+            (0.85
+             + 2.2 * glass_thickness
+             + 1.6 * pressure_caustic_strength
+             + 1.0 * anisotropic_highlight_strength)
+            * content_scale;
+        float2 depth_front_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.50
+                + depth_dir * texel * depth_span,
+            float2(0.0),
+            float2(1.0));
+        float2 depth_middle_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.36
+                + depth_tangent * texel * depth_span * 0.38,
+            float2(0.0),
+            float2(1.0));
+        float2 depth_far_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                - depth_dir * texel * depth_span
+                    * (0.62 + 0.26 * depth_contact),
+            float2(0.0),
+            float2(1.0));
+        float2 depth_chroma_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.44
+                - depth_tangent * texel * depth_split
+                + dispersion_tangent * texel * depth_split
+                    * (0.70 + spectral_dispersion * 1.60),
+            float2(0.0),
+            float2(1.0));
+        float3 depth_front =
+            backdrop.sample(samp, depth_front_uv).rgb;
+        float3 depth_middle =
+            backdrop.sample(samp, depth_middle_uv).rgb;
+        float3 depth_far =
+            backdrop.sample(samp, depth_far_uv).rgb;
+        float3 depth_chroma =
+            backdrop.sample(samp, depth_chroma_uv).rgb;
+        float3 depth_stack =
+            depth_front * 0.34
+            + depth_middle * 0.26
+            + depth_far * 0.30
+            + depth_chroma * 0.10;
+        float depth_luma =
+            dot(depth_stack, float3(0.2126, 0.7152, 0.0722));
+        float depth_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float depth_light = smoothstep(
+            depth_surface_luma - 0.12,
+            depth_surface_luma + 0.30,
+            depth_luma);
+        float depth_shadow = smoothstep(
+            0.08,
+            0.34,
+            depth_surface_luma - depth_luma);
+        float depth_separation = smoothstep(
+            0.02,
+            0.30,
+            abs(depth_luma - depth_surface_luma)
+                + length(depth_front - depth_far) * 0.36);
+        float3 depth_tint = mix(
+            depth_stack,
+            float3(depth_luma),
+            depth_shadow * (0.20 + 0.22 * glass_shadow_gain));
+        depth_tint = mix(
+            depth_tint,
+            depth_tint * (float3(1.0) + 0.16 * in.tint.rgb),
+            tint_chroma * (0.34 + 0.24 * prominent_intensity));
+        depth_tint += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * depth_rim
+            * (0.10 + 0.28 * spectral_rim_tint);
+        float depth_weight = depth_parallax_strength
+            * depth_gate
+            * (0.42
+               + 0.22 * depth_separation
+               + 0.20 * depth_light
+               + 0.16 * depth_contact);
+        rgb = mix(
+            rgb,
+            mix(rgb, depth_tint, 0.18 + 0.14 * depth_separation),
+            depth_weight);
+        rgb += depth_tint
+            * depth_weight
+            * (0.010
+               + 0.024 * dynamic_light_highlight
+               + 0.018 * glass_prismatic_gain);
+        float depth_occlusion = depth_shadow
+            * depth_weight
+            * (0.032 + 0.042 * glass_shadow_gain)
+            * (0.60 + 0.40 * depth_rim);
+        rgb *= 1.0 - clamp(depth_occlusion, 0.0, 0.075);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float optical_light_energy = clamp(
         dynamic_light_highlight
             + 0.34 * edge_inner_highlight
