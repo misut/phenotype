@@ -7430,6 +7430,147 @@ fragment float4 fs_material(
             * (0.014 + 0.028 * glass_caustic_spread);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float adaptive_contrast_strength = clamp(
+        0.030 * glass_thickness
+            + 0.060 * clear_glass_dimming
+            + 0.075 * clear_glass_contrast
+            + 0.020 * prominent_intensity
+            + 0.024 * coalescence_strength
+            + 0.16 * surface_tension_strength
+            + 0.26 * volumetric_absorption_strength,
+        0.0,
+        0.16);
+    if (adaptive_contrast_strength > 0.0001) {
+        float contrast_center =
+            1.0 - smoothstep(0.18, 1.12, normalized_len);
+        float contrast_rim = edge_lens
+            * (0.36
+               + 0.64
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.35, 0.5),
+                       signed_edge_distance)));
+        float contrast_contact = clamp(
+            pointer_lens_raw * pointer_lens_strength
+                + bridge_band * (0.44 + 0.56 * bridge_core),
+            0.0,
+            1.0);
+        float contrast_gate = clamp(
+            contrast_center * 0.36
+                + contrast_rim * 0.48
+                + contrast_contact * 0.22,
+            0.0,
+            1.0);
+        float2 contrast_raw_dir =
+            -dynamic_light_dir
+            + refraction_dir * (0.34 + 0.44 * edge_lens)
+            + bridge_dir * bridge_band * 0.34
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.44;
+        float contrast_dir_len = length(contrast_raw_dir);
+        float2 contrast_dir = contrast_dir_len > 0.0001
+            ? contrast_raw_dir / contrast_dir_len
+            : -dynamic_light_dir;
+        float2 contrast_tangent = float2(-contrast_dir.y,
+                                         contrast_dir.x);
+        float contrast_span =
+            (2.5
+             + 5.0 * glass_thickness
+             + 2.0 * glass_caustic_spread
+             + 0.10 * blur_points)
+            * content_scale
+            * (0.75 + 0.25 * prominent_lensing_gain);
+        float2 contrast_forward_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.40
+                + contrast_dir * texel * contrast_span,
+            float2(0.0),
+            float2(1.0));
+        float2 contrast_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.26
+                - contrast_dir * texel * contrast_span * 0.68,
+            float2(0.0),
+            float2(1.0));
+        float2 contrast_side_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.32
+                + contrast_tangent
+                    * texel
+                    * contrast_span
+                    * (0.48 + 0.30 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 contrast_forward =
+            backdrop.sample(samp, contrast_forward_uv).rgb;
+        float3 contrast_back =
+            backdrop.sample(samp, contrast_back_uv).rgb;
+        float3 contrast_side =
+            backdrop.sample(samp, contrast_side_uv).rgb;
+        float3 contrast_probe =
+            contrast_forward * 0.42
+            + contrast_back * 0.34
+            + contrast_side * 0.24;
+        float contrast_probe_luma =
+            dot(contrast_probe, float3(0.2126, 0.7152, 0.0722));
+        float contrast_forward_luma =
+            dot(contrast_forward, float3(0.2126, 0.7152, 0.0722));
+        float contrast_back_luma =
+            dot(contrast_back, float3(0.2126, 0.7152, 0.0722));
+        float contrast_side_luma =
+            dot(contrast_side, float3(0.2126, 0.7152, 0.0722));
+        float contrast_range = clamp(
+            max(abs(contrast_forward_luma - contrast_back_luma),
+                abs(contrast_probe_luma - contrast_side_luma)),
+            0.0,
+            1.0);
+        float bright_pressure = smoothstep(0.60, 0.94,
+                                           contrast_probe_luma);
+        float dark_pressure =
+            1.0 - smoothstep(0.08, 0.38, contrast_probe_luma);
+        float3 contrast_neutral =
+            mix(contrast_probe,
+                float3(contrast_probe_luma),
+                0.44 + 0.22 * contrast_range);
+        float3 contrast_film = mix(
+            rgb,
+            contrast_neutral,
+            0.16 + 0.18 * contrast_range);
+        float3 compressed_film = clamp(
+            (contrast_film - float3(0.50))
+                    * (1.0 + clear_glass_contrast * 0.62)
+                + float3(0.50),
+            0.0,
+            1.0);
+        compressed_film = mix(
+            compressed_film,
+            compressed_film
+                * (1.0 - 0.11 * bright_pressure)
+                + float3(0.035 * dark_pressure),
+            clamp(bright_pressure + dark_pressure, 0.0, 1.0));
+        compressed_film +=
+            float3(spectral_warmth,
+                   0.16 * (spectral_warmth + spectral_coolness),
+                   spectral_coolness)
+            * contrast_rim
+            * adaptive_contrast_strength
+            * 0.34;
+        compressed_film = mix(
+            compressed_film,
+            compressed_film * (float3(1.0) + 0.18 * in.tint.rgb),
+            tint_chroma * (0.20 + 0.30 * prominent_intensity));
+        float contrast_weight = adaptive_contrast_strength
+            * contrast_gate
+            * (0.56
+               + 0.26 * contrast_range
+               + 0.18 * max(bright_pressure, dark_pressure));
+        rgb = mix(rgb, compressed_film, contrast_weight);
+        rgb += float3(1.0)
+            * contrast_rim
+            * adaptive_contrast_strength
+            * (0.010 + 0.018 * edge_inner_highlight)
+            * (1.0 + dynamic_light_highlight);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
