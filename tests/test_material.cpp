@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 75);
+    assert(material_plan_contract_version == 76);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -805,6 +805,74 @@ void test_glass_thickness_scales_lensing_contract() {
            >= large.glass_dispersion.prismatic_gain);
 
     std::puts("PASS: glass thickness scales lensing contract");
+}
+
+void test_large_glass_surface_adapts_legibility_contract() {
+    auto env = sampled_environment();
+    env.backdrop.luma_min = 0.10f;
+    env.backdrop.luma_max = 0.96f;
+    env.backdrop.luma_mean = 0.74f;
+    env.backdrop.color_mean = Color{230, 238, 255, 255};
+
+    auto small_request = regular_request();
+    small_request.style.role = MaterialSurfaceRole::Sidebar;
+    auto small_plan = plan_material_surface(small_request, env);
+
+    auto large_request = large_surface_request();
+    large_request.style.role = MaterialSurfaceRole::Sidebar;
+    auto large_plan = plan_material_surface(large_request, env);
+
+    assert(!small_plan.large_surface_legibility.active);
+    assert(large_plan.large_surface_legibility.active);
+    assert(large_plan.large_surface_legibility.role_driven);
+    assert(large_plan.large_surface_legibility.size_driven);
+    assert(large_plan.large_surface_legibility.backdrop_driven);
+    assert(large_plan.large_surface_legibility.contrast_driven);
+    assert(large_plan.large_surface_legibility.brightness_driven);
+    assert(large_plan.large_surface_legibility.bounded);
+    assert(std::string_view(large_plan.large_surface_legibility.model)
+        == "large-surface-liquid-glass-legibility");
+    assert(std::string_view(large_plan.large_surface_legibility.source)
+        == "sidebar-large-glass-legibility");
+    assert(large_plan.large_surface_legibility.response_strength > 0.0f);
+    assert(large_plan.large_surface_legibility.opacity_delta > 0.0f);
+    assert(large_plan.large_surface_legibility.tint_alpha_delta > 0.0f);
+    assert(large_plan.large_surface_legibility.luminance_floor_delta > 0.0f);
+    assert(large_plan.large_surface_legibility.edge_highlight_delta > 0.0f);
+    assert(large_plan.large_surface_legibility.shadow_alpha_delta > 0.0f);
+    assert(large_plan.large_surface_legibility.shadow_radius_delta > 0.0f);
+    assert(large_plan.opacity > small_plan.opacity);
+    assert(large_plan.tint.a > small_plan.tint.a);
+    assert(large_plan.luminance_floor > small_plan.luminance_floor);
+    assert(large_plan.edge_highlight > small_plan.edge_highlight);
+    assert(large_plan.shadow_alpha > small_plan.shadow_alpha);
+    assert(large_plan.shadow_radius > small_plan.shadow_radius);
+    assert(large_plan.foreground.primary_contrast_ratio
+           >= large_plan.foreground.minimum_contrast_ratio);
+    assert(large_plan.reference_model.legibility_preserved);
+    assert(std::string_view(
+               large_plan.optical_composition.large_surface_legibility_source)
+           == large_plan.large_surface_legibility.source);
+    assert(large_plan.optical_composition.large_surface_legibility_required);
+    assert(large_plan.optical_composition.large_surface_legibility_response
+           == large_plan.large_surface_legibility.response_strength);
+    assert(large_plan.optical_composition.large_surface_opacity_delta
+           == large_plan.large_surface_legibility.opacity_delta);
+    assert(large_plan.optical_composition.large_surface_tint_alpha_delta
+           == large_plan.large_surface_legibility.tint_alpha_delta);
+    assert(large_plan.optical_composition.large_surface_luminance_floor_delta
+           == large_plan.large_surface_legibility.luminance_floor_delta);
+    assert(large_plan.optical_composition.large_surface_edge_highlight_delta
+           == large_plan.large_surface_legibility.edge_highlight_delta);
+    assert(large_plan.optical_response.large_surface_legibility_active);
+
+    auto control_request = large_request;
+    control_request.style.role = MaterialSurfaceRole::Control;
+    auto control_plan = plan_material_surface(control_request, env);
+    assert(!control_plan.large_surface_legibility.active);
+    assert(!control_plan.optical_response.large_surface_legibility_active);
+
+    std::puts("PASS: large glass surface adapts legibility contract");
 }
 
 void test_content_layer_stays_standard_material_contract() {
@@ -4550,6 +4618,7 @@ int main() {
     test_toolbar_scroll_edge_separates_scrolled_content_contract();
     test_configured_tint_drives_glass_chromatics_contract();
     test_glass_thickness_scales_lensing_contract();
+    test_large_glass_surface_adapts_legibility_contract();
     test_content_layer_stays_standard_material_contract();
     test_fallback_backdrop_access_contract();
     test_glass_background_variants_shape_fallback_paint_policy();
