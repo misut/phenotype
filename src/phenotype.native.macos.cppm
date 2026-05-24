@@ -5612,8 +5612,12 @@ fragment float4 fs_material(
     float bridge_flow_offset_gain = clamp(in.bridge_optics.y, 0.0, 0.60);
     float bridge_ribbon_width = clamp(in.bridge_optics.z, 0.08, 0.32);
     float group_effect_flags = floor(max(in.group_effects.z, 0.0) + 0.5);
+    float shape_blend_execution =
+        floor(fmod(group_effect_flags, 2.0));
     float union_execution =
         floor(fmod(floor(group_effect_flags / 2.0), 2.0));
+    float morph_execution =
+        floor(fmod(floor(group_effect_flags / 4.0), 2.0));
     float shared_backdrop_scope =
         floor(fmod(floor(group_effect_flags / 8.0), 2.0));
     float glass_effect_match_execution =
@@ -8216,6 +8220,16 @@ fragment float4 fs_material(
         bridge_band
             * group_blend_strength
             * (0.26 + 0.36 * bridge_core)
+        + shape_blend_execution
+            * group_blend_strength
+            * bridge_band
+            * (0.10 + 0.14 * bridge_core)
+        + morph_execution
+            * group_blend_strength
+            * (0.034
+               + 0.046 * bridge_band
+               + 0.030 * materialize_wave_strength)
+        + morph_execution * overlap_response_strength * 0.026
         + coalescence_strength * 0.34
         + fusion_strength * bridge_band * 0.22
         + surface_tension_strength * 1.65,
@@ -8244,7 +8258,9 @@ fragment float4 fs_material(
         float morph_gate = clamp(
             morph_axial
                 * (0.46 * morph_core + 0.54 * morph_shoulder)
-                * (0.56 + 0.44 * edge_lens),
+                * (0.56
+                   + 0.44 * edge_lens
+                   + 0.10 * morph_execution * group_blend_strength),
             0.0,
             1.0);
         float morph_alignment = smoothstep(
@@ -8256,7 +8272,8 @@ fragment float4 fs_material(
             - abs(bridge_lateral_signed)
                 * (10.0 + 5.0 * bridge_flow_offset_gain)
             + fusion_strength * 8.0
-            + coalescence_strength * 5.0;
+            + coalescence_strength * 5.0
+            + morph_execution * group_blend_strength * 4.0;
         float morph_wave = 0.5 + 0.5 * sin(morph_phase);
         float morph_pinched =
             1.0 - smoothstep(0.0, 0.32, abs(morph_wave - 0.58));
@@ -8264,6 +8281,7 @@ fragment float4 fs_material(
             (2.2
              + 5.6 * glass_thickness
              + 4.0 * glass_caustic_spread
+             + 0.9 * morph_execution * group_blend_strength
              + 0.12 * blur_points)
             * content_scale
             * (0.74 + 0.26 * glass_lensing_gain);
@@ -8272,7 +8290,8 @@ fragment float4 fs_material(
              + 2.8 * glass_thickness
              + 2.2 * glass_dispersion_tangential
              + 4.0 * spectral_dispersion)
-            * content_scale;
+            * content_scale
+            * (1.0 + 0.10 * morph_execution * group_blend_strength);
         float morph_shear_sign = bridge_shear >= 0.0 ? 1.0 : -1.0;
         float2 morph_forward_uv = clamp(
             in.screen_uv
@@ -8362,7 +8381,8 @@ fragment float4 fs_material(
             * (0.38
                + 0.22 * morph_continuity
                + 0.22 * morph_bright
-               + 0.18 * morph_alignment);
+               + 0.18 * morph_alignment
+               + 0.10 * morph_execution * group_blend_strength);
         rgb = mix(
             rgb,
             mix(rgb, morph_tint, 0.22 + 0.18 * morph_continuity),
