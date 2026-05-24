@@ -1807,6 +1807,26 @@ void test_prominent_glass_action_optics_contract() {
     assert(reduced_plan.prominent_glass.intensity
            < plan.prominent_glass.intensity);
 
+    auto high_contrast_env = sampled_environment();
+    high_contrast_env.capabilities.increase_contrast = true;
+    auto high_contrast_plan =
+        plan_material_surface(request, high_contrast_env);
+    assert(high_contrast_plan.prominent_glass.active);
+    assert(high_contrast_plan.prominent_glass.intensity
+           == plan.prominent_glass.intensity);
+    assert(high_contrast_plan.prominent_glass.tint_weight
+           > plan.prominent_glass.tint_weight);
+    assert(high_contrast_plan.prominent_glass.edge_lift
+           > plan.prominent_glass.edge_lift);
+    assert(high_contrast_plan.prominent_glass.lensing_gain
+           > plan.prominent_glass.lensing_gain);
+    assert(high_contrast_plan.optical_composition.prominent_glass_tint_weight
+           == high_contrast_plan.prominent_glass.tint_weight);
+    assert(high_contrast_plan.optical_response.prominent_glass_active);
+    assert(std::string_view(
+               high_contrast_plan.reference_model.accessibility_response)
+           == "increased-contrast");
+
     auto disabled = request;
     disabled.style.prominence.enabled = false;
     auto disabled_plan = plan_material_surface(disabled, sampled_environment());
