@@ -7389,6 +7389,159 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(anisotropic_shadow, 0.0, 0.065);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float ambient_chroma_bleed_strength = clamp(
+        0.026 * glass_thickness
+            + 0.030 * glass_caustic_spread
+            + 0.026 * max(saturation - 1.0, 0.0)
+            + 0.035 * bridge_flow_strength
+            + 0.026 * coalescence_strength
+            + 0.040 * pressure_caustic_strength
+            + 0.050 * anisotropic_highlight_strength
+            + 0.035 * prominent_intensity,
+        0.0,
+        0.18);
+    if (ambient_chroma_bleed_strength > 0.0001) {
+        float ambient_center =
+            1.0 - smoothstep(0.18, 1.18, normalized_len);
+        float ambient_rim = edge_lens
+            * (0.34
+               + 0.66
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.55, 0.5),
+                       signed_edge_distance)));
+        float ambient_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.42 + 0.58 * bridge_core)
+                + pressure_caustic_strength * 0.72,
+            0.0,
+            1.0);
+        float ambient_gate = clamp(
+            ambient_center * 0.30
+                + ambient_rim * 0.42
+                + ambient_contact * 0.32,
+            0.0,
+            1.0);
+        float2 ambient_raw_dir =
+            refraction_dir * (0.38 + 0.42 * edge_lens)
+            + bridge_dir * bridge_band * 0.48
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.42
+            - dynamic_light_dir * 0.24;
+        float ambient_dir_length = length(ambient_raw_dir);
+        float2 ambient_dir = ambient_dir_length > 0.0001
+            ? ambient_raw_dir / ambient_dir_length
+            : -dynamic_light_dir;
+        float2 ambient_tangent = float2(-ambient_dir.y,
+                                        ambient_dir.x);
+        float ambient_span =
+            (3.0
+             + 7.6 * glass_thickness
+             + 3.0 * glass_caustic_spread
+             + 0.12 * blur_points)
+            * content_scale
+            * (0.74 + 0.26 * glass_lensing_gain);
+        float ambient_chroma_span =
+            (0.8
+             + glass_dispersion_tangential * 1.2
+             + spectral_dispersion * 4.5)
+            * content_scale;
+        float2 ambient_forward_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.44
+                + ambient_dir * texel * ambient_span,
+            float2(0.0),
+            float2(1.0));
+        float2 ambient_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                - ambient_dir * texel * ambient_span * 0.64,
+            float2(0.0),
+            float2(1.0));
+        float2 ambient_left_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                + ambient_tangent * texel * ambient_span * 0.58
+                + dispersion_tangent * texel * ambient_chroma_span,
+            float2(0.0),
+            float2(1.0));
+        float2 ambient_right_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                - ambient_tangent * texel * ambient_span * 0.58
+                - dispersion_tangent * texel * ambient_chroma_span,
+            float2(0.0),
+            float2(1.0));
+        float3 ambient_forward =
+            backdrop.sample(samp, ambient_forward_uv).rgb;
+        float3 ambient_back =
+            backdrop.sample(samp, ambient_back_uv).rgb;
+        float3 ambient_left =
+            backdrop.sample(samp, ambient_left_uv).rgb;
+        float3 ambient_right =
+            backdrop.sample(samp, ambient_right_uv).rgb;
+        float3 ambient_rgb =
+            ambient_forward * 0.34
+            + ambient_back * 0.24
+            + ambient_left * 0.21
+            + ambient_right * 0.21;
+        float ambient_luma =
+            dot(ambient_rgb, float3(0.2126, 0.7152, 0.0722));
+        float ambient_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float ambient_bright = smoothstep(
+            ambient_surface_luma - 0.10,
+            ambient_surface_luma + 0.34,
+            ambient_luma);
+        float ambient_dark = smoothstep(
+            0.10,
+            0.36,
+            ambient_surface_luma - ambient_luma);
+        float ambient_chroma = max(
+            max(abs(ambient_rgb.r - ambient_rgb.g),
+                abs(ambient_rgb.g - ambient_rgb.b)),
+            abs(ambient_rgb.b - ambient_rgb.r));
+        float ambient_color_pickup = smoothstep(0.04, 0.34,
+                                                ambient_chroma);
+        float3 ambient_neutral =
+            mix(ambient_rgb,
+                float3(ambient_luma),
+                0.18 + 0.30 * ambient_dark);
+        float3 ambient_tint = mix(
+            ambient_neutral,
+            ambient_rgb,
+            0.48 + 0.32 * ambient_color_pickup);
+        ambient_tint = mix(
+            ambient_tint,
+            ambient_tint * (float3(1.0) + 0.20 * in.tint.rgb),
+            tint_chroma * (0.40 + 0.30 * prominent_intensity));
+        ambient_tint += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * ambient_rim
+            * (0.12 + 0.34 * spectral_rim_tint);
+        float ambient_weight = ambient_chroma_bleed_strength
+            * ambient_gate
+            * (0.46
+               + 0.26 * ambient_color_pickup
+               + 0.18 * ambient_bright
+               + 0.10 * ambient_contact);
+        rgb = mix(
+            rgb,
+            mix(rgb, ambient_tint, 0.22 + 0.18 * ambient_color_pickup),
+            ambient_weight);
+        rgb += ambient_tint
+            * ambient_weight
+            * (0.018
+               + 0.030 * glass_prismatic_gain
+               + 0.024 * dynamic_light_highlight);
+        float ambient_absorption = ambient_dark
+            * ambient_chroma_bleed_strength
+            * ambient_gate
+            * (0.014 + 0.030 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(ambient_absorption, 0.0, 0.055);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float optical_light_energy = clamp(
         dynamic_light_highlight
             + 0.34 * edge_inner_highlight
