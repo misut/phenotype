@@ -3592,6 +3592,10 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
         .interactive = false,
         .morph_transitions = false,
     };
+    request.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 55u,
+        .effect_id = 0u,
+    };
 
     auto peer = request;
     peer.geometry.x = 50.0f;
@@ -3609,12 +3613,20 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     different_shape.geometry.x = 260.0f;
     different_shape.geometry.radius = 8.0f;
 
+    auto different_namespace = request;
+    different_namespace.geometry.x = 310.0f;
+    different_namespace.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 56u,
+        .effect_id = 0u,
+    };
+
     std::vector<MaterialRuntimeRecord> records{
         {plan_material_surface(request, sampled_environment()), 1u},
         {plan_material_surface(peer, sampled_environment()), 2u},
         {plan_material_surface(different_union, sampled_environment()), 3u},
         {plan_material_surface(different_variant, sampled_environment()), 4u},
         {plan_material_surface(different_shape, sampled_environment()), 5u},
+        {plan_material_surface(different_namespace, sampled_environment()), 6u},
     };
 
     auto const union_group =
@@ -3636,6 +3648,8 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
         material_container_execution_descriptor(records[3], records);
     auto const different_shape_execution =
         material_container_execution_descriptor(records[4], records);
+    auto const different_namespace_execution =
+        material_container_execution_descriptor(records[5], records);
 
     assert(first_execution.union_execution);
     assert(peer_execution.union_execution);
@@ -3704,6 +3718,7 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     assert(!different_union_execution.union_execution);
     assert(!different_variant_execution.union_execution);
     assert(!different_shape_execution.union_execution);
+    assert(!different_namespace_execution.union_execution);
 
     std::puts("PASS: glass effect union uses compatible render bounds");
 }
