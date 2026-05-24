@@ -13122,6 +13122,173 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(horizon_absorption, 0.0, 0.046);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float clarity_balance_strength = clamp(
+        0.018 * clear_glass_contrast
+            + 0.016 * clear_glass_detail
+            + 0.014 * clear_glass_dimming
+            + 0.014 * glass_thickness
+            + 0.030 * legibility_veil_strength
+            + 0.026 * optical_equilibrium_strength
+            + 0.024 * horizon_glint_strength
+            + 0.020 * contact_caustic_strength
+            + 0.018 * volumetric_parallax_strength
+            + 0.014 * chromatic_polish_strength,
+        0.0,
+        0.12);
+    if (clarity_balance_strength > 0.0001) {
+        float balance_center =
+            1.0 - smoothstep(0.20, 1.18, normalized_len);
+        float balance_rim = edge_lens
+            * (0.30
+               + 0.70
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.56, 0.5),
+                       signed_edge_distance)));
+        float balance_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.30 + 0.70 * bridge_core)
+                + specular_intensity * 0.24
+                + surface_tension_strength * 0.80,
+            0.0,
+            1.0);
+        float balance_gate = clamp(
+            balance_center * 0.40
+                + balance_rim * 0.32
+                + balance_contact * 0.22
+                + clear_glass_detail * 0.16,
+            0.0,
+            1.0);
+        float2 balance_raw_dir =
+            refraction_dir * (0.34 + 0.28 * balance_rim)
+            - dynamic_light_dir * (0.24 + 0.18 * dynamic_light_highlight)
+            + bridge_dir * bridge_band * 0.18
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.16;
+        float balance_dir_len = length(balance_raw_dir);
+        float2 balance_dir = balance_dir_len > 0.0001
+            ? balance_raw_dir / balance_dir_len
+            : refraction_dir;
+        float2 balance_cross = float2(-balance_dir.y,
+                                      balance_dir.x);
+        float balance_span =
+            (1.1
+             + 2.8 * glass_thickness
+             + 1.6 * clear_glass_detail
+             + 0.06 * blur_points)
+            * content_scale
+            * (0.82 + 0.18 * glass_lensing_gain);
+        float2 balance_front_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                + balance_dir
+                    * texel
+                    * balance_span
+                    * (0.34 + 0.18 * balance_center),
+            float2(0.0),
+            float2(1.0));
+        float2 balance_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.24
+                - balance_dir
+                    * texel
+                    * balance_span
+                    * (0.38 + 0.18 * balance_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 balance_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.28
+                + balance_cross
+                    * texel
+                    * balance_span
+                    * (0.30 + 0.18 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 balance_front_rgb =
+            backdrop.sample(samp, balance_front_uv).rgb;
+        float3 balance_back_rgb =
+            backdrop.sample(samp, balance_back_uv).rgb;
+        float3 balance_cross_rgb =
+            backdrop.sample(samp, balance_cross_uv).rgb;
+        float3 balance_probe =
+            balance_front_rgb * 0.38
+            + balance_back_rgb * 0.38
+            + balance_cross_rgb * 0.24;
+        float balance_luma =
+            dot(balance_probe, float3(0.2126, 0.7152, 0.0722));
+        float balance_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float balance_surface_peak = max(max(rgb.r, rgb.g), rgb.b);
+        float balance_surface_floor = min(min(rgb.r, rgb.g), rgb.b);
+        float balance_range = clamp(
+            length(balance_front_rgb - balance_back_rgb) * 0.28
+                + length(balance_cross_rgb - balance_probe) * 0.20
+                + abs(balance_luma - balance_surface_luma) * 0.32,
+            0.0,
+            1.0);
+        float balance_overbright = smoothstep(
+            0.72,
+            1.02,
+            balance_surface_peak * 0.62
+                + balance_surface_luma * 0.38);
+        float balance_under =
+            1.0 - smoothstep(
+                0.10,
+                0.38,
+                balance_surface_floor * 0.42
+                    + balance_surface_luma * 0.58);
+        float balance_flat =
+            1.0 - smoothstep(0.06, 0.30, balance_range);
+        float3 balance_neutral = mix(
+            balance_probe,
+            float3(balance_luma),
+            0.40 + 0.20 * balance_flat);
+        float3 balance_layer = mix(
+            rgb,
+            balance_neutral,
+            0.05
+                + 0.10 * balance_flat
+                + 0.10 * max(balance_overbright, balance_under));
+        float3 balance_luma_rgb =
+            float3(dot(balance_layer, float3(0.2126, 0.7152, 0.0722)));
+        balance_layer = mix(
+            balance_layer,
+            balance_luma_rgb
+                + (balance_layer - balance_luma_rgb)
+                    * (0.92 - 0.10 * balance_flat),
+            clamp(balance_flat + balance_overbright, 0.0, 1.0));
+        balance_layer = clamp(
+            (balance_layer - float3(0.50))
+                    * (1.0 + clear_glass_contrast * 0.20)
+                + float3(0.50),
+            0.0,
+            1.0);
+        balance_layer = mix(
+            balance_layer,
+            balance_layer * (float3(1.0) + 0.06 * in.tint.rgb),
+            tint_chroma * (0.12 + 0.16 * prominent_intensity));
+        float balance_weight = clarity_balance_strength
+            * balance_gate
+            * (0.38
+               + 0.22 * balance_flat
+               + 0.20 * max(balance_overbright, balance_under)
+               + 0.20 * balance_contact);
+        rgb = mix(
+            rgb,
+            clamp(balance_layer, 0.0, 1.0),
+            balance_weight * 0.30);
+        float balance_bright_trim =
+            balance_overbright
+            * balance_weight
+            * (0.010 + 0.026 * clear_glass_dimming);
+        float balance_dark_lift =
+            balance_under
+            * balance_weight
+            * (0.006 + 0.014 * glass_scattering_gain);
+        rgb *= 1.0 - clamp(balance_bright_trim, 0.0, 0.040);
+        rgb += balance_neutral * balance_dark_lift;
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
