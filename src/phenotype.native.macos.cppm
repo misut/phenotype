@@ -10903,6 +10903,201 @@ fragment float4 fs_material(
                + 0.012 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float caustic_lattice_strength = clamp(
+        0.018 * glass_thickness
+            + 0.030 * glass_caustic_spread
+            + 0.014 * (glass_prismatic_gain - 1.0)
+            + 0.010 * clear_glass_detail
+            + 0.07 * focal_plane_strength
+            + 0.05 * contour_seal_strength
+            + 0.04 * pressure_caustic_strength
+            + 0.04 * thin_film_strength,
+        0.0,
+        0.13);
+    if (caustic_lattice_strength > 0.0001) {
+        float lattice_center =
+            1.0 - smoothstep(0.12, 1.14, normalized_len);
+        float lattice_rim = edge_lens
+            * (0.30
+               + 0.70
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.62, 0.5),
+                       signed_edge_distance)));
+        float lattice_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.26 + 0.74 * bridge_core)
+                + surface_tension_strength * 1.25,
+            0.0,
+            1.0);
+        float lattice_gate = clamp(
+            lattice_center * 0.34
+                + lattice_rim * 0.42
+                + lattice_contact * 0.26,
+            0.0,
+            1.0);
+        float2 lattice_raw_dir =
+            -dynamic_light_dir * (0.48 + 0.22 * dynamic_light_highlight)
+            + refraction_dir * (0.30 + 0.38 * edge_lens)
+            + bridge_dir * bridge_band * 0.28
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.18;
+        float lattice_dir_len = length(lattice_raw_dir);
+        float2 lattice_dir = lattice_dir_len > 0.0001
+            ? lattice_raw_dir / lattice_dir_len
+            : -dynamic_light_dir;
+        float2 lattice_cross = float2(-lattice_dir.y, lattice_dir.x);
+        float lattice_span =
+            (1.2
+             + 4.4 * glass_thickness
+             + 5.0 * glass_caustic_spread
+             + 1.6 * glass_dispersion_tangential
+             + 0.08 * blur_points)
+            * content_scale
+            * (0.74 + 0.26 * glass_lensing_gain);
+        float lattice_chroma_span =
+            (0.7
+             + 1.8 * glass_dispersion_tangential
+             + 5.2 * spectral_dispersion)
+            * content_scale;
+        float lattice_phase =
+            dot(normalized_local, lattice_dir)
+                * (11.0 + 8.0 * glass_caustic_spread)
+            + dot(normalized_local, lattice_cross)
+                * (6.0 + 5.0 * spectral_dispersion)
+            + bridge_shear * bridge_band * 4.0
+            + surface_tension_strength * 38.0;
+        float lattice_wave = 0.5 + 0.5 * sin(lattice_phase);
+        float lattice_counter_wave =
+            0.5 + 0.5 * cos(lattice_phase * 0.72
+                            - normalized_len * 5.0);
+        float lattice_crossing = smoothstep(
+            0.36,
+            0.96,
+            lattice_wave * lattice_counter_wave
+                + lattice_contact * 0.16);
+        float2 lattice_forward_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.46
+                + lattice_dir
+                    * texel
+                    * lattice_span
+                    * (0.56 + 0.26 * lattice_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 lattice_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                - lattice_dir
+                    * texel
+                    * lattice_span
+                    * (0.44 + 0.22 * lattice_counter_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 lattice_warm_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.38
+                + lattice_cross
+                    * texel
+                    * lattice_chroma_span
+                    * (0.72 + 0.24 * lattice_crossing)
+                + lattice_dir * texel * lattice_span * 0.20,
+            float2(0.0),
+            float2(1.0));
+        float2 lattice_cool_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                - lattice_cross
+                    * texel
+                    * lattice_chroma_span
+                    * (0.64 + 0.22 * lattice_wave)
+                - lattice_dir * texel * lattice_span * 0.16,
+            float2(0.0),
+            float2(1.0));
+        float3 lattice_forward =
+            backdrop.sample(samp, lattice_forward_uv).rgb;
+        float3 lattice_back =
+            backdrop.sample(samp, lattice_back_uv).rgb;
+        float3 lattice_warm =
+            backdrop.sample(samp, lattice_warm_uv).rgb;
+        float3 lattice_cool =
+            backdrop.sample(samp, lattice_cool_uv).rgb;
+        float3 lattice_rgb =
+            lattice_forward * 0.34
+            + lattice_back * 0.28
+            + lattice_warm * 0.20
+            + lattice_cool * 0.18;
+        float3 lattice_prism =
+            float3(lattice_warm.r,
+                   (lattice_forward.g + lattice_back.g) * 0.5,
+                   lattice_cool.b);
+        lattice_rgb = mix(
+            lattice_rgb,
+            lattice_prism,
+            0.30 + 0.36 * spectral_dispersion);
+        float lattice_luma =
+            dot(lattice_rgb, float3(0.2126, 0.7152, 0.0722));
+        float lattice_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float lattice_bright = smoothstep(
+            lattice_surface_luma - 0.08,
+            lattice_surface_luma + 0.30,
+            lattice_luma);
+        float lattice_dark = smoothstep(
+            0.08,
+            0.36,
+            lattice_surface_luma - lattice_luma);
+        float lattice_detail = smoothstep(
+            0.02,
+            0.32,
+            length(lattice_forward - lattice_back) * 0.30
+                + length(lattice_warm - lattice_cool) * 0.28
+                + lattice_crossing * 0.14);
+        float3 lattice_tint = mix(
+            float3(lattice_luma),
+            lattice_rgb,
+            0.72 + 0.18 * glass_caustic_spread);
+        lattice_tint = mix(
+            lattice_tint,
+            lattice_tint * (float3(1.0) + 0.18 * in.tint.rgb),
+            tint_chroma * (0.26 + 0.24 * prominent_intensity));
+        lattice_tint += float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (0.10
+               + 0.24 * spectral_rim_tint
+               + 0.18 * lattice_crossing);
+        float lattice_weight = caustic_lattice_strength
+            * lattice_gate
+            * (0.36
+               + 0.22 * lattice_detail
+               + 0.22 * lattice_bright
+               + 0.20 * lattice_crossing);
+        rgb = mix(
+            rgb,
+            mix(rgb, lattice_tint, 0.14 + 0.16 * lattice_detail),
+            lattice_weight * 0.40);
+        rgb += lattice_tint
+            * lattice_weight
+            * (0.010
+               + 0.024 * dynamic_light_highlight
+               + 0.026 * glass_prismatic_gain);
+        rgb += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * caustic_lattice_strength
+            * lattice_gate
+            * lattice_crossing
+            * (0.006 + 0.020 * glass_caustic_spread);
+        float lattice_absorption = lattice_dark
+            * caustic_lattice_strength
+            * lattice_gate
+            * (0.014 + 0.030 * glass_shadow_gain)
+            * (0.54 + 0.46 * lattice_rim);
+        rgb *= 1.0 - clamp(lattice_absorption, 0.0, 0.055);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
