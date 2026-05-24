@@ -14153,6 +14153,189 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(reflection_finish_glare_trim, 0.0, 0.026);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float content_focus_strength = clamp(
+        0.014 * clear_glass_detail
+            + 0.012 * clear_glass_contrast
+            + 0.012 * clear_glass_dimming
+            + 0.012 * glass_thickness
+            + 0.018 * legibility_veil_strength
+            + 0.016 * clarity_balance_strength
+            + 0.016 * chroma_governor_strength
+            + 0.014 * depth_aperture_strength
+            + 0.012 * reflection_finish_strength
+            + 0.010 * optical_equilibrium_strength,
+        0.0,
+        0.10);
+    if (content_focus_strength > 0.0001) {
+        float focus_center =
+            1.0 - smoothstep(0.18, 1.16, normalized_len);
+        float focus_rim = edge_lens
+            * (0.28
+               + 0.72
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.50, 0.5),
+                       signed_edge_distance)));
+        float focus_interaction = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.32 + 0.68 * bridge_core)
+                + surface_tension_strength * 0.52
+                + specular_intensity * 0.18,
+            0.0,
+            1.0);
+        float focus_gate = clamp(
+            focus_center * 0.34
+                + focus_rim * 0.24
+                + focus_interaction * 0.20
+                + clear_glass_detail * 0.18
+                + prominent_intensity * tint_chroma * 0.10,
+            0.0,
+            1.0);
+        float2 focus_axis_raw =
+            refraction_dir * (0.38 + 0.20 * focus_center)
+            - dynamic_light_dir * (0.18 + 0.14 * dynamic_light_highlight)
+            + bridge_dir * bridge_band * (0.16 + 0.10 * bridge_core)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.16;
+        float focus_axis_len = length(focus_axis_raw);
+        float2 focus_axis = focus_axis_len > 0.0001
+            ? focus_axis_raw / focus_axis_len
+            : refraction_dir;
+        float2 focus_cross = float2(-focus_axis.y, focus_axis.x);
+        float focus_span =
+            (0.9
+             + 2.0 * glass_thickness
+             + 1.8 * clear_glass_detail
+             + 0.8 * focus_interaction
+             + 0.045 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float2 focus_primary_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                + focus_axis
+                    * texel
+                    * focus_span
+                    * (0.22 + 0.14 * focus_center),
+            float2(0.0),
+            float2(1.0));
+        float2 focus_secondary_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.12
+                - focus_axis
+                    * texel
+                    * focus_span
+                    * (0.26 + 0.14 * focus_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 focus_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                + focus_cross
+                    * texel
+                    * focus_span
+                    * (0.22
+                       + 0.14 * focus_interaction
+                       + 0.10 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 focus_primary_rgb =
+            backdrop.sample(samp, focus_primary_uv).rgb;
+        float3 focus_secondary_rgb =
+            backdrop.sample(samp, focus_secondary_uv).rgb;
+        float3 focus_cross_rgb =
+            backdrop.sample(samp, focus_cross_uv).rgb;
+        float3 focus_probe =
+            focus_primary_rgb * 0.40
+            + focus_secondary_rgb * 0.36
+            + focus_cross_rgb * 0.24;
+        float focus_probe_luma =
+            dot(focus_probe, float3(0.2126, 0.7152, 0.0722));
+        float focus_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float focus_probe_peak =
+            max(max(focus_probe.r, focus_probe.g), focus_probe.b);
+        float focus_probe_floor =
+            min(min(focus_probe.r, focus_probe.g), focus_probe.b);
+        float focus_surface_peak = max(max(rgb.r, rgb.g), rgb.b);
+        float focus_surface_floor = min(min(rgb.r, rgb.g), rgb.b);
+        float focus_detail = clamp(
+            length(focus_primary_rgb - focus_secondary_rgb) * 0.34
+                + length(focus_cross_rgb - focus_probe) * 0.22
+                + abs(focus_probe_luma - focus_surface_luma) * 0.24,
+            0.0,
+            1.0);
+        float focus_lost = smoothstep(
+            0.06,
+            0.28,
+            focus_detail
+                - length(rgb - focus_probe) * 0.16
+                + clear_glass_dimming * 0.18);
+        float focus_overbright = smoothstep(
+            0.72,
+            1.02,
+            focus_surface_peak * 0.58
+                + focus_surface_luma * 0.42);
+        float focus_under =
+            1.0 - smoothstep(
+                0.10,
+                0.42,
+                focus_surface_floor * 0.45
+                    + focus_surface_luma * 0.55);
+        float3 focus_neutral =
+            mix(focus_probe,
+                float3(focus_probe_luma),
+                0.28 + 0.18 * clear_glass_dimming);
+        float3 focus_detail_layer = mix(
+            focus_neutral,
+            focus_probe,
+            0.42 + 0.26 * focus_detail);
+        focus_detail_layer = clamp(
+            (focus_detail_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast
+                           * (0.12 + 0.18 * focus_detail))
+                + float3(0.50),
+            0.0,
+            1.0);
+        focus_detail_layer = mix(
+            focus_detail_layer,
+            focus_detail_layer
+                * (float3(1.0)
+                   + in.tint.rgb
+                       * (0.020
+                          + 0.036 * tint_chroma * prominent_intensity)),
+            tint_chroma * (0.12 + 0.12 * focus_interaction));
+        float focus_probe_contrast =
+            clamp(focus_probe_peak - focus_probe_floor, 0.0, 1.0);
+        focus_detail_layer += focus_neutral
+            * focus_probe_contrast
+            * focus_gate
+            * (0.003
+               + 0.008 * clear_glass_detail
+               + 0.006 * glass_scattering_gain);
+        float focus_weight = content_focus_strength
+            * focus_gate
+            * (0.34
+               + 0.24 * focus_lost
+               + 0.16 * max(focus_overbright, focus_under)
+               + 0.14 * focus_detail
+               + 0.12 * focus_interaction);
+        rgb = mix(
+            rgb,
+            clamp(focus_detail_layer, 0.0, 1.0),
+            focus_weight * 0.31);
+        float focus_bright_trim =
+            focus_overbright
+            * focus_weight
+            * (0.007 + 0.016 * clear_glass_dimming);
+        float focus_dark_lift =
+            focus_under
+            * focus_weight
+            * (0.005 + 0.010 * glass_scattering_gain);
+        rgb *= 1.0 - clamp(focus_bright_trim, 0.0, 0.026);
+        rgb += focus_neutral * clamp(focus_dark_lift, 0.0, 0.020);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
