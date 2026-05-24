@@ -7315,6 +7315,121 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(internal_absorption, 0.0, 0.06);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float volumetric_absorption_strength = clamp(
+        0.046 * glass_thickness
+            + 0.030 * (glass_scattering_gain - 1.0)
+            + 0.038 * glass_caustic_spread
+            + 0.020 * prominent_intensity
+            + 0.030 * coalescence_strength
+            + 0.18 * surface_tension_strength,
+        0.0,
+        0.18);
+    if (volumetric_absorption_strength > 0.0001) {
+        float volume_center =
+            1.0 - smoothstep(0.16, 1.16, normalized_len);
+        float volume_rim = edge_lens
+            * (0.38
+               + 0.62
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.45, 0.5),
+                       signed_edge_distance)));
+        float volume_contact = clamp(
+            pointer_lens_raw * pointer_lens_strength
+                + bridge_band * (0.48 + 0.52 * bridge_core)
+                + coalescence_strength * 0.50,
+            0.0,
+            1.0);
+        float volume_depth = clamp(
+            volume_center * 0.30
+                + volume_rim * 0.46
+                + volume_contact * 0.28
+                + internal_transmission_strength * 1.20,
+            0.0,
+            1.0);
+        float2 volume_raw_dir =
+            refraction_dir * (0.48 + 0.52 * edge_lens)
+            - dynamic_light_dir * 0.42
+            + bridge_dir * bridge_band * 0.34
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.42;
+        float volume_dir_len = length(volume_raw_dir);
+        float2 volume_dir = volume_dir_len > 0.0001
+            ? volume_raw_dir / volume_dir_len
+            : -dynamic_light_dir;
+        float2 volume_tangent = float2(-volume_dir.y, volume_dir.x);
+        float volume_span =
+            (2.0
+             + 5.6 * glass_thickness
+             + 3.6 * glass_caustic_spread
+             + 0.12 * blur_points)
+            * content_scale
+            * (0.72 + 0.28 * glass_lensing_gain);
+        float2 volume_probe_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.48
+                + volume_dir * texel * volume_span
+                + volume_tangent
+                    * texel
+                    * volume_span
+                    * (bridge_shear * bridge_band * 0.22),
+            float2(0.0),
+            float2(1.0));
+        float2 volume_shadow_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                - volume_dir * texel * volume_span * 0.62,
+            float2(0.0),
+            float2(1.0));
+        float3 volume_probe =
+            backdrop.sample(samp, volume_probe_uv).rgb;
+        float3 volume_shadow_probe =
+            backdrop.sample(samp, volume_shadow_uv).rgb;
+        float3 volume_rgb =
+            volume_probe * 0.62 + volume_shadow_probe * 0.38;
+        float volume_luma =
+            dot(volume_rgb, float3(0.2126, 0.7152, 0.0722));
+        float rgb_volume_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float volume_bright = smoothstep(
+            rgb_volume_luma - 0.10,
+            rgb_volume_luma + 0.32,
+            volume_luma);
+        float volume_dark = smoothstep(
+            0.08,
+            0.34,
+            rgb_volume_luma - volume_luma);
+        float3 volume_tint = mix(
+            float3(volume_luma),
+            volume_rgb,
+            0.66 + 0.18 * glass_caustic_spread);
+        volume_tint = mix(
+            volume_tint,
+            volume_tint * (float3(1.0) + 0.20 * in.tint.rgb),
+            tint_chroma);
+        volume_tint += float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (0.18 + 0.36 * spectral_rim_tint);
+        float volume_absorption = volumetric_absorption_strength
+            * volume_depth
+            * (0.52 + 0.48 * volume_dark)
+            * (0.70 + 0.30 * glass_shadow_gain);
+        rgb = mix(
+            rgb,
+            mix(rgb, volume_tint, 0.18 + 0.16 * volume_bright),
+            volume_absorption * 0.34);
+        rgb *= 1.0 - clamp(
+            volume_absorption * (0.050 + 0.040 * volume_dark),
+            0.0,
+            0.075);
+        rgb += volume_tint
+            * volumetric_absorption_strength
+            * volume_depth
+            * volume_bright
+            * (0.014 + 0.028 * glass_caustic_spread);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
