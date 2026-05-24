@@ -3793,6 +3793,65 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     std::puts("PASS: glass effect union uses compatible render bounds");
 }
 
+void test_glass_effect_union_separates_rounded_radius_variants() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 48.0f, 48.0f, 8.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 913u,
+        .union_id = 1u,
+        .spacing = 24.0f,
+        .interactive = false,
+        .morph_transitions = false,
+    };
+    request.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 57u,
+        .effect_id = 0u,
+    };
+
+    auto peer = request;
+    peer.geometry.x = 56.0f;
+
+    auto different_radius = request;
+    different_radius.geometry.x = 112.0f;
+    different_radius.geometry.radius = 12.0f;
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(peer, sampled_environment()), 2u},
+        {plan_material_surface(different_radius, sampled_environment()), 3u},
+    };
+    assert(records[0].plan.shape.kind == MaterialShapeKind::RoundedRectangle);
+    assert(records[1].plan.shape.kind == MaterialShapeKind::RoundedRectangle);
+    assert(records[2].plan.shape.kind == MaterialShapeKind::RoundedRectangle);
+    assert(records[0].plan.shape.effective_radius
+           == records[1].plan.shape.effective_radius);
+    assert(records[0].plan.shape.effective_radius
+           != records[2].plan.shape.effective_radius);
+
+    auto const union_group =
+        accumulate_material_glass_effect_union_group(records, records[0].plan);
+    assert(union_group.surface_count == 2u);
+    assert(union_group.shape_pair_count == 1u);
+    assert(union_group.union_candidate_pair_count == 1u);
+    assert(union_group.min_x == 0.0f);
+    assert(union_group.max_x == 104.0f);
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const peer_execution =
+        material_container_execution_descriptor(records[1], records);
+    auto const different_radius_execution =
+        material_container_execution_descriptor(records[2], records);
+    assert(first_execution.union_execution);
+    assert(peer_execution.union_execution);
+    assert(!different_radius_execution.union_execution);
+    assert(first_execution.group_w == 104.0f);
+    assert(first_execution.group_radius == 8.0f);
+
+    std::puts(
+        "PASS: glass effect union separates rounded radius variants");
+}
+
 void test_glass_effect_union_aggregates_member_interaction() {
     auto request = regular_request();
     request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 20.0f};
@@ -4264,6 +4323,7 @@ int main() {
     test_container_group_surface_aggregates_clear_member_appearance();
     test_container_member_fallback_paint_uses_proximity_cluster();
     test_glass_effect_union_uses_compatible_render_bounds();
+    test_glass_effect_union_separates_rounded_radius_variants();
     test_glass_effect_union_aggregates_member_interaction();
     test_glass_effect_union_combines_at_rest_without_spacing();
     test_glass_effect_union_sample_budget_uses_leader_bounds();
