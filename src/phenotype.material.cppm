@@ -2777,6 +2777,17 @@ inline bool material_plans_share_glass_effect_id(
         && a.glass_identity.effect_id == b.glass_identity.effect_id;
 }
 
+inline bool material_plans_share_glass_effect_union_namespace(
+        MaterialPlan const& a,
+        MaterialPlan const& b) noexcept {
+    if (a.glass_identity.namespace_id == 0u
+        && b.glass_identity.namespace_id == 0u) {
+        return true;
+    }
+    return a.glass_identity.namespace_id != 0u
+        && a.glass_identity.namespace_id == b.glass_identity.namespace_id;
+}
+
 inline bool material_plans_share_glass_effect_union(
         MaterialPlan const& a,
         MaterialPlan const& b) noexcept {
@@ -2785,6 +2796,7 @@ inline bool material_plans_share_glass_effect_union(
         && a.container.container_id == b.container.container_id
         && a.container.union_id != 0u
         && a.container.union_id == b.container.union_id
+        && material_plans_share_glass_effect_union_namespace(a, b)
         && a.kind == b.kind
         && a.shape.valid
         && b.shape.valid
