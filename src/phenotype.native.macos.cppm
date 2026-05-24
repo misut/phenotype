@@ -16174,10 +16174,20 @@ fragment float4 fs_material(
             + 0.014 * liquid_response_strength
             + 0.012 * depth_aperture_strength
             + 0.012 * reflection_finish_strength
-            + 0.012 * content_focus_strength,
+            + 0.012 * content_focus_strength
+            + 0.010 * shared_shell_strength
+            + 0.010 * spacing_meniscus_strength,
         0.0,
         0.095);
     if (edge_caustic_strength > 0.0001) {
+        float caustic_contact = clamp(
+            spacing_meniscus_strength * 6.0
+                + shared_shell_strength * 4.8
+                + shared_membrane_strength * 3.6
+                + bridge_cohesion * 0.26
+                + glass_effect_match_execution * group_blend_strength * 0.18,
+            0.0,
+            1.0);
         float caustic_rim = edge_lens
             * (0.36
                + 0.64
@@ -16189,7 +16199,8 @@ fragment float4 fs_material(
             pointer_lens * pointer_lens_strength
                 + bridge_band * (0.28 + 0.72 * bridge_core)
                 + surface_tension_strength * 0.46
-                + specular_intensity * 0.24,
+                + specular_intensity * 0.24
+                + caustic_contact * 0.18,
             0.0,
             1.0);
         float caustic_gate = clamp(
@@ -16197,12 +16208,14 @@ fragment float4 fs_material(
                 + caustic_interaction * 0.24
                 + dynamic_light_highlight * 0.20
                 + spectral_dispersion * 0.16
-                + clear_glass_detail * 0.14,
+                + clear_glass_detail * 0.14
+                + caustic_contact * 0.16,
             0.0,
             1.0);
         float2 caustic_tangent_raw =
             float2(-refraction_dir.y, refraction_dir.x)
             + bridge_dir * bridge_band * (0.18 + 0.12 * bridge_core)
+            + bridge_tangent * caustic_contact * (0.12 + 0.10 * bridge_core)
             + pointer_dir * pointer_lens * pointer_lens_strength * 0.14
             + float2(-dynamic_light_dir.y, dynamic_light_dir.x)
                 * (0.18 + 0.12 * dynamic_light_highlight);
@@ -16219,6 +16232,7 @@ fragment float4 fs_material(
                     * (7.0 + 4.0 * clear_glass_detail)
                 + dot(normalized_local, dynamic_light_dir) * 2.8
                 + bridge_shear * bridge_band * 2.2
+                + caustic_contact * 1.8
                 + specular_intensity * 1.6,
             -9.0,
             9.0);
@@ -16336,7 +16350,8 @@ fragment float4 fs_material(
                + 0.24 * caustic_spark
                + 0.18 * caustic_rim
                + 0.16 * caustic_interaction
-               + 0.12 * caustic_contrast);
+               + 0.12 * caustic_contrast
+               + 0.10 * caustic_contact);
         rgb = mix(
             rgb,
             clamp(caustic_layer, 0.0, 1.0),
@@ -16357,6 +16372,226 @@ fragment float4 fs_material(
         rgb += caustic_neutral * clamp(caustic_dark_lift, 0.0, 0.018);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float edge_contact_caustic_strength = clamp(
+        0.014 * spacing_meniscus_strength
+            + 0.012 * shared_shell_strength
+            + 0.010 * shared_membrane_strength
+            + 0.012 * edge_caustic_strength
+            + 0.010 * bridge_cohesion
+            + 0.010 * liquid_response_strength
+            + 0.010 * reflection_finish_strength
+            + 0.008 * glass_effect_match_execution * group_blend_strength
+            + 0.008 * morph_execution * group_blend_strength,
+        0.0,
+        0.085);
+    if (edge_contact_caustic_strength > 0.0001) {
+        float contact_bridge = bridge_band
+            * (0.30 + 0.70 * bridge_core);
+        float contact_rim = edge_lens
+            * (0.34
+               + 0.66
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.22, 0.5),
+                       signed_edge_distance)));
+        float contact_group_rim = 0.0;
+        if (in.group_rect.z > 0.0 && in.group_rect.w > 0.0) {
+            float2 contact_group_size = max(in.group_rect.zw, float2(1.0));
+            float2 contact_group_local = clamp(
+                in.screen_pos - in.group_rect.xy,
+                float2(0.0),
+                contact_group_size);
+            float2 contact_group_edge = min(
+                contact_group_local,
+                max(contact_group_size - contact_group_local, float2(0.0)));
+            float contact_group_edge_distance =
+                min(contact_group_edge.x, contact_group_edge.y);
+            contact_group_rim =
+                1.0 - smoothstep(
+                    0.0,
+                    max(edge_bevel_width * 2.5, 1.0),
+                    contact_group_edge_distance);
+        }
+        float contact_transition = clamp(
+            glass_effect_match_execution * 0.30
+                + morph_execution * 0.26
+                + union_execution * 0.18
+                + shape_blend_execution * 0.14
+                + spacing_meniscus_strength * 4.2,
+            0.0,
+            1.0);
+        float contact_gate = clamp(
+            contact_bridge * 0.30
+                + contact_rim * 0.26
+                + contact_group_rim * 0.22
+                + contact_transition * group_blend_strength * 0.20
+                + edge_caustic_strength * 2.0
+                + shared_shell_strength * 2.2,
+            0.0,
+            1.0);
+        float2 contact_axis_raw =
+            bridge_dir * (0.40 + 0.24 * contact_bridge)
+            + bridge_tangent
+                * bridge_shear
+                * contact_bridge
+                * (0.34 + 0.18 * contact_transition)
+            + refraction_dir * (0.24 + 0.18 * contact_rim)
+            - dynamic_light_dir
+                * (0.20 + 0.14 * dynamic_light_highlight);
+        float contact_axis_len = length(contact_axis_raw);
+        float2 contact_axis = contact_axis_len > 0.0001
+            ? contact_axis_raw / contact_axis_len
+            : refraction_dir;
+        float2 contact_cross = float2(-contact_axis.y, contact_axis.x);
+        float contact_alignment =
+            smoothstep(-0.35, 0.78, dot(contact_axis, bridge_dir));
+        float contact_phase = clamp(
+            bridge_axial * (10.5 + 4.5 * contact_transition)
+                + bridge_shear * contact_bridge * 3.4
+                + dot(normalized_local, contact_cross)
+                    * (3.2 + 2.0 * contact_rim)
+                + dynamic_light_highlight * 2.0,
+            -10.0,
+            10.0);
+        float contact_wave = 0.5 + 0.5 * sin(contact_phase);
+        float contact_pinch =
+            1.0 - smoothstep(0.0, 0.33, abs(contact_wave - 0.55));
+        float contact_span =
+            (0.82
+             + 1.8 * glass_thickness
+             + 1.3 * clear_glass_detail
+             + 1.1 * contact_gate
+             + 0.045 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float contact_cross_span =
+            (0.66
+             + 1.3 * glass_dispersion_tangential
+             + 1.4 * spectral_dispersion
+             + 1.0 * contact_transition)
+            * content_scale;
+        float2 contact_front_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.22
+                + contact_axis
+                    * texel
+                    * contact_span
+                    * (0.28 + 0.16 * contact_wave)
+                - dynamic_light_dir
+                    * texel
+                    * contact_span
+                    * (0.10 + 0.10 * contact_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 contact_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                - contact_axis
+                    * texel
+                    * contact_span
+                    * (0.30 + 0.14 * contact_pinch),
+            float2(0.0),
+            float2(1.0));
+        float2 contact_upper_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + contact_cross
+                    * texel
+                    * contact_cross_span
+                    * (0.30 + 0.16 * contact_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 contact_lower_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                - contact_cross
+                    * texel
+                    * contact_cross_span
+                    * (0.28 + 0.16 * contact_pinch),
+            float2(0.0),
+            float2(1.0));
+        float3 contact_front_rgb =
+            backdrop.sample(samp, contact_front_uv).rgb;
+        float3 contact_back_rgb =
+            backdrop.sample(samp, contact_back_uv).rgb;
+        float3 contact_upper_rgb =
+            backdrop.sample(samp, contact_upper_uv).rgb;
+        float3 contact_lower_rgb =
+            backdrop.sample(samp, contact_lower_uv).rgb;
+        float3 contact_probe =
+            contact_front_rgb * 0.34
+            + contact_back_rgb * 0.30
+            + contact_upper_rgb * 0.18
+            + contact_lower_rgb * 0.18;
+        float contact_probe_luma =
+            dot(contact_probe, float3(0.2126, 0.7152, 0.0722));
+        float contact_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float contact_contrast = clamp(
+            length(contact_front_rgb - contact_back_rgb) * 0.32
+                + length(contact_upper_rgb - contact_lower_rgb) * 0.28
+                + abs(contact_probe_luma - contact_surface_luma) * 0.20
+                + contact_pinch * 0.10,
+            0.0,
+            1.0);
+        float contact_spark = smoothstep(
+            0.10,
+            0.64,
+            contact_contrast * 0.42
+                + contact_rim * 0.24
+                + contact_group_rim * 0.18
+                + contact_pinch * 0.20
+                + dynamic_light_highlight * 0.20);
+        float contact_dark = smoothstep(
+            0.08,
+            0.34,
+            contact_surface_luma - contact_probe_luma);
+        float3 contact_neutral = mix(
+            contact_probe,
+            float3(contact_probe_luma),
+            contact_dark * (0.16 + 0.16 * glass_shadow_gain));
+        float3 contact_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        float3 contact_layer =
+            contact_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.026
+                      + 0.040 * tint_chroma * prominent_intensity));
+        contact_layer += contact_prism
+            * contact_spark
+            * (0.006
+               + 0.012 * spectral_rim_tint
+               + 0.010 * glass_prismatic_gain);
+        float contact_weight = edge_contact_caustic_strength
+            * contact_gate
+            * (0.30
+               + 0.22 * contact_spark
+               + 0.18 * contact_pinch
+               + 0.16 * contact_alignment
+               + 0.14 * contact_transition);
+        rgb = mix(
+            rgb,
+            mix(rgb,
+                clamp(contact_layer, 0.0, 1.0),
+                0.18 + 0.18 * contact_spark),
+            contact_weight * 0.42);
+        rgb += contact_layer
+            * contact_weight
+            * contact_pinch
+            * (0.005
+               + 0.014 * dynamic_light_highlight
+               + 0.010 * glass_scattering_gain);
+        float contact_shadow =
+            contact_dark
+            * contact_weight
+            * (0.008 + 0.018 * glass_shadow_gain)
+            * (0.58 + 0.42 * (1.0 - contact_alignment));
+        rgb *= 1.0 - clamp(contact_shadow, 0.0, 0.046);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float surface_sheen_strength = clamp(
         0.010 * clear_glass_detail
             + 0.010 * clear_glass_contrast
@@ -16365,6 +16600,7 @@ fragment float4 fs_material(
             + 0.014 * spectral_rim_tint
             + 0.012 * reflection_finish_strength
             + 0.012 * edge_caustic_strength
+            + 0.012 * edge_contact_caustic_strength
             + 0.010 * content_focus_strength
             + 0.010 * liquid_response_strength,
         0.0,
@@ -16551,6 +16787,7 @@ fragment float4 fs_material(
             + 0.012 * depth_aperture_strength
             + 0.012 * content_focus_strength
             + 0.012 * edge_caustic_strength
+            + 0.010 * edge_contact_caustic_strength
             + 0.010 * surface_sheen_strength
             + 0.010 * liquid_response_strength
             + 0.008 * bridge_motion_strength * bridge_band,
@@ -16755,7 +16992,8 @@ fragment float4 fs_material(
             + 0.012 * parallax_depth_strength
             + 0.010 * depth_aperture_strength
             + 0.010 * content_focus_strength
-            + 0.008 * edge_caustic_strength,
+            + 0.008 * edge_caustic_strength
+            + 0.008 * edge_contact_caustic_strength,
         0.0,
         0.090);
     if (depth_occlusion_strength > 0.0001) {
@@ -16928,6 +17166,7 @@ fragment float4 fs_material(
             + 0.012 * depth_occlusion_strength
             + 0.010 * parallax_depth_strength
             + 0.010 * edge_caustic_strength
+            + 0.008 * edge_contact_caustic_strength
             + 0.008 * surface_sheen_strength
             + 0.008 * reflection_finish_strength,
         0.0,
@@ -17107,6 +17346,7 @@ fragment float4 fs_material(
             + 0.010 * depth_occlusion_strength
             + 0.010 * parallax_depth_strength
             + 0.008 * surface_sheen_strength
+            + 0.006 * edge_contact_caustic_strength
             + 0.008 * liquid_response_strength,
         0.0,
         0.085);
@@ -17287,6 +17527,7 @@ fragment float4 fs_material(
             + 0.008 * dynamic_light_highlight
             + 0.008 * edge_absorption_strength
             + 0.006 * internal_diffusion_strength
+            + 0.006 * edge_contact_caustic_strength
             + 0.006 * liquid_response_strength,
         0.0,
         0.070);
