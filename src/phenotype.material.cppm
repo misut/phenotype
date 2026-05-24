@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 76;
+inline constexpr std::uint32_t material_plan_contract_version = 77;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -721,11 +721,17 @@ struct MaterialScrollEdgeProfile {
     bool backdrop_driven = false;
     bool contrast_driven = false;
     bool hard_style = false;
+    bool legibility_driven = false;
     bool bounded = true;
+    float response_strength = 0.0f;
     float fade_extent_pixels = 0.0f;
     float dissolve_strength = 0.0f;
     float dimming_strength = 0.0f;
     float hard_style_strength = 0.0f;
+    float opacity_delta = 0.0f;
+    float tint_alpha_delta = 0.0f;
+    float luminance_floor_delta = 0.0f;
+    float edge_highlight_delta = 0.0f;
 };
 
 struct MaterialClearGlassLegibilityProfile {
@@ -921,10 +927,15 @@ struct MaterialOpticalComposition {
     float glass_dispersion_tangential_offset = 0.0f;
     float glass_dispersion_prismatic_gain = 1.0f;
     float glass_dispersion_caustic_spread = 0.0f;
+    float scroll_edge_response = 0.0f;
     float scroll_edge_extent = 0.0f;
     float scroll_edge_dissolve = 0.0f;
     float scroll_edge_dimming = 0.0f;
     float scroll_edge_hard_style = 0.0f;
+    float scroll_edge_opacity_delta = 0.0f;
+    float scroll_edge_tint_alpha_delta = 0.0f;
+    float scroll_edge_luminance_floor_delta = 0.0f;
+    float scroll_edge_edge_highlight_delta = 0.0f;
     float prominent_glass_intensity = 0.0f;
     float prominent_glass_tint_weight = 0.0f;
     float prominent_glass_edge_lift = 0.0f;
@@ -8031,6 +8042,13 @@ inline MaterialScrollEdgeProfile material_resolve_scroll_edge_profile(
         flat_mid_luma * (0.30f + 0.30f * role_scale),
         0.0f,
         0.56f);
+    profile.response_strength = std::clamp(
+        0.36f * (profile.dissolve_strength / 0.46f)
+            + 0.40f * (profile.dimming_strength / 0.36f)
+            + 0.30f * (profile.hard_style_strength / 0.56f)
+            + 0.10f * backdrop_response,
+        0.0f,
+        1.0f);
 
     if (profile.dissolve_strength <= 0.0001f
         && profile.dimming_strength <= 0.0001f
@@ -8052,6 +8070,63 @@ inline MaterialScrollEdgeProfile material_resolve_scroll_edge_profile(
         profile.contrast_driven,
         profile.backdrop_driven);
     return profile;
+}
+
+inline void apply_material_scroll_edge_legibility_policy(
+        MaterialPlan& plan) noexcept {
+    auto& profile = plan.scroll_edge;
+    if (!profile.active
+        || !plan.backdrop_sampling
+        || plan.fallback()
+        || plan.kind == MaterialKind::None) {
+        return;
+    }
+
+    auto const response =
+        std::clamp(profile.response_strength, 0.0f, 1.0f);
+    if (response <= 0.0001f)
+        return;
+
+    auto const dissolve =
+        std::clamp(profile.dissolve_strength / 0.46f, 0.0f, 1.0f);
+    auto const dimming =
+        std::clamp(profile.dimming_strength / 0.36f, 0.0f, 1.0f);
+    auto const hard =
+        std::clamp(profile.hard_style_strength / 0.56f, 0.0f, 1.0f);
+    auto const contrast =
+        profile.contrast_driven ? 1.0f : 0.0f;
+
+    profile.opacity_delta = material_apply_scalar_delta(
+        plan.opacity,
+        response * (0.010f + 0.020f * dimming + 0.014f * hard),
+        0.0f,
+        0.96f);
+    profile.tint_alpha_delta = material_apply_tint_alpha_delta(
+        plan.tint,
+        response
+            * (0.012f
+               + 0.018f * dissolve
+               + 0.016f * dimming
+               + 0.010f * hard));
+    profile.luminance_floor_delta = material_apply_scalar_delta(
+        plan.luminance_floor,
+        response * (0.006f + 0.016f * dimming + 0.014f * hard),
+        0.0f,
+        0.32f);
+    profile.edge_highlight_delta = material_apply_scalar_delta(
+        plan.edge_highlight,
+        response
+            * (0.008f
+               + 0.014f * dissolve
+               + 0.016f * hard
+               + 0.006f * contrast),
+        0.0f,
+        1.0f);
+    profile.legibility_driven =
+        std::fabs(profile.opacity_delta) > 0.0001f
+        || std::fabs(profile.tint_alpha_delta) > 0.0001f
+        || std::fabs(profile.luminance_floor_delta) > 0.0001f
+        || std::fabs(profile.edge_highlight_delta) > 0.0001f;
 }
 
 inline char const* material_clear_glass_legibility_source_name(
@@ -8831,11 +8906,20 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.glass_dispersion.prismatic_gain;
     composition.glass_dispersion_caustic_spread =
         plan.glass_dispersion.caustic_spread;
+    composition.scroll_edge_response = plan.scroll_edge.response_strength;
     composition.scroll_edge_extent = plan.scroll_edge.fade_extent_pixels;
     composition.scroll_edge_dissolve = plan.scroll_edge.dissolve_strength;
     composition.scroll_edge_dimming = plan.scroll_edge.dimming_strength;
     composition.scroll_edge_hard_style =
         plan.scroll_edge.hard_style_strength;
+    composition.scroll_edge_opacity_delta =
+        plan.scroll_edge.opacity_delta;
+    composition.scroll_edge_tint_alpha_delta =
+        plan.scroll_edge.tint_alpha_delta;
+    composition.scroll_edge_luminance_floor_delta =
+        plan.scroll_edge.luminance_floor_delta;
+    composition.scroll_edge_edge_highlight_delta =
+        plan.scroll_edge.edge_highlight_delta;
     composition.prominent_glass_intensity =
         plan.prominent_glass.intensity;
     composition.prominent_glass_tint_weight =
@@ -9247,12 +9331,13 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.refraction = material_resolve_refraction_profile(plan);
     plan.resource_budget.max_refraction_offset_pixels =
         plan.refraction.max_offset_pixels;
+    plan.glass_thickness = material_resolve_glass_thickness_profile(plan);
+    plan.scroll_edge = material_resolve_scroll_edge_profile(plan);
+    apply_material_scroll_edge_legibility_policy(plan);
     plan.edge_optics = material_resolve_edge_optics_profile(plan);
     plan.spectral_tint = material_resolve_spectral_tint_profile(plan);
     plan.dynamic_lighting = material_resolve_dynamic_lighting_profile(plan);
-    plan.glass_thickness = material_resolve_glass_thickness_profile(plan);
     plan.glass_dispersion = material_resolve_glass_dispersion_profile(plan);
-    plan.scroll_edge = material_resolve_scroll_edge_profile(plan);
     plan.clear_glass_legibility =
         material_resolve_clear_glass_legibility_profile(plan);
     plan.specular = material_resolve_specular_profile(plan);
