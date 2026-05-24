@@ -18195,6 +18195,261 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(tether_shadow, 0.0, 0.040);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float specular_handoff_strength = clamp(
+        0.014 * clear_glass_detail
+            + 0.012 * clear_glass_brightness
+            + 0.014 * glass_effect_match_execution * group_blend_strength
+            + 0.012 * morph_execution * group_blend_strength
+            + 0.010 * matched_tether_sheath_strength
+            + 0.010 * container_pressure_halo_strength
+            + 0.008 * shared_shell_strength
+            + 0.008 * edge_contact_caustic_strength
+            + 0.006 * surrounding_light_wrap_strength,
+        0.0,
+        0.074);
+    if (specular_handoff_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 handoff_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 handoff_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            handoff_group_size);
+        float2 handoff_group_norm =
+            (handoff_group_local / handoff_group_size - float2(0.5)) * 2.0;
+        float handoff_group_len = length(handoff_group_norm);
+        float handoff_center =
+            1.0 - smoothstep(0.18, 1.18, handoff_group_len);
+        float2 handoff_group_edge = min(
+            handoff_group_local,
+            max(handoff_group_size - handoff_group_local, float2(0.0)));
+        float handoff_edge_distance =
+            min(handoff_group_edge.x, handoff_group_edge.y);
+        float handoff_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.6, 1.0),
+                handoff_edge_distance);
+        float handoff_bridge = bridge_band
+            * (0.34 + 0.66 * bridge_core);
+        float handoff_transition = clamp(
+            glass_effect_match_execution * 0.34
+                + morph_execution * 0.24
+                + materialize_wave_strength * 0.16
+                + union_execution * 0.12
+                + shape_blend_execution * 0.10
+                + matched_tether_sheath_strength * 2.2,
+            0.0,
+            1.0);
+        float handoff_gate = clamp(
+            handoff_bridge * 0.30
+                + handoff_edge * 0.24
+                + handoff_center * 0.16
+                + handoff_transition * group_blend_strength * 0.22
+                + matched_tether_sheath_strength * 2.4
+                + container_pressure_halo_strength * 2.0,
+            0.0,
+            1.0);
+        float2 handoff_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 handoff_group_center_screen =
+            in.group_rect.xy + handoff_group_size * 0.5;
+        float2 handoff_group_center_uv = clamp(
+            handoff_group_center_screen / handoff_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 handoff_to_center =
+            handoff_group_center_uv - in.screen_uv;
+        float handoff_center_distance = length(handoff_to_center);
+        float2 handoff_center_dir =
+            handoff_center_distance > 0.0001
+                ? handoff_to_center / handoff_center_distance
+                : refraction_dir;
+        float2 handoff_axis_raw =
+            dynamic_light_dir
+                * (0.42 + 0.24 * dynamic_light_highlight)
+            + bridge_dir * (0.34 + 0.22 * handoff_bridge)
+            + handoff_center_dir * (0.24 + 0.18 * handoff_center)
+            + refraction_dir * (0.16 + 0.12 * handoff_edge);
+        float handoff_axis_len = length(handoff_axis_raw);
+        float2 handoff_axis = handoff_axis_len > 0.0001
+            ? handoff_axis_raw / handoff_axis_len
+            : refraction_dir;
+        float2 handoff_cross =
+            float2(-handoff_axis.y, handoff_axis.x);
+        float handoff_alignment =
+            smoothstep(-0.26, 0.88, dot(handoff_axis, bridge_dir));
+        float handoff_phase = clamp(
+            dot(handoff_group_norm, handoff_axis)
+                    * (5.8 + 2.8 * handoff_transition)
+                + dot(handoff_group_norm, handoff_cross)
+                    * (2.2 + 1.6 * handoff_bridge)
+                + bridge_axial * (3.4 + 2.4 * handoff_bridge)
+                + bridge_shear * handoff_bridge * 2.2
+                + dynamic_light_highlight * 2.0,
+            -10.0,
+            10.0);
+        float handoff_wave = 0.5 + 0.5 * sin(handoff_phase);
+        float handoff_glint =
+            1.0 - smoothstep(0.0, 0.29, abs(handoff_wave - 0.62));
+        float handoff_span =
+            (0.78
+             + 1.8 * glass_thickness
+             + 1.3 * clear_glass_detail
+             + 1.0 * handoff_gate
+             + 0.040 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float handoff_cross_span =
+            (0.58
+             + 1.1 * glass_dispersion_tangential
+             + 1.3 * spectral_dispersion
+             + 0.8 * handoff_transition)
+            * content_scale;
+        float2 handoff_light_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + handoff_axis
+                    * texel
+                    * handoff_span
+                    * (0.34 + 0.18 * handoff_glint),
+            float2(0.0),
+            float2(1.0));
+        float2 handoff_bridge_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - handoff_axis
+                    * texel
+                    * handoff_span
+                    * (0.26 + 0.14 * handoff_wave)
+                + bridge_tangent
+                    * texel
+                    * handoff_cross_span
+                    * bridge_shear
+                    * handoff_bridge
+                    * (0.16 + 0.12 * handoff_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 handoff_shoulder_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.15
+                + handoff_cross
+                    * texel
+                    * handoff_cross_span
+                    * (0.28 + 0.16 * handoff_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 handoff_counter_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.13
+                - handoff_cross
+                    * texel
+                    * handoff_cross_span
+                    * (0.24 + 0.14 * handoff_glint)
+                - handoff_center_dir
+                    * texel
+                    * handoff_span
+                    * (0.10 + 0.10 * handoff_transition),
+            float2(0.0),
+            float2(1.0));
+        float3 handoff_light_rgb =
+            backdrop.sample(samp, handoff_light_uv).rgb;
+        float3 handoff_bridge_rgb =
+            backdrop.sample(samp, handoff_bridge_uv).rgb;
+        float3 handoff_shoulder_rgb =
+            backdrop.sample(samp, handoff_shoulder_uv).rgb;
+        float3 handoff_counter_rgb =
+            backdrop.sample(samp, handoff_counter_uv).rgb;
+        float3 handoff_probe =
+            handoff_light_rgb * 0.36
+            + handoff_bridge_rgb * 0.28
+            + handoff_shoulder_rgb * 0.20
+            + handoff_counter_rgb * 0.16;
+        float handoff_luma =
+            dot(handoff_probe, float3(0.2126, 0.7152, 0.0722));
+        float handoff_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float handoff_range = clamp(
+            length(handoff_light_rgb - handoff_bridge_rgb) * 0.30
+                + length(handoff_shoulder_rgb - handoff_counter_rgb) * 0.24
+                + abs(handoff_luma - handoff_surface_luma) * 0.22
+                + handoff_glint * 0.10,
+            0.0,
+            1.0);
+        float handoff_coherence =
+            1.0 - smoothstep(0.08, 0.36, handoff_range);
+        float handoff_bright = smoothstep(
+            handoff_surface_luma - 0.07,
+            handoff_surface_luma + 0.28,
+            handoff_luma);
+        float handoff_dark = smoothstep(
+            0.08,
+            0.34,
+            handoff_surface_luma - handoff_luma);
+        float handoff_fresnel = clamp(
+            handoff_glint * 0.36
+                + handoff_edge * 0.24
+                + handoff_alignment * 0.18
+                + handoff_transition * 0.14
+                + dynamic_light_highlight * 0.12,
+            0.0,
+            1.0);
+        float3 handoff_neutral = mix(
+            handoff_probe,
+            float3(handoff_luma),
+            handoff_dark * (0.12 + 0.16 * glass_shadow_gain)
+                + handoff_coherence * 0.15);
+        float3 handoff_layer =
+            handoff_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.022
+                      + 0.036 * tint_chroma * prominent_intensity));
+        float3 handoff_glint_tint = mix(
+            float3(1.0),
+            float3(
+                spectral_warmth,
+                0.14 * (spectral_warmth + spectral_coolness),
+                spectral_coolness),
+            clamp(0.20 + 0.45 * spectral_rim_tint, 0.0, 1.0));
+        handoff_layer += handoff_glint_tint
+            * handoff_fresnel
+            * (0.004
+               + 0.012 * spectral_rim_tint
+               + 0.008 * glass_prismatic_gain);
+        float handoff_weight = specular_handoff_strength
+            * handoff_gate
+            * (0.30
+               + 0.22 * handoff_fresnel
+               + 0.16 * handoff_coherence
+               + 0.16 * handoff_bright
+               + 0.16 * handoff_alignment);
+        rgb = mix(
+            rgb,
+            mix(rgb, clamp(handoff_layer, 0.0, 1.0),
+                0.14 + 0.20 * handoff_fresnel),
+            handoff_weight * 0.38);
+        rgb += handoff_glint_tint
+            * handoff_weight
+            * handoff_glint
+            * (0.003
+               + 0.010 * dynamic_light_highlight
+               + 0.010 * glass_scattering_gain);
+        float handoff_shadow =
+            handoff_dark
+            * handoff_weight
+            * (0.006 + 0.014 * glass_shadow_gain)
+            * (0.56 + 0.44 * (1.0 - handoff_alignment));
+        rgb *= 1.0 - clamp(handoff_shadow, 0.0, 0.034);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
