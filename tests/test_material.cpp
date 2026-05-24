@@ -2598,6 +2598,54 @@ void test_glass_effect_matched_geometry_uses_nearby_namespace_source() {
            == records[0].plan.clear_glass_legibility.dimming_strength);
     assert(target_execution.glass_effect_match_appearance_clear_glass_contrast
            == records[0].plan.clear_glass_legibility.contrast_lift);
+    assert(target_execution.glass_effect_match_appearance_refraction_active);
+    assert(target_execution.glass_effect_match_appearance_refraction_strength
+           == records[0].plan.refraction.strength);
+    assert(target_execution.glass_effect_match_appearance_refraction_edge_bias
+           == records[0].plan.refraction.edge_bias);
+    assert(target_execution
+               .glass_effect_match_appearance_refraction_max_offset_pixels
+           == records[0].plan.refraction.max_offset_pixels);
+    assert(target_execution
+               .glass_effect_match_appearance_refraction_edge_caustic_intensity
+           == records[0].plan.refraction.edge_caustic_intensity);
+    assert(target_execution
+               .glass_effect_match_appearance_dynamic_lighting_active);
+    assert(target_execution
+               .glass_effect_match_appearance_dynamic_light_direction_x
+           == records[0].plan.dynamic_lighting.direction_x);
+    assert(target_execution
+               .glass_effect_match_appearance_dynamic_light_direction_y
+           == records[0].plan.dynamic_lighting.direction_y);
+    assert(target_execution
+               .glass_effect_match_appearance_dynamic_light_highlight
+           == records[0].plan.dynamic_lighting.highlight_strength);
+    assert(target_execution.glass_effect_match_appearance_dynamic_light_shadow
+           == records[0].plan.dynamic_lighting.shadow_strength);
+    assert(target_execution
+               .glass_effect_match_appearance_glass_thickness_active);
+    assert(target_execution.glass_effect_match_appearance_glass_thickness
+           == records[0].plan.glass_thickness.thickness);
+    assert(target_execution.glass_effect_match_appearance_glass_lensing_gain
+           == records[0].plan.glass_thickness.lensing_gain);
+    assert(target_execution.glass_effect_match_appearance_glass_shadow_gain
+           == records[0].plan.glass_thickness.shadow_gain);
+    assert(target_execution.glass_effect_match_appearance_glass_scattering_gain
+           == records[0].plan.glass_thickness.scattering_gain);
+    assert(target_execution
+               .glass_effect_match_appearance_glass_dispersion_active);
+    assert(target_execution
+               .glass_effect_match_appearance_glass_dispersion_axial_offset
+           == records[0].plan.glass_dispersion.axial_offset_pixels);
+    assert(target_execution
+               .glass_effect_match_appearance_glass_dispersion_tangential_offset
+           == records[0].plan.glass_dispersion.tangential_offset_pixels);
+    assert(target_execution
+               .glass_effect_match_appearance_glass_dispersion_prismatic_gain
+           == records[0].plan.glass_dispersion.prismatic_gain);
+    assert(target_execution
+               .glass_effect_match_appearance_glass_dispersion_caustic_spread
+           == records[0].plan.glass_dispersion.caustic_spread);
     assert(!target_execution.group_appearance_source_valid);
     assert(std::string_view{target_execution.execution_policy}
            == "glass-effect-matched-geometry");

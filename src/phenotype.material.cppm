@@ -1707,6 +1707,26 @@ struct MaterialContainerExecutionDescriptor {
     float glass_effect_match_appearance_clear_glass_contrast = 0.0f;
     float glass_effect_match_appearance_clear_glass_brightness_response = 0.0f;
     float glass_effect_match_appearance_clear_glass_detail_response = 0.0f;
+    bool glass_effect_match_appearance_refraction_active = false;
+    float glass_effect_match_appearance_refraction_strength = 0.0f;
+    float glass_effect_match_appearance_refraction_edge_bias = 0.0f;
+    float glass_effect_match_appearance_refraction_max_offset_pixels = 0.0f;
+    float glass_effect_match_appearance_refraction_edge_caustic_intensity = 0.0f;
+    bool glass_effect_match_appearance_dynamic_lighting_active = false;
+    float glass_effect_match_appearance_dynamic_light_direction_x = 0.0f;
+    float glass_effect_match_appearance_dynamic_light_direction_y = 0.0f;
+    float glass_effect_match_appearance_dynamic_light_highlight = 0.0f;
+    float glass_effect_match_appearance_dynamic_light_shadow = 0.0f;
+    bool glass_effect_match_appearance_glass_thickness_active = false;
+    float glass_effect_match_appearance_glass_thickness = 0.0f;
+    float glass_effect_match_appearance_glass_lensing_gain = 1.0f;
+    float glass_effect_match_appearance_glass_shadow_gain = 1.0f;
+    float glass_effect_match_appearance_glass_scattering_gain = 1.0f;
+    bool glass_effect_match_appearance_glass_dispersion_active = false;
+    float glass_effect_match_appearance_glass_dispersion_axial_offset = 0.0f;
+    float glass_effect_match_appearance_glass_dispersion_tangential_offset = 0.0f;
+    float glass_effect_match_appearance_glass_dispersion_prismatic_gain = 1.0f;
+    float glass_effect_match_appearance_glass_dispersion_caustic_spread = 0.0f;
     bool group_interaction_source_valid = false;
     std::uint32_t group_interaction_source_command_index = 0;
     float group_interaction_specular_anchor_x = 0.5f;
@@ -3804,6 +3824,55 @@ inline void material_apply_glass_effect_match_appearance_source(
         source_plan.clear_glass_legibility.brightness_response;
     execution.glass_effect_match_appearance_clear_glass_detail_response =
         source_plan.clear_glass_legibility.detail_response;
+
+    execution.glass_effect_match_appearance_refraction_active =
+        source_plan.refraction.active || target_plan.refraction.active;
+    execution.glass_effect_match_appearance_refraction_strength =
+        source_plan.refraction.strength;
+    execution.glass_effect_match_appearance_refraction_edge_bias =
+        source_plan.refraction.edge_bias;
+    execution.glass_effect_match_appearance_refraction_max_offset_pixels =
+        source_plan.refraction.max_offset_pixels;
+    execution
+        .glass_effect_match_appearance_refraction_edge_caustic_intensity =
+            source_plan.refraction.edge_caustic_intensity;
+
+    execution.glass_effect_match_appearance_dynamic_lighting_active =
+        source_plan.dynamic_lighting.active
+        || target_plan.dynamic_lighting.active;
+    execution.glass_effect_match_appearance_dynamic_light_direction_x =
+        source_plan.dynamic_lighting.direction_x;
+    execution.glass_effect_match_appearance_dynamic_light_direction_y =
+        source_plan.dynamic_lighting.direction_y;
+    execution.glass_effect_match_appearance_dynamic_light_highlight =
+        source_plan.dynamic_lighting.highlight_strength;
+    execution.glass_effect_match_appearance_dynamic_light_shadow =
+        source_plan.dynamic_lighting.shadow_strength;
+
+    execution.glass_effect_match_appearance_glass_thickness_active =
+        source_plan.glass_thickness.active
+        || target_plan.glass_thickness.active;
+    execution.glass_effect_match_appearance_glass_thickness =
+        source_plan.glass_thickness.thickness;
+    execution.glass_effect_match_appearance_glass_lensing_gain =
+        source_plan.glass_thickness.lensing_gain;
+    execution.glass_effect_match_appearance_glass_shadow_gain =
+        source_plan.glass_thickness.shadow_gain;
+    execution.glass_effect_match_appearance_glass_scattering_gain =
+        source_plan.glass_thickness.scattering_gain;
+
+    execution.glass_effect_match_appearance_glass_dispersion_active =
+        source_plan.glass_dispersion.active
+        || target_plan.glass_dispersion.active;
+    execution.glass_effect_match_appearance_glass_dispersion_axial_offset =
+        source_plan.glass_dispersion.axial_offset_pixels;
+    execution
+        .glass_effect_match_appearance_glass_dispersion_tangential_offset =
+            source_plan.glass_dispersion.tangential_offset_pixels;
+    execution.glass_effect_match_appearance_glass_dispersion_prismatic_gain =
+        source_plan.glass_dispersion.prismatic_gain;
+    execution.glass_effect_match_appearance_glass_dispersion_caustic_spread =
+        source_plan.glass_dispersion.caustic_spread;
 }
 
 inline MaterialGlassEffectMotionOptics material_glass_effect_match_motion_optics(
