@@ -6716,6 +6716,180 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(membrane_shadow, 0.0, 0.08);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float morph_field_strength = clamp(
+        bridge_band
+            * group_blend_strength
+            * (0.26 + 0.36 * bridge_core)
+        + coalescence_strength * 0.34
+        + fusion_strength * bridge_band * 0.22
+        + surface_tension_strength * 1.65,
+        0.0,
+        0.42);
+    if (morph_field_strength > 0.0001 && bridge_dir_length > 0.0001) {
+        float morph_core =
+            1.0 - smoothstep(
+                max(bridge_width * 0.20, 0.001),
+                bridge_width + 0.10,
+                bridge_lateral);
+        float morph_shoulder =
+            smoothstep(
+                max(bridge_width * 0.36, 0.001),
+                bridge_width + 0.05,
+                bridge_lateral)
+            * (1.0 - smoothstep(
+                bridge_width + 0.05,
+                bridge_width + 0.24,
+                bridge_lateral));
+        float morph_axial =
+            1.0 - smoothstep(
+                max(bridge_length * 0.58, 0.001),
+                bridge_length + 0.24,
+                bridge_axial);
+        float morph_gate = clamp(
+            morph_axial
+                * (0.46 * morph_core + 0.54 * morph_shoulder)
+                * (0.56 + 0.44 * edge_lens),
+            0.0,
+            1.0);
+        float morph_alignment = smoothstep(
+            -0.38,
+            1.0,
+            dot(bridge_dir, -dynamic_light_dir));
+        float morph_phase =
+            bridge_axial * (12.0 + 6.0 * group_blend_strength)
+            - abs(bridge_lateral_signed)
+                * (10.0 + 5.0 * bridge_flow_offset_gain)
+            + fusion_strength * 8.0
+            + coalescence_strength * 5.0;
+        float morph_wave = 0.5 + 0.5 * sin(morph_phase);
+        float morph_pinched =
+            1.0 - smoothstep(0.0, 0.32, abs(morph_wave - 0.58));
+        float morph_span =
+            (2.2
+             + 5.6 * glass_thickness
+             + 4.0 * glass_caustic_spread
+             + 0.12 * blur_points)
+            * content_scale
+            * (0.74 + 0.26 * glass_lensing_gain);
+        float morph_lateral_span =
+            (1.2
+             + 2.8 * glass_thickness
+             + 2.2 * glass_dispersion_tangential
+             + 4.0 * spectral_dispersion)
+            * content_scale;
+        float morph_shear_sign = bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 morph_forward_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.58
+                + bridge_dir
+                    * texel
+                    * morph_span
+                    * (0.54 + 0.30 * morph_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 morph_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                - bridge_dir
+                    * texel
+                    * morph_span
+                    * (0.40 + 0.28 * morph_pinched),
+            float2(0.0),
+            float2(1.0));
+        float2 morph_upper_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.42
+                + bridge_tangent
+                    * texel
+                    * morph_lateral_span
+                    * (0.64 + 0.24 * abs(bridge_shear))
+                    * morph_shear_sign,
+            float2(0.0),
+            float2(1.0));
+        float2 morph_lower_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.42
+                - bridge_tangent
+                    * texel
+                    * morph_lateral_span
+                    * (0.52 + 0.22 * morph_pinched)
+                    * morph_shear_sign,
+            float2(0.0),
+            float2(1.0));
+        float3 morph_forward =
+            backdrop.sample(samp, morph_forward_uv).rgb;
+        float3 morph_return =
+            backdrop.sample(samp, morph_return_uv).rgb;
+        float3 morph_upper =
+            backdrop.sample(samp, morph_upper_uv).rgb;
+        float3 morph_lower =
+            backdrop.sample(samp, morph_lower_uv).rgb;
+        float3 morph_rgb =
+            morph_forward * 0.34
+            + morph_return * 0.24
+            + morph_upper * 0.22
+            + morph_lower * 0.20;
+        float morph_luma =
+            dot(morph_rgb, float3(0.2126, 0.7152, 0.0722));
+        float morph_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float morph_bright = smoothstep(
+            morph_surface_luma - 0.08,
+            morph_surface_luma + 0.30,
+            morph_luma);
+        float morph_dark = smoothstep(
+            0.10,
+            0.34,
+            morph_surface_luma - morph_luma);
+        float morph_continuity = smoothstep(
+            0.04,
+            0.34,
+            length(morph_forward - morph_return) * 0.42
+                + length(morph_upper - morph_lower) * 0.28
+                + morph_pinched * 0.16);
+        float3 morph_tint = mix(
+            float3(morph_luma),
+            morph_rgb,
+            0.70 + 0.18 * glass_caustic_spread);
+        morph_tint = mix(
+            morph_tint,
+            morph_tint * (float3(1.0) + 0.22 * in.tint.rgb),
+            tint_chroma * (0.42 + 0.26 * group_blend_strength));
+        morph_tint += float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (0.16 + 0.34 * spectral_rim_tint)
+            * (morph_shoulder + morph_pinched * 0.42);
+        float morph_weight = morph_field_strength
+            * morph_gate
+            * (0.38
+               + 0.22 * morph_continuity
+               + 0.22 * morph_bright
+               + 0.18 * morph_alignment);
+        rgb = mix(
+            rgb,
+            mix(rgb, morph_tint, 0.22 + 0.18 * morph_continuity),
+            morph_weight);
+        rgb += morph_tint
+            * morph_weight
+            * (0.018
+               + 0.034 * bridge_highlight_gain
+               + 0.026 * glass_prismatic_gain);
+        rgb += float3(spectral_warmth,
+                      0.12 * (spectral_warmth + spectral_coolness),
+                      spectral_coolness)
+            * morph_weight
+            * morph_pinched
+            * (0.016 + 0.030 * glass_caustic_spread);
+        float morph_shadow = morph_dark
+            * morph_field_strength
+            * morph_gate
+            * (0.018 + 0.038 * glass_shadow_gain)
+            * (0.62 + 0.38 * (1.0 - morph_alignment));
+        rgb *= 1.0 - clamp(morph_shadow, 0.0, 0.078);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     if (prominent_intensity > 0.0001) {
         float prominent_center =
             1.0 - smoothstep(0.18, 1.12, normalized_len);
