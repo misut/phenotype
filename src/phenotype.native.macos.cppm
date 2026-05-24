@@ -7221,6 +7221,174 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(pressure_shadow, 0.0, 0.075);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float anisotropic_highlight_strength = clamp(
+        0.030 * glass_thickness
+            + 0.052 * dynamic_light_highlight
+            + 0.040 * bridge_flow_strength
+            + 0.045 * pointer_reaction
+            + 0.060 * pressure_caustic_strength
+            + 0.18 * diffraction_strength
+            + 0.16 * microfacet_strength
+            + 0.020 * prominent_intensity,
+        0.0,
+        0.22);
+    if (anisotropic_highlight_strength > 0.0001) {
+        float2 anisotropic_raw_dir =
+            bridge_dir
+                * bridge_flow_strength
+                * (0.90 + 0.30 * union_execution)
+            + pointer_dir
+                * pointer_lens
+                * pointer_lens_strength
+                * 0.74
+            + dispersion_tangent
+                * (0.22
+                   + 0.48 * spectral_dispersion
+                   + 0.30 * glass_caustic_spread)
+            + refraction_dir * edge_lens * 0.28
+            - dynamic_light_dir * 0.24;
+        float anisotropic_dir_length = length(anisotropic_raw_dir);
+        float2 anisotropic_dir = anisotropic_dir_length > 0.0001
+            ? anisotropic_raw_dir / anisotropic_dir_length
+            : normalize(float2(-dynamic_light_dir.y, dynamic_light_dir.x));
+        float2 anisotropic_cross = float2(-anisotropic_dir.y,
+                                          anisotropic_dir.x);
+        float anisotropic_surface =
+            1.0 - smoothstep(0.18, 1.18, normalized_len);
+        float anisotropic_rim = edge_lens
+            * (0.36
+               + 0.64
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.42, 0.5),
+                       signed_edge_distance)));
+        float anisotropic_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.44 + 0.56 * bridge_core)
+                + pressure_caustic_strength * 0.80,
+            0.0,
+            1.0);
+        float anisotropic_alignment = smoothstep(
+            -0.28,
+            0.98,
+            dot(anisotropic_dir, -dynamic_light_dir));
+        float anisotropic_gate = clamp(
+            anisotropic_surface * 0.30
+                + anisotropic_rim * 0.42
+                + anisotropic_contact * 0.34,
+            0.0,
+            1.0)
+            * (0.54 + 0.46 * anisotropic_alignment);
+        float anisotropic_span =
+            (3.0
+             + 8.4 * glass_thickness
+             + 5.2 * glass_caustic_spread
+             + 0.14 * blur_points)
+            * content_scale
+            * (0.74 + 0.26 * glass_lensing_gain);
+        float anisotropic_cross_span =
+            (1.0
+             + 1.8 * glass_dispersion_tangential
+             + 5.0 * spectral_dispersion)
+            * content_scale;
+        float anisotropic_phase =
+            dot(normalized_local, anisotropic_dir)
+                * (8.0 + 5.0 * glass_caustic_spread)
+            + dot(normalized_local, anisotropic_cross) * 2.6
+            + bridge_flow_strength * 5.0
+            + pointer_lens * pointer_lens_strength * 4.0;
+        float anisotropic_wave =
+            0.5 + 0.5 * sin(anisotropic_phase);
+        float anisotropic_line =
+            1.0 - smoothstep(
+                0.0,
+                0.34,
+                abs(anisotropic_wave - 0.64));
+        float2 anisotropic_forward_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.50
+                + anisotropic_dir
+                    * texel
+                    * anisotropic_span
+                    * (0.58 + 0.34 * anisotropic_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 anisotropic_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                - anisotropic_dir
+                    * texel
+                    * anisotropic_span
+                    * (0.46 + 0.22 * anisotropic_line),
+            float2(0.0),
+            float2(1.0));
+        float2 anisotropic_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.36
+                + anisotropic_cross
+                    * texel
+                    * anisotropic_cross_span
+                    * (bridge_shear >= 0.0 ? 1.0 : -1.0)
+                    * (0.74 + 0.26 * abs(bridge_shear)),
+            float2(0.0),
+            float2(1.0));
+        float3 anisotropic_forward =
+            backdrop.sample(samp, anisotropic_forward_uv).rgb;
+        float3 anisotropic_back =
+            backdrop.sample(samp, anisotropic_back_uv).rgb;
+        float3 anisotropic_cross_rgb =
+            backdrop.sample(samp, anisotropic_cross_uv).rgb;
+        float3 anisotropic_rgb =
+            anisotropic_forward * 0.52
+            + anisotropic_back * 0.28
+            + anisotropic_cross_rgb * 0.20;
+        float anisotropic_luma =
+            dot(anisotropic_rgb, float3(0.2126, 0.7152, 0.0722));
+        float anisotropic_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float anisotropic_bright = smoothstep(
+            anisotropic_surface_luma - 0.08,
+            anisotropic_surface_luma + 0.30,
+            anisotropic_luma);
+        float anisotropic_dark = smoothstep(
+            0.10,
+            0.36,
+            anisotropic_surface_luma - anisotropic_luma);
+        float anisotropic_focus = anisotropic_highlight_strength
+            * anisotropic_gate
+            * (0.48
+               + 0.34 * anisotropic_line
+               + 0.18 * anisotropic_bright);
+        float3 anisotropic_tint = mix(
+            float3(anisotropic_luma),
+            anisotropic_rgb,
+            0.78 + 0.14 * glass_caustic_spread);
+        anisotropic_tint = mix(
+            anisotropic_tint,
+            anisotropic_tint * (float3(1.0) + 0.22 * in.tint.rgb),
+            tint_chroma);
+        anisotropic_tint += float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (0.20 + 0.44 * spectral_rim_tint);
+        rgb = mix(
+            rgb,
+            mix(rgb, anisotropic_tint, 0.18 + 0.18 * anisotropic_bright),
+            anisotropic_focus * 0.18);
+        rgb += anisotropic_tint
+            * anisotropic_focus
+            * (0.026
+               + 0.050 * dynamic_light_highlight
+               + 0.040 * glass_prismatic_gain);
+        float anisotropic_shadow = anisotropic_dark
+            * anisotropic_highlight_strength
+            * anisotropic_gate
+            * (0.016 + 0.036 * glass_shadow_gain)
+            * (0.72 + 0.28 * (1.0 - anisotropic_alignment));
+        rgb *= 1.0 - clamp(anisotropic_shadow, 0.0, 0.065);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float optical_light_energy = clamp(
         dynamic_light_highlight
             + 0.34 * edge_inner_highlight
