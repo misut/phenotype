@@ -1789,6 +1789,26 @@ struct MaterialContainerExecutionDescriptor {
     float group_appearance_clear_glass_contrast = 0.0f;
     float group_appearance_clear_glass_brightness_response = 0.0f;
     float group_appearance_clear_glass_detail_response = 0.0f;
+    bool group_appearance_refraction_active = false;
+    float group_appearance_refraction_strength = 0.0f;
+    float group_appearance_refraction_edge_bias = 0.0f;
+    float group_appearance_refraction_max_offset_pixels = 0.0f;
+    float group_appearance_refraction_edge_caustic_intensity = 0.0f;
+    bool group_appearance_dynamic_lighting_active = false;
+    float group_appearance_dynamic_light_direction_x = 0.0f;
+    float group_appearance_dynamic_light_direction_y = 0.0f;
+    float group_appearance_dynamic_light_highlight = 0.0f;
+    float group_appearance_dynamic_light_shadow = 0.0f;
+    bool group_appearance_glass_thickness_active = false;
+    float group_appearance_glass_thickness = 0.0f;
+    float group_appearance_glass_lensing_gain = 1.0f;
+    float group_appearance_glass_shadow_gain = 1.0f;
+    float group_appearance_glass_scattering_gain = 1.0f;
+    bool group_appearance_glass_dispersion_active = false;
+    float group_appearance_glass_dispersion_axial_offset = 0.0f;
+    float group_appearance_glass_dispersion_tangential_offset = 0.0f;
+    float group_appearance_glass_dispersion_prismatic_gain = 1.0f;
+    float group_appearance_glass_dispersion_caustic_spread = 0.0f;
 };
 
 struct MaterialPaintLayerExecutionGeometry {
@@ -4459,6 +4479,81 @@ inline void material_apply_container_group_appearance_source(
             execution.group_appearance_clear_glass_detail_response = std::max(
                 execution.group_appearance_clear_glass_detail_response,
                 plan.clear_glass_legibility.detail_response);
+        }
+        if (plan.refraction.active) {
+            execution.group_appearance_refraction_active = true;
+            execution.group_appearance_refraction_strength = std::max(
+                execution.group_appearance_refraction_strength,
+                plan.refraction.strength);
+            execution.group_appearance_refraction_edge_bias = std::max(
+                execution.group_appearance_refraction_edge_bias,
+                plan.refraction.edge_bias);
+            execution.group_appearance_refraction_max_offset_pixels = std::max(
+                execution.group_appearance_refraction_max_offset_pixels,
+                plan.refraction.max_offset_pixels);
+            execution.group_appearance_refraction_edge_caustic_intensity =
+                std::max(
+                    execution
+                        .group_appearance_refraction_edge_caustic_intensity,
+                    plan.refraction.edge_caustic_intensity);
+        }
+        if (plan.dynamic_lighting.active) {
+            auto const current_lighting_energy =
+                execution.group_appearance_dynamic_light_highlight
+                + execution.group_appearance_dynamic_light_shadow;
+            auto const candidate_lighting_energy =
+                plan.dynamic_lighting.highlight_strength
+                + plan.dynamic_lighting.shadow_strength;
+            if (!execution.group_appearance_dynamic_lighting_active
+                || candidate_lighting_energy
+                    > current_lighting_energy + 0.0001f) {
+                execution.group_appearance_dynamic_light_direction_x =
+                    plan.dynamic_lighting.direction_x;
+                execution.group_appearance_dynamic_light_direction_y =
+                    plan.dynamic_lighting.direction_y;
+            }
+            execution.group_appearance_dynamic_lighting_active = true;
+            execution.group_appearance_dynamic_light_highlight = std::max(
+                execution.group_appearance_dynamic_light_highlight,
+                plan.dynamic_lighting.highlight_strength);
+            execution.group_appearance_dynamic_light_shadow = std::max(
+                execution.group_appearance_dynamic_light_shadow,
+                plan.dynamic_lighting.shadow_strength);
+        }
+        if (plan.glass_thickness.active) {
+            execution.group_appearance_glass_thickness_active = true;
+            execution.group_appearance_glass_thickness = std::max(
+                execution.group_appearance_glass_thickness,
+                plan.glass_thickness.thickness);
+            execution.group_appearance_glass_lensing_gain = std::max(
+                execution.group_appearance_glass_lensing_gain,
+                plan.glass_thickness.lensing_gain);
+            execution.group_appearance_glass_shadow_gain = std::max(
+                execution.group_appearance_glass_shadow_gain,
+                plan.glass_thickness.shadow_gain);
+            execution.group_appearance_glass_scattering_gain = std::max(
+                execution.group_appearance_glass_scattering_gain,
+                plan.glass_thickness.scattering_gain);
+        }
+        if (plan.glass_dispersion.active) {
+            execution.group_appearance_glass_dispersion_active = true;
+            execution.group_appearance_glass_dispersion_axial_offset =
+                std::max(
+                    execution.group_appearance_glass_dispersion_axial_offset,
+                    plan.glass_dispersion.axial_offset_pixels);
+            execution.group_appearance_glass_dispersion_tangential_offset =
+                std::max(
+                    execution
+                        .group_appearance_glass_dispersion_tangential_offset,
+                    plan.glass_dispersion.tangential_offset_pixels);
+            execution.group_appearance_glass_dispersion_prismatic_gain =
+                std::max(
+                    execution.group_appearance_glass_dispersion_prismatic_gain,
+                    plan.glass_dispersion.prismatic_gain);
+            execution.group_appearance_glass_dispersion_caustic_spread =
+                std::max(
+                    execution.group_appearance_glass_dispersion_caustic_spread,
+                    plan.glass_dispersion.caustic_spread);
         }
     }
     if (!source)

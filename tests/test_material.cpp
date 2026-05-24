@@ -4056,6 +4056,84 @@ void test_glass_effect_union_combines_at_rest_without_spacing() {
     std::puts("PASS: glass effect union combines at rest without spacing");
 }
 
+void test_glass_effect_union_aggregates_member_optics() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 80.0f, 80.0f, 20.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 922u,
+        .union_id = 1u,
+        .spacing = 24.0f,
+        .interactive = false,
+        .morph_transitions = false,
+    };
+
+    auto peer = request;
+    peer.geometry = MaterialGeometry{92.0f, 0.0f, 160.0f, 160.0f, 20.0f};
+    peer.style.tint = Color{64, 156, 255, 178};
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(peer, sampled_environment()), 2u},
+    };
+    assert(records[1].plan.refraction.active);
+    assert(records[1].plan.dynamic_lighting.active);
+    assert(records[1].plan.glass_thickness.active);
+    assert(records[1].plan.glass_thickness.thickness
+           > records[0].plan.glass_thickness.thickness);
+    assert(records[1].plan.glass_dispersion.active);
+    assert(records[1].plan.glass_dispersion.axial_offset_pixels
+           > records[0].plan.glass_dispersion.axial_offset_pixels);
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const peer_execution =
+        material_container_execution_descriptor(records[1], records);
+    assert(first_execution.union_execution);
+    assert(peer_execution.union_execution);
+    assert(first_execution.surface_leader);
+    assert(!peer_execution.surface_leader);
+    assert(first_execution.group_appearance_source_valid);
+    assert(first_execution.group_appearance_source_command_index == 2u);
+    assert(first_execution.group_appearance_refraction_active);
+    assert(first_execution.group_appearance_refraction_strength
+           == records[1].plan.refraction.strength);
+    assert(first_execution.group_appearance_refraction_edge_bias
+           == records[1].plan.refraction.edge_bias);
+    assert(first_execution.group_appearance_refraction_max_offset_pixels
+           == records[1].plan.refraction.max_offset_pixels);
+    assert(first_execution.group_appearance_refraction_edge_caustic_intensity
+           == records[1].plan.refraction.edge_caustic_intensity);
+    assert(first_execution.group_appearance_dynamic_lighting_active);
+    assert(first_execution.group_appearance_dynamic_light_direction_x
+           == records[1].plan.dynamic_lighting.direction_x);
+    assert(first_execution.group_appearance_dynamic_light_direction_y
+           == records[1].plan.dynamic_lighting.direction_y);
+    assert(first_execution.group_appearance_dynamic_light_highlight
+           == records[1].plan.dynamic_lighting.highlight_strength);
+    assert(first_execution.group_appearance_dynamic_light_shadow
+           == records[1].plan.dynamic_lighting.shadow_strength);
+    assert(first_execution.group_appearance_glass_thickness_active);
+    assert(first_execution.group_appearance_glass_thickness
+           == records[1].plan.glass_thickness.thickness);
+    assert(first_execution.group_appearance_glass_lensing_gain
+           == records[1].plan.glass_thickness.lensing_gain);
+    assert(first_execution.group_appearance_glass_shadow_gain
+           == records[1].plan.glass_thickness.shadow_gain);
+    assert(first_execution.group_appearance_glass_scattering_gain
+           == records[1].plan.glass_thickness.scattering_gain);
+    assert(first_execution.group_appearance_glass_dispersion_active);
+    assert(first_execution.group_appearance_glass_dispersion_axial_offset
+           == records[1].plan.glass_dispersion.axial_offset_pixels);
+    assert(first_execution.group_appearance_glass_dispersion_tangential_offset
+           == records[1].plan.glass_dispersion.tangential_offset_pixels);
+    assert(first_execution.group_appearance_glass_dispersion_prismatic_gain
+           == records[1].plan.glass_dispersion.prismatic_gain);
+    assert(first_execution.group_appearance_glass_dispersion_caustic_spread
+           == records[1].plan.glass_dispersion.caustic_spread);
+
+    std::puts("PASS: glass effect union aggregates member optics");
+}
+
 void test_glass_effect_union_sample_budget_uses_leader_bounds() {
     auto request = regular_request();
     request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 20.0f};
@@ -4326,6 +4404,7 @@ int main() {
     test_glass_effect_union_separates_rounded_radius_variants();
     test_glass_effect_union_aggregates_member_interaction();
     test_glass_effect_union_combines_at_rest_without_spacing();
+    test_glass_effect_union_aggregates_member_optics();
     test_glass_effect_union_sample_budget_uses_leader_bounds();
     test_glass_effect_union_fallback_paint_uses_group_leader();
     test_glass_effect_matched_fallback_paint_uses_match_rect();
