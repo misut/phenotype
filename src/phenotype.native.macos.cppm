@@ -6955,6 +6955,187 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(envelope_shadow, 0.0, 0.055);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float light_well_strength = clamp(
+        0.020 * glass_thickness
+            + 0.018 * glass_scattering_gain
+            + 0.016 * glass_caustic_spread
+            + 0.016 * specular_envelope_strength
+            + 0.014 * environment_reflection_strength
+            + 0.012 * polarized_reflection_strength
+            + 0.012 * dynamic_light_highlight
+            + 0.010 * prominent_intensity,
+        0.0,
+        0.13);
+    if (light_well_strength > 0.0001) {
+        float2 well_raw_dir =
+            -dynamic_light_dir * (0.72 + 0.28 * dynamic_light_highlight)
+            + refraction_dir * (0.30 + 0.34 * edge_lens)
+            + bridge_tangent * bridge_shear * bridge_band * 0.20
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.20;
+        float well_dir_len = length(well_raw_dir);
+        float2 well_dir = well_dir_len > 0.0001
+            ? well_raw_dir / well_dir_len
+            : -dynamic_light_dir;
+        float2 well_tangent = float2(-well_dir.y, well_dir.x);
+        float well_surface =
+            1.0 - smoothstep(0.12, 1.18, normalized_len);
+        float well_rim = edge_lens
+            * (0.28
+               + 0.72
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.44, 0.5),
+                       signed_edge_distance)));
+        float well_core =
+            1.0 - smoothstep(0.18, 0.92, normalized_len);
+        float well_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.26 + 0.74 * bridge_core)
+                + specular_envelope_strength * 1.60,
+            0.0,
+            1.0);
+        float well_gate = clamp(
+            well_core * 0.34
+                + well_surface * 0.24
+                + well_rim * 0.38
+                + well_contact * 0.26,
+            0.0,
+            1.0);
+        float well_span =
+            (1.8
+             + 6.6 * glass_thickness
+             + 3.6 * glass_caustic_spread
+             + 0.12 * blur_points)
+            * content_scale
+            * (0.80 + 0.20 * glass_lensing_gain);
+        float well_cross_span =
+            (0.9
+             + 2.8 * glass_thickness
+             + 1.6 * glass_dispersion_tangential
+             + 2.4 * spectral_dispersion)
+            * content_scale;
+        float well_phase =
+            dot(normalized_local, well_dir)
+                * (5.2 + 3.0 * glass_caustic_spread)
+            + dot(normalized_local, well_tangent)
+                * (2.4 + 1.2 * spectral_dispersion)
+            + bridge_shear * bridge_band * 2.6;
+        float well_pool =
+            (0.5 + 0.5 * cos(well_phase))
+            * (0.34 + 0.66 * well_gate);
+        float2 well_focus_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.50
+                - well_dir
+                    * texel
+                    * well_span
+                    * (0.38 + 0.24 * well_core),
+            float2(0.0),
+            float2(1.0));
+        float2 well_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.42
+                + well_dir
+                    * texel
+                    * well_span
+                    * (0.30 + 0.24 * well_contact),
+            float2(0.0),
+            float2(1.0));
+        float2 well_warm_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                + well_tangent
+                    * texel
+                    * well_cross_span
+                    * (0.62 + 0.20 * well_pool)
+                + dispersion_tangent
+                    * texel
+                    * well_cross_span
+                    * (0.30 + 0.38 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float2 well_cool_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                - well_tangent
+                    * texel
+                    * well_cross_span
+                    * (0.58 + 0.22 * well_gate)
+                - dispersion_tangent
+                    * texel
+                    * well_cross_span
+                    * (0.24 + 0.32 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float3 well_focus =
+            backdrop.sample(samp, well_focus_uv).rgb;
+        float3 well_return =
+            backdrop.sample(samp, well_return_uv).rgb;
+        float3 well_warm =
+            backdrop.sample(samp, well_warm_uv).rgb;
+        float3 well_cool =
+            backdrop.sample(samp, well_cool_uv).rgb;
+        float3 well_rgb =
+            well_focus * 0.34
+            + well_return * 0.28
+            + well_warm * 0.20
+            + well_cool * 0.18;
+        float well_luma =
+            dot(well_rgb, float3(0.2126, 0.7152, 0.0722));
+        float well_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float well_light = smoothstep(
+            well_surface_luma - 0.10,
+            well_surface_luma + 0.32,
+            well_luma);
+        float well_dark = smoothstep(
+            0.08,
+            0.34,
+            well_surface_luma - well_luma);
+        float well_detail = smoothstep(
+            0.02,
+            0.30,
+            length(well_focus - well_return) * 0.30
+                + length(well_warm - well_cool) * 0.28
+                + well_pool * 0.12);
+        float3 well_tint = mix(
+            well_rgb,
+            float3(well_luma),
+            well_dark * (0.14 + 0.18 * glass_shadow_gain));
+        well_tint = mix(
+            well_tint,
+            well_tint * (float3(1.0) + 0.16 * in.tint.rgb),
+            tint_chroma * (0.32 + 0.24 * prominent_intensity));
+        well_tint += float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (well_pool * 0.26 + well_rim * 0.24)
+            * (0.10 + 0.30 * spectral_rim_tint);
+        float well_weight = light_well_strength
+            * well_gate
+            * (0.34
+               + 0.24 * well_light
+               + 0.20 * well_detail
+               + 0.12 * well_pool
+               + 0.10 * well_contact);
+        rgb = mix(
+            rgb,
+            mix(rgb, well_tint, 0.16 + 0.14 * well_detail),
+            well_weight);
+        rgb += well_tint
+            * well_weight
+            * (0.010
+               + 0.022 * dynamic_light_highlight
+               + 0.018 * glass_prismatic_gain);
+        float well_absorption = well_dark
+            * light_well_strength
+            * well_gate
+            * (0.014 + 0.030 * glass_shadow_gain)
+            * (0.60 + 0.40 * well_rim);
+        rgb *= 1.0 - clamp(well_absorption, 0.0, 0.052);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float viscous_strain_strength = clamp(
         pointer_lens_strength * (0.42 * pointer_lens_raw + 0.58 * pointer_lens)
             + bridge_band
