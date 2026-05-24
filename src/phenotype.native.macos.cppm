@@ -6402,6 +6402,59 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(side_shadow, 0.0, 0.16);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float glass_meniscus_strength = clamp(
+        glass_thickness * 0.38
+            + (glass_lensing_gain - 1.0) * 0.42
+            + refraction_strength * 0.08
+            + glass_caustic_spread * 0.16,
+        0.0,
+        0.80);
+    if (glass_meniscus_strength > 0.0001 && edge_bevel_width > 0.0001) {
+        float meniscus_start = max(edge_width * 0.70, 0.5);
+        float meniscus_peak = max(edge_width * 1.45,
+                                  meniscus_start + 0.5);
+        float meniscus_end = max(edge_bevel_width * 1.75,
+                                 meniscus_peak + 0.75);
+        float meniscus_band =
+            smoothstep(meniscus_start,
+                       meniscus_peak,
+                       signed_edge_distance)
+            * (1.0 - smoothstep(meniscus_peak,
+                                meniscus_end,
+                                signed_edge_distance))
+            * edge_lens;
+        float meniscus_alignment = clamp(
+            dot(refraction_dir, dynamic_light_dir) * 0.5 + 0.5,
+            0.0,
+            1.0);
+        float meniscus_luma = dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        rgb = mix(
+            rgb,
+            mix(rgb, float3(meniscus_luma), 0.24),
+            meniscus_band * glass_meniscus_strength * 0.30);
+        float3 meniscus_tint =
+            float3(1.0 + 1.25 * spectral_warmth,
+                   1.0 + 0.36 * spectral_rim_tint,
+                   1.0 + 1.25 * spectral_coolness);
+        meniscus_tint = mix(
+            meniscus_tint,
+            meniscus_tint * (float3(1.0) + 0.28 * in.tint.rgb),
+            tint_chroma);
+        float meniscus_light = meniscus_band
+            * glass_meniscus_strength
+            * (0.55 + 0.45 * meniscus_alignment)
+            * (0.032 + 0.056 * edge_inner_highlight)
+            * (1.0 + dynamic_light_highlight * 0.90);
+        float meniscus_shadow = meniscus_band
+            * glass_meniscus_strength
+            * (1.0 - meniscus_alignment)
+            * (0.026 + 0.050 * edge_outer_shadow)
+            * (1.0 + dynamic_light_shadow * 0.80)
+            * glass_shadow_gain;
+        rgb += meniscus_tint * meniscus_light;
+        rgb *= 1.0 - clamp(meniscus_shadow, 0.0, 0.12);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
