@@ -5785,7 +5785,10 @@ fragment float4 fs_material(
     float2 bridge_dir = bridge_dir_length > 0.0001
         ? bridge_dir_raw / bridge_dir_length
         : float2(0.0);
+    float2 bridge_tangent = float2(-bridge_dir.y, bridge_dir.x);
     float bridge_band = 0.0;
+    float bridge_core = 0.0;
+    float bridge_shear = 0.0;
     if (bridge_motion_strength > 0.0001 && bridge_dir_length > 0.0001) {
         float2 bridge_anchor =
             clamp(in.bridge_motion.zw, float2(0.0), float2(1.0))
@@ -5793,9 +5796,9 @@ fragment float4 fs_material(
         float2 bridge_delta =
             (in.local_pos - bridge_anchor)
             / max(in.rect_size, float2(1.0));
-        float2 bridge_tangent = float2(-bridge_dir.y, bridge_dir.x);
         float bridge_axial = abs(dot(bridge_delta, bridge_dir));
-        float bridge_lateral = abs(dot(bridge_delta, bridge_tangent));
+        float bridge_lateral_signed = dot(bridge_delta, bridge_tangent);
+        float bridge_lateral = abs(bridge_lateral_signed);
         float bridge_width = bridge_ribbon_width;
         float bridge_length = clamp(
             0.34
@@ -5811,6 +5814,17 @@ fragment float4 fs_material(
                                 bridge_length + 0.20,
                                 bridge_axial))
             * bridge_motion_strength;
+        bridge_core =
+            1.0 - smoothstep(
+                bridge_width * 0.28,
+                bridge_width + 0.18,
+                bridge_lateral);
+        bridge_shear =
+            clamp(
+                bridge_lateral_signed / max(bridge_width + 0.18, 0.001),
+                -1.0,
+                1.0)
+            * bridge_core;
     }
     float2 refraction_uv =
         refraction_dir * texel
@@ -5821,6 +5835,14 @@ fragment float4 fs_material(
         * (refraction_offset_pixels * content_scale)
         * bridge_band
         * bridge_flow_offset_gain;
+    refraction_uv += bridge_tangent
+        * texel
+        * (refraction_offset_pixels * content_scale)
+        * bridge_shear
+        * bridge_band
+        * bridge_flow_offset_gain
+        * (0.22 + 0.30 * bridge_core)
+        * (0.38 + 0.62 * union_execution);
     float pointer_lens_strength = clamp(in.interaction_lens.w, 0.0, 0.35);
     refraction_uv *= prominent_lensing_gain;
     if (pointer_lens_strength > 0.0001) {
@@ -6172,6 +6194,13 @@ fragment float4 fs_material(
             * bridge_rim
             * bridge_highlight_gain
             * (0.34 + 0.66 * bridge_motion_strength);
+        rgb += bridge_tint
+            * bridge_band
+            * abs(bridge_shear)
+            * (0.18 + 0.42 * bridge_core)
+            * bridge_highlight_gain
+            * bridge_flow_offset_gain
+            * (0.44 + 0.56 * union_execution);
         rgb = clamp(rgb, 0.0, 1.0);
     }
     if (prominent_intensity > 0.0001) {
