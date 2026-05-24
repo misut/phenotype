@@ -15263,6 +15263,214 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(shell_shadow, 0.0, 0.048);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float spacing_meniscus_motion_gate =
+        bridge_dir_length > 0.0001 ? 1.0 : 0.0;
+    float spacing_meniscus_strength = clamp(
+        (0.010 * shared_membrane_strength
+            + 0.012 * shared_shell_strength
+            + 0.012 * glass_effect_match_execution * group_blend_strength
+            + 0.010 * morph_execution * group_blend_strength
+            + 0.010 * shape_blend_execution * group_blend_strength
+            + 0.008 * materialize_wave_strength
+            + 0.010 * bridge_band * (0.34 + 0.66 * bridge_core)
+            + 0.008 * cohesion_wake_strength)
+            * spacing_meniscus_motion_gate,
+        0.0,
+        0.095);
+    if (spacing_meniscus_strength > 0.0001
+        && bridge_band > 0.0001) {
+        float spacing_contact_core =
+            1.0 - smoothstep(
+                max(bridge_width * 0.16, 0.001),
+                bridge_width + 0.08,
+                bridge_lateral);
+        float spacing_contact_ridge =
+            smoothstep(
+                max(bridge_width * 0.28, 0.001),
+                bridge_width + 0.02,
+                bridge_lateral)
+            * (1.0 - smoothstep(
+                bridge_width + 0.02,
+                bridge_width + 0.22,
+                bridge_lateral));
+        float spacing_contact_axial =
+            1.0 - smoothstep(
+                max(bridge_length * 0.48, 0.001),
+                bridge_length + 0.24,
+                bridge_axial);
+        float spacing_contact_transition = clamp(
+            glass_effect_match_execution * 0.34
+                + morph_execution * 0.28
+                + shape_blend_execution * 0.20
+                + union_execution * 0.18,
+            0.0,
+            1.0);
+        float spacing_contact_gate = clamp(
+            spacing_contact_axial
+                * (0.48 * spacing_contact_core
+                   + 0.52 * spacing_contact_ridge)
+                * (0.56
+                   + 0.22 * spacing_contact_transition
+                   + 0.22 * max(shared_membrane_strength,
+                                shared_shell_strength)),
+            0.0,
+            1.0);
+        float spacing_contact_alignment =
+            smoothstep(-0.34, 1.0, dot(bridge_dir, -dynamic_light_dir));
+        float spacing_contact_phase =
+            bridge_axial * (11.0 + 5.0 * spacing_contact_transition)
+            - abs(bridge_lateral_signed)
+                * (9.0 + 5.0 * bridge_flow_offset_gain)
+            + bridge_shear * 2.8
+            + materialize_rim_position * materialize_wave_strength * 3.4;
+        float spacing_contact_wave =
+            0.5 + 0.5 * sin(spacing_contact_phase);
+        float spacing_contact_pinch =
+            1.0 - smoothstep(
+                0.0,
+                0.30,
+                abs(spacing_contact_wave - 0.56));
+        float spacing_contact_span =
+            (1.35
+             + 3.4 * glass_thickness
+             + 2.2 * clear_glass_detail
+             + 1.5 * spacing_contact_transition
+             + 0.06 * blur_points)
+            * content_scale
+            * (0.82 + 0.18 * glass_lensing_gain);
+        float spacing_contact_cross_span =
+            (0.90
+             + 1.8 * glass_dispersion_tangential
+             + 2.0 * spectral_dispersion
+             + 1.4 * abs(bridge_shear) * bridge_band)
+            * content_scale;
+        float2 spacing_contact_front_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                + bridge_dir
+                    * texel
+                    * spacing_contact_span
+                    * (0.42 + 0.20 * spacing_contact_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 spacing_contact_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.22
+                - bridge_dir
+                    * texel
+                    * spacing_contact_span
+                    * (0.34 + 0.20 * spacing_contact_pinch),
+            float2(0.0),
+            float2(1.0));
+        float2 spacing_contact_upper_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.24
+                + bridge_tangent
+                    * texel
+                    * spacing_contact_cross_span
+                    * (0.42
+                       + 0.18 * spacing_contact_wave
+                       + 0.18 * spacing_contact_ridge),
+            float2(0.0),
+            float2(1.0));
+        float2 spacing_contact_lower_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.24
+                - bridge_tangent
+                    * texel
+                    * spacing_contact_cross_span
+                    * (0.36
+                       + 0.18 * spacing_contact_pinch
+                       + 0.14 * spacing_contact_core),
+            float2(0.0),
+            float2(1.0));
+        float3 spacing_front_rgb =
+            backdrop.sample(samp, spacing_contact_front_uv).rgb;
+        float3 spacing_back_rgb =
+            backdrop.sample(samp, spacing_contact_back_uv).rgb;
+        float3 spacing_upper_rgb =
+            backdrop.sample(samp, spacing_contact_upper_uv).rgb;
+        float3 spacing_lower_rgb =
+            backdrop.sample(samp, spacing_contact_lower_uv).rgb;
+        float3 spacing_probe =
+            spacing_front_rgb * 0.34
+            + spacing_back_rgb * 0.30
+            + spacing_upper_rgb * 0.18
+            + spacing_lower_rgb * 0.18;
+        float spacing_luma =
+            dot(spacing_probe, float3(0.2126, 0.7152, 0.0722));
+        float spacing_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float spacing_range = clamp(
+            length(spacing_front_rgb - spacing_back_rgb) * 0.30
+                + length(spacing_upper_rgb - spacing_lower_rgb) * 0.28
+                + abs(spacing_luma - spacing_surface_luma) * 0.24
+                + spacing_contact_pinch * 0.10,
+            0.0,
+            1.0);
+        float spacing_bright = smoothstep(
+            spacing_surface_luma - 0.07,
+            spacing_surface_luma + 0.30,
+            spacing_luma);
+        float spacing_dark = smoothstep(
+            0.08,
+            0.34,
+            spacing_surface_luma - spacing_luma);
+        float spacing_coherence =
+            1.0 - smoothstep(0.08, 0.38, spacing_range);
+        float spacing_fresnel = clamp(
+            spacing_contact_ridge * 0.42
+                + spacing_contact_core * 0.26
+                + spacing_contact_transition * 0.18
+                + spacing_contact_alignment * 0.14,
+            0.0,
+            1.0);
+        float3 spacing_neutral = mix(
+            spacing_probe,
+            float3(spacing_luma),
+            spacing_dark * (0.16 + 0.18 * glass_shadow_gain)
+                + spacing_coherence * 0.18);
+        float3 spacing_tint =
+            spacing_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.030
+                      + 0.044
+                          * prominent_intensity
+                          * tint_chroma));
+        spacing_tint += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * spacing_fresnel
+            * (0.006
+               + 0.014 * spectral_rim_tint
+               + 0.010 * glass_prismatic_gain);
+        float spacing_weight = spacing_meniscus_strength
+            * spacing_contact_gate
+            * (0.34
+               + 0.20 * spacing_fresnel
+               + 0.18 * spacing_coherence
+               + 0.16 * spacing_bright
+               + 0.12 * spacing_contact_pinch);
+        rgb = mix(
+            rgb,
+            mix(rgb, spacing_tint, 0.18 + 0.18 * spacing_fresnel),
+            spacing_weight * 0.48);
+        rgb += spacing_tint
+            * spacing_weight
+            * spacing_contact_pinch
+            * (0.006
+               + 0.018 * dynamic_light_highlight
+               + 0.014 * glass_scattering_gain);
+        float spacing_shadow =
+            spacing_dark
+            * spacing_weight
+            * (0.010 + 0.024 * glass_shadow_gain)
+            * (0.56 + 0.44 * (1.0 - spacing_contact_alignment));
+        rgb *= 1.0 - clamp(spacing_shadow, 0.0, 0.052);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float liquid_response_strength = clamp(
         0.012 * clear_glass_detail
             + 0.010 * clear_glass_contrast
@@ -15273,6 +15481,7 @@ fragment float4 fs_material(
             + 0.014 * optical_equilibrium_strength
             + 0.016 * shared_membrane_strength
             + 0.014 * shared_shell_strength
+            + 0.014 * spacing_meniscus_strength
             + 0.018 * pointer_lens_strength * pointer_lens_raw
             + 0.016 * bridge_motion_strength * bridge_band
             + 0.010 * union_execution * group_blend_strength,
@@ -15444,6 +15653,7 @@ fragment float4 fs_material(
             + 0.016 * glass_union_glow_strength
             + 0.018 * liquid_response_strength
             + 0.014 * shared_shell_strength
+            + 0.012 * spacing_meniscus_strength
             + 0.014 * clarity_balance_strength
             + 0.012 * optical_equilibrium_strength
             + 0.012 * legibility_veil_strength,
