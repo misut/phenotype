@@ -1349,16 +1349,25 @@ void test_clear_glass_legibility_dimming_contract() {
 }
 
 void test_increase_contrast_raises_foreground_readability_contract() {
-    auto env = sampled_environment();
-    env.capabilities.increase_contrast = true;
-    env.backdrop.luma_min = 0.42f;
-    env.backdrop.luma_max = 0.64f;
-    env.backdrop.luma_mean = 0.54f;
+    auto baseline_env = sampled_environment();
+    baseline_env.backdrop.luma_min = 0.42f;
+    baseline_env.backdrop.luma_max = 0.64f;
+    baseline_env.backdrop.luma_mean = 0.54f;
 
+    auto baseline = plan_material_surface(regular_request(), baseline_env);
+    auto env = baseline_env;
+    env.capabilities.increase_contrast = true;
     auto plan = plan_material_surface(regular_request(), env);
 
     assert(plan.backdrop_sampling);
     assert(plan.decision_trace.increase_contrast);
+    assert(plan.opacity > baseline.opacity);
+    assert(plan.edge_highlight > baseline.edge_highlight);
+    assert(plan.edge_width > baseline.edge_width);
+    assert(plan.shadow_alpha > baseline.shadow_alpha);
+    assert(plan.optical_composition.edge_highlight == plan.edge_highlight);
+    assert(plan.optical_composition.edge_width == plan.edge_width);
+    assert(plan.execution_stages[2].optics.edge_width == plan.edge_width);
     assert(plan.foreground.high_contrast);
     assert(std::string_view(plan.foreground.scheme) == "high-contrast");
     assert(std::string_view(plan.foreground.source) == "accessibility");
@@ -1389,6 +1398,44 @@ void test_increase_contrast_raises_foreground_readability_contract() {
     assert(std::string_view(plan.reference_model.accessibility_response)
         == "increased-contrast");
     std::puts("PASS: increase contrast raises foreground readability contract");
+}
+
+void test_reduced_transparency_uses_solid_accessible_glass_fallback_contract() {
+    auto env = sampled_environment();
+    auto baseline = plan_material_surface(regular_request(), env);
+    env.capabilities.reduce_transparency = true;
+
+    auto plan = plan_material_surface(regular_request(), env);
+
+    assert(plan.fallback());
+    assert(plan.fallback_path == MaterialFallbackPath::ReducedTransparency);
+    assert(!plan.backdrop_sampling);
+    assert(plan.blur_radius == 0.0f);
+    assert(plan.saturation == 1.0f);
+    assert(plan.noise_opacity == 0.0f);
+    assert(plan.opacity > baseline.opacity);
+    assert(plan.tint.a > baseline.tint.a);
+    assert(plan.luminance_floor > baseline.luminance_floor);
+    assert(plan.edge_highlight > baseline.edge_highlight);
+    assert(plan.edge_width > baseline.edge_width);
+    assert(plan.shadow_alpha > baseline.shadow_alpha);
+    assert(plan.shadow_radius >= baseline.shadow_radius);
+    assert(material_alpha_fraction(plan.tint) * plan.opacity > 0.76f);
+    assert(std::string_view(plan.foreground.scheme) == "solid-fallback");
+    assert(std::string_view(plan.reference_model.accessibility_response)
+        == "reduced-transparency");
+    assert(std::string_view(plan.reference_model.performance_response)
+        == "deterministic-fallback");
+    assert(std::string_view(plan.optical_response.response_model)
+        == "deterministic-fallback");
+    assert(std::string_view(plan.optical_composition.fallback_source)
+        == "reduced-transparency");
+    assert(plan.paint_layer_count == 3u);
+    assert(plan.paint_layers[1].color.a == plan.tint.a);
+    assert(plan.paint_layers[1].opacity == plan.opacity);
+
+    std::puts(
+        "PASS: reduced transparency uses solid accessible glass fallback contract");
 }
 
 void test_interactive_material_modulates_optics_contract() {
@@ -4447,6 +4494,7 @@ int main() {
     test_foreground_contrast_gap_uses_absolute_contrast_candidate();
     test_clear_glass_legibility_dimming_contract();
     test_increase_contrast_raises_foreground_readability_contract();
+    test_reduced_transparency_uses_solid_accessible_glass_fallback_contract();
     test_interactive_material_modulates_optics_contract();
     test_prominent_glass_action_optics_contract();
     test_interactive_fallback_material_adds_pointer_highlight_layer();
