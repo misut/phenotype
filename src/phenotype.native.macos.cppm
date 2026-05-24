@@ -5618,6 +5618,8 @@ fragment float4 fs_material(
         floor(fmod(floor(group_effect_flags / 8.0), 2.0));
     float glass_effect_match_execution =
         floor(fmod(floor(group_effect_flags / 16.0), 2.0));
+    float group_surface_execution =
+        floor(fmod(floor(group_effect_flags / 32.0), 2.0));
     float bridge_caustic_gain =
         clamp(
             1.0
@@ -14332,6 +14334,207 @@ fragment float4 fs_material(
             * (0.005 + 0.010 * glass_shadow_gain)
             * (1.0 - container_calm * 0.38);
         rgb *= 1.0 - clamp(container_shadow, 0.0, 0.026);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
+    float group_surface_skin_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.010 * glass_thickness
+            + 0.020 * group_surface_execution * group_blend_strength
+            + 0.016 * shared_backdrop_scope * group_surface_execution
+            + 0.014 * fusion_strength * group_surface_execution
+            + 0.012 * overlap_response_strength
+            + 0.012 * container_field_strength
+            + 0.010 * bridge_band * (0.34 + 0.66 * bridge_core),
+        0.0,
+        0.090);
+    if (group_surface_skin_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 surface_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 surface_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            surface_group_size);
+        float2 surface_group_norm =
+            (surface_group_local / surface_group_size - float2(0.5)) * 2.0;
+        float surface_group_len = length(surface_group_norm);
+        float surface_group_center =
+            1.0 - smoothstep(0.18, 1.15, surface_group_len);
+        float2 surface_group_edge = min(
+            surface_group_local,
+            max(surface_group_size - surface_group_local, float2(0.0)));
+        float surface_group_edge_distance =
+            min(surface_group_edge.x, surface_group_edge.y);
+        float surface_group_edge_band =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.2, 1.0),
+                surface_group_edge_distance);
+        float surface_group_bridge = bridge_band
+            * (0.34 + 0.66 * bridge_core);
+        float surface_group_gate = clamp(
+            group_surface_execution * group_blend_strength * 0.36
+                + shared_backdrop_scope * group_surface_execution * 0.22
+                + fusion_strength * group_surface_execution * 0.18
+                + overlap_response_strength * 0.18
+                + surface_group_bridge * 0.22
+                + surface_group_center * 0.12
+                + surface_group_edge_band * 0.10,
+            0.0,
+            1.0);
+        float2 surface_backdrop_viewport_size =
+            float2(float(backdrop.get_width()), float(backdrop.get_height()))
+            / content_scale;
+        float2 surface_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : surface_backdrop_viewport_size.x,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : surface_backdrop_viewport_size.y),
+            float2(1.0));
+        float2 surface_group_center_screen =
+            in.group_rect.xy + surface_group_size * 0.5;
+        float2 surface_group_center_uv = clamp(
+            surface_group_center_screen / surface_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 surface_center_delta =
+            surface_group_center_uv - in.screen_uv;
+        float surface_center_distance = length(surface_center_delta);
+        float2 surface_center_dir = surface_center_distance > 0.0001
+            ? surface_center_delta / surface_center_distance
+            : refraction_dir;
+        float2 surface_axis_raw =
+            surface_center_dir
+                * (0.42 + 0.58 * group_surface_execution)
+            + bridge_dir * surface_group_bridge * (0.34 + 0.66 * bridge_core)
+            + refraction_dir * (0.22 + 0.18 * surface_group_center)
+            - dynamic_light_dir * specular_intensity * 0.14;
+        float surface_axis_len = length(surface_axis_raw);
+        float2 surface_axis = surface_axis_len > 0.0001
+            ? surface_axis_raw / surface_axis_len
+            : refraction_dir;
+        float2 surface_cross = float2(-surface_axis.y, surface_axis.x);
+        float surface_span =
+            (0.95
+             + 1.8 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 0.9 * surface_group_gate
+             + 0.05 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float2 surface_center_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + surface_center_dir
+                    * texel
+                    * surface_span
+                    * (0.20 + 0.16 * surface_group_center),
+            float2(0.0),
+            float2(1.0));
+        float2 surface_edge_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.15
+                - surface_axis
+                    * texel
+                    * surface_span
+                    * (0.28 + 0.18 * surface_group_edge_band)
+                + surface_cross
+                    * texel
+                    * surface_span
+                    * bridge_shear
+                    * surface_group_bridge
+                    * 0.10,
+            float2(0.0),
+            float2(1.0));
+        float2 surface_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                + surface_cross
+                    * texel
+                    * surface_span
+                    * (0.24
+                       + 0.14 * abs(bridge_shear) * surface_group_bridge
+                       + 0.12 * surface_group_gate),
+            float2(0.0),
+            float2(1.0));
+        float3 surface_center_rgb =
+            backdrop.sample(samp, surface_center_uv).rgb;
+        float3 surface_edge_rgb =
+            backdrop.sample(samp, surface_edge_uv).rgb;
+        float3 surface_cross_rgb =
+            backdrop.sample(samp, surface_cross_uv).rgb;
+        float3 surface_probe =
+            surface_center_rgb * 0.40
+            + surface_edge_rgb * 0.34
+            + surface_cross_rgb * 0.26;
+        float surface_probe_luma =
+            dot(surface_probe, float3(0.2126, 0.7152, 0.0722));
+        float surface_range = clamp(
+            length(surface_center_rgb - surface_edge_rgb) * 0.26
+                + length(surface_cross_rgb - surface_probe) * 0.18
+                + abs(surface_probe_luma
+                      - dot(rgb, float3(0.2126, 0.7152, 0.0722)))
+                    * 0.22,
+            0.0,
+            1.0);
+        float surface_calm =
+            1.0 - smoothstep(0.10, 0.42, surface_range);
+        float3 surface_neutral =
+            mix(surface_probe,
+                float3(surface_probe_luma),
+                0.34 + 0.18 * surface_calm);
+        float3 surface_tint =
+            surface_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.026
+                      + 0.034
+                          * prominent_intensity
+                          * tint_chroma));
+        float3 surface_layer = mix(
+            rgb,
+            surface_tint,
+            0.07
+                + 0.08 * surface_calm
+                + 0.07 * surface_group_gate);
+        float3 surface_luma_rgb =
+            float3(dot(surface_layer,
+                       float3(0.2126, 0.7152, 0.0722)));
+        surface_layer =
+            surface_luma_rgb
+            + (surface_layer - surface_luma_rgb)
+                * (0.90 + 0.10 * surface_group_gate);
+        float surface_highlight = clamp(
+            surface_group_gate
+                * (0.44 + 0.56 * surface_group_center)
+                * (0.48 + 0.52 * surface_calm),
+            0.0,
+            1.0);
+        surface_layer += surface_neutral
+            * surface_highlight
+            * (0.004
+               + 0.010 * clear_glass_detail
+               + 0.008 * glass_scattering_gain);
+        float surface_weight = group_surface_skin_strength
+            * surface_group_gate
+            * (0.34
+               + 0.18 * surface_group_center
+               + 0.18 * surface_group_edge_band
+               + 0.16 * surface_calm
+               + 0.10 * clear_glass_detail);
+        rgb = mix(
+            rgb,
+            clamp(surface_layer, 0.0, 1.0),
+            surface_weight * 0.32);
+        float surface_shadow =
+            surface_weight
+            * surface_group_gate
+            * (0.004 + 0.010 * glass_shadow_gain)
+            * (1.0 - surface_calm * 0.38);
+        rgb *= 1.0 - clamp(surface_shadow, 0.0, 0.024);
         rgb = clamp(rgb, 0.0, 1.0);
     }
     float liquid_response_strength = clamp(
