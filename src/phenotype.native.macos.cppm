@@ -6151,6 +6151,170 @@ fragment float4 fs_material(
         && (scroll_edge_dissolve > 0.0001
             || scroll_edge_dimming > 0.0001
             || scroll_edge_hard_style > 0.0001)) {
+        float pocket_left = in.local_pos.x;
+        float pocket_right = max(in.rect_size.x - in.local_pos.x, 0.0);
+        float pocket_top = in.local_pos.y;
+        float pocket_bottom = max(in.rect_size.y - in.local_pos.y, 0.0);
+        float pocket_nearest = min(
+            min(pocket_left, pocket_right),
+            min(pocket_top, pocket_bottom));
+        float2 pocket_dir = float2(-1.0, 0.0);
+        if (pocket_right <= pocket_nearest) {
+            pocket_dir = float2(1.0, 0.0);
+        }
+        if (pocket_top <= pocket_nearest) {
+            pocket_dir = float2(0.0, -1.0);
+        }
+        if (pocket_bottom <= pocket_nearest) {
+            pocket_dir = float2(0.0, 1.0);
+        }
+        float2 pocket_tangent = float2(-pocket_dir.y, pocket_dir.x);
+        float pocket_band = 1.0 - smoothstep(
+            0.0,
+            max(scroll_edge_extent, 0.5),
+            signed_edge_distance);
+        float pocket_hard = scroll_edge_hard_style
+            * (1.0 - smoothstep(0.34, 1.10, normalized_len));
+        float pocket_gate = clamp(
+            max(pocket_band, pocket_hard)
+                * (0.42
+                   + 0.50 * scroll_edge_dissolve
+                   + 0.34 * scroll_edge_dimming
+                   + 0.26 * scroll_edge_hard_style),
+            0.0,
+            1.0);
+        float scroll_pocket_strength = clamp(
+            pocket_gate
+                * (0.035
+                   + 0.030 * glass_thickness
+                   + 0.030 * (glass_lensing_gain - 1.0)
+                   + 0.024 * glass_caustic_spread
+                   + 0.020 * fusion_strength
+                   + 0.014 * bridge_band),
+            0.0,
+            0.18);
+        if (scroll_pocket_strength > 0.0001) {
+            float pocket_phase =
+                dot(normalized_local, pocket_tangent)
+                    * (7.0 + 4.0 * glass_caustic_spread)
+                + signed_edge_distance
+                    / max(scroll_edge_extent, 0.5)
+                    * 5.0
+                + scroll_edge_dissolve * 6.0
+                + bridge_band * 4.0;
+            float pocket_wave = 0.5 + 0.5 * sin(pocket_phase);
+            float pocket_span =
+                (2.0
+                 + 0.12 * scroll_edge_extent
+                 + 3.4 * glass_thickness
+                 + 2.6 * glass_caustic_spread
+                 + 0.10 * blur_points)
+                * content_scale
+                * (0.78 + 0.22 * glass_lensing_gain);
+            float pocket_cross_span =
+                (1.0
+                 + 2.2 * glass_thickness
+                 + 1.6 * glass_dispersion_tangential
+                 + 3.0 * spectral_dispersion)
+                * content_scale;
+            float2 pocket_mirror_uv = clamp(
+                in.screen_uv
+                    - pocket_dir
+                        * texel
+                        * pocket_span
+                        * (0.68 + 0.24 * pocket_band),
+                float2(0.0),
+                float2(1.0));
+            float2 pocket_pull_uv = clamp(
+                in.screen_uv
+                    + pocket_dir
+                        * texel
+                        * pocket_span
+                        * (0.36 + 0.24 * pocket_wave),
+                float2(0.0),
+                float2(1.0));
+            float2 pocket_shear_uv = clamp(
+                in.screen_uv
+                    + pocket_tangent
+                        * texel
+                        * pocket_cross_span
+                        * (0.58
+                           + 0.22 * abs(bridge_shear)
+                           + 0.16 * pocket_wave)
+                    + dispersion_tangent
+                        * texel
+                        * pocket_cross_span
+                        * 0.22,
+                float2(0.0),
+                float2(1.0));
+            float3 pocket_mirror =
+                backdrop.sample(samp, pocket_mirror_uv).rgb;
+            float3 pocket_pull =
+                backdrop.sample(samp, pocket_pull_uv).rgb;
+            float3 pocket_shear =
+                backdrop.sample(samp, pocket_shear_uv).rgb;
+            float3 pocket_rgb =
+                pocket_mirror * 0.42
+                + pocket_pull * 0.34
+                + pocket_shear * 0.24;
+            float pocket_luma =
+                dot(pocket_rgb, float3(0.2126, 0.7152, 0.0722));
+            float pocket_surface_luma =
+                dot(backdrop_rgb, float3(0.2126, 0.7152, 0.0722));
+            float pocket_bright = smoothstep(
+                pocket_surface_luma - 0.08,
+                pocket_surface_luma + 0.30,
+                pocket_luma);
+            float pocket_dark = smoothstep(
+                0.10,
+                0.34,
+                pocket_surface_luma - pocket_luma);
+            float pocket_detail = smoothstep(
+                0.03,
+                0.30,
+                length(pocket_mirror - pocket_pull) * 0.38
+                    + length(pocket_shear - pocket_rgb) * 0.24);
+            float3 pocket_tint = mix(
+                pocket_rgb,
+                float3(pocket_luma),
+                pocket_dark * (0.18 + 0.18 * glass_shadow_gain));
+            pocket_tint = mix(
+                pocket_tint,
+                pocket_tint * (float3(1.0) + 0.12 * in.tint.rgb),
+                clamp(in.tint.a, 0.0, 1.0)
+                    * (0.22 + 0.24 * prominent_intensity));
+            pocket_tint += float3(
+                spectral_warmth,
+                0.10 * (spectral_warmth + spectral_coolness),
+                spectral_coolness)
+                * pocket_band
+                * (0.08 + 0.24 * spectral_rim_tint);
+            float pocket_weight = scroll_pocket_strength
+                * (0.46
+                   + 0.20 * pocket_detail
+                   + 0.20 * pocket_bright
+                   + 0.14 * (1.0 - scroll_edge_hard_style));
+            backdrop_rgb = mix(
+                backdrop_rgb,
+                mix(backdrop_rgb, pocket_tint, 0.22 + 0.16 * pocket_detail),
+                pocket_weight);
+            backdrop_rgb += pocket_tint
+                * pocket_weight
+                * (0.010
+                   + 0.020 * dynamic_light_highlight
+                   + 0.014 * glass_prismatic_gain);
+            float pocket_shadow = pocket_dark
+                * pocket_weight
+                * (0.020 + 0.036 * glass_shadow_gain)
+                * (0.70 + 0.30 * scroll_edge_hard_style);
+            backdrop_rgb *= 1.0 - clamp(pocket_shadow, 0.0, 0.065);
+            backdrop_rgb = clamp(backdrop_rgb, 0.0, 1.0);
+        }
+    }
+    if (scroll_edge_extent > 0.0001
+        && (scroll_edge_dissolve > 0.0001
+            || scroll_edge_dimming > 0.0001
+            || scroll_edge_hard_style > 0.0001)) {
         float scroll_edge_band = 1.0 - smoothstep(
             0.0,
             max(scroll_edge_extent, 0.5),
