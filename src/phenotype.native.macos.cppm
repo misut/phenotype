@@ -15451,6 +15451,177 @@ fragment float4 fs_material(
         rgb += diffusion_neutral * clamp(diffusion_dark_lift, 0.0, 0.014);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float surrounding_light_wrap_strength = clamp(
+        0.008 * clear_glass_detail
+            + 0.008 * clear_glass_brightness
+            + 0.010 * glass_thickness
+            + 0.010 * glass_scattering_gain
+            + 0.008 * dynamic_light_highlight
+            + 0.008 * edge_absorption_strength
+            + 0.006 * internal_diffusion_strength
+            + 0.006 * liquid_response_strength,
+        0.0,
+        0.070);
+    if (surrounding_light_wrap_strength > 0.0001) {
+        float wrap_center =
+            1.0 - smoothstep(0.18, 1.18, normalized_len);
+        float wrap_rim = edge_lens
+            * (0.28
+               + 0.72
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.62, 0.5),
+                       signed_edge_distance)));
+        float wrap_motion = clamp(
+            pointer_lens * pointer_lens_strength * 0.24
+                + bridge_band * (0.22 + 0.78 * bridge_core)
+                + surface_tension_strength * 0.30
+                + specular_intensity * 0.20,
+            0.0,
+            1.0);
+        float wrap_gate = clamp(
+            wrap_center * 0.24
+                + wrap_rim * 0.26
+                + wrap_motion * 0.18
+                + clear_glass_detail * 0.16
+                + dynamic_light_highlight * 0.16,
+            0.0,
+            1.0);
+        float2 wrap_axis_raw =
+            -dynamic_light_dir * (0.34 + 0.18 * wrap_center)
+            + refraction_dir * (0.22 + 0.14 * wrap_rim)
+            + bridge_dir * bridge_band * (0.16 + 0.12 * bridge_core)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.14;
+        float wrap_axis_len = length(wrap_axis_raw);
+        float2 wrap_axis = wrap_axis_len > 0.0001
+            ? wrap_axis_raw / wrap_axis_len
+            : -dynamic_light_dir;
+        float2 wrap_cross =
+            float2(-wrap_axis.y, wrap_axis.x);
+        float wrap_span =
+            (1.1
+             + 2.4 * glass_thickness
+             + 1.5 * clear_glass_detail
+             + 0.9 * wrap_gate
+             + 0.045 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float2 wrap_light_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + wrap_axis
+                    * texel
+                    * wrap_span
+                    * (0.22 + 0.14 * wrap_center),
+            float2(0.0),
+            float2(1.0));
+        float2 wrap_shadow_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.07
+                - wrap_axis
+                    * texel
+                    * wrap_span
+                    * (0.24 + 0.14 * wrap_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 wrap_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + wrap_cross
+                    * texel
+                    * wrap_span
+                    * (0.18
+                       + 0.10 * wrap_motion
+                       + 0.08 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 wrap_light_rgb =
+            backdrop.sample(samp, wrap_light_uv).rgb;
+        float3 wrap_shadow_rgb =
+            backdrop.sample(samp, wrap_shadow_uv).rgb;
+        float3 wrap_cross_rgb =
+            backdrop.sample(samp, wrap_cross_uv).rgb;
+        float3 wrap_probe =
+            wrap_light_rgb * 0.40
+            + wrap_shadow_rgb * 0.34
+            + wrap_cross_rgb * 0.26;
+        float wrap_probe_luma =
+            dot(wrap_probe, float3(0.2126, 0.7152, 0.0722));
+        float wrap_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float wrap_range = clamp(
+            length(wrap_light_rgb - wrap_shadow_rgb) * 0.30
+                + length(wrap_cross_rgb - wrap_probe) * 0.20
+                + abs(wrap_probe_luma - wrap_surface_luma) * 0.22,
+            0.0,
+            1.0);
+        float wrap_pickup = smoothstep(
+            0.06,
+            0.48,
+            wrap_range * 0.42
+                + wrap_rim * 0.24
+                + wrap_motion * 0.18
+                + dynamic_light_highlight * 0.16);
+        float wrap_soft =
+            1.0 - smoothstep(
+                0.10,
+                0.46,
+                wrap_range * 0.54
+                    + clear_glass_contrast * 0.16);
+        float3 wrap_neutral =
+            mix(wrap_probe,
+                float3(wrap_probe_luma),
+                0.32 + 0.20 * wrap_soft);
+        float3 wrap_layer = mix(
+            rgb,
+            wrap_neutral,
+            0.04
+                + 0.08 * wrap_pickup
+                + 0.06 * wrap_gate);
+        float3 wrap_luma_rgb =
+            float3(dot(wrap_layer,
+                       float3(0.2126, 0.7152, 0.0722)));
+        wrap_layer =
+            wrap_luma_rgb
+            + (wrap_layer - wrap_luma_rgb)
+                * (0.88
+                   + 0.07 * wrap_pickup
+                   + 0.04 * clear_glass_detail);
+        wrap_layer = mix(
+            wrap_layer,
+            wrap_layer
+                * (float3(1.0)
+                   + in.tint.rgb
+                       * (0.012
+                          + 0.024 * tint_chroma * prominent_intensity)),
+            tint_chroma * (0.07 + 0.10 * wrap_gate));
+        float wrap_weight = surrounding_light_wrap_strength
+            * wrap_gate
+            * (0.30
+               + 0.22 * wrap_pickup
+               + 0.18 * wrap_soft
+               + 0.16 * wrap_rim
+               + 0.14 * wrap_motion);
+        rgb = mix(
+            rgb,
+            clamp(wrap_layer, 0.0, 1.0),
+            wrap_weight * 0.30);
+        float wrap_edge_lift =
+            wrap_weight
+            * wrap_pickup
+            * wrap_rim
+            * (0.004 + 0.008 * dynamic_light_highlight);
+        float wrap_shadow_trim =
+            wrap_weight
+            * (1.0 - wrap_soft)
+            * smoothstep(0.0,
+                         0.34,
+                         wrap_surface_luma - wrap_probe_luma)
+            * (0.004 + 0.008 * clear_glass_dimming);
+        rgb += wrap_neutral * clamp(wrap_edge_lift, 0.0, 0.014);
+        rgb *= 1.0 - clamp(wrap_shadow_trim, 0.0, 0.018);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
