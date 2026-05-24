@@ -7864,6 +7864,181 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(depth_occlusion, 0.0, 0.075);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float background_extension_inflate = max(in.sampling.w, 0.0);
+    float background_extension_strength = clamp(
+        0.024 * glass_thickness
+            + 0.024 * (glass_lensing_gain - 1.0)
+            + 0.020 * glass_caustic_spread
+            + 0.026 * ambient_chroma_bleed_strength
+            + 0.030 * depth_parallax_strength
+            + 0.020 * morph_field_strength
+            + 0.0016 * background_extension_inflate,
+        0.0,
+        0.16);
+    if (background_extension_strength > 0.0001) {
+        float extension_edge = edge_lens
+            * (0.38
+               + 0.62
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.65, 0.5),
+                       signed_edge_distance)));
+        float extension_soft = soft_edge_radius > 0.0
+            ? (1.0
+               - smoothstep(
+                   max(soft_edge_radius * 0.18, 0.001),
+                   soft_edge_radius,
+                   signed_edge_distance))
+            : 0.0;
+        float extension_bridge = bridge_band
+            * (0.40 + 0.60 * bridge_core)
+            * (0.50 + 0.50 * group_blend_strength);
+        float extension_gate = clamp(
+            extension_edge * 0.52
+                + extension_soft * 0.24
+                + extension_bridge * 0.28
+                + pointer_lens * pointer_lens_strength * 0.18,
+            0.0,
+            1.0);
+        float2 extension_raw_dir =
+            refraction_dir * (0.66 + 0.34 * edge_lens)
+            + bridge_dir * extension_bridge * 0.52
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.38
+            - dynamic_light_dir * 0.18;
+        float extension_dir_length = length(extension_raw_dir);
+        float2 extension_dir = extension_dir_length > 0.0001
+            ? extension_raw_dir / extension_dir_length
+            : -dynamic_light_dir;
+        float2 extension_tangent = float2(-extension_dir.y,
+                                          extension_dir.x);
+        float extension_span =
+            (2.4
+             + 5.8 * glass_thickness
+             + 3.8 * glass_caustic_spread
+             + 0.12 * blur_points
+             + 0.16 * background_extension_inflate)
+            * content_scale
+            * (0.78 + 0.22 * glass_lensing_gain);
+        float extension_cross_span =
+            (1.2
+             + 2.4 * glass_thickness
+             + 1.4 * glass_dispersion_tangential
+             + 3.6 * spectral_dispersion)
+            * content_scale;
+        float2 extension_mirror_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.36
+                - extension_dir
+                    * texel
+                    * extension_span
+                    * (0.74 + 0.26 * extension_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 extension_pull_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.52
+                + extension_dir
+                    * texel
+                    * extension_span
+                    * (0.46 + 0.24 * extension_bridge),
+            float2(0.0),
+            float2(1.0));
+        float2 extension_left_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.42
+                + extension_tangent
+                    * texel
+                    * extension_cross_span
+                    * (0.66 + 0.24 * abs(bridge_shear))
+                + dispersion_tangent
+                    * texel
+                    * extension_cross_span
+                    * 0.30,
+            float2(0.0),
+            float2(1.0));
+        float2 extension_right_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.42
+                - extension_tangent
+                    * texel
+                    * extension_cross_span
+                    * (0.58 + 0.22 * extension_gate)
+                - dispersion_tangent
+                    * texel
+                    * extension_cross_span
+                    * 0.24,
+            float2(0.0),
+            float2(1.0));
+        float3 extension_mirror =
+            backdrop.sample(samp, extension_mirror_uv).rgb;
+        float3 extension_pull =
+            backdrop.sample(samp, extension_pull_uv).rgb;
+        float3 extension_left =
+            backdrop.sample(samp, extension_left_uv).rgb;
+        float3 extension_right =
+            backdrop.sample(samp, extension_right_uv).rgb;
+        float3 extension_rgb =
+            extension_mirror * 0.38
+            + extension_pull * 0.26
+            + extension_left * 0.19
+            + extension_right * 0.17;
+        float extension_luma =
+            dot(extension_rgb, float3(0.2126, 0.7152, 0.0722));
+        float extension_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float extension_bright = smoothstep(
+            extension_surface_luma - 0.09,
+            extension_surface_luma + 0.32,
+            extension_luma);
+        float extension_dark = smoothstep(
+            0.10,
+            0.35,
+            extension_surface_luma - extension_luma);
+        float extension_detail = smoothstep(
+            0.03,
+            0.32,
+            length(extension_mirror - extension_pull) * 0.36
+                + length(extension_left - extension_right) * 0.28);
+        float3 extension_neutral = mix(
+            extension_rgb,
+            float3(extension_luma),
+            extension_dark * (0.18 + 0.22 * glass_shadow_gain));
+        float3 extension_tint = mix(
+            extension_neutral,
+            extension_rgb,
+            0.52 + 0.24 * extension_detail);
+        extension_tint = mix(
+            extension_tint,
+            extension_tint * (float3(1.0) + 0.16 * in.tint.rgb),
+            tint_chroma * (0.34 + 0.24 * prominent_intensity));
+        extension_tint += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * extension_edge
+            * (0.10 + 0.28 * spectral_rim_tint);
+        float extension_weight = background_extension_strength
+            * extension_gate
+            * (0.44
+               + 0.20 * extension_detail
+               + 0.20 * extension_bright
+               + 0.16 * extension_bridge);
+        rgb = mix(
+            rgb,
+            mix(rgb, extension_tint, 0.20 + 0.16 * extension_detail),
+            extension_weight);
+        rgb += extension_tint
+            * extension_weight
+            * (0.010
+               + 0.022 * dynamic_light_highlight
+               + 0.018 * glass_prismatic_gain);
+        float extension_shadow = extension_dark
+            * extension_weight
+            * (0.020 + 0.040 * glass_shadow_gain)
+            * (0.70 + 0.30 * extension_edge);
+        rgb *= 1.0 - clamp(extension_shadow, 0.0, 0.070);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float optical_light_energy = clamp(
         dynamic_light_highlight
             + 0.34 * edge_inner_highlight
