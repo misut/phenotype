@@ -3737,8 +3737,11 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     assert(first_execution.fusion_optics_active);
     assert(first_execution.fusion_strength == 1.0f);
     assert(first_execution.fusion_lensing_gain > 1.17f);
+    assert(first_execution.fusion_lensing_gain < 1.20f);
     assert(first_execution.fusion_edge_lift > 0.07f);
+    assert(first_execution.fusion_edge_lift < 0.09f);
     assert(first_execution.fusion_shadow_gain > 1.15f);
+    assert(first_execution.fusion_shadow_gain < 1.18f);
 
     auto const first_bridge_motion =
         material_container_bridge_motion_optics(
