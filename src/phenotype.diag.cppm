@@ -949,7 +949,13 @@ namespace detail {
         out.emplace("backdrop_driven", json::Value{profile.backdrop_driven});
         out.emplace("contrast_driven", json::Value{profile.contrast_driven});
         out.emplace("hard_style", json::Value{profile.hard_style});
+        out.emplace(
+            "legibility_driven",
+            json::Value{profile.legibility_driven});
         out.emplace("bounded", json::Value{profile.bounded});
+        out.emplace(
+            "response_strength",
+            json::Value{profile.response_strength});
         out.emplace(
             "fade_extent_pixels",
             json::Value{profile.fade_extent_pixels});
@@ -962,6 +968,16 @@ namespace detail {
         out.emplace(
             "hard_style_strength",
             json::Value{profile.hard_style_strength});
+        out.emplace("opacity_delta", json::Value{profile.opacity_delta});
+        out.emplace(
+            "tint_alpha_delta",
+            json::Value{profile.tint_alpha_delta});
+        out.emplace(
+            "luminance_floor_delta",
+            json::Value{profile.luminance_floor_delta});
+        out.emplace(
+            "edge_highlight_delta",
+            json::Value{profile.edge_highlight_delta});
         return json::Value{std::move(out)};
     }
 
@@ -2741,6 +2757,9 @@ namespace detail {
             "glass_dispersion_caustic_spread",
             json::Value{composition.glass_dispersion_caustic_spread});
         optical_composition.emplace(
+            "scroll_edge_response",
+            json::Value{composition.scroll_edge_response});
+        optical_composition.emplace(
             "scroll_edge_extent",
             json::Value{composition.scroll_edge_extent});
         optical_composition.emplace(
@@ -2752,6 +2771,18 @@ namespace detail {
         optical_composition.emplace(
             "scroll_edge_hard_style",
             json::Value{composition.scroll_edge_hard_style});
+        optical_composition.emplace(
+            "scroll_edge_opacity_delta",
+            json::Value{composition.scroll_edge_opacity_delta});
+        optical_composition.emplace(
+            "scroll_edge_tint_alpha_delta",
+            json::Value{composition.scroll_edge_tint_alpha_delta});
+        optical_composition.emplace(
+            "scroll_edge_luminance_floor_delta",
+            json::Value{composition.scroll_edge_luminance_floor_delta});
+        optical_composition.emplace(
+            "scroll_edge_edge_highlight_delta",
+            json::Value{composition.scroll_edge_edge_highlight_delta});
         optical_composition.emplace(
             "prominent_glass_intensity",
             json::Value{composition.prominent_glass_intensity});

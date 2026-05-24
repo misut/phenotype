@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 76);
+    assert(material_plan_contract_version == 77);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -642,18 +642,26 @@ void test_toolbar_scroll_edge_separates_scrolled_content_contract() {
     assert(plan.scroll_edge.backdrop_driven);
     assert(plan.scroll_edge.contrast_driven);
     assert(!plan.scroll_edge.hard_style);
+    assert(plan.scroll_edge.legibility_driven);
     assert(plan.scroll_edge.bounded);
     assert(std::string_view(plan.scroll_edge.model)
         == "adaptive-glass-scroll-edge");
     assert(std::string_view(plan.scroll_edge.source)
         == "sampled-backdrop-contrast-scroll-edge");
+    assert(plan.scroll_edge.response_strength > 0.0f);
     assert(plan.scroll_edge.fade_extent_pixels > plan.edge_width);
     assert(plan.scroll_edge.dissolve_strength > 0.0f);
     assert(plan.scroll_edge.dimming_strength > 0.0f);
     assert(plan.scroll_edge.hard_style_strength == 0.0f);
+    assert(plan.scroll_edge.opacity_delta > 0.0f);
+    assert(plan.scroll_edge.tint_alpha_delta > 0.0f);
+    assert(plan.scroll_edge.luminance_floor_delta > 0.0f);
+    assert(plan.scroll_edge.edge_highlight_delta > 0.0f);
     assert(std::string_view(plan.optical_composition.scroll_edge_source)
         == "sampled-backdrop-contrast-scroll-edge");
     assert(plan.optical_composition.scroll_edge_required);
+    assert(plan.optical_composition.scroll_edge_response
+           == plan.scroll_edge.response_strength);
     assert(plan.optical_composition.scroll_edge_extent
            == plan.scroll_edge.fade_extent_pixels);
     assert(plan.optical_composition.scroll_edge_dissolve
@@ -662,6 +670,14 @@ void test_toolbar_scroll_edge_separates_scrolled_content_contract() {
            == plan.scroll_edge.dimming_strength);
     assert(plan.optical_composition.scroll_edge_hard_style
            == plan.scroll_edge.hard_style_strength);
+    assert(plan.optical_composition.scroll_edge_opacity_delta
+           == plan.scroll_edge.opacity_delta);
+    assert(plan.optical_composition.scroll_edge_tint_alpha_delta
+           == plan.scroll_edge.tint_alpha_delta);
+    assert(plan.optical_composition.scroll_edge_luminance_floor_delta
+           == plan.scroll_edge.luminance_floor_delta);
+    assert(plan.optical_composition.scroll_edge_edge_highlight_delta
+           == plan.scroll_edge.edge_highlight_delta);
     assert(plan.optical_response.scroll_edge_active);
     assert(std::string_view(plan.execution_stages[1].optics.scroll_edge_model)
         == "adaptive-glass-scroll-edge");
@@ -678,9 +694,12 @@ void test_toolbar_scroll_edge_separates_scrolled_content_contract() {
     auto hard_plan = plan_material_surface(toolbar_request(), env);
     assert(hard_plan.scroll_edge.active);
     assert(hard_plan.scroll_edge.hard_style);
+    assert(hard_plan.scroll_edge.legibility_driven);
     assert(std::string_view(hard_plan.scroll_edge.source)
         == "sampled-backdrop-hard-scroll-edge");
     assert(hard_plan.scroll_edge.hard_style_strength > 0.0f);
+    assert(hard_plan.scroll_edge.response_strength > 0.0f);
+    assert(hard_plan.scroll_edge.edge_highlight_delta > 0.0f);
     assert(hard_plan.optical_composition.scroll_edge_hard_style
            == hard_plan.scroll_edge.hard_style_strength);
 
