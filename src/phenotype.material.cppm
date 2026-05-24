@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 75;
+inline constexpr std::uint32_t material_plan_contract_version = 76;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -744,6 +744,25 @@ struct MaterialClearGlassLegibilityProfile {
     float detail_response = 0.0f;
 };
 
+struct MaterialLargeSurfaceLegibilityProfile {
+    char const* model = "none";
+    char const* source = "none";
+    bool active = false;
+    bool role_driven = false;
+    bool size_driven = false;
+    bool backdrop_driven = false;
+    bool contrast_driven = false;
+    bool brightness_driven = false;
+    bool bounded = true;
+    float response_strength = 0.0f;
+    float opacity_delta = 0.0f;
+    float tint_alpha_delta = 0.0f;
+    float luminance_floor_delta = 0.0f;
+    float edge_highlight_delta = 0.0f;
+    float shadow_alpha_delta = 0.0f;
+    float shadow_radius_delta = 0.0f;
+};
+
 struct MaterialInteractionResponse {
     bool enabled = false;
     bool active = false;
@@ -809,6 +828,7 @@ struct MaterialOpticalResponseContract {
     bool scroll_edge_active = false;
     bool prominent_glass_active = false;
     bool clear_glass_legibility_active = false;
+    bool large_surface_legibility_active = false;
     bool foreground_vibrancy_active = false;
     bool interaction_active = false;
     bool interaction_modulates_optics = false;
@@ -831,6 +851,7 @@ struct MaterialOpticalComposition {
     char const* scroll_edge_source = "none";
     char const* prominent_glass_source = "none";
     char const* clear_glass_legibility_source = "none";
+    char const* large_surface_legibility_source = "none";
     char const* interaction_source = "none";
     char const* transition_source = "identity";
     char const* fallback_source = "none";
@@ -854,6 +875,7 @@ struct MaterialOpticalComposition {
     bool scroll_edge_required = false;
     bool prominent_glass_required = false;
     bool clear_glass_legibility_required = false;
+    bool large_surface_legibility_required = false;
     bool interaction_required = false;
     bool transition_required = false;
     bool fallback_required = false;
@@ -911,6 +933,11 @@ struct MaterialOpticalComposition {
     float clear_glass_contrast = 0.0f;
     float clear_glass_brightness_response = 0.0f;
     float clear_glass_detail_response = 0.0f;
+    float large_surface_legibility_response = 0.0f;
+    float large_surface_opacity_delta = 0.0f;
+    float large_surface_tint_alpha_delta = 0.0f;
+    float large_surface_luminance_floor_delta = 0.0f;
+    float large_surface_edge_highlight_delta = 0.0f;
     float interaction_response_strength = 0.0f;
     float interaction_control_morph_scale_delta = 0.0f;
     float interaction_control_morph_depth = 0.0f;
@@ -1127,6 +1154,7 @@ struct MaterialPlan {
     MaterialScrollEdgeProfile scroll_edge{};
     MaterialProminentGlassProfile prominent_glass{};
     MaterialClearGlassLegibilityProfile clear_glass_legibility{};
+    MaterialLargeSurfaceLegibilityProfile large_surface_legibility{};
     MaterialInteractionResponse interaction{};
     MaterialOpticalComposition optical_composition{};
     MaterialOpticalResponseContract optical_response{};
@@ -6742,6 +6770,158 @@ inline void apply_backdrop_color_policy(MaterialPlan& plan) noexcept {
         material_rgb_distance(before, plan.tint);
 }
 
+inline float material_large_surface_legibility_role_scale(
+        MaterialSurfaceRole role) noexcept {
+    switch (role) {
+        case MaterialSurfaceRole::Sidebar: return 1.18f;
+        case MaterialSurfaceRole::Navigation: return 1.08f;
+        case MaterialSurfaceRole::Toolbar: return 0.92f;
+        case MaterialSurfaceRole::StatusBar: return 0.82f;
+        case MaterialSurfaceRole::Overlay: return 0.76f;
+        case MaterialSurfaceRole::Surface: return 0.56f;
+        case MaterialSurfaceRole::Control:
+        case MaterialSurfaceRole::Content:
+            return 0.0f;
+    }
+    return 0.0f;
+}
+
+inline char const* material_large_surface_legibility_source_name(
+        MaterialSurfaceRole role,
+        bool brightness_driven,
+        bool contrast_driven) noexcept {
+    if (role == MaterialSurfaceRole::Sidebar)
+        return "sidebar-large-glass-legibility";
+    if (role == MaterialSurfaceRole::Navigation)
+        return "navigation-large-glass-legibility";
+    if (brightness_driven && contrast_driven)
+        return "bright-detail-large-glass-legibility";
+    if (contrast_driven)
+        return "detailed-large-glass-legibility";
+    if (brightness_driven)
+        return "bright-large-glass-legibility";
+    return "large-glass-legibility";
+}
+
+inline MaterialLargeSurfaceLegibilityProfile
+apply_material_large_surface_legibility_policy(MaterialPlan& plan) noexcept {
+    MaterialLargeSurfaceLegibilityProfile profile{};
+    profile.bounded = true;
+    if (!plan.backdrop_sampling
+        || plan.fallback()
+        || plan.kind == MaterialKind::None) {
+        return profile;
+    }
+
+    auto const role_scale =
+        material_large_surface_legibility_role_scale(plan.role);
+    if (role_scale <= 0.0001f)
+        return profile;
+
+    auto const width = std::max(plan.geometry.w, 1.0f);
+    auto const height = std::max(plan.geometry.h, 1.0f);
+    auto const area_root = std::sqrt(width * height);
+    auto const min_dim = std::min(width, height);
+    auto const area_response =
+        std::clamp((area_root - 180.0f) / 440.0f, 0.0f, 1.0f);
+    auto const span_response =
+        std::clamp((min_dim - 88.0f) / 260.0f, 0.0f, 1.0f);
+    auto const size_response =
+        std::clamp(area_response + 0.42f * span_response, 0.0f, 1.0f);
+    if (size_response <= 0.0500f)
+        return profile;
+
+    auto const luma_mean = std::clamp(plan.backdrop.luma_mean, 0.0f, 1.0f);
+    auto const luma_span = std::clamp(plan.backdrop.luma_span, 0.0f, 1.0f);
+    auto const bright_response =
+        std::clamp((luma_mean - 0.62f) / 0.38f, 0.0f, 1.0f);
+    auto const dark_response =
+        std::clamp((0.38f - luma_mean) / 0.38f, 0.0f, 1.0f);
+    auto const contrast_response =
+        std::clamp((luma_span - 0.18f) / 0.50f, 0.0f, 1.0f);
+    auto const flat_response =
+        std::clamp((0.14f - luma_span) / 0.14f, 0.0f, 1.0f);
+    auto const response = std::clamp(
+        role_scale
+            * (0.52f * size_response
+               + 0.20f * contrast_response
+               + 0.14f * bright_response
+               + 0.08f * dark_response
+               + 0.06f * flat_response),
+        0.0f,
+        1.0f);
+    if (response <= 0.0001f)
+        return profile;
+
+    profile.active = true;
+    profile.role_driven = role_scale > 0.0001f;
+    profile.size_driven = size_response > 0.0001f;
+    profile.backdrop_driven = true;
+    profile.contrast_driven =
+        contrast_response > 0.0001f || flat_response > 0.0001f;
+    profile.brightness_driven = bright_response > 0.0001f;
+    profile.response_strength = response;
+    profile.model = "large-surface-liquid-glass-legibility";
+    profile.source = material_large_surface_legibility_source_name(
+        plan.role,
+        profile.brightness_driven,
+        profile.contrast_driven);
+
+    profile.opacity_delta = material_apply_scalar_delta(
+        plan.opacity,
+        response
+            * (0.030f
+               + 0.055f * size_response
+               + 0.026f * contrast_response
+               + 0.020f * bright_response),
+        0.0f,
+        0.96f);
+    profile.tint_alpha_delta = material_apply_tint_alpha_delta(
+        plan.tint,
+        response
+            * (0.040f
+               + 0.060f * size_response
+               + 0.032f * contrast_response
+               + 0.018f * bright_response));
+    profile.luminance_floor_delta = material_apply_scalar_delta(
+        plan.luminance_floor,
+        response
+            * (0.014f
+               + 0.034f * dark_response
+               + 0.022f * contrast_response
+               + 0.016f * flat_response),
+        0.0f,
+        0.30f);
+    profile.edge_highlight_delta = material_apply_scalar_delta(
+        plan.edge_highlight,
+        response
+            * (0.020f
+               + 0.026f * contrast_response
+               + 0.018f * bright_response
+               + 0.014f * dark_response),
+        0.0f,
+        1.0f);
+    if (plan.quality_policy.allow_shadow) {
+        profile.shadow_alpha_delta = material_apply_scalar_delta(
+            plan.shadow_alpha,
+            response
+                * (0.008f
+                   + 0.015f * size_response
+                   + 0.010f * contrast_response),
+            0.0f,
+            0.4f);
+        profile.shadow_radius_delta = material_apply_scalar_delta(
+            plan.shadow_radius,
+            response
+                * (0.60f
+                   + 1.20f * size_response
+                   + 0.55f * contrast_response),
+            0.0f,
+            40.0f);
+    }
+    return profile;
+}
+
 inline float material_clamped_pointer_coordinate(float value) noexcept {
     return std::isfinite(value) ? std::clamp(value, 0.0f, 1.0f) : 0.5f;
 }
@@ -8441,6 +8621,15 @@ inline char const* material_optical_clear_glass_legibility_source_name(
     return "none";
 }
 
+inline char const* material_optical_large_surface_legibility_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.large_surface_legibility.active
+        && plan.large_surface_legibility.source
+        && plan.large_surface_legibility.source[0])
+        return plan.large_surface_legibility.source;
+    return "none";
+}
+
 inline char const* material_optical_stage_order_name(
         MaterialPlan const& plan) noexcept {
     if (!plan.primary_pass.active)
@@ -8522,6 +8711,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         material_optical_prominent_glass_source_name(plan);
     composition.clear_glass_legibility_source =
         material_optical_clear_glass_legibility_source_name(plan);
+    composition.large_surface_legibility_source =
+        material_optical_large_surface_legibility_source_name(plan);
     composition.interaction_source =
         material_optical_interaction_source_name(plan);
     composition.transition_source =
@@ -8561,6 +8752,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.prominent_glass_required = plan.prominent_glass.active;
     composition.clear_glass_legibility_required =
         plan.clear_glass_legibility.active;
+    composition.large_surface_legibility_required =
+        plan.large_surface_legibility.active;
     composition.interaction_required = plan.interaction.active;
     composition.transition_required = plan.transition.active;
     composition.fallback_required = plan.fallback();
@@ -8585,6 +8778,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         && plan.scroll_edge.bounded
         && plan.prominent_glass.bounded
         && plan.clear_glass_legibility.bounded
+        && plan.large_surface_legibility.bounded
         && plan.transition.bounded;
     composition.deterministic =
         plan.resource_budget.deterministic_fallback
@@ -8658,6 +8852,16 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.clear_glass_legibility.brightness_response;
     composition.clear_glass_detail_response =
         plan.clear_glass_legibility.detail_response;
+    composition.large_surface_legibility_response =
+        plan.large_surface_legibility.response_strength;
+    composition.large_surface_opacity_delta =
+        plan.large_surface_legibility.opacity_delta;
+    composition.large_surface_tint_alpha_delta =
+        plan.large_surface_legibility.tint_alpha_delta;
+    composition.large_surface_luminance_floor_delta =
+        plan.large_surface_legibility.luminance_floor_delta;
+    composition.large_surface_edge_highlight_delta =
+        plan.large_surface_legibility.edge_highlight_delta;
     composition.interaction_response_strength =
         plan.interaction.response_strength;
     composition.interaction_control_morph_scale_delta =
@@ -8721,6 +8925,8 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
         composition.prominent_glass_required;
     response.clear_glass_legibility_active =
         composition.clear_glass_legibility_required;
+    response.large_surface_legibility_active =
+        composition.large_surface_legibility_required;
     response.foreground_vibrancy_active = plan.foreground.uses_vibrancy;
     response.interaction_active = composition.interaction_required;
     response.interaction_modulates_optics =
@@ -9017,6 +9223,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     } else {
         apply_backdrop_luminance_policy(plan);
         apply_backdrop_color_policy(plan);
+        plan.large_surface_legibility =
+            apply_material_large_surface_legibility_policy(plan);
     }
     plan.sampling_kernel = material_resolve_sampling_kernel(
         plan.backdrop_sampling,

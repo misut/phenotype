@@ -2247,6 +2247,56 @@ namespace detail {
             "lensing_gain",
             json::Value{plan.prominent_glass.lensing_gain});
 
+        json::Object large_surface_legibility;
+        large_surface_legibility.emplace(
+            "model",
+            json::Value{plan.large_surface_legibility.model});
+        large_surface_legibility.emplace(
+            "source",
+            json::Value{plan.large_surface_legibility.source});
+        large_surface_legibility.emplace(
+            "active",
+            json::Value{plan.large_surface_legibility.active});
+        large_surface_legibility.emplace(
+            "role_driven",
+            json::Value{plan.large_surface_legibility.role_driven});
+        large_surface_legibility.emplace(
+            "size_driven",
+            json::Value{plan.large_surface_legibility.size_driven});
+        large_surface_legibility.emplace(
+            "backdrop_driven",
+            json::Value{plan.large_surface_legibility.backdrop_driven});
+        large_surface_legibility.emplace(
+            "contrast_driven",
+            json::Value{plan.large_surface_legibility.contrast_driven});
+        large_surface_legibility.emplace(
+            "brightness_driven",
+            json::Value{plan.large_surface_legibility.brightness_driven});
+        large_surface_legibility.emplace(
+            "bounded",
+            json::Value{plan.large_surface_legibility.bounded});
+        large_surface_legibility.emplace(
+            "response_strength",
+            json::Value{plan.large_surface_legibility.response_strength});
+        large_surface_legibility.emplace(
+            "opacity_delta",
+            json::Value{plan.large_surface_legibility.opacity_delta});
+        large_surface_legibility.emplace(
+            "tint_alpha_delta",
+            json::Value{plan.large_surface_legibility.tint_alpha_delta});
+        large_surface_legibility.emplace(
+            "luminance_floor_delta",
+            json::Value{plan.large_surface_legibility.luminance_floor_delta});
+        large_surface_legibility.emplace(
+            "edge_highlight_delta",
+            json::Value{plan.large_surface_legibility.edge_highlight_delta});
+        large_surface_legibility.emplace(
+            "shadow_alpha_delta",
+            json::Value{plan.large_surface_legibility.shadow_alpha_delta});
+        large_surface_legibility.emplace(
+            "shadow_radius_delta",
+            json::Value{plan.large_surface_legibility.shadow_radius_delta});
+
         json::Object interaction;
         interaction.emplace("enabled", json::Value{plan.interaction.enabled});
         interaction.emplace("active", json::Value{plan.interaction.active});
@@ -2421,6 +2471,10 @@ namespace detail {
             json::Value{
                 plan.optical_response.clear_glass_legibility_active});
         optical_response.emplace(
+            "large_surface_legibility_active",
+            json::Value{
+                plan.optical_response.large_surface_legibility_active});
+        optical_response.emplace(
             "foreground_vibrancy_active",
             json::Value{plan.optical_response.foreground_vibrancy_active});
         optical_response.emplace(
@@ -2479,6 +2533,9 @@ namespace detail {
         optical_composition.emplace(
             "clear_glass_legibility_source",
             json::Value{composition.clear_glass_legibility_source});
+        optical_composition.emplace(
+            "large_surface_legibility_source",
+            json::Value{composition.large_surface_legibility_source});
         optical_composition.emplace(
             "interaction_source",
             json::Value{composition.interaction_source});
@@ -2548,6 +2605,9 @@ namespace detail {
         optical_composition.emplace(
             "clear_glass_legibility_required",
             json::Value{composition.clear_glass_legibility_required});
+        optical_composition.emplace(
+            "large_surface_legibility_required",
+            json::Value{composition.large_surface_legibility_required});
         optical_composition.emplace(
             "interaction_required",
             json::Value{composition.interaction_required});
@@ -2716,6 +2776,21 @@ namespace detail {
         optical_composition.emplace(
             "clear_glass_detail_response",
             json::Value{composition.clear_glass_detail_response});
+        optical_composition.emplace(
+            "large_surface_legibility_response",
+            json::Value{composition.large_surface_legibility_response});
+        optical_composition.emplace(
+            "large_surface_opacity_delta",
+            json::Value{composition.large_surface_opacity_delta});
+        optical_composition.emplace(
+            "large_surface_tint_alpha_delta",
+            json::Value{composition.large_surface_tint_alpha_delta});
+        optical_composition.emplace(
+            "large_surface_luminance_floor_delta",
+            json::Value{composition.large_surface_luminance_floor_delta});
+        optical_composition.emplace(
+            "large_surface_edge_highlight_delta",
+            json::Value{composition.large_surface_edge_highlight_delta});
         optical_composition.emplace(
             "interaction_response_strength",
             json::Value{composition.interaction_response_strength});
@@ -3205,6 +3280,9 @@ namespace detail {
         out.emplace(
             "prominent_glass",
             json::Value{std::move(prominent_glass)});
+        out.emplace(
+            "large_surface_legibility",
+            json::Value{std::move(large_surface_legibility)});
         out.emplace("interaction", json::Value{std::move(interaction)});
         out.emplace(
             "optical_response",
