@@ -6201,6 +6201,32 @@ fragment float4 fs_material(
             * bridge_highlight_gain
             * bridge_flow_offset_gain
             * (0.44 + 0.56 * union_execution);
+        float bridge_sidewall =
+            smoothstep(0.10, 0.82, abs(bridge_shear))
+            * (0.24 + 0.76 * bridge_core);
+        float bridge_side_alignment =
+            clamp(dot(bridge_tangent, dynamic_light_dir), -1.0, 1.0);
+        float bridge_lit_side =
+            clamp(0.5 + 0.5 * bridge_shear * bridge_side_alignment,
+                  0.0,
+                  1.0);
+        float bridge_side_depth =
+            bridge_band
+            * bridge_sidewall
+            * bridge_flow_offset_gain
+            * (0.40 + 0.60 * union_execution);
+        float bridge_side_shadow = clamp(
+            bridge_side_depth
+                * (1.0 - bridge_lit_side)
+                * (0.18 + 0.12 * glass_shadow_gain),
+            0.0,
+            0.10);
+        rgb *= 1.0 - bridge_side_shadow;
+        rgb += bridge_tint
+            * bridge_side_depth
+            * bridge_lit_side
+            * bridge_highlight_gain
+            * 0.16;
         rgb = clamp(rgb, 0.0, 1.0);
     }
     if (prominent_intensity > 0.0001) {
