@@ -4171,6 +4171,9 @@ void test_glass_effect_union_bridge_motion_uses_member_centroid() {
     assert(!wide_peer_execution.surface_leader);
     assert(first_execution.group_w == 240.0f);
     assert(first_execution.group_h == 40.0f);
+    assert(first_execution.fusion_lensing_gain > 1.22f);
+    assert(first_execution.fusion_edge_lift > 0.10f);
+    assert(first_execution.fusion_shadow_gain > 1.20f);
 
     auto const first_bridge_motion =
         material_container_bridge_motion_optics(

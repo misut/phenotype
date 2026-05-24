@@ -3195,6 +3195,32 @@ inline char const* material_container_fusion_model_name(
     return "none";
 }
 
+inline float material_container_union_fusion_density(
+        MaterialContainerGroupAccumulator const& group,
+        bool union_execution) noexcept {
+    if (!union_execution)
+        return 0.0f;
+    auto const member_density = std::clamp(
+        (static_cast<float>(group.surface_count) - 2.0f) / 4.0f,
+        0.0f,
+        1.0f);
+    auto aspect_density = 0.0f;
+    if (group.has_bounds) {
+        auto const group_w = material_container_group_bounds_width(group);
+        auto const group_h = material_container_group_bounds_height(group);
+        auto const min_extent = std::max(std::min(group_w, group_h), 1.0f);
+        auto const max_extent = std::max(group_w, group_h);
+        aspect_density = std::clamp(
+            (max_extent / min_extent - 1.0f) / 4.0f,
+            0.0f,
+            1.0f);
+    }
+    return std::clamp(
+        0.50f * member_density + 0.50f * aspect_density,
+        0.0f,
+        1.0f);
+}
+
 inline void material_apply_container_fusion_optics(
         MaterialContainerExecutionDescriptor& execution,
         MaterialContainerGroupAccumulator const& group) noexcept {
@@ -3225,12 +3251,19 @@ inline void material_apply_container_fusion_optics(
     execution.fusion_model = material_container_fusion_model_name(execution);
     execution.fusion_optics_active = fusion_strength > 0.0001f;
     execution.fusion_strength = fusion_strength;
-    execution.fusion_lensing_gain = 1.0f + 0.18f * fusion_strength;
+    auto const union_density =
+        material_container_union_fusion_density(
+            group,
+            execution.union_execution);
+    execution.fusion_lensing_gain = 1.0f + 0.18f * fusion_strength
+        + 0.07f * union_density;
     execution.fusion_edge_lift = std::clamp(
-        0.075f * fusion_strength + 0.025f * union_bias,
+        0.075f * fusion_strength + 0.025f * union_bias
+            + 0.04f * union_density,
         0.0f,
-        0.12f);
-    execution.fusion_shadow_gain = 1.0f + 0.16f * fusion_strength;
+        0.16f);
+    execution.fusion_shadow_gain = 1.0f + 0.16f * fusion_strength
+        + 0.07f * union_density;
     execution.overlap_pair_count = group.overlap_pair_count;
     execution.overlap_max_fraction =
         std::clamp(group.max_shape_overlap, 0.0f, 1.0f);
