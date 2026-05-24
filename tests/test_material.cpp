@@ -2361,14 +2361,16 @@ void test_glass_effect_identity_drives_matched_execution_contract() {
         material_glass_effect_match_motion_optics(second_execution);
     assert(!source_motion.active);
     assert(target_motion.active);
-    assert(std::fabs(target_motion.strength - 0.390625f) < 0.0001f);
+    assert(std::fabs(target_motion.strength - 0.440625f) < 0.0001f);
     assert(target_motion.direction_x > 0.999f);
     assert(std::fabs(target_motion.direction_y) < 0.0001f);
     assert(target_motion.specular_anchor_x > 0.58f);
     assert(target_motion.specular_anchor_y == 0.5f);
-    assert(target_motion.refraction_gain > 1.17f);
+    assert(target_motion.refraction_gain > 1.23f);
     assert(target_motion.caustic_gain > target_motion.refraction_gain);
-    assert(target_motion.specular_intensity_gain > 1.21f);
+    assert(target_motion.specular_intensity_gain > 1.29f);
+    assert(target_motion.flow_offset_gain > 0.35f);
+    assert(target_motion.highlight_gain > 0.17f);
 
     auto const first_geometry =
         material_surface_execution_geometry(records[0].plan, &first_execution);
@@ -2600,6 +2602,13 @@ void test_glass_effect_matched_geometry_uses_nearby_namespace_source() {
     assert(std::string_view{target_execution.execution_policy}
            == "glass-effect-matched-geometry");
 
+    auto const target_motion =
+        material_glass_effect_match_motion_optics(target_execution);
+    assert(target_motion.active);
+    assert(std::fabs(target_motion.strength - 0.390625f) < 0.0001f);
+    assert(target_motion.refraction_gain < 1.18f);
+    assert(target_motion.specular_intensity_gain < 1.22f);
+
     std::puts("PASS: glass effect matched geometry uses nearby namespace source");
 }
 
@@ -2660,6 +2669,14 @@ void test_glass_effect_matched_geometry_prefers_effect_id_source() {
            < 0.0001f);
     assert(std::fabs(target_execution.glass_effect_match_rect_radius - 16.0f)
            < 0.0001f);
+
+    auto const target_motion =
+        material_glass_effect_match_motion_optics(target_execution);
+    assert(target_motion.active);
+    assert(std::fabs(target_motion.strength - 0.440625f) < 0.0001f);
+    assert(target_motion.refraction_gain > 1.23f);
+    assert(target_motion.caustic_gain > 1.36f);
+    assert(target_motion.specular_intensity_gain > 1.29f);
 
     std::puts(
         "PASS: glass effect matched geometry prefers effect id source");
