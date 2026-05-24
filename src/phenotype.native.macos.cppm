@@ -12032,15 +12032,194 @@ fragment float4 fs_material(
             * max(in.rect_size, float2(1.0));
         float specular_radius = clamp(in.interaction.z, 0.05, 1.0)
             * max(min(in.rect_size.x, in.rect_size.y), 1.0);
-        float specular_distance = distance(in.local_pos, anchor);
-        float glow = 1.0 - smoothstep(0.0, specular_radius, specular_distance);
-        glow *= glow * specular_intensity;
-        float edge_focus = edge * (1.0 - smoothstep(
+        float2 specular_delta = in.local_pos - anchor;
+        float specular_distance = length(specular_delta);
+        float2 specular_dir = specular_distance > 0.0001
+            ? specular_delta / specular_distance
+            : -dynamic_light_dir;
+        float2 specular_tangent = float2(-specular_dir.y,
+                                         specular_dir.x);
+        float specular_core = 1.0 - smoothstep(
+            0.0,
+            max(specular_radius * 0.42, 0.5),
+            specular_distance);
+        float specular_halo = 1.0 - smoothstep(
+            0.0,
+            max(specular_radius, 0.5),
+            specular_distance);
+        float specular_ring =
+            smoothstep(
+                max(specular_radius * 0.24, 0.5),
+                max(specular_radius * 0.52, 0.75),
+                specular_distance)
+            * (1.0 - smoothstep(
+                max(specular_radius * 0.52, 0.75),
+                max(specular_radius, 1.0),
+                specular_distance));
+        float specular_edge_focus = edge * (1.0 - smoothstep(
             0.0,
             specular_radius * 0.75,
             specular_distance));
-        rgb += float3(glow * (0.22 + 0.18 * edge_lift));
-        rgb += float3(edge_focus * specular_intensity * 0.28);
+        float specular_focus_gate = clamp(
+            specular_core * 0.44
+                + specular_halo * 0.24
+                + specular_ring * 0.22
+                + specular_edge_focus * 0.28,
+            0.0,
+            1.0);
+        float specular_surface_gain = clamp(
+            0.50
+                + 0.28 * glass_lensing_gain
+                + 0.18 * glass_prismatic_gain
+                + 0.20 * meniscus_coherence_strength
+                + 0.18 * substrate_coupling_strength
+                + 0.16 * surface_lamination_strength,
+            0.0,
+            1.32);
+        float specular_span =
+            (1.0
+             + 0.030 * specular_radius
+             + 3.4 * glass_thickness
+             + 2.4 * glass_caustic_spread
+             + 0.06 * blur_points)
+            * content_scale
+            * (0.76 + 0.24 * glass_lensing_gain);
+        float specular_chroma_span =
+            (0.7
+             + 1.4 * glass_dispersion_tangential
+             + 3.8 * spectral_dispersion)
+            * content_scale;
+        float specular_alignment = smoothstep(
+            -0.10,
+            0.94,
+            dot(specular_dir, -dynamic_light_dir) * 0.52
+                + specular_edge_focus * 0.28
+                + specular_core * 0.20);
+        float specular_wave =
+            0.5
+            + 0.5
+                * sin(
+                    dot(normalized_local, specular_dir)
+                        * (7.0 + 3.0 * glass_caustic_spread)
+                    + dot(normalized_local, specular_tangent)
+                        * (3.0 + 1.8 * glass_dispersion_tangential)
+                    + specular_ring * 5.0
+                    + surface_tension_strength * 36.0);
+        float2 specular_focus_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.40
+                - dynamic_light_dir
+                    * texel
+                    * specular_span
+                    * (0.38 + 0.22 * specular_core)
+                + specular_dir
+                    * texel
+                    * specular_span
+                    * (0.24 + 0.18 * specular_ring),
+            float2(0.0),
+            float2(1.0));
+        float2 specular_warm_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.36
+                + specular_tangent
+                    * texel
+                    * specular_chroma_span
+                    * (0.62 + 0.18 * specular_wave)
+                - dynamic_light_dir * texel * specular_span * 0.24,
+            float2(0.0),
+            float2(1.0));
+        float2 specular_cool_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                - specular_tangent
+                    * texel
+                    * specular_chroma_span
+                    * (0.56 + 0.18 * specular_ring)
+                + specular_dir * texel * specular_span * 0.18,
+            float2(0.0),
+            float2(1.0));
+        float3 specular_focus_rgb =
+            backdrop.sample(samp, specular_focus_uv).rgb;
+        float3 specular_warm_rgb =
+            backdrop.sample(samp, specular_warm_uv).rgb;
+        float3 specular_cool_rgb =
+            backdrop.sample(samp, specular_cool_uv).rgb;
+        float3 specular_probe =
+            specular_focus_rgb * 0.44
+            + specular_warm_rgb * 0.30
+            + specular_cool_rgb * 0.26;
+        float3 specular_prism =
+            float3(specular_warm_rgb.r,
+                   specular_probe.g,
+                   specular_cool_rgb.b);
+        specular_probe = mix(
+            specular_probe,
+            specular_prism,
+            0.20 + 0.34 * spectral_dispersion);
+        float specular_luma =
+            dot(specular_probe, float3(0.2126, 0.7152, 0.0722));
+        float specular_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float specular_detail = clamp(
+            length(specular_focus_rgb - specular_cool_rgb) * 0.26
+                + length(specular_warm_rgb - specular_probe) * 0.22
+                + abs(specular_luma - specular_surface_luma) * 0.30
+                + specular_wave * specular_ring * 0.14,
+            0.0,
+            1.0);
+        float specular_bright = smoothstep(
+            specular_surface_luma - 0.06,
+            specular_surface_luma + 0.32,
+            specular_luma);
+        float3 specular_neutral = mix(
+            specular_probe,
+            float3(specular_luma),
+            0.28 + 0.20 * (1.0 - specular_detail));
+        float3 specular_tint = mix(
+            specular_neutral,
+            specular_probe,
+            0.58 + 0.22 * glass_caustic_spread);
+        specular_tint = mix(
+            specular_tint,
+            specular_tint * (float3(1.0) + 0.16 * in.tint.rgb),
+            tint_chroma * (0.20 + 0.26 * prominent_intensity));
+        specular_tint += float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (0.08
+               + 0.24 * spectral_rim_tint
+               + 0.18 * specular_ring);
+        float specular_weight = specular_intensity
+            * specular_focus_gate
+            * specular_surface_gain
+            * (0.38
+               + 0.22 * specular_alignment
+               + 0.20 * specular_detail
+               + 0.20 * specular_bright);
+        rgb = mix(
+            rgb,
+            clamp(specular_tint, 0.0, 1.0),
+            specular_weight * 0.30);
+        rgb += specular_tint
+            * specular_weight
+            * (0.020
+               + 0.034 * edge_lift
+               + 0.028 * dynamic_light_highlight);
+        rgb += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * specular_weight
+            * (specular_ring + specular_edge_focus)
+            * (0.012 + 0.026 * glass_prismatic_gain);
+        float specular_cavity = (1.0 - specular_bright)
+            * specular_intensity
+            * specular_halo
+            * (0.012 + 0.026 * glass_shadow_gain)
+            * (0.54 + 0.46 * substrate_coupling_strength);
+        rgb *= 1.0 - clamp(specular_cavity, 0.0, 0.050);
+        rgb = clamp(rgb, 0.0, 1.0);
     }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
