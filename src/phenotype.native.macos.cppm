@@ -8426,6 +8426,165 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(morph_shadow, 0.0, 0.078);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float cohesion_wake_strength = clamp(
+        0.012 * bridge_cohesion
+            + 0.010 * bridge_band * (0.36 + 0.64 * bridge_core)
+            + 0.010 * group_surface_execution * group_blend_strength
+            + 0.008 * glass_effect_match_execution * group_blend_strength
+            + 0.008 * morph_execution * group_blend_strength
+            + 0.006 * surface_tension_strength,
+        0.0,
+        0.090);
+    if (cohesion_wake_strength > 0.0001
+        && bridge_dir_length > 0.0001
+        && bridge_band > 0.0001) {
+        float wake_core =
+            1.0 - smoothstep(
+                max(bridge_width * 0.22, 0.001),
+                bridge_width + 0.12,
+                bridge_lateral);
+        float wake_shoulder =
+            smoothstep(
+                max(bridge_width * 0.34, 0.001),
+                bridge_width + 0.06,
+                bridge_lateral)
+            * (1.0 - smoothstep(
+                bridge_width + 0.06,
+                bridge_width + 0.28,
+                bridge_lateral));
+        float wake_axial =
+            1.0 - smoothstep(
+                max(bridge_length * 0.52, 0.001),
+                bridge_length + 0.24,
+                bridge_axial);
+        float wake_gate = clamp(
+            wake_axial
+                * (0.54 * wake_core + 0.46 * wake_shoulder)
+                * (0.62 + 0.38 * bridge_core),
+            0.0,
+            1.0);
+        float wake_alignment =
+            smoothstep(-0.40, 1.0, dot(bridge_dir, -dynamic_light_dir));
+        float wake_phase =
+            bridge_axial * (9.0 + 5.0 * bridge_cohesion)
+            - abs(bridge_lateral_signed)
+                * (7.0 + 4.0 * bridge_flow_offset_gain)
+            + bridge_shear * 2.6
+            + fusion_strength * 4.5
+            + group_blend_strength * 3.4;
+        float wake_flow = 0.5 + 0.5 * sin(wake_phase);
+        float wake_pinched =
+            1.0 - smoothstep(0.0, 0.34, abs(wake_flow - 0.52));
+        float wake_span =
+            (1.5
+             + 3.2 * glass_thickness
+             + 2.6 * clear_glass_detail
+             + 1.8 * bridge_cohesion
+             + 0.06 * blur_points)
+            * content_scale
+            * (0.82 + 0.18 * glass_lensing_gain);
+        float wake_cross_span =
+            (0.9
+             + 2.0 * glass_thickness
+             + 1.4 * spectral_dispersion
+             + 1.8 * abs(bridge_shear) * bridge_band)
+            * content_scale;
+        float2 wake_lead_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                + bridge_dir
+                    * texel
+                    * wake_span
+                    * (0.34 + 0.22 * wake_flow),
+            float2(0.0),
+            float2(1.0));
+        float2 wake_trail_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.24
+                - bridge_dir
+                    * texel
+                    * wake_span
+                    * (0.28 + 0.20 * wake_pinched),
+            float2(0.0),
+            float2(1.0));
+        float2 wake_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.26
+                + bridge_tangent
+                    * texel
+                    * wake_cross_span
+                    * bridge_shear
+                    * (0.44 + 0.22 * wake_flow),
+            float2(0.0),
+            float2(1.0));
+        float3 wake_lead =
+            backdrop.sample(samp, wake_lead_uv).rgb;
+        float3 wake_trail =
+            backdrop.sample(samp, wake_trail_uv).rgb;
+        float3 wake_cross_rgb =
+            backdrop.sample(samp, wake_cross_uv).rgb;
+        float3 wake_rgb =
+            wake_lead * 0.40
+            + wake_trail * 0.34
+            + wake_cross_rgb * 0.26;
+        float wake_luma =
+            dot(wake_rgb, float3(0.2126, 0.7152, 0.0722));
+        float wake_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float wake_bright = smoothstep(
+            wake_surface_luma - 0.08,
+            wake_surface_luma + 0.28,
+            wake_luma);
+        float wake_dark = smoothstep(
+            0.08,
+            0.34,
+            wake_surface_luma - wake_luma);
+        float wake_detail = smoothstep(
+            0.02,
+            0.32,
+            length(wake_lead - wake_trail) * 0.34
+                + length(wake_cross_rgb - wake_rgb) * 0.24
+                + wake_pinched * 0.14);
+        float3 wake_tint = mix(
+            wake_rgb,
+            float3(wake_luma),
+            wake_dark * (0.14 + 0.18 * glass_shadow_gain));
+        wake_tint = mix(
+            wake_tint,
+            wake_tint * (float3(1.0) + 0.18 * in.tint.rgb),
+            tint_chroma * (0.32 + 0.24 * group_blend_strength));
+        wake_tint += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (0.12 + 0.28 * spectral_rim_tint)
+            * (wake_pinched + wake_shoulder * 0.36);
+        float wake_weight = cohesion_wake_strength
+            * wake_gate
+            * (0.34
+               + 0.22 * wake_detail
+               + 0.20 * wake_bright
+               + 0.14 * wake_alignment
+               + 0.10 * bridge_cohesion);
+        rgb = mix(
+            rgb,
+            mix(rgb, wake_tint, 0.16 + 0.18 * wake_detail),
+            wake_weight * 0.44);
+        rgb += wake_tint
+            * wake_weight
+            * wake_pinched
+            * (0.010
+               + 0.022 * dynamic_light_highlight
+               + 0.018 * glass_prismatic_gain);
+        float wake_shadow =
+            wake_dark
+            * cohesion_wake_strength
+            * wake_gate
+            * (0.014 + 0.030 * glass_shadow_gain)
+            * (0.58 + 0.42 * (1.0 - wake_alignment));
+        rgb *= 1.0 - clamp(wake_shadow, 0.0, 0.052);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float matched_transition_memory_strength = clamp(
         0.016 * glass_effect_match_execution
             * (0.42 + 0.58 * group_blend_strength)
