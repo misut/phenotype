@@ -5789,6 +5789,11 @@ fragment float4 fs_material(
     float bridge_band = 0.0;
     float bridge_core = 0.0;
     float bridge_shear = 0.0;
+    float bridge_axial = 0.0;
+    float bridge_lateral_signed = 0.0;
+    float bridge_lateral = 0.0;
+    float bridge_width = bridge_ribbon_width;
+    float bridge_length = 0.0;
     if (bridge_motion_strength > 0.0001 && bridge_dir_length > 0.0001) {
         float2 bridge_anchor =
             clamp(in.bridge_motion.zw, float2(0.0), float2(1.0))
@@ -5796,11 +5801,10 @@ fragment float4 fs_material(
         float2 bridge_delta =
             (in.local_pos - bridge_anchor)
             / max(in.rect_size, float2(1.0));
-        float bridge_axial = abs(dot(bridge_delta, bridge_dir));
-        float bridge_lateral_signed = dot(bridge_delta, bridge_tangent);
-        float bridge_lateral = abs(bridge_lateral_signed);
-        float bridge_width = bridge_ribbon_width;
-        float bridge_length = clamp(
+        bridge_axial = abs(dot(bridge_delta, bridge_dir));
+        bridge_lateral_signed = dot(bridge_delta, bridge_tangent);
+        bridge_lateral = abs(bridge_lateral_signed);
+        bridge_length = clamp(
             0.34
                 + group_blend_strength * 0.32
                 + union_execution * bridge_flow_offset_gain * 0.18,
@@ -6227,6 +6231,68 @@ fragment float4 fs_material(
             * bridge_lit_side
             * bridge_highlight_gain
             * 0.16;
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
+    float bridge_flow_strength = clamp(
+        bridge_band
+            * bridge_motion_strength
+            * bridge_flow_offset_gain
+            * (0.42 + 0.58 * union_execution)
+            * (0.74 + 0.26 * glass_lensing_gain),
+        0.0,
+        0.72);
+    if (bridge_flow_strength > 0.0001 && bridge_dir_length > 0.0001) {
+        float bridge_flow_core = 1.0 - smoothstep(
+            max(bridge_width * 0.18, 0.001),
+            bridge_width + 0.08,
+            bridge_lateral);
+        float bridge_flow_edge =
+            smoothstep(
+                max(bridge_width * 0.28, 0.001),
+                bridge_width + 0.02,
+                bridge_lateral)
+            * (1.0 - smoothstep(
+                bridge_width + 0.02,
+                bridge_width + 0.18,
+                bridge_lateral));
+        float bridge_axial_falloff = 1.0 - smoothstep(
+            max(bridge_length * 0.55, 0.001),
+            bridge_length + 0.20,
+            bridge_axial);
+        float bridge_flow_alignment = smoothstep(
+            -0.32,
+            1.0,
+            dot(bridge_dir, -dynamic_light_dir));
+        float bridge_shear_gloss =
+            smoothstep(0.14, 0.86, abs(bridge_shear)) * bridge_core;
+        float bridge_flow_gloss = bridge_flow_strength
+            * bridge_axial_falloff
+            * (0.54 * bridge_flow_core + 0.46 * bridge_flow_edge)
+            * (0.38 + 0.62 * bridge_flow_alignment);
+        float3 bridge_flow_tint =
+            float3(1.0 + 1.38 * spectral_warmth,
+                   1.0 + 0.38 * spectral_rim_tint,
+                   1.0 + 1.38 * spectral_coolness);
+        bridge_flow_tint = mix(
+            bridge_flow_tint,
+            bridge_flow_tint * (float3(1.0) + 0.34 * in.tint.rgb),
+            tint_chroma);
+        rgb += bridge_flow_tint
+            * bridge_flow_gloss
+            * (0.030
+               + 0.046 * glass_thickness
+               + 0.060 * bridge_highlight_gain);
+        rgb += bridge_flow_tint
+            * bridge_flow_strength
+            * bridge_axial_falloff
+            * bridge_shear_gloss
+            * (0.018 + 0.034 * glass_caustic_spread);
+        float bridge_flow_shadow = bridge_flow_strength
+            * bridge_axial_falloff
+            * bridge_flow_edge
+            * (1.0 - bridge_flow_alignment)
+            * (0.018 + 0.046 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(bridge_flow_shadow, 0.0, 0.10);
         rgb = clamp(rgb, 0.0, 1.0);
     }
     if (prominent_intensity > 0.0001) {
