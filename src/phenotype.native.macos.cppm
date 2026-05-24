@@ -7344,6 +7344,199 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(interference_shadow, 0.0, 0.065);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float transition_echo_strength = clamp(
+        union_interference_strength * 0.34
+            + coalescence_strength * 0.28
+            + bridge_flow_strength * 0.18
+            + materialize_wave_strength * bridge_band * 0.16
+            + group_blend_strength * overlap_response_strength * 0.12,
+        0.0,
+        0.38);
+    if (transition_echo_strength > 0.0001
+        && bridge_dir_length > 0.0001) {
+        float echo_core =
+            1.0 - smoothstep(
+                max(bridge_width * 0.16, 0.001),
+                bridge_width + 0.08,
+                bridge_lateral);
+        float echo_shoulder =
+            smoothstep(
+                max(bridge_width * 0.30, 0.001),
+                bridge_width + 0.04,
+                bridge_lateral)
+            * (1.0 - smoothstep(
+                bridge_width + 0.04,
+                bridge_width + 0.22,
+                bridge_lateral));
+        float echo_axial =
+            1.0 - smoothstep(
+                max(bridge_length * 0.50, 0.001),
+                bridge_length + 0.24,
+                bridge_axial);
+        float echo_gate = clamp(
+            echo_axial
+                * (0.40 * echo_core + 0.60 * echo_shoulder)
+                * (0.58 + 0.42 * edge_lens),
+            0.0,
+            1.0);
+        float echo_alignment = smoothstep(
+            -0.34,
+            1.0,
+            dot(bridge_dir, -dynamic_light_dir));
+        float echo_phase =
+            bridge_axial * (14.0 + 6.0 * union_execution)
+            - bridge_lateral_signed
+                * (18.0 + 8.0 * group_blend_strength)
+            + materialize_rim_position * materialize_wave_strength * 4.0
+            + coalescence_strength * 5.0;
+        float echo_wave = 0.5 + 0.5 * sin(echo_phase);
+        float echo_fold =
+            cos(echo_phase * 0.64
+                + bridge_shear * 4.0
+                + glass_caustic_spread * 13.0);
+        float echo_span =
+            (1.8
+             + 5.0 * glass_thickness
+             + 3.4 * glass_caustic_spread
+             + 0.10 * blur_points)
+            * content_scale
+            * (0.74 + 0.26 * glass_lensing_gain);
+        float echo_cross_span =
+            (0.8
+             + 2.0 * glass_thickness
+             + 1.6 * glass_dispersion_tangential
+             + 2.2 * spectral_dispersion)
+            * content_scale;
+        float2 echo_lead_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.56
+                + bridge_dir
+                    * texel
+                    * echo_span
+                    * (0.60 + 0.24 * echo_wave)
+                + bridge_tangent
+                    * texel
+                    * echo_cross_span
+                    * bridge_shear
+                    * 0.24,
+            float2(0.0),
+            float2(1.0));
+        float2 echo_trail_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.36
+                - bridge_dir
+                    * texel
+                    * echo_span
+                    * (0.52 + 0.22 * echo_core)
+                - bridge_tangent
+                    * texel
+                    * echo_cross_span
+                    * bridge_shear
+                    * 0.20,
+            float2(0.0),
+            float2(1.0));
+        float2 echo_outer_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.32
+                + bridge_tangent
+                    * texel
+                    * echo_cross_span
+                    * (0.58 + 0.28 * echo_shoulder)
+                + dispersion_tangent
+                    * texel
+                    * echo_cross_span
+                    * (0.18 + 0.24 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float2 echo_inner_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.42
+                - bridge_tangent
+                    * texel
+                    * echo_cross_span
+                    * (0.46 + 0.24 * echo_gate)
+                - dispersion_tangent
+                    * texel
+                    * echo_cross_span
+                    * (0.14 + 0.22 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float3 echo_lead =
+            backdrop.sample(samp, echo_lead_uv).rgb;
+        float3 echo_trail =
+            backdrop.sample(samp, echo_trail_uv).rgb;
+        float3 echo_outer =
+            backdrop.sample(samp, echo_outer_uv).rgb;
+        float3 echo_inner =
+            backdrop.sample(samp, echo_inner_uv).rgb;
+        float3 echo_rgb =
+            echo_lead * 0.34
+            + echo_trail * 0.30
+            + echo_outer * 0.18
+            + echo_inner * 0.18;
+        float echo_luma =
+            dot(echo_rgb, float3(0.2126, 0.7152, 0.0722));
+        float echo_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float echo_bright = smoothstep(
+            echo_surface_luma - 0.08,
+            echo_surface_luma + 0.28,
+            echo_luma);
+        float echo_dark = smoothstep(
+            0.08,
+            0.34,
+            echo_surface_luma - echo_luma);
+        float echo_memory = smoothstep(
+            0.02,
+            0.30,
+            length(echo_lead - echo_trail) * 0.32
+                + length(echo_outer - echo_inner) * 0.28
+                + abs(echo_fold) * 0.12);
+        float3 echo_tint = mix(
+            echo_rgb,
+            float3(echo_luma),
+            echo_dark * (0.16 + 0.18 * glass_shadow_gain));
+        echo_tint = mix(
+            echo_tint,
+            echo_tint * (float3(1.0) + 0.18 * in.tint.rgb),
+            tint_chroma * (0.34 + 0.22 * group_blend_strength));
+        echo_tint += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (echo_wave * 0.30 + echo_shoulder * 0.28)
+            * (0.10 + 0.30 * spectral_rim_tint);
+        float echo_weight = transition_echo_strength
+            * echo_gate
+            * (0.36
+               + 0.22 * echo_memory
+               + 0.20 * echo_bright
+               + 0.22 * echo_alignment);
+        rgb = mix(
+            rgb,
+            mix(rgb, echo_tint, 0.16 + 0.16 * echo_memory),
+            echo_weight * 0.42);
+        rgb += echo_tint
+            * echo_weight
+            * (0.012
+               + 0.024 * dynamic_light_highlight
+               + 0.018 * glass_prismatic_gain);
+        rgb += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * transition_echo_strength
+            * echo_gate
+            * abs(echo_fold)
+            * (0.006 + 0.016 * glass_caustic_spread);
+        float echo_shadow = echo_dark
+            * transition_echo_strength
+            * echo_gate
+            * echo_shoulder
+            * (0.016 + 0.034 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(echo_shadow, 0.0, 0.058);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float morph_field_strength = clamp(
         bridge_band
             * group_blend_strength
