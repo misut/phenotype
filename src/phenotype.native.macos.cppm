@@ -5848,24 +5848,26 @@ fragment float4 fs_material(
         * (0.22 + 0.30 * bridge_core)
         * (0.38 + 0.62 * union_execution);
     float pointer_lens_strength = clamp(in.interaction_lens.w, 0.0, 0.35);
+    float2 pointer_anchor =
+        clamp(in.interaction_lens.xy, float2(0.0), float2(1.0))
+        * max(in.rect_size, float2(1.0));
+    float pointer_lens_radius =
+        clamp(in.interaction_lens.z, 0.05, 1.0)
+        * max(min(in.rect_size.x, in.rect_size.y), 1.0);
+    float2 pointer_delta = in.local_pos - pointer_anchor;
+    float pointer_distance = length(pointer_delta);
+    float2 pointer_dir = pointer_distance > 0.0001
+        ? pointer_delta / pointer_distance
+        : -refraction_dir;
+    float pointer_lens_raw = 0.0;
+    float pointer_lens = 0.0;
     refraction_uv *= prominent_lensing_gain;
     if (pointer_lens_strength > 0.0001) {
-        float2 pointer_anchor =
-            clamp(in.interaction_lens.xy, float2(0.0), float2(1.0))
-            * max(in.rect_size, float2(1.0));
-        float pointer_lens_radius =
-            clamp(in.interaction_lens.z, 0.05, 1.0)
-            * max(min(in.rect_size.x, in.rect_size.y), 1.0);
-        float2 pointer_delta = in.local_pos - pointer_anchor;
-        float pointer_distance = length(pointer_delta);
-        float2 pointer_dir = pointer_distance > 0.0001
-            ? pointer_delta / pointer_distance
-            : -refraction_dir;
-        float pointer_lens = 1.0 - smoothstep(
+        pointer_lens_raw = 1.0 - smoothstep(
             0.0,
             pointer_lens_radius,
             pointer_distance);
-        pointer_lens *= pointer_lens;
+        pointer_lens = pointer_lens_raw * pointer_lens_raw;
         refraction_uv += pointer_dir
             * texel
             * (refraction_offset_pixels * content_scale)
@@ -6364,6 +6366,59 @@ fragment float4 fs_material(
             * prominent_intensity
             * 0.035;
     }
+    float pointer_reaction = clamp(
+        pointer_lens_strength
+            * (0.46 * pointer_lens_raw + 0.54 * pointer_lens)
+            * (0.72 + 0.28 * prominent_lensing_gain)
+            * (0.86 + 0.14 * glass_lensing_gain),
+        0.0,
+        0.36);
+    if (pointer_reaction > 0.0001) {
+        float pointer_radius_ratio =
+            pointer_distance / max(pointer_lens_radius, 0.001);
+        float pointer_pressure_ring =
+            1.0 - smoothstep(
+                0.0,
+                0.38,
+                abs(pointer_radius_ratio - 0.52));
+        pointer_pressure_ring *= pointer_lens_raw;
+        float pointer_light_alignment = clamp(
+            dot(pointer_dir, -dynamic_light_dir) * 0.5 + 0.5,
+            0.0,
+            1.0);
+        float pointer_edge_pickup = clamp(
+            edge_lens * (0.36 + 0.64 * pointer_pressure_ring),
+            0.0,
+            1.0);
+        float3 pointer_tint =
+            float3(1.0 + 1.34 * spectral_warmth,
+                   1.0 + 0.40 * spectral_rim_tint,
+                   1.0 + 1.34 * spectral_coolness);
+        pointer_tint = mix(
+            pointer_tint,
+            pointer_tint * (float3(1.0) + 0.34 * in.tint.rgb),
+            tint_chroma);
+        float pointer_gloss = pointer_reaction
+            * (0.48 + 0.52 * pointer_light_alignment)
+            * (0.050 + 0.050 * glass_thickness
+               + 0.050 * edge_inner_highlight);
+        rgb += pointer_tint * pointer_gloss;
+        rgb += pointer_tint
+            * pointer_reaction
+            * pointer_pressure_ring
+            * (0.020 + 0.046 * glass_caustic_spread);
+        rgb += pointer_tint
+            * pointer_reaction
+            * pointer_edge_pickup
+            * (0.018 + 0.036 * edge_inner_highlight);
+        float pointer_contact_shadow = pointer_reaction
+            * (1.0 - pointer_light_alignment)
+            * (0.018 + 0.042 * edge_outer_shadow)
+            * (1.0 + dynamic_light_shadow * 0.80)
+            * glass_shadow_gain;
+        rgb *= 1.0 - clamp(pointer_contact_shadow, 0.0, 0.11);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float optical_light_energy = clamp(
         dynamic_light_highlight
             + 0.34 * edge_inner_highlight
@@ -6585,13 +6640,13 @@ fragment float4 fs_material(
             * max(in.rect_size, float2(1.0));
         float specular_radius = clamp(in.interaction.z, 0.05, 1.0)
             * max(min(in.rect_size.x, in.rect_size.y), 1.0);
-        float pointer_distance = distance(in.local_pos, anchor);
-        float glow = 1.0 - smoothstep(0.0, specular_radius, pointer_distance);
+        float specular_distance = distance(in.local_pos, anchor);
+        float glow = 1.0 - smoothstep(0.0, specular_radius, specular_distance);
         glow *= glow * specular_intensity;
         float edge_focus = edge * (1.0 - smoothstep(
             0.0,
             specular_radius * 0.75,
-            pointer_distance));
+            specular_distance));
         rgb += float3(glow * (0.22 + 0.18 * edge_lift));
         rgb += float3(edge_focus * specular_intensity * 0.28);
     }
