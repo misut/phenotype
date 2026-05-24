@@ -14917,6 +14917,180 @@ fragment float4 fs_material(
         rgb += parallax_neutral * clamp(parallax_dark_lift, 0.0, 0.018);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float depth_occlusion_strength = clamp(
+        0.012 * clear_glass_detail
+            + 0.012 * clear_glass_dimming
+            + 0.010 * clear_glass_contrast
+            + 0.014 * glass_thickness
+            + 0.012 * (glass_shadow_gain - 1.0)
+            + 0.012 * dynamic_light_shadow
+            + 0.012 * parallax_depth_strength
+            + 0.010 * depth_aperture_strength
+            + 0.010 * content_focus_strength
+            + 0.008 * edge_caustic_strength,
+        0.0,
+        0.090);
+    if (depth_occlusion_strength > 0.0001) {
+        float occlusion_lower =
+            smoothstep(0.30,
+                       1.0,
+                       in.local_pos.y / max(in.rect_size.y, 1.0));
+        float occlusion_rim = edge_lens
+            * (0.32
+               + 0.68
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.34, 0.5),
+                       signed_edge_distance)));
+        float occlusion_motion = clamp(
+            pointer_lens * pointer_lens_strength * 0.30
+                + bridge_band * (0.26 + 0.74 * bridge_core)
+                + surface_tension_strength * 0.36
+                + specular_intensity * 0.18,
+            0.0,
+            1.0);
+        float occlusion_gate = clamp(
+            occlusion_lower * 0.30
+                + occlusion_rim * 0.34
+                + occlusion_motion * 0.20
+                + clear_glass_dimming * 0.18
+                + dynamic_light_shadow * 0.18,
+            0.0,
+            1.0);
+        float2 occlusion_axis_raw =
+            dynamic_light_dir * (0.38 + 0.20 * dynamic_light_shadow)
+            + refraction_dir * (0.30 + 0.18 * occlusion_rim)
+            + bridge_dir * bridge_band * (0.16 + 0.10 * bridge_core)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.12;
+        float occlusion_axis_len = length(occlusion_axis_raw);
+        float2 occlusion_axis = occlusion_axis_len > 0.0001
+            ? occlusion_axis_raw / occlusion_axis_len
+            : dynamic_light_dir;
+        float2 occlusion_cross =
+            float2(-occlusion_axis.y, occlusion_axis.x);
+        float occlusion_span =
+            (0.8
+             + 2.0 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.0 * occlusion_gate
+             + 0.040 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float2 occlusion_floor_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.12
+                + occlusion_axis
+                    * texel
+                    * occlusion_span
+                    * (0.24 + 0.14 * occlusion_lower),
+            float2(0.0),
+            float2(1.0));
+        float2 occlusion_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - occlusion_axis
+                    * texel
+                    * occlusion_span
+                    * (0.26 + 0.14 * occlusion_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 occlusion_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + occlusion_cross
+                    * texel
+                    * occlusion_span
+                    * (0.20
+                       + 0.12 * occlusion_motion
+                       + 0.08 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 occlusion_floor_rgb =
+            backdrop.sample(samp, occlusion_floor_uv).rgb;
+        float3 occlusion_back_rgb =
+            backdrop.sample(samp, occlusion_back_uv).rgb;
+        float3 occlusion_cross_rgb =
+            backdrop.sample(samp, occlusion_cross_uv).rgb;
+        float3 occlusion_probe =
+            occlusion_floor_rgb * 0.40
+            + occlusion_back_rgb * 0.34
+            + occlusion_cross_rgb * 0.26;
+        float occlusion_probe_luma =
+            dot(occlusion_probe, float3(0.2126, 0.7152, 0.0722));
+        float occlusion_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float occlusion_range = clamp(
+            length(occlusion_floor_rgb - occlusion_back_rgb) * 0.32
+                + length(occlusion_cross_rgb - occlusion_probe) * 0.20
+                + abs(occlusion_probe_luma - occlusion_surface_luma) * 0.20,
+            0.0,
+            1.0);
+        float occlusion_shadow = smoothstep(
+            0.10,
+            0.58,
+            occlusion_rim * 0.34
+                + occlusion_lower * 0.26
+                + dynamic_light_shadow * 0.26
+                + occlusion_range * 0.28);
+        float occlusion_clear =
+            1.0 - smoothstep(
+                0.26,
+                0.82,
+                occlusion_range * 0.48
+                    + clear_glass_dimming * 0.24
+                    + occlusion_shadow * 0.18);
+        float3 occlusion_neutral =
+            mix(occlusion_probe,
+                float3(occlusion_probe_luma),
+                0.34 + 0.18 * occlusion_clear);
+        float3 occlusion_layer = mix(
+            rgb,
+            occlusion_neutral,
+            0.04
+                + 0.08 * occlusion_clear
+                + 0.08 * occlusion_gate);
+        float3 occlusion_luma_rgb =
+            float3(dot(occlusion_layer, float3(0.2126, 0.7152, 0.0722)));
+        occlusion_layer =
+            occlusion_luma_rgb
+            + (occlusion_layer - occlusion_luma_rgb)
+                * (0.88
+                   + 0.06 * occlusion_clear
+                   + 0.04 * clear_glass_detail);
+        occlusion_layer = clamp(
+            (occlusion_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast
+                           * (0.08 + 0.10 * occlusion_clear))
+                + float3(0.50),
+            0.0,
+            1.0);
+        float occlusion_weight = depth_occlusion_strength
+            * occlusion_gate
+            * (0.30
+               + 0.22 * occlusion_shadow
+               + 0.18 * occlusion_clear
+               + 0.16 * occlusion_motion
+               + 0.14 * occlusion_rim);
+        rgb = mix(
+            rgb,
+            clamp(occlusion_layer, 0.0, 1.0),
+            occlusion_weight * 0.28);
+        float occlusion_depth_trim =
+            occlusion_weight
+            * occlusion_shadow
+            * (0.006 + 0.014 * glass_shadow_gain);
+        float occlusion_floor_lift =
+            occlusion_weight
+            * occlusion_clear
+            * smoothstep(0.0,
+                         0.32,
+                         0.32 - min(min(rgb.r, rgb.g), rgb.b))
+            * (0.003 + 0.007 * glass_scattering_gain);
+        rgb *= 1.0 - clamp(occlusion_depth_trim, 0.0, 0.026);
+        rgb += occlusion_neutral * clamp(occlusion_floor_lift, 0.0, 0.016);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
