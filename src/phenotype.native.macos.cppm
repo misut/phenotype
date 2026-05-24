@@ -11440,6 +11440,204 @@ fragment float4 fs_material(
             * (0.006 + 0.018 * glass_prismatic_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float meniscus_coherence_strength = clamp(
+        0.020 * glass_meniscus_strength
+            + 0.050 * surface_lamination_strength
+            + 0.044 * chromatic_polish_strength
+            + 0.030 * contour_seal_strength
+            + 0.026 * caustic_lattice_strength
+            + 0.020 * group_blend_strength
+            + 0.018 * overlap_response_strength
+            + 0.016 * bridge_motion_strength
+            + 0.014 * pointer_lens_strength,
+        0.0,
+        0.12);
+    if (meniscus_coherence_strength > 0.0001
+        && edge_bevel_width > 0.0001) {
+        float coherence_outer = 1.0 - smoothstep(
+            0.0,
+            max(edge_bevel_width * 2.05, 0.5),
+            signed_edge_distance);
+        float coherence_inner = 1.0 - smoothstep(
+            0.0,
+            max(edge_width * 0.78, 0.5),
+            signed_edge_distance);
+        float coherence_meniscus = clamp(
+            coherence_outer - coherence_inner * 0.50,
+            0.0,
+            1.0)
+            * (0.48 + 0.52 * edge_lens);
+        float coherence_surface =
+            (1.0 - smoothstep(0.18, 1.18, normalized_len))
+            * (0.38 + 0.62 * coherence_outer);
+        float coherence_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.38 + 0.62 * bridge_core)
+                + surface_tension_strength * 1.25
+                + group_blend_strength * overlap_response_strength * 0.28,
+            0.0,
+            1.0);
+        float coherence_gate = clamp(
+            coherence_meniscus * 0.54
+                + coherence_surface * 0.20
+                + coherence_contact * 0.30,
+            0.0,
+            1.0);
+        float2 coherence_raw_dir =
+            refraction_dir * (0.42 + 0.34 * edge_lens)
+            - dynamic_light_dir * (0.30 + 0.24 * dynamic_light_highlight)
+            + bridge_tangent * bridge_shear * bridge_band * 0.30
+            + bridge_dir * bridge_band * 0.18
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.24;
+        float coherence_dir_len = length(coherence_raw_dir);
+        float2 coherence_dir = coherence_dir_len > 0.0001
+            ? coherence_raw_dir / coherence_dir_len
+            : -dynamic_light_dir;
+        float2 coherence_cross = float2(-coherence_dir.y,
+                                        coherence_dir.x);
+        float coherence_phase =
+            dot(normalized_local, coherence_dir)
+                * (6.8 + 3.2 * glass_caustic_spread)
+            + dot(normalized_local, coherence_cross)
+                * (2.4 + 1.8 * glass_dispersion_tangential)
+            + bridge_shear * bridge_band * 3.2
+            + surface_tension_strength * 42.0;
+        float coherence_wave = 0.5 + 0.5 * sin(coherence_phase);
+        float coherence_counter =
+            0.5 + 0.5 * cos(coherence_phase * 0.62
+                            - normalized_len * 4.4);
+        float coherence_span =
+            (1.2
+             + 3.8 * glass_thickness
+             + 2.6 * glass_caustic_spread
+             + 1.8 * glass_dispersion_tangential
+             + 0.08 * blur_points)
+            * content_scale
+            * (0.76 + 0.24 * glass_lensing_gain);
+        float coherence_micro_span =
+            (0.7
+             + 1.4 * glass_dispersion_tangential
+             + 3.4 * spectral_dispersion)
+            * content_scale;
+        float2 coherence_sheen_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.42
+                + coherence_dir
+                    * texel
+                    * coherence_span
+                    * (0.48 + 0.24 * coherence_wave)
+                + coherence_cross
+                    * texel
+                    * coherence_micro_span
+                    * (0.18 + 0.12 * coherence_meniscus),
+            float2(0.0),
+            float2(1.0));
+        float2 coherence_anchor_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                - coherence_dir
+                    * texel
+                    * coherence_span
+                    * (0.42 + 0.18 * coherence_counter),
+            float2(0.0),
+            float2(1.0));
+        float2 coherence_tangent_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                + coherence_cross
+                    * texel
+                    * coherence_span
+                    * (0.36 + 0.22 * abs(bridge_shear) * bridge_band)
+                - dispersion_tangent
+                    * texel
+                    * coherence_micro_span
+                    * 0.16,
+            float2(0.0),
+            float2(1.0));
+        float3 coherence_sheen =
+            backdrop.sample(samp, coherence_sheen_uv).rgb;
+        float3 coherence_anchor =
+            backdrop.sample(samp, coherence_anchor_uv).rgb;
+        float3 coherence_tangent_rgb =
+            backdrop.sample(samp, coherence_tangent_uv).rgb;
+        float3 coherence_probe =
+            coherence_sheen * 0.38
+            + coherence_anchor * 0.38
+            + coherence_tangent_rgb * 0.24;
+        float coherence_luma =
+            dot(coherence_probe, float3(0.2126, 0.7152, 0.0722));
+        float coherence_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float coherence_range = clamp(
+            length(coherence_sheen - coherence_anchor) * 0.30
+                + length(coherence_tangent_rgb - coherence_probe) * 0.24
+                + abs(coherence_luma - coherence_surface_luma) * 0.34
+                + coherence_wave * coherence_counter * 0.10,
+            0.0,
+            1.0);
+        float coherence_lit = smoothstep(
+            -0.10,
+            0.92,
+            dot(coherence_dir, -dynamic_light_dir) * 0.52
+                + coherence_meniscus * 0.34
+                + coherence_wave * 0.14);
+        float coherence_dark = smoothstep(
+            0.08,
+            0.38,
+            coherence_surface_luma - coherence_luma);
+        float coherence_flat =
+            1.0 - smoothstep(0.08, 0.34, coherence_range);
+        float3 coherence_neutral = mix(
+            coherence_probe,
+            float3(coherence_luma),
+            0.32 + 0.24 * coherence_flat);
+        float3 coherence_layer = mix(
+            rgb,
+            coherence_neutral,
+            0.08
+                + 0.12 * coherence_range
+                + 0.10 * coherence_lit);
+        coherence_layer = mix(
+            coherence_layer,
+            coherence_layer * (float3(1.0) + 0.12 * in.tint.rgb),
+            tint_chroma * (0.22 + 0.24 * prominent_intensity));
+        coherence_layer += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * coherence_meniscus
+            * (0.010 + 0.026 * spectral_rim_tint);
+        float coherence_weight = meniscus_coherence_strength
+            * coherence_gate
+            * (0.38
+               + 0.22 * coherence_lit
+               + 0.20 * coherence_contact
+               + 0.20 * coherence_range);
+        rgb = mix(
+            rgb,
+            clamp(coherence_layer, 0.0, 1.0),
+            coherence_weight * 0.42);
+        rgb += coherence_neutral
+            * coherence_weight
+            * coherence_meniscus
+            * (0.006
+               + 0.014 * dynamic_light_highlight
+               + 0.012 * glass_prismatic_gain);
+        rgb += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * coherence_weight
+            * coherence_meniscus
+            * (0.006 + 0.016 * glass_caustic_spread);
+        float coherence_occlusion = coherence_dark
+            * meniscus_coherence_strength
+            * coherence_gate
+            * (0.012 + 0.026 * glass_shadow_gain)
+            * (0.62 + 0.38 * coherence_meniscus);
+        rgb *= 1.0 - clamp(coherence_occlusion, 0.0, 0.050);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
