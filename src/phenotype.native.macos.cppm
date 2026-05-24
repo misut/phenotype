@@ -6277,6 +6277,143 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(reflection_shadow, 0.0, 0.07);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float viscous_strain_strength = clamp(
+        pointer_lens_strength * (0.42 * pointer_lens_raw + 0.58 * pointer_lens)
+            + bridge_band
+                * bridge_motion_strength
+                * (0.36 + 0.64 * bridge_flow_offset_gain)
+            + fusion_strength * (0.20 + 0.28 * group_blend_strength)
+            + materialize_wave_strength * 0.26
+            + control_morph_depth * 0.34,
+        0.0,
+        1.0);
+    if (viscous_strain_strength > 0.0001) {
+        float2 strain_raw_dir =
+            pointer_dir
+                * pointer_lens
+                * pointer_lens_strength
+                * 2.20
+            + bridge_dir
+                * bridge_band
+                * bridge_motion_strength
+                * (0.74 + 0.26 * union_execution)
+            + refraction_dir
+                * (fusion_strength * 0.52
+                   + materialize_wave_strength * 0.46
+                   + control_morph_depth * 0.34)
+            - dynamic_light_dir * 0.18;
+        float strain_dir_len = length(strain_raw_dir);
+        float2 strain_dir = strain_dir_len > 0.0001
+            ? strain_raw_dir / strain_dir_len
+            : -dynamic_light_dir;
+        float2 strain_tangent = float2(-strain_dir.y, strain_dir.x);
+        float strain_span =
+            (2.0
+             + 4.5 * glass_thickness
+             + 2.8 * glass_caustic_spread
+             + 0.12 * blur_points)
+            * content_scale
+            * (0.70 + 0.30 * glass_lensing_gain);
+        float strain_shear = clamp(
+            bridge_shear * bridge_band
+                + pointer_lens_raw
+                    * pointer_lens_strength
+                    * dot(pointer_dir, strain_tangent),
+            -1.0,
+            1.0);
+        float2 strain_forward_uv = clamp(
+            in.screen_uv
+                + refraction_uv
+                + strain_dir * texel * strain_span,
+            float2(0.0),
+            float2(1.0));
+        float2 strain_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.56
+                - strain_dir * texel * strain_span * 0.70,
+            float2(0.0),
+            float2(1.0));
+        float2 strain_shear_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.38
+                + strain_tangent
+                    * texel
+                    * strain_span
+                    * (0.42 + 0.36 * abs(strain_shear))
+                    * (strain_shear >= 0.0 ? 1.0 : -1.0),
+            float2(0.0),
+            float2(1.0));
+        float3 strain_forward = backdrop.sample(samp, strain_forward_uv).rgb;
+        float3 strain_back = backdrop.sample(samp, strain_back_uv).rgb;
+        float3 strain_side = backdrop.sample(samp, strain_shear_uv).rgb;
+        float3 strained_rgb =
+            strain_forward * 0.44
+            + strain_back * 0.34
+            + strain_side * 0.22;
+        float strained_luma =
+            dot(strained_rgb, float3(0.2126, 0.7152, 0.0722));
+        float rgb_luma = dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float strain_bright = smoothstep(
+            rgb_luma - 0.08,
+            rgb_luma + 0.28,
+            strained_luma);
+        float strain_dark = smoothstep(
+            0.10,
+            0.34,
+            rgb_luma - strained_luma);
+        float strain_core =
+            1.0 - smoothstep(0.14, 1.10, normalized_len);
+        float strain_rim =
+            edge_lens
+            * (0.40
+               + 0.60
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_width * 1.55, 0.5),
+                       signed_edge_distance)));
+        float strain_pressure_ring =
+            pointer_lens_strength > 0.0001
+                ? (1.0
+                   - smoothstep(
+                       0.0,
+                       0.34,
+                       abs(pointer_distance
+                               / max(pointer_lens_radius, 0.001)
+                           - 0.48)))
+                : 0.0;
+        float strain_gate = clamp(
+            strain_core * 0.36
+                + strain_rim * 0.42
+                + strain_pressure_ring * pointer_lens_raw * 0.22
+                + bridge_band * bridge_core * 0.30,
+            0.0,
+            1.0);
+        float3 strain_tint = mix(
+            mix(float3(strained_luma), strained_rgb, 0.74),
+            strained_rgb * (float3(1.0) + 0.20 * in.tint.rgb),
+            tint_chroma);
+        rgb = mix(
+            rgb,
+            mix(rgb, strain_tint, 0.34 + 0.18 * strain_bright),
+            viscous_strain_strength * strain_gate * 0.34);
+        rgb += strain_tint
+            * viscous_strain_strength
+            * strain_gate
+            * strain_bright
+            * (0.018 + 0.036 * glass_caustic_spread);
+        rgb += float3(spectral_warmth,
+                      0.16 * (spectral_warmth + spectral_coolness),
+                      spectral_coolness)
+            * viscous_strain_strength
+            * strain_gate
+            * (0.012 + 0.024 * abs(strain_shear));
+        float strain_shadow = strain_dark
+            * viscous_strain_strength
+            * strain_gate
+            * (0.020 + 0.034 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(strain_shadow, 0.0, 0.07);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     if (bridge_band > 0.0001) {
         float bridge_rim =
             bridge_band
