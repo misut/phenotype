@@ -4135,6 +4135,25 @@ inline MaterialGlassEffectMotionOptics material_container_bridge_motion_optics(
         1.0f);
     if (strength <= 0.0001f)
         return optics;
+    auto const member_spread = execution.union_execution
+        ? std::clamp(
+            (static_cast<float>(execution.surface_count) - 2.0f) / 4.0f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const group_min_extent =
+        std::max(std::min(geometry.w, geometry.h), 1.0f);
+    auto const group_max_extent = std::max(geometry.w, geometry.h);
+    auto const aspect_spread = execution.union_execution
+        ? std::clamp(
+            (group_max_extent / group_min_extent - 1.0f) / 4.0f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const union_flow_spread =
+        std::clamp(0.50f * member_spread + 0.50f * aspect_spread,
+                   0.0f,
+                   1.0f);
 
     optics.active = true;
     optics.strength = strength;
@@ -4148,12 +4167,18 @@ inline MaterialGlassEffectMotionOptics material_container_bridge_motion_optics(
         (bridge_y - geometry.y) / geometry.h,
         0.16f,
         0.84f);
-    optics.refraction_gain = 1.0f + 0.32f * strength;
-    optics.caustic_gain = 1.0f + 0.48f * strength;
-    optics.specular_intensity_gain = 1.0f + 0.42f * strength;
-    optics.flow_offset_gain = 0.14f + 0.30f * strength;
-    optics.ribbon_width = 0.10f + 0.16f * strength;
-    optics.highlight_gain = 0.06f + 0.14f * strength;
+    optics.refraction_gain = 1.0f + 0.32f * strength
+        + 0.06f * union_flow_spread;
+    optics.caustic_gain = 1.0f + 0.48f * strength
+        + 0.10f * union_flow_spread;
+    optics.specular_intensity_gain = 1.0f + 0.42f * strength
+        + 0.08f * union_flow_spread;
+    optics.flow_offset_gain = 0.14f + 0.30f * strength
+        + 0.08f * union_flow_spread;
+    optics.ribbon_width = 0.10f + 0.16f * strength
+        + 0.05f * union_flow_spread;
+    optics.highlight_gain = 0.06f + 0.14f * strength
+        + 0.05f * union_flow_spread;
     return optics;
 }
 

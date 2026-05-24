@@ -4185,6 +4185,12 @@ void test_glass_effect_union_bridge_motion_uses_member_centroid() {
     assert(first_bridge_motion.specular_anchor_x < 0.55f);
     assert(std::fabs(first_bridge_motion.specular_anchor_y - 0.5f)
            < 0.0001f);
+    assert(first_bridge_motion.refraction_gain > 1.35f);
+    assert(first_bridge_motion.caustic_gain > 1.54f);
+    assert(first_bridge_motion.specular_intensity_gain > 1.45f);
+    assert(first_bridge_motion.flow_offset_gain > 0.48f);
+    assert(first_bridge_motion.ribbon_width > 0.29f);
+    assert(first_bridge_motion.highlight_gain > 0.23f);
 
     std::puts("PASS: glass effect union bridge motion uses member centroid");
 }
