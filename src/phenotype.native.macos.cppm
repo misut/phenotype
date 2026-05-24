@@ -6183,6 +6183,100 @@ fragment float4 fs_material(
     float3 rgb = mix(backdrop_rgb, in.tint.rgb, tint_strength);
     float edge = 1.0 - smoothstep(0.0, edge_width, signed_edge_distance);
     float edge_lift = clamp(in.luminance_curve.w, 0.0, 1.0);
+    float environment_reflection_strength = clamp(
+        0.030
+            + 0.050 * glass_thickness
+            + 0.038 * glass_caustic_spread
+            + 0.032 * (glass_lensing_gain - 1.0)
+            + 0.018 * prominent_intensity,
+        0.0,
+        0.18);
+    if (environment_reflection_strength > 0.0001) {
+        float2 reflection_raw_dir =
+            -dynamic_light_dir + refraction_dir * (0.34 + 0.36 * edge_lens);
+        float reflection_raw_len = length(reflection_raw_dir);
+        float2 reflection_dir = reflection_raw_len > 0.0001
+            ? reflection_raw_dir / reflection_raw_len
+            : -dynamic_light_dir;
+        float2 reflection_tangent = float2(-reflection_dir.y,
+                                           reflection_dir.x);
+        float reflection_span =
+            (4.0
+             + 12.0 * glass_thickness
+             + 0.28 * blur_points
+             + 3.5 * glass_caustic_spread)
+            * content_scale;
+        float2 reflection_base_uv =
+            refraction_uv * (0.38 + 0.42 * edge_lens);
+        float2 forward_uv = clamp(
+            in.screen_uv
+                + reflection_base_uv
+                - reflection_dir * texel * reflection_span,
+            float2(0.0),
+            float2(1.0));
+        float2 left_uv = clamp(
+            in.screen_uv
+                + reflection_base_uv * 0.62
+                + reflection_tangent * texel * reflection_span * 0.72,
+            float2(0.0),
+            float2(1.0));
+        float2 right_uv = clamp(
+            in.screen_uv
+                + reflection_base_uv * 0.62
+                - reflection_tangent * texel * reflection_span * 0.72,
+            float2(0.0),
+            float2(1.0));
+        float3 reflected_rgb =
+            backdrop.sample(samp, forward_uv).rgb * 0.50
+            + backdrop.sample(samp, left_uv).rgb * 0.25
+            + backdrop.sample(samp, right_uv).rgb * 0.25;
+        float reflected_luma =
+            dot(reflected_rgb, float3(0.2126, 0.7152, 0.0722));
+        float surface_luma =
+            dot(backdrop_rgb, float3(0.2126, 0.7152, 0.0722));
+        float reflected_light = smoothstep(
+            surface_luma - 0.12,
+            surface_luma + 0.30,
+            reflected_luma);
+        float dark_reflection = smoothstep(
+            0.08,
+            0.36,
+            surface_luma - reflected_luma);
+        float reflection_surface =
+            1.0 - smoothstep(0.22, 1.20, normalized_len);
+        float reflection_sweep = smoothstep(
+            -0.52,
+            0.98,
+            dot(normalized_local, -reflection_dir));
+        float reflection_rim =
+            edge_lens
+            * (0.42
+               + 0.58
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_width * 1.45, 0.5),
+                       signed_edge_distance)));
+        float reflection_gate = clamp(
+            0.36 * reflection_surface * reflection_sweep
+                + 0.64 * reflection_rim,
+            0.0,
+            1.0);
+        float3 reflected_tint = mix(
+            mix(float3(reflected_luma), reflected_rgb, 0.78),
+            reflected_rgb * (float3(1.0) + 0.22 * in.tint.rgb),
+            tint_chroma);
+        rgb += reflected_tint
+            * environment_reflection_strength
+            * reflection_gate
+            * (0.18 + 0.34 * reflected_light)
+            * (0.72 + 0.28 * refraction_strength);
+        float reflection_shadow = dark_reflection
+            * environment_reflection_strength
+            * reflection_gate
+            * (0.030 + 0.044 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(reflection_shadow, 0.0, 0.07);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     if (bridge_band > 0.0001) {
         float bridge_rim =
             bridge_band
