@@ -11098,6 +11098,171 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(lattice_absorption, 0.0, 0.055);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float surface_lamination_strength = clamp(
+        0.018 * glass_thickness
+            + 0.014 * (glass_lensing_gain - 1.0)
+            + 0.012 * clear_glass_contrast
+            + 0.012 * clear_glass_detail
+            + 0.06 * caustic_lattice_strength
+            + 0.06 * focal_plane_strength
+            + 0.04 * contour_seal_strength
+            + 0.03 * adaptive_contrast_strength,
+        0.0,
+        0.12);
+    if (surface_lamination_strength > 0.0001) {
+        float lamination_center =
+            1.0 - smoothstep(0.16, 1.12, normalized_len);
+        float lamination_rim = edge_lens
+            * (0.34
+               + 0.66
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.70, 0.5),
+                       signed_edge_distance)));
+        float lamination_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.30 + 0.70 * bridge_core)
+                + surface_tension_strength * 1.10,
+            0.0,
+            1.0);
+        float lamination_gate = clamp(
+            lamination_center * 0.30
+                + lamination_rim * 0.48
+                + lamination_contact * 0.24,
+            0.0,
+            1.0);
+        float2 lamination_raw_dir =
+            -dynamic_light_dir * (0.42 + 0.22 * dynamic_light_highlight)
+            + refraction_dir * (0.34 + 0.34 * edge_lens)
+            + bridge_dir * bridge_band * 0.20
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.18;
+        float lamination_dir_len = length(lamination_raw_dir);
+        float2 lamination_dir = lamination_dir_len > 0.0001
+            ? lamination_raw_dir / lamination_dir_len
+            : -dynamic_light_dir;
+        float2 lamination_cross = float2(-lamination_dir.y,
+                                         lamination_dir.x);
+        float lamination_span =
+            (1.4
+             + 3.6 * glass_thickness
+             + 2.4 * glass_caustic_spread
+             + 0.08 * blur_points)
+            * content_scale
+            * (0.80 + 0.20 * glass_lensing_gain);
+        float2 lamination_gloss_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.40
+                + lamination_dir
+                    * texel
+                    * lamination_span
+                    * (0.48 + 0.22 * lamination_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 lamination_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.28
+                - lamination_dir * texel * lamination_span * 0.58,
+            float2(0.0),
+            float2(1.0));
+        float2 lamination_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                + lamination_cross
+                    * texel
+                    * lamination_span
+                    * (0.42 + 0.22 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 lamination_gloss =
+            backdrop.sample(samp, lamination_gloss_uv).rgb;
+        float3 lamination_base =
+            backdrop.sample(samp, lamination_base_uv).rgb;
+        float3 lamination_cross_rgb =
+            backdrop.sample(samp, lamination_cross_uv).rgb;
+        float3 lamination_probe =
+            lamination_gloss * 0.40
+            + lamination_base * 0.38
+            + lamination_cross_rgb * 0.22;
+        float lamination_luma =
+            dot(lamination_probe, float3(0.2126, 0.7152, 0.0722));
+        float lamination_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float lamination_range = clamp(
+            length(lamination_gloss - lamination_base) * 0.28
+                + length(lamination_cross_rgb - lamination_probe) * 0.22
+                + abs(lamination_luma - lamination_surface_luma) * 0.42,
+            0.0,
+            1.0);
+        float lamination_fresnel = smoothstep(
+            -0.12,
+            0.92,
+            dot(refraction_dir, -dynamic_light_dir) * 0.5
+                + lamination_rim * 0.5);
+        float lamination_bright = smoothstep(
+            lamination_surface_luma - 0.08,
+            lamination_surface_luma + 0.28,
+            lamination_luma);
+        float lamination_dark = smoothstep(
+            0.08,
+            0.36,
+            lamination_surface_luma - lamination_luma);
+        float lamination_smooth =
+            1.0 - smoothstep(0.08, 0.38, lamination_range);
+        float3 lamination_neutral = mix(
+            lamination_probe,
+            float3(lamination_luma),
+            0.34 + 0.22 * lamination_smooth);
+        float3 lamination_layer = mix(
+            rgb,
+            lamination_neutral,
+            0.08
+                + 0.12 * lamination_smooth
+                + 0.10 * lamination_bright);
+        lamination_layer = clamp(
+            (lamination_layer - float3(0.50))
+                    * (1.0 + clear_glass_contrast * 0.30)
+                + float3(0.50),
+            0.0,
+            1.0);
+        lamination_layer = mix(
+            lamination_layer,
+            lamination_layer * (1.0 - 0.06 * lamination_bright)
+                + lamination_neutral * (0.04 + 0.06 * lamination_dark),
+            clamp(lamination_bright + lamination_dark, 0.0, 1.0));
+        lamination_layer = mix(
+            lamination_layer,
+            lamination_layer * (float3(1.0) + 0.12 * in.tint.rgb),
+            tint_chroma * (0.24 + 0.22 * prominent_intensity));
+        lamination_layer += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * lamination_rim
+            * (0.008 + 0.024 * spectral_rim_tint);
+        float lamination_weight = surface_lamination_strength
+            * lamination_gate
+            * (0.38
+               + 0.22 * lamination_fresnel
+               + 0.20 * lamination_smooth
+               + 0.20 * lamination_contact);
+        rgb = mix(
+            rgb,
+            clamp(lamination_layer, 0.0, 1.0),
+            lamination_weight * 0.46);
+        rgb += lamination_neutral
+            * lamination_weight
+            * lamination_fresnel
+            * (0.006
+               + 0.014 * dynamic_light_highlight
+               + 0.012 * glass_scattering_gain);
+        float lamination_occlusion = lamination_dark
+            * surface_lamination_strength
+            * lamination_gate
+            * (0.012 + 0.026 * glass_shadow_gain)
+            * (0.58 + 0.42 * lamination_rim);
+        rgb *= 1.0 - clamp(lamination_occlusion, 0.0, 0.050);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
