@@ -12397,6 +12397,168 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(equilibrium_absorption, 0.0, 0.046);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float legibility_veil_strength = clamp(
+        0.020 * clear_glass_dimming
+            + 0.024 * clear_glass_contrast
+            + 0.014 * prominent_intensity
+            + 0.040 * optical_equilibrium_strength
+            + 0.030 * substrate_coupling_strength
+            + 0.026 * adaptive_contrast_strength
+            + 0.020 * clarity_film_strength
+            + 0.016 * specular_intensity,
+        0.0,
+        0.12);
+    if (legibility_veil_strength > 0.0001) {
+        float veil_center =
+            1.0 - smoothstep(0.12, 1.18, normalized_len);
+        float veil_edge = edge_lens
+            * (0.30
+               + 0.70
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.55, 0.5),
+                       signed_edge_distance)));
+        float veil_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.30 + 0.70 * bridge_core)
+                + specular_intensity * 0.26,
+            0.0,
+            1.0);
+        float veil_gate = clamp(
+            veil_center * 0.44
+                + veil_edge * 0.30
+                + veil_contact * 0.22,
+            0.0,
+            1.0);
+        float2 veil_raw_dir =
+            refraction_dir * (0.32 + 0.30 * edge_lens)
+            - dynamic_light_dir * (0.26 + 0.18 * dynamic_light_highlight)
+            + bridge_dir * bridge_band * 0.18
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.18;
+        float veil_dir_len = length(veil_raw_dir);
+        float2 veil_dir = veil_dir_len > 0.0001
+            ? veil_raw_dir / veil_dir_len
+            : -dynamic_light_dir;
+        float2 veil_cross = float2(-veil_dir.y, veil_dir.x);
+        float veil_span =
+            (1.4
+             + 3.2 * glass_thickness
+             + 0.10 * blur_points
+             + 1.6 * clear_glass_detail)
+            * content_scale
+            * (0.80 + 0.20 * glass_lensing_gain);
+        float2 veil_fore_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                + veil_dir
+                    * texel
+                    * veil_span
+                    * (0.36 + 0.18 * veil_center),
+            float2(0.0),
+            float2(1.0));
+        float2 veil_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.26
+                - veil_dir
+                    * texel
+                    * veil_span
+                    * (0.42 + 0.18 * veil_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 veil_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                + veil_cross
+                    * texel
+                    * veil_span
+                    * (0.34 + 0.18 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 veil_fore_rgb =
+            backdrop.sample(samp, veil_fore_uv).rgb;
+        float3 veil_back_rgb =
+            backdrop.sample(samp, veil_back_uv).rgb;
+        float3 veil_cross_rgb =
+            backdrop.sample(samp, veil_cross_uv).rgb;
+        float3 veil_probe =
+            veil_fore_rgb * 0.40
+            + veil_back_rgb * 0.36
+            + veil_cross_rgb * 0.24;
+        float veil_luma =
+            dot(veil_probe, float3(0.2126, 0.7152, 0.0722));
+        float veil_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float veil_backdrop_range = clamp(
+            length(veil_fore_rgb - veil_back_rgb) * 0.34
+                + length(veil_cross_rgb - veil_probe) * 0.24
+                + abs(veil_luma - veil_surface_luma) * 0.32,
+            0.0,
+            1.0);
+        float veil_bright_pressure = smoothstep(
+            0.64,
+            0.96,
+            veil_luma * 0.48 + veil_surface_luma * 0.52);
+        float veil_dark_pressure =
+            1.0 - smoothstep(
+                0.10,
+                0.38,
+                veil_luma * 0.42 + veil_surface_luma * 0.58);
+        float veil_low_detail =
+            1.0 - smoothstep(0.05, 0.30, veil_backdrop_range);
+        float3 veil_neutral = mix(
+            veil_probe,
+            float3(veil_luma),
+            0.42 + 0.20 * veil_low_detail);
+        float3 veil_layer = mix(
+            rgb,
+            veil_neutral,
+            0.06
+                + 0.12 * veil_low_detail
+                + 0.10 * max(veil_bright_pressure, veil_dark_pressure));
+        float3 veil_luma_rgb =
+            float3(dot(veil_layer, float3(0.2126, 0.7152, 0.0722)));
+        veil_layer = mix(
+            veil_layer,
+            veil_luma_rgb
+                + (veil_layer - veil_luma_rgb)
+                    * (0.90 - 0.12 * veil_low_detail),
+            clamp(veil_low_detail
+                  + max(veil_bright_pressure, veil_dark_pressure),
+                  0.0,
+                  1.0));
+        veil_layer = mix(
+            veil_layer,
+            veil_layer * (float3(1.0) + 0.08 * in.tint.rgb),
+            tint_chroma * (0.16 + 0.18 * prominent_intensity));
+        float veil_weight = legibility_veil_strength
+            * veil_gate
+            * (0.38
+               + 0.24 * veil_low_detail
+               + 0.20 * max(veil_bright_pressure, veil_dark_pressure)
+               + 0.18 * veil_contact);
+        rgb = mix(
+            rgb,
+            clamp(veil_layer, 0.0, 1.0),
+            veil_weight * 0.34);
+        float veil_bright_compression =
+            veil_bright_pressure
+            * veil_weight
+            * (0.020 + 0.034 * clear_glass_dimming);
+        float veil_dark_lift =
+            veil_dark_pressure
+            * veil_weight
+            * (0.010 + 0.018 * glass_scattering_gain);
+        rgb *= 1.0 - clamp(veil_bright_compression, 0.0, 0.046);
+        rgb += veil_neutral * veil_dark_lift;
+        rgb += float3(
+            spectral_warmth,
+            0.10 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * veil_edge
+            * veil_weight
+            * (0.004 + 0.012 * spectral_rim_tint);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
