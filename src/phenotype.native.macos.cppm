@@ -13830,6 +13830,174 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(union_shadow_trim, 0.0, 0.030);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float container_field_strength = clamp(
+        0.012 * clear_glass_detail
+            + 0.010 * clear_glass_contrast
+            + 0.012 * glass_thickness
+            + 0.018 * group_blend_strength * fusion_strength
+            + 0.014 * overlap_response_strength
+            + 0.014 * union_execution * group_blend_strength
+            + 0.018 * bridge_band * (0.34 + 0.66 * bridge_core)
+            + 0.014 * coalescence_strength
+            + 0.012 * glass_union_glow_strength,
+        0.0,
+        0.10);
+    if (container_field_strength > 0.0001) {
+        float container_bridge = bridge_band
+            * (0.32 + 0.68 * bridge_core);
+        float container_union = clamp(
+            group_blend_strength * fusion_strength * 0.36
+                + overlap_response_strength * 0.24
+                + union_execution * group_blend_strength * 0.22
+                + container_bridge * 0.28
+                + coalescence_strength * 0.22
+                + glass_union_glow_strength * 0.18,
+            0.0,
+            1.0);
+        float container_gate = clamp(
+            container_union
+                + clear_glass_detail * 0.12
+                + prominent_intensity * tint_chroma * 0.10,
+            0.0,
+            1.0);
+        float2 container_axis_raw =
+            bridge_dir * container_bridge
+            + refraction_dir * (0.28 + 0.72 * container_union)
+            - dynamic_light_dir
+                * specular_intensity
+                * (0.16 + 0.10 * container_gate);
+        float container_axis_length = length(container_axis_raw);
+        float2 container_axis = container_axis_length > 0.0001
+            ? container_axis_raw / container_axis_length
+            : refraction_dir;
+        float2 container_cross =
+            float2(-container_axis.y, container_axis.x);
+        float container_span =
+            (0.85
+             + 1.7 * glass_thickness
+             + 1.3 * clear_glass_detail
+             + 1.1 * container_gate
+             + 0.04 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float container_neck = clamp(
+            bridge_core * (0.44 + 0.56 * container_bridge)
+                + group_blend_strength * overlap_response_strength * 0.24
+                + union_execution * group_blend_strength * 0.20,
+            0.0,
+            1.0);
+        float2 container_near_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + container_axis
+                    * texel
+                    * container_span
+                    * (0.24 + 0.16 * container_neck),
+            float2(0.0),
+            float2(1.0));
+        float2 container_far_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - container_axis
+                    * texel
+                    * container_span
+                    * (0.28 + 0.16 * container_gate)
+                + container_cross
+                    * texel
+                    * container_span
+                    * bridge_shear
+                    * container_bridge
+                    * 0.10,
+            float2(0.0),
+            float2(1.0));
+        float2 container_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                + container_cross
+                    * texel
+                    * container_span
+                    * (0.22
+                       + 0.16 * abs(bridge_shear) * container_bridge
+                       + 0.10 * container_union),
+            float2(0.0),
+            float2(1.0));
+        float3 container_near_rgb =
+            backdrop.sample(samp, container_near_uv).rgb;
+        float3 container_far_rgb =
+            backdrop.sample(samp, container_far_uv).rgb;
+        float3 container_cross_rgb =
+            backdrop.sample(samp, container_cross_uv).rgb;
+        float3 container_probe =
+            container_near_rgb * 0.38
+            + container_far_rgb * 0.36
+            + container_cross_rgb * 0.26;
+        float container_probe_luma =
+            dot(container_probe, float3(0.2126, 0.7152, 0.0722));
+        float container_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float container_range = clamp(
+            length(container_near_rgb - container_far_rgb) * 0.30
+                + length(container_cross_rgb - container_probe) * 0.20
+                + abs(container_probe_luma - container_surface_luma) * 0.24,
+            0.0,
+            1.0);
+        float container_calm =
+            1.0 - smoothstep(0.10, 0.40, container_range);
+        float3 container_neutral =
+            mix(container_probe,
+                float3(container_probe_luma),
+                0.32 + 0.18 * container_calm);
+        float3 container_tint =
+            container_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.030
+                      + 0.036
+                          * prominent_intensity
+                          * tint_chroma));
+        float3 container_layer = mix(
+            rgb,
+            container_tint,
+            0.07
+                + 0.08 * container_calm
+                + 0.07 * container_union);
+        float3 container_luma_rgb =
+            float3(dot(container_layer,
+                       float3(0.2126, 0.7152, 0.0722)));
+        container_layer =
+            container_luma_rgb
+            + (container_layer - container_luma_rgb)
+                * (0.90 + 0.10 * container_gate);
+        float container_highlight = clamp(
+            container_gate
+                * (0.42 + 0.58 * container_neck)
+                * (0.48 + 0.52 * container_calm),
+            0.0,
+            1.0);
+        container_layer += container_neutral
+            * container_highlight
+            * (0.005
+               + 0.010 * clear_glass_detail
+               + 0.008 * glass_scattering_gain);
+        float container_weight = container_field_strength
+            * container_gate
+            * (0.34
+               + 0.18 * container_neck
+               + 0.18 * container_calm
+               + 0.16 * container_union
+               + 0.10 * clear_glass_detail);
+        rgb = mix(
+            rgb,
+            clamp(container_layer, 0.0, 1.0),
+            container_weight * 0.34);
+        float container_shadow =
+            container_weight
+            * container_union
+            * (0.005 + 0.010 * glass_shadow_gain)
+            * (1.0 - container_calm * 0.38);
+        rgb *= 1.0 - clamp(container_shadow, 0.0, 0.026);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float liquid_response_strength = clamp(
         0.012 * clear_glass_detail
             + 0.010 * clear_glass_contrast
