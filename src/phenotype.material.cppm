@@ -2812,6 +2812,21 @@ inline bool material_plans_share_glass_effect_union_namespace(
         && a.glass_identity.namespace_id == b.glass_identity.namespace_id;
 }
 
+inline bool material_plans_share_glass_effect_union_shape(
+        MaterialPlan const& a,
+        MaterialPlan const& b) noexcept {
+    if (!a.shape.valid
+        || !b.shape.valid
+        || a.shape.kind != b.shape.kind) {
+        return false;
+    }
+    if (a.shape.kind == MaterialShapeKind::RoundedRectangle) {
+        return std::fabs(a.shape.effective_radius - b.shape.effective_radius)
+            <= 0.0001f;
+    }
+    return true;
+}
+
 inline bool material_plans_share_glass_effect_union(
         MaterialPlan const& a,
         MaterialPlan const& b) noexcept {
@@ -2822,9 +2837,7 @@ inline bool material_plans_share_glass_effect_union(
         && a.container.union_id == b.container.union_id
         && material_plans_share_glass_effect_union_namespace(a, b)
         && a.kind == b.kind
-        && a.shape.valid
-        && b.shape.valid
-        && a.shape.kind == b.shape.kind;
+        && material_plans_share_glass_effect_union_shape(a, b);
 }
 
 inline bool material_plan_in_glass_effect_union_group(
