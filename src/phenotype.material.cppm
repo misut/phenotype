@@ -4813,7 +4813,9 @@ material_container_execution_descriptor_from_group(
             : material_container_inner_edge_alpha_blend_strength(
                 group,
                 descriptor.shape_blend_strength);
-    material_apply_container_fusion_optics(descriptor, group);
+    auto const& fusion_group =
+        descriptor.union_execution ? union_group : group;
+    material_apply_container_fusion_optics(descriptor, fusion_group);
     if (descriptor.glass_effect_match_execution) {
         if (auto const* source = match_source.record) {
             descriptor.glass_effect_match_source_valid = true;
