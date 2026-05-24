@@ -6582,6 +6582,101 @@ fragment float4 fs_material(
             * prism_band
             * (0.10 + 0.34 * (glass_prismatic_gain - 1.0));
     }
+    float microfacet_strength = clamp(
+        0.030 * glass_thickness
+            + 0.045 * glass_caustic_spread
+            + 0.035 * spectral_dispersion
+            + 0.020 * prominent_intensity
+            + 0.040 * viscous_strain_strength
+            + 0.018 * bridge_flow_strength,
+        0.0,
+        0.16);
+    if (microfacet_strength > 0.0001) {
+        float2 sparkle_grid = floor(
+            (in.screen_uv
+                * float2(float(backdrop.get_width()),
+                         float(backdrop.get_height())))
+                / max(6.0 * content_scale, 1.0));
+        float sparkle_seed = fract(
+            sin(dot(sparkle_grid + floor(in.local_pos * 0.03125),
+                    float2(127.1, 311.7)))
+            * 43758.5453);
+        float sparkle_seed_b = fract(
+            sin(dot(sparkle_grid + float2(19.19, 73.31),
+                    float2(269.5, 183.3)))
+            * 43758.5453);
+        float2 facet_raw_dir =
+            float2(sparkle_seed * 2.0 - 1.0,
+                   sparkle_seed_b * 2.0 - 1.0);
+        float facet_dir_length = length(facet_raw_dir);
+        float2 facet_dir = facet_dir_length > 0.0001
+            ? facet_raw_dir / facet_dir_length
+            : normalize(float2(0.71, -0.70));
+        float facet_alignment = pow(
+            clamp(dot(facet_dir, -dynamic_light_dir) * 0.5 + 0.5,
+                  0.0,
+                  1.0),
+            5.0);
+        float facet_surface =
+            1.0 - smoothstep(0.22, 1.18, normalized_len);
+        float facet_edge = 1.0 - smoothstep(
+            0.0,
+            max(edge_width * 1.35, 0.5),
+            signed_edge_distance);
+        float facet_rim =
+            edge_lens * (0.42 + 0.58 * facet_edge);
+        float facet_gate = clamp(
+            facet_surface * 0.38
+                + facet_rim * 0.52
+                + pointer_lens
+                    * pointer_lens_strength
+                    * 0.28
+                + bridge_flow_strength * 0.20,
+            0.0,
+            1.0);
+        float rare_glint = smoothstep(0.84, 0.995, sparkle_seed);
+        float facet_line_phase = fract(
+            dot(normalized_local, facet_dir)
+                * (4.0 + 3.0 * sparkle_seed_b)
+            + sparkle_seed);
+        float facet_line =
+            1.0 - smoothstep(
+                0.0,
+                0.16,
+                abs(facet_line_phase - 0.5));
+        float sparkle = microfacet_strength
+            * facet_gate
+            * (0.35 + 0.65 * facet_alignment)
+            * (0.35 * facet_line + 0.65 * rare_glint);
+        float2 sparkle_uv = clamp(
+            in.screen_uv
+                + facet_dir
+                    * texel
+                    * content_scale
+                    * (1.5 + 2.5 * glass_caustic_spread),
+            float2(0.0),
+            float2(1.0));
+        float3 sparkle_rgb = backdrop.sample(samp, sparkle_uv).rgb;
+        float sparkle_luma =
+            dot(sparkle_rgb, float3(0.2126, 0.7152, 0.0722));
+        float3 microfacet_tint = mix(
+            float3(sparkle_luma),
+            sparkle_rgb,
+            0.58 + 0.22 * glass_caustic_spread);
+        microfacet_tint = mix(
+            microfacet_tint,
+            microfacet_tint * (float3(1.0) + 0.20 * in.tint.rgb),
+            tint_chroma);
+        microfacet_tint += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (0.18 + 0.42 * spectral_rim_tint);
+        rgb += microfacet_tint
+            * sparkle
+            * (0.030 + 0.060 * glass_prismatic_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float light_sweep = smoothstep(
         -0.72,
         0.96,
