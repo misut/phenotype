@@ -6353,6 +6353,55 @@ fragment float4 fs_material(
         rgb *= 1.0 - shadow_sheen;
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float glass_sidewall_strength = clamp(
+        glass_thickness * (0.42 + 0.58 * edge_inner_highlight)
+            + 0.18 * (glass_prismatic_gain - 1.0)
+            + 0.12 * glass_caustic_spread,
+        0.0,
+        1.0);
+    if (glass_sidewall_strength > 0.0001 && edge_bevel_width > 0.0001) {
+        float sidewall_outer = 1.0 - smoothstep(
+            0.0,
+            max(edge_bevel_width * 1.35, 0.5),
+            signed_edge_distance);
+        float sidewall_inner = 1.0 - smoothstep(
+            0.0,
+            max(edge_width * 0.85, 0.5),
+            signed_edge_distance);
+        float sidewall_band = clamp(
+            sidewall_outer - sidewall_inner * 0.54,
+            0.0,
+            1.0);
+        float side_alignment = clamp(
+            dot(refraction_dir, -dynamic_light_dir) * 0.5 + 0.5,
+            0.0,
+            1.0);
+        float side_corner_focus = clamp(
+            0.42 + 0.58 * smoothstep(0.32, 1.12, normalized_len),
+            0.0,
+            1.0);
+        float3 side_tint =
+            float3(1.0 + 1.10 * spectral_warmth,
+                   1.0 + 0.28 * spectral_rim_tint,
+                   1.0 + 1.10 * spectral_coolness);
+        side_tint = mix(
+            side_tint,
+            side_tint * (float3(1.0) + 0.32 * in.tint.rgb),
+            tint_chroma);
+        float side_light = sidewall_band
+            * glass_sidewall_strength
+            * side_alignment
+            * side_corner_focus
+            * (0.050 + 0.070 * edge_inner_highlight);
+        float side_shadow = sidewall_band
+            * glass_sidewall_strength
+            * (1.0 - side_alignment)
+            * (0.040 + 0.060 * edge_outer_shadow)
+            * glass_shadow_gain;
+        rgb += side_tint * side_light;
+        rgb *= 1.0 - clamp(side_shadow, 0.0, 0.16);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
