@@ -12771,6 +12771,182 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(parallax_internal_shadow, 0.0, 0.052);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float contact_caustic_strength = clamp(
+        0.020 * glass_thickness
+            + 0.018 * (glass_shadow_gain - 1.0)
+            + 0.014 * clear_glass_dimming
+            + 0.012 * clear_glass_contrast
+            + 0.034 * volumetric_parallax_strength
+            + 0.030 * substrate_coupling_strength
+            + 0.024 * optical_equilibrium_strength
+            + 0.022 * meniscus_coherence_strength
+            + 0.018 * surface_lamination_strength
+            + 0.014 * specular_intensity,
+        0.0,
+        0.12);
+    if (contact_caustic_strength > 0.0001) {
+        float contact_lower =
+            smoothstep(0.28,
+                       1.0,
+                       in.local_pos.y / max(in.rect_size.y, 1.0));
+        float contact_rim = edge_lens
+            * (0.32
+               + 0.68
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.62, 0.5),
+                       signed_edge_distance)));
+        float contact_bridge = bridge_band * (0.30 + 0.70 * bridge_core);
+        float contact_touch = clamp(
+            pointer_lens * pointer_lens_strength
+                + contact_bridge
+                + surface_tension_strength * 0.95
+                + specular_intensity * 0.22,
+            0.0,
+            1.0);
+        float contact_gate = clamp(
+            contact_rim * 0.42
+                + contact_lower * 0.26
+                + contact_touch * 0.30
+                + contact_rim * volumetric_parallax_strength * 0.90,
+            0.0,
+            1.0);
+        float2 contact_raw_dir =
+            dynamic_light_dir * (0.42 + 0.22 * dynamic_light_shadow)
+            + refraction_dir * (0.30 + 0.26 * contact_rim)
+            + bridge_dir * bridge_band * 0.22
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.18;
+        float contact_dir_len = length(contact_raw_dir);
+        float2 contact_dir = contact_dir_len > 0.0001
+            ? contact_raw_dir / contact_dir_len
+            : dynamic_light_dir;
+        float2 contact_cross = float2(-contact_dir.y,
+                                      contact_dir.x);
+        float contact_span =
+            (1.4
+             + 3.8 * glass_thickness
+             + 2.6 * glass_caustic_spread
+             + 0.16 * clamp(in.effects.z, 0.0, 64.0))
+            * content_scale
+            * (0.76 + 0.24 * glass_lensing_gain);
+        float contact_micro_span =
+            (0.7
+             + 1.2 * glass_dispersion_tangential
+             + 2.0 * spectral_dispersion)
+            * content_scale;
+        float2 contact_shadow_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                + contact_dir
+                    * texel
+                    * contact_span
+                    * (0.42 + 0.22 * contact_lower),
+            float2(0.0),
+            float2(1.0));
+        float2 contact_lift_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.36
+                - contact_dir
+                    * texel
+                    * contact_span
+                    * (0.26 + 0.20 * contact_rim)
+                + contact_cross
+                    * texel
+                    * contact_micro_span
+                    * (0.34 + 0.18 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float2 contact_prism_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.28
+                - contact_cross
+                    * texel
+                    * contact_micro_span
+                    * (0.40 + 0.20 * contact_touch),
+            float2(0.0),
+            float2(1.0));
+        float3 contact_shadow_rgb =
+            backdrop.sample(samp, contact_shadow_uv).rgb;
+        float3 contact_lift_rgb =
+            backdrop.sample(samp, contact_lift_uv).rgb;
+        float3 contact_prism_rgb =
+            backdrop.sample(samp, contact_prism_uv).rgb;
+        float3 contact_probe =
+            contact_shadow_rgb * 0.42
+            + contact_lift_rgb * 0.36
+            + contact_prism_rgb * 0.22;
+        float contact_luma =
+            dot(contact_probe, float3(0.2126, 0.7152, 0.0722));
+        float contact_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float contact_range = clamp(
+            length(contact_shadow_rgb - contact_lift_rgb) * 0.30
+                + length(contact_prism_rgb - contact_probe) * 0.22
+                + abs(contact_luma - contact_surface_luma) * 0.34,
+            0.0,
+            1.0);
+        float contact_cavity =
+            smoothstep(0.04,
+                       0.34,
+                       contact_surface_luma - contact_luma);
+        float contact_bright = smoothstep(
+            contact_surface_luma - 0.06,
+            contact_surface_luma + 0.30,
+            contact_luma);
+        float contact_flat =
+            1.0 - smoothstep(0.06, 0.34, contact_range);
+        float contact_alignment = smoothstep(
+            -0.12,
+            0.92,
+            dot(contact_dir, dynamic_light_dir) * 0.48
+                + contact_lower * 0.28
+                + contact_rim * 0.24);
+        float3 contact_neutral = mix(
+            contact_probe,
+            float3(contact_luma),
+            0.34 + 0.22 * contact_flat);
+        float3 contact_layer = mix(
+            rgb,
+            contact_neutral,
+            0.06
+                + 0.10 * contact_range
+                + 0.12 * max(contact_cavity, contact_bright));
+        contact_layer = mix(
+            contact_layer,
+            contact_layer * (float3(1.0) + 0.08 * in.tint.rgb),
+            tint_chroma * (0.16 + 0.20 * prominent_intensity));
+        contact_layer += float3(
+            spectral_warmth,
+            0.10 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * contact_rim
+            * (0.005
+               + 0.014 * spectral_rim_tint
+               + 0.010 * glass_prismatic_gain);
+        float contact_weight = contact_caustic_strength
+            * contact_gate
+            * (0.36
+               + 0.22 * contact_range
+               + 0.22 * contact_alignment
+               + 0.20 * contact_touch);
+        rgb = mix(
+            rgb,
+            clamp(contact_layer, 0.0, 1.0),
+            contact_weight * 0.30);
+        rgb += contact_neutral
+            * contact_weight
+            * contact_bright
+            * (0.004
+               + 0.010 * dynamic_light_highlight
+               + 0.008 * glass_scattering_gain);
+        float contact_occlusion =
+            contact_cavity
+            * contact_weight
+            * (0.016 + 0.030 * glass_shadow_gain)
+            * (0.58 + 0.42 * max(contact_rim, contact_lower));
+        rgb *= 1.0 - clamp(contact_occlusion, 0.0, 0.060);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
