@@ -5800,6 +5800,15 @@ fragment float4 fs_material(
     float bridge_band = 0.0;
     float bridge_core = 0.0;
     float bridge_shear = 0.0;
+    float bridge_cohesion = clamp(
+        bridge_motion_strength
+            * (0.34 * glass_effect_match_execution
+               + 0.26 * group_surface_execution
+               + 0.22 * morph_execution
+               + 0.18 * shape_blend_execution)
+            * (0.46 + 0.54 * group_blend_strength),
+        0.0,
+        1.0);
     float bridge_axial = 0.0;
     float bridge_lateral_signed = 0.0;
     float bridge_lateral = 0.0;
@@ -5818,9 +5827,18 @@ fragment float4 fs_material(
         bridge_length = clamp(
             0.34
                 + group_blend_strength * 0.32
-                + union_execution * bridge_flow_offset_gain * 0.18,
+                + union_execution * bridge_flow_offset_gain * 0.18
+                + bridge_cohesion * 0.16,
             0.34,
-            mix(0.72, 0.84, union_execution));
+            mix(0.72, 0.88, max(union_execution, bridge_cohesion)));
+        bridge_width = clamp(
+            bridge_ribbon_width
+                * (1.0
+                   + 0.18 * bridge_cohesion
+                   + 0.10 * glass_effect_match_execution
+                   + 0.08 * group_surface_execution),
+            0.08,
+            0.38);
         bridge_band =
             (1.0 - smoothstep(bridge_width,
                               bridge_width + 0.18,
@@ -5849,15 +5867,17 @@ fragment float4 fs_material(
         * texel
         * (refraction_offset_pixels * content_scale)
         * bridge_band
-        * bridge_flow_offset_gain;
+        * (bridge_flow_offset_gain + 0.18 * bridge_cohesion);
     refraction_uv += bridge_tangent
         * texel
         * (refraction_offset_pixels * content_scale)
         * bridge_shear
         * bridge_band
-        * bridge_flow_offset_gain
+        * (bridge_flow_offset_gain + 0.16 * bridge_cohesion)
         * (0.22 + 0.30 * bridge_core)
-        * (0.38 + 0.62 * union_execution);
+        * (0.38
+           + 0.34 * union_execution
+           + 0.28 * bridge_cohesion);
     float pointer_lens_strength = clamp(in.interaction_lens.w, 0.0, 0.35);
     float2 pointer_anchor =
         clamp(in.interaction_lens.xy, float2(0.0), float2(1.0))
