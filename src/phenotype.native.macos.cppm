@@ -13991,6 +13991,168 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(aperture_shadow_balance, 0.0, 0.028);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float reflection_finish_strength = clamp(
+        0.012 * clear_glass_detail
+            + 0.012 * clear_glass_contrast
+            + 0.014 * glass_thickness
+            + 0.016 * chroma_governor_strength
+            + 0.014 * glass_union_glow_strength
+            + 0.014 * liquid_response_strength
+            + 0.018 * depth_aperture_strength
+            + 0.012 * optical_equilibrium_strength
+            + 0.010 * spectral_rim_tint,
+        0.0,
+        0.095);
+    if (reflection_finish_strength > 0.0001) {
+        float reflection_rim = edge_lens
+            * (0.42
+               + 0.58
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.34, 0.5),
+                       signed_edge_distance)));
+        float reflection_interaction = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.30 + 0.70 * bridge_core)
+                + surface_tension_strength * 0.48
+                + specular_intensity * 0.26,
+            0.0,
+            1.0);
+        float reflection_center =
+            1.0 - smoothstep(0.26, 1.08, normalized_len);
+        float reflection_gate = clamp(
+            reflection_rim * 0.38
+                + reflection_interaction * 0.28
+                + reflection_center * 0.18
+                + clear_glass_detail * 0.16,
+            0.0,
+            1.0);
+        float2 reflection_axis_raw =
+            -dynamic_light_dir * (0.42 + 0.24 * specular_intensity)
+            + refraction_dir * (0.28 + 0.18 * reflection_rim)
+            + bridge_dir * bridge_band * (0.16 + 0.10 * bridge_core)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.14;
+        float reflection_axis_len = length(reflection_axis_raw);
+        float2 reflection_axis = reflection_axis_len > 0.0001
+            ? reflection_axis_raw / reflection_axis_len
+            : refraction_dir;
+        float2 reflection_cross =
+            float2(-reflection_axis.y, reflection_axis.x);
+        float reflection_span =
+            (1.1
+             + 2.4 * glass_thickness
+             + 1.6 * clear_glass_detail
+             + 1.0 * reflection_gate
+             + 0.05 * blur_points)
+            * content_scale
+            * (0.82 + 0.18 * glass_lensing_gain);
+        float2 reflection_finish_light_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + reflection_axis
+                    * texel
+                    * reflection_span
+                    * (0.28 + 0.16 * reflection_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 reflection_finish_shadow_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.12
+                - reflection_axis
+                    * texel
+                    * reflection_span
+                    * (0.26 + 0.14 * reflection_interaction),
+            float2(0.0),
+            float2(1.0));
+        float2 reflection_finish_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                + reflection_cross
+                    * texel
+                    * reflection_span
+                    * (0.24
+                       + 0.14 * abs(bridge_shear) * bridge_band
+                       + 0.10 * reflection_interaction),
+            float2(0.0),
+            float2(1.0));
+        float3 reflection_light_rgb =
+            backdrop.sample(samp, reflection_finish_light_uv).rgb;
+        float3 reflection_shadow_rgb =
+            backdrop.sample(samp, reflection_finish_shadow_uv).rgb;
+        float3 reflection_cross_rgb =
+            backdrop.sample(samp, reflection_finish_cross_uv).rgb;
+        float3 reflection_probe =
+            reflection_light_rgb * 0.42
+            + reflection_shadow_rgb * 0.32
+            + reflection_cross_rgb * 0.26;
+        float reflection_probe_luma =
+            dot(reflection_probe, float3(0.2126, 0.7152, 0.0722));
+        float reflection_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float reflection_range = clamp(
+            length(reflection_light_rgb - reflection_shadow_rgb) * 0.34
+                + length(reflection_cross_rgb - reflection_probe) * 0.20
+                + abs(reflection_probe_luma - reflection_surface_luma) * 0.22,
+            0.0,
+            1.0);
+        float reflection_finish_highlight = smoothstep(
+            0.16,
+            0.70,
+            reflection_range * 0.46
+                + reflection_rim * 0.26
+                + reflection_interaction * 0.20
+                + dynamic_light_highlight * 0.30);
+        float3 reflection_neutral =
+            mix(reflection_probe,
+                float3(reflection_probe_luma),
+                0.26 + 0.18 * clear_glass_dimming);
+        float3 reflection_tint =
+            reflection_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.026
+                      + 0.046 * tint_chroma * prominent_intensity));
+        float3 reflection_layer = mix(
+            rgb,
+            reflection_tint,
+            0.05
+                + 0.10 * reflection_finish_highlight
+                + 0.08 * reflection_gate);
+        float3 reflection_luma_rgb =
+            float3(dot(reflection_layer, float3(0.2126, 0.7152, 0.0722)));
+        reflection_layer =
+            reflection_luma_rgb
+            + (reflection_layer - reflection_luma_rgb)
+                * (0.90
+                   + 0.08 * reflection_finish_highlight
+                   + 0.04 * spectral_rim_tint);
+        reflection_layer += reflection_neutral
+            * reflection_finish_highlight
+            * reflection_gate
+            * (0.005
+               + 0.012 * dynamic_light_highlight
+               + 0.010 * glass_scattering_gain);
+        float reflection_finish_weight = reflection_finish_strength
+            * reflection_gate
+            * (0.32
+               + 0.24 * reflection_finish_highlight
+               + 0.18 * reflection_rim
+               + 0.16 * reflection_interaction
+               + 0.10 * reflection_center);
+        rgb = mix(
+            rgb,
+            clamp(reflection_layer, 0.0, 1.0),
+            reflection_finish_weight * 0.32);
+        float reflection_finish_glare_trim =
+            reflection_finish_weight
+            * reflection_finish_highlight
+            * smoothstep(0.76,
+                         1.02,
+                         max(max(rgb.r, rgb.g), rgb.b))
+            * (0.006 + 0.014 * clear_glass_dimming);
+        rgb *= 1.0 - clamp(reflection_finish_glare_trim, 0.0, 0.026);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
