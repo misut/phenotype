@@ -3831,8 +3831,11 @@ inline MaterialGlassEffectMotionOptics material_glass_effect_match_motion_optics
         execution.glass_effect_match_blend_strength,
         0.0f,
         1.0f);
+    auto const identity_coherence =
+        execution.glass_effect_match_source_effect_id_match ? blend : 0.0f;
     auto const strength = std::clamp(
-        blend * (0.65f + 0.35f * proximity),
+        blend * (0.65f + 0.35f * proximity)
+            + 0.10f * identity_coherence,
         0.0f,
         1.0f);
     if (strength <= 0.0001f)
@@ -3850,12 +3853,18 @@ inline MaterialGlassEffectMotionOptics material_glass_effect_match_motion_optics
         0.5f + optics.direction_y * 0.22f * strength,
         0.18f,
         0.82f);
-    optics.refraction_gain = 1.0f + 0.45f * strength;
-    optics.caustic_gain = 1.0f + 0.70f * strength;
-    optics.specular_intensity_gain = 1.0f + 0.55f * strength;
-    optics.flow_offset_gain = 0.18f + 0.34f * strength;
-    optics.ribbon_width = 0.12f + 0.18f * strength;
-    optics.highlight_gain = 0.08f + 0.16f * strength;
+    optics.refraction_gain =
+        1.0f + 0.45f * strength + 0.08f * identity_coherence;
+    optics.caustic_gain =
+        1.0f + 0.70f * strength + 0.12f * identity_coherence;
+    optics.specular_intensity_gain =
+        1.0f + 0.55f * strength + 0.10f * identity_coherence;
+    optics.flow_offset_gain =
+        0.18f + 0.34f * strength + 0.06f * identity_coherence;
+    optics.ribbon_width =
+        0.12f + 0.18f * strength + 0.04f * identity_coherence;
+    optics.highlight_gain =
+        0.08f + 0.16f * strength + 0.05f * identity_coherence;
     return optics;
 }
 
