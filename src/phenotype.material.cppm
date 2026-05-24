@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 72;
+inline constexpr std::uint32_t material_plan_contract_version = 73;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -1660,6 +1660,11 @@ struct MaterialContainerExecutionDescriptor {
     float fusion_lensing_gain = 1.0f;
     float fusion_edge_lift = 0.0f;
     float fusion_shadow_gain = 1.0f;
+    bool overlap_response_active = false;
+    std::uint32_t overlap_pair_count = 0;
+    float overlap_response_strength = 0.0f;
+    float overlap_max_fraction = 0.0f;
+    float overlap_density = 0.0f;
     float glass_effect_match_progress = 1.0f;
     float glass_effect_match_blend_strength = 0.0f;
     float glass_effect_materialize_progress = 1.0f;
@@ -2710,6 +2715,7 @@ struct MaterialContainerGroupAccumulator {
     std::uint32_t union_candidate_pair_count = 0;
     std::uint32_t morph_candidate_pair_count = 0;
     std::uint32_t separated_pair_count = 0;
+    std::uint32_t overlap_pair_count = 0;
     bool has_bounds = false;
     bool has_shape_gap = false;
     float min_x = 0.0f;
@@ -2718,6 +2724,7 @@ struct MaterialContainerGroupAccumulator {
     float max_y = 0.0f;
     float min_shape_gap = 0.0f;
     float max_shape_gap = 0.0f;
+    float max_shape_overlap = 0.0f;
     float max_blend_distance = 0.0f;
     float max_effective_radius = 0.0f;
 };
@@ -2789,6 +2796,27 @@ inline float material_rect_gap(MaterialGeometry const& a,
     auto const dx = std::max(std::max(b.x - ax2, a.x - bx2), 0.0f);
     auto const dy = std::max(std::max(b.y - ay2, a.y - by2), 0.0f);
     return std::sqrt(dx * dx + dy * dy);
+}
+
+inline float material_rect_overlap_fraction(
+        MaterialGeometry const& a,
+        MaterialGeometry const& b) noexcept {
+    auto const aw = std::max(0.0f, a.w);
+    auto const ah = std::max(0.0f, a.h);
+    auto const bw = std::max(0.0f, b.w);
+    auto const bh = std::max(0.0f, b.h);
+    auto const min_area = std::min(aw * ah, bw * bh);
+    if (min_area <= 0.0001f)
+        return 0.0f;
+    auto const ix0 = std::max(a.x, b.x);
+    auto const iy0 = std::max(a.y, b.y);
+    auto const ix1 = std::min(a.x + aw, b.x + bw);
+    auto const iy1 = std::min(a.y + ah, b.y + bh);
+    auto const iw = std::max(0.0f, ix1 - ix0);
+    auto const ih = std::max(0.0f, iy1 - iy0);
+    if (iw <= 0.0001f || ih <= 0.0001f)
+        return 0.0f;
+    return std::clamp((iw * ih) / min_area, 0.0f, 1.0f);
 }
 
 inline void accumulate_material_container_bounds(
@@ -2952,6 +2980,11 @@ inline void accumulate_material_container_pair(
         std::min(a.container.blend_distance, b.container.blend_distance);
     group.max_blend_distance =
         std::max(group.max_blend_distance, blend_distance);
+    auto const overlap = material_rect_overlap_fraction(a.geometry, b.geometry);
+    if (overlap > 0.0001f) {
+        ++group.overlap_pair_count;
+        group.max_shape_overlap = std::max(group.max_shape_overlap, overlap);
+    }
     auto const blend_candidate = gap <= blend_distance;
     if (blend_candidate)
         ++group.blend_candidate_pair_count;
@@ -3041,6 +3074,33 @@ inline float material_container_group_blend_continuity(
     return 0.0f;
 }
 
+inline float material_container_overlap_density(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (group.shape_pair_count == 0u || group.overlap_pair_count == 0u)
+        return 0.0f;
+    return std::clamp(
+        static_cast<float>(group.overlap_pair_count)
+            / static_cast<float>(group.shape_pair_count),
+        0.0f,
+        1.0f);
+}
+
+inline float material_container_overlap_response_strength(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (group.overlap_pair_count == 0u)
+        return 0.0f;
+    auto const overlap = std::clamp(group.max_shape_overlap, 0.0f, 1.0f);
+    auto const density = material_container_overlap_density(group);
+    auto const continuity = material_container_group_blend_continuity(group);
+    return std::clamp(
+        0.32f * std::sqrt(overlap)
+            + 0.38f * overlap
+            + 0.20f * density
+            + 0.10f * continuity,
+        0.0f,
+        1.0f);
+}
+
 inline char const* material_container_fusion_model_name(
         MaterialContainerExecutionDescriptor const& execution) noexcept {
     if (execution.glass_effect_match_execution)
@@ -3067,6 +3127,11 @@ inline void material_apply_container_fusion_optics(
         execution.fusion_lensing_gain = 1.0f;
         execution.fusion_edge_lift = 0.0f;
         execution.fusion_shadow_gain = 1.0f;
+        execution.overlap_response_active = false;
+        execution.overlap_pair_count = 0u;
+        execution.overlap_response_strength = 0.0f;
+        execution.overlap_max_fraction = 0.0f;
+        execution.overlap_density = 0.0f;
         return;
     }
 
@@ -3087,6 +3152,14 @@ inline void material_apply_container_fusion_optics(
         0.0f,
         0.12f);
     execution.fusion_shadow_gain = 1.0f + 0.16f * fusion_strength;
+    execution.overlap_pair_count = group.overlap_pair_count;
+    execution.overlap_max_fraction =
+        std::clamp(group.max_shape_overlap, 0.0f, 1.0f);
+    execution.overlap_density = material_container_overlap_density(group);
+    execution.overlap_response_strength =
+        material_container_overlap_response_strength(group);
+    execution.overlap_response_active =
+        execution.overlap_response_strength > 0.0001f;
 }
 
 inline float material_container_shape_blend_strength_for_gap(

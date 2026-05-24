@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 72);
+    assert(material_plan_contract_version == 73);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -3054,6 +3054,68 @@ void test_container_member_shape_blend_uses_spacing_falloff() {
     std::puts("PASS: container member shape blend uses spacing falloff");
 }
 
+void test_container_group_surface_adds_overlap_response() {
+    auto request = regular_request();
+    request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 16.0f};
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 922u,
+        .union_id = 0u,
+        .spacing = 20.0f,
+        .interactive = false,
+        .morph_transitions = true,
+    };
+    auto overlapping = request;
+    overlapping.geometry.x = 30.0f;
+
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(request, sampled_environment()), 1u},
+        {plan_material_surface(overlapping, sampled_environment()), 2u},
+    };
+
+    auto const group = accumulate_material_container_group(records, 922u);
+    assert(group.shape_pair_count == 1u);
+    assert(group.blend_candidate_pair_count == 1u);
+    assert(group.overlap_pair_count == 1u);
+    assert(std::fabs(group.max_shape_overlap - 0.25f) < 0.0001f);
+    assert(std::fabs(material_container_overlap_density(group) - 1.0f)
+           < 0.0001f);
+    auto const overlap_strength =
+        material_container_overlap_response_strength(group);
+    assert(overlap_strength > 0.53f);
+    assert(overlap_strength < 0.55f);
+
+    auto const first_execution =
+        material_container_execution_descriptor(records[0], records);
+    auto const second_execution =
+        material_container_execution_descriptor(records[1], records);
+    assert(first_execution.group_surface_execution);
+    assert(second_execution.group_surface_execution);
+    assert(first_execution.surface_leader);
+    assert(!second_execution.surface_leader);
+    assert(first_execution.overlap_response_active);
+    assert(first_execution.overlap_pair_count == 1u);
+    assert(std::fabs(
+               first_execution.overlap_max_fraction
+                   - group.max_shape_overlap)
+           < 0.0001f);
+    assert(std::fabs(first_execution.overlap_density - 1.0f) < 0.0001f);
+    assert(std::fabs(
+               first_execution.overlap_response_strength
+                   - overlap_strength)
+           < 0.0001f);
+
+    auto const first_surface_geometry =
+        material_surface_execution_geometry(records[0].plan, &first_execution);
+    auto const second_surface_geometry =
+        material_surface_execution_geometry(records[1].plan, &second_execution);
+    assert(first_surface_geometry.active);
+    assert(first_surface_geometry.w == 70.0f);
+    assert(first_surface_geometry.h == 40.0f);
+    assert(!second_surface_geometry.active);
+
+    std::puts("PASS: container group surface adds overlap response");
+}
+
 void test_container_group_surface_preserves_radius_continuity() {
     auto request = regular_request();
     request.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 8.0f};
@@ -4028,6 +4090,7 @@ int main() {
     test_executor_sampled_status_contract();
     test_container_group_runtime_summary_contract();
     test_container_member_shape_blend_uses_spacing_falloff();
+    test_container_group_surface_adds_overlap_response();
     test_container_group_surface_preserves_radius_continuity();
     test_container_group_surface_aggregates_member_interaction();
     test_container_group_surface_aggregates_clear_member_appearance();
