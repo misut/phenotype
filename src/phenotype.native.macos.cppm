@@ -11832,6 +11832,178 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(grazing_shadow, 0.0, 0.070);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float substrate_coupling_strength = clamp(
+        0.020 * glass_thickness
+            + 0.018 * (glass_shadow_gain - 1.0)
+            + 0.014 * clear_glass_dimming
+            + 0.014 * clear_glass_contrast
+            + 0.050 * meniscus_coherence_strength
+            + 0.040 * surface_lamination_strength
+            + 0.030 * volumetric_absorption_strength
+            + 0.020 * adaptive_contrast_strength
+            + 0.018 * group_blend_strength
+            + 0.016 * overlap_response_strength,
+        0.0,
+        0.13);
+    if (substrate_coupling_strength > 0.0001) {
+        float substrate_shadow_radius = clamp(in.effects.z, 0.0, 64.0);
+        float substrate_edge_span = max(
+            edge_width,
+            max(edge_bevel_width * 1.35, substrate_shadow_radius * 0.16));
+        float substrate_edge = 1.0 - smoothstep(
+            0.0,
+            max(substrate_edge_span, 0.5),
+            signed_edge_distance);
+        float substrate_lower =
+            smoothstep(0.30,
+                       1.0,
+                       in.local_pos.y / max(in.rect_size.y, 1.0));
+        float substrate_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.34 + 0.66 * bridge_core)
+                + surface_tension_strength * 1.10
+                + group_blend_strength * overlap_response_strength * 0.24,
+            0.0,
+            1.0);
+        float substrate_gate = clamp(
+            substrate_edge * 0.44
+                + substrate_lower * 0.24
+                + substrate_contact * 0.30
+                + edge_lens * 0.20,
+            0.0,
+            1.0);
+        float2 substrate_raw_dir =
+            dynamic_light_dir * (0.48 + 0.24 * dynamic_light_shadow)
+            + refraction_dir * (0.28 + 0.30 * edge_lens)
+            + bridge_dir * bridge_band * 0.22
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.20;
+        float substrate_dir_len = length(substrate_raw_dir);
+        float2 substrate_dir = substrate_dir_len > 0.0001
+            ? substrate_raw_dir / substrate_dir_len
+            : dynamic_light_dir;
+        float2 substrate_cross = float2(-substrate_dir.y,
+                                        substrate_dir.x);
+        float substrate_span =
+            (2.2
+             + 4.6 * glass_thickness
+             + 0.18 * substrate_shadow_radius
+             + 0.10 * blur_points)
+            * content_scale
+            * (0.74 + 0.26 * glass_lensing_gain);
+        float substrate_micro_span =
+            (0.8
+             + 1.4 * glass_caustic_spread
+             + 1.2 * glass_dispersion_tangential)
+            * content_scale;
+        float2 substrate_shadow_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.26
+                + substrate_dir
+                    * texel
+                    * substrate_span
+                    * (0.62 + 0.22 * substrate_lower),
+            float2(0.0),
+            float2(1.0));
+        float2 substrate_lift_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                - substrate_dir
+                    * texel
+                    * substrate_span
+                    * (0.34 + 0.22 * edge_lens)
+                + substrate_cross
+                    * texel
+                    * substrate_micro_span
+                    * (0.28 + 0.18 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float2 substrate_anchor_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                - substrate_cross
+                    * texel
+                    * substrate_micro_span
+                    * (0.26 + 0.18 * substrate_contact),
+            float2(0.0),
+            float2(1.0));
+        float3 substrate_shadow_rgb =
+            backdrop.sample(samp, substrate_shadow_uv).rgb;
+        float3 substrate_lift_rgb =
+            backdrop.sample(samp, substrate_lift_uv).rgb;
+        float3 substrate_anchor_rgb =
+            backdrop.sample(samp, substrate_anchor_uv).rgb;
+        float3 substrate_probe =
+            substrate_shadow_rgb * 0.42
+            + substrate_lift_rgb * 0.34
+            + substrate_anchor_rgb * 0.24;
+        float substrate_luma =
+            dot(substrate_probe, float3(0.2126, 0.7152, 0.0722));
+        float substrate_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float substrate_contrast = clamp(
+            length(substrate_shadow_rgb - substrate_lift_rgb) * 0.28
+                + length(substrate_anchor_rgb - substrate_probe) * 0.20
+                + abs(substrate_luma - substrate_surface_luma) * 0.38,
+            0.0,
+            1.0);
+        float substrate_dark = smoothstep(
+            0.06,
+            0.34,
+            substrate_surface_luma - substrate_luma);
+        float substrate_bright = smoothstep(
+            substrate_surface_luma - 0.08,
+            substrate_surface_luma + 0.28,
+            substrate_luma);
+        float substrate_light_side = smoothstep(
+            -0.12,
+            0.92,
+            dot(substrate_dir, dynamic_light_dir) * 0.52
+                + substrate_lower * 0.30
+                + substrate_edge * 0.18);
+        float3 substrate_neutral = mix(
+            substrate_probe,
+            float3(substrate_luma),
+            0.38 + 0.22 * (1.0 - substrate_contrast));
+        float3 substrate_layer = mix(
+            rgb,
+            substrate_neutral,
+            0.08
+                + 0.10 * substrate_bright
+                + 0.12 * substrate_contrast);
+        substrate_layer = mix(
+            substrate_layer,
+            substrate_layer * (float3(1.0) + 0.10 * in.tint.rgb),
+            tint_chroma * (0.18 + 0.22 * prominent_intensity));
+        substrate_layer += float3(
+            spectral_warmth,
+            0.10 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * substrate_edge
+            * (0.006 + 0.018 * spectral_rim_tint);
+        float substrate_weight = substrate_coupling_strength
+            * substrate_gate
+            * (0.40
+               + 0.22 * substrate_contact
+               + 0.20 * substrate_contrast
+               + 0.18 * substrate_light_side);
+        rgb = mix(
+            rgb,
+            clamp(substrate_layer, 0.0, 1.0),
+            substrate_weight * 0.36);
+        float substrate_grounding = substrate_dark
+            * substrate_coupling_strength
+            * substrate_gate
+            * (0.020 + 0.034 * glass_shadow_gain)
+            * (0.56 + 0.44 * max(substrate_edge, substrate_lower));
+        rgb *= 1.0 - clamp(substrate_grounding, 0.0, 0.062);
+        rgb += substrate_neutral
+            * substrate_weight
+            * substrate_bright
+            * (0.004
+               + 0.010 * dynamic_light_highlight
+               + 0.010 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     if (caustic_weight > 0.0001) {
         float rim_alignment = clamp(
             dot(refraction_dir, dynamic_light_dir) * 0.5 + 0.5,
