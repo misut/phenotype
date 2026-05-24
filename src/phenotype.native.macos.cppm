@@ -19786,6 +19786,239 @@ fragment float4 fs_material(
             * (0.002 + 0.006 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float rim_compression_strength = clamp(
+        0.012 * clear_glass_detail
+            + 0.010 * clear_glass_contrast
+            + 0.010 * glass_thickness
+            + 0.008 * (glass_lensing_gain - 1.0)
+            + 0.008 * edge_outer_shadow
+            + 0.008 * depth_seal_strength
+            + 0.007 * continuity_finish_strength
+            + 0.007 * transition_clarity_strength
+            + 0.006 * transmission_caustic_strength
+            + 0.006 * reflection_wake_strength
+            + 0.006 * container_pressure_halo_strength
+            + 0.006 * glass_effect_match_execution * group_blend_strength,
+        0.0,
+        0.062);
+    if (rim_compression_strength > 0.0001) {
+        float2 rim_half_size = max(in.rect_size * 0.5, float2(0.5));
+        float2 rim_center_local = in.local_pos - rim_half_size;
+        float2 rim_rect_normal_raw;
+        if (rect_edge_distance.x < rect_edge_distance.y) {
+            rim_rect_normal_raw =
+                float2(rim_center_local.x >= 0.0 ? 1.0 : -1.0, 0.0);
+        } else {
+            rim_rect_normal_raw =
+                float2(0.0, rim_center_local.y >= 0.0 ? 1.0 : -1.0);
+        }
+        float2 rim_round_normal_raw =
+            length(rim_center_local) > 0.0001
+                ? rim_center_local / length(rim_center_local)
+                : rim_rect_normal_raw;
+        float rim_corner_mix = smoothstep(
+            0.52,
+            0.90,
+            min(abs(normalized_local.x), abs(normalized_local.y)));
+        float2 rim_normal_raw = mix(
+            rim_rect_normal_raw,
+            rim_round_normal_raw,
+            rim_corner_mix);
+        float rim_normal_len = length(rim_normal_raw);
+        float2 rim_normal = rim_normal_len > 0.0001
+            ? rim_normal_raw / rim_normal_len
+            : refraction_dir;
+        float2 rim_tangent = float2(-rim_normal.y, rim_normal.x);
+        float rim_edge = 1.0 - smoothstep(
+            0.0,
+            max(edge_bevel_width * 2.2, 1.0),
+            signed_edge_distance);
+        float rim_inner = smoothstep(
+            max(edge_bevel_width * 0.18, 0.10),
+            max(edge_bevel_width * 1.30, 1.0),
+            signed_edge_distance);
+        float rim_outer = 1.0 - smoothstep(
+            max(edge_bevel_width * 0.72, 0.5),
+            max(edge_bevel_width * 2.8, 1.0),
+            signed_edge_distance);
+        float rim_band = clamp(
+            rim_edge * 0.56
+                + rim_outer * rim_inner * 0.28
+                + edge_lens * 0.18,
+            0.0,
+            1.0);
+        float rim_pointer = clamp(
+            pointer_lens_strength
+                * (0.34 * pointer_lens_raw + 0.66 * pointer_lens),
+            0.0,
+            1.0);
+        float rim_transition = clamp(
+            glass_effect_match_execution * 0.30
+                + morph_execution * 0.22
+                + materialize_wave_strength * 0.16
+                + depth_seal_strength * 1.6
+                + continuity_finish_strength * 1.5
+                + transition_clarity_strength * 1.4
+                + container_pressure_halo_strength * 1.2
+                + rim_pointer * 0.16,
+            0.0,
+            1.0);
+        float rim_light_alignment =
+            smoothstep(-0.36, 0.92, dot(rim_normal, -dynamic_light_dir));
+        float rim_bridge_alignment =
+            smoothstep(-0.28, 0.88, abs(dot(rim_tangent, bridge_dir)));
+        float rim_gate = clamp(
+            rim_band
+                * (0.44
+                   + 0.18 * rim_light_alignment
+                   + 0.16 * rim_bridge_alignment
+                   + 0.14 * rim_transition
+                   + 0.08 * rim_pointer),
+            0.0,
+            1.0);
+        float rim_span =
+            (0.72
+             + 1.4 * glass_thickness
+             + 1.1 * clear_glass_detail
+             + 0.9 * rim_transition
+             + 0.032 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float rim_tangent_span =
+            (0.46
+             + 0.8 * glass_dispersion_tangential
+             + 0.7 * spectral_dispersion
+             + 0.7 * rim_bridge_alignment)
+            * content_scale;
+        float2 rim_outer_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + rim_normal
+                    * texel
+                    * rim_span
+                    * (0.24 + 0.16 * rim_band),
+            float2(0.0),
+            float2(1.0));
+        float2 rim_inner_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - rim_normal
+                    * texel
+                    * rim_span
+                    * (0.26 + 0.16 * rim_inner),
+            float2(0.0),
+            float2(1.0));
+        float2 rim_leading_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + rim_tangent
+                    * texel
+                    * rim_tangent_span
+                    * (0.26 + 0.16 * rim_bridge_alignment),
+            float2(0.0),
+            float2(1.0));
+        float2 rim_trailing_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.06
+                - rim_tangent
+                    * texel
+                    * rim_tangent_span
+                    * (0.22 + 0.14 * rim_transition),
+            float2(0.0),
+            float2(1.0));
+        float3 rim_outer_rgb =
+            backdrop.sample(samp, rim_outer_uv).rgb;
+        float3 rim_inner_rgb =
+            backdrop.sample(samp, rim_inner_uv).rgb;
+        float3 rim_leading_rgb =
+            backdrop.sample(samp, rim_leading_uv).rgb;
+        float3 rim_trailing_rgb =
+            backdrop.sample(samp, rim_trailing_uv).rgb;
+        float3 rim_probe =
+            rim_outer_rgb * 0.34
+            + rim_inner_rgb * 0.30
+            + rim_leading_rgb * 0.20
+            + rim_trailing_rgb * 0.16;
+        float rim_luma =
+            dot(rim_probe, float3(0.2126, 0.7152, 0.0722));
+        float rim_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float rim_range = clamp(
+            length(rim_outer_rgb - rim_inner_rgb) * 0.32
+                + length(rim_leading_rgb - rim_trailing_rgb) * 0.22
+                + abs(rim_luma - rim_surface_luma) * 0.22
+                + rim_band * 0.08,
+            0.0,
+            1.0);
+        float rim_coherence =
+            1.0 - smoothstep(0.08, 0.34, rim_range);
+        float rim_contact_dark = smoothstep(
+            0.04,
+            0.30,
+            rim_surface_luma - rim_luma);
+        float rim_backlight = smoothstep(
+            rim_surface_luma - 0.05,
+            rim_surface_luma + 0.28,
+            rim_luma);
+        float3 rim_neutral = mix(
+            rim_probe,
+            float3(rim_luma),
+            rim_coherence * 0.14
+                + rim_contact_dark * (0.12 + 0.12 * glass_shadow_gain));
+        float3 rim_layer = clamp(
+            (rim_neutral - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.040
+                       + rim_transition * 0.030)
+                + float3(0.50),
+            0.0,
+            1.0);
+        rim_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.012
+                   + 0.020 * tint_chroma * prominent_intensity);
+        float3 rim_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        float rim_prism_gate = clamp(
+            rim_edge * 0.32
+                + rim_light_alignment * 0.24
+                + rim_bridge_alignment * 0.18
+                + rim_transition * 0.16
+                + rim_pointer * 0.12,
+            0.0,
+            1.0);
+        rim_layer += rim_prism
+            * rim_prism_gate
+            * (0.002
+               + 0.006 * spectral_rim_tint
+               + 0.005 * glass_prismatic_gain);
+        float rim_weight = rim_compression_strength
+            * rim_gate
+            * (0.34
+               + 0.20 * rim_coherence
+               + 0.18 * rim_backlight
+               + 0.14 * rim_contact_dark
+               + 0.12 * rim_transition);
+        rgb = mix(
+            rgb,
+            mix(rgb, rim_layer, 0.08 + 0.12 * rim_coherence),
+            rim_weight * 0.30);
+        float rim_contact_shadow =
+            rim_contact_dark
+            * rim_weight
+            * (0.004 + 0.010 * glass_shadow_gain)
+            * (0.60 + 0.40 * rim_edge);
+        rgb *= 1.0 - clamp(rim_contact_shadow, 0.0, 0.028);
+        rgb += rim_prism
+            * rim_weight
+            * rim_prism_gate
+            * (0.0015
+               + 0.004 * dynamic_light_highlight
+               + 0.004 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
