@@ -7150,6 +7150,200 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(membrane_shadow, 0.0, 0.08);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float union_interference_strength = clamp(
+        bridge_band
+            * group_blend_strength
+            * (0.20 + 0.32 * bridge_core)
+            + bridge_band * union_execution * 0.18
+            + bridge_band * overlap_response_strength * 0.12
+            + coalescence_strength * 0.30,
+        0.0,
+        0.46);
+    if (union_interference_strength > 0.0001
+        && bridge_dir_length > 0.0001) {
+        float interference_core = 1.0 - smoothstep(
+            max(bridge_width * 0.18, 0.001),
+            bridge_width + 0.07,
+            bridge_lateral);
+        float interference_ridge =
+            smoothstep(
+                max(bridge_width * 0.30, 0.001),
+                bridge_width + 0.03,
+                bridge_lateral)
+            * (1.0 - smoothstep(
+                bridge_width + 0.03,
+                bridge_width + 0.20,
+                bridge_lateral));
+        float interference_axial = 1.0 - smoothstep(
+            max(bridge_length * 0.52, 0.001),
+            bridge_length + 0.22,
+            bridge_axial);
+        float interference_gate = clamp(
+            interference_axial
+                * (0.44 * interference_core + 0.56 * interference_ridge)
+                * (0.62 + 0.38 * edge_lens),
+            0.0,
+            1.0);
+        float interference_alignment = smoothstep(
+            -0.32,
+            1.0,
+            dot(bridge_dir, -dynamic_light_dir));
+        float interference_phase =
+            bridge_axial * (18.0 + 8.0 * group_blend_strength)
+            + bridge_lateral_signed
+                * (24.0 + 10.0 * union_execution)
+            + bridge_shear * 5.0
+            + coalescence_strength * 6.0;
+        float interference_wave =
+            (0.5 + 0.5 * cos(interference_phase))
+            * (0.38 + 0.62 * interference_ridge);
+        float interference_fold =
+            sin(interference_phase * 0.58
+                - bridge_lateral_signed * 11.0
+                + glass_caustic_spread * 17.0);
+        float interference_span =
+            (1.6
+             + 5.2 * glass_thickness
+             + 3.8 * glass_caustic_spread
+             + 0.10 * blur_points)
+            * content_scale
+            * (0.76 + 0.24 * glass_lensing_gain);
+        float interference_cross_span =
+            (0.9
+             + 2.4 * glass_thickness
+             + 1.8 * glass_dispersion_tangential
+             + 2.6 * spectral_dispersion)
+            * content_scale;
+        float2 interference_forward_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.58
+                + bridge_dir
+                    * texel
+                    * interference_span
+                    * (0.66 + 0.20 * interference_wave)
+                + bridge_tangent
+                    * texel
+                    * interference_cross_span
+                    * bridge_shear
+                    * 0.24,
+            float2(0.0),
+            float2(1.0));
+        float2 interference_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.38
+                - bridge_dir
+                    * texel
+                    * interference_span
+                    * (0.48 + 0.18 * interference_core)
+                - bridge_tangent
+                    * texel
+                    * interference_cross_span
+                    * bridge_shear
+                    * 0.20,
+            float2(0.0),
+            float2(1.0));
+        float2 interference_left_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                + bridge_tangent
+                    * texel
+                    * interference_cross_span
+                    * (0.62 + 0.30 * interference_ridge)
+                + dispersion_tangent
+                    * texel
+                    * interference_cross_span
+                    * (0.18 + 0.28 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float2 interference_right_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                - bridge_tangent
+                    * texel
+                    * interference_cross_span
+                    * (0.58 + 0.24 * interference_gate)
+                - dispersion_tangent
+                    * texel
+                    * interference_cross_span
+                    * (0.16 + 0.24 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float3 interference_forward =
+            backdrop.sample(samp, interference_forward_uv).rgb;
+        float3 interference_back =
+            backdrop.sample(samp, interference_back_uv).rgb;
+        float3 interference_left =
+            backdrop.sample(samp, interference_left_uv).rgb;
+        float3 interference_right =
+            backdrop.sample(samp, interference_right_uv).rgb;
+        float3 interference_rgb =
+            interference_forward * 0.32
+            + interference_back * 0.28
+            + interference_left * 0.20
+            + interference_right * 0.20;
+        float interference_luma =
+            dot(interference_rgb, float3(0.2126, 0.7152, 0.0722));
+        float interference_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float interference_bright = smoothstep(
+            interference_surface_luma - 0.08,
+            interference_surface_luma + 0.28,
+            interference_luma);
+        float interference_dark = smoothstep(
+            0.08,
+            0.34,
+            interference_surface_luma - interference_luma);
+        float interference_detail = smoothstep(
+            0.02,
+            0.30,
+            length(interference_forward - interference_back) * 0.30
+                + length(interference_left - interference_right) * 0.30
+                + interference_wave * 0.16);
+        float3 interference_tint = mix(
+            interference_rgb,
+            float3(interference_luma),
+            interference_dark * (0.16 + 0.20 * glass_shadow_gain));
+        interference_tint = mix(
+            interference_tint,
+            interference_tint * (float3(1.0) + 0.20 * in.tint.rgb),
+            tint_chroma * (0.36 + 0.24 * group_blend_strength));
+        interference_tint += float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (interference_wave * 0.38 + interference_ridge * 0.26)
+            * (0.10 + 0.32 * spectral_rim_tint);
+        float interference_weight = union_interference_strength
+            * interference_gate
+            * (0.38
+               + 0.20 * interference_detail
+               + 0.20 * interference_bright
+               + 0.22 * interference_alignment);
+        rgb = mix(
+            rgb,
+            mix(rgb, interference_tint, 0.18 + 0.16 * interference_detail),
+            interference_weight * 0.44);
+        rgb += interference_tint
+            * interference_weight
+            * (0.014
+               + 0.026 * dynamic_light_highlight
+               + 0.020 * glass_prismatic_gain);
+        rgb += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * union_interference_strength
+            * interference_gate
+            * abs(interference_fold)
+            * (0.006 + 0.018 * glass_caustic_spread);
+        float interference_shadow = interference_dark
+            * union_interference_strength
+            * interference_gate
+            * interference_ridge
+            * (0.018 + 0.038 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(interference_shadow, 0.0, 0.065);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float morph_field_strength = clamp(
         bridge_band
             * group_blend_strength
