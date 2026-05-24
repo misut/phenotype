@@ -15091,6 +15091,184 @@ fragment float4 fs_material(
         rgb += occlusion_neutral * clamp(occlusion_floor_lift, 0.0, 0.016);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float edge_absorption_strength = clamp(
+        0.012 * clear_glass_detail
+            + 0.012 * clear_glass_dimming
+            + 0.010 * clear_glass_contrast
+            + 0.016 * glass_thickness
+            + 0.012 * glass_shadow_gain
+            + 0.012 * depth_occlusion_strength
+            + 0.010 * parallax_depth_strength
+            + 0.010 * edge_caustic_strength
+            + 0.008 * surface_sheen_strength
+            + 0.008 * reflection_finish_strength,
+        0.0,
+        0.090);
+    if (edge_absorption_strength > 0.0001) {
+        float absorption_rim = edge_lens
+            * (0.34
+               + 0.66
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.46, 0.5),
+                       signed_edge_distance)));
+        float absorption_center =
+            1.0 - smoothstep(0.26, 1.12, normalized_len);
+        float absorption_motion = clamp(
+            pointer_lens * pointer_lens_strength * 0.28
+                + bridge_band * (0.24 + 0.76 * bridge_core)
+                + surface_tension_strength * 0.34
+                + specular_intensity * 0.18,
+            0.0,
+            1.0);
+        float absorption_gate = clamp(
+            absorption_rim * 0.38
+                + absorption_center * 0.22
+                + absorption_motion * 0.18
+                + clear_glass_dimming * 0.22
+                + glass_thickness * 0.18,
+            0.0,
+            1.0);
+        float2 absorption_axis_raw =
+            refraction_dir * (0.36 + 0.18 * absorption_rim)
+            + dynamic_light_dir * (0.24 + 0.14 * dynamic_light_shadow)
+            + bridge_dir * bridge_band * (0.14 + 0.10 * bridge_core)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.10;
+        float absorption_axis_len = length(absorption_axis_raw);
+        float2 absorption_axis = absorption_axis_len > 0.0001
+            ? absorption_axis_raw / absorption_axis_len
+            : refraction_dir;
+        float2 absorption_cross =
+            float2(-absorption_axis.y, absorption_axis.x);
+        float absorption_span =
+            (0.9
+             + 2.2 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.0 * absorption_gate
+             + 0.040 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float2 absorption_rim_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.12
+                + absorption_axis
+                    * texel
+                    * absorption_span
+                    * (0.24 + 0.14 * absorption_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 absorption_core_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - absorption_axis
+                    * texel
+                    * absorption_span
+                    * (0.22 + 0.12 * absorption_center),
+            float2(0.0),
+            float2(1.0));
+        float2 absorption_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + absorption_cross
+                    * texel
+                    * absorption_span
+                    * (0.20
+                       + 0.10 * absorption_motion
+                       + 0.08 * abs(bridge_shear) * bridge_band),
+            float2(0.0),
+            float2(1.0));
+        float3 absorption_rim_rgb =
+            backdrop.sample(samp, absorption_rim_uv).rgb;
+        float3 absorption_core_rgb =
+            backdrop.sample(samp, absorption_core_uv).rgb;
+        float3 absorption_cross_rgb =
+            backdrop.sample(samp, absorption_cross_uv).rgb;
+        float3 absorption_probe =
+            absorption_rim_rgb * 0.40
+            + absorption_core_rgb * 0.36
+            + absorption_cross_rgb * 0.24;
+        float absorption_probe_luma =
+            dot(absorption_probe, float3(0.2126, 0.7152, 0.0722));
+        float absorption_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float absorption_surface_peak = max(max(rgb.r, rgb.g), rgb.b);
+        float absorption_surface_floor = min(min(rgb.r, rgb.g), rgb.b);
+        float absorption_density = smoothstep(
+            0.08,
+            0.58,
+            length(absorption_rim_rgb - absorption_core_rgb) * 0.30
+                + abs(absorption_probe_luma - absorption_surface_luma) * 0.26
+                + absorption_rim * 0.28
+                + clear_glass_dimming * 0.20);
+        float absorption_glare = smoothstep(
+            0.72,
+            1.02,
+            absorption_surface_peak * 0.58
+                + absorption_surface_luma * 0.42);
+        float absorption_hollow =
+            1.0 - smoothstep(
+                0.10,
+                0.42,
+                absorption_surface_floor * 0.46
+                    + absorption_surface_luma * 0.54);
+        float3 absorption_neutral =
+            mix(absorption_probe,
+                float3(absorption_probe_luma),
+                0.34 + 0.18 * clear_glass_dimming);
+        float3 absorption_layer = mix(
+            rgb,
+            absorption_neutral,
+            0.04
+                + 0.08 * absorption_density
+                + 0.08 * absorption_gate);
+        float3 absorption_luma_rgb =
+            float3(dot(absorption_layer,
+                       float3(0.2126, 0.7152, 0.0722)));
+        absorption_layer =
+            absorption_luma_rgb
+            + (absorption_layer - absorption_luma_rgb)
+                * (0.86
+                   + 0.07 * (1.0 - absorption_density)
+                   + 0.04 * clear_glass_detail);
+        absorption_layer = mix(
+            absorption_layer,
+            absorption_layer
+                * (float3(1.0)
+                   - in.tint.rgb
+                       * (0.012
+                          + 0.022 * tint_chroma * prominent_intensity)),
+            tint_chroma * (0.08 + 0.12 * absorption_rim));
+        float absorption_weight = edge_absorption_strength
+            * absorption_gate
+            * (0.30
+               + 0.22 * absorption_density
+               + 0.18 * max(absorption_glare, absorption_hollow)
+               + 0.16 * absorption_rim
+               + 0.14 * absorption_motion);
+        rgb = mix(
+            rgb,
+            clamp(absorption_layer, 0.0, 1.0),
+            absorption_weight * 0.28);
+        float absorption_glare_trim =
+            absorption_glare
+            * absorption_weight
+            * (0.007 + 0.016 * clear_glass_dimming);
+        float absorption_edge_trim =
+            absorption_density
+            * absorption_rim
+            * absorption_weight
+            * (0.005 + 0.010 * glass_shadow_gain);
+        float absorption_hollow_lift =
+            absorption_hollow
+            * absorption_weight
+            * (0.004 + 0.008 * glass_scattering_gain);
+        rgb *= 1.0 - clamp(absorption_glare_trim + absorption_edge_trim,
+                            0.0,
+                            0.030);
+        rgb += absorption_neutral
+            * clamp(absorption_hollow_lift, 0.0, 0.016);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
