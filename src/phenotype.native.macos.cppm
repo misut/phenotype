@@ -2513,6 +2513,24 @@ inline void apply_material_container_execution_descriptors(
                 material_execution_transition(
                     record->plan.transition,
                     execution);
+            auto const gain_ratio = [](float target_gain,
+                                       float current_gain) noexcept {
+                if (current_gain <= 0.0001f)
+                    return std::clamp(target_gain, 0.0f, 1.5f);
+                return std::clamp(target_gain / current_gain, 0.0f, 1.5f);
+            };
+            auto const opacity_ratio = gain_ratio(
+                execution->glass_effect_materialize_opacity_gain,
+                record->plan.transition.opacity_gain);
+            auto const optical_ratio = gain_ratio(
+                execution->glass_effect_materialize_optical_gain,
+                record->plan.transition.optical_gain);
+            auto const shadow_ratio = gain_ratio(
+                execution->glass_effect_materialize_shadow_gain,
+                record->plan.transition.shadow_gain);
+            auto const refraction_ratio = gain_ratio(
+                execution->glass_effect_materialize_refraction_gain,
+                record->plan.transition.refraction_gain);
             auto const geometry =
                 material_surface_execution_geometry(record->plan, execution);
             if (!geometry.active) {
@@ -2527,9 +2545,80 @@ inline void apply_material_container_execution_descriptors(
             inst.rect[3] = geometry.h;
             inst.params[0] = geometry.radius;
             inst.params[2] = std::clamp(
-                inst.params[2] * transition.opacity_gain,
+                inst.params[2] * opacity_ratio,
                 0.0f,
                 1.0f);
+            inst.tint[3] = std::clamp(inst.tint[3] * opacity_ratio,
+                                      0.0f,
+                                      1.0f);
+            inst.params[1] = std::clamp(inst.params[1] * optical_ratio,
+                                        0.0f,
+                                        36.0f);
+            inst.optics[0] =
+                1.0f + (inst.optics[0] - 1.0f) * optical_ratio;
+            inst.optics[3] = std::clamp(inst.optics[3] * optical_ratio,
+                                        0.0f,
+                                        1.0f);
+            inst.effects[1] = std::clamp(inst.effects[1] * shadow_ratio,
+                                         0.0f,
+                                         0.4f);
+            inst.effects[2] =
+                std::max(0.0f, inst.effects[2] * shadow_ratio);
+            inst.effects[3] = std::clamp(inst.effects[3] * optical_ratio,
+                                         0.0f,
+                                         0.05f);
+            inst.refraction[0] = std::clamp(
+                inst.refraction[0] * refraction_ratio,
+                0.0f,
+                0.35f);
+            inst.refraction[2] = std::clamp(
+                inst.refraction[2] * refraction_ratio,
+                0.0f,
+                8.0f);
+            inst.refraction[3] = std::clamp(
+                inst.refraction[3] * refraction_ratio,
+                0.0f,
+                0.35f);
+            inst.edge_optics[1] = std::clamp(
+                inst.edge_optics[1] * optical_ratio,
+                0.0f,
+                0.90f);
+            inst.edge_optics[2] = std::clamp(
+                inst.edge_optics[2] * shadow_ratio,
+                0.0f,
+                0.80f);
+            inst.edge_optics[3] = std::clamp(
+                inst.edge_optics[3] * refraction_ratio,
+                0.0f,
+                0.16f);
+            inst.spectral_tint[0] = std::clamp(
+                inst.spectral_tint[0] * optical_ratio,
+                0.0f,
+                0.22f);
+            inst.spectral_tint[1] = std::clamp(
+                inst.spectral_tint[1] * optical_ratio,
+                0.0f,
+                0.22f);
+            inst.spectral_tint[2] = std::clamp(
+                inst.spectral_tint[2] * optical_ratio,
+                0.0f,
+                0.22f);
+            inst.spectral_tint[3] = std::clamp(
+                inst.spectral_tint[3] * optical_ratio,
+                0.0f,
+                0.28f);
+            inst.interaction[3] = std::clamp(
+                inst.interaction[3] * optical_ratio,
+                0.0f,
+                1.0f);
+            inst.lighting[2] = std::clamp(
+                inst.lighting[2] * optical_ratio,
+                0.0f,
+                0.45f);
+            inst.lighting[3] = std::clamp(
+                inst.lighting[3] * optical_ratio,
+                0.0f,
+                0.36f);
             inst.group_rect[0] = inst.rect[0];
             inst.group_rect[1] = inst.rect[1];
             inst.group_rect[2] = inst.rect[2];

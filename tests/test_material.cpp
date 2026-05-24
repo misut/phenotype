@@ -2440,6 +2440,13 @@ void test_glass_effect_matched_geometry_respects_container_spacing() {
     assert(first_execution.glass_effect_materialize_execution);
     assert(!first_execution.glass_effect_match_source_valid);
     assert(first_execution.glass_effect_match_blend_strength == 0.0f);
+    assert(first_execution.glass_effect_materialize_opacity_gain == 0.5f);
+    assert(first_execution.glass_effect_materialize_optical_gain
+           < records[0].plan.transition.optical_gain);
+    assert(first_execution.glass_effect_materialize_shadow_gain
+           < records[0].plan.transition.shadow_gain);
+    assert(first_execution.glass_effect_materialize_refraction_gain
+           < records[0].plan.transition.refraction_gain);
     assert(first_execution.glass_effect_materialize_wave_strength == 1.0f);
     assert(!first_execution.shape_blend_execution);
     assert(std::string_view(first_execution.execution_policy)
@@ -2451,6 +2458,13 @@ void test_glass_effect_matched_geometry_respects_container_spacing() {
     assert(second_execution.glass_effect_materialize_execution);
     assert(!second_execution.glass_effect_match_source_valid);
     assert(second_execution.glass_effect_match_blend_strength == 0.0f);
+    assert(second_execution.glass_effect_materialize_opacity_gain == 0.5f);
+    assert(second_execution.glass_effect_materialize_optical_gain
+           < records[1].plan.transition.optical_gain);
+    assert(second_execution.glass_effect_materialize_shadow_gain
+           < records[1].plan.transition.shadow_gain);
+    assert(second_execution.glass_effect_materialize_refraction_gain
+           < records[1].plan.transition.refraction_gain);
     assert(second_execution.glass_effect_materialize_wave_strength == 1.0f);
     assert(!second_execution.shape_blend_execution);
     assert(std::string_view(second_execution.execution_policy)
@@ -2463,6 +2477,14 @@ void test_glass_effect_matched_geometry_respects_container_spacing() {
     assert(!first_transition.matched_geometry);
     assert(std::string_view(first_transition.policy) == "materialize-in");
     assert(first_transition.opacity_gain == 0.5f);
+    assert(first_execution.glass_effect_materialize_opacity_gain
+           == first_transition.opacity_gain);
+    assert(first_execution.glass_effect_materialize_optical_gain
+           == first_transition.optical_gain);
+    assert(first_execution.glass_effect_materialize_shadow_gain
+           == first_transition.shadow_gain);
+    assert(first_execution.glass_effect_materialize_refraction_gain
+           == first_transition.refraction_gain);
     assert(first_transition.materialize_lensing_gain > 1.23f);
 
     auto const first_base_geometry =

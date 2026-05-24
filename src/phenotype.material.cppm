@@ -1668,6 +1668,10 @@ struct MaterialContainerExecutionDescriptor {
     float glass_effect_match_progress = 1.0f;
     float glass_effect_match_blend_strength = 0.0f;
     float glass_effect_materialize_progress = 1.0f;
+    float glass_effect_materialize_opacity_gain = 1.0f;
+    float glass_effect_materialize_optical_gain = 1.0f;
+    float glass_effect_materialize_shadow_gain = 1.0f;
+    float glass_effect_materialize_refraction_gain = 1.0f;
     float glass_effect_materialize_wave_strength = 0.0f;
     bool glass_effect_match_source_valid = false;
     float glass_effect_match_source_gap = 0.0f;
@@ -4506,6 +4510,14 @@ material_container_execution_descriptor_from_group(
         auto const transition =
             material_transition_as_materialize(plan.transition);
         descriptor.glass_effect_materialize_progress = transition.progress;
+        descriptor.glass_effect_materialize_opacity_gain =
+            transition.opacity_gain;
+        descriptor.glass_effect_materialize_optical_gain =
+            transition.optical_gain;
+        descriptor.glass_effect_materialize_shadow_gain =
+            transition.shadow_gain;
+        descriptor.glass_effect_materialize_refraction_gain =
+            transition.refraction_gain;
         descriptor.glass_effect_materialize_wave_strength =
             transition.materialize_wave_strength;
     }
