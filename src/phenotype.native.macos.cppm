@@ -7784,6 +7784,164 @@ fragment float4 fs_material(
         rgb += bevel_tint * bright_band;
         rgb *= (1.0 - shadow_band_inner);
     }
+    float grazing_rim_strength = clamp(
+        0.032 * glass_thickness
+            + 0.070 * glass_caustic_spread
+            + 0.040 * edge_inner_highlight
+            + 0.026 * dynamic_light_highlight
+            + 0.11 * pressure_caustic_strength
+            + 0.18 * volumetric_absorption_strength
+            + 0.12 * adaptive_contrast_strength,
+        0.0,
+        0.20);
+    if (grazing_rim_strength > 0.0001 && edge_bevel_width > 0.0001) {
+        float grazing_outer = 1.0 - smoothstep(
+            0.0,
+            max(edge_bevel_width * 1.80, 0.5),
+            signed_edge_distance);
+        float grazing_inner = 1.0 - smoothstep(
+            0.0,
+            max(edge_width * 0.86, 0.5),
+            signed_edge_distance);
+        float grazing_band = clamp(
+            grazing_outer - grazing_inner * 0.62,
+            0.0,
+            1.0)
+            * (0.54 + 0.46 * edge_lens);
+        float2 grazing_tangent = float2(-refraction_dir.y,
+                                        refraction_dir.x);
+        float grazing_tangent_len = length(grazing_tangent);
+        grazing_tangent = grazing_tangent_len > 0.0001
+            ? grazing_tangent / grazing_tangent_len
+            : float2(-dynamic_light_dir.y, dynamic_light_dir.x);
+        float grazing_alignment = smoothstep(
+            0.06,
+            0.96,
+            abs(dot(grazing_tangent, dynamic_light_dir)));
+        float grazing_lit_side = clamp(
+            dot(refraction_dir, -dynamic_light_dir) * 0.5 + 0.5,
+            0.0,
+            1.0);
+        float grazing_corner = smoothstep(0.40, 1.20, normalized_len);
+        float grazing_gate = grazing_band
+            * (0.46 + 0.54 * grazing_alignment)
+            * (0.76 + 0.24 * grazing_corner);
+        float2 grazing_raw_dir =
+            grazing_tangent
+                * (grazing_lit_side >= 0.5 ? 1.0 : -1.0)
+            - dynamic_light_dir * 0.36
+            + refraction_dir * (0.26 + 0.30 * edge_lens);
+        float grazing_dir_len = length(grazing_raw_dir);
+        float2 grazing_dir = grazing_dir_len > 0.0001
+            ? grazing_raw_dir / grazing_dir_len
+            : grazing_tangent;
+        float2 grazing_cross = float2(-grazing_dir.y, grazing_dir.x);
+        float grazing_span =
+            (1.6
+             + 5.8 * glass_thickness
+             + 5.2 * glass_caustic_spread
+             + 1.8 * glass_dispersion_tangential
+             + 0.08 * blur_points)
+            * content_scale
+            * (0.72 + 0.28 * glass_lensing_gain);
+        float grazing_chroma_span =
+            (0.8
+             + 1.6 * glass_dispersion_tangential
+             + 6.0 * spectral_dispersion)
+            * content_scale;
+        float grazing_wave =
+            0.5
+            + 0.5
+                * sin(
+                    dot(normalized_local, grazing_dir) * 13.0
+                        + dot(normalized_local, grazing_cross) * 3.5
+                        + glass_caustic_spread * 29.0
+                        + surface_tension_strength * 48.0);
+        float2 grazing_probe_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.44
+                + grazing_dir
+                    * texel
+                    * grazing_span
+                    * (0.52 + 0.42 * grazing_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 grazing_warm_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.42
+                + grazing_dir * texel * grazing_span * 0.68
+                + grazing_cross * texel * grazing_chroma_span,
+            float2(0.0),
+            float2(1.0));
+        float2 grazing_cool_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.34
+                - grazing_dir * texel * grazing_span * 0.44
+                - grazing_cross * texel * grazing_chroma_span,
+            float2(0.0),
+            float2(1.0));
+        float3 grazing_probe =
+            backdrop.sample(samp, grazing_probe_uv).rgb;
+        float3 grazing_warm =
+            backdrop.sample(samp, grazing_warm_uv).rgb;
+        float3 grazing_cool =
+            backdrop.sample(samp, grazing_cool_uv).rgb;
+        float3 grazing_rgb =
+            float3(grazing_warm.r,
+                   (grazing_probe.g + grazing_warm.g + grazing_cool.g) / 3.0,
+                   grazing_cool.b);
+        grazing_rgb = mix(grazing_probe, grazing_rgb,
+                          0.42 + 0.38 * spectral_dispersion);
+        float grazing_luma =
+            dot(grazing_rgb, float3(0.2126, 0.7152, 0.0722));
+        float grazing_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float grazing_bright = smoothstep(
+            grazing_surface_luma - 0.08,
+            grazing_surface_luma + 0.30,
+            grazing_luma);
+        float grazing_dark = smoothstep(
+            0.08,
+            0.36,
+            grazing_surface_luma - grazing_luma);
+        float grazing_focus = grazing_rim_strength
+            * grazing_gate
+            * (0.58
+               + 0.24 * grazing_bright
+               + 0.18 * grazing_wave)
+            * (0.74 + 0.26 * glass_prismatic_gain);
+        float3 grazing_tint = mix(
+            float3(grazing_luma),
+            grazing_rgb,
+            0.80 + 0.12 * glass_caustic_spread);
+        grazing_tint = mix(
+            grazing_tint,
+            grazing_tint * (float3(1.0) + 0.24 * in.tint.rgb),
+            tint_chroma);
+        grazing_tint += float3(
+            spectral_warmth,
+            0.16 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (0.24 + 0.46 * spectral_rim_tint);
+        rgb += grazing_tint
+            * grazing_focus
+            * (0.030
+               + 0.058 * edge_inner_highlight
+               + 0.040 * dynamic_light_highlight);
+        rgb += float3(spectral_warmth,
+                      0.14 * (spectral_warmth + spectral_coolness),
+                      spectral_coolness)
+            * grazing_focus
+            * (0.018 + 0.045 * glass_caustic_spread);
+        float grazing_shadow = grazing_dark
+            * grazing_rim_strength
+            * grazing_gate
+            * (0.018 + 0.040 * edge_outer_shadow)
+            * (0.70 + 0.30 * (1.0 - grazing_lit_side))
+            * glass_shadow_gain;
+        rgb *= 1.0 - clamp(grazing_shadow, 0.0, 0.070);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     if (caustic_weight > 0.0001) {
         float rim_alignment = clamp(
             dot(refraction_dir, dynamic_light_dir) * 0.5 + 0.5,
