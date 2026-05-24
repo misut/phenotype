@@ -6670,6 +6670,120 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(meniscus_shadow, 0.0, 0.12);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float internal_transmission_strength = clamp(
+        0.075 * glass_thickness
+            + 0.035 * refraction_strength
+            + 0.065 * glass_caustic_spread
+            + 0.045 * (glass_lensing_gain - 1.0)
+            + 0.020 * prominent_intensity,
+        0.0,
+        0.20);
+    if (internal_transmission_strength > 0.0001
+        && edge_bevel_width > 0.0001) {
+        float transmission_start = max(edge_width * 0.65, 0.5);
+        float transmission_peak = max(edge_width * 1.85,
+                                      transmission_start + 0.5);
+        float transmission_end = max(edge_bevel_width * 2.45,
+                                     transmission_peak + 0.75);
+        float internal_band =
+            smoothstep(transmission_start,
+                       transmission_peak,
+                       signed_edge_distance)
+            * (1.0 - smoothstep(transmission_peak,
+                                transmission_end,
+                                signed_edge_distance))
+            * (0.50 + 0.50 * edge_lens);
+        float internal_center =
+            1.0 - smoothstep(0.20, 1.16, normalized_len);
+        internal_band = clamp(
+            internal_band + internal_center * 0.22 * glass_thickness,
+            0.0,
+            1.0);
+        float2 transmission_raw_dir =
+            refraction_dir * (0.66 + 0.34 * glass_lensing_gain)
+            - dynamic_light_dir * 0.30;
+        float transmission_dir_len = length(transmission_raw_dir);
+        float2 transmission_dir = transmission_dir_len > 0.0001
+            ? transmission_raw_dir / transmission_dir_len
+            : -dynamic_light_dir;
+        float transmission_span =
+            (2.5
+             + 7.0 * glass_thickness
+             + 2.8 * glass_caustic_spread
+             + 0.16 * blur_points)
+            * content_scale;
+        float chroma_span = max(
+            1.0,
+            glass_dispersion_tangential * 0.72
+                + spectral_dispersion * 6.0)
+            * content_scale;
+        float2 warm_transmission_uv = clamp(
+            in.screen_uv
+                + refraction_uv
+                + transmission_dir * texel * transmission_span
+                + dispersion_tangent * texel * chroma_span,
+            float2(0.0),
+            float2(1.0));
+        float2 cool_transmission_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.72
+                - transmission_dir * texel * transmission_span * 0.74
+                - dispersion_tangent * texel * chroma_span,
+            float2(0.0),
+            float2(1.0));
+        float3 warm_transmission =
+            backdrop.sample(samp, warm_transmission_uv).rgb;
+        float3 cool_transmission =
+            backdrop.sample(samp, cool_transmission_uv).rgb;
+        float3 transmitted_rgb =
+            float3(warm_transmission.r,
+                   (warm_transmission.g + cool_transmission.g) * 0.5,
+                   cool_transmission.b);
+        float transmitted_luma =
+            dot(transmitted_rgb, float3(0.2126, 0.7152, 0.0722));
+        float surface_rgb_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float bright_transmission = smoothstep(
+            surface_rgb_luma - 0.10,
+            surface_rgb_luma + 0.34,
+            transmitted_luma);
+        float dark_transmission = smoothstep(
+            0.10,
+            0.38,
+            surface_rgb_luma - transmitted_luma);
+        float transmission_alignment = clamp(
+            dot(transmission_dir, -dynamic_light_dir) * 0.5 + 0.5,
+            0.0,
+            1.0);
+        float3 internal_tint = mix(
+            float3(transmitted_luma),
+            transmitted_rgb,
+            0.82);
+        internal_tint = mix(
+            internal_tint,
+            internal_tint * (float3(1.0) + 0.24 * in.tint.rgb),
+            tint_chroma);
+        float transmission_glow = internal_transmission_strength
+            * internal_band
+            * (0.36 + 0.64 * bright_transmission)
+            * (0.56 + 0.44 * transmission_alignment);
+        rgb += internal_tint
+            * transmission_glow
+            * (0.12
+               + 0.16 * edge_inner_highlight
+               + 0.08 * glass_caustic_spread);
+        rgb += float3(spectral_warmth,
+                      0.18 * (spectral_warmth + spectral_coolness),
+                      spectral_coolness)
+            * transmission_glow
+            * (0.08 + 0.12 * glass_prismatic_gain);
+        float internal_absorption = dark_transmission
+            * internal_transmission_strength
+            * internal_band
+            * (0.028 + 0.040 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(internal_absorption, 0.0, 0.06);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     rgb += float3(edge * edge_lift);
     if (edge_bevel_width > 0.0001
         && (edge_inner_highlight > 0.0001 || edge_outer_shadow > 0.0001)) {
