@@ -5876,6 +5876,96 @@ fragment float4 fs_material(
             * 1.65
             * prominent_lensing_gain;
     }
+    float convex_refraction_strength = clamp(
+        0.018 * glass_thickness
+            + 0.024 * (glass_lensing_gain - 1.0)
+            + 0.020 * glass_caustic_spread
+            + 0.014 * fusion_strength
+            + 0.018 * materialize_wave_strength
+            + 0.014 * control_morph_depth
+            + 0.016 * prominent_intensity
+            + 0.014 * pointer_lens_strength * pointer_lens_raw
+            + 0.016 * bridge_band,
+        0.0,
+        0.12);
+    if (convex_refraction_strength > 0.0001) {
+        float convex_center =
+            1.0 - smoothstep(0.10, 1.08, normalized_len);
+        float convex_rim = edge_lens
+            * (0.32
+               + 0.68
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.32, 0.5),
+                       signed_edge_distance)));
+        float convex_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.32 + 0.68 * bridge_core)
+                + control_morph_depth * 1.25
+                + group_blend_strength * overlap_response_strength * 0.36,
+            0.0,
+            1.0);
+        float convex_gate = clamp(
+            convex_center * 0.42
+                + convex_rim * 0.36
+                + convex_contact * 0.28,
+            0.0,
+            1.0);
+        float2 convex_raw_dir =
+            refraction_dir * (0.48 + 0.52 * edge_lens)
+            - dynamic_light_dir * (0.16 + 0.24 * dynamic_light_highlight)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.44
+            + bridge_dir * bridge_band * 0.34
+            + bridge_tangent * bridge_shear * bridge_band * 0.24;
+        float convex_dir_len = length(convex_raw_dir);
+        float2 convex_dir = convex_dir_len > 0.0001
+            ? convex_raw_dir / convex_dir_len
+            : refraction_dir;
+        float2 convex_tangent = float2(-convex_dir.y, convex_dir.x);
+        float convex_phase =
+            dot(normalized_local, convex_dir)
+                * (5.2 + 3.4 * glass_caustic_spread)
+            + dot(normalized_local, convex_tangent)
+                * (2.4 + 2.0 * fusion_strength)
+            + bridge_shear * bridge_band * 2.6
+            + materialize_rim_position * materialize_wave_strength * 3.2;
+        float convex_fold =
+            0.5 + 0.5 * cos(convex_phase + normalized_len * 3.4);
+        float convex_saddle =
+            sin(dot(normalized_local, convex_tangent) * 4.8
+                - normalized_len * 2.6
+                + glass_thickness * 9.0);
+        float convex_span =
+            (1.2
+             + 4.6 * glass_thickness
+             + 3.2 * glass_caustic_spread
+             + 0.08 * blur_points)
+            * content_scale
+            * (0.78 + 0.22 * glass_lensing_gain);
+        float convex_weight = convex_refraction_strength
+            * convex_gate
+            * (0.54
+               + 0.24 * convex_fold
+               + 0.22 * convex_contact);
+        refraction_uv += convex_dir
+            * texel
+            * convex_span
+            * convex_weight
+            * (0.72 + 0.28 * convex_center);
+        refraction_uv += convex_tangent
+            * texel
+            * convex_span
+            * convex_weight
+            * convex_saddle
+            * (0.20 + 0.26 * convex_rim);
+        refraction_uv -= dynamic_light_dir
+            * texel
+            * convex_span
+            * convex_refraction_strength
+            * convex_gate
+            * dynamic_light_highlight
+            * 0.18;
+    }
     float surface_tension_strength = clamp(
         0.014 * glass_thickness
             + 0.018 * (glass_lensing_gain - 1.0)
