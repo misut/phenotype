@@ -11674,6 +11674,188 @@ fragment float4 fs_material(
         rgb += bevel_tint * bright_band;
         rgb *= (1.0 - shadow_band_inner);
     }
+    float materialize_caustic_wave_strength = clamp(
+        materialize_wave_strength
+            * (0.024
+               + 0.030 * glass_thickness
+               + 0.026 * glass_caustic_spread
+               + 0.020 * (materialize_lensing_gain - 1.0)
+               + 0.018 * clear_glass_detail
+               + 0.014 * bridge_band
+               + 0.012 * pointer_lens_strength * pointer_lens_raw),
+        0.0,
+        0.115);
+    if (materialize_caustic_wave_strength > 0.0001) {
+        float wave_band = 1.0 - smoothstep(
+            0.0,
+            0.22 + 0.10 * glass_thickness,
+            abs(normalized_len - materialize_rim_position));
+        float wave_edge = edge_lens
+            * (0.30
+               + 0.70
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.48, 0.5),
+                       signed_edge_distance)));
+        float wave_motion = clamp(
+            pointer_lens * pointer_lens_strength * 0.24
+                + bridge_band * (0.22 + 0.78 * bridge_core)
+                + surface_tension_strength * 0.30
+                + caustic_weight * 0.40,
+            0.0,
+            1.0);
+        float wave_gate = clamp(
+            wave_band * 0.46
+                + wave_edge * 0.26
+                + wave_motion * 0.18
+                + clear_glass_detail * 0.14,
+            0.0,
+            1.0);
+        float2 wave_axis_raw =
+            refraction_dir * (0.42 + 0.22 * wave_edge)
+            - dynamic_light_dir * (0.26 + 0.18 * dynamic_light_highlight)
+            + bridge_dir * bridge_band * (0.18 + 0.12 * bridge_core)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.16;
+        float wave_axis_len = length(wave_axis_raw);
+        float2 wave_axis = wave_axis_len > 0.0001
+            ? wave_axis_raw / wave_axis_len
+            : refraction_dir;
+        float2 wave_cross = float2(-wave_axis.y, wave_axis.x);
+        float wave_phase =
+            dot(normalized_local, wave_axis)
+                * (8.0 + 5.0 * glass_caustic_spread)
+            + dot(normalized_local, wave_cross)
+                * (3.0 + 2.0 * glass_dispersion_tangential)
+            + materialize_rim_position * 5.6
+            + bridge_shear * bridge_band * 2.4;
+        float wave_fold = 0.5 + 0.5 * sin(wave_phase);
+        float wave_span =
+            (1.0
+             + 2.8 * glass_thickness
+             + 2.8 * glass_caustic_spread
+             + 1.4 * wave_gate
+             + 0.055 * blur_points)
+            * content_scale
+            * (0.78 + 0.22 * materialize_lensing_gain);
+        float wave_micro_span =
+            (0.7
+             + 1.4 * glass_dispersion_tangential
+             + 2.2 * spectral_dispersion)
+            * content_scale;
+        float2 wave_front_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.36
+                + wave_axis
+                    * texel
+                    * wave_span
+                    * (0.34 + 0.18 * wave_fold),
+            float2(0.0),
+            float2(1.0));
+        float2 wave_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.28
+                - wave_axis
+                    * texel
+                    * wave_span
+                    * (0.30 + 0.18 * wave_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 wave_prism_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.32
+                + wave_cross
+                    * texel
+                    * wave_micro_span
+                    * (0.42
+                       + 0.18 * wave_motion
+                       + 0.14 * abs(bridge_shear) * bridge_band)
+                - dynamic_light_dir
+                    * texel
+                    * wave_span
+                    * 0.18,
+            float2(0.0),
+            float2(1.0));
+        float3 wave_front_rgb =
+            backdrop.sample(samp, wave_front_uv).rgb;
+        float3 wave_back_rgb =
+            backdrop.sample(samp, wave_back_uv).rgb;
+        float3 wave_prism_rgb =
+            backdrop.sample(samp, wave_prism_uv).rgb;
+        float3 wave_probe =
+            wave_front_rgb * 0.38
+            + wave_back_rgb * 0.34
+            + wave_prism_rgb * 0.28;
+        float wave_luma =
+            dot(wave_probe, float3(0.2126, 0.7152, 0.0722));
+        float wave_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float wave_detail = smoothstep(
+            0.04,
+            0.42,
+            length(wave_front_rgb - wave_back_rgb) * 0.30
+                + length(wave_prism_rgb - wave_probe) * 0.22
+                + abs(wave_luma - wave_surface_luma) * 0.22);
+        float wave_bright = smoothstep(
+            wave_surface_luma - 0.08,
+            wave_surface_luma + 0.30,
+            wave_luma);
+        float wave_dark = smoothstep(
+            0.08,
+            0.36,
+            wave_surface_luma - wave_luma);
+        float3 wave_split =
+            float3(wave_front_rgb.r,
+                   (wave_probe.g + wave_prism_rgb.g) * 0.5,
+                   wave_back_rgb.b);
+        float3 wave_neutral =
+            mix(wave_probe,
+                float3(wave_luma),
+                0.32 + 0.22 * (1.0 - wave_detail));
+        float3 wave_layer = mix(
+            wave_neutral,
+            wave_split,
+            0.34 + 0.28 * spectral_dispersion);
+        float3 wave_luma_rgb =
+            float3(dot(wave_layer, float3(0.2126, 0.7152, 0.0722)));
+        wave_layer =
+            wave_luma_rgb
+            + (wave_layer - wave_luma_rgb)
+                * (0.88 + 0.08 * wave_detail + 0.04 * clear_glass_detail);
+        wave_layer = mix(
+            wave_layer,
+            wave_layer * (float3(1.0) + 0.12 * in.tint.rgb),
+            tint_chroma * (0.12 + 0.16 * prominent_intensity));
+        wave_layer += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * wave_gate
+            * (0.010 + 0.028 * spectral_rim_tint);
+        float wave_weight = materialize_caustic_wave_strength
+            * wave_gate
+            * (0.36
+               + 0.22 * wave_detail
+               + 0.18 * wave_bright
+               + 0.14 * wave_motion
+               + 0.10 * wave_fold);
+        rgb = mix(
+            rgb,
+            clamp(wave_layer, 0.0, 1.0),
+            wave_weight * 0.42);
+        rgb += wave_neutral
+            * wave_weight
+            * wave_bright
+            * (0.004
+               + 0.010 * dynamic_light_highlight
+               + 0.008 * glass_scattering_gain);
+        float wave_shadow =
+            wave_dark
+            * materialize_caustic_wave_strength
+            * wave_gate
+            * (0.006 + 0.014 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(wave_shadow, 0.0, 0.030);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float grazing_rim_strength = clamp(
         0.032 * glass_thickness
             + 0.070 * glass_caustic_spread
