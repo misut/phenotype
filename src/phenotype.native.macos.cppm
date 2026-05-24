@@ -6677,6 +6677,117 @@ fragment float4 fs_material(
             * (0.030 + 0.060 * glass_prismatic_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float diffraction_strength = clamp(
+        0.036 * glass_thickness
+            + 0.085 * glass_caustic_spread
+            + 0.060 * spectral_dispersion
+            + 0.040 * (glass_prismatic_gain - 1.0)
+            + 0.025 * prominent_intensity
+            + 0.20 * microfacet_strength,
+        0.0,
+        0.18);
+    if (diffraction_strength > 0.0001 && edge_bevel_width > 0.0001) {
+        float diffraction_outer = 1.0 - smoothstep(
+            0.0,
+            max(edge_bevel_width * 1.85, 0.5),
+            signed_edge_distance);
+        float diffraction_inner = 1.0 - smoothstep(
+            0.0,
+            max(edge_width * 0.70, 0.5),
+            signed_edge_distance);
+        float diffraction_band = clamp(
+            diffraction_outer - diffraction_inner * 0.46,
+            0.0,
+            1.0)
+            * (0.58 + 0.42 * edge_lens);
+        float2 diffraction_raw_dir =
+            dispersion_tangent
+                * (0.70 + 0.30 * glass_prismatic_gain)
+            - dynamic_light_dir * 0.44
+            + refraction_dir * 0.18;
+        float diffraction_dir_length = length(diffraction_raw_dir);
+        float2 diffraction_dir = diffraction_dir_length > 0.0001
+            ? diffraction_raw_dir / diffraction_dir_length
+            : dispersion_tangent;
+        float diffraction_sweep = smoothstep(
+            -0.34,
+            0.92,
+            dot(normalized_local, -diffraction_dir));
+        float diffraction_corner = smoothstep(0.44, 1.20, normalized_len);
+        float diffraction_gate = diffraction_band
+            * (0.48 + 0.52 * diffraction_sweep)
+            * (0.72 + 0.28 * diffraction_corner);
+        float diffraction_span =
+            (1.75
+             + 5.5 * glass_caustic_spread
+             + 1.4 * glass_dispersion_tangential
+             + 0.08 * blur_points)
+            * content_scale;
+        float chroma_spread =
+            (1.0
+             + glass_dispersion_tangential * 0.70
+             + spectral_dispersion * 5.0)
+            * content_scale;
+        float2 diffraction_warm_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.54
+                + diffraction_dir * texel * diffraction_span
+                + dispersion_tangent * texel * chroma_spread,
+            float2(0.0),
+            float2(1.0));
+        float2 diffraction_cool_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.54
+                - diffraction_dir * texel * diffraction_span * 0.72
+                - dispersion_tangent * texel * chroma_spread,
+            float2(0.0),
+            float2(1.0));
+        float3 diffraction_warm =
+            backdrop.sample(samp, diffraction_warm_uv).rgb;
+        float3 diffraction_cool =
+            backdrop.sample(samp, diffraction_cool_uv).rgb;
+        float3 diffraction_rgb =
+            float3(diffraction_warm.r,
+                   (diffraction_warm.g + diffraction_cool.g) * 0.5,
+                   diffraction_cool.b);
+        float diffraction_luma =
+            dot(diffraction_rgb, float3(0.2126, 0.7152, 0.0722));
+        float surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float diffraction_bright = smoothstep(
+            surface_luma - 0.08,
+            surface_luma + 0.30,
+            diffraction_luma);
+        float diffraction_dark = smoothstep(
+            0.10,
+            0.34,
+            surface_luma - diffraction_luma);
+        float3 diffraction_tint = mix(
+            float3(diffraction_luma),
+            diffraction_rgb,
+            0.78 + 0.12 * glass_caustic_spread);
+        diffraction_tint = mix(
+            diffraction_tint,
+            diffraction_tint * (float3(1.0) + 0.22 * in.tint.rgb),
+            tint_chroma);
+        rgb += diffraction_tint
+            * diffraction_strength
+            * diffraction_gate
+            * (0.060 + 0.080 * edge_inner_highlight)
+            * (0.62 + 0.38 * diffraction_bright);
+        rgb += float3(spectral_warmth,
+                      0.15 * (spectral_warmth + spectral_coolness),
+                      spectral_coolness)
+            * diffraction_strength
+            * diffraction_gate
+            * (0.030 + 0.050 * glass_prismatic_gain);
+        float diffraction_absorption = diffraction_dark
+            * diffraction_strength
+            * diffraction_gate
+            * (0.018 + 0.035 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(diffraction_absorption, 0.0, 0.055);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float light_sweep = smoothstep(
         -0.72,
         0.96,
