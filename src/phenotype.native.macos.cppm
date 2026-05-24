@@ -6782,6 +6782,179 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(polar_shadow, 0.0, 0.055);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float specular_envelope_strength = clamp(
+        0.018 * glass_thickness
+            + 0.018 * (glass_lensing_gain - 1.0)
+            + 0.016 * glass_caustic_spread
+            + 0.018 * environment_reflection_strength
+            + 0.016 * polarized_reflection_strength
+            + 0.014 * dynamic_light_highlight
+            + 0.010 * prominent_intensity
+            + 0.010 * pointer_lens_strength * pointer_lens_raw,
+        0.0,
+        0.12);
+    if (specular_envelope_strength > 0.0001) {
+        float2 envelope_raw_dir =
+            -dynamic_light_dir
+            + refraction_dir * (0.24 + 0.34 * edge_lens)
+            + pointer_dir * pointer_lens * pointer_lens_strength * 0.26
+            + bridge_dir * bridge_band * 0.18;
+        float envelope_dir_len = length(envelope_raw_dir);
+        float2 envelope_dir = envelope_dir_len > 0.0001
+            ? envelope_raw_dir / envelope_dir_len
+            : -dynamic_light_dir;
+        float2 envelope_tangent = float2(-envelope_dir.y,
+                                         envelope_dir.x);
+        float envelope_surface =
+            1.0 - smoothstep(0.14, 1.20, normalized_len);
+        float envelope_rim = edge_lens
+            * (0.34
+               + 0.66
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.36, 0.5),
+                       signed_edge_distance)));
+        float envelope_grazing = smoothstep(
+            -0.34,
+            0.94,
+            dot(normalized_local, -envelope_dir));
+        float envelope_contact = clamp(
+            pointer_lens * pointer_lens_strength
+                + bridge_band * (0.28 + 0.72 * bridge_core),
+            0.0,
+            1.0);
+        float envelope_gate = clamp(
+            envelope_surface * (0.30 + 0.46 * envelope_grazing)
+                + envelope_rim * 0.50
+                + envelope_contact * 0.22,
+            0.0,
+            1.0);
+        float envelope_span =
+            (3.0
+             + 9.0 * glass_thickness
+             + 3.4 * glass_caustic_spread
+             + 0.16 * blur_points)
+            * content_scale
+            * (0.78 + 0.22 * glass_lensing_gain);
+        float envelope_cross_span =
+            (1.2
+             + 3.0 * glass_thickness
+             + 1.8 * glass_dispersion_tangential
+             + 2.8 * spectral_dispersion)
+            * content_scale;
+        float2 envelope_bright_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.46
+                - envelope_dir
+                    * texel
+                    * envelope_span
+                    * (0.72 + 0.20 * envelope_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 envelope_soft_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.36
+                + envelope_dir
+                    * texel
+                    * envelope_span
+                    * (0.34 + 0.24 * envelope_contact),
+            float2(0.0),
+            float2(1.0));
+        float2 envelope_left_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                + envelope_tangent
+                    * texel
+                    * envelope_cross_span
+                    * (0.72 + 0.20 * abs(bridge_shear))
+                + dispersion_tangent
+                    * texel
+                    * envelope_cross_span
+                    * (0.26 + 0.34 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float2 envelope_right_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.30
+                - envelope_tangent
+                    * texel
+                    * envelope_cross_span
+                    * (0.66 + 0.22 * envelope_gate)
+                - dispersion_tangent
+                    * texel
+                    * envelope_cross_span
+                    * (0.20 + 0.28 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float3 envelope_bright =
+            backdrop.sample(samp, envelope_bright_uv).rgb;
+        float3 envelope_soft =
+            backdrop.sample(samp, envelope_soft_uv).rgb;
+        float3 envelope_left =
+            backdrop.sample(samp, envelope_left_uv).rgb;
+        float3 envelope_right =
+            backdrop.sample(samp, envelope_right_uv).rgb;
+        float3 envelope_rgb =
+            envelope_bright * 0.36
+            + envelope_soft * 0.28
+            + envelope_left * 0.18
+            + envelope_right * 0.18;
+        float envelope_luma =
+            dot(envelope_rgb, float3(0.2126, 0.7152, 0.0722));
+        float envelope_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float envelope_light = smoothstep(
+            envelope_surface_luma - 0.08,
+            envelope_surface_luma + 0.30,
+            envelope_luma);
+        float envelope_dark = smoothstep(
+            0.08,
+            0.34,
+            envelope_surface_luma - envelope_luma);
+        float envelope_detail = smoothstep(
+            0.02,
+            0.30,
+            length(envelope_bright - envelope_soft) * 0.30
+                + length(envelope_left - envelope_right) * 0.28
+                + envelope_grazing * 0.10);
+        float3 envelope_tint = mix(
+            envelope_rgb,
+            float3(envelope_luma),
+            envelope_dark * (0.16 + 0.18 * glass_shadow_gain));
+        envelope_tint = mix(
+            envelope_tint,
+            envelope_tint * (float3(1.0) + 0.18 * in.tint.rgb),
+            tint_chroma * (0.34 + 0.22 * prominent_intensity));
+        envelope_tint += float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * (envelope_rim * 0.30 + envelope_grazing * 0.20)
+            * (0.10 + 0.28 * spectral_rim_tint);
+        float envelope_weight = specular_envelope_strength
+            * envelope_gate
+            * (0.34
+               + 0.24 * envelope_light
+               + 0.20 * envelope_detail
+               + 0.14 * envelope_contact
+               + 0.08 * dynamic_light_highlight);
+        rgb = mix(
+            rgb,
+            mix(rgb, envelope_tint, 0.14 + 0.14 * envelope_detail),
+            envelope_weight);
+        rgb += envelope_tint
+            * envelope_weight
+            * (0.012
+               + 0.024 * dynamic_light_highlight
+               + 0.016 * glass_prismatic_gain);
+        float envelope_shadow = envelope_dark
+            * specular_envelope_strength
+            * envelope_gate
+            * (0.016 + 0.032 * glass_shadow_gain)
+            * (0.58 + 0.42 * envelope_rim);
+        rgb *= 1.0 - clamp(envelope_shadow, 0.0, 0.055);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float viscous_strain_strength = clamp(
         pointer_lens_strength * (0.42 * pointer_lens_raw + 0.58 * pointer_lens)
             + bridge_band
