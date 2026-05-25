@@ -18232,6 +18232,323 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(spectral_phase_shadow, 0.0, 0.032);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float container_irradiance_lock_strength = clamp(
+        0.013 * spectral_phase_lock_strength
+            + 0.012 * phase_field_strength
+            + 0.010 * luminance_coupler_strength
+            + 0.010 * refraction_coupler_strength
+            + 0.009 * morph_coupler_strength
+            + 0.008 * normal_coupler_strength
+            + 0.008 * thickness_coupler_strength
+            + 0.007 * glass_effect_match_execution * group_blend_strength
+            + 0.006 * materialize_wave_strength
+            + 0.006 * spectral_rim_tint,
+        0.0,
+        0.068);
+    if (container_irradiance_lock_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 irradiance_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 irradiance_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            irradiance_group_size);
+        float2 irradiance_group_norm =
+            (irradiance_group_local / irradiance_group_size - float2(0.5))
+            * 2.0;
+        float irradiance_group_radius = length(irradiance_group_norm);
+        float irradiance_center =
+            1.0 - smoothstep(0.16, 1.12, irradiance_group_radius);
+        float2 irradiance_group_edge = min(
+            irradiance_group_local,
+            max(irradiance_group_size - irradiance_group_local,
+                float2(0.0)));
+        float irradiance_edge_distance =
+            min(irradiance_group_edge.x, irradiance_group_edge.y);
+        float irradiance_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.5, 1.0),
+                irradiance_edge_distance);
+        float irradiance_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float irradiance_transition = clamp(
+            glass_effect_match_execution * 0.32
+                + morph_execution * 0.24
+                + materialize_wave_strength * 0.18
+                + shape_blend_execution * 0.12
+                + union_execution * 0.10
+                + spectral_phase_lock_strength * 1.8
+                + phase_field_strength * 1.4
+                + luminance_coupler_strength * 1.2,
+            0.0,
+            1.0);
+        float irradiance_gate = clamp(
+            irradiance_center * 0.20
+                + irradiance_edge * 0.20
+                + irradiance_bridge * 0.22
+                + irradiance_transition * group_blend_strength * 0.26
+                + edge_lens * 0.12,
+            0.0,
+            1.0);
+        float2 irradiance_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 irradiance_group_center_screen =
+            in.group_rect.xy + irradiance_group_size * 0.5;
+        float2 irradiance_group_center_uv = clamp(
+            irradiance_group_center_screen / irradiance_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 irradiance_to_center =
+            irradiance_group_center_uv - in.screen_uv;
+        float irradiance_center_distance = length(irradiance_to_center);
+        float2 irradiance_center_dir =
+            irradiance_center_distance > 0.0001
+                ? irradiance_to_center / irradiance_center_distance
+                : refraction_dir;
+        float2 irradiance_axis_raw =
+            irradiance_center_dir * (0.28 + 0.18 * irradiance_center)
+            + bridge_dir * (0.26 + 0.22 * irradiance_bridge)
+            + refraction_dir * (0.22 + 0.16 * clear_glass_detail)
+            + dispersion_tangent
+                * (0.18
+                   + 0.12 * spectral_dispersion
+                   + 0.12 * glass_dispersion_tangential)
+            - dynamic_light_dir
+                * (0.18 + 0.16 * dynamic_light_highlight);
+        float irradiance_axis_len = length(irradiance_axis_raw);
+        float2 irradiance_axis =
+            irradiance_axis_len > 0.0001
+                ? irradiance_axis_raw / irradiance_axis_len
+                : refraction_dir;
+        float2 irradiance_cross =
+            float2(-irradiance_axis.y, irradiance_axis.x);
+        float irradiance_alignment =
+            smoothstep(-0.30, 0.92, dot(irradiance_axis, bridge_dir));
+        float irradiance_light_face =
+            smoothstep(-0.28, 0.94, dot(irradiance_axis, -dynamic_light_dir));
+        float irradiance_phase = clamp(
+            dot(irradiance_group_norm, irradiance_axis)
+                    * (4.8 + 2.4 * irradiance_transition)
+                + dot(irradiance_group_norm, irradiance_cross)
+                    * (2.2 + 1.5 * irradiance_bridge)
+                + bridge_axial * (3.0 + 2.0 * irradiance_bridge)
+                + bridge_shear * irradiance_bridge * 2.0
+                + materialize_rim_position
+                    * materialize_wave_strength
+                    * 2.6
+                + dynamic_light_highlight * 1.5,
+            -10.0,
+            10.0);
+        float irradiance_wave =
+            0.5 + 0.5 * sin(irradiance_phase);
+        float irradiance_counter =
+            0.5 + 0.5 * cos(
+                irradiance_phase * 0.68
+                + bridge_shear * 2.8
+                + glass_caustic_spread * 7.0);
+        float irradiance_lock =
+            1.0 - smoothstep(
+                0.0,
+                0.34,
+                abs(irradiance_wave - 0.56));
+        float irradiance_counter_lock =
+            1.0 - smoothstep(
+                0.0,
+                0.36,
+                abs(irradiance_counter - 0.52));
+        float irradiance_span =
+            (0.90
+             + 2.0 * glass_thickness
+             + 1.3 * clear_glass_detail
+             + 1.0 * irradiance_gate
+             + 0.040 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float irradiance_cross_span =
+            (0.72
+             + 1.2 * glass_dispersion_tangential
+             + 1.1 * spectral_dispersion
+             + 0.85 * irradiance_transition)
+            * content_scale;
+        float2 irradiance_core_uv = clamp(
+            mix(
+                in.screen_uv,
+                irradiance_group_center_uv,
+                0.16 + 0.14 * irradiance_center),
+            float2(0.0),
+            float2(1.0));
+        float2 irradiance_light_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                - dynamic_light_dir
+                    * texel
+                    * irradiance_span
+                    * (0.22 + 0.16 * irradiance_light_face),
+            float2(0.0),
+            float2(1.0));
+        float2 irradiance_lead_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                + irradiance_axis
+                    * texel
+                    * irradiance_span
+                    * (0.24 + 0.16 * irradiance_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 irradiance_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - irradiance_axis
+                    * texel
+                    * irradiance_span
+                    * (0.22 + 0.14 * irradiance_lock),
+            float2(0.0),
+            float2(1.0));
+        float2 irradiance_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.15
+                + irradiance_cross
+                    * texel
+                    * irradiance_cross_span
+                    * (0.24 + 0.14 * irradiance_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 irradiance_counter_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.13
+                - irradiance_cross
+                    * texel
+                    * irradiance_cross_span
+                    * (0.22 + 0.14 * irradiance_counter_lock)
+                + dispersion_tangent
+                    * texel
+                    * irradiance_cross_span
+                    * (0.12 + 0.14 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float3 irradiance_core_rgb =
+            backdrop.sample(samp, irradiance_core_uv).rgb;
+        float3 irradiance_light_rgb =
+            backdrop.sample(samp, irradiance_light_uv).rgb;
+        float3 irradiance_lead_rgb =
+            backdrop.sample(samp, irradiance_lead_uv).rgb;
+        float3 irradiance_return_rgb =
+            backdrop.sample(samp, irradiance_return_uv).rgb;
+        float3 irradiance_cross_rgb =
+            backdrop.sample(samp, irradiance_cross_uv).rgb;
+        float3 irradiance_counter_rgb =
+            backdrop.sample(samp, irradiance_counter_uv).rgb;
+        float3 irradiance_probe =
+            irradiance_core_rgb * 0.24
+            + irradiance_light_rgb * 0.20
+            + irradiance_lead_rgb * 0.18
+            + irradiance_return_rgb * 0.16
+            + irradiance_cross_rgb * 0.12
+            + irradiance_counter_rgb * 0.10;
+        float irradiance_luma =
+            dot(irradiance_probe, float3(0.2126, 0.7152, 0.0722));
+        float irradiance_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float irradiance_chroma = max(
+            max(abs(irradiance_probe.r - irradiance_probe.g),
+                abs(irradiance_probe.g - irradiance_probe.b)),
+            abs(irradiance_probe.b - irradiance_probe.r));
+        float irradiance_color_pickup =
+            smoothstep(0.035, 0.34, irradiance_chroma);
+        float irradiance_range = clamp(
+            length(irradiance_light_rgb - irradiance_return_rgb) * 0.26
+                + length(irradiance_lead_rgb - irradiance_counter_rgb)
+                    * 0.22
+                + length(irradiance_cross_rgb - irradiance_core_rgb)
+                    * 0.18
+                + abs(irradiance_luma - irradiance_surface_luma) * 0.18
+                + irradiance_lock * 0.06
+                + irradiance_counter_lock * 0.05,
+            0.0,
+            1.0);
+        float irradiance_coherence =
+            1.0 - smoothstep(0.08, 0.36, irradiance_range);
+        float irradiance_lift = smoothstep(
+            irradiance_surface_luma - 0.06,
+            irradiance_surface_luma + 0.30,
+            irradiance_luma);
+        float irradiance_depth = smoothstep(
+            0.08,
+            0.34,
+            irradiance_surface_luma - irradiance_luma);
+        float3 irradiance_neutral = mix(
+            irradiance_probe,
+            float3(irradiance_luma),
+            irradiance_depth * (0.10 + 0.16 * glass_shadow_gain)
+                + irradiance_coherence * 0.12);
+        float3 irradiance_tint = mix(
+            irradiance_neutral,
+            irradiance_probe,
+            0.42
+                + 0.30 * irradiance_color_pickup
+                + 0.10 * irradiance_light_face);
+        irradiance_tint = mix(
+            irradiance_tint,
+            irradiance_tint
+                * (float3(1.0)
+                   + in.tint.rgb
+                       * (0.10
+                          + 0.14 * tint_chroma * prominent_intensity)),
+            0.36 + 0.24 * group_blend_strength);
+        irradiance_tint += float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * irradiance_color_pickup
+            * irradiance_light_face
+            * (0.003
+               + 0.004 * spectral_rim_tint
+               + 0.003 * glass_prismatic_gain);
+        float3 irradiance_layer = clamp(
+            (irradiance_tint - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + irradiance_lift * 0.010
+                       + irradiance_light_face * 0.008
+                       - irradiance_depth * 0.020)
+                + float3(0.50),
+            0.0,
+            1.0);
+        float irradiance_weight =
+            container_irradiance_lock_strength
+            * irradiance_gate
+            * (0.28
+               + 0.20 * irradiance_coherence
+               + 0.18 * irradiance_color_pickup
+               + 0.16 * irradiance_lift
+               + 0.12 * irradiance_light_face
+               + 0.10 * irradiance_bridge);
+        rgb = mix(
+            rgb,
+            mix(
+                irradiance_layer,
+                rgb + irradiance_layer
+                    * (0.010
+                       + 0.018 * irradiance_lift
+                       + 0.014 * irradiance_color_pickup),
+                0.10 + 0.14 * irradiance_light_face),
+            irradiance_weight * 0.29);
+        float irradiance_absorption =
+            irradiance_depth
+            * irradiance_weight
+            * (0.004 + 0.012 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - irradiance_alignment));
+        rgb *= 1.0 - clamp(irradiance_absorption, 0.0, 0.030);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float depth_aperture_strength = clamp(
         0.014 * clear_glass_detail
             + 0.012 * clear_glass_contrast
@@ -18250,6 +18567,7 @@ fragment float4 fs_material(
             + 0.010 * morph_coupler_strength
             + 0.010 * phase_field_strength
             + 0.009 * spectral_phase_lock_strength
+            + 0.008 * container_irradiance_lock_strength
             + 0.012 * legibility_veil_strength,
         0.0,
         0.10);
@@ -18422,6 +18740,7 @@ fragment float4 fs_material(
             + 0.014 * liquid_response_strength
             + 0.018 * depth_aperture_strength
             + 0.012 * optical_equilibrium_strength
+            + 0.008 * container_irradiance_lock_strength
             + 0.010 * spectral_rim_tint,
         0.0,
         0.095);
@@ -18585,6 +18904,7 @@ fragment float4 fs_material(
             + 0.016 * chroma_governor_strength
             + 0.014 * depth_aperture_strength
             + 0.012 * reflection_finish_strength
+            + 0.008 * container_irradiance_lock_strength
             + 0.010 * optical_equilibrium_strength,
         0.0,
         0.10);
@@ -18978,7 +19298,8 @@ fragment float4 fs_material(
             + 0.008 * morph_execution * group_blend_strength
             + 0.007 * morph_coupler_strength
             + 0.006 * phase_field_strength
-            + 0.006 * spectral_phase_lock_strength,
+            + 0.006 * spectral_phase_lock_strength
+            + 0.006 * container_irradiance_lock_strength,
         0.0,
         0.085);
     if (edge_contact_caustic_strength > 0.0001) {
@@ -20125,6 +20446,7 @@ fragment float4 fs_material(
             + 0.008 * edge_absorption_strength
             + 0.006 * internal_diffusion_strength
             + 0.006 * edge_contact_caustic_strength
+            + 0.006 * container_irradiance_lock_strength
             + 0.006 * liquid_response_strength,
         0.0,
         0.070);
@@ -20806,6 +21128,7 @@ fragment float4 fs_material(
             + 0.007 * morph_coupler_strength
             + 0.007 * phase_field_strength
             + 0.006 * spectral_phase_lock_strength
+            + 0.006 * container_irradiance_lock_strength
             + 0.008 * shared_shell_strength
             + 0.008 * edge_contact_caustic_strength
             + 0.006 * surrounding_light_wrap_strength,
@@ -21071,6 +21394,7 @@ fragment float4 fs_material(
             + 0.007 * morph_coupler_strength
             + 0.006 * phase_field_strength
             + 0.006 * spectral_phase_lock_strength
+            + 0.006 * container_irradiance_lock_strength
             + 0.006 * surrounding_light_wrap_strength,
         0.0,
         0.078);
@@ -21345,6 +21669,7 @@ fragment float4 fs_material(
             + 0.006 * morph_coupler_strength
             + 0.006 * phase_field_strength
             + 0.006 * spectral_phase_lock_strength
+            + 0.006 * container_irradiance_lock_strength
             + 0.006 * matched_tether_sheath_strength,
         0.0,
         0.072);
@@ -21621,6 +21946,7 @@ fragment float4 fs_material(
             + 0.006 * morph_coupler_strength
             + 0.006 * phase_field_strength
             + 0.006 * spectral_phase_lock_strength
+            + 0.006 * container_irradiance_lock_strength
             + 0.006 * matched_tether_sheath_strength
             + 0.006 * pointer_lens_strength
                 * (0.38 * pointer_lens_raw + 0.62 * pointer_lens),
@@ -21903,6 +22229,7 @@ fragment float4 fs_material(
             + 0.005 * morph_coupler_strength
             + 0.005 * phase_field_strength
             + 0.005 * spectral_phase_lock_strength
+            + 0.005 * container_irradiance_lock_strength
             + 0.006 * pointer_lens_strength
                 * (0.36 * pointer_lens_raw + 0.64 * pointer_lens),
         0.0,
@@ -22160,6 +22487,7 @@ fragment float4 fs_material(
             + 0.006 * morph_coupler_strength
             + 0.005 * phase_field_strength
             + 0.005 * spectral_phase_lock_strength
+            + 0.005 * container_irradiance_lock_strength
             + 0.006 * matched_tether_sheath_strength
             + 0.006 * container_pressure_halo_strength,
         0.0,
@@ -25089,6 +25417,7 @@ fragment float4 fs_material(
             + 0.004 * volume_veil_strength
             + 0.004 * aperture_field_strength
             + 0.004 * transition_clarity_strength
+            + 0.004 * container_irradiance_lock_strength
             + 0.004 * glass_effect_match_execution * group_blend_strength,
         0.0,
         0.052);
@@ -25844,6 +26173,7 @@ fragment float4 fs_material(
             + 0.005 * ambient_seal_field_strength
             + 0.005 * contact_shadow_field_strength
             + 0.004 * depth_fusion_strength
+            + 0.004 * container_irradiance_lock_strength
             + 0.004 * focus_field_strength,
         0.0,
         0.058);
