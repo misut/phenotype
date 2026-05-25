@@ -2583,6 +2583,65 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
             + 0.020f * plan.glass_meniscus.edge_pull,
         0.0f,
         0.54f);
+    inst.thickness[0] = std::clamp(
+        inst.thickness[0]
+            + 0.055f * plan.glass_transmission.internal_transmission,
+        0.0f,
+        0.86f);
+    inst.thickness[3] = std::clamp(
+        inst.thickness[3]
+            + 0.18f * plan.glass_transmission.subsurface_scatter
+            + 0.08f * plan.glass_transmission.internal_transmission,
+        1.0f,
+        1.45f);
+    inst.glass_environment[3] = std::clamp(
+        inst.glass_environment[3]
+            + 0.44f * plan.glass_transmission.internal_transmission
+            - 0.14f * plan.glass_transmission.volume_absorption,
+        0.0f,
+        1.0f);
+    inst.glass_stability[3] = std::clamp(
+        inst.glass_stability[3]
+            + 0.055f * plan.glass_transmission.internal_transmission
+            - 0.085f * plan.glass_transmission.volume_absorption,
+        -0.24f,
+        0.24f);
+    inst.refraction[0] = std::clamp(
+        inst.refraction[0]
+            + 0.10f * plan.glass_transmission.interlayer_refraction,
+        0.0f,
+        0.86f);
+    inst.refraction[2] = std::clamp(
+        inst.refraction[2]
+            * (1.0f
+               + 0.24f * plan.glass_transmission.interlayer_refraction),
+        0.0f,
+        8.0f);
+    inst.refraction[3] = std::clamp(
+        inst.refraction[3]
+            + 0.035f * plan.glass_transmission.interlayer_refraction,
+        0.0f,
+        0.44f);
+    inst.spectral_tint[2] = std::clamp(
+        inst.spectral_tint[2]
+            + 0.030f * plan.glass_transmission.interlayer_refraction,
+        0.0f,
+        0.24f);
+    inst.spectral_tint[3] = std::clamp(
+        inst.spectral_tint[3]
+            + 0.040f * plan.glass_transmission.subsurface_scatter,
+        0.0f,
+        0.34f);
+    inst.lighting[2] = std::clamp(
+        inst.lighting[2]
+            + 0.050f * plan.glass_transmission.subsurface_scatter,
+        0.0f,
+        0.56f);
+    inst.lighting[3] = std::clamp(
+        inst.lighting[3]
+            + 0.040f * plan.glass_transmission.volume_absorption,
+        0.0f,
+        0.42f);
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];
