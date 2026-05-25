@@ -23051,7 +23051,162 @@ fragment float4 fs_material(
         max(shadow_band, 0.5),
         signed_edge_distance);
     float shadow = lower_depth * edge_depth * clamp(in.effects.y, 0.0, 0.4);
-    rgb *= (1.0 - shadow);
+    float transmitted_shadow = shadow;
+    float shadow_transmission_strength = clamp(
+        0.010 * glass_scattering_gain
+            + 0.009 * clear_glass_detail
+            + 0.008 * clear_glass_dimming
+            + 0.007 * glass_shadow_gain
+            + 0.006 * substrate_adhesion_strength
+            + 0.005 * ambient_seal_field_strength
+            + 0.005 * contact_shadow_field_strength
+            + 0.004 * depth_fusion_strength
+            + shadow * 0.08,
+        0.0,
+        0.080);
+    if (shadow_transmission_strength > 0.0001 && shadow > 0.0001) {
+        float2 shadow_transmission_cross =
+            float2(-dynamic_light_dir.y, dynamic_light_dir.x);
+        float shadow_transmission_anchor = clamp(
+            lower_depth * 0.28
+                + edge_depth * 0.22
+                + edge_lens * 0.16
+                + bridge_band * 0.12
+                + substrate_adhesion_strength * 2.8
+                + ambient_seal_field_strength * 2.0
+                + contact_shadow_field_strength * 1.6,
+            0.0,
+            1.0);
+        float shadow_transmission_span =
+            (0.56
+             + 0.014 * shadow_radius
+             + 0.020 * blur_points
+             + 0.9 * glass_thickness
+             + 0.8 * clear_glass_detail
+             + 0.6 * shadow_transmission_anchor)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float shadow_transmission_cross_span =
+            (0.40
+             + 0.7 * glass_dispersion_tangential
+             + 0.6 * spectral_dispersion
+             + 0.5 * shadow_transmission_anchor)
+            * content_scale;
+        float2 shadow_transmission_floor_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - dynamic_light_dir
+                    * texel
+                    * shadow_transmission_span
+                    * (0.22 + 0.16 * lower_depth),
+            float2(0.0),
+            float2(1.0));
+        float2 shadow_transmission_lift_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + dynamic_light_dir
+                    * texel
+                    * shadow_transmission_span
+                    * (0.18 + 0.12 * edge_depth),
+            float2(0.0),
+            float2(1.0));
+        float2 shadow_transmission_edge_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + normalized_local
+                    * texel
+                    * shadow_transmission_cross_span
+                    * (0.20 + 0.14 * edge_depth),
+            float2(0.0),
+            float2(1.0));
+        float2 shadow_transmission_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + shadow_transmission_cross
+                    * texel
+                    * shadow_transmission_cross_span
+                    * (0.18 + 0.12 * lower_depth),
+            float2(0.0),
+            float2(1.0));
+        float3 shadow_transmission_floor_rgb =
+            backdrop.sample(samp, shadow_transmission_floor_uv).rgb;
+        float3 shadow_transmission_lift_rgb =
+            backdrop.sample(samp, shadow_transmission_lift_uv).rgb;
+        float3 shadow_transmission_edge_rgb =
+            backdrop.sample(samp, shadow_transmission_edge_uv).rgb;
+        float3 shadow_transmission_cross_rgb =
+            backdrop.sample(samp, shadow_transmission_cross_uv).rgb;
+        float3 shadow_transmission_probe =
+            shadow_transmission_floor_rgb * 0.34
+            + shadow_transmission_lift_rgb * 0.24
+            + shadow_transmission_edge_rgb * 0.22
+            + shadow_transmission_cross_rgb * 0.20;
+        float shadow_transmission_luma = dot(
+            shadow_transmission_probe,
+            float3(0.2126, 0.7152, 0.0722));
+        float shadow_transmission_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float shadow_transmission_range = clamp(
+            length(shadow_transmission_floor_rgb - shadow_transmission_lift_rgb) * 0.32
+                + length(shadow_transmission_edge_rgb - shadow_transmission_cross_rgb) * 0.24
+                + abs(shadow_transmission_luma - shadow_transmission_surface_luma) * 0.20
+                + shadow_transmission_anchor * 0.06,
+            0.0,
+            1.0);
+        float shadow_transmission_coherence =
+            1.0 - smoothstep(0.08, 0.36, shadow_transmission_range);
+        float shadow_transmission_lift = smoothstep(
+            shadow_transmission_surface_luma - 0.05,
+            shadow_transmission_surface_luma + 0.25,
+            shadow_transmission_luma);
+        float3 shadow_transmission_layer = mix(
+            shadow_transmission_probe,
+            float3(shadow_transmission_luma),
+            shadow_transmission_coherence * 0.16
+                + glass_shadow_gain * 0.08);
+        shadow_transmission_layer = clamp(
+            (shadow_transmission_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.014
+                       - glass_shadow_gain * 0.016
+                       - shadow_transmission_anchor * 0.010)
+                + float3(0.50),
+            0.0,
+            1.0);
+        shadow_transmission_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.006
+                   + 0.012 * tint_chroma * prominent_intensity);
+        float shadow_transmission_gate =
+            shadow_transmission_strength
+            * shadow
+            * (0.34
+               + 0.22 * shadow_transmission_anchor
+               + 0.18 * shadow_transmission_coherence
+               + 0.12 * shadow_transmission_lift
+               + 0.10 * dynamic_light_highlight);
+        transmitted_shadow *= 1.0 - clamp(
+            shadow_transmission_gate
+                * (0.22
+                   + 0.16 * shadow_transmission_coherence
+                   + 0.12 * shadow_transmission_lift),
+            0.0,
+            0.34);
+        rgb = mix(
+            rgb,
+            shadow_transmission_layer,
+            shadow_transmission_gate * 0.18);
+        float3 shadow_transmission_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        rgb += shadow_transmission_prism
+            * shadow_transmission_gate
+            * (0.0006
+               + 0.0020 * spectral_rim_tint
+               + 0.0020 * glass_scattering_gain);
+    }
+    rgb *= (1.0 - transmitted_shadow);
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
