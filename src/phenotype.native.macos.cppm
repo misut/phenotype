@@ -15471,6 +15471,272 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(spacing_shadow, 0.0, 0.052);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float bridge_meniscus_reflection_strength = clamp(
+        0.010 * spacing_meniscus_strength
+            + 0.010 * shared_membrane_strength
+            + 0.010 * shared_shell_strength
+            + 0.008 * container_field_strength
+            + 0.010 * glass_union_glow_strength
+            + 0.014 * bridge_band * (0.34 + 0.66 * bridge_core)
+            + 0.012 * glass_effect_match_execution * group_blend_strength
+            + 0.010 * morph_execution * group_blend_strength
+            + 0.008 * dynamic_light_highlight,
+        0.0,
+        0.070);
+    if (bridge_meniscus_reflection_strength > 0.0001
+        && bridge_dir_length > 0.0001
+        && bridge_band > 0.0001) {
+        float bridge_meniscus_core =
+            1.0 - smoothstep(
+                max(bridge_width * 0.12, 0.001),
+                bridge_width + 0.10,
+                bridge_lateral);
+        float bridge_meniscus_ridge =
+            smoothstep(
+                max(bridge_width * 0.22, 0.001),
+                bridge_width + 0.03,
+                bridge_lateral)
+            * (1.0 - smoothstep(
+                bridge_width + 0.03,
+                bridge_width + 0.25,
+                bridge_lateral));
+        float bridge_meniscus_axial =
+            1.0 - smoothstep(
+                max(bridge_length * 0.44, 0.001),
+                bridge_length + 0.24,
+                bridge_axial);
+        float bridge_meniscus_transition = clamp(
+            glass_effect_match_execution * 0.34
+                + morph_execution * 0.26
+                + shape_blend_execution * 0.18
+                + union_execution * 0.18
+                + materialize_wave_strength * 0.14
+                + spacing_meniscus_strength * 1.6,
+            0.0,
+            1.0);
+        float bridge_meniscus_gate = clamp(
+            bridge_meniscus_axial
+                * (0.44 * bridge_meniscus_core
+                   + 0.56 * bridge_meniscus_ridge)
+                * (0.52
+                   + 0.22 * bridge_meniscus_transition
+                   + 0.16 * group_blend_strength
+                   + 0.10 * shared_backdrop_scope),
+            0.0,
+            1.0);
+        float2 bridge_meniscus_normal =
+            bridge_tangent * (bridge_shear >= 0.0 ? 1.0 : -1.0);
+        float2 bridge_meniscus_reflect_dir =
+            dynamic_light_dir
+            - bridge_meniscus_normal
+                * (2.0 * dot(dynamic_light_dir, bridge_meniscus_normal));
+        float bridge_meniscus_reflect_len =
+            length(bridge_meniscus_reflect_dir);
+        bridge_meniscus_reflect_dir =
+            bridge_meniscus_reflect_len > 0.0001
+                ? bridge_meniscus_reflect_dir / bridge_meniscus_reflect_len
+                : -dynamic_light_dir;
+        float bridge_meniscus_alignment =
+            smoothstep(-0.30, 0.94, dot(bridge_meniscus_reflect_dir,
+                                        -dynamic_light_dir));
+        float bridge_meniscus_shear_gloss =
+            smoothstep(0.10, 0.86, abs(bridge_shear))
+            * (0.42 + 0.58 * bridge_core);
+        float bridge_meniscus_phase = clamp(
+            bridge_axial * (15.0 + 7.0 * bridge_meniscus_transition)
+                - abs(bridge_lateral_signed)
+                    * (10.0 + 5.0 * bridge_flow_offset_gain)
+                + bridge_shear * (4.0 + 2.0 * bridge_core)
+                + spacing_meniscus_strength * 7.0
+                + glass_thickness * 5.0,
+            -14.0,
+            14.0);
+        float bridge_meniscus_wave =
+            0.5 + 0.5 * sin(bridge_meniscus_phase);
+        float bridge_meniscus_pinch =
+            1.0 - smoothstep(
+                0.0,
+                0.28,
+                abs(bridge_meniscus_wave - 0.62));
+        float bridge_meniscus_span =
+            (0.92
+             + 2.8 * glass_thickness
+             + 1.8 * clear_glass_detail
+             + 1.4 * glass_caustic_spread
+             + 1.2 * bridge_meniscus_transition
+             + 0.050 * blur_points)
+            * content_scale
+            * (0.82 + 0.18 * glass_lensing_gain);
+        float bridge_meniscus_cross_span =
+            (0.72
+             + 1.6 * glass_dispersion_tangential
+             + 1.8 * spectral_dispersion
+             + 1.2 * bridge_meniscus_shear_gloss)
+            * content_scale;
+        float2 bridge_meniscus_front_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.22
+                + bridge_meniscus_reflect_dir
+                    * texel
+                    * bridge_meniscus_span
+                    * (0.34 + 0.18 * bridge_meniscus_wave)
+                + bridge_dir
+                    * texel
+                    * bridge_meniscus_span
+                    * (0.14 + 0.12 * bridge_meniscus_pinch),
+            float2(0.0),
+            float2(1.0));
+        float2 bridge_meniscus_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                - bridge_meniscus_reflect_dir
+                    * texel
+                    * bridge_meniscus_span
+                    * (0.30 + 0.16 * bridge_meniscus_pinch)
+                - bridge_dir
+                    * texel
+                    * bridge_meniscus_span
+                    * (0.12 + 0.10 * bridge_meniscus_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 bridge_meniscus_upper_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + bridge_tangent
+                    * texel
+                    * bridge_meniscus_cross_span
+                    * (0.34
+                       + 0.18 * bridge_meniscus_wave
+                       + 0.18 * bridge_meniscus_ridge),
+            float2(0.0),
+            float2(1.0));
+        float2 bridge_meniscus_lower_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                - bridge_tangent
+                    * texel
+                    * bridge_meniscus_cross_span
+                    * (0.30
+                       + 0.18 * bridge_meniscus_pinch
+                       + 0.14 * bridge_meniscus_core),
+            float2(0.0),
+            float2(1.0));
+        float3 bridge_meniscus_front_rgb =
+            backdrop.sample(samp, bridge_meniscus_front_uv).rgb;
+        float3 bridge_meniscus_return_rgb =
+            backdrop.sample(samp, bridge_meniscus_return_uv).rgb;
+        float3 bridge_meniscus_upper_rgb =
+            backdrop.sample(samp, bridge_meniscus_upper_uv).rgb;
+        float3 bridge_meniscus_lower_rgb =
+            backdrop.sample(samp, bridge_meniscus_lower_uv).rgb;
+        float3 bridge_meniscus_mirror =
+            bridge_meniscus_front_rgb * 0.34
+            + bridge_meniscus_return_rgb * 0.28
+            + bridge_meniscus_upper_rgb * 0.20
+            + bridge_meniscus_lower_rgb * 0.18;
+        float3 bridge_meniscus_split = float3(
+            bridge_meniscus_upper_rgb.r,
+            (bridge_meniscus_front_rgb.g + bridge_meniscus_return_rgb.g) * 0.5,
+            bridge_meniscus_lower_rgb.b);
+        float bridge_meniscus_luma =
+            dot(bridge_meniscus_mirror, float3(0.2126, 0.7152, 0.0722));
+        float bridge_meniscus_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float bridge_meniscus_range = clamp(
+            length(bridge_meniscus_front_rgb - bridge_meniscus_return_rgb) * 0.30
+                + length(bridge_meniscus_upper_rgb - bridge_meniscus_lower_rgb)
+                    * 0.26
+                + abs(bridge_meniscus_luma - bridge_meniscus_surface_luma)
+                    * 0.22
+                + bridge_meniscus_pinch * 0.08,
+            0.0,
+            1.0);
+        float bridge_meniscus_coherence =
+            1.0 - smoothstep(0.08, 0.36, bridge_meniscus_range);
+        float bridge_meniscus_lift = smoothstep(
+            bridge_meniscus_surface_luma - 0.06,
+            bridge_meniscus_surface_luma + 0.30,
+            bridge_meniscus_luma);
+        float bridge_meniscus_dark = smoothstep(
+            0.08,
+            0.34,
+            bridge_meniscus_surface_luma - bridge_meniscus_luma);
+        float bridge_meniscus_fresnel = clamp(
+            bridge_meniscus_ridge * 0.34
+                + bridge_meniscus_core * 0.22
+                + bridge_meniscus_alignment * 0.18
+                + bridge_meniscus_transition * 0.16
+                + bridge_meniscus_shear_gloss * 0.14,
+            0.0,
+            1.0);
+        float3 bridge_meniscus_layer = mix(
+            bridge_meniscus_mirror,
+            bridge_meniscus_split,
+            0.18
+                + 0.16 * bridge_meniscus_pinch
+                + 0.14 * bridge_meniscus_fresnel
+                + 0.12 * spectral_dispersion);
+        bridge_meniscus_layer = clamp(
+            (bridge_meniscus_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.018
+                       + bridge_meniscus_lift * 0.014
+                       + bridge_meniscus_fresnel * 0.012
+                       - glass_shadow_gain * 0.006)
+                + float3(0.50),
+            0.0,
+            1.0);
+        bridge_meniscus_layer *= float3(
+            1.0
+                + spectral_warmth
+                    * (0.24 + 0.16 * bridge_meniscus_wave),
+            1.0 + spectral_rim_tint * 0.16,
+            1.0
+                + spectral_coolness
+                    * (0.24 + 0.16 * (1.0 - bridge_meniscus_wave)));
+        float3 bridge_meniscus_prism = float3(
+            spectral_warmth,
+            0.15 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        bridge_meniscus_layer += bridge_meniscus_prism
+            * bridge_meniscus_fresnel
+            * (0.0010
+               + 0.0030 * spectral_rim_tint
+               + 0.0028 * glass_caustic_spread
+               + 0.0022 * glass_prismatic_gain)
+            * (0.34
+               + 0.24 * bridge_meniscus_coherence
+               + 0.22 * bridge_meniscus_pinch
+               + 0.20 * bridge_meniscus_lift);
+        float bridge_meniscus_weight =
+            bridge_meniscus_reflection_strength
+            * bridge_meniscus_gate
+            * (0.30
+               + 0.20 * bridge_meniscus_coherence
+               + 0.18 * bridge_meniscus_fresnel
+               + 0.16 * bridge_meniscus_pinch
+               + 0.12 * bridge_meniscus_shear_gloss);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                bridge_meniscus_layer,
+                0.08 + 0.16 * bridge_meniscus_fresnel),
+            bridge_meniscus_weight * 0.34);
+        rgb += bridge_meniscus_prism
+            * bridge_meniscus_weight
+            * bridge_meniscus_pinch
+            * (0.0008
+               + 0.0026 * dynamic_light_highlight
+               + 0.0024 * glass_scattering_gain);
+        float bridge_meniscus_shadow =
+            bridge_meniscus_dark
+            * bridge_meniscus_weight
+            * (0.006 + 0.016 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - bridge_meniscus_alignment));
+        rgb *= 1.0 - clamp(bridge_meniscus_shadow, 0.0, 0.038);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float liquid_response_strength = clamp(
         0.012 * clear_glass_detail
             + 0.010 * clear_glass_contrast
@@ -15482,6 +15748,7 @@ fragment float4 fs_material(
             + 0.016 * shared_membrane_strength
             + 0.014 * shared_shell_strength
             + 0.014 * spacing_meniscus_strength
+            + 0.012 * bridge_meniscus_reflection_strength
             + 0.018 * pointer_lens_strength * pointer_lens_raw
             + 0.016 * bridge_motion_strength * bridge_band
             + 0.010 * union_execution * group_blend_strength,
