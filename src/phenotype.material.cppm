@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 85;
+inline constexpr std::uint32_t material_plan_contract_version = 86;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -494,6 +494,11 @@ struct MaterialStageOptics {
     float glass_substrate_settle = 0.0f;
     float glass_substrate_shadow = 0.0f;
     float glass_substrate_refraction = 0.0f;
+    char const* glass_ambient_reflection_model = "none";
+    float glass_ambient_reflection_gain = 0.0f;
+    float glass_ambient_color_bleed = 0.0f;
+    float glass_ambient_luma_polarization = 0.0f;
+    float glass_ambient_sheen_coherence = 0.0f;
     char const* glass_thickness_model = "none";
     float glass_thickness = 0.0f;
     float glass_lensing_gain = 1.0f;
@@ -807,6 +812,24 @@ struct MaterialGlassSubstrateAdhesionProfile {
     float refraction_crawl = 0.0f;
 };
 
+struct MaterialGlassAmbientReflectionProfile {
+    char const* model = "none";
+    char const* source = "none";
+    bool active = false;
+    bool environment_driven = false;
+    bool transmission_driven = false;
+    bool substrate_driven = false;
+    bool surface_driven = false;
+    bool lighting_driven = false;
+    bool interaction_driven = false;
+    bool reduced_motion_suppressed = false;
+    bool bounded = true;
+    float reflection_gain = 0.0f;
+    float color_bleed = 0.0f;
+    float luma_polarization = 0.0f;
+    float sheen_coherence = 0.0f;
+};
+
 struct MaterialGlassEnvironmentProfile {
     char const* model = "none";
     char const* source = "none";
@@ -1010,6 +1033,7 @@ struct MaterialOpticalResponseContract {
     bool glass_transmission_active = false;
     bool glass_surface_cohesion_active = false;
     bool glass_substrate_adhesion_active = false;
+    bool glass_ambient_reflection_active = false;
     bool glass_thickness_active = false;
     bool glass_dispersion_active = false;
     bool glass_stabilization_active = false;
@@ -1041,6 +1065,7 @@ struct MaterialOpticalComposition {
     char const* glass_transmission_source = "none";
     char const* glass_surface_cohesion_source = "none";
     char const* glass_substrate_adhesion_source = "none";
+    char const* glass_ambient_reflection_source = "none";
     char const* glass_thickness_source = "none";
     char const* glass_dispersion_source = "none";
     char const* glass_stabilization_source = "none";
@@ -1073,6 +1098,7 @@ struct MaterialOpticalComposition {
     bool glass_transmission_required = false;
     bool glass_surface_cohesion_required = false;
     bool glass_substrate_adhesion_required = false;
+    bool glass_ambient_reflection_required = false;
     bool glass_thickness_required = false;
     bool glass_dispersion_required = false;
     bool glass_stabilization_required = false;
@@ -1139,6 +1165,10 @@ struct MaterialOpticalComposition {
     float glass_substrate_settle = 0.0f;
     float glass_substrate_shadow = 0.0f;
     float glass_substrate_refraction = 0.0f;
+    float glass_ambient_reflection_gain = 0.0f;
+    float glass_ambient_color_bleed = 0.0f;
+    float glass_ambient_luma_polarization = 0.0f;
+    float glass_ambient_sheen_coherence = 0.0f;
     float glass_thickness = 0.0f;
     float glass_lensing_gain = 1.0f;
     float glass_shadow_gain = 1.0f;
@@ -1397,6 +1427,7 @@ struct MaterialPlan {
     MaterialGlassTransmissionProfile glass_transmission{};
     MaterialGlassSurfaceCohesionProfile glass_surface_cohesion{};
     MaterialGlassSubstrateAdhesionProfile glass_substrate_adhesion{};
+    MaterialGlassAmbientReflectionProfile glass_ambient_reflection{};
     MaterialGlassThicknessProfile glass_thickness{};
     MaterialGlassDispersionProfile glass_dispersion{};
     MaterialGlassStabilizationProfile glass_stabilization{};
@@ -1526,6 +1557,16 @@ inline MaterialStageOptics material_primary_stage_optics(
         plan.glass_substrate_adhesion.contact_shadow;
     optics.glass_substrate_refraction =
         plan.glass_substrate_adhesion.refraction_crawl;
+    optics.glass_ambient_reflection_model =
+        plan.glass_ambient_reflection.model;
+    optics.glass_ambient_reflection_gain =
+        plan.glass_ambient_reflection.reflection_gain;
+    optics.glass_ambient_color_bleed =
+        plan.glass_ambient_reflection.color_bleed;
+    optics.glass_ambient_luma_polarization =
+        plan.glass_ambient_reflection.luma_polarization;
+    optics.glass_ambient_sheen_coherence =
+        plan.glass_ambient_reflection.sheen_coherence;
     optics.glass_thickness_model = plan.glass_thickness.model;
     optics.glass_thickness = plan.glass_thickness.thickness;
     optics.glass_lensing_gain = plan.glass_thickness.lensing_gain;
@@ -1683,6 +1724,16 @@ inline MaterialStageOptics material_edge_stage_optics(
         plan.glass_substrate_adhesion.contact_shadow;
     optics.glass_substrate_refraction =
         plan.glass_substrate_adhesion.refraction_crawl;
+    optics.glass_ambient_reflection_model =
+        plan.glass_ambient_reflection.model;
+    optics.glass_ambient_reflection_gain =
+        plan.glass_ambient_reflection.reflection_gain;
+    optics.glass_ambient_color_bleed =
+        plan.glass_ambient_reflection.color_bleed;
+    optics.glass_ambient_luma_polarization =
+        plan.glass_ambient_reflection.luma_polarization;
+    optics.glass_ambient_sheen_coherence =
+        plan.glass_ambient_reflection.sheen_coherence;
     optics.glass_thickness_model = plan.glass_thickness.model;
     optics.glass_thickness = plan.glass_thickness.thickness;
     optics.glass_lensing_gain = plan.glass_thickness.lensing_gain;
@@ -10062,6 +10113,170 @@ material_resolve_glass_substrate_adhesion_profile(
     return profile;
 }
 
+inline char const* material_glass_ambient_reflection_source_name(
+        bool environment_driven,
+        bool transmission_driven,
+        bool substrate_driven,
+        bool surface_driven,
+        bool lighting_driven) noexcept {
+    if (environment_driven && transmission_driven && substrate_driven)
+        return "environment-transmission-substrate-ambient-reflection";
+    if (environment_driven && surface_driven && lighting_driven)
+        return "environment-surface-light-ambient-reflection";
+    if (environment_driven && transmission_driven)
+        return "environment-transmission-ambient-reflection";
+    if (environment_driven && substrate_driven)
+        return "environment-substrate-ambient-reflection";
+    if (environment_driven)
+        return "environment-ambient-reflection";
+    return "sampled-backdrop-ambient-reflection";
+}
+
+inline MaterialGlassAmbientReflectionProfile
+material_resolve_glass_ambient_reflection_profile(
+        MaterialPlan const& plan) noexcept {
+    MaterialGlassAmbientReflectionProfile profile{};
+    profile.bounded = true;
+    if (!plan.backdrop_sampling
+        || plan.fallback()
+        || plan.kind == MaterialKind::None) {
+        return profile;
+    }
+
+    auto const environment_response = plan.glass_environment.active
+        ? std::clamp(
+            plan.glass_environment.reflection_strength * 0.34f
+                + plan.glass_environment.color_pickup * 0.24f
+                + plan.glass_environment.transmission_balance * 0.22f
+                + std::fabs(plan.glass_environment.luminance_balance - 0.5f)
+                    * 0.20f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const transmission_response = plan.glass_transmission.active
+        ? std::clamp(
+            plan.glass_transmission.internal_transmission / 0.52f * 0.30f
+                + plan.glass_transmission.interlayer_refraction / 0.32f
+                    * 0.26f
+                + plan.glass_transmission.subsurface_scatter / 0.34f
+                    * 0.24f
+                + plan.glass_transmission.volume_absorption / 0.30f
+                    * 0.20f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const substrate_response = plan.glass_substrate_adhesion.active
+        ? std::clamp(
+            plan.glass_substrate_adhesion.contact_strength / 0.46f * 0.32f
+                + plan.glass_substrate_adhesion.settle_depth / 0.34f
+                    * 0.24f
+                + plan.glass_substrate_adhesion.contact_shadow / 0.30f
+                    * 0.22f
+                + plan.glass_substrate_adhesion.refraction_crawl / 0.28f
+                    * 0.22f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const surface_response = plan.glass_surface_cohesion.active
+        ? std::clamp(
+            plan.glass_surface_cohesion.surface_response / 0.64f * 0.30f
+                + plan.glass_surface_cohesion.edge_adhesion / 0.56f
+                    * 0.24f
+                + plan.glass_surface_cohesion.shape_coalescence / 0.54f
+                    * 0.22f
+                + plan.glass_surface_cohesion.luma_stability / 0.62f
+                    * 0.24f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const lighting_response = plan.dynamic_lighting.active
+        ? std::clamp(
+            plan.dynamic_lighting.highlight_strength / 0.45f * 0.46f
+                + plan.dynamic_lighting.shadow_strength / 0.36f * 0.26f
+                + std::fabs(plan.dynamic_lighting.direction_x) * 0.14f
+                + std::fabs(plan.dynamic_lighting.direction_y) * 0.14f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const interaction_response = plan.interaction.active
+        ? std::clamp(
+            plan.interaction.response_strength * 0.44f
+                + plan.interaction.pointer_lens_strength * 0.32f
+                + plan.interaction.control_morph_edge * 0.14f
+                + plan.interaction.control_morph_depth * 0.10f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const reduced_motion_scale =
+        plan.decision_trace.reduce_motion ? 0.80f : 1.0f;
+    auto const response = std::clamp(
+        0.07f
+            + 0.30f * environment_response
+            + 0.22f * transmission_response
+            + 0.18f * substrate_response
+            + 0.14f * surface_response
+            + 0.10f * lighting_response
+            + 0.06f * interaction_response,
+        0.0f,
+        1.0f);
+
+    profile.reflection_gain = std::clamp(
+        reduced_motion_scale
+            * (0.045f
+               + 0.24f * response
+               + 0.10f * environment_response
+               + 0.06f * substrate_response),
+        0.0f,
+        0.42f);
+    profile.color_bleed = std::clamp(
+        0.030f
+            + 0.20f * environment_response
+            + 0.12f * transmission_response
+            + 0.08f * surface_response,
+        0.0f,
+        0.34f);
+    profile.luma_polarization = std::clamp(
+        0.024f
+            + 0.16f * environment_response
+            + 0.12f * substrate_response
+            + 0.08f * lighting_response,
+        0.0f,
+        0.30f);
+    profile.sheen_coherence = std::clamp(
+        reduced_motion_scale
+            * (0.040f
+               + 0.18f * surface_response
+               + 0.16f * substrate_response
+               + 0.14f * transmission_response
+               + 0.08f * lighting_response),
+        0.0f,
+        0.36f);
+    if (profile.reflection_gain <= 0.0001f
+        && profile.color_bleed <= 0.0001f
+        && profile.luma_polarization <= 0.0001f
+        && profile.sheen_coherence <= 0.0001f) {
+        return MaterialGlassAmbientReflectionProfile{};
+    }
+
+    profile.active = true;
+    profile.environment_driven = environment_response > 0.0001f;
+    profile.transmission_driven = transmission_response > 0.0001f;
+    profile.substrate_driven = substrate_response > 0.0001f;
+    profile.surface_driven = surface_response > 0.0001f;
+    profile.lighting_driven = lighting_response > 0.0001f;
+    profile.interaction_driven = interaction_response > 0.0001f;
+    profile.reduced_motion_suppressed =
+        plan.decision_trace.reduce_motion && reduced_motion_scale < 1.0f;
+    profile.model = "adaptive-glass-ambient-reflection";
+    profile.source = material_glass_ambient_reflection_source_name(
+        profile.environment_driven,
+        profile.transmission_driven,
+        profile.substrate_driven,
+        profile.surface_driven,
+        profile.lighting_driven);
+    return profile;
+}
+
 inline float material_base_specular_intensity(MaterialKind kind) noexcept {
     switch (kind) {
         case MaterialKind::Clear: return 0.050f;
@@ -10134,6 +10349,19 @@ inline MaterialSpecularProfile material_resolve_specular_profile(
             0.0f,
             1.0f)
         : 0.0f;
+    auto const ambient_reflection_response =
+        plan.glass_ambient_reflection.active
+        ? std::clamp(
+            plan.glass_ambient_reflection.reflection_gain / 0.42f * 0.32f
+                + plan.glass_ambient_reflection.color_bleed / 0.34f
+                    * 0.22f
+                + plan.glass_ambient_reflection.luma_polarization / 0.30f
+                    * 0.22f
+                + plan.glass_ambient_reflection.sheen_coherence / 0.36f
+                    * 0.24f,
+            0.0f,
+            1.0f)
+        : 0.0f;
     auto const lighting_response = plan.dynamic_lighting.active
         ? std::clamp(
             plan.dynamic_lighting.highlight_strength / 0.45f * 0.46f
@@ -10146,8 +10374,9 @@ inline MaterialSpecularProfile material_resolve_specular_profile(
     auto const glint_response = std::clamp(
         caustic_flow_response * 0.40f
             + depth_response * 0.24f
-            + environment_response * 0.20f
-            + lighting_response * 0.16f,
+            + environment_response * 0.16f
+            + ambient_reflection_response * 0.12f
+            + lighting_response * 0.08f,
         0.0f,
         1.0f);
     auto const ambient_intensity = std::clamp(
@@ -10157,6 +10386,7 @@ inline MaterialSpecularProfile material_resolve_specular_profile(
              + 0.020f * backdrop_response
              + 0.50f * caustic_response
              + 0.060f * glint_response
+             + 0.030f * ambient_reflection_response
              + 0.025f * caustic_flow_response)
             * (plan.transition.active ? plan.transition.optical_gain : 1.0f),
         0.0f,
@@ -10196,6 +10426,7 @@ inline MaterialSpecularProfile material_resolve_specular_profile(
         0.58f
             + 0.18f * shape_roundness
             + 0.045f * depth_response
+            + 0.030f * ambient_reflection_response
             - 0.070f * caustic_flow_response,
         0.48f,
         0.82f);
@@ -10626,6 +10857,15 @@ inline char const* material_optical_glass_substrate_adhesion_source_name(
     return "none";
 }
 
+inline char const* material_optical_glass_ambient_reflection_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.glass_ambient_reflection.active
+        && plan.glass_ambient_reflection.source
+        && plan.glass_ambient_reflection.source[0])
+        return plan.glass_ambient_reflection.source;
+    return "none";
+}
+
 inline char const* material_optical_glass_thickness_source_name(
         MaterialPlan const& plan) noexcept {
     if (plan.glass_thickness.active
@@ -10788,6 +11028,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         material_optical_glass_surface_cohesion_source_name(plan);
     composition.glass_substrate_adhesion_source =
         material_optical_glass_substrate_adhesion_source_name(plan);
+    composition.glass_ambient_reflection_source =
+        material_optical_glass_ambient_reflection_source_name(plan);
     composition.glass_thickness_source =
         material_optical_glass_thickness_source_name(plan);
     composition.glass_dispersion_source =
@@ -10848,6 +11090,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.glass_surface_cohesion.active;
     composition.glass_substrate_adhesion_required =
         plan.glass_substrate_adhesion.active;
+    composition.glass_ambient_reflection_required =
+        plan.glass_ambient_reflection.active;
     composition.glass_thickness_required = plan.glass_thickness.active;
     composition.glass_dispersion_required = plan.glass_dispersion.active;
     composition.glass_stabilization_required =
@@ -10885,6 +11129,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         && plan.glass_transmission.bounded
         && plan.glass_surface_cohesion.bounded
         && plan.glass_substrate_adhesion.bounded
+        && plan.glass_ambient_reflection.bounded
         && plan.glass_thickness.bounded
         && plan.glass_dispersion.bounded
         && plan.glass_stabilization.bounded
@@ -10974,6 +11219,14 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.glass_substrate_adhesion.contact_shadow;
     composition.glass_substrate_refraction =
         plan.glass_substrate_adhesion.refraction_crawl;
+    composition.glass_ambient_reflection_gain =
+        plan.glass_ambient_reflection.reflection_gain;
+    composition.glass_ambient_color_bleed =
+        plan.glass_ambient_reflection.color_bleed;
+    composition.glass_ambient_luma_polarization =
+        plan.glass_ambient_reflection.luma_polarization;
+    composition.glass_ambient_sheen_coherence =
+        plan.glass_ambient_reflection.sheen_coherence;
     composition.glass_thickness = plan.glass_thickness.thickness;
     composition.glass_lensing_gain = plan.glass_thickness.lensing_gain;
     composition.glass_shadow_gain = plan.glass_thickness.shadow_gain;
@@ -11113,6 +11366,8 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
         composition.glass_surface_cohesion_required;
     response.glass_substrate_adhesion_active =
         composition.glass_substrate_adhesion_required;
+    response.glass_ambient_reflection_active =
+        composition.glass_ambient_reflection_required;
     response.glass_thickness_active =
         composition.glass_thickness_required;
     response.glass_dispersion_active =
@@ -11476,6 +11731,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         material_resolve_glass_surface_cohesion_profile(plan);
     plan.glass_substrate_adhesion =
         material_resolve_glass_substrate_adhesion_profile(plan);
+    plan.glass_ambient_reflection =
+        material_resolve_glass_ambient_reflection_profile(plan);
     plan.specular = material_resolve_specular_profile(plan);
     plan.luminance_curve = material_resolve_luminance_curve(
         plan.backdrop_sampling,
