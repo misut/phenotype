@@ -31272,6 +31272,359 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(bounds_shadow, 0.0, 0.016);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float container_morph_field_strength = clamp(
+        group_blend_strength
+            * (0.014 * morph_execution
+               + 0.012 * union_execution
+               + 0.010 * shape_blend_execution
+               + 0.008 * shared_backdrop_scope
+               + 0.008 * group_surface_execution
+               + 0.006 * bridge_motion_strength)
+            + 0.07 * bounds_anchor_field_strength
+            + 0.06 * container_pressure_field_strength
+            + 0.05 * edge_meniscus_field_strength
+            + 0.04 * lensing_flow_field_strength,
+        0.0,
+        0.050);
+    if (container_morph_field_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 morph_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 morph_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            morph_group_size);
+        float2 morph_group_norm =
+            (morph_group_local / morph_group_size - float2(0.5)) * 2.0;
+        float2 morph_group_center_screen =
+            in.group_rect.xy + morph_group_size * 0.5;
+        float2 morph_viewport_guess =
+            float2(float(backdrop.get_width()), float(backdrop.get_height()))
+            / content_scale;
+        float2 morph_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : morph_viewport_guess.x,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : morph_viewport_guess.y),
+            float2(1.0));
+        float2 morph_group_center_uv = clamp(
+            morph_group_center_screen / morph_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 morph_to_center =
+            morph_group_center_uv - in.screen_uv;
+        float morph_center_distance = length(morph_to_center);
+        float2 morph_center_dir =
+            morph_center_distance > 0.0001
+                ? morph_to_center / morph_center_distance
+                : refraction_dir;
+        float morph_group_center =
+            1.0 - smoothstep(0.20, 1.12, length(morph_group_norm));
+        float morph_group_rim =
+            smoothstep(0.52, 1.02,
+                max(abs(morph_group_norm.x), abs(morph_group_norm.y)))
+            * (1.0 - smoothstep(1.02, 1.24,
+                max(abs(morph_group_norm.x), abs(morph_group_norm.y))));
+        float morph_local_center =
+            1.0 - smoothstep(0.22, 1.08, normalized_len);
+        float morph_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.80, 1.0),
+                signed_edge_distance);
+        float morph_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float morph_transition = clamp(
+            morph_execution * group_blend_strength * 0.30
+                + union_execution * group_blend_strength * 0.24
+                + shape_blend_execution * group_blend_strength * 0.20
+                + shared_backdrop_scope * group_blend_strength * 0.18
+                + group_surface_execution * group_blend_strength * 0.16
+                + morph_bridge * 0.22,
+            0.0,
+            1.0);
+        float morph_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float morph_presence = clamp(
+            morph_group_center * 0.20
+                + morph_group_rim * 0.20
+                + morph_local_center * 0.12
+                + morph_edge * 0.16
+                + morph_bridge * 0.18
+                + morph_transition * 0.22
+                + morph_pointer * 0.10,
+            0.0,
+            1.0);
+        float2 morph_axis_raw =
+            morph_center_dir * (0.34 + 0.24 * morph_group_center)
+            + bridge_dir * (0.28 + 0.26 * morph_bridge)
+            + refraction_dir * (0.24 + 0.16 * glass_lensing_gain)
+            - dynamic_light_dir
+                * (0.22 + 0.18 * dynamic_light_highlight)
+            + pointer_dir * (0.18 + 0.16 * morph_pointer)
+            + dispersion_tangent
+                * (0.14
+                   + 0.10 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential);
+        float morph_axis_len = length(morph_axis_raw);
+        float2 morph_axis =
+            morph_axis_len > 0.0001
+                ? morph_axis_raw / morph_axis_len
+                : morph_center_dir;
+        float2 morph_cross =
+            float2(-morph_axis.y, morph_axis.x);
+        float morph_light_face =
+            smoothstep(-0.20, 0.94, dot(morph_axis, -dynamic_light_dir));
+        float morph_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(morph_axis, bridge_dir)));
+        float morph_phase = clamp(
+            dot(morph_group_norm, morph_axis)
+                    * (4.2 + 1.8 * morph_transition)
+                + dot(morph_group_norm, morph_cross)
+                    * (2.8 + 1.2 * morph_bridge)
+                + dot(normalized_local, morph_axis)
+                    * (2.2 + 1.0 * morph_local_center)
+                + bridge_axial * (2.8 + 1.5 * bridge_core)
+                + bridge_shear * morph_bridge * 2.1
+                + materialize_rim_position * materialize_wave_strength * 2.4
+                + spectral_dispersion * 4.6,
+            -12.0,
+            12.0);
+        float morph_wave = 0.5 + 0.5 * sin(morph_phase);
+        float morph_counter =
+            0.5 + 0.5 * cos(
+                morph_phase * 0.70
+                + glass_caustic_spread * 4.2
+                + morph_transition * 2.0);
+        float morph_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(morph_wave - 0.55));
+        float morph_return_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(morph_counter - 0.52));
+        float morph_span =
+            (0.94
+             + 2.0 * glass_thickness
+             + 1.6 * clear_glass_detail
+             + 1.4 * morph_presence
+             + 0.038 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float morph_cross_span =
+            (0.64
+             + 1.2 * glass_dispersion_tangential
+             + 1.1 * spectral_dispersion
+             + 0.9 * morph_bridge_alignment)
+            * content_scale;
+        float morph_center_pull = clamp(
+            0.10
+                + 0.24 * morph_transition
+                + 0.20 * group_blend_strength
+                + 0.18 * shared_backdrop_scope
+                + 0.16 * morph_bridge,
+            0.0,
+            0.58);
+        float2 morph_base_uv = clamp(
+            mix(in.screen_uv, morph_group_center_uv, morph_center_pull)
+                + refraction_uv * (0.10 + 0.06 * morph_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 morph_forward_uv = clamp(
+            morph_base_uv
+                + morph_axis
+                    * texel
+                    * morph_span
+                    * (0.30 + 0.14 * morph_lobe)
+                + bridge_dir
+                    * texel
+                    * morph_span
+                    * morph_bridge
+                    * 0.18,
+            float2(0.0),
+            float2(1.0));
+        float2 morph_return_uv = clamp(
+            morph_base_uv
+                - morph_axis
+                    * texel
+                    * morph_span
+                    * (0.28 + 0.14 * morph_return_lobe)
+                - bridge_dir
+                    * texel
+                    * morph_span
+                    * morph_bridge
+                    * 0.14,
+            float2(0.0),
+            float2(1.0));
+        float2 morph_cross_a_uv = clamp(
+            morph_base_uv
+                + morph_cross
+                    * texel
+                    * morph_cross_span
+                    * (0.30 + 0.12 * morph_wave)
+                + dispersion_tangent
+                    * texel
+                    * morph_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 morph_cross_b_uv = clamp(
+            morph_base_uv
+                - morph_cross
+                    * texel
+                    * morph_cross_span
+                    * (0.28 + 0.12 * morph_lobe)
+                - dispersion_tangent
+                    * texel
+                    * morph_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 morph_light_uv = clamp(
+            morph_base_uv
+                - dynamic_light_dir
+                    * texel
+                    * morph_span
+                    * (0.18 + 0.12 * morph_light_face),
+            float2(0.0),
+            float2(1.0));
+        float3 morph_base_rgb =
+            backdrop.sample(samp, morph_base_uv).rgb;
+        float3 morph_forward_rgb =
+            backdrop.sample(samp, morph_forward_uv).rgb;
+        float3 morph_return_rgb =
+            backdrop.sample(samp, morph_return_uv).rgb;
+        float3 morph_cross_a_rgb =
+            backdrop.sample(samp, morph_cross_a_uv).rgb;
+        float3 morph_cross_b_rgb =
+            backdrop.sample(samp, morph_cross_b_uv).rgb;
+        float3 morph_light_rgb =
+            backdrop.sample(samp, morph_light_uv).rgb;
+        float3 morph_membrane_rgb =
+            morph_base_rgb * 0.23
+            + morph_forward_rgb * 0.19
+            + morph_return_rgb * 0.18
+            + morph_cross_a_rgb * 0.14
+            + morph_cross_b_rgb * 0.14
+            + morph_light_rgb * 0.12;
+        float3 morph_split = float3(
+            morph_forward_rgb.r,
+            (morph_base_rgb.g + morph_light_rgb.g) * 0.5,
+            morph_return_rgb.b);
+        float morph_luma =
+            dot(morph_membrane_rgb, float3(0.2126, 0.7152, 0.0722));
+        float morph_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float morph_chroma = max(
+            max(abs(morph_membrane_rgb.r - morph_membrane_rgb.g),
+                abs(morph_membrane_rgb.g - morph_membrane_rgb.b)),
+            abs(morph_membrane_rgb.b - morph_membrane_rgb.r));
+        float morph_pickup =
+            smoothstep(0.030, 0.34, morph_chroma);
+        float morph_range = clamp(
+            length(morph_forward_rgb - morph_return_rgb) * 0.24
+                + length(morph_cross_a_rgb - morph_cross_b_rgb) * 0.22
+                + length(morph_light_rgb - morph_base_rgb) * 0.16
+                + abs(morph_luma - morph_surface_luma) * 0.18
+                + morph_lobe * 0.10
+                + morph_presence * 0.10,
+            0.0,
+            1.0);
+        float morph_coherence =
+            1.0 - smoothstep(0.08, 0.38, morph_range);
+        float morph_lift = smoothstep(
+            morph_surface_luma - 0.06,
+            morph_surface_luma + 0.30,
+            morph_luma);
+        float morph_depth = smoothstep(
+            0.08,
+            0.34,
+            morph_surface_luma - morph_luma);
+        float3 morph_neutral = mix(
+            morph_membrane_rgb,
+            float3(morph_luma),
+            morph_depth * (0.12 + 0.14 * glass_shadow_gain)
+                + morph_coherence * 0.12);
+        float3 morph_layer = mix(
+            morph_neutral,
+            morph_split,
+            0.16
+                + 0.16 * morph_pickup
+                + 0.14 * morph_lobe
+                + 0.12 * morph_presence
+                + 0.10 * morph_light_face);
+        morph_layer = clamp(
+            (morph_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + morph_lift * 0.010
+                       + morph_transition * 0.010
+                       - morph_depth * 0.016)
+                + float3(0.50),
+            0.0,
+            1.0);
+        morph_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.012
+                   + 0.024 * tint_chroma * prominent_intensity);
+        float3 morph_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.10,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.08,
+            spectral_coolness + tint_chroma * in.tint.b * 0.10);
+        morph_layer += morph_prism
+            * morph_pickup
+            * (0.0008
+               + 0.0026 * spectral_rim_tint
+               + 0.0022 * glass_prismatic_gain
+               + 0.0018 * glass_scattering_gain)
+            * (0.32
+               + 0.22 * morph_light_face
+               + 0.20 * morph_lobe
+               + 0.18 * morph_presence
+               + 0.14 * morph_coherence);
+        float morph_gate = clamp(
+            morph_presence * 0.28
+                + morph_transition * 0.24
+                + morph_bridge * 0.18
+                + morph_lobe * 0.14
+                + morph_light_face * 0.10
+                + morph_coherence * 0.10,
+            0.0,
+            1.0);
+        float morph_weight =
+            container_morph_field_strength
+            * morph_gate
+            * (0.30
+               + 0.20 * morph_coherence
+               + 0.16 * morph_pickup
+               + 0.14 * morph_lift
+               + 0.12 * morph_bridge_alignment
+               + 0.10 * morph_presence);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                morph_layer,
+                0.06
+                    + 0.12 * morph_lobe
+                    + 0.10 * morph_transition
+                    + 0.08 * morph_pickup),
+            morph_weight * 0.24);
+        rgb += morph_prism
+            * morph_weight
+            * max(morph_lobe, morph_return_lobe * 0.72)
+            * (0.0006
+               + 0.0020 * dynamic_light_highlight
+               + 0.0018 * glass_scattering_gain);
+        float morph_shadow =
+            morph_depth
+            * morph_weight
+            * (0.0020 + 0.0066 * glass_shadow_gain)
+            * (0.52 + 0.48 * (1.0 - morph_light_face));
+        rgb *= 1.0 - clamp(morph_shadow, 0.0, 0.020);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
