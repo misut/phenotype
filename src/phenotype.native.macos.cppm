@@ -38667,6 +38667,16 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(hierarchy_absorption, 0.0, 0.0080);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float environment_luminance_bias =
+        planned_environment_luminance_balance - 0.5;
+    float adaptive_vibrancy_bias = clamp(
+        planned_environment_color_pickup * 0.34
+            + planned_environment_reflection * 0.26
+            + planned_environment_transmission_balance * 0.22
+            + abs(environment_luminance_bias) * 0.20
+            + environment_sheen_bias * 0.18,
+        0.0,
+        1.0);
     float contextual_reflection_field_strength = clamp(
         0.003 * overlap_response_strength
             + 0.004 * fusion_strength
@@ -38675,6 +38685,8 @@ fragment float4 fs_material(
             + 0.004 * bridge_band
             + 0.007 * planned_environment_reflection
             + 0.005 * planned_environment_color_pickup
+            + 0.004 * planned_environment_transmission_balance
+            + 0.003 * abs(environment_luminance_bias)
             + 0.25 * hierarchy_separation_field_strength
             + 0.22 * surface_identity_field_strength
             + 0.19 * tonal_equilibrium_field_strength
@@ -38694,9 +38706,11 @@ fragment float4 fs_material(
             + 0.013 * interlayer_refraction_field_strength
             + 0.010 * layer_separation_field_strength
             + 0.008 * edge_meniscus_field_strength
-            + 0.006 * foreground_sheen_field_strength,
+            + 0.006 * foreground_sheen_field_strength
+            + 0.050 * environment_sheen_bias
+            + 0.040 * adaptive_vibrancy_bias,
         0.0,
-        0.020);
+        0.023);
     if (contextual_reflection_field_strength > 0.0001) {
         float reflection_center =
             1.0 - smoothstep(0.26, 1.08, normalized_len);
@@ -38729,6 +38743,7 @@ fragment float4 fs_material(
                 + tonal_equilibrium_field_strength * 3.6
                 + chroma_containment_field_strength * 3.0
                 + specular_flow_field_strength * 2.4
+                + adaptive_vibrancy_bias * 0.30
                 + reflection_pointer * 0.06,
             0.0,
             1.0);
@@ -38738,13 +38753,19 @@ fragment float4 fs_material(
                 + reflection_lock * 0.18
                 + reflection_bridge * 0.16
                 + reflection_center * 0.06
-                + reflection_pointer * 0.05,
+                + reflection_pointer * 0.05
+                + planned_environment_reflection * 0.10
+                + planned_environment_color_pickup * 0.08
+                + adaptive_vibrancy_bias * 0.08,
             0.0,
             1.0);
         float reflection_shear_sign =
             bridge_shear >= 0.0 ? 1.0 : -1.0;
         float2 reflection_axis_raw =
-            -dynamic_light_dir * (0.34 + 0.18 * dynamic_light_highlight)
+            -dynamic_light_dir
+                * (0.34
+                   + 0.18 * dynamic_light_highlight
+                   + 0.08 * planned_environment_reflection)
             + refraction_dir * (0.23 + 0.15 * glass_lensing_gain)
             + bridge_tangent
                 * reflection_shear_sign
@@ -38753,7 +38774,8 @@ fragment float4 fs_material(
             + dispersion_tangent
                 * (0.12
                    + 0.07 * spectral_dispersion
-                   + 0.05 * glass_dispersion_tangential)
+                   + 0.05 * glass_dispersion_tangential
+                   + 0.08 * planned_environment_color_pickup)
             + pointer_dir * (0.08 + 0.06 * reflection_pointer);
         float reflection_axis_len = length(reflection_axis_raw);
         float2 reflection_axis =
@@ -38776,7 +38798,8 @@ fragment float4 fs_material(
                 + reflection_rim * 0.20
                 + reflection_center * 0.08
                 + reflection_grazing * reflection_rim * 0.10
-                + reflection_pointer * 0.06,
+                + reflection_pointer * 0.06
+                + adaptive_vibrancy_bias * 0.10,
             0.0,
             1.0);
         float reflection_span =
@@ -38784,6 +38807,8 @@ fragment float4 fs_material(
              + 0.58 * glass_thickness
              + 0.48 * clear_glass_detail
              + 0.62 * reflection_presence
+             + 0.56 * planned_environment_reflection
+             + 0.36 * planned_environment_transmission_balance
              + 0.010 * blur_points)
             * content_scale
             * (0.86 + 0.14 * glass_lensing_gain);
@@ -38791,11 +38816,15 @@ fragment float4 fs_material(
             (0.24
              + 0.38 * glass_dispersion_tangential
              + 0.34 * spectral_dispersion
-             + 0.48 * reflection_support)
+             + 0.48 * reflection_support
+             + 0.42 * planned_environment_color_pickup)
             * content_scale;
         float2 reflection_base_uv = clamp(
             in.screen_uv
-                + refraction_uv * (0.032 + 0.046 * reflection_support),
+                + refraction_uv
+                    * (0.032
+                       + 0.046 * reflection_support
+                       + 0.030 * planned_environment_transmission_balance),
             float2(0.0),
             float2(1.0));
         float2 reflection_key_uv = clamp(
@@ -38859,9 +38888,10 @@ fragment float4 fs_material(
             0.045
                 + 0.055 * spectral_dispersion
                 + 0.045 * glass_dispersion_tangential
-                + 0.045 * reflection_support,
+                + 0.045 * reflection_support
+                + 0.055 * planned_environment_color_pickup,
             0.0,
-            0.21);
+            0.24);
         float3 reflection_probe = mix(
             reflection_average,
             reflection_split,
@@ -38887,12 +38917,13 @@ fragment float4 fs_material(
                 0.0,
                 1.0);
         float reflection_pickup = smoothstep(
-            0.05,
+            0.046 - 0.010 * planned_environment_color_pickup,
             0.38,
             length(reflection_key_rgb - reflection_fill_rgb) * 0.22
                 + length(reflection_ridge_rgb - reflection_valley_rgb) * 0.18
                 + reflection_luma_range * 0.20
-                + reflection_support * 0.08);
+                + reflection_support * 0.08
+                + adaptive_vibrancy_bias * 0.08);
         float reflection_shadow =
             smoothstep(
                 0.05,
@@ -38912,6 +38943,7 @@ fragment float4 fs_material(
                 + 0.13 * reflection_support
                 + 0.10 * reflection_light_face
                 + 0.08 * reflection_pickup
+                + 0.08 * planned_environment_color_pickup
                 - 0.08 * reflection_shadow,
             0.44,
             0.86);
@@ -38920,7 +38952,9 @@ fragment float4 fs_material(
                 + (reflection_probe_luma - 0.50)
                     * (0.58 + 0.18 * reflection_support)
                 + (reflection_highlight - reflection_shadow)
-                    * (0.036 + 0.040 * reflection_rim),
+                    * (0.036 + 0.040 * reflection_rim)
+                + environment_luminance_bias
+                    * (0.022 + 0.028 * adaptive_vibrancy_bias),
             0.0,
             1.0);
         float3 reflection_surface =
@@ -38937,21 +38971,25 @@ fragment float4 fs_material(
                     * (1.0
                        + clear_glass_contrast * 0.005
                        + reflection_pickup * 0.006
+                       + adaptive_vibrancy_bias * 0.005
                        - reflection_shadow * 0.005)
                 + float3(0.50),
             0.0,
             1.0);
         reflection_layer *= float3(
-            1.0 + spectral_warmth * 0.13 + tint_chroma * in.tint.r * 0.005,
+            1.0 + spectral_warmth * 0.13 + tint_chroma * in.tint.r * 0.005
+                + planned_environment_color_pickup * in.tint.r * 0.008,
             1.0 + spectral_rim_tint * 0.07 + tint_chroma * in.tint.g * 0.005,
-            1.0 + spectral_coolness * 0.13 + tint_chroma * in.tint.b * 0.005);
+            1.0 + spectral_coolness * 0.13 + tint_chroma * in.tint.b * 0.005
+                + planned_environment_color_pickup * in.tint.b * 0.008);
         float reflection_gate = clamp(
             reflection_presence * 0.27
                 + reflection_stack * 0.21
                 + reflection_rim * 0.22
                 + reflection_support * 0.15
                 + reflection_pickup * 0.10
-                + reflection_bridge_alignment * 0.07,
+                + reflection_bridge_alignment * 0.07
+                + adaptive_vibrancy_bias * 0.07,
             0.0,
             1.0);
         float reflection_weight =
@@ -38961,14 +38999,16 @@ fragment float4 fs_material(
                + 0.15 * reflection_support
                + 0.12 * reflection_pickup
                + 0.10 * reflection_highlight
-               + 0.08 * reflection_grazing);
+               + 0.08 * reflection_grazing
+               + 0.08 * adaptive_vibrancy_bias);
         rgb = mix(
             rgb,
             reflection_layer,
             reflection_weight
                 * (0.052
                    + 0.046 * reflection_presence
-                   + 0.040 * reflection_rim));
+                   + 0.040 * reflection_rim
+                   + 0.030 * planned_environment_reflection));
         float3 reflection_prism = float3(
             spectral_warmth + tint_chroma * in.tint.r * 0.034,
             0.12 * (spectral_warmth + spectral_coolness)
@@ -38979,7 +39019,8 @@ fragment float4 fs_material(
             * reflection_rim
             * (0.00016
                + 0.00054 * spectral_rim_tint
-               + 0.00046 * glass_scattering_gain)
+               + 0.00046 * glass_scattering_gain
+               + 0.00030 * adaptive_vibrancy_bias)
             * (0.50 + 0.50 * reflection_highlight);
         float reflection_absorption =
             reflection_shadow
@@ -39701,6 +39742,8 @@ fragment float4 fs_material(
             + 0.002 * abs(glass_stabilization_transmission_bias)
             + 0.004 * planned_environment_transmission_balance
             + 0.003 * planned_environment_reflection
+            + 0.004 * planned_environment_color_pickup
+            + 0.003 * abs(environment_luminance_bias)
             + 0.004 * group_blend_strength * shared_backdrop_scope
             + 0.003 * group_blend_strength * group_surface_execution
             + 0.004 * bridge_band * (0.36 + 0.64 * bridge_core)
@@ -39718,13 +39761,16 @@ fragment float4 fs_material(
             + 0.036 * edge_continuity_field_strength
             + 0.030 * rim_coalescence_field_strength
             + 0.024 * edge_adhesion_field_strength
-            + 0.020 * elastic_tension_field_strength,
+            + 0.020 * elastic_tension_field_strength
+            + 0.060 * adaptive_vibrancy_bias,
         0.0,
-        0.020);
+        0.023);
     if (adaptive_transmission_field_strength > 0.0001
         && (clear_glass_detail > 0.0001
             || glass_stabilization_strength > 0.0001
             || planned_environment_transmission_balance > 0.0001
+            || planned_environment_color_pickup > 0.0001
+            || planned_environment_reflection > 0.0001
             || group_blend_strength > 0.0001
             || bridge_band > 0.0001
             || pointer_lens_strength > 0.0001)) {
@@ -39759,12 +39805,17 @@ fragment float4 fs_material(
                 + clear_glass_detail * 0.10
                 + morph_continuity_field_strength * 3.6
                 + interaction_response_field_strength * 3.2
-                + contextual_reflection_field_strength * 2.8,
+                + contextual_reflection_field_strength * 2.8
+                + adaptive_vibrancy_bias * 0.18
+                + planned_environment_transmission_balance * 0.12,
             0.0,
             1.0);
         float2 adaptive_axis_raw =
             refraction_dir * (0.30 + 0.16 * glass_lensing_gain)
-            - dynamic_light_dir * (0.22 + 0.14 * dynamic_light_highlight)
+            - dynamic_light_dir
+                * (0.22
+                   + 0.14 * dynamic_light_highlight
+                   + 0.08 * planned_environment_reflection)
             + bridge_dir * (0.18 + 0.20 * adaptive_bridge)
             + pointer_dir * adaptive_pointer * 0.12
             + bridge_tangent
@@ -39773,7 +39824,8 @@ fragment float4 fs_material(
             + dispersion_tangent
                 * (0.10
                    + 0.06 * spectral_dispersion
-                   + 0.04 * glass_dispersion_tangential);
+                   + 0.04 * glass_dispersion_tangential
+                   + 0.08 * planned_environment_color_pickup);
         float adaptive_axis_len = length(adaptive_axis_raw);
         float2 adaptive_axis =
             adaptive_axis_len > 0.0001
@@ -39796,7 +39848,8 @@ fragment float4 fs_material(
                 + bridge_lateral_signed * adaptive_bridge * 1.0
                 + pointer_lens_raw * adaptive_pointer * 1.4
                 + spectral_dispersion * 1.3
-                + glass_caustic_spread * 1.1,
+                + glass_caustic_spread * 1.1
+                + adaptive_vibrancy_bias * 1.8,
             -12.0,
             12.0);
         float adaptive_wave =
@@ -39816,7 +39869,8 @@ fragment float4 fs_material(
                 + adaptive_bridge * 0.16
                 + adaptive_pointer * 0.14
                 + adaptive_rim * 0.10
-                + adaptive_bridge_alignment * 0.10,
+                + adaptive_bridge_alignment * 0.10
+                + adaptive_vibrancy_bias * 0.10,
             0.0,
             1.0);
         float adaptive_focus =
@@ -39828,6 +39882,8 @@ fragment float4 fs_material(
              + 0.50 * glass_thickness
              + 0.48 * clear_glass_detail
              + 0.58 * adaptive_presence
+             + 0.54 * planned_environment_transmission_balance
+             + 0.36 * planned_environment_reflection
              + 0.010 * blur_points)
             * content_scale
             * (0.86 + 0.14 * glass_lensing_gain);
@@ -39835,18 +39891,23 @@ fragment float4 fs_material(
             (0.22
              + 0.34 * glass_dispersion_tangential
              + 0.34 * spectral_dispersion
-             + 0.48 * adaptive_support)
+             + 0.48 * adaptive_support
+             + 0.42 * planned_environment_color_pickup)
             * content_scale;
         float adaptive_depth_span =
             (0.18
              + 0.30 * adaptive_group
              + 0.24 * adaptive_bridge
              + 0.20 * adaptive_pointer
-             + 0.16 * glass_caustic_spread)
+             + 0.16 * glass_caustic_spread
+             + 0.30 * planned_environment_transmission_balance)
             * content_scale;
         float2 adaptive_base_uv = clamp(
             in.screen_uv
-                + refraction_uv * (0.030 + 0.046 * adaptive_support)
+                + refraction_uv
+                    * (0.030
+                       + 0.046 * adaptive_support
+                       + 0.034 * planned_environment_transmission_balance)
                 + adaptive_axis
                     * texel
                     * adaptive_depth_span
@@ -39917,9 +39978,10 @@ fragment float4 fs_material(
             0.036
                 + 0.048 * spectral_dispersion
                 + 0.040 * glass_dispersion_tangential
-                + 0.044 * adaptive_support,
+                + 0.044 * adaptive_support
+                + 0.052 * planned_environment_color_pickup,
             0.0,
-            0.20);
+            0.23);
         float3 adaptive_probe = mix(
             adaptive_average,
             adaptive_split,
@@ -39960,13 +40022,15 @@ fragment float4 fs_material(
                 0.34,
                 adaptive_luma_range * 0.52
                     + adaptive_chroma_range * 0.30
-                    + adaptive_support * 0.08);
+                    + adaptive_support * 0.08
+                    + adaptive_vibrancy_bias * 0.06);
         float adaptive_backdrop_quiet =
             1.0 - smoothstep(
                 0.09,
                 0.42,
                 adaptive_luma_range * 0.52
-                    + adaptive_chroma_range * 0.30);
+                    + adaptive_chroma_range * 0.30
+                    - adaptive_vibrancy_bias * 0.04);
         float adaptive_shadow =
             smoothstep(
                 0.05,
@@ -39986,20 +40050,27 @@ fragment float4 fs_material(
                 + 0.18 * adaptive_backdrop_quiet
                 + 0.12 * adaptive_light_face
                 + 0.10 * clear_glass_detail
+                + 0.08 * planned_environment_transmission_balance
+                + 0.06 * adaptive_vibrancy_bias
+                + 0.04 * max(environment_luminance_bias, 0.0)
                 + 0.05 * glass_stabilization_damping
                 + glass_stabilization_transmission_bias
                 - 0.14 * adaptive_backdrop_busy
                 - 0.06 * glass_stabilization_shimmer_reduction
                     * adaptive_backdrop_busy
+                - 0.04 * max(-environment_luminance_bias, 0.0)
+                    * adaptive_backdrop_busy
                 - 0.08 * adaptive_shadow,
             0.34,
-            0.82);
+            0.86);
         float adaptive_target_luma = clamp(
             0.50
                 + (adaptive_probe_luma - 0.50)
                     * (0.50 + 0.22 * adaptive_transmission)
                 + (adaptive_highlight - adaptive_shadow)
                     * (0.030 + 0.034 * adaptive_support)
+                + environment_luminance_bias
+                    * (0.020 + 0.026 * adaptive_vibrancy_bias)
                 - adaptive_backdrop_busy
                     * clear_glass_dimming
                     * (0.020 + 0.018 * clear_glass_detail),
@@ -40010,9 +40081,11 @@ fragment float4 fs_material(
                 + 0.12 * adaptive_transmission
                 + 0.10 * adaptive_support
                 + 0.08 * adaptive_light_face
+                + 0.08 * planned_environment_color_pickup
+                + 0.06 * adaptive_vibrancy_bias
                 - 0.10 * adaptive_backdrop_busy,
             0.42,
-            0.86);
+            0.90);
         float3 adaptive_surface =
             float3(adaptive_target_luma)
             + (adaptive_probe - float3(adaptive_probe_luma))
@@ -40027,14 +40100,17 @@ fragment float4 fs_material(
                     * (1.0
                        + clear_glass_contrast * 0.006
                        + adaptive_backdrop_busy * 0.006
+                       + adaptive_vibrancy_bias * 0.005
                        - adaptive_shadow * 0.004)
                 + float3(0.50),
             0.0,
             1.0);
         adaptive_layer *= float3(
-            1.0 + spectral_warmth * 0.11 + tint_chroma * in.tint.r * 0.004,
+            1.0 + spectral_warmth * 0.11 + tint_chroma * in.tint.r * 0.004
+                + planned_environment_color_pickup * in.tint.r * 0.008,
             1.0 + spectral_rim_tint * 0.055 + tint_chroma * in.tint.g * 0.004,
-            1.0 + spectral_coolness * 0.11 + tint_chroma * in.tint.b * 0.004);
+            1.0 + spectral_coolness * 0.11 + tint_chroma * in.tint.b * 0.004
+                + planned_environment_color_pickup * in.tint.b * 0.008);
         float adaptive_gate = clamp(
             adaptive_presence * 0.28
                 + adaptive_support * 0.20
@@ -40042,7 +40118,8 @@ fragment float4 fs_material(
                 + adaptive_backdrop_quiet * 0.10
                 + adaptive_rim * 0.10
                 + adaptive_lobe * 0.08
-                + adaptive_bridge_alignment * 0.06,
+                + adaptive_bridge_alignment * 0.06
+                + adaptive_vibrancy_bias * 0.07,
             0.0,
             1.0);
         float adaptive_weight =
@@ -40052,14 +40129,16 @@ fragment float4 fs_material(
                + 0.14 * adaptive_support
                + 0.12 * adaptive_transmission
                + 0.10 * adaptive_focus
-               + 0.08 * adaptive_backdrop_busy);
+               + 0.08 * adaptive_backdrop_busy
+               + 0.08 * adaptive_vibrancy_bias);
         rgb = mix(
             rgb,
             adaptive_layer,
             adaptive_weight
                 * (0.050
                    + 0.044 * adaptive_presence
-                   + 0.038 * adaptive_backdrop_busy));
+                   + 0.038 * adaptive_backdrop_busy
+                   + 0.030 * planned_environment_transmission_balance));
         float3 adaptive_prism = float3(
             spectral_warmth + tint_chroma * in.tint.r * 0.030,
             0.11 * (spectral_warmth + spectral_coolness)
@@ -40074,7 +40153,8 @@ fragment float4 fs_material(
             * adaptive_caustic
             * (0.00014
                + 0.00046 * spectral_rim_tint
-               + 0.00040 * glass_scattering_gain);
+               + 0.00040 * glass_scattering_gain
+               + 0.00028 * adaptive_vibrancy_bias);
         float adaptive_absorption =
             adaptive_shadow
             * adaptive_weight
