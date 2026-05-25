@@ -33893,6 +33893,329 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(elastic_absorption, 0.0, 0.016);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float edge_adhesion_field_strength = clamp(
+        0.005 * overlap_response_strength
+            + 0.006 * fusion_strength
+            + 0.006 * group_blend_strength * shared_backdrop_scope
+            + 0.005 * group_blend_strength * group_surface_execution
+            + 0.007 * bridge_band
+            + 0.24 * elastic_tension_field_strength
+            + 0.17 * contact_pressure_field_strength
+            + 0.13 * internal_shadow_field_strength
+            + 0.12 * subsurface_caustic_field_strength
+            + 0.09 * transmission_depth_field_strength
+            + 0.08 * interlayer_refraction_field_strength
+            + 0.07 * layer_separation_field_strength
+            + 0.027 * edge_meniscus_field_strength
+            + 0.021 * container_morph_field_strength
+            + 0.015 * foreground_sheen_field_strength,
+        0.0,
+        0.034);
+    if (edge_adhesion_field_strength > 0.0001) {
+        float adhesion_rim =
+            edge_lens
+            * (0.48
+               + 0.52
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.05, 0.66),
+                       signed_edge_distance)));
+        float adhesion_bridge =
+            bridge_band * (0.42 + 0.58 * bridge_core);
+        float adhesion_stack = clamp(
+            overlap_response_strength * 0.28
+                + fusion_strength * 0.24
+                + group_blend_strength * shared_backdrop_scope * 0.18
+                + group_surface_execution * group_blend_strength * 0.16
+                + adhesion_bridge * 0.24,
+            0.0,
+            1.0);
+        float adhesion_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float adhesion_lock = clamp(
+            adhesion_rim * 0.26
+                + adhesion_bridge * 0.22
+                + adhesion_stack * 0.20
+                + elastic_tension_field_strength * 4.2
+                + contact_pressure_field_strength * 3.6
+                + edge_meniscus_field_strength * 3.0
+                + internal_shadow_field_strength * 2.4
+                + adhesion_pointer * 0.06,
+            0.0,
+            1.0);
+        float adhesion_presence = clamp(
+            adhesion_rim * 0.27
+                + adhesion_stack * 0.25
+                + adhesion_bridge * 0.20
+                + adhesion_lock * 0.17
+                + prominent_intensity * 0.06
+                + adhesion_pointer * 0.05,
+            0.0,
+            1.0);
+        float adhesion_shear_sign =
+            bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 adhesion_axis_raw =
+            bridge_tangent
+                * adhesion_shear_sign
+                * (0.36 + 0.24 * abs(bridge_shear) * adhesion_bridge)
+            + bridge_dir * (0.24 + 0.20 * adhesion_bridge)
+            + refraction_dir * (0.28 + 0.18 * glass_lensing_gain)
+            - dynamic_light_dir * (0.17 + 0.14 * dynamic_light_highlight)
+            + pointer_dir * (0.12 + 0.10 * adhesion_pointer)
+            + dispersion_tangent
+                * (0.12
+                   + 0.08 * spectral_dispersion
+                   + 0.06 * glass_dispersion_tangential);
+        float adhesion_axis_len = length(adhesion_axis_raw);
+        float2 adhesion_axis =
+            adhesion_axis_len > 0.0001
+                ? adhesion_axis_raw / adhesion_axis_len
+                : (normalized_len > 0.0001
+                    ? refraction_dir
+                    : float2(1.0, 0.0));
+        float2 adhesion_cross =
+            float2(-adhesion_axis.y, adhesion_axis.x);
+        float adhesion_light_face =
+            smoothstep(-0.24, 0.88, dot(adhesion_axis, -dynamic_light_dir));
+        float adhesion_bridge_alignment =
+            smoothstep(-0.18, 0.90, abs(dot(adhesion_axis, bridge_tangent)));
+        float adhesion_phase = clamp(
+            dot(normalized_local, adhesion_axis)
+                    * (5.1 + 1.6 * adhesion_presence)
+                + dot(normalized_local, adhesion_cross)
+                    * (3.0 + 1.3 * adhesion_stack)
+                + bridge_axial * (2.1 + 1.1 * bridge_core)
+                + bridge_lateral_signed * adhesion_bridge * 2.0
+                + bridge_shear * adhesion_bridge * 2.4
+                + spectral_dispersion * 3.4
+                + glass_caustic_spread * 2.8,
+            -12.0,
+            12.0);
+        float adhesion_wave =
+            0.5 + 0.5 * sin(adhesion_phase);
+        float adhesion_release_wave =
+            0.5 + 0.5 * cos(
+                adhesion_phase * 0.72
+                + glass_caustic_spread * 4.2
+                + adhesion_stack * 2.4);
+        float adhesion_lobe =
+            1.0 - smoothstep(0.0, 0.33, abs(adhesion_wave - 0.55));
+        float adhesion_return_lobe =
+            1.0 - smoothstep(0.0, 0.35, abs(adhesion_release_wave - 0.46));
+        float adhesion_pin = clamp(
+            adhesion_lock * 0.28
+                + adhesion_bridge_alignment * 0.23
+                + adhesion_rim * 0.20
+                + adhesion_lobe * 0.13
+                + adhesion_return_lobe * 0.10
+                + adhesion_pointer * 0.06,
+            0.0,
+            1.0);
+        float adhesion_focus =
+            (0.5 + 0.5 * cos(adhesion_phase * 1.28 + normalized_len * 3.0))
+            * (0.34 + 0.66 * adhesion_lobe);
+        float adhesion_span =
+            (0.50
+             + 1.10 * glass_thickness
+             + 0.82 * clear_glass_detail
+             + 0.96 * adhesion_presence
+             + 0.022 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float adhesion_cross_span =
+            (0.40
+             + 0.70 * glass_dispersion_tangential
+             + 0.64 * spectral_dispersion
+             + 0.86 * adhesion_pin)
+            * content_scale;
+        float adhesion_channel_span =
+            (0.32
+             + 0.48 * glass_dispersion_tangential
+             + 0.54 * spectral_dispersion
+             + 0.46 * glass_caustic_spread)
+            * content_scale
+            * (0.82 + 0.18 * adhesion_focus);
+        float2 adhesion_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.08 + 0.10 * adhesion_pin),
+            float2(0.0),
+            float2(1.0));
+        float2 adhesion_rim_uv = clamp(
+            adhesion_base_uv
+                + adhesion_axis
+                    * texel
+                    * adhesion_span
+                    * (0.18 + 0.15 * adhesion_pin)
+                + bridge_dir
+                    * texel
+                    * adhesion_span
+                    * adhesion_bridge
+                    * 0.12,
+            float2(0.0),
+            float2(1.0));
+        float2 adhesion_release_uv = clamp(
+            adhesion_base_uv
+                - adhesion_axis
+                    * texel
+                    * adhesion_span
+                    * (0.18 + 0.14 * adhesion_return_lobe)
+                - bridge_dir
+                    * texel
+                    * adhesion_span
+                    * adhesion_bridge
+                    * 0.10,
+            float2(0.0),
+            float2(1.0));
+        float2 adhesion_core_uv = clamp(
+            adhesion_base_uv
+                + refraction_dir
+                    * texel
+                    * adhesion_span
+                    * (0.10 + 0.12 * adhesion_rim)
+                - dynamic_light_dir
+                    * texel
+                    * adhesion_span
+                    * (0.10 + 0.12 * adhesion_light_face),
+            float2(0.0),
+            float2(1.0));
+        float2 adhesion_warm_uv = clamp(
+            adhesion_base_uv
+                + adhesion_cross
+                    * texel
+                    * adhesion_cross_span
+                    * (0.22 + 0.12 * adhesion_wave)
+                + dispersion_tangent
+                    * texel
+                    * adhesion_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float2 adhesion_cool_uv = clamp(
+            adhesion_base_uv
+                - adhesion_cross
+                    * texel
+                    * adhesion_cross_span
+                    * (0.22 + 0.12 * adhesion_lobe)
+                - dispersion_tangent
+                    * texel
+                    * adhesion_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float3 adhesion_rim_rgb =
+            backdrop.sample(samp, adhesion_rim_uv).rgb;
+        float3 adhesion_release_rgb =
+            backdrop.sample(samp, adhesion_release_uv).rgb;
+        float3 adhesion_core_rgb =
+            backdrop.sample(samp, adhesion_core_uv).rgb;
+        float3 adhesion_warm_rgb =
+            backdrop.sample(samp, adhesion_warm_uv).rgb;
+        float3 adhesion_cool_rgb =
+            backdrop.sample(samp, adhesion_cool_uv).rgb;
+        float3 adhesion_probe =
+            adhesion_rim_rgb * 0.25
+            + adhesion_release_rgb * 0.22
+            + adhesion_core_rgb * 0.25
+            + adhesion_warm_rgb * 0.14
+            + adhesion_cool_rgb * 0.14;
+        float3 adhesion_split = float3(
+            adhesion_warm_rgb.r,
+            (adhesion_core_rgb.g + adhesion_probe.g) * 0.5,
+            adhesion_cool_rgb.b);
+        float adhesion_rim_luma =
+            dot(adhesion_rim_rgb, float3(0.2126, 0.7152, 0.0722));
+        float adhesion_release_luma =
+            dot(adhesion_release_rgb, float3(0.2126, 0.7152, 0.0722));
+        float adhesion_probe_luma =
+            dot(adhesion_probe, float3(0.2126, 0.7152, 0.0722));
+        float adhesion_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float adhesion_edge_delta = clamp(
+            abs(adhesion_rim_luma - adhesion_release_luma) * 0.32
+                + abs(adhesion_probe_luma - adhesion_surface_luma) * 0.22
+                + length(adhesion_rim_rgb - adhesion_release_rgb) * 0.20
+                + length(adhesion_warm_rgb - adhesion_cool_rgb) * 0.16
+                + adhesion_pin * 0.10,
+            0.0,
+            1.0);
+        float adhesion_coherence =
+            1.0 - smoothstep(0.10, 0.43, adhesion_edge_delta);
+        float adhesion_shadow = smoothstep(
+            0.012,
+            0.30,
+            max(adhesion_surface_luma - adhesion_probe_luma, 0.0) * 0.40
+                + max(adhesion_rim_luma - adhesion_release_luma, 0.0) * 0.26
+                + adhesion_pin * 0.17);
+        float adhesion_lift = smoothstep(
+            adhesion_surface_luma - 0.05,
+            adhesion_surface_luma + 0.26,
+            adhesion_probe_luma);
+        float3 adhesion_layer = mix(
+            adhesion_probe,
+            adhesion_split,
+            0.11
+                + 0.13 * adhesion_focus
+                + 0.10 * adhesion_light_face
+                + 0.10 * adhesion_pin);
+        adhesion_layer = mix(
+            adhesion_layer,
+            float3(adhesion_probe_luma),
+            adhesion_shadow * (0.08 + 0.14 * glass_shadow_gain)
+                + adhesion_coherence * 0.08);
+        adhesion_layer = clamp(
+            (adhesion_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.010
+                       + adhesion_lift * 0.009
+                       - adhesion_shadow * 0.014)
+                + float3(0.50),
+            0.0,
+            1.0);
+        adhesion_layer *= float3(
+            1.0 + spectral_warmth * 0.33 + tint_chroma * in.tint.r * 0.012,
+            1.0 + spectral_rim_tint * 0.12 + tint_chroma * in.tint.g * 0.010,
+            1.0 + spectral_coolness * 0.33 + tint_chroma * in.tint.b * 0.012);
+        float adhesion_gate = clamp(
+            adhesion_presence * 0.28
+                + adhesion_stack * 0.24
+                + adhesion_rim * 0.19
+                + adhesion_pin * 0.17
+                + adhesion_focus * 0.09
+                + adhesion_coherence * 0.08,
+            0.0,
+            1.0);
+        float adhesion_weight =
+            edge_adhesion_field_strength
+            * adhesion_gate
+            * (0.26
+               + 0.20 * adhesion_pin
+               + 0.16 * adhesion_lift
+               + 0.14 * adhesion_focus
+               + 0.12 * adhesion_bridge_alignment);
+        rgb = mix(
+            rgb,
+            adhesion_layer,
+            adhesion_weight
+                * (0.09
+                   + 0.08 * adhesion_focus
+                   + 0.08 * adhesion_presence));
+        float3 adhesion_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.10,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.08,
+            spectral_coolness + tint_chroma * in.tint.b * 0.10);
+        rgb += adhesion_prism
+            * adhesion_weight
+            * max(adhesion_lobe, adhesion_return_lobe * 0.68)
+            * (0.0005
+               + 0.0015 * spectral_rim_tint
+               + 0.0014 * glass_scattering_gain);
+        float adhesion_absorption =
+            adhesion_shadow
+            * adhesion_weight
+            * (0.0012 + 0.0046 * glass_shadow_gain)
+            * (0.52 + 0.48 * (1.0 - adhesion_light_face));
+        rgb *= 1.0 - clamp(adhesion_absorption, 0.0, 0.016);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
