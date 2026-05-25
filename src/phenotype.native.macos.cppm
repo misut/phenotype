@@ -32268,6 +32268,333 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(interlayer_absorption, 0.0, 0.017);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float transmission_depth_field_strength = clamp(
+        0.009 * overlap_response_strength
+            + 0.008 * fusion_strength
+            + 0.007 * group_blend_strength * shared_backdrop_scope
+            + 0.006 * group_blend_strength * group_surface_execution
+            + 0.006 * bridge_band
+            + 0.22 * interlayer_refraction_field_strength
+            + 0.18 * layer_separation_field_strength
+            + 0.04 * container_morph_field_strength
+            + 0.04 * bounds_anchor_field_strength
+            + 0.03 * foreground_sheen_field_strength,
+        0.0,
+        0.038);
+    if (transmission_depth_field_strength > 0.0001) {
+        float transmission_center =
+            1.0 - smoothstep(0.16, 1.08, normalized_len);
+        float transmission_rim =
+            edge_lens
+            * (0.34
+               + 0.66
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.50, 0.75),
+                       signed_edge_distance)));
+        float transmission_bridge =
+            bridge_band * (0.32 + 0.68 * bridge_core);
+        float transmission_stack = clamp(
+            overlap_response_strength * 0.30
+                + fusion_strength * 0.22
+                + group_blend_strength * shared_backdrop_scope * 0.18
+                + group_surface_execution * group_blend_strength * 0.16
+                + transmission_bridge * 0.18,
+            0.0,
+            1.0);
+        float transmission_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float transmission_presence = clamp(
+            transmission_center * 0.22
+                + transmission_rim * 0.20
+                + transmission_stack * 0.24
+                + transmission_bridge * 0.16
+                + transmission_pointer * 0.10
+                + prominent_intensity * 0.08,
+            0.0,
+            1.0);
+        float2 transmission_group_norm = normalized_local;
+        float transmission_group_active = 0.0;
+        if (in.group_rect.z > 0.0 && in.group_rect.w > 0.0) {
+            float2 transmission_group_size =
+                max(in.group_rect.zw, float2(1.0));
+            float2 transmission_group_local = clamp(
+                in.screen_pos - in.group_rect.xy,
+                float2(0.0),
+                transmission_group_size);
+            transmission_group_norm =
+                (transmission_group_local / transmission_group_size
+                 - float2(0.5))
+                * 2.0;
+            transmission_group_active = group_blend_strength;
+        }
+        float2 transmission_axis_raw =
+            -dynamic_light_dir * (0.36 + 0.24 * dynamic_light_highlight)
+            + refraction_dir * (0.28 + 0.18 * glass_lensing_gain)
+            + bridge_dir * (0.22 + 0.22 * transmission_bridge)
+            + pointer_dir * (0.18 + 0.16 * transmission_pointer)
+            + dispersion_tangent
+                * (0.14
+                   + 0.10 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential)
+            + transmission_group_norm
+                * transmission_group_active
+                * (0.10 + 0.08 * transmission_stack);
+        float transmission_axis_len = length(transmission_axis_raw);
+        float2 transmission_axis =
+            transmission_axis_len > 0.0001
+                ? transmission_axis_raw / transmission_axis_len
+                : -dynamic_light_dir;
+        float2 transmission_cross =
+            float2(-transmission_axis.y, transmission_axis.x);
+        float transmission_light_face =
+            smoothstep(
+                -0.18,
+                0.94,
+                dot(transmission_axis, -dynamic_light_dir));
+        float transmission_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(transmission_axis, bridge_dir)));
+        float transmission_phase = clamp(
+            dot(normalized_local, transmission_axis)
+                    * (4.4 + 1.8 * transmission_presence)
+                + dot(normalized_local, transmission_cross)
+                    * (2.8 + 1.1 * transmission_stack)
+                + dot(transmission_group_norm, transmission_axis)
+                    * transmission_group_active
+                    * (2.0 + 1.1 * transmission_bridge)
+                + bridge_axial * (2.4 + 1.3 * bridge_core)
+                + bridge_shear * transmission_bridge * 1.8
+                + spectral_dispersion * 4.0,
+            -12.0,
+            12.0);
+        float transmission_wave =
+            0.5 + 0.5 * sin(transmission_phase);
+        float transmission_counter =
+            0.5 + 0.5 * cos(
+                transmission_phase * 0.72
+                + glass_caustic_spread * 4.2
+                + transmission_stack * 2.1);
+        float transmission_lobe =
+            1.0 - smoothstep(0.0, 0.35, abs(transmission_wave - 0.55));
+        float transmission_return_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(transmission_counter - 0.52));
+        float transmission_span =
+            (0.82
+             + 1.8 * glass_thickness
+             + 1.3 * clear_glass_detail
+             + 1.3 * transmission_presence
+             + 0.036 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float transmission_cross_span =
+            (0.56
+             + 1.0 * glass_dispersion_tangential
+             + 0.9 * spectral_dispersion
+             + 0.8 * transmission_bridge_alignment)
+            * content_scale;
+        float2 transmission_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.12 + 0.08 * transmission_stack),
+            float2(0.0),
+            float2(1.0));
+        float2 transmission_face_uv = clamp(
+            transmission_base_uv
+                - dynamic_light_dir
+                    * texel
+                    * transmission_span
+                    * (0.26 + 0.14 * transmission_light_face)
+                + transmission_axis
+                    * texel
+                    * transmission_span
+                    * (0.14 + 0.10 * transmission_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 transmission_shadow_uv = clamp(
+            transmission_base_uv
+                + dynamic_light_dir
+                    * texel
+                    * transmission_span
+                    * (0.24 + 0.14 * (1.0 - transmission_light_face))
+                - transmission_axis
+                    * texel
+                    * transmission_span
+                    * (0.14 + 0.10 * transmission_return_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 transmission_core_uv = clamp(
+            transmission_base_uv
+                + transmission_axis
+                    * texel
+                    * transmission_span
+                    * (0.22 + 0.16 * transmission_center)
+                + bridge_dir
+                    * texel
+                    * transmission_span
+                    * transmission_bridge
+                    * 0.16,
+            float2(0.0),
+            float2(1.0));
+        float2 transmission_warm_uv = clamp(
+            transmission_base_uv
+                + transmission_cross
+                    * texel
+                    * transmission_cross_span
+                    * (0.30 + 0.12 * transmission_wave)
+                + dispersion_tangent
+                    * texel
+                    * transmission_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 transmission_cool_uv = clamp(
+            transmission_base_uv
+                - transmission_cross
+                    * texel
+                    * transmission_cross_span
+                    * (0.28 + 0.12 * transmission_lobe)
+                - dispersion_tangent
+                    * texel
+                    * transmission_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float3 transmission_face_rgb =
+            backdrop.sample(samp, transmission_face_uv).rgb;
+        float3 transmission_shadow_rgb =
+            backdrop.sample(samp, transmission_shadow_uv).rgb;
+        float3 transmission_core_rgb =
+            backdrop.sample(samp, transmission_core_uv).rgb;
+        float3 transmission_warm_rgb =
+            backdrop.sample(samp, transmission_warm_uv).rgb;
+        float3 transmission_cool_rgb =
+            backdrop.sample(samp, transmission_cool_uv).rgb;
+        float3 transmission_probe =
+            transmission_face_rgb * 0.25
+            + transmission_shadow_rgb * 0.20
+            + transmission_core_rgb * 0.23
+            + transmission_warm_rgb * 0.16
+            + transmission_cool_rgb * 0.16;
+        float3 transmission_split = float3(
+            transmission_warm_rgb.r,
+            (transmission_core_rgb.g + transmission_face_rgb.g) * 0.5,
+            transmission_cool_rgb.b);
+        float transmission_luma =
+            dot(transmission_probe, float3(0.2126, 0.7152, 0.0722));
+        float transmission_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float transmission_range = clamp(
+            length(transmission_face_rgb - transmission_shadow_rgb) * 0.24
+                + length(transmission_warm_rgb - transmission_cool_rgb) * 0.22
+                + length(transmission_core_rgb - transmission_probe) * 0.18
+                + abs(transmission_luma - transmission_surface_luma) * 0.18
+                + transmission_lobe * 0.10
+                + transmission_presence * 0.08,
+            0.0,
+            1.0);
+        float transmission_coherence =
+            1.0 - smoothstep(0.08, 0.38, transmission_range);
+        float transmission_lift = smoothstep(
+            transmission_surface_luma - 0.05,
+            transmission_surface_luma + 0.30,
+            transmission_luma);
+        float transmission_depth = smoothstep(
+            0.08,
+            0.34,
+            transmission_surface_luma - transmission_luma);
+        float transmission_core_luma =
+            dot(transmission_core_rgb, float3(0.2126, 0.7152, 0.0722));
+        float transmission_core_pickup = smoothstep(
+            transmission_surface_luma - 0.06,
+            transmission_surface_luma + 0.28,
+            transmission_core_luma);
+        float transmission_body = clamp(
+            transmission_range * 0.32
+                + transmission_core_pickup * 0.22
+                + transmission_stack * 0.18
+                + transmission_lobe * 0.14
+                + transmission_bridge_alignment * 0.12,
+            0.0,
+            1.0);
+        float3 transmission_neutral = mix(
+            transmission_probe,
+            float3(transmission_luma),
+            transmission_depth * (0.12 + 0.14 * glass_shadow_gain)
+                + transmission_coherence * 0.12);
+        float3 transmission_layer = mix(
+            transmission_neutral,
+            transmission_split,
+            0.14
+                + 0.15 * transmission_body
+                + 0.14 * transmission_lobe
+                + 0.12 * transmission_light_face
+                + 0.10 * transmission_core_pickup);
+        transmission_layer = clamp(
+            (transmission_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + transmission_lift * 0.010
+                       + transmission_body * 0.012
+                       - transmission_depth * 0.014)
+                + float3(0.50),
+            0.0,
+            1.0);
+        transmission_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.010
+                   + 0.020 * tint_chroma * prominent_intensity);
+        float3 transmission_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.10,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.08,
+            spectral_coolness + tint_chroma * in.tint.b * 0.10);
+        transmission_layer += transmission_prism
+            * transmission_core_pickup
+            * (0.0006
+               + 0.0022 * spectral_rim_tint
+               + 0.0020 * glass_prismatic_gain
+               + 0.0016 * glass_scattering_gain)
+            * (0.32
+               + 0.22 * transmission_light_face
+               + 0.18 * transmission_lobe
+               + 0.18 * transmission_body);
+        float transmission_gate = clamp(
+            transmission_presence * 0.28
+                + transmission_stack * 0.24
+                + transmission_rim * 0.16
+                + transmission_lobe * 0.14
+                + transmission_light_face * 0.10
+                + transmission_coherence * 0.10,
+            0.0,
+            1.0);
+        float transmission_weight =
+            transmission_depth_field_strength
+            * transmission_gate
+            * (0.30
+               + 0.20 * transmission_body
+               + 0.16 * transmission_core_pickup
+               + 0.14 * transmission_coherence
+               + 0.12 * transmission_bridge_alignment);
+        rgb = mix(
+            rgb,
+            transmission_layer,
+            transmission_weight
+                * (0.15
+                   + 0.12 * transmission_lobe
+                   + 0.10 * transmission_presence));
+        rgb += transmission_prism
+            * transmission_weight
+            * max(transmission_lobe, transmission_return_lobe * 0.70)
+            * (0.0006
+               + 0.0018 * dynamic_light_highlight
+               + 0.0016 * glass_scattering_gain);
+        float transmission_absorption =
+            transmission_depth
+            * transmission_weight
+            * (0.0016 + 0.0054 * glass_shadow_gain)
+            * (0.50 + 0.50 * (1.0 - transmission_light_face));
+        rgb *= 1.0 - clamp(transmission_absorption, 0.0, 0.017);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
