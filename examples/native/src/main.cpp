@@ -656,6 +656,12 @@ void view(State const& state) {
                 widget::button<Msg>("Close", ToggleDialog{}, ButtonVariant::Primary);
             }, 360.0f, 72);
         }
+        if (state.notifications) {
+            layout::snackbar_overlay([&] {
+                widget::text("Email notifications are on");
+                widget::button<Msg>("Turn off", ToggleNotifications{});
+            }, 440.0f, 88, "Notification Snackbar");
+        }
 
         layout::spacer(12);
 

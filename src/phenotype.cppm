@@ -3937,6 +3937,8 @@ enum class GlassSurfacePreset {
     Sheet,
     Inspector,
     CommandPalette,
+    Snackbar,
+    Toast,
 };
 
 inline char const* glass_surface_preset_name(
@@ -3958,6 +3960,8 @@ inline char const* glass_surface_preset_name(
         case GlassSurfacePreset::Inspector:    return "inspector";
         case GlassSurfacePreset::CommandPalette:
             return "command_palette";
+        case GlassSurfacePreset::Snackbar:     return "snackbar";
+        case GlassSurfacePreset::Toast:        return "toast";
     }
     return "content";
 }
@@ -4313,6 +4317,38 @@ inline MaterialSurfaceOptions glass_surface_options(
                 semantic_label,
                 "Command Palette");
             break;
+        case GlassSurfacePreset::Snackbar:
+            options.kind = MaterialKind::Regular;
+            options.role = MaterialSurfaceRole::Overlay;
+            options.direction = FlexDirection::Row;
+            options.padding = SpaceToken::Sm;
+            options.gap = SpaceToken::Sm;
+            options.cross_align = CrossAxisAlignment::Center;
+            options.main_align = MainAxisAlignment::Start;
+            options.interactive = true;
+            options.shape = MaterialSurfaceShape::Capsule;
+            options.border_width = 1.0f;
+            options.max_width = 520.0f;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Snackbar");
+            break;
+        case GlassSurfacePreset::Toast:
+            options.kind = MaterialKind::Thin;
+            options.role = MaterialSurfaceRole::Overlay;
+            options.direction = FlexDirection::Row;
+            options.padding = SpaceToken::Xs;
+            options.gap = SpaceToken::Xs;
+            options.cross_align = CrossAxisAlignment::Center;
+            options.main_align = MainAxisAlignment::Center;
+            options.interactive = false;
+            options.shape = MaterialSurfaceShape::Capsule;
+            options.border_width = 1.0f;
+            options.max_width = 360.0f;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Toast");
+            break;
     }
     return options;
 }
@@ -4629,6 +4665,43 @@ void command_palette(F&& builder,
         std::forward<F>(builder));
 }
 
+template<typename F>
+    requires std::is_invocable_v<F>
+void snackbar(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::Overlay;
+    options.interactive = true;
+    options.semantic_label = chrome_label_or(options.semantic_label,
+                                             "Snackbar");
+    material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void snackbar(F&& builder,
+              char const* semantic_label = "Snackbar") {
+    material_surface(
+        glass_surface_options(GlassSurfacePreset::Snackbar, semantic_label),
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void toast(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::Overlay;
+    options.interactive = false;
+    options.semantic_label = chrome_label_or(options.semantic_label, "Toast");
+    material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void toast(F&& builder,
+           char const* semantic_label = "Toast") {
+    material_surface(
+        glass_surface_options(GlassSurfacePreset::Toast, semantic_label),
+        std::forward<F>(builder));
+}
+
 // overlay — render `builder`'s contents above the main tree, after
 // the rest of the UI has been laid out and painted. The overlay is
 // the foundation for dialogs, popovers, tooltips, snackbars, and
@@ -4647,8 +4720,7 @@ void command_palette(F&& builder,
 // (0, 0) with the canvas width and lays out its children in column
 // order. Higher-level wrappers (`layout::dialog`,
 // `layout::tooltip`, `layout::snackbar`) for the common positioning
-// patterns will land in follow-up PRs once the foundation here is
-// exercised.
+// patterns continue to build on the same fixed overlay root.
 template<typename F>
     requires std::is_invocable_v<F>
 void overlay(F&& builder) {
@@ -4661,6 +4733,56 @@ void overlay(F&& builder) {
     Scope::set_current(&scope);
     builder();
     Scope::set_current(prev);
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void snackbar_overlay(F&& builder,
+                      float max_width = 520.0f,
+                      unsigned int top_padding = 24,
+                      char const* semantic_label = "Snackbar") {
+    overlay([&] {
+        if (top_padding > 0u) {
+            auto sp_h = detail::alloc_node();
+            detail::node_at(sp_h).style.fixed_height =
+                static_cast<float>(top_padding);
+            detail::attach_to_scope(sp_h);
+        }
+        row([&] {
+            sized_box(max_width, [&] {
+                auto options = glass_surface_options(
+                    GlassSurfacePreset::Snackbar,
+                    semantic_label);
+                options.max_width = max_width;
+                snackbar(options, std::forward<F>(builder));
+            });
+        }, SpaceToken::Md, CrossAxisAlignment::Start, MainAxisAlignment::Center);
+    });
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void toast_overlay(F&& builder,
+                   float max_width = 360.0f,
+                   unsigned int top_padding = 16,
+                   char const* semantic_label = "Toast") {
+    overlay([&] {
+        if (top_padding > 0u) {
+            auto sp_h = detail::alloc_node();
+            detail::node_at(sp_h).style.fixed_height =
+                static_cast<float>(top_padding);
+            detail::attach_to_scope(sp_h);
+        }
+        row([&] {
+            sized_box(max_width, [&] {
+                auto options = glass_surface_options(
+                    GlassSurfacePreset::Toast,
+                    semantic_label);
+                options.max_width = max_width;
+                toast(options, std::forward<F>(builder));
+            });
+        }, SpaceToken::Md, CrossAxisAlignment::Start, MainAxisAlignment::Center);
+    });
 }
 
 // dialog — modal helper built on top of `overlay`. Pushes a top-
