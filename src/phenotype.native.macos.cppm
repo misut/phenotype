@@ -1653,6 +1653,8 @@ struct MaterialInstanceGPU {
     float prominent_glass[4]{};
     // dimming, contrast lift, brightness response, detail response
     float clear_glass[4]{};
+    // stabilization strength, damping, shimmer reduction, transmission bias
+    float glass_stability[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
     // shape blend strength, inner-edge alpha blend strength, flags, command index
@@ -2436,6 +2438,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.clear_glass[1] = plan.clear_glass_legibility.contrast_lift;
     inst.clear_glass[2] = plan.clear_glass_legibility.brightness_response;
     inst.clear_glass[3] = plan.clear_glass_legibility.detail_response;
+    inst.glass_stability[0] = plan.glass_stabilization.strength;
+    inst.glass_stability[1] = plan.glass_stabilization.damping;
+    inst.glass_stability[2] = plan.glass_stabilization.shimmer_reduction;
+    inst.glass_stability[3] = plan.glass_stabilization.transmission_bias;
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];
@@ -5479,6 +5485,7 @@ struct MaterialVsOut {
     float4 scroll_edge;
     float4 prominent_glass;
     float4 clear_glass;
+    float4 glass_stability;
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
@@ -5507,6 +5514,7 @@ struct MaterialInstance {
     float4 scroll_edge;
     float4 prominent_glass;
     float4 clear_glass;
+    float4 glass_stability;
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
@@ -5568,6 +5576,7 @@ vertex MaterialVsOut vs_material(
     out.scroll_edge = inst.scroll_edge;
     out.prominent_glass = inst.prominent_glass;
     out.clear_glass = inst.clear_glass;
+    out.glass_stability = inst.glass_stability;
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
     out.fusion_optics = inst.fusion_optics;
@@ -5759,6 +5768,14 @@ fragment float4 fs_material(
     float clear_glass_contrast = clamp(in.clear_glass.y, 0.0, 0.28);
     float clear_glass_brightness = clamp(in.clear_glass.z, 0.0, 1.0);
     float clear_glass_detail = clamp(in.clear_glass.w, 0.0, 1.0);
+    float glass_stabilization_strength =
+        clamp(in.glass_stability.x, 0.0, 1.0);
+    float glass_stabilization_damping =
+        clamp(in.glass_stability.y, 0.0, 1.0);
+    float glass_stabilization_shimmer_reduction =
+        clamp(in.glass_stability.z, 0.0, 1.0);
+    float glass_stabilization_transmission_bias =
+        clamp(in.glass_stability.w, -0.24, 0.24);
     clear_glass_dimming = max(
         clear_glass_dimming,
         0.060 * overlap_response_strength);
@@ -38914,6 +38931,9 @@ fragment float4 fs_material(
     float adaptive_transmission_field_strength = clamp(
         0.004 * clear_glass_detail
             + 0.003 * glass_thickness
+            + 0.004 * glass_stabilization_strength
+            + 0.003 * glass_stabilization_shimmer_reduction
+            + 0.002 * abs(glass_stabilization_transmission_bias)
             + 0.004 * group_blend_strength * shared_backdrop_scope
             + 0.003 * group_blend_strength * group_surface_execution
             + 0.004 * bridge_band * (0.36 + 0.64 * bridge_core)
@@ -38936,6 +38956,7 @@ fragment float4 fs_material(
         0.020);
     if (adaptive_transmission_field_strength > 0.0001
         && (clear_glass_detail > 0.0001
+            || glass_stabilization_strength > 0.0001
             || group_blend_strength > 0.0001
             || bridge_band > 0.0001
             || pointer_lens_strength > 0.0001)) {
@@ -39197,7 +39218,11 @@ fragment float4 fs_material(
                 + 0.18 * adaptive_backdrop_quiet
                 + 0.12 * adaptive_light_face
                 + 0.10 * clear_glass_detail
+                + 0.05 * glass_stabilization_damping
+                + glass_stabilization_transmission_bias
                 - 0.14 * adaptive_backdrop_busy
+                - 0.06 * glass_stabilization_shimmer_reduction
+                    * adaptive_backdrop_busy
                 - 0.08 * adaptive_shadow,
             0.34,
             0.82);
@@ -39294,6 +39319,9 @@ fragment float4 fs_material(
     float motion_settling_field_strength = clamp(
         0.005 * bridge_motion_strength
             + 0.004 * materialize_wave_strength
+            + 0.005 * glass_stabilization_strength
+            + 0.004 * glass_stabilization_damping
+            + 0.003 * glass_stabilization_shimmer_reduction
             + 0.003 * morph_execution * group_blend_strength
             + 0.003 * glass_effect_match_execution * group_blend_strength
             + 0.003 * pointer_lens_strength
@@ -39317,6 +39345,7 @@ fragment float4 fs_material(
     if (motion_settling_field_strength > 0.0001
         && (bridge_motion_strength > 0.0001
             || materialize_wave_strength > 0.0001
+            || glass_stabilization_strength > 0.0001
             || pointer_lens_strength > 0.0001
             || group_blend_strength > 0.0001)) {
         float settling_bridge =
@@ -39330,7 +39359,8 @@ fragment float4 fs_material(
                 + group_blend_strength
                     * (0.12 + 0.08 * morph_execution)
                 + settling_bridge * 0.18
-                + control_morph_depth * 0.16,
+                + control_morph_depth * 0.16
+                + glass_stabilization_strength * 0.14,
             0.0,
             1.0);
         float settling_rim =
@@ -39360,7 +39390,9 @@ fragment float4 fs_material(
                 + settling_rim * 0.10
                 + adaptive_transmission_field_strength * 3.0
                 + morph_continuity_field_strength * 2.8
-                + interaction_response_field_strength * 2.4,
+                + interaction_response_field_strength * 2.4
+                + glass_stabilization_strength * 0.18
+                + glass_stabilization_damping * 0.10,
             0.0,
             1.0);
         float settling_shear =
@@ -39434,6 +39466,8 @@ fragment float4 fs_material(
                 + 0.20 * settling_support
                 + 0.14 * settling_light_face
                 + 0.12 * clear_glass_detail
+                + 0.12 * glass_stabilization_damping
+                + 0.04 * glass_stabilization_strength
                 - 0.10 * abs(bridge_shear) * settling_bridge
                 - 0.08 * materialize_wave_strength,
             0.30,
@@ -39580,12 +39614,18 @@ fragment float4 fs_material(
                     + abs(bridge_shear) * settling_bridge * 0.18
                     + materialize_wave_strength * 0.16
                     + settling_pointer * 0.10);
+        settling_unstable *=
+            1.0 - 0.28 * glass_stabilization_shimmer_reduction;
         float settling_restful =
-            1.0 - smoothstep(
+            clamp(
+                1.0 - smoothstep(
                 0.08,
                 0.38,
                 settling_motion_contrast * 0.48
-                    + materialize_wave_strength * 0.12);
+                    + materialize_wave_strength * 0.12)
+                    + glass_stabilization_damping * 0.12,
+                0.0,
+                1.0);
         float settling_shadow =
             smoothstep(
                 0.05,
@@ -39606,6 +39646,7 @@ fragment float4 fs_material(
                     * (0.49 + 0.23 * settling_damping)
                 + (settling_highlight - settling_shadow)
                     * (0.028 + 0.032 * settling_support)
+                + glass_stabilization_transmission_bias
                 - settling_unstable
                     * clear_glass_dimming
                     * (0.018 + 0.016 * clear_glass_detail),
@@ -39616,6 +39657,7 @@ fragment float4 fs_material(
                 + 0.12 * settling_damping
                 + 0.10 * settling_support
                 + 0.08 * settling_light_face
+                + 0.06 * glass_stabilization_shimmer_reduction
                 - 0.10 * settling_unstable,
             0.42,
             0.86);
@@ -39649,6 +39691,8 @@ fragment float4 fs_material(
                 + settling_unstable * 0.14
                 + settling_restful * 0.08
                 + settling_rim * 0.08
+                + glass_stabilization_strength * 0.08
+                + glass_stabilization_damping * 0.06
                 + settling_bridge_alignment * 0.06,
             0.0,
             1.0);
@@ -39659,7 +39703,8 @@ fragment float4 fs_material(
                + 0.14 * settling_support
                + 0.12 * settling_damping
                + 0.10 * settling_focus
-               + 0.08 * settling_unstable);
+               + 0.08 * settling_unstable
+               + 0.06 * glass_stabilization_strength);
         rgb = mix(
             rgb,
             settling_layer,
