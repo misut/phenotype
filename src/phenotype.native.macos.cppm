@@ -17872,6 +17872,366 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(phase_field_shadow, 0.0, 0.034);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float spectral_phase_lock_strength = clamp(
+        0.014 * phase_field_strength
+            + 0.012 * morph_coupler_strength
+            + 0.010 * thickness_coupler_strength
+            + 0.010 * refraction_coupler_strength
+            + 0.008 * normal_coupler_strength
+            + 0.008 * spectral_rim_tint
+            + 0.008 * (glass_prismatic_gain - 1.0)
+            + 0.006 * glass_effect_match_execution * group_blend_strength
+            + 0.006 * materialize_wave_strength,
+        0.0,
+        0.070);
+    if (spectral_phase_lock_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 spectral_phase_group_size = max(
+            in.group_rect.zw,
+            float2(1.0));
+        float2 spectral_phase_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            spectral_phase_group_size);
+        float2 spectral_phase_group_norm =
+            (spectral_phase_group_local / spectral_phase_group_size
+             - float2(0.5))
+            * 2.0;
+        float spectral_phase_group_len =
+            length(spectral_phase_group_norm);
+        float spectral_phase_center =
+            1.0 - smoothstep(0.18, 1.10, spectral_phase_group_len);
+        float2 spectral_phase_group_edge = min(
+            spectral_phase_group_local,
+            max(spectral_phase_group_size - spectral_phase_group_local,
+                float2(0.0)));
+        float spectral_phase_edge_distance =
+            min(spectral_phase_group_edge.x, spectral_phase_group_edge.y);
+        float spectral_phase_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.2, 1.0),
+                spectral_phase_edge_distance);
+        float spectral_phase_bridge =
+            bridge_band * (0.36 + 0.64 * bridge_core);
+        float spectral_phase_transition = clamp(
+            glass_effect_match_execution * 0.34
+                + morph_execution * 0.24
+                + materialize_wave_strength * 0.18
+                + shape_blend_execution * 0.12
+                + union_execution * 0.08
+                + phase_field_strength * 1.8
+                + morph_coupler_strength * 1.4
+                + thickness_coupler_strength * 1.2,
+            0.0,
+            1.0);
+        float spectral_phase_gate = clamp(
+            spectral_phase_center * 0.18
+                + spectral_phase_edge * 0.22
+                + spectral_phase_bridge * 0.24
+                + spectral_phase_transition * group_blend_strength * 0.26
+                + edge_lens * 0.10,
+            0.0,
+            1.0);
+        float2 spectral_phase_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 spectral_phase_group_center_screen =
+            in.group_rect.xy + spectral_phase_group_size * 0.5;
+        float2 spectral_phase_group_center_uv = clamp(
+            spectral_phase_group_center_screen
+                / spectral_phase_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 spectral_phase_to_center =
+            spectral_phase_group_center_uv - in.screen_uv;
+        float spectral_phase_center_distance =
+            length(spectral_phase_to_center);
+        float2 spectral_phase_center_dir =
+            spectral_phase_center_distance > 0.0001
+                ? spectral_phase_to_center
+                    / spectral_phase_center_distance
+                : refraction_dir;
+        float2 spectral_phase_axis_raw =
+            bridge_dir * (0.30 + 0.24 * spectral_phase_bridge)
+            + refraction_dir * (0.24 + 0.18 * clear_glass_detail)
+            + spectral_phase_center_dir
+                * (0.22 + 0.16 * spectral_phase_center)
+            + dispersion_tangent
+                * (0.20
+                   + 0.18 * spectral_dispersion
+                   + 0.14 * glass_dispersion_tangential)
+            - dynamic_light_dir
+                * (0.16 + 0.14 * dynamic_light_highlight);
+        float spectral_phase_axis_len = length(spectral_phase_axis_raw);
+        float2 spectral_phase_axis =
+            spectral_phase_axis_len > 0.0001
+                ? spectral_phase_axis_raw / spectral_phase_axis_len
+                : dispersion_tangent;
+        float2 spectral_phase_cross =
+            float2(-spectral_phase_axis.y, spectral_phase_axis.x);
+        float spectral_phase_alignment =
+            smoothstep(-0.28, 0.92, dot(spectral_phase_axis, bridge_dir));
+        float spectral_phase_phase = clamp(
+            dot(spectral_phase_group_norm, spectral_phase_axis)
+                    * (5.2 + 2.8 * spectral_phase_transition)
+                + dot(spectral_phase_group_norm, spectral_phase_cross)
+                    * (2.6 + 1.5 * spectral_phase_bridge)
+                + bridge_axial * (3.2 + 2.2 * spectral_phase_bridge)
+                + bridge_shear * spectral_phase_bridge * 2.2
+                + materialize_rim_position
+                    * materialize_wave_strength
+                    * 2.8
+                + dynamic_light_highlight * 1.6,
+            -10.0,
+            10.0);
+        float spectral_phase_wave =
+            0.5 + 0.5 * sin(spectral_phase_phase);
+        float spectral_phase_counter =
+            0.5 + 0.5 * cos(
+                spectral_phase_phase * 0.70
+                + bridge_shear * 3.1
+                + glass_caustic_spread * 8.0);
+        float spectral_phase_ridge =
+            1.0 - smoothstep(
+                0.0,
+                0.30,
+                abs(spectral_phase_wave - 0.58));
+        float spectral_phase_fringe =
+            1.0 - smoothstep(
+                0.0,
+                0.34,
+                abs(spectral_phase_counter - 0.54));
+        float spectral_phase_span =
+            (0.82
+             + 1.9 * glass_thickness
+             + 1.2 * clear_glass_detail
+             + 1.0 * spectral_phase_gate
+             + 0.040 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float spectral_phase_chroma_span =
+            (0.72
+             + 1.4 * spectral_dispersion
+             + 1.2 * glass_dispersion_tangential
+             + 0.90 * spectral_phase_transition)
+            * content_scale;
+        float2 spectral_phase_center_uv = clamp(
+            mix(
+                in.screen_uv,
+                spectral_phase_group_center_uv,
+                0.10 + 0.14 * spectral_phase_center),
+            float2(0.0),
+            float2(1.0));
+        float2 spectral_phase_red_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + spectral_phase_axis
+                    * texel
+                    * spectral_phase_span
+                    * (0.30 + 0.16 * spectral_phase_wave)
+                + dispersion_tangent
+                    * texel
+                    * spectral_phase_chroma_span
+                    * (0.18 + 0.20 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 spectral_phase_green_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                - spectral_phase_axis
+                    * texel
+                    * spectral_phase_span
+                    * (0.18 + 0.12 * spectral_phase_ridge)
+                + spectral_phase_cross
+                    * texel
+                    * spectral_phase_chroma_span
+                    * (0.14 + 0.12 * spectral_phase_bridge),
+            float2(0.0),
+            float2(1.0));
+        float2 spectral_phase_blue_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.17
+                - spectral_phase_axis
+                    * texel
+                    * spectral_phase_span
+                    * (0.28 + 0.14 * spectral_phase_fringe)
+                - dispersion_tangent
+                    * texel
+                    * spectral_phase_chroma_span
+                    * (0.20 + 0.18 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 spectral_phase_rim_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                + spectral_phase_cross
+                    * texel
+                    * spectral_phase_chroma_span
+                    * (0.24 + 0.16 * spectral_phase_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 spectral_phase_counter_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.15
+                - spectral_phase_cross
+                    * texel
+                    * spectral_phase_chroma_span
+                    * (0.22 + 0.16 * spectral_phase_fringe)
+                + spectral_phase_axis
+                    * texel
+                    * spectral_phase_span
+                    * (0.12 + 0.12 * spectral_phase_counter),
+            float2(0.0),
+            float2(1.0));
+        float3 spectral_phase_center_rgb =
+            backdrop.sample(samp, spectral_phase_center_uv).rgb;
+        float3 spectral_phase_red_rgb =
+            backdrop.sample(samp, spectral_phase_red_uv).rgb;
+        float3 spectral_phase_green_rgb =
+            backdrop.sample(samp, spectral_phase_green_uv).rgb;
+        float3 spectral_phase_blue_rgb =
+            backdrop.sample(samp, spectral_phase_blue_uv).rgb;
+        float3 spectral_phase_rim_rgb =
+            backdrop.sample(samp, spectral_phase_rim_uv).rgb;
+        float3 spectral_phase_counter_rgb =
+            backdrop.sample(samp, spectral_phase_counter_uv).rgb;
+        float3 spectral_phase_average =
+            spectral_phase_center_rgb * 0.22
+            + spectral_phase_red_rgb * 0.18
+            + spectral_phase_green_rgb * 0.18
+            + spectral_phase_blue_rgb * 0.18
+            + spectral_phase_rim_rgb * 0.14
+            + spectral_phase_counter_rgb * 0.10;
+        float3 spectral_phase_split = float3(
+            spectral_phase_red_rgb.r,
+            spectral_phase_green_rgb.g,
+            spectral_phase_blue_rgb.b);
+        float spectral_phase_split_mix = clamp(
+            0.22
+                + 0.18 * spectral_rim_tint
+                + 0.12 * (glass_prismatic_gain - 1.0),
+            0.0,
+            0.46);
+        float3 spectral_phase_probe = mix(
+            spectral_phase_average,
+            spectral_phase_split,
+            spectral_phase_split_mix);
+        float spectral_phase_luma =
+            dot(spectral_phase_probe, float3(0.2126, 0.7152, 0.0722));
+        float spectral_phase_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float spectral_phase_range = clamp(
+            length(spectral_phase_red_rgb - spectral_phase_blue_rgb) * 0.28
+                + length(spectral_phase_rim_rgb
+                         - spectral_phase_counter_rgb) * 0.20
+                + length(spectral_phase_split
+                         - spectral_phase_average) * 0.18
+                + abs(spectral_phase_luma
+                      - spectral_phase_surface_luma) * 0.18
+                + spectral_phase_ridge * 0.08
+                + spectral_phase_fringe * 0.06,
+            0.0,
+            1.0);
+        float spectral_phase_coherence =
+            1.0 - smoothstep(0.09, 0.38, spectral_phase_range);
+        float spectral_phase_bright = smoothstep(
+            spectral_phase_surface_luma - 0.07,
+            spectral_phase_surface_luma + 0.30,
+            spectral_phase_luma);
+        float spectral_phase_dark = smoothstep(
+            0.08,
+            0.34,
+            spectral_phase_surface_luma - spectral_phase_luma);
+        float spectral_phase_fresnel = clamp(
+            spectral_phase_ridge * 0.24
+                + spectral_phase_fringe * 0.20
+                + spectral_phase_edge * 0.20
+                + spectral_phase_alignment * 0.18
+                + spectral_phase_transition * 0.18,
+            0.0,
+            1.0);
+        float3 spectral_phase_tint = mix(
+            float3(1.0),
+            float3(
+                spectral_warmth * (1.0 + 0.08 * spectral_phase_ridge),
+                0.14 * (spectral_warmth + spectral_coolness),
+                spectral_coolness * (1.0 + 0.08 * spectral_phase_fringe)),
+            clamp(0.20 + 0.46 * spectral_rim_tint, 0.0, 1.0));
+        float3 spectral_phase_neutral = mix(
+            spectral_phase_probe,
+            float3(spectral_phase_luma),
+            spectral_phase_dark * (0.12 + 0.16 * glass_shadow_gain)
+                + spectral_phase_coherence * 0.10);
+        float3 spectral_phase_layer =
+            spectral_phase_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.018
+                      + 0.032 * tint_chroma * prominent_intensity));
+        spectral_phase_layer = mix(
+            spectral_phase_layer,
+            rgb + spectral_phase_tint
+                * (0.012
+                   + 0.028 * spectral_phase_bright
+                   + 0.034 * spectral_phase_fresnel),
+            0.11
+                + 0.12 * spectral_phase_coherence
+                + 0.10 * spectral_phase_transition);
+        spectral_phase_layer = clamp(
+            (spectral_phase_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + spectral_phase_fresnel * 0.010
+                       + spectral_phase_bright * 0.008
+                       - glass_shadow_gain * 0.004)
+                + float3(0.50),
+            0.0,
+            1.0);
+        spectral_phase_layer += spectral_phase_tint
+            * spectral_phase_fresnel
+            * (0.0009
+               + 0.0028 * spectral_rim_tint
+               + 0.0025 * glass_prismatic_gain
+               + 0.0018 * glass_scattering_gain)
+            * (0.30
+               + 0.22 * spectral_phase_coherence
+               + 0.24 * max(spectral_phase_ridge,
+                            spectral_phase_fringe * 0.78)
+               + 0.22 * spectral_phase_bright);
+        float spectral_phase_weight =
+            spectral_phase_lock_strength
+            * spectral_phase_gate
+            * (0.30
+               + 0.20 * spectral_phase_coherence
+               + 0.18 * spectral_phase_fresnel
+               + 0.16 * spectral_phase_bright
+               + 0.16 * spectral_phase_bridge);
+        rgb = mix(
+            rgb,
+            clamp(spectral_phase_layer, 0.0, 1.0),
+            spectral_phase_weight * 0.30);
+        rgb += spectral_phase_tint
+            * spectral_phase_weight
+            * max(spectral_phase_ridge, spectral_phase_fringe * 0.72)
+            * (0.0011
+               + 0.0036 * glass_prismatic_gain
+               + 0.0030 * glass_scattering_gain);
+        float spectral_phase_shadow =
+            spectral_phase_dark
+            * spectral_phase_weight
+            * (0.004 + 0.013 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - spectral_phase_alignment));
+        rgb *= 1.0 - clamp(spectral_phase_shadow, 0.0, 0.032);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float depth_aperture_strength = clamp(
         0.014 * clear_glass_detail
             + 0.012 * clear_glass_contrast
@@ -17889,6 +18249,7 @@ fragment float4 fs_material(
             + 0.012 * thickness_coupler_strength
             + 0.010 * morph_coupler_strength
             + 0.010 * phase_field_strength
+            + 0.009 * spectral_phase_lock_strength
             + 0.012 * legibility_veil_strength,
         0.0,
         0.10);
@@ -18616,7 +18977,8 @@ fragment float4 fs_material(
             + 0.008 * glass_effect_match_execution * group_blend_strength
             + 0.008 * morph_execution * group_blend_strength
             + 0.007 * morph_coupler_strength
-            + 0.006 * phase_field_strength,
+            + 0.006 * phase_field_strength
+            + 0.006 * spectral_phase_lock_strength,
         0.0,
         0.085);
     if (edge_contact_caustic_strength > 0.0001) {
@@ -20443,6 +20805,7 @@ fragment float4 fs_material(
             + 0.008 * thickness_coupler_strength
             + 0.007 * morph_coupler_strength
             + 0.007 * phase_field_strength
+            + 0.006 * spectral_phase_lock_strength
             + 0.008 * shared_shell_strength
             + 0.008 * edge_contact_caustic_strength
             + 0.006 * surrounding_light_wrap_strength,
@@ -20707,6 +21070,7 @@ fragment float4 fs_material(
             + 0.007 * thickness_coupler_strength
             + 0.007 * morph_coupler_strength
             + 0.006 * phase_field_strength
+            + 0.006 * spectral_phase_lock_strength
             + 0.006 * surrounding_light_wrap_strength,
         0.0,
         0.078);
@@ -20980,6 +21344,7 @@ fragment float4 fs_material(
             + 0.008 * specular_handoff_strength
             + 0.006 * morph_coupler_strength
             + 0.006 * phase_field_strength
+            + 0.006 * spectral_phase_lock_strength
             + 0.006 * matched_tether_sheath_strength,
         0.0,
         0.072);
@@ -21255,6 +21620,7 @@ fragment float4 fs_material(
             + 0.008 * specular_handoff_strength
             + 0.006 * morph_coupler_strength
             + 0.006 * phase_field_strength
+            + 0.006 * spectral_phase_lock_strength
             + 0.006 * matched_tether_sheath_strength
             + 0.006 * pointer_lens_strength
                 * (0.38 * pointer_lens_raw + 0.62 * pointer_lens),
@@ -21536,6 +21902,7 @@ fragment float4 fs_material(
             + 0.006 * transition_clarity_strength
             + 0.005 * morph_coupler_strength
             + 0.005 * phase_field_strength
+            + 0.005 * spectral_phase_lock_strength
             + 0.006 * pointer_lens_strength
                 * (0.36 * pointer_lens_raw + 0.64 * pointer_lens),
         0.0,
@@ -21792,6 +22159,7 @@ fragment float4 fs_material(
             + 0.006 * thickness_coupler_strength
             + 0.006 * morph_coupler_strength
             + 0.005 * phase_field_strength
+            + 0.005 * spectral_phase_lock_strength
             + 0.006 * matched_tether_sheath_strength
             + 0.006 * container_pressure_halo_strength,
         0.0,
