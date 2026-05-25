@@ -37486,6 +37486,407 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(identity_absorption, 0.0, 0.0085);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float hierarchy_separation_field_strength = clamp(
+        0.003 * overlap_response_strength
+            + 0.004 * fusion_strength
+            + 0.005 * group_blend_strength * shared_backdrop_scope
+            + 0.004 * group_blend_strength * group_surface_execution
+            + 0.004 * bridge_band
+            + 0.26 * surface_identity_field_strength
+            + 0.23 * tonal_equilibrium_field_strength
+            + 0.20 * chroma_containment_field_strength
+            + 0.17 * legibility_preservation_field_strength
+            + 0.14 * depth_separation_field_strength
+            + 0.11 * specular_flow_field_strength
+            + 0.09 * phase_equalization_field_strength
+            + 0.075 * edge_continuity_field_strength
+            + 0.064 * rim_coalescence_field_strength
+            + 0.054 * edge_adhesion_field_strength
+            + 0.046 * elastic_tension_field_strength
+            + 0.040 * contact_pressure_field_strength
+            + 0.034 * internal_shadow_field_strength
+            + 0.028 * subsurface_caustic_field_strength
+            + 0.023 * transmission_depth_field_strength
+            + 0.018 * interlayer_refraction_field_strength
+            + 0.014 * layer_separation_field_strength
+            + 0.010 * edge_meniscus_field_strength
+            + 0.008 * container_morph_field_strength
+            + 0.007 * foreground_sheen_field_strength,
+        0.0,
+        0.022);
+    if (hierarchy_separation_field_strength > 0.0001) {
+        float hierarchy_center =
+            1.0 - smoothstep(0.24, 1.06, normalized_len);
+        float hierarchy_rim =
+            edge_lens
+            * (0.64
+               + 0.36
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.85, 0.90),
+                       signed_edge_distance)));
+        float hierarchy_bridge =
+            bridge_band * (0.52 + 0.48 * bridge_core);
+        float hierarchy_stack = clamp(
+            overlap_response_strength * 0.30
+                + fusion_strength * 0.22
+                + group_blend_strength * shared_backdrop_scope * 0.20
+                + group_surface_execution * group_blend_strength * 0.18
+                + hierarchy_bridge * 0.22,
+            0.0,
+            1.0);
+        float hierarchy_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float hierarchy_lock = clamp(
+            hierarchy_rim * 0.31
+                + hierarchy_stack * 0.23
+                + hierarchy_bridge * 0.19
+                + surface_identity_field_strength * 5.2
+                + tonal_equilibrium_field_strength * 4.3
+                + chroma_containment_field_strength * 3.7
+                + legibility_preservation_field_strength * 3.1
+                + depth_separation_field_strength * 2.5
+                + hierarchy_pointer * 0.06,
+            0.0,
+            1.0);
+        float hierarchy_presence = clamp(
+            hierarchy_rim * 0.30
+                + hierarchy_stack * 0.24
+                + hierarchy_lock * 0.19
+                + hierarchy_bridge * 0.17
+                + hierarchy_center * 0.06
+                + hierarchy_pointer * 0.05,
+            0.0,
+            1.0);
+        float hierarchy_shear_sign =
+            bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 hierarchy_axis_raw =
+            bridge_dir * (0.28 + 0.18 * hierarchy_bridge)
+            + refraction_dir * (0.24 + 0.15 * glass_lensing_gain)
+            - dynamic_light_dir * (0.28 + 0.16 * dynamic_light_highlight)
+            + bridge_tangent
+                * hierarchy_shear_sign
+                * (0.22 + 0.15 * abs(bridge_shear) * hierarchy_bridge)
+            + dispersion_tangent
+                * (0.12
+                   + 0.07 * spectral_dispersion
+                   + 0.05 * glass_dispersion_tangential)
+            + pointer_dir * (0.09 + 0.07 * hierarchy_pointer);
+        float hierarchy_axis_len = length(hierarchy_axis_raw);
+        float2 hierarchy_axis =
+            hierarchy_axis_len > 0.0001
+                ? hierarchy_axis_raw / hierarchy_axis_len
+                : (normalized_len > 0.0001
+                    ? refraction_dir
+                    : float2(1.0, 0.0));
+        float2 hierarchy_cross =
+            float2(-hierarchy_axis.y, hierarchy_axis.x);
+        float hierarchy_light_face =
+            smoothstep(-0.15, 0.94, dot(hierarchy_axis, -dynamic_light_dir));
+        float hierarchy_bridge_alignment =
+            smoothstep(-0.12, 0.94, abs(dot(hierarchy_axis, bridge_tangent)));
+        float hierarchy_phase = clamp(
+            dot(normalized_local, hierarchy_axis)
+                    * (3.1 + 0.9 * hierarchy_presence)
+                + dot(normalized_local, hierarchy_cross)
+                    * (2.0 + 0.8 * hierarchy_stack)
+                + bridge_axial * (1.5 + 0.7 * bridge_core)
+                + bridge_lateral_signed * hierarchy_bridge * 1.1
+                + bridge_shear * hierarchy_bridge * 1.2
+                + spectral_dispersion * 1.7
+                + glass_caustic_spread * 1.2,
+            -12.0,
+            12.0);
+        float hierarchy_wave =
+            0.5 + 0.5 * sin(hierarchy_phase);
+        float hierarchy_counter_wave =
+            0.5 + 0.5 * cos(
+                hierarchy_phase * 0.56
+                + glass_caustic_spread * 2.0
+                + hierarchy_stack * 1.4);
+        float hierarchy_lobe =
+            1.0 - smoothstep(0.0, 0.43, abs(hierarchy_wave - 0.50));
+        float hierarchy_return_lobe =
+            1.0 - smoothstep(0.0, 0.46, abs(hierarchy_counter_wave - 0.50));
+        float hierarchy_support = clamp(
+            hierarchy_lock * 0.32
+                + hierarchy_bridge_alignment * 0.18
+                + hierarchy_rim * 0.18
+                + hierarchy_lobe * 0.09
+                + hierarchy_return_lobe * 0.08
+                + hierarchy_center * 0.07
+                + hierarchy_pointer * 0.06,
+            0.0,
+            1.0);
+        float hierarchy_focus =
+            (0.5
+             + 0.5
+                 * cos(hierarchy_phase * 1.02 + normalized_len * 1.5))
+            * (0.35 + 0.65 * hierarchy_lobe);
+        float hierarchy_span =
+            (0.34
+             + 0.62 * glass_thickness
+             + 0.50 * clear_glass_detail
+             + 0.66 * hierarchy_presence
+             + 0.012 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float hierarchy_cross_span =
+            (0.26
+             + 0.40 * glass_dispersion_tangential
+             + 0.36 * spectral_dispersion
+             + 0.52 * hierarchy_support)
+            * content_scale;
+        float hierarchy_layer_span =
+            (0.22
+             + 0.30 * hierarchy_stack
+             + 0.24 * hierarchy_bridge
+             + 0.18 * glass_caustic_spread)
+            * content_scale;
+        float2 hierarchy_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.034 + 0.048 * hierarchy_support),
+            float2(0.0),
+            float2(1.0));
+        float2 hierarchy_foreground_uv = clamp(
+            hierarchy_base_uv
+                - hierarchy_axis
+                    * texel
+                    * hierarchy_span
+                    * (0.12 + 0.09 * hierarchy_light_face)
+                + refraction_dir
+                    * texel
+                    * hierarchy_layer_span
+                    * (0.10 + 0.08 * hierarchy_center),
+            float2(0.0),
+            float2(1.0));
+        float2 hierarchy_background_uv = clamp(
+            hierarchy_base_uv
+                + hierarchy_axis
+                    * texel
+                    * hierarchy_span
+                    * (0.13 + 0.09 * (1.0 - hierarchy_light_face))
+                - refraction_dir
+                    * texel
+                    * hierarchy_layer_span
+                    * (0.09 + 0.08 * hierarchy_return_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 hierarchy_core_uv = clamp(
+            hierarchy_base_uv
+                + bridge_dir
+                    * texel
+                    * hierarchy_span
+                    * hierarchy_bridge
+                    * 0.050
+                + refraction_dir
+                    * texel
+                    * hierarchy_span
+                    * (0.050 + 0.052 * hierarchy_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 hierarchy_ridge_uv = clamp(
+            hierarchy_base_uv
+                + hierarchy_cross
+                    * texel
+                    * hierarchy_cross_span
+                    * (0.14 + 0.08 * hierarchy_wave)
+                + dispersion_tangent
+                    * texel
+                    * hierarchy_layer_span
+                    * (0.26 + 0.18 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float2 hierarchy_valley_uv = clamp(
+            hierarchy_base_uv
+                - hierarchy_cross
+                    * texel
+                    * hierarchy_cross_span
+                    * (0.14 + 0.08 * hierarchy_lobe)
+                - dispersion_tangent
+                    * texel
+                    * hierarchy_layer_span
+                    * (0.26 + 0.18 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float3 hierarchy_foreground_rgb =
+            backdrop.sample(samp, hierarchy_foreground_uv).rgb;
+        float3 hierarchy_background_rgb =
+            backdrop.sample(samp, hierarchy_background_uv).rgb;
+        float3 hierarchy_core_rgb =
+            backdrop.sample(samp, hierarchy_core_uv).rgb;
+        float3 hierarchy_ridge_rgb =
+            backdrop.sample(samp, hierarchy_ridge_uv).rgb;
+        float3 hierarchy_valley_rgb =
+            backdrop.sample(samp, hierarchy_valley_uv).rgb;
+        float3 hierarchy_average =
+            hierarchy_foreground_rgb * 0.23
+            + hierarchy_background_rgb * 0.23
+            + hierarchy_core_rgb * 0.28
+            + hierarchy_ridge_rgb * 0.13
+            + hierarchy_valley_rgb * 0.13;
+        float3 hierarchy_split = float3(
+            hierarchy_ridge_rgb.r,
+            (hierarchy_core_rgb.g + hierarchy_average.g) * 0.5,
+            hierarchy_valley_rgb.b);
+        float hierarchy_split_mix = clamp(
+            0.045
+                + 0.055 * spectral_dispersion
+                + 0.045 * glass_dispersion_tangential
+                + 0.050 * hierarchy_support,
+            0.0,
+            0.22);
+        float3 hierarchy_probe = mix(
+            hierarchy_average,
+            hierarchy_split,
+            hierarchy_split_mix);
+        float hierarchy_foreground_luma =
+            dot(hierarchy_foreground_rgb, float3(0.2126, 0.7152, 0.0722));
+        float hierarchy_background_luma =
+            dot(hierarchy_background_rgb, float3(0.2126, 0.7152, 0.0722));
+        float hierarchy_core_luma =
+            dot(hierarchy_core_rgb, float3(0.2126, 0.7152, 0.0722));
+        float hierarchy_ridge_luma =
+            dot(hierarchy_ridge_rgb, float3(0.2126, 0.7152, 0.0722));
+        float hierarchy_valley_luma =
+            dot(hierarchy_valley_rgb, float3(0.2126, 0.7152, 0.0722));
+        float hierarchy_probe_luma =
+            dot(hierarchy_probe, float3(0.2126, 0.7152, 0.0722));
+        float hierarchy_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float hierarchy_luma_min = min(
+            min(hierarchy_foreground_luma, hierarchy_background_luma),
+            min(hierarchy_core_luma,
+                min(hierarchy_ridge_luma, hierarchy_valley_luma)));
+        float hierarchy_luma_max = max(
+            max(hierarchy_foreground_luma, hierarchy_background_luma),
+            max(hierarchy_core_luma,
+                max(hierarchy_ridge_luma, hierarchy_valley_luma)));
+        float hierarchy_luma_range =
+            clamp(hierarchy_luma_max - hierarchy_luma_min, 0.0, 1.0);
+        float hierarchy_layer_delta = clamp(
+            abs(hierarchy_foreground_luma - hierarchy_background_luma) * 0.30
+                + abs(hierarchy_core_luma - hierarchy_surface_luma) * 0.20
+                + length(hierarchy_foreground_rgb - hierarchy_background_rgb)
+                    * 0.18
+                + length(hierarchy_ridge_rgb - hierarchy_valley_rgb) * 0.13
+                + hierarchy_luma_range * 0.15
+                + hierarchy_support * 0.08,
+            0.0,
+            1.0);
+        float hierarchy_collapse =
+            1.0 - smoothstep(0.08, 0.39, hierarchy_layer_delta);
+        float hierarchy_order =
+            smoothstep(
+                -0.22,
+                0.22,
+                hierarchy_surface_luma
+                    - (hierarchy_background_luma * 0.58
+                       + hierarchy_foreground_luma * 0.42));
+        float hierarchy_clearance = clamp(
+            hierarchy_rim * 0.27
+                + hierarchy_stack * 0.21
+                + hierarchy_bridge * 0.16
+                + hierarchy_support * 0.15
+                + (1.0 - hierarchy_collapse) * 0.13
+                + hierarchy_center * 0.08,
+            0.0,
+            1.0);
+        float hierarchy_luma_push =
+            (hierarchy_order - 0.5)
+            * (0.13
+               + 0.09 * hierarchy_collapse
+               + 0.08 * hierarchy_clearance);
+        float hierarchy_target_luma = clamp(
+            0.50
+                + (hierarchy_probe_luma - 0.50)
+                    * (0.58 + 0.18 * hierarchy_clearance)
+                + hierarchy_luma_push,
+            0.0,
+            1.0);
+        float hierarchy_chroma_keep = clamp(
+            0.54
+                + 0.15 * hierarchy_clearance
+                + 0.11 * hierarchy_support
+                + 0.08 * hierarchy_light_face
+                - 0.10 * hierarchy_collapse,
+            0.43,
+            0.86);
+        float3 hierarchy_ordered_surface =
+            float3(hierarchy_target_luma)
+            + (hierarchy_probe - float3(hierarchy_probe_luma))
+                * hierarchy_chroma_keep;
+        float3 hierarchy_layer = mix(
+            hierarchy_probe,
+            hierarchy_ordered_surface,
+            (0.24 + 0.18 * hierarchy_collapse)
+                * (0.46 + 0.54 * hierarchy_support));
+        hierarchy_layer = mix(
+            hierarchy_layer,
+            hierarchy_core_rgb,
+            (1.0 - hierarchy_collapse)
+                * (0.07 + 0.07 * hierarchy_focus));
+        hierarchy_layer = clamp(
+            (hierarchy_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.006
+                       + hierarchy_clearance * 0.006
+                       - hierarchy_collapse * 0.006)
+                + float3(0.50),
+            0.0,
+            1.0);
+        hierarchy_layer *= float3(
+            1.0 + spectral_warmth * 0.15 + tint_chroma * in.tint.r * 0.006,
+            1.0 + spectral_rim_tint * 0.07 + tint_chroma * in.tint.g * 0.005,
+            1.0 + spectral_coolness * 0.15 + tint_chroma * in.tint.b * 0.006);
+        float hierarchy_gate = clamp(
+            hierarchy_presence * 0.27
+                + hierarchy_stack * 0.22
+                + hierarchy_rim * 0.20
+                + hierarchy_support * 0.15
+                + hierarchy_collapse * 0.10
+                + hierarchy_clearance * 0.08,
+            0.0,
+            1.0);
+        float hierarchy_weight =
+            hierarchy_separation_field_strength
+            * hierarchy_gate
+            * (0.18
+               + 0.15 * hierarchy_support
+               + 0.13 * hierarchy_clearance
+               + 0.12 * hierarchy_collapse
+               + 0.10 * hierarchy_bridge_alignment);
+        rgb = mix(
+            rgb,
+            hierarchy_layer,
+            hierarchy_weight
+                * (0.056
+                   + 0.048 * hierarchy_focus
+                   + 0.048 * hierarchy_presence));
+        float3 hierarchy_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.038,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.033,
+            spectral_coolness + tint_chroma * in.tint.b * 0.038);
+        float hierarchy_separator =
+            max(hierarchy_lobe, hierarchy_return_lobe * 0.50)
+            * hierarchy_rim
+            * (0.43 + 0.57 * hierarchy_clearance)
+            * (1.0 - hierarchy_collapse * 0.20);
+        rgb += hierarchy_prism
+            * hierarchy_weight
+            * hierarchy_separator
+            * (0.00018
+               + 0.00060 * spectral_rim_tint
+               + 0.00050 * glass_scattering_gain);
+        float hierarchy_absorption =
+            hierarchy_collapse
+            * hierarchy_weight
+            * (0.00060 + 0.0020 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - hierarchy_light_face));
+        rgb *= 1.0 - clamp(hierarchy_absorption, 0.0, 0.0080);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
