@@ -28093,6 +28093,353 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(environment_shadow, 0.0, 0.026);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float ambient_chromatic_field_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.009 * clear_glass_contrast
+            + 0.008 * glass_scattering_gain
+            + 0.008 * glass_prismatic_gain
+            + 0.30 * environment_envelope_strength
+            + 0.22 * critical_angle_reflection_strength
+            + 0.20 * spectral_grazing_glint_strength
+            + 0.18 * thin_film_interference_strength
+            + 0.14 * edge_caustic_dispersion_strength
+            + 0.006 * transition_seam_lock_strength
+            + 0.005 * container_irradiance_lock_strength
+            + 0.005 * ambient_seal_field_strength,
+        0.0,
+        0.064);
+    if (ambient_chromatic_field_strength > 0.0001) {
+        float2 chroma_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 chroma_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            chroma_group_size);
+        float2 chroma_group_norm =
+            (chroma_group_local / chroma_group_size - float2(0.5)) * 2.0;
+        float chroma_group_active =
+            in.group_rect.z > 0.0 && in.group_rect.w > 0.0 ? 1.0 : 0.0;
+        float chroma_center =
+            1.0 - smoothstep(0.20, 1.16, length(normalized_local));
+        float chroma_group_center =
+            1.0 - smoothstep(0.18, 1.12, length(chroma_group_norm));
+        float chroma_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.90, 1.0),
+                signed_edge_distance);
+        float chroma_bridge =
+            bridge_band * (0.32 + 0.68 * bridge_core);
+        float chroma_transition = clamp(
+            glass_effect_match_execution * 0.24
+                + morph_execution * 0.18
+                + materialize_wave_strength * 0.14
+                + environment_envelope_strength * 1.8
+                + critical_angle_reflection_strength * 1.4
+                + spectral_grazing_glint_strength * 1.2
+                + transition_seam_lock_strength * 1.0
+                + chroma_group_active * group_blend_strength * 0.18,
+            0.0,
+            1.0);
+        float2 chroma_axis_raw =
+            refraction_dir * (0.32 + 0.20 * glass_lensing_gain)
+            - dynamic_light_dir
+                * (0.26 + 0.18 * dynamic_light_highlight)
+            + bridge_dir * (0.22 + 0.22 * chroma_bridge)
+            + dispersion_tangent
+                * (0.18
+                   + 0.12 * spectral_dispersion
+                   + 0.10 * glass_dispersion_tangential)
+            + normalized_local * (0.12 + 0.12 * chroma_center);
+        float chroma_axis_len = length(chroma_axis_raw);
+        float2 chroma_axis =
+            chroma_axis_len > 0.0001
+                ? chroma_axis_raw / chroma_axis_len
+                : refraction_dir;
+        float2 chroma_cross = float2(-chroma_axis.y, chroma_axis.x);
+        float chroma_light_face =
+            smoothstep(-0.20, 0.92, dot(chroma_axis, -dynamic_light_dir));
+        float chroma_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(chroma_axis, bridge_dir)));
+        float chroma_phase = clamp(
+            dot(normalized_local, chroma_axis)
+                    * (4.0 + 1.6 * chroma_transition)
+                + dot(normalized_local, chroma_cross)
+                    * (2.6 + 1.2 * chroma_bridge)
+                + dot(chroma_group_norm, chroma_axis)
+                    * chroma_group_active
+                    * (2.2 + 1.4 * group_blend_strength)
+                + bridge_axial * (2.4 + 1.4 * bridge_core)
+                + bridge_shear * bridge_band * 1.6
+                + spectral_dispersion * 4.8,
+            -12.0,
+            12.0);
+        float chroma_wave = 0.5 + 0.5 * sin(chroma_phase);
+        float chroma_counter = 0.5 + 0.5 * cos(
+            chroma_phase * 0.70
+            + glass_caustic_spread * 4.2
+            + materialize_rim_position * materialize_wave_strength * 2.0);
+        float chroma_lobe =
+            1.0 - smoothstep(0.0, 0.35, abs(chroma_wave - 0.55));
+        float chroma_counter_lobe =
+            1.0 - smoothstep(0.0, 0.37, abs(chroma_counter - 0.52));
+        float chroma_gate = clamp(
+            chroma_center * 0.22
+                + chroma_edge * 0.20
+                + chroma_bridge * 0.18
+                + chroma_transition * 0.22
+                + chroma_light_face * 0.10
+                + chroma_group_center * chroma_group_active * 0.10
+                + chroma_lobe * 0.08,
+            0.0,
+            1.0);
+        float chroma_span =
+            (0.84
+             + 2.0 * glass_thickness
+             + 1.5 * clear_glass_detail
+             + 1.3 * chroma_transition
+             + 0.040 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float chroma_cross_span =
+            (0.58
+             + 1.2 * glass_dispersion_tangential
+             + 1.1 * spectral_dispersion
+             + 0.8 * chroma_bridge_alignment)
+            * content_scale;
+        float chroma_wide_span =
+            (1.10
+             + 2.1 * clear_glass_detail
+             + 1.3 * environment_envelope_strength
+             + 0.050 * blur_points)
+            * content_scale;
+        float2 chroma_center_uv = clamp(
+            in.screen_uv + refraction_uv * 0.10,
+            float2(0.0),
+            float2(1.0));
+        float2 chroma_light_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.12
+                - dynamic_light_dir
+                    * texel
+                    * chroma_span
+                    * (0.24 + 0.14 * chroma_light_face),
+            float2(0.0),
+            float2(1.0));
+        float2 chroma_shadow_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + dynamic_light_dir
+                    * texel
+                    * chroma_span
+                    * (0.22 + 0.14 * chroma_counter_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 chroma_warm_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + chroma_cross
+                    * texel
+                    * chroma_cross_span
+                    * (0.28 + 0.14 * chroma_wave)
+                + dispersion_tangent
+                    * texel
+                    * chroma_wide_span
+                    * (0.12 + 0.12 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 chroma_cool_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - chroma_cross
+                    * texel
+                    * chroma_cross_span
+                    * (0.26 + 0.14 * chroma_lobe)
+                - dispersion_tangent
+                    * texel
+                    * chroma_wide_span
+                    * (0.12 + 0.12 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 chroma_far_uv = clamp(
+            in.screen_uv
+                + chroma_axis
+                    * texel
+                    * chroma_wide_span
+                    * (0.26 + 0.16 * chroma_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 chroma_return_uv = clamp(
+            in.screen_uv
+                - chroma_axis
+                    * texel
+                    * chroma_wide_span
+                    * (0.24 + 0.14 * chroma_counter_lobe),
+            float2(0.0),
+            float2(1.0));
+        float3 chroma_center_rgb =
+            backdrop.sample(samp, chroma_center_uv).rgb;
+        float3 chroma_light_rgb =
+            backdrop.sample(samp, chroma_light_uv).rgb;
+        float3 chroma_shadow_rgb =
+            backdrop.sample(samp, chroma_shadow_uv).rgb;
+        float3 chroma_warm_rgb =
+            backdrop.sample(samp, chroma_warm_uv).rgb;
+        float3 chroma_cool_rgb =
+            backdrop.sample(samp, chroma_cool_uv).rgb;
+        float3 chroma_far_rgb =
+            backdrop.sample(samp, chroma_far_uv).rgb;
+        float3 chroma_return_rgb =
+            backdrop.sample(samp, chroma_return_uv).rgb;
+        float3 chroma_ambient =
+            chroma_center_rgb * 0.22
+            + chroma_light_rgb * 0.18
+            + chroma_shadow_rgb * 0.16
+            + chroma_warm_rgb * 0.14
+            + chroma_cool_rgb * 0.14
+            + chroma_far_rgb * 0.09
+            + chroma_return_rgb * 0.07;
+        float3 chroma_split = float3(
+            chroma_warm_rgb.r,
+            (chroma_center_rgb.g + chroma_light_rgb.g) * 0.5,
+            chroma_cool_rgb.b);
+        float chroma_luma =
+            dot(chroma_ambient, float3(0.2126, 0.7152, 0.0722));
+        float chroma_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float chroma_probe_peak =
+            max(max(chroma_ambient.r, chroma_ambient.g), chroma_ambient.b);
+        float chroma_probe_floor =
+            min(min(chroma_ambient.r, chroma_ambient.g), chroma_ambient.b);
+        float chroma_surface_peak =
+            max(max(rgb.r, rgb.g), rgb.b);
+        float chroma_surface_floor =
+            min(min(rgb.r, rgb.g), rgb.b);
+        float chroma_probe_contrast =
+            clamp(chroma_probe_peak - chroma_probe_floor, 0.0, 1.0);
+        float chroma_surface_contrast =
+            clamp(chroma_surface_peak - chroma_surface_floor, 0.0, 1.0);
+        float chroma_pickup = smoothstep(
+            0.030,
+            0.34,
+            max(
+                max(abs(chroma_ambient.r - chroma_ambient.g),
+                    abs(chroma_ambient.g - chroma_ambient.b)),
+                abs(chroma_ambient.b - chroma_ambient.r)));
+        float chroma_range = clamp(
+            length(chroma_light_rgb - chroma_shadow_rgb) * 0.24
+                + length(chroma_warm_rgb - chroma_cool_rgb) * 0.24
+                + length(chroma_far_rgb - chroma_return_rgb) * 0.18
+                + abs(chroma_luma - chroma_surface_luma) * 0.18
+                + chroma_probe_contrast * 0.08
+                + chroma_lobe * 0.06,
+            0.0,
+            1.0);
+        float chroma_coherence =
+            1.0 - smoothstep(0.08, 0.38, chroma_range);
+        float chroma_lift = smoothstep(
+            chroma_surface_luma - 0.06,
+            chroma_surface_luma + 0.30,
+            chroma_luma);
+        float chroma_depth = smoothstep(
+            0.08,
+            0.34,
+            chroma_surface_luma - chroma_luma);
+        float chroma_temperature = clamp(
+            (chroma_warm_rgb.r + chroma_light_rgb.r)
+                - (chroma_cool_rgb.b + chroma_shadow_rgb.b)
+                + spectral_warmth
+                - spectral_coolness,
+            -1.0,
+            1.0);
+        float3 chroma_neutral = mix(
+            chroma_ambient,
+            float3(chroma_luma),
+            chroma_depth * (0.12 + 0.14 * glass_shadow_gain)
+                + chroma_coherence * 0.12);
+        float3 chroma_equilibrium = mix(
+            chroma_neutral,
+            chroma_split,
+            0.18
+                + 0.18 * chroma_pickup
+                + 0.14 * chroma_lobe
+                + 0.12 * chroma_light_face);
+        chroma_equilibrium = clamp(
+            (chroma_equilibrium - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + chroma_lift * 0.010
+                       + chroma_transition * 0.010
+                       - chroma_depth * 0.016)
+                + float3(0.50),
+            0.0,
+            1.0);
+        float3 chroma_temperature_tint = mix(
+            float3(1.0 + spectral_coolness * 0.18,
+                   1.0 + spectral_rim_tint * 0.08,
+                   1.0 + spectral_warmth * 0.06),
+            float3(1.0 + spectral_warmth * 0.22,
+                   1.0 + spectral_rim_tint * 0.08,
+                   1.0 + spectral_coolness * 0.16),
+            chroma_temperature * 0.5 + 0.5);
+        chroma_equilibrium *= chroma_temperature_tint;
+        chroma_equilibrium *= float3(1.0)
+            + in.tint.rgb
+                * (0.014
+                   + 0.026 * tint_chroma * prominent_intensity);
+        float3 chroma_prism = float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        chroma_equilibrium += chroma_prism
+            * chroma_pickup
+            * (0.0009
+               + 0.0028 * spectral_rim_tint
+               + 0.0026 * glass_prismatic_gain
+               + 0.0022 * glass_scattering_gain)
+            * (0.32
+               + 0.20 * chroma_light_face
+               + 0.20 * chroma_lobe
+               + 0.16 * chroma_coherence);
+        float chroma_contrast_balance = clamp(
+            1.0
+                - smoothstep(
+                    0.08,
+                    0.42,
+                    abs(chroma_surface_contrast - chroma_probe_contrast)),
+            0.0,
+            1.0);
+        float chroma_weight =
+            ambient_chromatic_field_strength
+            * chroma_gate
+            * (0.28
+               + 0.20 * chroma_coherence
+               + 0.16 * chroma_pickup
+               + 0.14 * chroma_lift
+               + 0.12 * chroma_contrast_balance
+               + 0.10 * chroma_bridge_alignment);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                chroma_equilibrium,
+                0.07
+                    + 0.12 * chroma_lobe
+                    + 0.10 * chroma_pickup),
+            chroma_weight * 0.25);
+        rgb += chroma_prism
+            * chroma_weight
+            * max(chroma_lobe, chroma_counter_lobe * 0.72)
+            * (0.0006
+               + 0.0022 * dynamic_light_highlight
+               + 0.0022 * glass_scattering_gain);
+        float chroma_shadow =
+            chroma_depth
+            * chroma_weight
+            * (0.0025 + 0.008 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - chroma_light_face));
+        rgb *= 1.0 - clamp(chroma_shadow, 0.0, 0.024);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
