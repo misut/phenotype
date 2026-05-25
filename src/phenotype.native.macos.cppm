@@ -30945,6 +30945,333 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(meniscus_shadow, 0.0, 0.016);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float bounds_anchor_field_strength = clamp(
+        0.012 * glass_effect_match_execution
+            + 0.010 * refraction_strength
+            + 0.010 * glass_thickness
+            + 0.008 * clear_glass_detail
+            + 0.008 * prominent_intensity
+            + 0.07 * edge_meniscus_field_strength
+            + 0.06 * interactive_tint_field_strength
+            + 0.05 * container_pressure_field_strength
+            + 0.05 * foreground_sheen_field_strength,
+        0.0,
+        0.044);
+    if (bounds_anchor_field_strength > 0.0001) {
+        float2 bounds_size = max(in.rect_size, float2(1.0));
+        float2 bounds_center_local = bounds_size * 0.5;
+        float2 bounds_center_screen =
+            in.screen_pos - in.local_pos + bounds_center_local;
+        float2 bounds_viewport_guess =
+            float2(float(backdrop.get_width()), float(backdrop.get_height()))
+            / content_scale;
+        float2 bounds_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : bounds_viewport_guess.x,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : bounds_viewport_guess.y),
+            float2(1.0));
+        float2 bounds_anchor_uv = clamp(
+            bounds_center_screen / bounds_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 bounds_to_anchor = bounds_anchor_uv - in.screen_uv;
+        float bounds_anchor_distance = length(bounds_to_anchor);
+        float2 bounds_anchor_dir =
+            bounds_anchor_distance > 0.0001
+                ? bounds_to_anchor / bounds_anchor_distance
+                : refraction_dir;
+        float2 bounds_norm =
+            (in.local_pos / bounds_size - float2(0.5)) * 2.0;
+        float bounds_max_axis =
+            max(abs(bounds_norm.x), abs(bounds_norm.y));
+        float bounds_center =
+            1.0 - smoothstep(0.16, 1.04, length(bounds_norm));
+        float bounds_rim =
+            smoothstep(0.50, 1.00, bounds_max_axis)
+            * (1.0 - smoothstep(1.00, 1.20, bounds_max_axis));
+        float bounds_corner =
+            smoothstep(0.76, 1.30, length(bounds_norm));
+        float bounds_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.50, 1.0),
+                signed_edge_distance);
+        float bounds_bridge =
+            bridge_band * (0.30 + 0.70 * bridge_core);
+        float bounds_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float bounds_presence = clamp(
+            bounds_center * 0.18
+                + bounds_rim * 0.24
+                + bounds_corner * 0.14
+                + bounds_edge * 0.18
+                + bounds_bridge * 0.14
+                + bounds_pointer * 0.12,
+            0.0,
+            1.0);
+        float2 bounds_axis_raw =
+            bounds_anchor_dir * (0.34 + 0.18 * bounds_center)
+            - dynamic_light_dir
+                * (0.30 + 0.22 * dynamic_light_highlight)
+            + refraction_dir * (0.24 + 0.18 * glass_lensing_gain)
+            + pointer_dir * (0.20 + 0.16 * bounds_pointer)
+            + bridge_dir * (0.18 + 0.16 * bounds_bridge)
+            + dispersion_tangent
+                * (0.14
+                   + 0.10 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential);
+        float bounds_axis_len = length(bounds_axis_raw);
+        float2 bounds_axis =
+            bounds_axis_len > 0.0001
+                ? bounds_axis_raw / bounds_axis_len
+                : bounds_anchor_dir;
+        float2 bounds_cross = float2(-bounds_axis.y, bounds_axis.x);
+        float bounds_light_face =
+            smoothstep(-0.20, 0.94, dot(bounds_axis, -dynamic_light_dir));
+        float bounds_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(bounds_axis, bridge_dir)));
+        float bounds_phase = clamp(
+            dot(bounds_norm, bounds_axis)
+                    * (4.6 + 1.8 * bounds_presence)
+                + dot(bounds_norm, bounds_cross)
+                    * (3.0 + 1.2 * bounds_rim)
+                + dot(normalized_local, bounds_axis)
+                    * (1.8 + 1.0 * bounds_center)
+                + bridge_axial * (2.0 + 1.2 * bridge_core)
+                + bridge_shear * bounds_bridge * 1.8
+                + spectral_dispersion * 4.4,
+            -12.0,
+            12.0);
+        float bounds_wave = 0.5 + 0.5 * sin(bounds_phase);
+        float bounds_counter =
+            0.5 + 0.5 * cos(
+                bounds_phase * 0.70
+                + glass_caustic_spread * 4.0
+                + materialize_rim_position * materialize_wave_strength * 2.0);
+        float bounds_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(bounds_wave - 0.55));
+        float bounds_return_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(bounds_counter - 0.52));
+        float bounds_span =
+            (0.82
+             + 1.7 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.2 * bounds_presence
+             + 0.034 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float bounds_corner_span =
+            (0.58
+             + 1.1 * glass_dispersion_tangential
+             + 1.0 * spectral_dispersion
+             + 0.8 * bounds_bridge_alignment)
+            * content_scale;
+        float bounds_anchor_pull = clamp(
+            0.08
+                + 0.18 * bounds_center
+                + 0.16 * glass_effect_match_execution
+                + 0.14 * group_blend_strength
+                + 0.12 * bounds_bridge,
+            0.0,
+            0.46);
+        float2 bounds_base_uv = clamp(
+            mix(in.screen_uv, bounds_anchor_uv, bounds_anchor_pull)
+                + refraction_uv * (0.08 + 0.05 * bounds_presence),
+            float2(0.0),
+            float2(1.0));
+        float2 bounds_light_uv = clamp(
+            bounds_base_uv
+                - dynamic_light_dir
+                    * texel
+                    * bounds_span
+                    * (0.22 + 0.14 * bounds_light_face)
+                + bounds_axis
+                    * texel
+                    * bounds_span
+                    * (0.12 + 0.10 * bounds_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 bounds_shadow_uv = clamp(
+            bounds_base_uv
+                + dynamic_light_dir
+                    * texel
+                    * bounds_span
+                    * (0.18 + 0.12 * (1.0 - bounds_light_face))
+                - bounds_axis
+                    * texel
+                    * bounds_span
+                    * (0.10 + 0.08 * bounds_return_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 bounds_cross_a_uv = clamp(
+            bounds_base_uv
+                + bounds_cross
+                    * texel
+                    * bounds_corner_span
+                    * (0.30 + 0.12 * bounds_wave)
+                + dispersion_tangent
+                    * texel
+                    * bounds_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 bounds_cross_b_uv = clamp(
+            bounds_base_uv
+                - bounds_cross
+                    * texel
+                    * bounds_corner_span
+                    * (0.28 + 0.12 * bounds_lobe)
+                - dispersion_tangent
+                    * texel
+                    * bounds_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 bounds_center_uv = clamp(
+            bounds_anchor_uv
+                + bounds_axis
+                    * texel
+                    * bounds_span
+                    * (0.08 + 0.08 * bounds_center),
+            float2(0.0),
+            float2(1.0));
+        float3 bounds_base_rgb =
+            backdrop.sample(samp, bounds_base_uv).rgb;
+        float3 bounds_light_rgb =
+            backdrop.sample(samp, bounds_light_uv).rgb;
+        float3 bounds_shadow_rgb =
+            backdrop.sample(samp, bounds_shadow_uv).rgb;
+        float3 bounds_cross_a_rgb =
+            backdrop.sample(samp, bounds_cross_a_uv).rgb;
+        float3 bounds_cross_b_rgb =
+            backdrop.sample(samp, bounds_cross_b_uv).rgb;
+        float3 bounds_center_rgb =
+            backdrop.sample(samp, bounds_center_uv).rgb;
+        float3 bounds_probe =
+            bounds_base_rgb * 0.24
+            + bounds_light_rgb * 0.22
+            + bounds_shadow_rgb * 0.17
+            + bounds_cross_a_rgb * 0.14
+            + bounds_cross_b_rgb * 0.14
+            + bounds_center_rgb * 0.09;
+        float3 bounds_split = float3(
+            bounds_cross_a_rgb.r,
+            (bounds_base_rgb.g + bounds_center_rgb.g) * 0.5,
+            bounds_cross_b_rgb.b);
+        float bounds_luma =
+            dot(bounds_probe, float3(0.2126, 0.7152, 0.0722));
+        float bounds_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float bounds_chroma = max(
+            max(abs(bounds_probe.r - bounds_probe.g),
+                abs(bounds_probe.g - bounds_probe.b)),
+            abs(bounds_probe.b - bounds_probe.r));
+        float bounds_pickup =
+            smoothstep(0.028, 0.32, bounds_chroma);
+        float bounds_range = clamp(
+            length(bounds_light_rgb - bounds_shadow_rgb) * 0.24
+                + length(bounds_cross_a_rgb - bounds_cross_b_rgb) * 0.22
+                + length(bounds_center_rgb - bounds_base_rgb) * 0.16
+                + abs(bounds_luma - bounds_surface_luma) * 0.18
+                + bounds_lobe * 0.10
+                + bounds_presence * 0.10,
+            0.0,
+            1.0);
+        float bounds_coherence =
+            1.0 - smoothstep(0.08, 0.38, bounds_range);
+        float bounds_lift = smoothstep(
+            bounds_surface_luma - 0.06,
+            bounds_surface_luma + 0.30,
+            bounds_luma);
+        float bounds_depth = smoothstep(
+            0.08,
+            0.34,
+            bounds_surface_luma - bounds_luma);
+        float3 bounds_neutral = mix(
+            bounds_probe,
+            float3(bounds_luma),
+            bounds_depth * (0.10 + 0.12 * glass_shadow_gain)
+                + bounds_coherence * 0.10);
+        float3 bounds_layer = mix(
+            bounds_neutral,
+            bounds_split,
+            0.14
+                + 0.16 * bounds_pickup
+                + 0.14 * bounds_lobe
+                + 0.12 * bounds_light_face
+                + 0.10 * bounds_rim);
+        bounds_layer = clamp(
+            (bounds_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + bounds_lift * 0.010
+                       + bounds_presence * 0.010
+                       - bounds_depth * 0.014)
+                + float3(0.50),
+            0.0,
+            1.0);
+        bounds_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.010
+                   + 0.020 * tint_chroma * prominent_intensity);
+        float3 bounds_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.10,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.08,
+            spectral_coolness + tint_chroma * in.tint.b * 0.10);
+        bounds_layer += bounds_prism
+            * (0.0007
+               + 0.0022 * spectral_rim_tint
+               + 0.0020 * glass_prismatic_gain
+               + 0.0016 * glass_scattering_gain)
+            * (0.32
+               + 0.22 * bounds_pickup
+               + 0.20 * bounds_light_face
+               + 0.18 * bounds_lobe
+               + 0.12 * bounds_rim);
+        float bounds_gate = clamp(
+            bounds_presence * 0.28
+                + bounds_rim * 0.22
+                + bounds_lobe * 0.16
+                + bounds_center * 0.12
+                + bounds_light_face * 0.10
+                + bounds_coherence * 0.10,
+            0.0,
+            1.0);
+        float bounds_weight =
+            bounds_anchor_field_strength
+            * bounds_gate
+            * (0.30
+               + 0.18 * bounds_lift
+               + 0.16 * bounds_pickup
+               + 0.14 * bounds_coherence
+               + 0.12 * bounds_bridge_alignment
+               + 0.10 * bounds_rim);
+        rgb = mix(
+            rgb,
+            bounds_layer,
+            bounds_weight
+                * (0.16
+                   + 0.12 * bounds_lobe
+                   + 0.10 * bounds_presence));
+        rgb += bounds_prism
+            * bounds_weight
+            * max(bounds_lobe, bounds_return_lobe * 0.70)
+            * (0.0005
+               + 0.0018 * dynamic_light_highlight
+               + 0.0014 * glass_scattering_gain);
+        float bounds_shadow =
+            bounds_depth
+            * bounds_weight
+            * (0.0016 + 0.0050 * glass_shadow_gain)
+            * (0.50 + 0.50 * (1.0 - bounds_light_face));
+        rgb *= 1.0 - clamp(bounds_shadow, 0.0, 0.016);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
