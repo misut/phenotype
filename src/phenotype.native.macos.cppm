@@ -15737,6 +15737,268 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(bridge_meniscus_shadow, 0.0, 0.038);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float specular_sheet_strength = clamp(
+        (0.38 * bridge_meniscus_reflection_strength
+         + 0.010 * spacing_meniscus_strength
+         + 0.010 * shared_membrane_strength
+         + 0.010 * shared_shell_strength
+         + 0.012 * glass_effect_match_execution * group_blend_strength
+         + 0.010 * morph_execution * group_blend_strength
+         + 0.012 * bridge_highlight_gain
+         + 0.008 * dynamic_light_highlight)
+            * bridge_band
+            * (0.34 + 0.66 * bridge_core),
+        0.0,
+        0.072);
+    if (specular_sheet_strength > 0.0001
+        && bridge_dir_length > 0.0001
+        && bridge_band > 0.0001) {
+        float specular_sheet_core =
+            1.0 - smoothstep(
+                max(bridge_width * 0.18, 0.001),
+                bridge_width + 0.18,
+                bridge_lateral);
+        float specular_sheet_ridge =
+            smoothstep(
+                max(bridge_width * 0.18, 0.001),
+                bridge_width + 0.02,
+                bridge_lateral)
+            * (1.0 - smoothstep(
+                bridge_width + 0.02,
+                bridge_width + 0.28,
+                bridge_lateral));
+        float specular_sheet_axial =
+            1.0 - smoothstep(
+                max(bridge_length * 0.36, 0.001),
+                bridge_length + 0.30,
+                bridge_axial);
+        float specular_sheet_continuity = clamp(
+            glass_effect_match_execution * 0.34
+                + shared_backdrop_scope * 0.22
+                + morph_execution * 0.18
+                + shape_blend_execution * 0.14
+                + group_blend_strength * 0.12
+                + spacing_meniscus_strength * 1.4,
+            0.0,
+            1.0);
+        float specular_sheet_gate = clamp(
+            specular_sheet_axial
+                * (0.46 * specular_sheet_core
+                   + 0.54 * specular_sheet_ridge)
+                * (0.50
+                   + 0.20 * specular_sheet_continuity
+                   + 0.18 * bridge_highlight_gain
+                   + 0.12 * shared_backdrop_scope),
+            0.0,
+            1.0);
+        float2 specular_sheet_axis_raw =
+            -dynamic_light_dir * (0.46 + 0.32 * dynamic_light_highlight)
+            + bridge_dir * (0.34 + 0.28 * bridge_highlight_gain)
+            + bridge_tangent
+                * bridge_shear
+                * (0.22 + 0.18 * specular_sheet_continuity);
+        float specular_sheet_axis_len = length(specular_sheet_axis_raw);
+        float2 specular_sheet_axis = specular_sheet_axis_len > 0.0001
+            ? specular_sheet_axis_raw / specular_sheet_axis_len
+            : bridge_dir;
+        float specular_sheet_alignment =
+            smoothstep(-0.24, 0.96, dot(specular_sheet_axis,
+                                        -dynamic_light_dir));
+        float specular_sheet_phase = clamp(
+            bridge_axial * (12.0 + 6.0 * specular_sheet_continuity)
+                + bridge_lateral_signed
+                    * (8.0 + 5.0 * bridge_flow_offset_gain)
+                + bridge_shear * (5.0 + 2.0 * bridge_core)
+                + bridge_highlight_gain * 3.0
+                + glass_thickness * 4.0,
+            -14.0,
+            14.0);
+        float specular_sheet_wave =
+            0.5 + 0.5 * sin(specular_sheet_phase);
+        float specular_sheet_filament =
+            1.0 - smoothstep(
+                0.0,
+                0.24,
+                abs(specular_sheet_wave - 0.66));
+        float specular_sheet_span =
+            (1.00
+             + 2.4 * glass_thickness
+             + 1.6 * clear_glass_detail
+             + 1.2 * glass_caustic_spread
+             + 1.4 * specular_sheet_continuity
+             + 0.046 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float specular_sheet_cross_span =
+            (0.76
+             + 1.8 * glass_dispersion_tangential
+             + 1.6 * spectral_dispersion
+             + 1.4 * specular_sheet_alignment)
+            * content_scale;
+        float2 specular_sheet_light_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.20
+                + specular_sheet_axis
+                    * texel
+                    * specular_sheet_span
+                    * (0.32 + 0.16 * specular_sheet_wave)
+                + bridge_dir
+                    * texel
+                    * specular_sheet_span
+                    * (0.10 + 0.10 * specular_sheet_filament),
+            float2(0.0),
+            float2(1.0));
+        float2 specular_sheet_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                - specular_sheet_axis
+                    * texel
+                    * specular_sheet_span
+                    * (0.28 + 0.14 * specular_sheet_filament)
+                - bridge_dir
+                    * texel
+                    * specular_sheet_span
+                    * (0.10 + 0.08 * specular_sheet_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 specular_sheet_upper_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                + bridge_tangent
+                    * texel
+                    * specular_sheet_cross_span
+                    * (0.36
+                       + 0.18 * specular_sheet_wave
+                       + 0.16 * specular_sheet_ridge),
+            float2(0.0),
+            float2(1.0));
+        float2 specular_sheet_lower_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                - bridge_tangent
+                    * texel
+                    * specular_sheet_cross_span
+                    * (0.32
+                       + 0.18 * specular_sheet_filament
+                       + 0.14 * specular_sheet_core),
+            float2(0.0),
+            float2(1.0));
+        float3 specular_sheet_light_rgb =
+            backdrop.sample(samp, specular_sheet_light_uv).rgb;
+        float3 specular_sheet_return_rgb =
+            backdrop.sample(samp, specular_sheet_return_uv).rgb;
+        float3 specular_sheet_upper_rgb =
+            backdrop.sample(samp, specular_sheet_upper_uv).rgb;
+        float3 specular_sheet_lower_rgb =
+            backdrop.sample(samp, specular_sheet_lower_uv).rgb;
+        float3 specular_sheet_mirror =
+            specular_sheet_light_rgb * 0.36
+            + specular_sheet_return_rgb * 0.26
+            + specular_sheet_upper_rgb * 0.20
+            + specular_sheet_lower_rgb * 0.18;
+        float3 specular_sheet_split = float3(
+            specular_sheet_upper_rgb.r,
+            (specular_sheet_light_rgb.g + specular_sheet_return_rgb.g) * 0.5,
+            specular_sheet_lower_rgb.b);
+        float specular_sheet_luma =
+            dot(specular_sheet_mirror, float3(0.2126, 0.7152, 0.0722));
+        float specular_sheet_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float specular_sheet_range = clamp(
+            length(specular_sheet_light_rgb - specular_sheet_return_rgb) * 0.28
+                + length(specular_sheet_upper_rgb - specular_sheet_lower_rgb)
+                    * 0.24
+                + abs(specular_sheet_luma - specular_sheet_surface_luma)
+                    * 0.20
+                + specular_sheet_filament * 0.08,
+            0.0,
+            1.0);
+        float specular_sheet_coherence =
+            1.0 - smoothstep(0.08, 0.34, specular_sheet_range);
+        float specular_sheet_lift = smoothstep(
+            specular_sheet_surface_luma - 0.05,
+            specular_sheet_surface_luma + 0.28,
+            specular_sheet_luma);
+        float specular_sheet_dark = smoothstep(
+            0.07,
+            0.32,
+            specular_sheet_surface_luma - specular_sheet_luma);
+        float specular_sheet_fresnel = clamp(
+            specular_sheet_ridge * 0.32
+                + specular_sheet_core * 0.20
+                + specular_sheet_alignment * 0.20
+                + specular_sheet_continuity * 0.16
+                + specular_sheet_filament * 0.12,
+            0.0,
+            1.0);
+        float3 specular_sheet_layer = mix(
+            specular_sheet_mirror,
+            specular_sheet_split,
+            0.16
+                + 0.16 * specular_sheet_filament
+                + 0.14 * specular_sheet_fresnel
+                + 0.12 * spectral_dispersion);
+        specular_sheet_layer = clamp(
+            (specular_sheet_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.018
+                       + specular_sheet_lift * 0.014
+                       + specular_sheet_fresnel * 0.012
+                       - glass_shadow_gain * 0.005)
+                + float3(0.50),
+            0.0,
+            1.0);
+        specular_sheet_layer *= float3(
+            1.0
+                + spectral_warmth
+                    * (0.22 + 0.16 * specular_sheet_wave),
+            1.0 + spectral_rim_tint * 0.16,
+            1.0
+                + spectral_coolness
+                    * (0.22 + 0.16 * (1.0 - specular_sheet_wave)));
+        float3 specular_sheet_prism = float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        specular_sheet_layer += specular_sheet_prism
+            * specular_sheet_fresnel
+            * (0.0010
+               + 0.0030 * spectral_rim_tint
+               + 0.0026 * glass_caustic_spread
+               + 0.0022 * glass_prismatic_gain)
+            * (0.34
+               + 0.24 * specular_sheet_coherence
+               + 0.22 * specular_sheet_filament
+               + 0.20 * specular_sheet_lift);
+        float specular_sheet_weight =
+            specular_sheet_strength
+            * specular_sheet_gate
+            * (0.32
+               + 0.20 * specular_sheet_coherence
+               + 0.18 * specular_sheet_fresnel
+               + 0.16 * specular_sheet_filament
+               + 0.10 * specular_sheet_alignment);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                specular_sheet_layer,
+                0.10 + 0.18 * specular_sheet_fresnel),
+            specular_sheet_weight * 0.36);
+        rgb += specular_sheet_prism
+            * specular_sheet_weight
+            * specular_sheet_filament
+            * (0.0008
+               + 0.0026 * dynamic_light_highlight
+               + 0.0022 * glass_scattering_gain);
+        float specular_sheet_shadow =
+            specular_sheet_dark
+            * specular_sheet_weight
+            * (0.005 + 0.014 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - specular_sheet_alignment));
+        rgb *= 1.0 - clamp(specular_sheet_shadow, 0.0, 0.034);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float liquid_response_strength = clamp(
         0.012 * clear_glass_detail
             + 0.010 * clear_glass_contrast
@@ -15749,6 +16011,7 @@ fragment float4 fs_material(
             + 0.014 * shared_shell_strength
             + 0.014 * spacing_meniscus_strength
             + 0.012 * bridge_meniscus_reflection_strength
+            + 0.012 * specular_sheet_strength
             + 0.018 * pointer_lens_strength * pointer_lens_raw
             + 0.016 * bridge_motion_strength * bridge_band
             + 0.010 * union_execution * group_blend_strength,
