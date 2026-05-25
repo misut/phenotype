@@ -31946,6 +31946,328 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(separation_shadow, 0.0, 0.018);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float interlayer_refraction_field_strength = clamp(
+        0.010 * overlap_response_strength
+            + 0.009 * fusion_strength
+            + 0.008 * group_blend_strength * shared_backdrop_scope
+            + 0.007 * group_blend_strength * group_surface_execution
+            + 0.006 * bridge_band
+            + 0.24 * layer_separation_field_strength
+            + 0.05 * container_morph_field_strength
+            + 0.04 * bounds_anchor_field_strength
+            + 0.04 * edge_meniscus_field_strength
+            + 0.03 * foreground_sheen_field_strength,
+        0.0,
+        0.040);
+    if (interlayer_refraction_field_strength > 0.0001) {
+        float interlayer_center =
+            1.0 - smoothstep(0.20, 1.10, normalized_len);
+        float interlayer_rim =
+            edge_lens
+            * (0.38
+               + 0.62
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.35, 0.75),
+                       signed_edge_distance)));
+        float interlayer_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float interlayer_overlap = clamp(
+            overlap_response_strength * 0.32
+                + fusion_strength * 0.24
+                + group_blend_strength * shared_backdrop_scope * 0.18
+                + group_surface_execution * group_blend_strength * 0.16
+                + interlayer_bridge * 0.18,
+            0.0,
+            1.0);
+        float interlayer_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float interlayer_presence = clamp(
+            interlayer_center * 0.20
+                + interlayer_rim * 0.22
+                + interlayer_overlap * 0.24
+                + interlayer_bridge * 0.18
+                + interlayer_pointer * 0.10
+                + prominent_intensity * 0.06,
+            0.0,
+            1.0);
+        float2 interlayer_group_norm = normalized_local;
+        float interlayer_group_active = 0.0;
+        if (in.group_rect.z > 0.0 && in.group_rect.w > 0.0) {
+            float2 interlayer_group_size =
+                max(in.group_rect.zw, float2(1.0));
+            float2 interlayer_group_local = clamp(
+                in.screen_pos - in.group_rect.xy,
+                float2(0.0),
+                interlayer_group_size);
+            interlayer_group_norm =
+                (interlayer_group_local / interlayer_group_size - float2(0.5))
+                * 2.0;
+            interlayer_group_active = group_blend_strength;
+        }
+        float2 interlayer_axis_raw =
+            refraction_dir * (0.34 + 0.20 * glass_lensing_gain)
+            - dynamic_light_dir * (0.28 + 0.22 * dynamic_light_highlight)
+            + bridge_dir * (0.24 + 0.24 * interlayer_bridge)
+            + pointer_dir * (0.18 + 0.18 * interlayer_pointer)
+            + dispersion_tangent
+                * (0.16
+                   + 0.10 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential)
+            + interlayer_group_norm
+                * interlayer_group_active
+                * (0.10 + 0.08 * interlayer_overlap);
+        float interlayer_axis_len = length(interlayer_axis_raw);
+        float2 interlayer_axis =
+            interlayer_axis_len > 0.0001
+                ? interlayer_axis_raw / interlayer_axis_len
+                : refraction_dir;
+        float2 interlayer_cross =
+            float2(-interlayer_axis.y, interlayer_axis.x);
+        float interlayer_light_face =
+            smoothstep(-0.20, 0.94, dot(interlayer_axis, -dynamic_light_dir));
+        float interlayer_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(interlayer_axis, bridge_dir)));
+        float interlayer_phase = clamp(
+            dot(normalized_local, interlayer_axis)
+                    * (4.6 + 1.8 * interlayer_presence)
+                + dot(normalized_local, interlayer_cross)
+                    * (2.9 + 1.1 * interlayer_overlap)
+                + dot(interlayer_group_norm, interlayer_axis)
+                    * interlayer_group_active
+                    * (2.1 + 1.1 * interlayer_bridge)
+                + bridge_axial * (2.5 + 1.4 * bridge_core)
+                + bridge_shear * interlayer_bridge * 1.8
+                + spectral_dispersion * 4.2,
+            -12.0,
+            12.0);
+        float interlayer_wave = 0.5 + 0.5 * sin(interlayer_phase);
+        float interlayer_counter =
+            0.5 + 0.5 * cos(
+                interlayer_phase * 0.74
+                + glass_caustic_spread * 4.1
+                + interlayer_overlap * 2.0);
+        float interlayer_lobe =
+            1.0 - smoothstep(0.0, 0.35, abs(interlayer_wave - 0.55));
+        float interlayer_return_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(interlayer_counter - 0.52));
+        float interlayer_span =
+            (0.78
+             + 1.7 * glass_thickness
+             + 1.3 * clear_glass_detail
+             + 1.2 * interlayer_presence
+             + 0.034 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float interlayer_cross_span =
+            (0.54
+             + 1.0 * glass_dispersion_tangential
+             + 0.9 * spectral_dispersion
+             + 0.8 * interlayer_bridge_alignment)
+            * content_scale;
+        float2 interlayer_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.12 + 0.08 * interlayer_overlap),
+            float2(0.0),
+            float2(1.0));
+        float2 interlayer_front_uv = clamp(
+            interlayer_base_uv
+                - dynamic_light_dir
+                    * texel
+                    * interlayer_span
+                    * (0.24 + 0.14 * interlayer_light_face)
+                + interlayer_axis
+                    * texel
+                    * interlayer_span
+                    * (0.16 + 0.10 * interlayer_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 interlayer_back_uv = clamp(
+            interlayer_base_uv
+                + dynamic_light_dir
+                    * texel
+                    * interlayer_span
+                    * (0.24 + 0.14 * (1.0 - interlayer_light_face))
+                - interlayer_axis
+                    * texel
+                    * interlayer_span
+                    * (0.14 + 0.10 * interlayer_return_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 interlayer_relay_uv = clamp(
+            interlayer_base_uv
+                + interlayer_axis
+                    * texel
+                    * interlayer_span
+                    * (0.30 + 0.16 * interlayer_overlap)
+                + bridge_dir
+                    * texel
+                    * interlayer_span
+                    * interlayer_bridge
+                    * 0.16,
+            float2(0.0),
+            float2(1.0));
+        float2 interlayer_warm_uv = clamp(
+            interlayer_base_uv
+                + interlayer_cross
+                    * texel
+                    * interlayer_cross_span
+                    * (0.28 + 0.12 * interlayer_wave)
+                + dispersion_tangent
+                    * texel
+                    * interlayer_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 interlayer_cool_uv = clamp(
+            interlayer_base_uv
+                - interlayer_cross
+                    * texel
+                    * interlayer_cross_span
+                    * (0.26 + 0.12 * interlayer_lobe)
+                - dispersion_tangent
+                    * texel
+                    * interlayer_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float3 interlayer_front_rgb =
+            backdrop.sample(samp, interlayer_front_uv).rgb;
+        float3 interlayer_back_rgb =
+            backdrop.sample(samp, interlayer_back_uv).rgb;
+        float3 interlayer_relay_rgb =
+            backdrop.sample(samp, interlayer_relay_uv).rgb;
+        float3 interlayer_warm_rgb =
+            backdrop.sample(samp, interlayer_warm_uv).rgb;
+        float3 interlayer_cool_rgb =
+            backdrop.sample(samp, interlayer_cool_uv).rgb;
+        float3 interlayer_probe =
+            interlayer_front_rgb * 0.24
+            + interlayer_back_rgb * 0.21
+            + interlayer_relay_rgb * 0.23
+            + interlayer_warm_rgb * 0.16
+            + interlayer_cool_rgb * 0.16;
+        float3 interlayer_split = float3(
+            interlayer_warm_rgb.r,
+            (interlayer_relay_rgb.g + interlayer_front_rgb.g) * 0.5,
+            interlayer_cool_rgb.b);
+        float interlayer_luma =
+            dot(interlayer_probe, float3(0.2126, 0.7152, 0.0722));
+        float interlayer_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float interlayer_range = clamp(
+            length(interlayer_front_rgb - interlayer_back_rgb) * 0.24
+                + length(interlayer_warm_rgb - interlayer_cool_rgb) * 0.22
+                + length(interlayer_relay_rgb - interlayer_probe) * 0.18
+                + abs(interlayer_luma - interlayer_surface_luma) * 0.18
+                + interlayer_lobe * 0.10
+                + interlayer_presence * 0.08,
+            0.0,
+            1.0);
+        float interlayer_coherence =
+            1.0 - smoothstep(0.08, 0.38, interlayer_range);
+        float interlayer_lift = smoothstep(
+            interlayer_surface_luma - 0.05,
+            interlayer_surface_luma + 0.30,
+            interlayer_luma);
+        float interlayer_depth = smoothstep(
+            0.08,
+            0.34,
+            interlayer_surface_luma - interlayer_luma);
+        float interlayer_relay_luma =
+            dot(interlayer_relay_rgb, float3(0.2126, 0.7152, 0.0722));
+        float interlayer_relay_pickup = smoothstep(
+            interlayer_surface_luma - 0.05,
+            interlayer_surface_luma + 0.26,
+            interlayer_relay_luma);
+        float interlayer_relief = clamp(
+            interlayer_range * 0.34
+                + interlayer_relay_pickup * 0.22
+                + interlayer_overlap * 0.18
+                + interlayer_lobe * 0.14
+                + interlayer_bridge_alignment * 0.12,
+            0.0,
+            1.0);
+        float3 interlayer_neutral = mix(
+            interlayer_probe,
+            float3(interlayer_luma),
+            interlayer_depth * (0.12 + 0.14 * glass_shadow_gain)
+                + interlayer_coherence * 0.12);
+        float3 interlayer_layer = mix(
+            interlayer_neutral,
+            interlayer_split,
+            0.14
+                + 0.15 * interlayer_relief
+                + 0.14 * interlayer_lobe
+                + 0.12 * interlayer_light_face
+                + 0.10 * interlayer_relay_pickup);
+        interlayer_layer = clamp(
+            (interlayer_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + interlayer_lift * 0.010
+                       + interlayer_relief * 0.012
+                       - interlayer_depth * 0.014)
+                + float3(0.50),
+            0.0,
+            1.0);
+        interlayer_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.010
+                   + 0.020 * tint_chroma * prominent_intensity);
+        float3 interlayer_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.10,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.08,
+            spectral_coolness + tint_chroma * in.tint.b * 0.10);
+        interlayer_layer += interlayer_prism
+            * interlayer_relay_pickup
+            * (0.0006
+               + 0.0022 * spectral_rim_tint
+               + 0.0020 * glass_prismatic_gain
+               + 0.0016 * glass_scattering_gain)
+            * (0.32
+               + 0.22 * interlayer_light_face
+               + 0.18 * interlayer_lobe
+               + 0.18 * interlayer_relief);
+        float interlayer_gate = clamp(
+            interlayer_presence * 0.28
+                + interlayer_overlap * 0.24
+                + interlayer_rim * 0.16
+                + interlayer_lobe * 0.14
+                + interlayer_light_face * 0.10
+                + interlayer_coherence * 0.10,
+            0.0,
+            1.0);
+        float interlayer_weight =
+            interlayer_refraction_field_strength
+            * interlayer_gate
+            * (0.30
+               + 0.20 * interlayer_relief
+               + 0.16 * interlayer_relay_pickup
+               + 0.14 * interlayer_coherence
+               + 0.12 * interlayer_bridge_alignment);
+        rgb = mix(
+            rgb,
+            interlayer_layer,
+            interlayer_weight
+                * (0.15
+                   + 0.12 * interlayer_lobe
+                   + 0.10 * interlayer_presence));
+        rgb += interlayer_prism
+            * interlayer_weight
+            * max(interlayer_lobe, interlayer_return_lobe * 0.70)
+            * (0.0006
+               + 0.0018 * dynamic_light_highlight
+               + 0.0016 * glass_scattering_gain);
+        float interlayer_absorption =
+            interlayer_depth
+            * interlayer_weight
+            * (0.0016 + 0.0056 * glass_shadow_gain)
+            * (0.52 + 0.48 * (1.0 - interlayer_light_face));
+        rgb *= 1.0 - clamp(interlayer_absorption, 0.0, 0.017);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
