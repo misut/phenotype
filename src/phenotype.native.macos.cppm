@@ -14827,9 +14827,11 @@ fragment float4 fs_material(
             + 0.010 * glass_scattering_gain
             + 0.014 * edge_inner_highlight
             + 0.010 * edge_outer_shadow
-            + 0.010 * planned_environment_reflection,
+            + 0.010 * planned_environment_reflection
+            + 0.008 * planned_environment_color_pickup
+            + 0.006 * planned_environment_transmission_balance,
         0.0,
-        0.11);
+        0.12);
     if (glass_edge_diffusion_strength > 0.0001
         && edge_bevel_width > 0.0001) {
         float diffusion_outer = 1.0 - smoothstep(
@@ -14849,6 +14851,8 @@ fragment float4 fs_material(
             planned_union_response_strength * 0.28
                 + planned_union_edge_continuity * 0.28
                 + planned_union_shape_coalescence * 0.18
+                + planned_environment_reflection * 0.16
+                + planned_environment_color_pickup * 0.12
                 + edge_lens * 0.18
                 + glass_union_glow_strength * 1.40,
             0.0,
@@ -14857,9 +14861,13 @@ fragment float4 fs_material(
             refraction_dir
                 * (0.44 + 0.28 * planned_union_edge_continuity)
             - dynamic_light_dir
-                * (0.24 + 0.18 * dynamic_light_highlight)
+                * (0.24
+                   + 0.18 * dynamic_light_highlight
+                   + 0.10 * planned_environment_reflection)
             + dispersion_tangent
-                * (0.14 + 0.12 * planned_union_shape_coalescence);
+                * (0.14
+                   + 0.12 * planned_union_shape_coalescence
+                   + 0.09 * planned_environment_color_pickup);
         float diffusion_axis_length = length(diffusion_axis_raw);
         float2 diffusion_axis = diffusion_axis_length > 0.0001
             ? diffusion_axis_raw / diffusion_axis_length
@@ -14871,13 +14879,16 @@ fragment float4 fs_material(
              + 3.4 * glass_thickness
              + 2.0 * planned_union_edge_continuity
              + 1.2 * planned_union_luma_stability
+             + 1.0 * planned_environment_reflection
+             + 0.6 * planned_environment_transmission_balance
              + 0.05 * blur_points)
             * content_scale
             * (0.80 + 0.20 * glass_lensing_gain);
         float diffusion_micro_span =
             (0.7
              + 1.8 * glass_dispersion_tangential
-             + 3.2 * spectral_dispersion)
+             + 3.2 * spectral_dispersion
+             + 0.7 * planned_environment_color_pickup)
             * content_scale;
         float2 diffusion_near_uv = clamp(
             in.screen_uv
@@ -14962,6 +14973,10 @@ fragment float4 fs_material(
             diffusion_luma_rgb
             + (diffusion_layer - diffusion_luma_rgb)
                 * (0.88 + 0.10 * diffusion_contact);
+        diffusion_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.010 * planned_environment_color_pickup
+                   + 0.008 * planned_environment_reflection);
         float diffusion_weight =
             glass_edge_diffusion_strength
             * diffusion_band
@@ -14969,7 +14984,8 @@ fragment float4 fs_material(
                + 0.22 * diffusion_contact
                + 0.18 * diffusion_calm
                + 0.14 * planned_union_edge_continuity
-               + 0.10 * edge_inner_highlight);
+               + 0.10 * edge_inner_highlight
+               + 0.08 * planned_environment_reflection);
         rgb = mix(
             rgb,
             clamp(diffusion_layer, 0.0, 1.0),
@@ -14978,7 +14994,8 @@ fragment float4 fs_material(
             diffusion_weight
             * (0.006
                + 0.012 * glass_scattering_gain
-               + 0.010 * planned_environment_reflection)
+               + 0.010 * planned_environment_reflection
+               + 0.006 * planned_environment_color_pickup)
             * (0.42 + 0.58 * diffusion_calm);
         rgb += diffusion_neutral * diffusion_highlight;
         float diffusion_shadow =
@@ -31375,12 +31392,16 @@ fragment float4 fs_material(
             + 0.010 * glass_caustic_spread
             + 0.008 * (glass_lensing_gain - 1.0)
             + 0.008 * spectral_rim_tint
+            + 0.008 * planned_environment_reflection
+            + 0.006 * planned_environment_color_pickup
+            + 0.006 * planned_environment_transmission_balance
             + 0.08 * interactive_tint_field_strength
             + 0.07 * container_pressure_field_strength
             + 0.06 * foreground_sheen_field_strength
-            + 0.05 * ambient_chromatic_field_strength,
+            + 0.05 * ambient_chromatic_field_strength
+            + 0.06 * environment_sheen_bias,
         0.0,
-        0.046);
+        0.054);
     if (edge_meniscus_field_strength > 0.0001) {
         float meniscus_edge =
             1.0 - smoothstep(
@@ -31404,7 +31425,10 @@ fragment float4 fs_material(
                 + meniscus_corner * 0.16
                 + meniscus_bridge * 0.16
                 + meniscus_pointer * 0.12
-                + tint_strength * 0.08,
+                + tint_strength * 0.08
+                + planned_environment_reflection * 0.10
+                + planned_environment_color_pickup * 0.08
+                + environment_sheen_bias * 0.08,
             0.0,
             1.0);
         float2 meniscus_axis_raw =
@@ -31413,10 +31437,12 @@ fragment float4 fs_material(
                 * (0.30 + 0.22 * dynamic_light_highlight)
             + pointer_dir * (0.22 + 0.18 * meniscus_pointer)
             + bridge_dir * (0.20 + 0.18 * meniscus_bridge)
+            - dynamic_light_dir * (0.08 * planned_environment_reflection)
             + dispersion_tangent
                 * (0.16
                    + 0.12 * spectral_dispersion
-                   + 0.10 * glass_dispersion_tangential);
+                   + 0.10 * glass_dispersion_tangential
+                   + 0.09 * planned_environment_color_pickup);
         float meniscus_axis_len = length(meniscus_axis_raw);
         float2 meniscus_axis =
             meniscus_axis_len > 0.0001
@@ -31436,7 +31462,8 @@ fragment float4 fs_material(
                 + bridge_axial * (2.4 + 1.2 * bridge_core)
                 + bridge_shear * bridge_band * 1.8
                 + materialize_rim_position * materialize_wave_strength * 2.2
-                + spectral_dispersion * 4.8,
+                + spectral_dispersion * 4.8
+                + environment_sheen_bias * 2.4,
             -12.0,
             12.0);
         float meniscus_wave = 0.5 + 0.5 * sin(meniscus_phase);
@@ -31454,6 +31481,8 @@ fragment float4 fs_material(
              + 1.4 * glass_thickness
              + 1.2 * glass_caustic_spread
              + 1.0 * meniscus_presence
+             + 0.8 * planned_environment_reflection
+             + 0.6 * planned_environment_transmission_balance
              + 0.032 * blur_points)
             * content_scale
             * (0.88 + 0.12 * glass_lensing_gain);
@@ -31461,11 +31490,15 @@ fragment float4 fs_material(
             (0.48
              + 1.0 * glass_dispersion_tangential
              + 0.9 * spectral_dispersion
-             + 0.8 * meniscus_bridge_alignment)
+             + 0.8 * meniscus_bridge_alignment
+             + 0.8 * planned_environment_color_pickup)
             * content_scale;
         float2 meniscus_base_uv = clamp(
             in.screen_uv
-                + refraction_uv * (0.08 + 0.05 * meniscus_presence),
+                + refraction_uv
+                    * (0.08
+                       + 0.05 * meniscus_presence
+                       + 0.04 * planned_environment_transmission_balance),
             float2(0.0),
             float2(1.0));
         float2 meniscus_light_uv = clamp(
@@ -31473,11 +31506,15 @@ fragment float4 fs_material(
                 - dynamic_light_dir
                     * texel
                     * meniscus_span
-                    * (0.24 + 0.14 * meniscus_light_face)
+                    * (0.24
+                       + 0.14 * meniscus_light_face
+                       + 0.07 * planned_environment_reflection)
                 + meniscus_axis
                     * texel
                     * meniscus_span
-                    * (0.14 + 0.10 * meniscus_lobe),
+                    * (0.14
+                       + 0.10 * meniscus_lobe
+                       + 0.05 * environment_sheen_bias),
             float2(0.0),
             float2(1.0));
         float2 meniscus_shadow_uv = clamp(
@@ -31485,11 +31522,15 @@ fragment float4 fs_material(
                 + dynamic_light_dir
                     * texel
                     * meniscus_span
-                    * (0.20 + 0.12 * (1.0 - meniscus_light_face))
+                    * (0.20
+                       + 0.12 * (1.0 - meniscus_light_face)
+                       + 0.05 * planned_environment_transmission_balance)
                 - meniscus_axis
                     * texel
                     * meniscus_span
-                    * (0.12 + 0.08 * meniscus_return_lobe),
+                    * (0.12
+                       + 0.08 * meniscus_return_lobe
+                       + 0.05 * environment_sheen_bias),
             float2(0.0),
             float2(1.0));
         float2 meniscus_warm_uv = clamp(
@@ -31497,11 +31538,15 @@ fragment float4 fs_material(
                 + meniscus_cross
                     * texel
                     * meniscus_chroma_span
-                    * (0.30 + 0.12 * meniscus_wave)
+                    * (0.30
+                       + 0.12 * meniscus_wave
+                       + 0.07 * planned_environment_color_pickup)
                 + dispersion_tangent
                     * texel
                     * meniscus_span
-                    * (0.10 + 0.08 * spectral_rim_tint),
+                    * (0.10
+                       + 0.08 * spectral_rim_tint
+                       + 0.04 * environment_sheen_bias),
             float2(0.0),
             float2(1.0));
         float2 meniscus_cool_uv = clamp(
@@ -31509,11 +31554,15 @@ fragment float4 fs_material(
                 - meniscus_cross
                     * texel
                     * meniscus_chroma_span
-                    * (0.28 + 0.12 * meniscus_lobe)
+                    * (0.28
+                       + 0.12 * meniscus_lobe
+                       + 0.07 * planned_environment_color_pickup)
                 - dispersion_tangent
                     * texel
                     * meniscus_span
-                    * (0.10 + 0.08 * spectral_rim_tint),
+                    * (0.10
+                       + 0.08 * spectral_rim_tint
+                       + 0.04 * environment_sheen_bias),
             float2(0.0),
             float2(1.0));
         float3 meniscus_base_rgb =
@@ -31545,13 +31594,17 @@ fragment float4 fs_material(
                 abs(meniscus_probe.g - meniscus_probe.b)),
             abs(meniscus_probe.b - meniscus_probe.r));
         float meniscus_pickup =
-            smoothstep(0.028, 0.32, meniscus_chroma);
+            smoothstep(
+                0.022 - 0.006 * planned_environment_color_pickup,
+                0.32,
+                meniscus_chroma);
         float meniscus_range = clamp(
             length(meniscus_light_rgb - meniscus_shadow_rgb) * 0.24
                 + length(meniscus_warm_rgb - meniscus_cool_rgb) * 0.22
                 + abs(meniscus_luma - meniscus_surface_luma) * 0.18
                 + meniscus_lobe * 0.12
-                + meniscus_presence * 0.10,
+                + meniscus_presence * 0.10
+                + environment_sheen_bias * 0.08,
             0.0,
             1.0);
         float meniscus_coherence =
@@ -31575,13 +31628,15 @@ fragment float4 fs_material(
             0.15
                 + 0.16 * meniscus_pickup
                 + 0.14 * meniscus_lobe
-                + 0.12 * meniscus_light_face);
+                + 0.12 * meniscus_light_face
+                + 0.10 * planned_environment_color_pickup);
         meniscus_layer = clamp(
             (meniscus_layer - float3(0.50))
                     * (1.0
                        + clear_glass_contrast * 0.012
                        + meniscus_lift * 0.012
                        + meniscus_presence * 0.010
+                       + planned_environment_reflection * 0.010
                        - meniscus_depth * 0.014)
                 + float3(0.50),
             0.0,
@@ -31589,7 +31644,8 @@ fragment float4 fs_material(
         meniscus_layer *= float3(1.0)
             + in.tint.rgb
                 * (0.010
-                   + 0.022 * tint_chroma * prominent_intensity);
+                   + 0.022 * tint_chroma * prominent_intensity
+                   + 0.016 * planned_environment_color_pickup);
         float3 meniscus_prism = float3(
             spectral_warmth + tint_chroma * in.tint.r * 0.12,
             0.12 * (spectral_warmth + spectral_coolness)
@@ -31599,18 +31655,28 @@ fragment float4 fs_material(
             * (0.0007
                + 0.0024 * spectral_rim_tint
                + 0.0022 * glass_prismatic_gain
-               + 0.0018 * glass_scattering_gain)
+               + 0.0018 * glass_scattering_gain
+               + 0.0015 * planned_environment_reflection
+               + 0.0012 * planned_environment_color_pickup)
             * (0.32
                + 0.22 * meniscus_pickup
                + 0.20 * meniscus_light_face
-               + 0.18 * meniscus_lobe);
+               + 0.18 * meniscus_lobe
+               + 0.12 * environment_sheen_bias);
+        float meniscus_halo =
+            max(meniscus_lobe, meniscus_return_lobe * 0.68)
+            * meniscus_edge
+            * (0.44 + 0.56 * environment_sheen_bias);
         float meniscus_gate = clamp(
             meniscus_presence * 0.30
                 + meniscus_edge * 0.22
                 + meniscus_lobe * 0.16
                 + meniscus_bridge * 0.12
                 + meniscus_light_face * 0.10
-                + meniscus_coherence * 0.10,
+                + meniscus_coherence * 0.10
+                + planned_environment_reflection * 0.08
+                + planned_environment_color_pickup * 0.06
+                + environment_sheen_bias * 0.06,
             0.0,
             1.0);
         float meniscus_weight =
@@ -31620,20 +31686,27 @@ fragment float4 fs_material(
                + 0.18 * meniscus_lift
                + 0.16 * meniscus_pickup
                + 0.14 * meniscus_coherence
-               + 0.12 * meniscus_bridge_alignment);
+               + 0.12 * meniscus_bridge_alignment
+               + 0.10 * environment_sheen_bias);
         rgb = mix(
             rgb,
             meniscus_layer,
             meniscus_weight
                 * (0.16
                    + 0.14 * meniscus_lobe
-                   + 0.10 * meniscus_presence));
+                   + 0.10 * meniscus_presence
+                   + 0.08 * planned_environment_reflection));
+        rgb += meniscus_layer
+            * meniscus_weight
+            * meniscus_halo
+            * (0.0020 + 0.0035 * planned_environment_reflection);
         rgb += meniscus_prism
             * meniscus_weight
-            * max(meniscus_lobe, meniscus_return_lobe * 0.70)
+            * max(meniscus_lobe, max(meniscus_return_lobe * 0.70, meniscus_halo))
             * (0.0006
                + 0.0020 * dynamic_light_highlight
-               + 0.0016 * glass_scattering_gain);
+               + 0.0016 * glass_scattering_gain
+               + 0.0010 * environment_sheen_bias);
         float meniscus_shadow =
             meniscus_depth
             * meniscus_weight
