@@ -28787,6 +28787,373 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(flow_shadow, 0.0, 0.024);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float container_cohesion_field_strength = clamp(
+        0.018 * group_blend_strength
+            + 0.014 * bridge_band * (0.34 + 0.66 * bridge_core)
+            + 0.011 * glass_effect_match_execution * group_blend_strength
+            + 0.010 * morph_execution * group_blend_strength
+            + 0.009 * materialize_wave_strength * bridge_band
+            + 0.26 * lensing_flow_field_strength
+            + 0.22 * ambient_chromatic_field_strength
+            + 0.18 * environment_envelope_strength
+            + 0.14 * transition_seam_lock_strength
+            + 0.12 * container_irradiance_lock_strength
+            + 0.10 * spectral_grazing_glint_strength,
+        0.0,
+        0.060);
+    if (container_cohesion_field_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 cohesion_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 cohesion_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            cohesion_group_size);
+        float2 cohesion_group_norm =
+            (cohesion_group_local / cohesion_group_size - float2(0.5)) * 2.0;
+        float2 cohesion_group_center_screen =
+            in.group_rect.xy + cohesion_group_size * 0.5;
+        float2 cohesion_to_group_screen =
+            cohesion_group_center_screen - in.screen_pos;
+        float cohesion_to_group_distance =
+            length(cohesion_to_group_screen);
+        float2 cohesion_group_dir =
+            cohesion_to_group_distance > 0.0001
+                ? cohesion_to_group_screen / cohesion_to_group_distance
+                : bridge_dir;
+        float cohesion_center =
+            1.0 - smoothstep(0.18, 1.14, length(normalized_local));
+        float cohesion_group_center =
+            1.0 - smoothstep(0.18, 1.10, length(cohesion_group_norm));
+        float cohesion_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 3.10, 1.0),
+                signed_edge_distance);
+        float cohesion_bridge =
+            bridge_band * (0.32 + 0.68 * bridge_core);
+        float cohesion_presence = clamp(
+            group_blend_strength * 0.38
+                + cohesion_bridge * 0.34
+                + glass_effect_match_execution * group_blend_strength * 0.16
+                + morph_execution * group_blend_strength * 0.14
+                + materialize_wave_strength * cohesion_bridge * 0.12
+                + transition_seam_lock_strength * group_blend_strength * 1.6,
+            0.0,
+            1.0);
+        float cohesion_transition = clamp(
+            glass_effect_match_execution * 0.24
+                + morph_execution * 0.18
+                + materialize_wave_strength * 0.14
+                + lensing_flow_field_strength * 1.8
+                + ambient_chromatic_field_strength * 1.4
+                + environment_envelope_strength * 1.2
+                + transition_seam_lock_strength * 1.0
+                + group_blend_strength * 0.20,
+            0.0,
+            1.0);
+        float2 cohesion_axis_raw =
+            cohesion_group_dir * (0.30 + 0.22 * cohesion_presence)
+            + bridge_dir * (0.28 + 0.24 * cohesion_bridge)
+            + refraction_dir * (0.22 + 0.18 * glass_lensing_gain)
+            - dynamic_light_dir
+                * (0.20 + 0.16 * dynamic_light_highlight)
+            + dispersion_tangent
+                * (0.14
+                   + 0.10 * spectral_dispersion
+                   + 0.10 * glass_dispersion_tangential)
+            + normalized_local * (0.10 + 0.10 * cohesion_edge);
+        float cohesion_axis_len = length(cohesion_axis_raw);
+        float2 cohesion_axis =
+            cohesion_axis_len > 0.0001
+                ? cohesion_axis_raw / cohesion_axis_len
+                : bridge_dir;
+        float2 cohesion_cross =
+            float2(-cohesion_axis.y, cohesion_axis.x);
+        float cohesion_light_face =
+            smoothstep(-0.20, 0.94, dot(cohesion_axis, -dynamic_light_dir));
+        float cohesion_bridge_alignment =
+            smoothstep(-0.24, 0.90, abs(dot(cohesion_axis, bridge_dir)));
+        float cohesion_group_alignment =
+            smoothstep(-0.20, 0.92, dot(cohesion_axis, cohesion_group_dir));
+        float cohesion_curve = clamp(
+            abs(dot(normalized_local, cohesion_cross)) * 0.30
+                + cohesion_edge * 0.24
+                + cohesion_bridge * 0.24
+                + cohesion_group_center * 0.14
+                + cohesion_center * 0.10,
+            0.0,
+            1.0);
+        float cohesion_phase = clamp(
+            dot(normalized_local, cohesion_axis)
+                    * (4.0 + 1.7 * cohesion_transition)
+                + dot(normalized_local, cohesion_cross)
+                    * (2.8 + 1.3 * cohesion_curve)
+                + dot(cohesion_group_norm, cohesion_axis)
+                    * (2.2 + 1.5 * group_blend_strength)
+                + signed_edge_distance
+                    / max(edge_bevel_width * 2.45, 1.0)
+                    * (2.0 + 1.3 * glass_thickness)
+                + bridge_axial * (2.2 + 1.5 * bridge_core)
+                + bridge_shear * bridge_band * 2.0
+                + materialize_rim_position * materialize_wave_strength * 2.0,
+            -12.0,
+            12.0);
+        float cohesion_wave =
+            0.5 + 0.5 * sin(cohesion_phase);
+        float cohesion_counter =
+            0.5 + 0.5 * cos(
+                cohesion_phase * 0.72
+                + spectral_dispersion * 4.6
+                + glass_caustic_spread * 4.2);
+        float cohesion_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(cohesion_wave - 0.55));
+        float cohesion_counter_lobe =
+            1.0 - smoothstep(
+                0.0,
+                0.36,
+                abs(cohesion_counter - 0.52));
+        float cohesion_membrane =
+            smoothstep(0.16, 0.84, cohesion_presence)
+            * (0.5
+               + 0.5 * sin(
+                   cohesion_phase * 1.28
+                   + bridge_shear * bridge_band * 3.2));
+        float cohesion_gate = clamp(
+            cohesion_presence * 0.28
+                + cohesion_bridge * 0.22
+                + cohesion_edge * 0.18
+                + cohesion_transition * 0.16
+                + cohesion_group_center * 0.10
+                + cohesion_light_face * 0.08
+                + cohesion_curve * 0.08,
+            0.0,
+            1.0);
+        float cohesion_span =
+            (0.86
+             + 2.0 * glass_thickness
+             + 1.7 * clear_glass_detail
+             + 1.2 * cohesion_transition
+             + 0.040 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float cohesion_cross_span =
+            (0.58
+             + 1.1 * glass_dispersion_tangential
+             + 1.0 * spectral_dispersion
+             + 0.9 * cohesion_bridge_alignment)
+            * content_scale;
+        float cohesion_membrane_span =
+            (1.08
+             + 2.1 * clear_glass_detail
+             + 1.3 * cohesion_presence
+             + 0.046 * blur_points)
+            * content_scale;
+        float2 cohesion_center_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.10 + 0.04 * cohesion_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 cohesion_group_uv = clamp(
+            in.screen_uv
+                + cohesion_group_dir
+                    * texel
+                    * cohesion_membrane_span
+                    * (0.18 + 0.16 * cohesion_group_alignment),
+            float2(0.0),
+            float2(1.0));
+        float2 cohesion_bridge_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.12
+                + bridge_dir
+                    * texel
+                    * cohesion_span
+                    * (0.28 + 0.18 * cohesion_bridge),
+            float2(0.0),
+            float2(1.0));
+        float2 cohesion_return_uv = clamp(
+            in.screen_uv
+                - cohesion_axis
+                    * texel
+                    * cohesion_span
+                    * (0.24 + 0.16 * cohesion_counter_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 cohesion_cross_a_uv = clamp(
+            in.screen_uv
+                + cohesion_cross
+                    * texel
+                    * cohesion_cross_span
+                    * (0.28 + 0.14 * cohesion_wave)
+                + dispersion_tangent
+                    * texel
+                    * cohesion_membrane_span
+                    * (0.08 + 0.10 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 cohesion_cross_b_uv = clamp(
+            in.screen_uv
+                - cohesion_cross
+                    * texel
+                    * cohesion_cross_span
+                    * (0.26 + 0.14 * cohesion_lobe)
+                - dispersion_tangent
+                    * texel
+                    * cohesion_membrane_span
+                    * (0.08 + 0.10 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 cohesion_membrane_uv = clamp(
+            in.screen_uv
+                + cohesion_axis
+                    * texel
+                    * cohesion_membrane_span
+                    * (0.18 + 0.16 * cohesion_membrane)
+                + cohesion_cross
+                    * texel
+                    * cohesion_cross_span
+                    * (0.14 + 0.12 * cohesion_counter),
+            float2(0.0),
+            float2(1.0));
+        float3 cohesion_center_rgb =
+            backdrop.sample(samp, cohesion_center_uv).rgb;
+        float3 cohesion_group_rgb =
+            backdrop.sample(samp, cohesion_group_uv).rgb;
+        float3 cohesion_bridge_rgb =
+            backdrop.sample(samp, cohesion_bridge_uv).rgb;
+        float3 cohesion_return_rgb =
+            backdrop.sample(samp, cohesion_return_uv).rgb;
+        float3 cohesion_cross_a_rgb =
+            backdrop.sample(samp, cohesion_cross_a_uv).rgb;
+        float3 cohesion_cross_b_rgb =
+            backdrop.sample(samp, cohesion_cross_b_uv).rgb;
+        float3 cohesion_membrane_rgb =
+            backdrop.sample(samp, cohesion_membrane_uv).rgb;
+        float3 cohesion_union =
+            cohesion_center_rgb * 0.20
+            + cohesion_group_rgb * 0.18
+            + cohesion_bridge_rgb * 0.18
+            + cohesion_return_rgb * 0.14
+            + cohesion_cross_a_rgb * 0.12
+            + cohesion_cross_b_rgb * 0.12
+            + cohesion_membrane_rgb * 0.06;
+        float3 cohesion_split = float3(
+            cohesion_bridge_rgb.r,
+            (cohesion_group_rgb.g + cohesion_center_rgb.g) * 0.5,
+            cohesion_return_rgb.b);
+        float cohesion_luma =
+            dot(cohesion_union, float3(0.2126, 0.7152, 0.0722));
+        float cohesion_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float cohesion_chroma = max(
+            max(abs(cohesion_union.r - cohesion_union.g),
+                abs(cohesion_union.g - cohesion_union.b)),
+            abs(cohesion_union.b - cohesion_union.r));
+        float cohesion_pickup =
+            smoothstep(0.030, 0.34, cohesion_chroma);
+        float cohesion_range = clamp(
+            length(cohesion_group_rgb - cohesion_center_rgb) * 0.22
+                + length(cohesion_bridge_rgb - cohesion_return_rgb) * 0.22
+                + length(cohesion_cross_a_rgb - cohesion_cross_b_rgb) * 0.18
+                + length(cohesion_membrane_rgb - cohesion_union) * 0.14
+                + abs(cohesion_luma - cohesion_surface_luma) * 0.16
+                + cohesion_curve * 0.08,
+            0.0,
+            1.0);
+        float cohesion_coherence =
+            1.0 - smoothstep(0.08, 0.38, cohesion_range);
+        float cohesion_lift = smoothstep(
+            cohesion_surface_luma - 0.06,
+            cohesion_surface_luma + 0.30,
+            cohesion_luma);
+        float cohesion_depth = smoothstep(
+            0.08,
+            0.34,
+            cohesion_surface_luma - cohesion_luma);
+        float cohesion_unity = clamp(
+            1.0
+                - smoothstep(
+                    0.08,
+                    0.44,
+                    length(cohesion_group_rgb - cohesion_bridge_rgb)),
+            0.0,
+            1.0);
+        float3 cohesion_neutral = mix(
+            cohesion_union,
+            float3(cohesion_luma),
+            cohesion_depth * (0.12 + 0.14 * glass_shadow_gain)
+                + cohesion_coherence * 0.12);
+        float3 cohesion_layer = mix(
+            cohesion_neutral,
+            cohesion_split,
+            0.16
+                + 0.16 * cohesion_pickup
+                + 0.14 * cohesion_lobe
+                + 0.14 * cohesion_presence
+                + 0.12 * cohesion_light_face);
+        cohesion_layer = clamp(
+            (cohesion_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + cohesion_lift * 0.010
+                       + cohesion_transition * 0.010
+                       - cohesion_depth * 0.016)
+                + float3(0.50),
+            0.0,
+            1.0);
+        cohesion_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.012
+                   + 0.024 * tint_chroma * prominent_intensity);
+        float3 cohesion_prism = float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        cohesion_layer += cohesion_prism
+            * cohesion_pickup
+            * (0.0008
+               + 0.0026 * spectral_rim_tint
+               + 0.0024 * glass_prismatic_gain
+               + 0.0022 * glass_caustic_spread)
+            * (0.30
+               + 0.20 * cohesion_light_face
+               + 0.20 * cohesion_lobe
+               + 0.18 * cohesion_presence
+               + 0.14 * cohesion_coherence);
+        float cohesion_weight =
+            container_cohesion_field_strength
+            * cohesion_gate
+            * (0.28
+               + 0.18 * cohesion_coherence
+               + 0.16 * cohesion_pickup
+               + 0.14 * cohesion_lift
+               + 0.12 * cohesion_unity
+               + 0.10 * cohesion_bridge_alignment)
+            * (0.34 + 0.66 * cohesion_presence);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                cohesion_layer,
+                0.06
+                    + 0.12 * cohesion_lobe
+                    + 0.10 * cohesion_presence
+                    + 0.08 * cohesion_pickup),
+            cohesion_weight * 0.24);
+        rgb += cohesion_prism
+            * cohesion_weight
+            * max(cohesion_lobe, cohesion_membrane * 0.74)
+            * (0.0006
+               + 0.0022 * dynamic_light_highlight
+               + 0.0020 * glass_scattering_gain);
+        float cohesion_shadow =
+            cohesion_depth
+            * cohesion_weight
+            * (0.0024 + 0.0075 * glass_shadow_gain)
+            * (0.52 + 0.48 * (1.0 - cohesion_light_face));
+        rgb *= 1.0 - clamp(cohesion_shadow, 0.0, 0.023);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
