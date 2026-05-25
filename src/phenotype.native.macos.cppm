@@ -16175,6 +16175,239 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(response_bright_trim, 0.0, 0.026);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float luminance_coupler_strength = clamp(
+        0.014 * liquid_response_strength
+            + 0.010 * specular_sheet_strength
+            + 0.010 * bridge_meniscus_reflection_strength
+            + 0.010 * spacing_meniscus_strength
+            + 0.010 * shared_membrane_strength
+            + 0.010 * shared_shell_strength
+            + 0.010 * glass_effect_match_execution * group_blend_strength
+            + 0.008 * morph_execution * group_blend_strength
+            + 0.006 * dynamic_light_highlight,
+        0.0,
+        0.068);
+    if (luminance_coupler_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 coupler_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 coupler_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            coupler_group_size);
+        float2 coupler_group_norm =
+            (coupler_group_local / coupler_group_size - float2(0.5)) * 2.0;
+        float coupler_group_len = length(coupler_group_norm);
+        float coupler_center =
+            1.0 - smoothstep(0.20, 1.14, coupler_group_len);
+        float2 coupler_group_edge = min(
+            coupler_group_local,
+            max(coupler_group_size - coupler_group_local, float2(0.0)));
+        float coupler_edge_distance =
+            min(coupler_group_edge.x, coupler_group_edge.y);
+        float coupler_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.2, 1.0),
+                coupler_edge_distance);
+        float coupler_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float coupler_transition = clamp(
+            glass_effect_match_execution * 0.34
+                + morph_execution * 0.22
+                + shape_blend_execution * 0.14
+                + union_execution * 0.12
+                + specular_sheet_strength * 2.0
+                + liquid_response_strength * 1.6
+                + spacing_meniscus_strength * 1.2,
+            0.0,
+            1.0);
+        float coupler_gate = clamp(
+            coupler_center * 0.20
+                + coupler_edge * 0.22
+                + coupler_bridge * 0.24
+                + coupler_transition * group_blend_strength * 0.24
+                + shared_backdrop_scope * 0.10,
+            0.0,
+            1.0);
+        float2 coupler_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 coupler_group_center_screen =
+            in.group_rect.xy + coupler_group_size * 0.5;
+        float2 coupler_group_center_uv = clamp(
+            coupler_group_center_screen / coupler_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 coupler_to_center =
+            coupler_group_center_uv - in.screen_uv;
+        float coupler_center_distance = length(coupler_to_center);
+        float2 coupler_center_dir =
+            coupler_center_distance > 0.0001
+                ? coupler_to_center / coupler_center_distance
+                : refraction_dir;
+        float2 coupler_axis_raw =
+            coupler_center_dir * (0.34 + 0.20 * coupler_center)
+            + bridge_dir * (0.30 + 0.22 * coupler_bridge)
+            - dynamic_light_dir * (0.22 + 0.18 * dynamic_light_highlight)
+            + refraction_dir * (0.16 + 0.12 * edge_lens);
+        float coupler_axis_len = length(coupler_axis_raw);
+        float2 coupler_axis = coupler_axis_len > 0.0001
+            ? coupler_axis_raw / coupler_axis_len
+            : refraction_dir;
+        float2 coupler_cross = float2(-coupler_axis.y, coupler_axis.x);
+        float coupler_phase = clamp(
+            dot(coupler_group_norm, coupler_axis)
+                    * (4.8 + 2.4 * coupler_transition)
+                + dot(coupler_group_norm, coupler_cross)
+                    * (2.0 + 1.4 * coupler_bridge)
+                + bridge_axial * (3.2 + 2.0 * coupler_bridge)
+                + bridge_shear * coupler_bridge * 2.0
+                + dynamic_light_highlight * 1.6,
+            -10.0,
+            10.0);
+        float coupler_wave = 0.5 + 0.5 * sin(coupler_phase);
+        float coupler_glint =
+            1.0 - smoothstep(0.0, 0.30, abs(coupler_wave - 0.60));
+        float coupler_span =
+            (0.84
+             + 1.7 * glass_thickness
+             + 1.2 * clear_glass_detail
+             + 1.0 * coupler_gate
+             + 0.038 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float coupler_cross_span =
+            (0.64
+             + 1.1 * glass_dispersion_tangential
+             + 1.2 * spectral_dispersion
+             + 0.8 * coupler_transition)
+            * content_scale;
+        float2 coupler_center_uv = clamp(
+            mix(in.screen_uv,
+                coupler_group_center_uv,
+                0.18 + 0.14 * coupler_center),
+            float2(0.0),
+            float2(1.0));
+        float2 coupler_flow_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + coupler_axis
+                    * texel
+                    * coupler_span
+                    * (0.28 + 0.16 * coupler_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 coupler_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - coupler_axis
+                    * texel
+                    * coupler_span
+                    * (0.24 + 0.14 * coupler_glint),
+            float2(0.0),
+            float2(1.0));
+        float2 coupler_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                + coupler_cross
+                    * texel
+                    * coupler_cross_span
+                    * (0.24 + 0.14 * coupler_edge),
+            float2(0.0),
+            float2(1.0));
+        float3 coupler_center_rgb =
+            backdrop.sample(samp, coupler_center_uv).rgb;
+        float3 coupler_flow_rgb =
+            backdrop.sample(samp, coupler_flow_uv).rgb;
+        float3 coupler_return_rgb =
+            backdrop.sample(samp, coupler_return_uv).rgb;
+        float3 coupler_cross_rgb =
+            backdrop.sample(samp, coupler_cross_uv).rgb;
+        float3 coupler_probe =
+            coupler_center_rgb * 0.30
+            + coupler_flow_rgb * 0.30
+            + coupler_return_rgb * 0.24
+            + coupler_cross_rgb * 0.16;
+        float coupler_probe_luma =
+            dot(coupler_probe, float3(0.2126, 0.7152, 0.0722));
+        float coupler_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float coupler_range = clamp(
+            length(coupler_flow_rgb - coupler_return_rgb) * 0.26
+                + length(coupler_center_rgb - coupler_cross_rgb) * 0.20
+                + abs(coupler_probe_luma - coupler_surface_luma) * 0.22
+                + coupler_glint * 0.08,
+            0.0,
+            1.0);
+        float coupler_coherence =
+            1.0 - smoothstep(0.08, 0.34, coupler_range);
+        float coupler_delta = clamp(
+            coupler_probe_luma - coupler_surface_luma,
+            -0.26,
+            0.26);
+        float coupler_lift = smoothstep(
+            coupler_surface_luma - 0.06,
+            coupler_surface_luma + 0.26,
+            coupler_probe_luma);
+        float coupler_dark = smoothstep(
+            0.08,
+            0.34,
+            coupler_surface_luma - coupler_probe_luma);
+        float3 coupler_neutral =
+            rgb
+            + float3(coupler_delta)
+                * (0.18
+                   + 0.16 * coupler_coherence
+                   + 0.12 * coupler_transition);
+        coupler_neutral = mix(
+            coupler_neutral,
+            coupler_probe,
+            0.05
+                + 0.08 * coupler_glint
+                + 0.07 * coupler_gate);
+        float3 coupler_layer =
+            coupler_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.018
+                      + 0.034 * tint_chroma * prominent_intensity));
+        float3 coupler_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        coupler_layer += coupler_prism
+            * (0.002
+               + 0.006 * spectral_rim_tint
+               + 0.005 * glass_prismatic_gain)
+            * coupler_glint
+            * (0.40 + 0.60 * coupler_lift);
+        float coupler_weight =
+            luminance_coupler_strength
+            * coupler_gate
+            * (0.30
+               + 0.22 * coupler_coherence
+               + 0.18 * coupler_lift
+               + 0.16 * coupler_glint
+               + 0.14 * coupler_bridge);
+        rgb = mix(
+            rgb,
+            clamp(coupler_layer, 0.0, 1.0),
+            coupler_weight * 0.34);
+        float coupler_shadow =
+            coupler_dark
+            * coupler_weight
+            * (0.005 + 0.013 * glass_shadow_gain)
+            * (0.58 + 0.42 * (1.0 - coupler_coherence));
+        rgb *= 1.0 - clamp(coupler_shadow, 0.0, 0.032);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float depth_aperture_strength = clamp(
         0.014 * clear_glass_detail
             + 0.012 * clear_glass_contrast
@@ -16186,6 +16419,7 @@ fragment float4 fs_material(
             + 0.012 * spacing_meniscus_strength
             + 0.014 * clarity_balance_strength
             + 0.012 * optical_equilibrium_strength
+            + 0.012 * luminance_coupler_strength
             + 0.012 * legibility_veil_strength,
         0.0,
         0.10);
@@ -18732,6 +18966,7 @@ fragment float4 fs_material(
             + 0.012 * morph_execution * group_blend_strength
             + 0.010 * matched_tether_sheath_strength
             + 0.010 * container_pressure_halo_strength
+            + 0.008 * luminance_coupler_strength
             + 0.008 * shared_shell_strength
             + 0.008 * edge_contact_caustic_strength
             + 0.006 * surrounding_light_wrap_strength,
@@ -18990,6 +19225,7 @@ fragment float4 fs_material(
             + 0.010 * specular_handoff_strength
             + 0.008 * matched_tether_sheath_strength
             + 0.008 * container_pressure_halo_strength
+            + 0.007 * luminance_coupler_strength
             + 0.006 * surrounding_light_wrap_strength,
         0.0,
         0.078);
@@ -20063,6 +20299,7 @@ fragment float4 fs_material(
             + 0.007 * transmission_caustic_strength
             + 0.007 * reflection_wake_strength
             + 0.006 * specular_handoff_strength
+            + 0.006 * luminance_coupler_strength
             + 0.006 * matched_tether_sheath_strength
             + 0.006 * container_pressure_halo_strength,
         0.0,
