@@ -22450,6 +22450,300 @@ fragment float4 fs_material(
                + 0.0025 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float ambient_seal_field_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.009 * clear_glass_contrast
+            + 0.008 * glass_thickness
+            + 0.007 * glass_scattering_gain
+            + 0.006 * contact_shadow_field_strength
+            + 0.006 * depth_fusion_strength
+            + 0.005 * focus_field_strength
+            + 0.005 * parallax_field_strength
+            + 0.004 * volume_veil_strength
+            + 0.004 * aperture_field_strength
+            + 0.004 * transition_clarity_strength
+            + 0.004 * glass_effect_match_execution * group_blend_strength,
+        0.0,
+        0.052);
+    if (ambient_seal_field_strength > 0.0001) {
+        float ambient_seal_interior = smoothstep(
+            max(edge_bevel_width * 0.68, 0.22),
+            max(edge_bevel_width * 3.30, 1.0),
+            signed_edge_distance);
+        float ambient_seal_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.60, 1.0),
+                signed_edge_distance);
+        float ambient_seal_radius = length(normalized_local);
+        float ambient_seal_center =
+            1.0 - smoothstep(0.16, 1.08, ambient_seal_radius);
+        float ambient_seal_basin =
+            smoothstep(0.24, 0.66, ambient_seal_radius)
+            * (1.0 - smoothstep(0.72, 1.12, ambient_seal_radius));
+        float ambient_seal_pointer = clamp(
+            pointer_lens_strength
+                * (0.28 * pointer_lens_raw + 0.72 * pointer_lens),
+            0.0,
+            1.0);
+        float ambient_seal_contact = clamp(
+            ambient_seal_edge * 0.30
+                + edge_lens * 0.22
+                + ambient_seal_pointer * 0.16
+                + bridge_band * 0.14
+                + glass_effect_match_execution * group_blend_strength * 0.12
+                + contact_shadow_field_strength * 1.2,
+            0.0,
+            1.0);
+        float ambient_seal_body = clamp(
+            ambient_seal_interior
+                * (0.32
+                   + 0.24 * ambient_seal_center
+                   + 0.20 * ambient_seal_basin
+                   + 0.14 * ambient_seal_contact
+                   + 0.10 * (1.0 - ambient_seal_edge)),
+            0.0,
+            1.0);
+        float ambient_seal_transition = clamp(
+            glass_effect_match_execution * 0.28
+                + morph_execution * 0.20
+                + materialize_wave_strength * 0.16
+                + contact_shadow_field_strength * 1.3
+                + depth_fusion_strength * 1.2
+                + focus_field_strength * 1.0
+                + parallax_field_strength * 0.9
+                + transition_clarity_strength * 0.8
+                + reflection_wake_strength * 0.8
+                + ambient_seal_contact * 0.16,
+            0.0,
+            1.0);
+        float2 ambient_seal_axis_raw =
+            bridge_dir * (0.32 + 0.20 * bridge_band)
+            + refraction_dir * (0.28 + 0.20 * glass_lensing_gain)
+            - dynamic_light_dir * (0.24 + 0.16 * dynamic_light_highlight)
+            + normalized_local * (0.12 + 0.12 * ambient_seal_center);
+        float ambient_seal_axis_len = length(ambient_seal_axis_raw);
+        float2 ambient_seal_axis = ambient_seal_axis_len > 0.0001
+            ? ambient_seal_axis_raw / ambient_seal_axis_len
+            : refraction_dir;
+        float2 ambient_seal_cross =
+            float2(-ambient_seal_axis.y, ambient_seal_axis.x);
+        float ambient_seal_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(ambient_seal_axis, bridge_dir)));
+        float ambient_seal_light_face =
+            smoothstep(-0.18, 0.90, dot(ambient_seal_axis, -dynamic_light_dir));
+        float ambient_seal_phase = clamp(
+            dot(normalized_local, ambient_seal_axis)
+                    * (3.7 + 1.6 * ambient_seal_transition)
+                + dot(normalized_local, ambient_seal_cross)
+                    * (2.4 + 1.1 * bridge_band)
+                + bridge_axial * (2.2 + 1.4 * bridge_core)
+                + bridge_shear * bridge_band * 1.6
+                + materialize_rim_position
+                    * materialize_wave_strength
+                    * 1.8,
+            -10.0,
+            10.0);
+        float ambient_seal_wave =
+            0.5 + 0.5 * sin(ambient_seal_phase);
+        float ambient_seal_pool =
+            1.0 - smoothstep(
+                0.0,
+                0.36,
+                abs(ambient_seal_wave - 0.55));
+        float ambient_seal_gate = clamp(
+            ambient_seal_body
+                * (0.30
+                   + 0.18 * ambient_seal_contact
+                   + 0.16 * ambient_seal_basin
+                   + 0.14 * ambient_seal_bridge_alignment
+                   + 0.12 * ambient_seal_light_face
+                   + 0.10 * ambient_seal_transition
+                   + 0.08 * ambient_seal_pool
+                   + 0.08 * ambient_seal_pointer),
+            0.0,
+            1.0);
+        float ambient_seal_span =
+            (0.68
+             + 1.4 * glass_thickness
+             + 1.1 * clear_glass_detail
+             + 0.8 * ambient_seal_transition
+             + 0.028 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float ambient_seal_cross_span =
+            (0.46
+             + 0.8 * glass_dispersion_tangential
+             + 0.7 * spectral_dispersion
+             + 0.7 * ambient_seal_bridge_alignment)
+            * content_scale;
+        float ambient_seal_edge_span =
+            (0.38
+             + 0.8 * glass_thickness
+             + 0.7 * glass_lensing_gain
+             + 0.6 * ambient_seal_contact)
+            * content_scale;
+        float2 ambient_seal_core_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08,
+            float2(0.0),
+            float2(1.0));
+        float2 ambient_seal_floor_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - dynamic_light_dir
+                    * texel
+                    * ambient_seal_span
+                    * (0.22 + 0.12 * ambient_seal_contact),
+            float2(0.0),
+            float2(1.0));
+        float2 ambient_seal_ambient_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                + ambient_seal_axis
+                    * texel
+                    * ambient_seal_span
+                    * (0.20 + 0.12 * ambient_seal_pool),
+            float2(0.0),
+            float2(1.0));
+        float2 ambient_seal_edge_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                + normalized_local
+                    * texel
+                    * ambient_seal_edge_span
+                    * (0.22 + 0.16 * ambient_seal_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 ambient_seal_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                + ambient_seal_cross
+                    * texel
+                    * ambient_seal_cross_span
+                    * (0.20 + 0.12 * ambient_seal_basin),
+            float2(0.0),
+            float2(1.0));
+        float2 ambient_seal_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                - ambient_seal_cross
+                    * texel
+                    * ambient_seal_cross_span
+                    * (0.20 + 0.12 * ambient_seal_pool),
+            float2(0.0),
+            float2(1.0));
+        float3 ambient_seal_core_rgb =
+            backdrop.sample(samp, ambient_seal_core_uv).rgb;
+        float3 ambient_seal_floor_rgb =
+            backdrop.sample(samp, ambient_seal_floor_uv).rgb;
+        float3 ambient_seal_ambient_rgb =
+            backdrop.sample(samp, ambient_seal_ambient_uv).rgb;
+        float3 ambient_seal_edge_rgb =
+            backdrop.sample(samp, ambient_seal_edge_uv).rgb;
+        float3 ambient_seal_cross_rgb =
+            backdrop.sample(samp, ambient_seal_cross_uv).rgb;
+        float3 ambient_seal_return_rgb =
+            backdrop.sample(samp, ambient_seal_return_uv).rgb;
+        float3 ambient_seal_probe =
+            ambient_seal_core_rgb * 0.30
+            + ambient_seal_floor_rgb * 0.20
+            + ambient_seal_ambient_rgb * 0.18
+            + ambient_seal_edge_rgb * 0.14
+            + ambient_seal_cross_rgb * 0.10
+            + ambient_seal_return_rgb * 0.08;
+        float ambient_seal_luma =
+            dot(ambient_seal_probe, float3(0.2126, 0.7152, 0.0722));
+        float ambient_seal_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float ambient_seal_range = clamp(
+            length(ambient_seal_floor_rgb - ambient_seal_ambient_rgb) * 0.26
+                + length(ambient_seal_cross_rgb - ambient_seal_return_rgb) * 0.22
+                + length(ambient_seal_edge_rgb - ambient_seal_core_rgb) * 0.20
+                + abs(ambient_seal_luma - ambient_seal_surface_luma) * 0.18
+                + ambient_seal_contact * 0.06,
+            0.0,
+            1.0);
+        float ambient_seal_coherence =
+            1.0 - smoothstep(0.08, 0.36, ambient_seal_range);
+        float ambient_seal_lift = smoothstep(
+            ambient_seal_surface_luma - 0.04,
+            ambient_seal_surface_luma + 0.26,
+            ambient_seal_luma);
+        float ambient_seal_depth = smoothstep(
+            0.04,
+            0.32,
+            ambient_seal_surface_luma - ambient_seal_luma);
+        float ambient_seal_anchor = clamp(
+            ambient_seal_contact * 0.28
+                + ambient_seal_coherence * 0.24
+                + ambient_seal_pool * 0.18
+                + ambient_seal_basin * 0.14
+                + ambient_seal_light_face * 0.10,
+            0.0,
+            1.0);
+        float3 ambient_seal_neutral = mix(
+            ambient_seal_probe,
+            float3(ambient_seal_luma),
+            ambient_seal_coherence * 0.16
+                + ambient_seal_depth * (0.10 + 0.12 * glass_shadow_gain)
+                + ambient_seal_contact * 0.08);
+        float3 ambient_seal_layer = clamp(
+            (ambient_seal_neutral - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.020
+                       + ambient_seal_transition * 0.018
+                       - ambient_seal_depth * 0.026
+                       - ambient_seal_anchor * 0.008)
+                + float3(0.50),
+            0.0,
+            1.0);
+        ambient_seal_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.008
+                   + 0.014 * tint_chroma * prominent_intensity);
+        float3 ambient_seal_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        float ambient_seal_prism_gate = clamp(
+            ambient_seal_anchor * 0.24
+                + ambient_seal_bridge_alignment * 0.20
+                + ambient_seal_light_face * 0.16
+                + ambient_seal_transition * 0.14
+                + ambient_seal_pool * 0.12,
+            0.0,
+            1.0);
+        ambient_seal_layer += ambient_seal_prism
+            * ambient_seal_prism_gate
+            * (0.0010
+               + 0.003 * spectral_rim_tint
+               + 0.0025 * glass_prismatic_gain);
+        float ambient_seal_weight = ambient_seal_field_strength
+            * ambient_seal_gate
+            * (0.28
+               + 0.20 * ambient_seal_anchor
+               + 0.18 * ambient_seal_coherence
+               + 0.14 * ambient_seal_lift
+               + 0.12 * ambient_seal_transition);
+        rgb = mix(
+            rgb,
+            mix(rgb, ambient_seal_layer, 0.08 + 0.14 * ambient_seal_anchor),
+            ambient_seal_weight * 0.26);
+        float ambient_seal_settle =
+            (ambient_seal_depth * 0.66 + ambient_seal_contact * 0.34)
+            * ambient_seal_weight
+            * (0.0025 + 0.007 * clear_glass_dimming)
+            * (0.54 + 0.46 * ambient_seal_body);
+        rgb *= 1.0 - clamp(ambient_seal_settle, 0.0, 0.024);
+        rgb += ambient_seal_prism
+            * ambient_seal_weight
+            * ambient_seal_prism_gate
+            * (0.0008
+               + 0.0025 * dynamic_light_highlight
+               + 0.0025 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
