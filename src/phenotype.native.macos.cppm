@@ -37096,6 +37096,396 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(equilibrium_absorption, 0.0, 0.009);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float surface_identity_field_strength = clamp(
+        0.003 * overlap_response_strength
+            + 0.004 * fusion_strength
+            + 0.005 * group_blend_strength * shared_backdrop_scope
+            + 0.004 * group_blend_strength * group_surface_execution
+            + 0.004 * bridge_band
+            + 0.27 * tonal_equilibrium_field_strength
+            + 0.23 * chroma_containment_field_strength
+            + 0.20 * legibility_preservation_field_strength
+            + 0.16 * depth_separation_field_strength
+            + 0.13 * specular_flow_field_strength
+            + 0.10 * phase_equalization_field_strength
+            + 0.08 * edge_continuity_field_strength
+            + 0.07 * rim_coalescence_field_strength
+            + 0.06 * edge_adhesion_field_strength
+            + 0.05 * elastic_tension_field_strength
+            + 0.044 * contact_pressure_field_strength
+            + 0.038 * internal_shadow_field_strength
+            + 0.032 * subsurface_caustic_field_strength
+            + 0.026 * transmission_depth_field_strength
+            + 0.021 * interlayer_refraction_field_strength
+            + 0.017 * layer_separation_field_strength
+            + 0.011 * edge_meniscus_field_strength
+            + 0.009 * container_morph_field_strength
+            + 0.008 * foreground_sheen_field_strength,
+        0.0,
+        0.023);
+    if (surface_identity_field_strength > 0.0001) {
+        float identity_center =
+            1.0 - smoothstep(0.28, 1.10, normalized_len);
+        float identity_rim =
+            edge_lens
+            * (0.62
+               + 0.38
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.70, 0.88),
+                       signed_edge_distance)));
+        float identity_bridge =
+            bridge_band * (0.50 + 0.50 * bridge_core);
+        float identity_stack = clamp(
+            overlap_response_strength * 0.27
+                + fusion_strength * 0.23
+                + group_blend_strength * shared_backdrop_scope * 0.20
+                + group_surface_execution * group_blend_strength * 0.16
+                + identity_bridge * 0.22,
+            0.0,
+            1.0);
+        float identity_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float identity_lock = clamp(
+            identity_rim * 0.30
+                + identity_bridge * 0.22
+                + identity_stack * 0.17
+                + tonal_equilibrium_field_strength * 4.9
+                + chroma_containment_field_strength * 4.2
+                + legibility_preservation_field_strength * 3.5
+                + depth_separation_field_strength * 2.8
+                + specular_flow_field_strength * 2.3
+                + identity_pointer * 0.06,
+            0.0,
+            1.0);
+        float identity_presence = clamp(
+            identity_rim * 0.31
+                + identity_stack * 0.23
+                + identity_bridge * 0.18
+                + identity_lock * 0.17
+                + identity_center * 0.06
+                + identity_pointer * 0.05,
+            0.0,
+            1.0);
+        float identity_shear_sign =
+            bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 identity_axis_raw =
+            refraction_dir * (0.28 + 0.15 * glass_lensing_gain)
+            - dynamic_light_dir * (0.30 + 0.17 * dynamic_light_highlight)
+            + bridge_tangent
+                * identity_shear_sign
+                * (0.25 + 0.16 * abs(bridge_shear) * identity_bridge)
+            + bridge_dir * (0.17 + 0.14 * identity_bridge)
+            + dispersion_tangent
+                * (0.11
+                   + 0.06 * spectral_dispersion
+                   + 0.05 * glass_dispersion_tangential)
+            + pointer_dir * (0.09 + 0.07 * identity_pointer);
+        float identity_axis_len = length(identity_axis_raw);
+        float2 identity_axis =
+            identity_axis_len > 0.0001
+                ? identity_axis_raw / identity_axis_len
+                : (normalized_len > 0.0001
+                    ? refraction_dir
+                    : float2(1.0, 0.0));
+        float2 identity_cross = float2(-identity_axis.y, identity_axis.x);
+        float identity_light_face =
+            smoothstep(-0.15, 0.94, dot(identity_axis, -dynamic_light_dir));
+        float identity_bridge_alignment =
+            smoothstep(-0.12, 0.94, abs(dot(identity_axis, bridge_tangent)));
+        float identity_phase = clamp(
+            dot(normalized_local, identity_axis)
+                    * (3.0 + 0.9 * identity_presence)
+                + dot(normalized_local, identity_cross)
+                    * (1.8 + 0.8 * identity_stack)
+                + bridge_axial * (1.4 + 0.7 * bridge_core)
+                + bridge_lateral_signed * identity_bridge * 1.0
+                + bridge_shear * identity_bridge * 1.2
+                + spectral_dispersion * 1.7
+                + glass_caustic_spread * 1.3,
+            -12.0,
+            12.0);
+        float identity_wave = 0.5 + 0.5 * sin(identity_phase);
+        float identity_counter_wave =
+            0.5 + 0.5 * cos(
+                identity_phase * 0.52
+                + glass_caustic_spread * 2.0
+                + identity_stack * 1.3);
+        float identity_lobe =
+            1.0 - smoothstep(0.0, 0.44, abs(identity_wave - 0.50));
+        float identity_return_lobe =
+            1.0 - smoothstep(0.0, 0.46, abs(identity_counter_wave - 0.50));
+        float identity_support = clamp(
+            identity_lock * 0.32
+                + identity_bridge_alignment * 0.18
+                + identity_rim * 0.18
+                + identity_center * 0.09
+                + identity_lobe * 0.09
+                + identity_return_lobe * 0.08
+                + identity_pointer * 0.07,
+            0.0,
+            1.0);
+        float identity_focus =
+            (0.5
+             + 0.5 * cos(identity_phase * 0.98 + normalized_len * 1.6))
+            * (0.34 + 0.66 * identity_lobe);
+        float identity_span =
+            (0.32
+             + 0.64 * glass_thickness
+             + 0.52 * clear_glass_detail
+             + 0.68 * identity_presence
+             + 0.012 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float identity_cross_span =
+            (0.25
+             + 0.40 * glass_dispersion_tangential
+             + 0.36 * spectral_dispersion
+             + 0.54 * identity_support)
+            * content_scale;
+        float identity_channel_span =
+            (0.17
+             + 0.26 * glass_dispersion_tangential
+             + 0.28 * spectral_dispersion
+             + 0.23 * glass_caustic_spread)
+            * content_scale
+            * (0.82 + 0.18 * identity_focus);
+        float2 identity_base_uv = clamp(
+            in.screen_uv + refraction_uv * (0.035 + 0.050 * identity_support),
+            float2(0.0),
+            float2(1.0));
+        float2 identity_face_uv = clamp(
+            identity_base_uv
+                + refraction_dir
+                    * texel
+                    * identity_span
+                    * (0.055 + 0.060 * identity_center)
+                + bridge_dir
+                    * texel
+                    * identity_span
+                    * identity_bridge
+                    * 0.045,
+            float2(0.0),
+            float2(1.0));
+        float2 identity_light_uv = clamp(
+            identity_base_uv
+                - dynamic_light_dir
+                    * texel
+                    * identity_span
+                    * (0.13 + 0.10 * identity_light_face)
+                + identity_axis
+                    * texel
+                    * identity_span
+                    * (0.07 + 0.08 * identity_support),
+            float2(0.0),
+            float2(1.0));
+        float2 identity_shadow_uv = clamp(
+            identity_base_uv
+                + dynamic_light_dir
+                    * texel
+                    * identity_span
+                    * (0.14 + 0.10 * (1.0 - identity_light_face))
+                - identity_axis
+                    * texel
+                    * identity_span
+                    * (0.07 + 0.08 * identity_return_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 identity_warm_uv = clamp(
+            identity_base_uv
+                + identity_cross
+                    * texel
+                    * identity_cross_span
+                    * (0.13 + 0.08 * identity_wave)
+                + dispersion_tangent
+                    * texel
+                    * identity_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float2 identity_cool_uv = clamp(
+            identity_base_uv
+                - identity_cross
+                    * texel
+                    * identity_cross_span
+                    * (0.13 + 0.08 * identity_lobe)
+                - dispersion_tangent
+                    * texel
+                    * identity_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float3 identity_face_rgb =
+            backdrop.sample(samp, identity_face_uv).rgb;
+        float3 identity_light_rgb =
+            backdrop.sample(samp, identity_light_uv).rgb;
+        float3 identity_shadow_rgb =
+            backdrop.sample(samp, identity_shadow_uv).rgb;
+        float3 identity_warm_rgb =
+            backdrop.sample(samp, identity_warm_uv).rgb;
+        float3 identity_cool_rgb =
+            backdrop.sample(samp, identity_cool_uv).rgb;
+        float3 identity_average =
+            identity_face_rgb * 0.30
+            + identity_light_rgb * 0.20
+            + identity_shadow_rgb * 0.20
+            + identity_warm_rgb * 0.15
+            + identity_cool_rgb * 0.15;
+        float3 identity_split = float3(
+            identity_warm_rgb.r,
+            (identity_face_rgb.g + identity_average.g) * 0.5,
+            identity_cool_rgb.b);
+        float identity_split_mix = clamp(
+            0.05
+                + 0.06 * spectral_dispersion
+                + 0.05 * glass_dispersion_tangential
+                + 0.05 * identity_support,
+            0.0,
+            0.23);
+        float3 identity_probe = mix(
+            identity_average,
+            identity_split,
+            identity_split_mix);
+        float identity_face_luma =
+            dot(identity_face_rgb, float3(0.2126, 0.7152, 0.0722));
+        float identity_light_luma =
+            dot(identity_light_rgb, float3(0.2126, 0.7152, 0.0722));
+        float identity_shadow_luma =
+            dot(identity_shadow_rgb, float3(0.2126, 0.7152, 0.0722));
+        float identity_warm_luma =
+            dot(identity_warm_rgb, float3(0.2126, 0.7152, 0.0722));
+        float identity_cool_luma =
+            dot(identity_cool_rgb, float3(0.2126, 0.7152, 0.0722));
+        float identity_probe_luma =
+            dot(identity_probe, float3(0.2126, 0.7152, 0.0722));
+        float identity_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float identity_luma_min = min(
+            min(identity_face_luma, identity_shadow_luma),
+            min(identity_light_luma,
+                min(identity_warm_luma, identity_cool_luma)));
+        float identity_luma_max = max(
+            max(identity_face_luma, identity_shadow_luma),
+            max(identity_light_luma,
+                max(identity_warm_luma, identity_cool_luma)));
+        float identity_luma_range =
+            clamp(identity_luma_max - identity_luma_min, 0.0, 1.0);
+        float identity_face_delta = clamp(
+            abs(identity_probe_luma - identity_surface_luma) * 0.26
+                + length(identity_light_rgb - identity_shadow_rgb) * 0.18
+                + length(identity_warm_rgb - identity_cool_rgb) * 0.14
+                + identity_luma_range * 0.18
+                + identity_support * 0.08,
+            0.0,
+            1.0);
+        float identity_surface_loss =
+            1.0 - smoothstep(0.09, 0.42, identity_face_delta);
+        float identity_edge_signal = clamp(
+            identity_rim * 0.34
+                + identity_lobe * 0.16
+                + identity_return_lobe * 0.12
+                + identity_light_face * 0.10
+                + identity_bridge_alignment * 0.10
+                + identity_support * 0.14,
+            0.0,
+            1.0);
+        float identity_face_signal = clamp(
+            identity_center * 0.26
+                + identity_presence * 0.23
+                + identity_stack * 0.18
+                + (1.0 - identity_surface_loss) * 0.14
+                + identity_support * 0.12,
+            0.0,
+            1.0);
+        float identity_target_luma =
+            0.50
+            + (identity_probe_luma - 0.50)
+                * (0.60 + 0.18 * identity_face_signal);
+        float identity_chroma = clamp(
+            length(identity_probe - float3(identity_probe_luma)),
+            0.0,
+            1.0);
+        float identity_chroma_keep = clamp(
+            0.55
+                + 0.18 * identity_face_signal
+                + 0.12 * identity_edge_signal
+                + 0.08 * identity_light_face
+                - 0.10 * identity_surface_loss,
+            0.44,
+            0.88);
+        float3 identity_surface =
+            float3(identity_target_luma)
+            + (identity_probe - float3(identity_probe_luma))
+                * identity_chroma_keep;
+        float3 identity_layer = mix(
+            identity_probe,
+            identity_surface,
+            (0.22 + 0.18 * identity_surface_loss)
+                * (0.45 + 0.55 * identity_support));
+        identity_layer = mix(
+            identity_layer,
+            identity_face_rgb,
+            (1.0 - identity_surface_loss)
+                * (0.07 + 0.07 * identity_focus));
+        identity_layer = clamp(
+            (identity_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.006
+                       + identity_edge_signal * 0.005
+                       - identity_surface_loss * 0.007)
+                + float3(0.50),
+            0.0,
+            1.0);
+        identity_layer *= float3(
+            1.0 + spectral_warmth * 0.17 + tint_chroma * in.tint.r * 0.006,
+            1.0 + spectral_rim_tint * 0.07 + tint_chroma * in.tint.g * 0.005,
+            1.0 + spectral_coolness * 0.17 + tint_chroma * in.tint.b * 0.006);
+        float identity_gate = clamp(
+            identity_presence * 0.26
+                + identity_stack * 0.21
+                + identity_rim * 0.21
+                + identity_support * 0.15
+                + identity_surface_loss * 0.10
+                + identity_edge_signal * 0.08,
+            0.0,
+            1.0);
+        float identity_weight =
+            surface_identity_field_strength
+            * identity_gate
+            * (0.19
+               + 0.15 * identity_support
+               + 0.14 * identity_edge_signal
+               + 0.12 * identity_surface_loss
+               + 0.10 * identity_bridge_alignment);
+        rgb = mix(
+            rgb,
+            identity_layer,
+            identity_weight
+                * (0.058
+                   + 0.050 * identity_focus
+                   + 0.050 * identity_presence));
+        float3 identity_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.042,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.035,
+            spectral_coolness + tint_chroma * in.tint.b * 0.042);
+        float identity_surface_glint =
+            max(identity_lobe, identity_return_lobe * 0.50)
+            * identity_rim
+            * (0.45 + 0.55 * identity_edge_signal)
+            * (1.0 - identity_surface_loss * 0.22);
+        rgb += identity_prism
+            * identity_weight
+            * identity_surface_glint
+            * (0.00020
+               + 0.00065 * spectral_rim_tint
+               + 0.00055 * glass_scattering_gain);
+        float identity_absorption =
+            identity_surface_loss
+            * identity_weight
+            * (0.00065 + 0.0022 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - identity_light_face));
+        rgb *= 1.0 - clamp(identity_absorption, 0.0, 0.0085);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
