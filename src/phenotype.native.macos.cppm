@@ -29154,6 +29154,355 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(cohesion_shadow, 0.0, 0.023);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float interactive_kinetic_field_strength = clamp(
+        0.018 * pointer_lens_strength
+            * (0.40 * pointer_lens_raw + 0.60 * pointer_lens)
+            + 0.010 * glass_lensing_gain
+            + 0.008 * clear_glass_detail
+            + 0.007 * glass_prismatic_gain
+            + 0.26 * container_cohesion_field_strength
+            + 0.22 * lensing_flow_field_strength
+            + 0.18 * ambient_chromatic_field_strength
+            + 0.14 * environment_envelope_strength
+            + 0.10 * spectral_grazing_glint_strength
+            + 0.08 * transition_seam_lock_strength,
+        0.0,
+        0.058);
+    if (interactive_kinetic_field_strength > 0.0001
+        && pointer_lens_strength > 0.0001) {
+        float kinetic_radius_ratio =
+            pointer_distance / max(pointer_lens_radius, 0.001);
+        float kinetic_press =
+            clamp(
+                pointer_lens_strength
+                    * (0.42 * pointer_lens_raw + 0.58 * pointer_lens),
+                0.0,
+                1.0);
+        float kinetic_inner =
+            1.0 - smoothstep(0.0, 0.52, kinetic_radius_ratio);
+        float kinetic_ring =
+            1.0 - smoothstep(
+                0.0,
+                0.36,
+                abs(kinetic_radius_ratio - 0.54));
+        kinetic_ring *= pointer_lens_raw;
+        float kinetic_outer =
+            1.0 - smoothstep(
+                0.20,
+                1.05,
+                abs(kinetic_radius_ratio - 0.84));
+        kinetic_outer *= pointer_lens_raw;
+        float kinetic_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.80, 1.0),
+                signed_edge_distance);
+        float kinetic_bridge =
+            bridge_band * (0.30 + 0.70 * bridge_core);
+        float kinetic_presence = clamp(
+            kinetic_press * 0.40
+                + kinetic_inner * 0.10
+                + kinetic_ring * 0.22
+                + kinetic_outer * 0.12
+                + kinetic_edge * 0.10
+                + kinetic_bridge * 0.10
+                + group_blend_strength * container_cohesion_field_strength * 3.0,
+            0.0,
+            1.0);
+        float2 kinetic_axis_raw =
+            -pointer_dir * (0.34 + 0.24 * kinetic_press)
+            + refraction_dir * (0.24 + 0.18 * glass_lensing_gain)
+            - dynamic_light_dir
+                * (0.22 + 0.18 * dynamic_light_highlight)
+            + bridge_dir * (0.18 + 0.18 * kinetic_bridge)
+            + dispersion_tangent
+                * (0.14
+                   + 0.10 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential);
+        float kinetic_axis_len = length(kinetic_axis_raw);
+        float2 kinetic_axis =
+            kinetic_axis_len > 0.0001
+                ? kinetic_axis_raw / kinetic_axis_len
+                : -pointer_dir;
+        float2 kinetic_cross =
+            float2(-kinetic_axis.y, kinetic_axis.x);
+        float kinetic_light_face =
+            smoothstep(-0.20, 0.94, dot(kinetic_axis, -dynamic_light_dir));
+        float kinetic_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(kinetic_axis, bridge_dir)));
+        float kinetic_pointer_alignment =
+            smoothstep(-0.20, 0.92, dot(kinetic_axis, -pointer_dir));
+        float kinetic_curvature = clamp(
+            kinetic_ring * 0.30
+                + kinetic_outer * 0.22
+                + kinetic_edge * 0.20
+                + abs(dot(normalized_local, kinetic_cross)) * 0.18
+                + kinetic_bridge * 0.14,
+            0.0,
+            1.0);
+        float kinetic_phase = clamp(
+            dot(normalized_local, kinetic_axis)
+                    * (4.4 + 1.8 * kinetic_presence)
+                + dot(normalized_local, kinetic_cross)
+                    * (2.8 + 1.3 * kinetic_curvature)
+                + kinetic_radius_ratio
+                    * (3.2 + 1.8 * kinetic_press)
+                + bridge_axial * (2.2 + 1.4 * bridge_core)
+                + bridge_shear * bridge_band * 1.8
+                + materialize_rim_position * materialize_wave_strength * 2.0,
+            -12.0,
+            12.0);
+        float kinetic_wave =
+            0.5 + 0.5 * sin(kinetic_phase);
+        float kinetic_counter =
+            0.5 + 0.5 * cos(
+                kinetic_phase * 0.74
+                + spectral_dispersion * 4.8
+                + glass_caustic_spread * 4.2);
+        float kinetic_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(kinetic_wave - 0.55));
+        float kinetic_rebound =
+            1.0 - smoothstep(0.0, 0.36, abs(kinetic_counter - 0.52));
+        kinetic_rebound *= max(kinetic_ring, kinetic_outer * 0.82);
+        float kinetic_gate = clamp(
+            kinetic_presence * 0.30
+                + kinetic_inner * 0.10
+                + kinetic_ring * 0.20
+                + kinetic_edge * 0.16
+                + kinetic_lobe * 0.12
+                + kinetic_light_face * 0.10
+                + kinetic_curvature * 0.10
+                + kinetic_bridge * 0.08,
+            0.0,
+            1.0);
+        float kinetic_span =
+            (0.82
+             + 2.0 * glass_thickness
+             + 1.6 * clear_glass_detail
+             + 1.4 * kinetic_presence
+             + 0.038 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float kinetic_cross_span =
+            (0.54
+             + 1.1 * glass_dispersion_tangential
+             + 1.0 * spectral_dispersion
+             + 0.8 * kinetic_bridge_alignment)
+            * content_scale;
+        float kinetic_rebound_span =
+            (1.02
+             + 2.0 * clear_glass_detail
+             + 1.3 * kinetic_curvature
+             + 0.044 * blur_points)
+            * content_scale;
+        float2 kinetic_center_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.10 + 0.04 * kinetic_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 kinetic_press_uv = clamp(
+            in.screen_uv
+                - pointer_dir
+                    * texel
+                    * kinetic_span
+                    * (0.24 + 0.18 * kinetic_press),
+            float2(0.0),
+            float2(1.0));
+        float2 kinetic_release_uv = clamp(
+            in.screen_uv
+                + pointer_dir
+                    * texel
+                    * kinetic_span
+                    * (0.26 + 0.18 * kinetic_rebound),
+            float2(0.0),
+            float2(1.0));
+        float2 kinetic_cross_a_uv = clamp(
+            in.screen_uv
+                + kinetic_cross
+                    * texel
+                    * kinetic_cross_span
+                    * (0.28 + 0.14 * kinetic_wave)
+                + dispersion_tangent
+                    * texel
+                    * kinetic_rebound_span
+                    * (0.08 + 0.10 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 kinetic_cross_b_uv = clamp(
+            in.screen_uv
+                - kinetic_cross
+                    * texel
+                    * kinetic_cross_span
+                    * (0.26 + 0.14 * kinetic_lobe)
+                - dispersion_tangent
+                    * texel
+                    * kinetic_rebound_span
+                    * (0.08 + 0.10 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 kinetic_rebound_uv = clamp(
+            in.screen_uv
+                + kinetic_axis
+                    * texel
+                    * kinetic_rebound_span
+                    * (0.18 + 0.16 * kinetic_rebound)
+                + kinetic_cross
+                    * texel
+                    * kinetic_cross_span
+                    * (0.14 + 0.12 * kinetic_counter),
+            float2(0.0),
+            float2(1.0));
+        float2 kinetic_light_uv = clamp(
+            in.screen_uv
+                - dynamic_light_dir
+                    * texel
+                    * kinetic_span
+                    * (0.10 + 0.12 * kinetic_light_face)
+                + pointer_dir
+                    * texel
+                    * kinetic_span
+                    * (0.10 + 0.08 * kinetic_outer),
+            float2(0.0),
+            float2(1.0));
+        float3 kinetic_center_rgb =
+            backdrop.sample(samp, kinetic_center_uv).rgb;
+        float3 kinetic_press_rgb =
+            backdrop.sample(samp, kinetic_press_uv).rgb;
+        float3 kinetic_release_rgb =
+            backdrop.sample(samp, kinetic_release_uv).rgb;
+        float3 kinetic_cross_a_rgb =
+            backdrop.sample(samp, kinetic_cross_a_uv).rgb;
+        float3 kinetic_cross_b_rgb =
+            backdrop.sample(samp, kinetic_cross_b_uv).rgb;
+        float3 kinetic_rebound_rgb =
+            backdrop.sample(samp, kinetic_rebound_uv).rgb;
+        float3 kinetic_light_rgb =
+            backdrop.sample(samp, kinetic_light_uv).rgb;
+        float3 kinetic_energy =
+            kinetic_center_rgb * 0.20
+            + kinetic_press_rgb * 0.18
+            + kinetic_release_rgb * 0.18
+            + kinetic_cross_a_rgb * 0.13
+            + kinetic_cross_b_rgb * 0.13
+            + kinetic_rebound_rgb * 0.10
+            + kinetic_light_rgb * 0.08;
+        float3 kinetic_split = float3(
+            kinetic_press_rgb.r,
+            (kinetic_center_rgb.g + kinetic_light_rgb.g) * 0.5,
+            kinetic_release_rgb.b);
+        float kinetic_luma =
+            dot(kinetic_energy, float3(0.2126, 0.7152, 0.0722));
+        float kinetic_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float kinetic_chroma = max(
+            max(abs(kinetic_energy.r - kinetic_energy.g),
+                abs(kinetic_energy.g - kinetic_energy.b)),
+            abs(kinetic_energy.b - kinetic_energy.r));
+        float kinetic_pickup =
+            smoothstep(0.030, 0.34, kinetic_chroma);
+        float kinetic_range = clamp(
+            length(kinetic_press_rgb - kinetic_release_rgb) * 0.24
+                + length(kinetic_cross_a_rgb - kinetic_cross_b_rgb) * 0.20
+                + length(kinetic_rebound_rgb - kinetic_center_rgb) * 0.16
+                + abs(kinetic_luma - kinetic_surface_luma) * 0.18
+                + kinetic_curvature * 0.10
+                + kinetic_ring * 0.08,
+            0.0,
+            1.0);
+        float kinetic_coherence =
+            1.0 - smoothstep(0.08, 0.38, kinetic_range);
+        float kinetic_lift = smoothstep(
+            kinetic_surface_luma - 0.06,
+            kinetic_surface_luma + 0.30,
+            kinetic_luma);
+        float kinetic_depth = smoothstep(
+            0.08,
+            0.34,
+            kinetic_surface_luma - kinetic_luma);
+        float kinetic_recovery = clamp(
+            1.0
+                - smoothstep(
+                    0.08,
+                    0.44,
+                    length(kinetic_press_rgb - kinetic_rebound_rgb)),
+            0.0,
+            1.0);
+        float3 kinetic_neutral = mix(
+            kinetic_energy,
+            float3(kinetic_luma),
+            kinetic_depth * (0.12 + 0.14 * glass_shadow_gain)
+                + kinetic_coherence * 0.12);
+        float3 kinetic_layer = mix(
+            kinetic_neutral,
+            kinetic_split,
+            0.16
+                + 0.16 * kinetic_pickup
+                + 0.14 * kinetic_lobe
+                + 0.14 * kinetic_presence
+                + 0.12 * kinetic_light_face);
+        kinetic_layer = clamp(
+            (kinetic_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + kinetic_lift * 0.010
+                       + kinetic_presence * 0.010
+                       - kinetic_depth * 0.016)
+                + float3(0.50),
+            0.0,
+            1.0);
+        kinetic_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.012
+                   + 0.024 * tint_chroma * prominent_intensity);
+        float3 kinetic_prism = float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        kinetic_layer += kinetic_prism
+            * kinetic_pickup
+            * (0.0008
+               + 0.0026 * spectral_rim_tint
+               + 0.0024 * glass_prismatic_gain
+               + 0.0022 * glass_caustic_spread)
+            * (0.30
+               + 0.20 * kinetic_light_face
+               + 0.20 * kinetic_lobe
+               + 0.18 * kinetic_presence
+               + 0.14 * kinetic_coherence);
+        float kinetic_weight =
+            interactive_kinetic_field_strength
+            * kinetic_gate
+            * (0.28
+               + 0.18 * kinetic_coherence
+               + 0.16 * kinetic_pickup
+               + 0.14 * kinetic_lift
+               + 0.12 * kinetic_recovery
+               + 0.10 * kinetic_pointer_alignment)
+            * (0.34 + 0.66 * kinetic_presence);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                kinetic_layer,
+                0.06
+                    + 0.12 * kinetic_lobe
+                    + 0.10 * kinetic_ring
+                    + 0.08 * kinetic_pickup),
+            kinetic_weight * 0.24);
+        rgb += kinetic_prism
+            * kinetic_weight
+            * max(kinetic_lobe, kinetic_rebound * 0.74)
+            * (0.0006
+               + 0.0022 * dynamic_light_highlight
+               + 0.0020 * glass_scattering_gain);
+        float kinetic_shadow =
+            kinetic_depth
+            * kinetic_weight
+            * (0.0024 + 0.0075 * glass_shadow_gain)
+            * (0.52 + 0.48 * (1.0 - kinetic_light_face));
+        rgb *= 1.0 - clamp(kinetic_shadow, 0.0, 0.023);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
