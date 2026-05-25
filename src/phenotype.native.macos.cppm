@@ -28440,6 +28440,353 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(chroma_shadow, 0.0, 0.024);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float lensing_flow_field_strength = clamp(
+        0.011 * glass_lensing_gain
+            + 0.009 * clear_glass_detail
+            + 0.008 * clear_glass_contrast
+            + 0.008 * glass_prismatic_gain
+            + 0.007 * glass_scattering_gain
+            + 0.30 * ambient_chromatic_field_strength
+            + 0.24 * environment_envelope_strength
+            + 0.20 * critical_angle_reflection_strength
+            + 0.18 * spectral_grazing_glint_strength
+            + 0.16 * thin_film_interference_strength
+            + 0.12 * edge_caustic_dispersion_strength
+            + 0.005 * transition_seam_lock_strength
+            + 0.004 * container_irradiance_lock_strength,
+        0.0,
+        0.062);
+    if (lensing_flow_field_strength > 0.0001) {
+        float2 flow_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 flow_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            flow_group_size);
+        float2 flow_group_norm =
+            (flow_group_local / flow_group_size - float2(0.5)) * 2.0;
+        float flow_group_active =
+            in.group_rect.z > 0.0 && in.group_rect.w > 0.0 ? 1.0 : 0.0;
+        float flow_center =
+            1.0 - smoothstep(0.18, 1.14, length(normalized_local));
+        float flow_group_center =
+            1.0 - smoothstep(0.18, 1.10, length(flow_group_norm));
+        float flow_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 3.05, 1.0),
+                signed_edge_distance);
+        float flow_bridge =
+            bridge_band * (0.30 + 0.70 * bridge_core);
+        float flow_transition = clamp(
+            glass_effect_match_execution * 0.24
+                + morph_execution * 0.18
+                + materialize_wave_strength * 0.14
+                + ambient_chromatic_field_strength * 1.8
+                + environment_envelope_strength * 1.4
+                + critical_angle_reflection_strength * 1.2
+                + transition_seam_lock_strength * 1.0
+                + flow_group_active * group_blend_strength * 0.18,
+            0.0,
+            1.0);
+        float2 flow_axis_raw =
+            refraction_dir * (0.36 + 0.24 * glass_lensing_gain)
+            + normalized_local * (0.20 + 0.14 * flow_center)
+            - dynamic_light_dir
+                * (0.24 + 0.18 * dynamic_light_highlight)
+            + bridge_dir * (0.22 + 0.22 * flow_bridge)
+            + dispersion_tangent
+                * (0.16
+                   + 0.12 * spectral_dispersion
+                   + 0.10 * glass_dispersion_tangential)
+            + flow_group_norm
+                * flow_group_active
+                * (0.10 + 0.10 * group_blend_strength);
+        float flow_axis_len = length(flow_axis_raw);
+        float2 flow_axis =
+            flow_axis_len > 0.0001
+                ? flow_axis_raw / flow_axis_len
+                : refraction_dir;
+        float2 flow_cross = float2(-flow_axis.y, flow_axis.x);
+        float flow_light_face =
+            smoothstep(-0.20, 0.94, dot(flow_axis, -dynamic_light_dir));
+        float flow_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(flow_axis, bridge_dir)));
+        float flow_curvature = clamp(
+            abs(dot(normalized_local, flow_cross)) * 0.38
+                + flow_edge * 0.24
+                + flow_bridge * 0.20
+                + flow_center * 0.12
+                + flow_group_center * flow_group_active * 0.10,
+            0.0,
+            1.0);
+        float flow_phase = clamp(
+            dot(normalized_local, flow_axis)
+                    * (4.2 + 1.8 * flow_transition)
+                + dot(normalized_local, flow_cross)
+                    * (3.0 + 1.3 * flow_curvature)
+                + dot(flow_group_norm, flow_axis)
+                    * flow_group_active
+                    * (2.4 + 1.4 * group_blend_strength)
+                + signed_edge_distance
+                    / max(edge_bevel_width * 2.40, 1.0)
+                    * (2.0 + 1.4 * glass_thickness)
+                + bridge_axial * (2.2 + 1.5 * bridge_core)
+                + bridge_shear * bridge_band * 1.8
+                + materialize_rim_position * materialize_wave_strength * 2.0,
+            -12.0,
+            12.0);
+        float flow_wave = 0.5 + 0.5 * sin(flow_phase);
+        float flow_counter = 0.5 + 0.5 * cos(
+            flow_phase * 0.72
+            + spectral_dispersion * 4.8
+            + glass_caustic_spread * 4.4);
+        float flow_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(flow_wave - 0.55));
+        float flow_counter_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(flow_counter - 0.52));
+        float flow_curl =
+            smoothstep(0.20, 0.86, flow_curvature)
+            * (0.5 + 0.5 * sin(flow_phase * 1.36 + bridge_shear * 2.4));
+        float flow_gate = clamp(
+            flow_center * 0.20
+                + flow_edge * 0.22
+                + flow_bridge * 0.18
+                + flow_transition * 0.22
+                + flow_light_face * 0.10
+                + flow_curvature * 0.10
+                + flow_group_center * flow_group_active * 0.08,
+            0.0,
+            1.0);
+        float flow_span =
+            (0.92
+             + 2.2 * glass_thickness
+             + 1.8 * clear_glass_detail
+             + 1.4 * flow_transition
+             + 0.044 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float flow_cross_span =
+            (0.62
+             + 1.2 * glass_dispersion_tangential
+             + 1.0 * spectral_dispersion
+             + 0.9 * flow_bridge_alignment)
+            * content_scale;
+        float flow_wake_span =
+            (1.16
+             + 2.4 * clear_glass_detail
+             + 1.2 * flow_curvature
+             + 0.050 * blur_points)
+            * content_scale;
+        float2 flow_core_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.10 + 0.04 * flow_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 flow_upstream_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.12
+                - flow_axis
+                    * texel
+                    * flow_span
+                    * (0.28 + 0.16 * flow_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 flow_downstream_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.12
+                + flow_axis
+                    * texel
+                    * flow_span
+                    * (0.30 + 0.16 * flow_counter_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 flow_cross_a_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + flow_cross
+                    * texel
+                    * flow_cross_span
+                    * (0.30 + 0.14 * flow_wave)
+                + dispersion_tangent
+                    * texel
+                    * flow_wake_span
+                    * (0.08 + 0.12 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 flow_cross_b_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - flow_cross
+                    * texel
+                    * flow_cross_span
+                    * (0.28 + 0.14 * flow_lobe)
+                - dispersion_tangent
+                    * texel
+                    * flow_wake_span
+                    * (0.08 + 0.12 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 flow_curl_uv = clamp(
+            in.screen_uv
+                + flow_axis
+                    * texel
+                    * flow_wake_span
+                    * (0.18 + 0.16 * flow_curl)
+                + flow_cross
+                    * texel
+                    * flow_cross_span
+                    * (0.16 + 0.12 * flow_counter),
+            float2(0.0),
+            float2(1.0));
+        float2 flow_focus_uv = clamp(
+            in.screen_uv
+                - normalized_local
+                    * texel
+                    * flow_wake_span
+                    * (0.12 + 0.14 * flow_center)
+                - dynamic_light_dir
+                    * texel
+                    * flow_span
+                    * (0.08 + 0.10 * flow_light_face),
+            float2(0.0),
+            float2(1.0));
+        float3 flow_core_rgb =
+            backdrop.sample(samp, flow_core_uv).rgb;
+        float3 flow_upstream_rgb =
+            backdrop.sample(samp, flow_upstream_uv).rgb;
+        float3 flow_downstream_rgb =
+            backdrop.sample(samp, flow_downstream_uv).rgb;
+        float3 flow_cross_a_rgb =
+            backdrop.sample(samp, flow_cross_a_uv).rgb;
+        float3 flow_cross_b_rgb =
+            backdrop.sample(samp, flow_cross_b_uv).rgb;
+        float3 flow_curl_rgb =
+            backdrop.sample(samp, flow_curl_uv).rgb;
+        float3 flow_focus_rgb =
+            backdrop.sample(samp, flow_focus_uv).rgb;
+        float3 flow_transport =
+            flow_core_rgb * 0.20
+            + flow_upstream_rgb * 0.18
+            + flow_downstream_rgb * 0.18
+            + flow_cross_a_rgb * 0.14
+            + flow_cross_b_rgb * 0.14
+            + flow_curl_rgb * 0.08
+            + flow_focus_rgb * 0.08;
+        float3 flow_shear = float3(
+            flow_upstream_rgb.r,
+            (flow_cross_a_rgb.g + flow_cross_b_rgb.g) * 0.5,
+            flow_downstream_rgb.b);
+        float flow_luma =
+            dot(flow_transport, float3(0.2126, 0.7152, 0.0722));
+        float flow_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float flow_chroma = max(
+            max(abs(flow_transport.r - flow_transport.g),
+                abs(flow_transport.g - flow_transport.b)),
+            abs(flow_transport.b - flow_transport.r));
+        float flow_pickup = smoothstep(0.030, 0.34, flow_chroma);
+        float flow_range = clamp(
+            length(flow_upstream_rgb - flow_downstream_rgb) * 0.24
+                + length(flow_cross_a_rgb - flow_cross_b_rgb) * 0.22
+                + length(flow_curl_rgb - flow_focus_rgb) * 0.16
+                + abs(flow_luma - flow_surface_luma) * 0.18
+                + flow_curvature * 0.10
+                + flow_lobe * 0.06,
+            0.0,
+            1.0);
+        float flow_coherence =
+            1.0 - smoothstep(0.08, 0.38, flow_range);
+        float flow_lift = smoothstep(
+            flow_surface_luma - 0.06,
+            flow_surface_luma + 0.30,
+            flow_luma);
+        float flow_depth = smoothstep(
+            0.08,
+            0.34,
+            flow_surface_luma - flow_luma);
+        float flow_refraction_balance = clamp(
+            1.0
+                - smoothstep(
+                    0.08,
+                    0.44,
+                    length(flow_upstream_rgb - flow_downstream_rgb)),
+            0.0,
+            1.0);
+        float3 flow_neutral = mix(
+            flow_transport,
+            float3(flow_luma),
+            flow_depth * (0.12 + 0.14 * glass_shadow_gain)
+                + flow_coherence * 0.12);
+        float3 flow_layer = mix(
+            flow_neutral,
+            flow_shear,
+            0.18
+                + 0.16 * flow_pickup
+                + 0.14 * flow_lobe
+                + 0.12 * flow_curvature
+                + 0.10 * flow_light_face);
+        flow_layer = clamp(
+            (flow_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + flow_lift * 0.010
+                       + flow_transition * 0.010
+                       - flow_depth * 0.016)
+                + float3(0.50),
+            0.0,
+            1.0);
+        flow_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.012
+                   + 0.024 * tint_chroma * prominent_intensity);
+        float3 flow_prism = float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        flow_layer += flow_prism
+            * flow_pickup
+            * (0.0008
+               + 0.0026 * spectral_rim_tint
+               + 0.0026 * glass_prismatic_gain
+               + 0.0022 * glass_caustic_spread)
+            * (0.30
+               + 0.20 * flow_light_face
+               + 0.20 * flow_lobe
+               + 0.18 * flow_curvature
+               + 0.14 * flow_coherence);
+        float flow_weight =
+            lensing_flow_field_strength
+            * flow_gate
+            * (0.28
+               + 0.18 * flow_coherence
+               + 0.16 * flow_pickup
+               + 0.14 * flow_lift
+               + 0.12 * flow_refraction_balance
+               + 0.10 * flow_bridge_alignment);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                flow_layer,
+                0.06
+                    + 0.12 * flow_lobe
+                    + 0.10 * flow_curvature
+                    + 0.08 * flow_pickup),
+            flow_weight * 0.24);
+        rgb += flow_prism
+            * flow_weight
+            * max(flow_lobe, flow_curl * 0.74)
+            * (0.0006
+               + 0.0022 * dynamic_light_highlight
+               + 0.0022 * glass_scattering_gain);
+        float flow_shadow =
+            flow_depth
+            * flow_weight
+            * (0.0025 + 0.008 * glass_shadow_gain)
+            * (0.52 + 0.48 * (1.0 - flow_light_face));
+        rgb *= 1.0 - clamp(flow_shadow, 0.0, 0.024);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
