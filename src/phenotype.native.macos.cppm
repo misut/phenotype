@@ -21585,6 +21585,290 @@ fragment float4 fs_material(
                + 0.003 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float focus_field_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.009 * glass_lensing_gain
+            + 0.008 * glass_thickness
+            + 0.007 * clear_glass_brightness
+            + 0.006 * parallax_field_strength
+            + 0.006 * polarization_field_strength
+            + 0.005 * aperture_field_strength
+            + 0.005 * accommodation_field_strength
+            + 0.004 * volume_veil_strength
+            + 0.004 * transition_clarity_strength
+            + 0.004 * reflection_wake_strength
+            + 0.004 * glass_effect_match_execution * group_blend_strength,
+        0.0,
+        0.052);
+    if (focus_field_strength > 0.0001) {
+        float focus_field_interior = smoothstep(
+            max(edge_bevel_width * 0.64, 0.20),
+            max(edge_bevel_width * 3.10, 1.0),
+            signed_edge_distance);
+        float focus_field_radius = length(normalized_local);
+        float focus_field_center =
+            1.0 - smoothstep(0.12, 1.06, focus_field_radius);
+        float focus_field_midplane =
+            smoothstep(0.20, 0.58, focus_field_radius)
+            * (1.0 - smoothstep(0.66, 1.10, focus_field_radius));
+        float focus_field_corner_calm =
+            1.0 - smoothstep(
+                0.74,
+                1.08,
+                max(abs(normalized_local.x), abs(normalized_local.y)));
+        float focus_field_body = clamp(
+            focus_field_interior
+                * (0.34
+                   + 0.28 * focus_field_center
+                   + 0.20 * focus_field_midplane
+                   + 0.12 * focus_field_corner_calm
+                   + 0.10 * edge_lens),
+            0.0,
+            1.0);
+        float focus_field_pointer = clamp(
+            pointer_lens_strength
+                * (0.28 * pointer_lens_raw + 0.72 * pointer_lens),
+            0.0,
+            1.0);
+        float focus_field_transition = clamp(
+            glass_effect_match_execution * 0.28
+                + morph_execution * 0.20
+                + materialize_wave_strength * 0.16
+                + parallax_field_strength * 1.3
+                + polarization_field_strength * 1.1
+                + aperture_field_strength * 1.0
+                + accommodation_field_strength * 0.9
+                + transition_clarity_strength * 0.9
+                + reflection_wake_strength * 0.8
+                + focus_field_pointer * 0.14,
+            0.0,
+            1.0);
+        float2 focus_field_axis_raw =
+            refraction_dir * (0.34 + 0.22 * glass_lensing_gain)
+            + bridge_dir * (0.28 + 0.18 * bridge_band)
+            - dynamic_light_dir * (0.22 + 0.16 * dynamic_light_highlight)
+            + normalized_local * (0.12 + 0.12 * focus_field_center);
+        float focus_field_axis_len = length(focus_field_axis_raw);
+        float2 focus_field_axis = focus_field_axis_len > 0.0001
+            ? focus_field_axis_raw / focus_field_axis_len
+            : refraction_dir;
+        float2 focus_field_cross =
+            float2(-focus_field_axis.y, focus_field_axis.x);
+        float focus_field_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(focus_field_axis, bridge_dir)));
+        float focus_field_light_face =
+            smoothstep(-0.18, 0.90, dot(focus_field_axis, -dynamic_light_dir));
+        float focus_field_phase = clamp(
+            dot(normalized_local, focus_field_axis)
+                    * (3.8 + 1.6 * focus_field_transition)
+                + dot(normalized_local, focus_field_cross)
+                    * (2.5 + 1.1 * bridge_band)
+                + bridge_axial * (2.3 + 1.4 * bridge_core)
+                + bridge_shear * bridge_band * 1.6
+                + materialize_rim_position
+                    * materialize_wave_strength
+                    * 1.8,
+            -10.0,
+            10.0);
+        float focus_field_wave =
+            0.5 + 0.5 * sin(focus_field_phase);
+        float focus_field_lock =
+            1.0 - smoothstep(
+                0.0,
+                0.34,
+                abs(focus_field_wave - 0.54));
+        float focus_field_gate = clamp(
+            focus_field_body
+                * (0.30
+                   + 0.20 * focus_field_center
+                   + 0.16 * focus_field_midplane
+                   + 0.14 * focus_field_bridge_alignment
+                   + 0.12 * focus_field_light_face
+                   + 0.10 * focus_field_transition
+                   + 0.08 * focus_field_lock
+                   + 0.08 * focus_field_pointer),
+            0.0,
+            1.0);
+        float focus_field_span =
+            (0.74
+             + 1.5 * glass_thickness
+             + 1.2 * clear_glass_detail
+             + 0.8 * focus_field_transition
+             + 0.030 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float focus_field_cross_span =
+            (0.48
+             + 0.8 * glass_dispersion_tangential
+             + 0.7 * spectral_dispersion
+             + 0.7 * focus_field_bridge_alignment)
+            * content_scale;
+        float focus_field_plane_span =
+            (0.42
+             + 0.9 * glass_thickness
+             + 0.7 * glass_lensing_gain
+             + 0.6 * focus_field_lock)
+            * content_scale;
+        float2 focus_field_core_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08,
+            float2(0.0),
+            float2(1.0));
+        float2 focus_field_near_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + focus_field_axis
+                    * texel
+                    * focus_field_span
+                    * (0.26 + 0.12 * focus_field_lock),
+            float2(0.0),
+            float2(1.0));
+        float2 focus_field_far_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                - focus_field_axis
+                    * texel
+                    * focus_field_span
+                    * (0.22 + 0.12 * focus_field_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 focus_field_left_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                + focus_field_cross
+                    * texel
+                    * focus_field_cross_span
+                    * (0.22 + 0.12 * focus_field_midplane),
+            float2(0.0),
+            float2(1.0));
+        float2 focus_field_right_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                - focus_field_cross
+                    * texel
+                    * focus_field_cross_span
+                    * (0.22 + 0.12 * focus_field_lock),
+            float2(0.0),
+            float2(1.0));
+        float2 focus_field_plane_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + (focus_field_axis * (focus_field_wave - 0.50)
+                   + focus_field_cross * (focus_field_midplane - 0.50) * 0.5)
+                    * texel
+                    * focus_field_plane_span,
+            float2(0.0),
+            float2(1.0));
+        float3 focus_field_core_rgb =
+            backdrop.sample(samp, focus_field_core_uv).rgb;
+        float3 focus_field_near_rgb =
+            backdrop.sample(samp, focus_field_near_uv).rgb;
+        float3 focus_field_far_rgb =
+            backdrop.sample(samp, focus_field_far_uv).rgb;
+        float3 focus_field_left_rgb =
+            backdrop.sample(samp, focus_field_left_uv).rgb;
+        float3 focus_field_right_rgb =
+            backdrop.sample(samp, focus_field_right_uv).rgb;
+        float3 focus_field_plane_rgb =
+            backdrop.sample(samp, focus_field_plane_uv).rgb;
+        float3 focus_field_probe =
+            focus_field_core_rgb * 0.32
+            + focus_field_near_rgb * 0.20
+            + focus_field_far_rgb * 0.18
+            + focus_field_left_rgb * 0.12
+            + focus_field_right_rgb * 0.12
+            + focus_field_plane_rgb * 0.06;
+        float focus_field_luma =
+            dot(focus_field_probe, float3(0.2126, 0.7152, 0.0722));
+        float focus_field_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float focus_field_range = clamp(
+            length(focus_field_near_rgb - focus_field_far_rgb) * 0.28
+                + length(focus_field_left_rgb - focus_field_right_rgb) * 0.22
+                + length(focus_field_plane_rgb - focus_field_core_rgb) * 0.18
+                + abs(focus_field_luma - focus_field_surface_luma) * 0.18
+                + focus_field_lock * 0.06,
+            0.0,
+            1.0);
+        float focus_field_coherence =
+            1.0 - smoothstep(0.07, 0.34, focus_field_range);
+        float focus_field_lift = smoothstep(
+            focus_field_surface_luma - 0.04,
+            focus_field_surface_luma + 0.26,
+            focus_field_luma);
+        float focus_field_depth = smoothstep(
+            0.05,
+            0.32,
+            focus_field_surface_luma - focus_field_luma);
+        float focus_field_focus = clamp(
+            focus_field_coherence * 0.34
+                + focus_field_lock * 0.22
+                + focus_field_center * 0.18
+                + focus_field_midplane * 0.14
+                + focus_field_light_face * 0.10,
+            0.0,
+            1.0);
+        float3 focus_field_neutral = mix(
+            focus_field_probe,
+            float3(focus_field_luma),
+            focus_field_coherence * 0.14
+                + focus_field_depth * (0.10 + 0.10 * glass_shadow_gain));
+        float3 focus_field_layer = clamp(
+            (focus_field_neutral - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.024
+                       + focus_field_transition * 0.022
+                       + focus_field_focus * 0.018
+                       - focus_field_depth * 0.024)
+                + float3(0.50),
+            0.0,
+            1.0);
+        focus_field_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.010
+                   + 0.018 * tint_chroma * prominent_intensity);
+        float3 focus_field_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        float focus_field_prism_gate = clamp(
+            focus_field_focus * 0.26
+                + focus_field_bridge_alignment * 0.20
+                + focus_field_light_face * 0.18
+                + focus_field_transition * 0.14
+                + focus_field_lock * 0.12,
+            0.0,
+            1.0);
+        focus_field_layer += focus_field_prism
+            * focus_field_prism_gate
+            * (0.0012
+               + 0.004 * spectral_rim_tint
+               + 0.003 * glass_prismatic_gain);
+        float focus_field_weight = focus_field_strength
+            * focus_field_gate
+            * (0.28
+               + 0.20 * focus_field_focus
+               + 0.18 * focus_field_coherence
+               + 0.14 * focus_field_lift
+               + 0.12 * focus_field_transition);
+        rgb = mix(
+            rgb,
+            mix(rgb, focus_field_layer, 0.08 + 0.14 * focus_field_focus),
+            focus_field_weight * 0.28);
+        float focus_field_settle =
+            focus_field_depth
+            * focus_field_weight
+            * (0.0025 + 0.007 * clear_glass_dimming)
+            * (0.52 + 0.48 * focus_field_body);
+        rgb *= 1.0 - clamp(focus_field_settle, 0.0, 0.022);
+        rgb += focus_field_prism
+            * focus_field_weight
+            * focus_field_prism_gate
+            * (0.0010
+               + 0.003 * dynamic_light_highlight
+               + 0.003 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
