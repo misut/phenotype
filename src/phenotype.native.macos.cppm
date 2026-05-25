@@ -29503,6 +29503,288 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(kinetic_shadow, 0.0, 0.023);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float adaptive_legibility_field_strength = clamp(
+        0.014 * clear_glass_contrast
+            + 0.012 * clear_glass_detail
+            + 0.008 * clear_glass_brightness
+            + 0.006 * prominent_intensity
+            + 0.006 * glass_thickness
+            + 0.18 * interactive_kinetic_field_strength
+            + 0.16 * container_cohesion_field_strength
+            + 0.14 * lensing_flow_field_strength
+            + 0.12 * ambient_chromatic_field_strength
+            + 0.10 * environment_envelope_strength
+            + 0.08 * transition_seam_lock_strength,
+        0.0,
+        0.052);
+    if (adaptive_legibility_field_strength > 0.0001) {
+        float legibility_center =
+            1.0 - smoothstep(0.58, 1.18, normalized_len);
+        float legibility_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.85, 1.0),
+                signed_edge_distance);
+        float legibility_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float legibility_presence = clamp(
+            legibility_center * 0.22
+                + legibility_edge * 0.22
+                + legibility_bridge * 0.18
+                + pointer_lens_strength * 0.16
+                + group_blend_strength
+                    * container_cohesion_field_strength * 2.0
+                + clear_glass_detail * 0.12
+                + prominent_intensity * 0.10,
+            0.0,
+            1.0);
+        float2 legibility_axis_raw =
+            refraction_dir * (0.34 + 0.22 * clear_glass_detail)
+            - dynamic_light_dir
+                * (0.30 + 0.20 * dynamic_light_highlight)
+            + bridge_dir * (0.20 + 0.16 * legibility_bridge)
+            - pointer_dir * (0.18 + 0.12 * pointer_lens_strength)
+            + dispersion_tangent
+                * (0.14
+                   + 0.10 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential);
+        float legibility_axis_len = length(legibility_axis_raw);
+        float2 legibility_axis =
+            legibility_axis_len > 0.0001
+                ? legibility_axis_raw / legibility_axis_len
+                : refraction_dir;
+        float2 legibility_cross =
+            float2(-legibility_axis.y, legibility_axis.x);
+        float legibility_light_face =
+            smoothstep(-0.22, 0.92, dot(legibility_axis, -dynamic_light_dir));
+        float legibility_span =
+            (0.92
+             + 1.8 * clear_glass_detail
+             + 1.4 * glass_thickness
+             + 1.2 * legibility_presence
+             + 0.036 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float legibility_cross_span =
+            (0.58
+             + 1.2 * spectral_dispersion
+             + 1.0 * glass_dispersion_tangential
+             + 0.8 * legibility_bridge)
+            * content_scale;
+        float2 legibility_center_uv = clamp(
+            in.screen_uv
+                + refraction_uv
+                    * (0.06 + 0.04 * legibility_presence),
+            float2(0.0),
+            float2(1.0));
+        float2 legibility_axis_a_uv = clamp(
+            in.screen_uv
+                + legibility_axis
+                    * texel
+                    * legibility_span
+                    * (0.26 + 0.14 * legibility_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 legibility_axis_b_uv = clamp(
+            in.screen_uv
+                - legibility_axis
+                    * texel
+                    * legibility_span
+                    * (0.24 + 0.14 * legibility_center),
+            float2(0.0),
+            float2(1.0));
+        float2 legibility_cross_a_uv = clamp(
+            in.screen_uv
+                + legibility_cross
+                    * texel
+                    * legibility_cross_span
+                    * (0.28 + 0.12 * legibility_bridge)
+                + dispersion_tangent
+                    * texel
+                    * legibility_span
+                    * (0.06 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 legibility_cross_b_uv = clamp(
+            in.screen_uv
+                - legibility_cross
+                    * texel
+                    * legibility_cross_span
+                    * (0.26 + 0.12 * legibility_edge)
+                - dispersion_tangent
+                    * texel
+                    * legibility_span
+                    * (0.06 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 legibility_light_uv = clamp(
+            in.screen_uv
+                - dynamic_light_dir
+                    * texel
+                    * legibility_span
+                    * (0.18 + 0.12 * legibility_light_face),
+            float2(0.0),
+            float2(1.0));
+        float2 legibility_shadow_uv = clamp(
+            in.screen_uv
+                + dynamic_light_dir
+                    * texel
+                    * legibility_span
+                    * (0.18 + 0.12 * (1.0 - legibility_light_face)),
+            float2(0.0),
+            float2(1.0));
+        float3 legibility_center_rgb =
+            backdrop.sample(samp, legibility_center_uv).rgb;
+        float3 legibility_axis_a_rgb =
+            backdrop.sample(samp, legibility_axis_a_uv).rgb;
+        float3 legibility_axis_b_rgb =
+            backdrop.sample(samp, legibility_axis_b_uv).rgb;
+        float3 legibility_cross_a_rgb =
+            backdrop.sample(samp, legibility_cross_a_uv).rgb;
+        float3 legibility_cross_b_rgb =
+            backdrop.sample(samp, legibility_cross_b_uv).rgb;
+        float3 legibility_light_rgb =
+            backdrop.sample(samp, legibility_light_uv).rgb;
+        float3 legibility_shadow_rgb =
+            backdrop.sample(samp, legibility_shadow_uv).rgb;
+        float3 legibility_field_rgb =
+            legibility_center_rgb * 0.24
+            + legibility_axis_a_rgb * 0.16
+            + legibility_axis_b_rgb * 0.16
+            + legibility_cross_a_rgb * 0.12
+            + legibility_cross_b_rgb * 0.12
+            + legibility_light_rgb * 0.10
+            + legibility_shadow_rgb * 0.10;
+        float3 legibility_split = float3(
+            legibility_shadow_rgb.r,
+            (legibility_center_rgb.g + legibility_field_rgb.g) * 0.5,
+            legibility_light_rgb.b);
+        float legibility_backdrop_luma =
+            dot(legibility_field_rgb, float3(0.2126, 0.7152, 0.0722));
+        float legibility_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float legibility_axis_range =
+            length(legibility_axis_a_rgb - legibility_axis_b_rgb);
+        float legibility_cross_range =
+            length(legibility_cross_a_rgb - legibility_cross_b_rgb);
+        float legibility_light_range =
+            length(legibility_light_rgb - legibility_shadow_rgb);
+        float legibility_local_range = clamp(
+            legibility_axis_range * 0.24
+                + legibility_cross_range * 0.22
+                + legibility_light_range * 0.18
+                + abs(legibility_surface_luma - legibility_backdrop_luma)
+                    * 0.16
+                + legibility_edge * 0.10
+                + legibility_presence * 0.10,
+            0.0,
+            1.0);
+        float legibility_busy =
+            smoothstep(0.055, 0.34, legibility_local_range);
+        float legibility_low_contrast =
+            1.0 - smoothstep(
+                0.035,
+                0.24,
+                abs(legibility_surface_luma - legibility_backdrop_luma));
+        float legibility_bright =
+            smoothstep(0.48, 0.90, legibility_backdrop_luma);
+        float legibility_dark =
+            1.0 - smoothstep(0.16, 0.50, legibility_backdrop_luma);
+        float legibility_bias = legibility_bright >= legibility_dark
+            ? -1.0
+            : 1.0;
+        float legibility_delta =
+            (0.028
+             + 0.090 * clear_glass_contrast
+             + 0.038 * clear_glass_detail
+             + 0.026 * clear_glass_brightness)
+            * (0.36
+               + 0.40 * legibility_low_contrast
+               + 0.24 * legibility_busy);
+        float legibility_target_luma = clamp(
+            legibility_backdrop_luma + legibility_bias * legibility_delta,
+            0.07,
+            0.93);
+        float legibility_luma_shift =
+            (legibility_target_luma - legibility_surface_luma)
+            * legibility_low_contrast
+            * (0.30 + 0.38 * legibility_busy);
+        float3 legibility_neutral = mix(
+            rgb,
+            float3(legibility_surface_luma),
+            0.08
+                + 0.12 * legibility_low_contrast
+                + 0.08 * legibility_busy);
+        float3 legibility_contrasted = clamp(
+            (legibility_neutral - float3(legibility_backdrop_luma))
+                    * (1.0
+                       + clear_glass_contrast * 0.18
+                       + legibility_busy * 0.11
+                       + legibility_presence * 0.08)
+                + float3(legibility_backdrop_luma)
+                + float3(legibility_luma_shift),
+            0.0,
+            1.0);
+        float3 legibility_chroma =
+            legibility_split - float3(
+                dot(legibility_split, float3(0.2126, 0.7152, 0.0722)));
+        float3 legibility_layer = clamp(
+            legibility_contrasted
+                + legibility_chroma
+                    * (0.030
+                       + 0.040 * legibility_busy
+                       + 0.026 * clear_glass_detail),
+            0.0,
+            1.0);
+        float3 legibility_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        legibility_layer += legibility_prism
+            * (0.0006
+               + 0.0022 * spectral_rim_tint
+               + 0.0018 * glass_prismatic_gain)
+            * (0.36
+               + 0.24 * legibility_busy
+               + 0.22 * legibility_light_face
+               + 0.18 * legibility_presence);
+        float legibility_gate = clamp(
+            legibility_presence * 0.28
+                + legibility_busy * 0.24
+                + legibility_low_contrast * 0.22
+                + legibility_edge * 0.14
+                + legibility_bridge * 0.08
+                + legibility_light_face * 0.08,
+            0.0,
+            1.0);
+        float legibility_weight =
+            adaptive_legibility_field_strength
+            * legibility_gate
+            * (0.34
+               + 0.22 * legibility_low_contrast
+               + 0.18 * legibility_busy
+               + 0.14 * clear_glass_detail
+               + 0.12 * legibility_presence);
+        rgb = mix(
+            rgb,
+            legibility_layer,
+            legibility_weight
+                * (0.18
+                   + 0.16 * legibility_low_contrast
+                   + 0.10 * legibility_busy));
+        rgb += legibility_prism
+            * legibility_weight
+            * (0.0005
+               + 0.0018 * dynamic_light_highlight
+               + 0.0014 * glass_scattering_gain);
+        float legibility_settle =
+            legibility_weight
+            * legibility_dark
+            * (0.0020 + 0.0055 * glass_shadow_gain)
+            * (0.44 + 0.56 * (1.0 - legibility_light_face));
+        rgb *= 1.0 - clamp(legibility_settle, 0.0, 0.018);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
