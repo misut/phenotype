@@ -20513,6 +20513,282 @@ fragment float4 fs_material(
                + 0.004 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float accommodation_field_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.009 * clear_glass_contrast
+            + 0.008 * clear_glass_dimming
+            + 0.008 * glass_thickness
+            + 0.007 * glass_scattering_gain
+            + 0.006 * volume_veil_strength
+            + 0.006 * catchlight_strength
+            + 0.005 * rim_compression_strength
+            + 0.005 * continuity_finish_strength
+            + 0.005 * transition_clarity_strength
+            + 0.005 * reflection_wake_strength
+            + 0.004 * glass_effect_match_execution * group_blend_strength,
+        0.0,
+        0.058);
+    if (accommodation_field_strength > 0.0001) {
+        float accommodation_interior = smoothstep(
+            max(edge_bevel_width * 0.72, 0.20),
+            max(edge_bevel_width * 3.10, 1.0),
+            signed_edge_distance);
+        float accommodation_center =
+            1.0 - smoothstep(0.20, 1.14, length(normalized_local));
+        float accommodation_corner_balance =
+            1.0 - smoothstep(
+                0.74,
+                1.08,
+                max(abs(normalized_local.x), abs(normalized_local.y)));
+        float accommodation_body = clamp(
+            accommodation_interior
+                * (0.38
+                   + 0.32 * accommodation_center
+                   + 0.18 * accommodation_corner_balance
+                   + 0.12 * edge_lens),
+            0.0,
+            1.0);
+        float accommodation_pointer = clamp(
+            pointer_lens_strength
+                * (0.30 * pointer_lens_raw + 0.70 * pointer_lens),
+            0.0,
+            1.0);
+        float accommodation_transition = clamp(
+            glass_effect_match_execution * 0.26
+                + morph_execution * 0.20
+                + materialize_wave_strength * 0.16
+                + volume_veil_strength * 1.4
+                + catchlight_strength * 1.1
+                + transition_clarity_strength * 1.0
+                + reflection_wake_strength * 0.9
+                + continuity_finish_strength * 0.8
+                + accommodation_pointer * 0.14,
+            0.0,
+            1.0);
+        float2 accommodation_axis_raw =
+            bridge_dir * (0.34 + 0.20 * bridge_band)
+            + refraction_dir * (0.30 + 0.20 * glass_lensing_gain)
+            - dynamic_light_dir * (0.24 + 0.16 * dynamic_light_highlight)
+            + normalized_local * (0.10 + 0.12 * accommodation_center);
+        float accommodation_axis_len = length(accommodation_axis_raw);
+        float2 accommodation_axis = accommodation_axis_len > 0.0001
+            ? accommodation_axis_raw / accommodation_axis_len
+            : refraction_dir;
+        float2 accommodation_cross =
+            float2(-accommodation_axis.y, accommodation_axis.x);
+        float accommodation_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(accommodation_axis, bridge_dir)));
+        float accommodation_light_face =
+            smoothstep(-0.20, 0.90, dot(accommodation_axis, -dynamic_light_dir));
+        float accommodation_phase = clamp(
+            dot(normalized_local, accommodation_axis)
+                    * (3.8 + 1.8 * accommodation_transition)
+                + dot(normalized_local, accommodation_cross)
+                    * (2.4 + 1.2 * bridge_band)
+                + bridge_axial * (2.2 + 1.6 * bridge_core)
+                + bridge_shear * bridge_band * 2.0
+                + materialize_rim_position
+                    * materialize_wave_strength
+                    * 2.0,
+            -10.0,
+            10.0);
+        float accommodation_wave =
+            0.5 + 0.5 * sin(accommodation_phase);
+        float accommodation_sheen =
+            1.0 - smoothstep(
+                0.0,
+                0.36,
+                abs(accommodation_wave - 0.54));
+        float accommodation_gate = clamp(
+            accommodation_body
+                * (0.34
+                   + 0.20 * accommodation_center
+                   + 0.16 * accommodation_alignment
+                   + 0.14 * accommodation_light_face
+                   + 0.12 * accommodation_transition
+                   + 0.08 * accommodation_sheen
+                   + 0.08 * accommodation_pointer),
+            0.0,
+            1.0);
+        float accommodation_span =
+            (0.72
+             + 1.5 * glass_thickness
+             + 1.2 * clear_glass_detail
+             + 0.9 * accommodation_transition
+             + 0.030 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float accommodation_cross_span =
+            (0.50
+             + 0.8 * glass_dispersion_tangential
+             + 0.7 * spectral_dispersion
+             + 0.7 * accommodation_alignment)
+            * content_scale;
+        float2 accommodation_core_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08,
+            float2(0.0),
+            float2(1.0));
+        float2 accommodation_forward_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + accommodation_axis
+                    * texel
+                    * accommodation_span
+                    * (0.26 + 0.12 * accommodation_sheen),
+            float2(0.0),
+            float2(1.0));
+        float2 accommodation_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - accommodation_axis
+                    * texel
+                    * accommodation_span
+                    * (0.24 + 0.12 * accommodation_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 accommodation_upper_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + accommodation_cross
+                    * texel
+                    * accommodation_cross_span
+                    * (0.24 + 0.12 * accommodation_alignment),
+            float2(0.0),
+            float2(1.0));
+        float2 accommodation_lower_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - accommodation_cross
+                    * texel
+                    * accommodation_cross_span
+                    * (0.22 + 0.12 * accommodation_sheen),
+            float2(0.0),
+            float2(1.0));
+        float3 accommodation_core_rgb =
+            backdrop.sample(samp, accommodation_core_uv).rgb;
+        float3 accommodation_forward_rgb =
+            backdrop.sample(samp, accommodation_forward_uv).rgb;
+        float3 accommodation_back_rgb =
+            backdrop.sample(samp, accommodation_back_uv).rgb;
+        float3 accommodation_upper_rgb =
+            backdrop.sample(samp, accommodation_upper_uv).rgb;
+        float3 accommodation_lower_rgb =
+            backdrop.sample(samp, accommodation_lower_uv).rgb;
+        float3 accommodation_probe =
+            accommodation_core_rgb * 0.34
+            + accommodation_forward_rgb * 0.20
+            + accommodation_back_rgb * 0.18
+            + accommodation_upper_rgb * 0.15
+            + accommodation_lower_rgb * 0.13;
+        float accommodation_luma =
+            dot(accommodation_probe, float3(0.2126, 0.7152, 0.0722));
+        float accommodation_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float accommodation_axis_range =
+            length(accommodation_forward_rgb - accommodation_back_rgb);
+        float accommodation_cross_range =
+            length(accommodation_upper_rgb - accommodation_lower_rgb);
+        float accommodation_core_range =
+            length(accommodation_core_rgb - accommodation_probe);
+        float accommodation_range = clamp(
+            accommodation_axis_range * 0.30
+                + accommodation_cross_range * 0.26
+                + accommodation_core_range * 0.18
+                + abs(accommodation_luma - accommodation_surface_luma) * 0.16
+                + accommodation_sheen * 0.06,
+            0.0,
+            1.0);
+        float accommodation_busy =
+            smoothstep(0.10, 0.42, accommodation_range);
+        float accommodation_calm =
+            1.0 - smoothstep(0.12, 0.44, accommodation_range);
+        float accommodation_dark_need = smoothstep(
+            0.04,
+            0.30,
+            accommodation_surface_luma - accommodation_luma);
+        float accommodation_bright_need = smoothstep(
+            accommodation_surface_luma - 0.05,
+            accommodation_surface_luma + 0.30,
+            accommodation_luma);
+        float accommodation_chroma = clamp(
+            max(max(accommodation_probe.r, accommodation_probe.g),
+                accommodation_probe.b)
+                - min(min(accommodation_probe.r, accommodation_probe.g),
+                    accommodation_probe.b),
+            0.0,
+            1.0);
+        float accommodation_pressure = clamp(
+            accommodation_busy * 0.36
+                + accommodation_dark_need * 0.18
+                + accommodation_bright_need * 0.16
+                + accommodation_chroma * 0.10
+                + accommodation_transition * 0.10
+                + accommodation_center * 0.10,
+            0.0,
+            1.0);
+        float3 accommodation_neutral = mix(
+            accommodation_probe,
+            float3(accommodation_luma),
+            accommodation_busy * 0.24
+                + accommodation_chroma * 0.16
+                + accommodation_calm * 0.08);
+        float3 accommodation_layer = clamp(
+            (accommodation_neutral - float3(0.50))
+                    * (1.0
+                       - accommodation_busy * 0.060
+                       + clear_glass_contrast * 0.026)
+                + float3(0.50),
+            0.0,
+            1.0);
+        float3 accommodation_tint =
+            mix(float3(1.0), in.tint.rgb, 0.16 + 0.14 * tint_chroma);
+        accommodation_layer = mix(
+            accommodation_layer,
+            accommodation_layer * accommodation_tint,
+            0.20 + 0.16 * prominent_intensity);
+        float3 accommodation_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        float accommodation_prism_gate = clamp(
+            accommodation_sheen * 0.26
+                + accommodation_light_face * 0.22
+                + accommodation_alignment * 0.18
+                + accommodation_transition * 0.16
+                + accommodation_pressure * 0.12,
+            0.0,
+            1.0);
+        accommodation_layer += accommodation_prism
+            * accommodation_prism_gate
+            * (0.0012
+               + 0.004 * spectral_rim_tint
+               + 0.003 * glass_prismatic_gain);
+        float accommodation_weight = accommodation_field_strength
+            * accommodation_gate
+            * (0.30
+               + 0.24 * accommodation_pressure
+               + 0.16 * accommodation_calm
+               + 0.14 * accommodation_sheen
+               + 0.12 * accommodation_transition);
+        rgb = mix(
+            rgb,
+            mix(rgb, accommodation_layer, 0.10 + 0.14 * accommodation_pressure),
+            accommodation_weight * 0.30);
+        float accommodation_settle =
+            accommodation_pressure
+            * accommodation_weight
+            * (0.003 + 0.008 * clear_glass_dimming)
+            * (0.54 + 0.46 * accommodation_body);
+        rgb *= 1.0 - clamp(accommodation_settle, 0.0, 0.024);
+        rgb += accommodation_prism
+            * accommodation_weight
+            * accommodation_prism_gate
+            * (0.0010
+               + 0.003 * dynamic_light_highlight
+               + 0.003 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
