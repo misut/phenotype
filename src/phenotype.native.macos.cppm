@@ -29785,6 +29785,286 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(legibility_settle, 0.0, 0.018);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float foreground_sheen_field_strength = clamp(
+        0.012 * specular_intensity
+            + 0.010 * clear_glass_detail
+            + 0.009 * glass_prismatic_gain
+            + 0.008 * glass_scattering_gain
+            + 0.006 * prominent_intensity
+            + 0.16 * adaptive_legibility_field_strength
+            + 0.14 * interactive_kinetic_field_strength
+            + 0.12 * container_cohesion_field_strength
+            + 0.10 * lensing_flow_field_strength
+            + 0.08 * ambient_chromatic_field_strength,
+        0.0,
+        0.050);
+    if (foreground_sheen_field_strength > 0.0001) {
+        float2 sheen_bounds_norm =
+            (in.local_pos / max(in.rect_size, float2(1.0))
+                - float2(0.5))
+            * 2.0;
+        float sheen_bounds_distance = max(
+            abs(sheen_bounds_norm.x),
+            abs(sheen_bounds_norm.y));
+        float sheen_bounds_center =
+            1.0 - smoothstep(0.18, 1.06, length(sheen_bounds_norm));
+        float sheen_bounds_rim =
+            smoothstep(0.52, 1.0, sheen_bounds_distance)
+            * (1.0 - smoothstep(1.0, 1.22, sheen_bounds_distance));
+        float sheen_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.55, 1.0),
+                signed_edge_distance);
+        float sheen_bridge =
+            bridge_band * (0.30 + 0.70 * bridge_core);
+        float2 sheen_anchor =
+            clamp(in.interaction.xy, float2(0.0), float2(1.0))
+            * max(in.rect_size, float2(1.0));
+        float2 sheen_anchor_delta =
+            (in.local_pos - sheen_anchor) / max(in.rect_size, float2(1.0));
+        float sheen_anchor_distance = length(sheen_anchor_delta);
+        float2 sheen_anchor_dir =
+            sheen_anchor_distance > 0.0001
+                ? sheen_anchor_delta / sheen_anchor_distance
+                : -dynamic_light_dir;
+        float2 sheen_axis_raw =
+            -dynamic_light_dir * (0.36 + 0.22 * dynamic_light_highlight)
+            + sheen_anchor_dir * (0.28 + 0.18 * specular_intensity)
+            + refraction_dir * (0.22 + 0.16 * glass_lensing_gain)
+            + bridge_dir * (0.18 + 0.18 * sheen_bridge)
+            + dispersion_tangent
+                * (0.14
+                   + 0.10 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential);
+        float sheen_axis_len = length(sheen_axis_raw);
+        float2 sheen_axis =
+            sheen_axis_len > 0.0001
+                ? sheen_axis_raw / sheen_axis_len
+                : -dynamic_light_dir;
+        float2 sheen_cross = float2(-sheen_axis.y, sheen_axis.x);
+        float sheen_light_face =
+            smoothstep(-0.20, 0.94, dot(sheen_axis, -dynamic_light_dir));
+        float sheen_anchor_lobe =
+            1.0 - smoothstep(
+                0.0,
+                0.58 + 0.22 * max(specular_intensity, pointer_lens_strength),
+                sheen_anchor_distance);
+        float sheen_phase = clamp(
+            dot(sheen_bounds_norm, sheen_axis)
+                    * (4.8 + 2.0 * sheen_bounds_rim)
+                + dot(sheen_bounds_norm, sheen_cross)
+                    * (2.8 + 1.4 * sheen_bridge)
+                + sheen_anchor_lobe * 3.2
+                + bridge_axial * (2.2 + 1.2 * bridge_core)
+                + spectral_dispersion * 4.6,
+            -12.0,
+            12.0);
+        float sheen_wave = 0.5 + 0.5 * sin(sheen_phase);
+        float sheen_ribbon =
+            1.0 - smoothstep(
+                0.0,
+                0.32,
+                abs(dot(sheen_bounds_norm, sheen_cross)
+                    + 0.10 * sin(sheen_phase * 0.72)));
+        sheen_ribbon *= 0.42 + 0.58 * sheen_wave;
+        float sheen_presence = clamp(
+            sheen_bounds_center * 0.18
+                + sheen_bounds_rim * 0.24
+                + sheen_edge * 0.20
+                + sheen_bridge * 0.16
+                + sheen_anchor_lobe * 0.16
+                + pointer_lens_strength * pointer_lens_raw * 0.14
+                + prominent_intensity * 0.10,
+            0.0,
+            1.0);
+        float sheen_span =
+            (0.78
+             + 1.5 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.2 * sheen_presence
+             + 0.032 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float sheen_chroma_span =
+            (0.52
+             + 1.0 * spectral_dispersion
+             + 0.9 * glass_dispersion_tangential
+             + 0.7 * sheen_bridge)
+            * content_scale;
+        float2 sheen_center_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.08 + 0.04 * sheen_presence),
+            float2(0.0),
+            float2(1.0));
+        float2 sheen_highlight_uv = clamp(
+            in.screen_uv
+                - dynamic_light_dir
+                    * texel
+                    * sheen_span
+                    * (0.28 + 0.14 * sheen_light_face)
+                + sheen_axis
+                    * texel
+                    * sheen_span
+                    * (0.12 + 0.10 * sheen_ribbon),
+            float2(0.0),
+            float2(1.0));
+        float2 sheen_shadow_uv = clamp(
+            in.screen_uv
+                + dynamic_light_dir
+                    * texel
+                    * sheen_span
+                    * (0.22 + 0.12 * (1.0 - sheen_light_face))
+                - sheen_axis
+                    * texel
+                    * sheen_span
+                    * (0.10 + 0.08 * sheen_bounds_rim),
+            float2(0.0),
+            float2(1.0));
+        float2 sheen_warm_uv = clamp(
+            in.screen_uv
+                + sheen_cross
+                    * texel
+                    * sheen_chroma_span
+                    * (0.30 + 0.14 * sheen_wave)
+                + dispersion_tangent
+                    * texel
+                    * sheen_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 sheen_cool_uv = clamp(
+            in.screen_uv
+                - sheen_cross
+                    * texel
+                    * sheen_chroma_span
+                    * (0.28 + 0.12 * sheen_ribbon)
+                - dispersion_tangent
+                    * texel
+                    * sheen_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float3 sheen_center_rgb =
+            backdrop.sample(samp, sheen_center_uv).rgb;
+        float3 sheen_highlight_rgb =
+            backdrop.sample(samp, sheen_highlight_uv).rgb;
+        float3 sheen_shadow_rgb =
+            backdrop.sample(samp, sheen_shadow_uv).rgb;
+        float3 sheen_warm_rgb =
+            backdrop.sample(samp, sheen_warm_uv).rgb;
+        float3 sheen_cool_rgb =
+            backdrop.sample(samp, sheen_cool_uv).rgb;
+        float3 sheen_probe =
+            sheen_center_rgb * 0.28
+            + sheen_highlight_rgb * 0.24
+            + sheen_shadow_rgb * 0.18
+            + sheen_warm_rgb * 0.15
+            + sheen_cool_rgb * 0.15;
+        float3 sheen_split = float3(
+            sheen_warm_rgb.r,
+            (sheen_center_rgb.g + sheen_highlight_rgb.g) * 0.5,
+            sheen_cool_rgb.b);
+        float sheen_luma =
+            dot(sheen_probe, float3(0.2126, 0.7152, 0.0722));
+        float sheen_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float sheen_chroma = max(
+            max(abs(sheen_probe.r - sheen_probe.g),
+                abs(sheen_probe.g - sheen_probe.b)),
+            abs(sheen_probe.b - sheen_probe.r));
+        float sheen_pickup =
+            smoothstep(0.028, 0.32, sheen_chroma);
+        float sheen_contrast = clamp(
+            length(sheen_highlight_rgb - sheen_shadow_rgb) * 0.24
+                + length(sheen_warm_rgb - sheen_cool_rgb) * 0.22
+                + abs(sheen_luma - sheen_surface_luma) * 0.18
+                + sheen_ribbon * 0.12
+                + sheen_edge * 0.10
+                + sheen_presence * 0.08,
+            0.0,
+            1.0);
+        float sheen_coherence =
+            1.0 - smoothstep(0.10, 0.42, sheen_contrast);
+        float sheen_bright =
+            smoothstep(
+                sheen_surface_luma - 0.05,
+                sheen_surface_luma + 0.30,
+                sheen_luma);
+        float3 sheen_neutral = mix(
+            sheen_probe,
+            float3(sheen_luma),
+            0.22 + 0.16 * sheen_coherence);
+        float3 sheen_layer = mix(
+            sheen_neutral,
+            sheen_split,
+            0.16
+                + 0.16 * sheen_pickup
+                + 0.14 * sheen_ribbon
+                + 0.12 * sheen_light_face);
+        sheen_layer = clamp(
+            (sheen_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.014
+                       + sheen_bright * 0.012
+                       + sheen_presence * 0.010)
+                + float3(0.50),
+            0.0,
+            1.0);
+        sheen_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.012
+                   + 0.024 * tint_chroma * prominent_intensity);
+        float3 sheen_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        sheen_layer += sheen_prism
+            * (0.0007
+               + 0.0024 * spectral_rim_tint
+               + 0.0020 * glass_prismatic_gain
+               + 0.0016 * glass_scattering_gain)
+            * (0.34
+               + 0.24 * sheen_pickup
+               + 0.22 * sheen_light_face
+               + 0.20 * sheen_ribbon);
+        float sheen_gate = clamp(
+            sheen_presence * 0.26
+                + sheen_ribbon * 0.22
+                + sheen_bounds_rim * 0.18
+                + sheen_light_face * 0.12
+                + sheen_pickup * 0.12
+                + sheen_coherence * 0.10,
+            0.0,
+            1.0);
+        float sheen_weight =
+            foreground_sheen_field_strength
+            * sheen_gate
+            * (0.32
+               + 0.20 * sheen_bright
+               + 0.18 * sheen_pickup
+               + 0.16 * sheen_ribbon
+               + 0.14 * sheen_coherence);
+        rgb = mix(
+            rgb,
+            sheen_layer,
+            sheen_weight
+                * (0.18
+                   + 0.14 * sheen_ribbon
+                   + 0.10 * sheen_presence));
+        rgb += sheen_prism
+            * sheen_weight
+            * (0.0006
+               + 0.0018 * dynamic_light_highlight
+               + 0.0014 * glass_scattering_gain);
+        float sheen_cavity =
+            (1.0 - sheen_bright)
+            * sheen_weight
+            * (0.0018 + 0.0050 * glass_shadow_gain)
+            * (0.44 + 0.56 * (1.0 - sheen_light_face));
+        rgb *= 1.0 - clamp(sheen_cavity, 0.0, 0.016);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
