@@ -22744,6 +22744,302 @@ fragment float4 fs_material(
                + 0.0025 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float substrate_adhesion_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.009 * clear_glass_dimming
+            + 0.008 * glass_shadow_gain
+            + 0.007 * glass_scattering_gain
+            + 0.006 * ambient_seal_field_strength
+            + 0.006 * contact_shadow_field_strength
+            + 0.005 * depth_fusion_strength
+            + 0.005 * focus_field_strength
+            + 0.004 * parallax_field_strength
+            + 0.004 * volume_veil_strength
+            + 0.004 * glass_effect_match_execution * group_blend_strength,
+        0.0,
+        0.052);
+    if (substrate_adhesion_strength > 0.0001) {
+        float substrate_adhesion_interior = smoothstep(
+            max(edge_bevel_width * 0.70, 0.24),
+            max(edge_bevel_width * 3.40, 1.0),
+            signed_edge_distance);
+        float substrate_adhesion_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.70, 1.0),
+                signed_edge_distance);
+        float substrate_adhesion_lower = smoothstep(
+            0.20,
+            0.96,
+            in.local_pos.y / max(in.rect_size.y, 1.0));
+        float substrate_adhesion_radius = length(normalized_local);
+        float substrate_adhesion_center =
+            1.0 - smoothstep(0.18, 1.10, substrate_adhesion_radius);
+        float substrate_adhesion_bed =
+            smoothstep(0.26, 0.70, substrate_adhesion_radius)
+            * (1.0 - smoothstep(0.76, 1.12, substrate_adhesion_radius));
+        float substrate_adhesion_pointer = clamp(
+            pointer_lens_strength
+                * (0.26 * pointer_lens_raw + 0.74 * pointer_lens),
+            0.0,
+            1.0);
+        float substrate_adhesion_anchor = clamp(
+            substrate_adhesion_lower * 0.24
+                + substrate_adhesion_edge * 0.22
+                + edge_lens * 0.18
+                + bridge_band * 0.14
+                + substrate_adhesion_pointer * 0.12
+                + ambient_seal_field_strength * 1.3
+                + contact_shadow_field_strength * 1.2,
+            0.0,
+            1.0);
+        float substrate_adhesion_body = clamp(
+            substrate_adhesion_interior
+                * (0.30
+                   + 0.22 * substrate_adhesion_center
+                   + 0.20 * substrate_adhesion_bed
+                   + 0.16 * substrate_adhesion_anchor
+                   + 0.12 * substrate_adhesion_lower),
+            0.0,
+            1.0);
+        float substrate_adhesion_transition = clamp(
+            glass_effect_match_execution * 0.28
+                + morph_execution * 0.20
+                + materialize_wave_strength * 0.16
+                + ambient_seal_field_strength * 1.3
+                + contact_shadow_field_strength * 1.2
+                + depth_fusion_strength * 1.0
+                + focus_field_strength * 0.9
+                + parallax_field_strength * 0.8
+                + substrate_adhesion_anchor * 0.18,
+            0.0,
+            1.0);
+        float2 substrate_adhesion_axis_raw =
+            -dynamic_light_dir * (0.34 + 0.18 * dynamic_light_highlight)
+            + bridge_dir * (0.28 + 0.18 * bridge_band)
+            + refraction_dir * (0.26 + 0.18 * glass_lensing_gain)
+            + normalized_local * (0.12 + 0.12 * substrate_adhesion_center);
+        float substrate_adhesion_axis_len =
+            length(substrate_adhesion_axis_raw);
+        float2 substrate_adhesion_axis =
+            substrate_adhesion_axis_len > 0.0001
+                ? substrate_adhesion_axis_raw / substrate_adhesion_axis_len
+                : -dynamic_light_dir;
+        float2 substrate_adhesion_cross =
+            float2(-substrate_adhesion_axis.y, substrate_adhesion_axis.x);
+        float substrate_adhesion_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(substrate_adhesion_axis, bridge_dir)));
+        float substrate_adhesion_light_face =
+            smoothstep(-0.18, 0.90, dot(substrate_adhesion_axis, -dynamic_light_dir));
+        float substrate_adhesion_phase = clamp(
+            dot(normalized_local, substrate_adhesion_axis)
+                    * (3.6 + 1.5 * substrate_adhesion_transition)
+                + dot(normalized_local, substrate_adhesion_cross)
+                    * (2.3 + 1.0 * bridge_band)
+                + bridge_axial * (2.1 + 1.3 * bridge_core)
+                + bridge_shear * bridge_band * 1.5
+                + materialize_rim_position
+                    * materialize_wave_strength
+                    * 1.7,
+            -10.0,
+            10.0);
+        float substrate_adhesion_wave =
+            0.5 + 0.5 * sin(substrate_adhesion_phase);
+        float substrate_adhesion_settle_band =
+            1.0 - smoothstep(
+                0.0,
+                0.38,
+                abs(substrate_adhesion_wave - 0.56));
+        float substrate_adhesion_gate = clamp(
+            substrate_adhesion_body
+                * (0.28
+                   + 0.18 * substrate_adhesion_anchor
+                   + 0.16 * substrate_adhesion_bed
+                   + 0.14 * substrate_adhesion_bridge_alignment
+                   + 0.12 * substrate_adhesion_light_face
+                   + 0.10 * substrate_adhesion_transition
+                   + 0.08 * substrate_adhesion_settle_band
+                   + 0.08 * substrate_adhesion_pointer),
+            0.0,
+            1.0);
+        float substrate_adhesion_span =
+            (0.66
+             + 1.3 * glass_thickness
+             + 1.1 * clear_glass_detail
+             + 0.8 * substrate_adhesion_transition
+             + 0.028 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float substrate_adhesion_cross_span =
+            (0.44
+             + 0.8 * glass_dispersion_tangential
+             + 0.6 * spectral_dispersion
+             + 0.6 * substrate_adhesion_bridge_alignment)
+            * content_scale;
+        float substrate_adhesion_edge_span =
+            (0.40
+             + 0.8 * glass_thickness
+             + 0.7 * glass_lensing_gain
+             + 0.6 * substrate_adhesion_anchor)
+            * content_scale;
+        float2 substrate_adhesion_core_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08,
+            float2(0.0),
+            float2(1.0));
+        float2 substrate_adhesion_floor_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - dynamic_light_dir
+                    * texel
+                    * substrate_adhesion_span
+                    * (0.24 + 0.14 * substrate_adhesion_anchor),
+            float2(0.0),
+            float2(1.0));
+        float2 substrate_adhesion_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                + dynamic_light_dir
+                    * texel
+                    * substrate_adhesion_span
+                    * (0.18 + 0.10 * substrate_adhesion_settle_band),
+            float2(0.0),
+            float2(1.0));
+        float2 substrate_adhesion_edge_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                + normalized_local
+                    * texel
+                    * substrate_adhesion_edge_span
+                    * (0.22 + 0.16 * substrate_adhesion_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 substrate_adhesion_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                + substrate_adhesion_cross
+                    * texel
+                    * substrate_adhesion_cross_span
+                    * (0.20 + 0.12 * substrate_adhesion_bed),
+            float2(0.0),
+            float2(1.0));
+        float2 substrate_adhesion_shear_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                - substrate_adhesion_cross
+                    * texel
+                    * substrate_adhesion_cross_span
+                    * (0.18 + 0.12 * substrate_adhesion_settle_band),
+            float2(0.0),
+            float2(1.0));
+        float3 substrate_adhesion_core_rgb =
+            backdrop.sample(samp, substrate_adhesion_core_uv).rgb;
+        float3 substrate_adhesion_floor_rgb =
+            backdrop.sample(samp, substrate_adhesion_floor_uv).rgb;
+        float3 substrate_adhesion_return_rgb =
+            backdrop.sample(samp, substrate_adhesion_return_uv).rgb;
+        float3 substrate_adhesion_edge_rgb =
+            backdrop.sample(samp, substrate_adhesion_edge_uv).rgb;
+        float3 substrate_adhesion_cross_rgb =
+            backdrop.sample(samp, substrate_adhesion_cross_uv).rgb;
+        float3 substrate_adhesion_shear_rgb =
+            backdrop.sample(samp, substrate_adhesion_shear_uv).rgb;
+        float3 substrate_adhesion_probe =
+            substrate_adhesion_core_rgb * 0.30
+            + substrate_adhesion_floor_rgb * 0.22
+            + substrate_adhesion_return_rgb * 0.16
+            + substrate_adhesion_edge_rgb * 0.14
+            + substrate_adhesion_cross_rgb * 0.10
+            + substrate_adhesion_shear_rgb * 0.08;
+        float substrate_adhesion_luma =
+            dot(substrate_adhesion_probe, float3(0.2126, 0.7152, 0.0722));
+        float substrate_adhesion_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float substrate_adhesion_range = clamp(
+            length(substrate_adhesion_floor_rgb - substrate_adhesion_return_rgb) * 0.26
+                + length(substrate_adhesion_cross_rgb - substrate_adhesion_shear_rgb) * 0.22
+                + length(substrate_adhesion_edge_rgb - substrate_adhesion_core_rgb) * 0.20
+                + abs(substrate_adhesion_luma - substrate_adhesion_surface_luma) * 0.18
+                + substrate_adhesion_anchor * 0.06,
+            0.0,
+            1.0);
+        float substrate_adhesion_coherence =
+            1.0 - smoothstep(0.08, 0.36, substrate_adhesion_range);
+        float substrate_adhesion_lift = smoothstep(
+            substrate_adhesion_surface_luma - 0.04,
+            substrate_adhesion_surface_luma + 0.25,
+            substrate_adhesion_luma);
+        float substrate_adhesion_depth = smoothstep(
+            0.04,
+            0.32,
+            substrate_adhesion_surface_luma - substrate_adhesion_luma);
+        float3 substrate_adhesion_neutral = mix(
+            substrate_adhesion_probe,
+            float3(substrate_adhesion_luma),
+            substrate_adhesion_coherence * 0.16
+                + substrate_adhesion_depth * (0.10 + 0.12 * glass_shadow_gain)
+                + substrate_adhesion_anchor * 0.08);
+        float3 substrate_adhesion_layer = clamp(
+            (substrate_adhesion_neutral - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.018
+                       + substrate_adhesion_transition * 0.018
+                       - substrate_adhesion_depth * 0.028
+                       - substrate_adhesion_anchor * 0.010)
+                + float3(0.50),
+            0.0,
+            1.0);
+        substrate_adhesion_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.008
+                   + 0.014 * tint_chroma * prominent_intensity);
+        float3 substrate_adhesion_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        float substrate_adhesion_prism_gate = clamp(
+            substrate_adhesion_anchor * 0.24
+                + substrate_adhesion_bridge_alignment * 0.18
+                + substrate_adhesion_light_face * 0.16
+                + substrate_adhesion_transition * 0.14
+                + substrate_adhesion_settle_band * 0.12,
+            0.0,
+            1.0);
+        substrate_adhesion_layer += substrate_adhesion_prism
+            * substrate_adhesion_prism_gate
+            * (0.0008
+               + 0.0028 * spectral_rim_tint
+               + 0.0024 * glass_prismatic_gain);
+        float substrate_adhesion_weight =
+            substrate_adhesion_strength
+            * substrate_adhesion_gate
+            * (0.28
+               + 0.20 * substrate_adhesion_anchor
+               + 0.18 * substrate_adhesion_coherence
+               + 0.14 * substrate_adhesion_lift
+               + 0.12 * substrate_adhesion_transition);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                substrate_adhesion_layer,
+                0.08 + 0.14 * substrate_adhesion_anchor),
+            substrate_adhesion_weight * 0.25);
+        float substrate_adhesion_settle =
+            (substrate_adhesion_depth * 0.62
+             + substrate_adhesion_anchor * 0.38)
+            * substrate_adhesion_weight
+            * (0.0025 + 0.007 * clear_glass_dimming)
+            * (0.54 + 0.46 * substrate_adhesion_body);
+        rgb *= 1.0 - clamp(substrate_adhesion_settle, 0.0, 0.024);
+        rgb += substrate_adhesion_prism
+            * substrate_adhesion_weight
+            * substrate_adhesion_prism_gate
+            * (0.0007
+               + 0.0022 * dynamic_light_highlight
+               + 0.0024 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
