@@ -38207,6 +38207,359 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(reflection_absorption, 0.0, 0.0074);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float interaction_response_field_strength = clamp(
+        0.020 * pointer_lens_strength
+            * (0.36 * pointer_lens_raw + 0.64 * pointer_lens)
+            + 0.003 * overlap_response_strength
+            + 0.004 * fusion_strength
+            + 0.005 * group_blend_strength * shared_backdrop_scope
+            + 0.004 * group_blend_strength * group_surface_execution
+            + 0.004 * bridge_band
+            + 0.24 * contextual_reflection_field_strength
+            + 0.22 * hierarchy_separation_field_strength
+            + 0.19 * surface_identity_field_strength
+            + 0.16 * tonal_equilibrium_field_strength
+            + 0.13 * chroma_containment_field_strength
+            + 0.11 * legibility_preservation_field_strength
+            + 0.09 * depth_separation_field_strength
+            + 0.07 * specular_flow_field_strength
+            + 0.052 * phase_equalization_field_strength
+            + 0.042 * edge_continuity_field_strength
+            + 0.035 * rim_coalescence_field_strength
+            + 0.030 * edge_adhesion_field_strength
+            + 0.025 * elastic_tension_field_strength
+            + 0.020 * contact_pressure_field_strength
+            + 0.016 * internal_shadow_field_strength,
+        0.0,
+        0.021);
+    if (interaction_response_field_strength > 0.0001
+        && pointer_lens_strength > 0.0001) {
+        float interaction_radius_ratio =
+            pointer_distance / max(pointer_lens_radius, 0.001);
+        float interaction_press = clamp(
+            pointer_lens_strength
+                * (0.38 * pointer_lens_raw + 0.62 * pointer_lens),
+            0.0,
+            1.0);
+        float interaction_core =
+            1.0 - smoothstep(0.0, 0.46, interaction_radius_ratio);
+        float interaction_ring =
+            1.0 - smoothstep(
+                0.0,
+                0.34,
+                abs(interaction_radius_ratio - 0.56));
+        interaction_ring *= pointer_lens_raw;
+        float interaction_outer =
+            1.0 - smoothstep(
+                0.18,
+                1.05,
+                abs(interaction_radius_ratio - 0.86));
+        interaction_outer *= pointer_lens_raw;
+        float interaction_rim =
+            edge_lens
+            * (0.58
+               + 0.42
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.70, 0.86),
+                       signed_edge_distance)));
+        float interaction_bridge =
+            bridge_band * (0.46 + 0.54 * bridge_core);
+        float interaction_presence = clamp(
+            interaction_press * 0.36
+                + interaction_core * 0.13
+                + interaction_ring * 0.20
+                + interaction_outer * 0.13
+                + interaction_rim * 0.11
+                + interaction_bridge * 0.09
+                + contextual_reflection_field_strength * 3.8
+                + hierarchy_separation_field_strength * 3.2,
+            0.0,
+            1.0);
+        float2 interaction_axis_raw =
+            pointer_dir * (0.46 + 0.20 * interaction_press)
+            + refraction_dir * (0.22 + 0.14 * glass_lensing_gain)
+            - dynamic_light_dir * (0.20 + 0.13 * dynamic_light_highlight)
+            + bridge_tangent
+                * (bridge_shear >= 0.0 ? 1.0 : -1.0)
+                * (0.14 + 0.12 * abs(bridge_shear) * interaction_bridge)
+            + dispersion_tangent
+                * (0.10
+                   + 0.06 * spectral_dispersion
+                   + 0.04 * glass_dispersion_tangential);
+        float interaction_axis_len = length(interaction_axis_raw);
+        float2 interaction_axis =
+            interaction_axis_len > 0.0001
+                ? interaction_axis_raw / interaction_axis_len
+                : pointer_dir;
+        float2 interaction_cross =
+            float2(-interaction_axis.y, interaction_axis.x);
+        float interaction_light_face =
+            smoothstep(-0.18, 0.92, dot(interaction_axis, -dynamic_light_dir));
+        float interaction_bridge_alignment =
+            smoothstep(-0.14, 0.92, abs(dot(interaction_axis, bridge_tangent)));
+        float interaction_phase = clamp(
+            dot(normalized_local, interaction_axis)
+                    * (3.4 + 1.1 * interaction_presence)
+                + dot(normalized_local, interaction_cross)
+                    * (2.1 + 0.9 * interaction_ring)
+                + interaction_radius_ratio * (1.6 + 1.2 * interaction_press)
+                + bridge_axial * (1.2 + 0.8 * bridge_core)
+                + bridge_lateral_signed * interaction_bridge * 1.0
+                + spectral_dispersion * 1.6
+                + glass_caustic_spread * 1.2,
+            -12.0,
+            12.0);
+        float interaction_wave =
+            0.5 + 0.5 * sin(interaction_phase);
+        float interaction_counter_wave =
+            0.5 + 0.5 * cos(
+                interaction_phase * 0.58
+                + interaction_press * 2.6
+                + glass_caustic_spread * 1.8);
+        float interaction_lobe =
+            1.0 - smoothstep(0.0, 0.42, abs(interaction_wave - 0.50));
+        float interaction_return_lobe =
+            1.0 - smoothstep(0.0, 0.46, abs(interaction_counter_wave - 0.50));
+        float interaction_support = clamp(
+            interaction_presence * 0.30
+                + interaction_press * 0.22
+                + interaction_ring * 0.17
+                + interaction_outer * 0.10
+                + interaction_rim * 0.12
+                + interaction_bridge_alignment * 0.10,
+            0.0,
+            1.0);
+        float interaction_focus =
+            (0.5
+             + 0.5
+                 * cos(interaction_phase * 1.04 + interaction_radius_ratio))
+            * (0.34 + 0.66 * interaction_lobe);
+        float interaction_span =
+            (0.28
+             + 0.52 * glass_thickness
+             + 0.44 * clear_glass_detail
+             + 0.62 * interaction_presence
+             + 0.010 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float interaction_cross_span =
+            (0.22
+             + 0.34 * glass_dispersion_tangential
+             + 0.32 * spectral_dispersion
+             + 0.46 * interaction_support)
+            * content_scale;
+        float interaction_pressure_span =
+            (0.18
+             + 0.34 * interaction_press
+             + 0.22 * interaction_ring
+             + 0.16 * glass_caustic_spread)
+            * content_scale;
+        float2 interaction_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.032 + 0.048 * interaction_support)
+                + pointer_dir
+                    * texel
+                    * interaction_pressure_span
+                    * (0.10 + 0.12 * interaction_press),
+            float2(0.0),
+            float2(1.0));
+        float2 interaction_press_uv = clamp(
+            interaction_base_uv
+                - pointer_dir
+                    * texel
+                    * interaction_span
+                    * (0.11 + 0.12 * interaction_press),
+            float2(0.0),
+            float2(1.0));
+        float2 interaction_release_uv = clamp(
+            interaction_base_uv
+                + pointer_dir
+                    * texel
+                    * interaction_span
+                    * (0.12 + 0.10 * interaction_outer),
+            float2(0.0),
+            float2(1.0));
+        float2 interaction_shear_uv = clamp(
+            interaction_base_uv
+                + interaction_cross
+                    * texel
+                    * interaction_cross_span
+                    * (0.13 + 0.08 * interaction_wave)
+                + dispersion_tangent
+                    * texel
+                    * interaction_pressure_span
+                    * (0.24 + 0.18 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float2 interaction_return_uv = clamp(
+            interaction_base_uv
+                - interaction_cross
+                    * texel
+                    * interaction_cross_span
+                    * (0.13 + 0.08 * interaction_lobe)
+                - dispersion_tangent
+                    * texel
+                    * interaction_pressure_span
+                    * (0.24 + 0.18 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float3 interaction_press_rgb =
+            backdrop.sample(samp, interaction_press_uv).rgb;
+        float3 interaction_release_rgb =
+            backdrop.sample(samp, interaction_release_uv).rgb;
+        float3 interaction_shear_rgb =
+            backdrop.sample(samp, interaction_shear_uv).rgb;
+        float3 interaction_return_rgb =
+            backdrop.sample(samp, interaction_return_uv).rgb;
+        float3 interaction_average =
+            interaction_press_rgb * 0.30
+            + interaction_release_rgb * 0.24
+            + interaction_shear_rgb * 0.23
+            + interaction_return_rgb * 0.23;
+        float3 interaction_split = float3(
+            interaction_shear_rgb.r,
+            (interaction_press_rgb.g + interaction_average.g) * 0.5,
+            interaction_return_rgb.b);
+        float interaction_split_mix = clamp(
+            0.040
+                + 0.052 * spectral_dispersion
+                + 0.044 * glass_dispersion_tangential
+                + 0.052 * interaction_press,
+            0.0,
+            0.22);
+        float3 interaction_probe = mix(
+            interaction_average,
+            interaction_split,
+            interaction_split_mix);
+        float interaction_press_luma =
+            dot(interaction_press_rgb, float3(0.2126, 0.7152, 0.0722));
+        float interaction_release_luma =
+            dot(interaction_release_rgb, float3(0.2126, 0.7152, 0.0722));
+        float interaction_shear_luma =
+            dot(interaction_shear_rgb, float3(0.2126, 0.7152, 0.0722));
+        float interaction_return_luma =
+            dot(interaction_return_rgb, float3(0.2126, 0.7152, 0.0722));
+        float interaction_probe_luma =
+            dot(interaction_probe, float3(0.2126, 0.7152, 0.0722));
+        float interaction_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float interaction_luma_range =
+            clamp(
+                max(max(interaction_press_luma, interaction_release_luma),
+                    max(interaction_shear_luma, interaction_return_luma))
+                    - min(min(interaction_press_luma,
+                              interaction_release_luma),
+                          min(interaction_shear_luma,
+                              interaction_return_luma)),
+                0.0,
+                1.0);
+        float interaction_displacement = smoothstep(
+            0.04,
+            0.34,
+            length(interaction_press_rgb - interaction_release_rgb) * 0.22
+                + length(interaction_shear_rgb - interaction_return_rgb) * 0.17
+                + interaction_luma_range * 0.18
+                + interaction_support * 0.08);
+        float interaction_shadow =
+            smoothstep(
+                0.05,
+                0.34,
+                interaction_surface_luma
+                    - min(interaction_release_luma, interaction_return_luma)
+                    + interaction_luma_range * 0.12);
+        float interaction_highlight =
+            smoothstep(
+                0.06,
+                0.38,
+                max(interaction_press_luma, interaction_shear_luma)
+                    - interaction_surface_luma
+                    + interaction_luma_range * 0.12);
+        float interaction_target_luma = clamp(
+            0.50
+                + (interaction_probe_luma - 0.50)
+                    * (0.57 + 0.18 * interaction_support)
+                + (interaction_highlight - interaction_shadow)
+                    * (0.034 + 0.036 * interaction_press),
+            0.0,
+            1.0);
+        float interaction_chroma_keep = clamp(
+            0.54
+                + 0.12 * interaction_support
+                + 0.10 * interaction_press
+                + 0.08 * interaction_light_face
+                - 0.08 * interaction_shadow,
+            0.43,
+            0.86);
+        float3 interaction_surface =
+            float3(interaction_target_luma)
+            + (interaction_probe - float3(interaction_probe_luma))
+                * interaction_chroma_keep;
+        float3 interaction_layer = mix(
+            interaction_probe,
+            interaction_surface,
+            (0.22 + 0.18 * interaction_displacement)
+                * (0.45 + 0.55 * interaction_support));
+        interaction_layer = clamp(
+            (interaction_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.005
+                       + interaction_press * 0.006
+                       - interaction_shadow * 0.005)
+                + float3(0.50),
+            0.0,
+            1.0);
+        interaction_layer *= float3(
+            1.0 + spectral_warmth * 0.12 + tint_chroma * in.tint.r * 0.005,
+            1.0 + spectral_rim_tint * 0.06 + tint_chroma * in.tint.g * 0.005,
+            1.0 + spectral_coolness * 0.12 + tint_chroma * in.tint.b * 0.005);
+        float interaction_gate = clamp(
+            interaction_presence * 0.28
+                + interaction_press * 0.22
+                + interaction_ring * 0.17
+                + interaction_support * 0.15
+                + interaction_rim * 0.10
+                + interaction_displacement * 0.08,
+            0.0,
+            1.0);
+        float interaction_weight =
+            interaction_response_field_strength
+            * interaction_gate
+            * (0.17
+               + 0.15 * interaction_support
+               + 0.12 * interaction_displacement
+               + 0.10 * interaction_focus
+               + 0.08 * interaction_bridge_alignment);
+        rgb = mix(
+            rgb,
+            interaction_layer,
+            interaction_weight
+                * (0.052
+                   + 0.046 * interaction_presence
+                   + 0.040 * interaction_press));
+        float3 interaction_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.032,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.028,
+            spectral_coolness + tint_chroma * in.tint.b * 0.032);
+        float interaction_caustic =
+            max(interaction_lobe, interaction_return_lobe * 0.52)
+            * max(interaction_ring, interaction_core * 0.42)
+            * (0.46 + 0.54 * interaction_support);
+        rgb += interaction_prism
+            * interaction_weight
+            * interaction_caustic
+            * (0.00016
+               + 0.00052 * spectral_rim_tint
+               + 0.00046 * glass_scattering_gain);
+        float interaction_absorption =
+            interaction_shadow
+            * interaction_weight
+            * (0.00052 + 0.0017 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - interaction_light_face));
+        rgb *= 1.0 - clamp(interaction_absorption, 0.0, 0.0072);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
