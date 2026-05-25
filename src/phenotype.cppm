@@ -3928,6 +3928,7 @@ enum class GlassSurfacePreset {
     ToolbarGroup,
     SegmentedControl,
     Navigation,
+    TabBar,
     Sidebar,
     Content,
     StatusBar,
@@ -3950,6 +3951,7 @@ inline char const* glass_surface_preset_name(
         case GlassSurfacePreset::SegmentedControl:
             return "segmented_control";
         case GlassSurfacePreset::Navigation:   return "navigation";
+        case GlassSurfacePreset::TabBar:       return "tab_bar";
         case GlassSurfacePreset::Sidebar:      return "sidebar";
         case GlassSurfacePreset::Content:      return "content";
         case GlassSurfacePreset::StatusBar:    return "status_bar";
@@ -4210,6 +4212,22 @@ inline MaterialSurfaceOptions glass_surface_options(
                 semantic_label,
                 "Navigation");
             break;
+        case GlassSurfacePreset::TabBar:
+            options.kind = MaterialKind::Regular;
+            options.role = MaterialSurfaceRole::Navigation;
+            options.direction = FlexDirection::Row;
+            options.padding = SpaceToken::Xs;
+            options.gap = SpaceToken::Xs;
+            options.cross_align = CrossAxisAlignment::Center;
+            options.main_align = MainAxisAlignment::Center;
+            options.interactive = true;
+            options.shape = MaterialSurfaceShape::Capsule;
+            options.border_width = 1.0f;
+            options.max_width = 720.0f;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Tab Bar");
+            break;
         case GlassSurfacePreset::Sidebar:
             options.kind = MaterialKind::Thin;
             options.role = MaterialSurfaceRole::Sidebar;
@@ -4469,6 +4487,24 @@ void navigation(F&& builder,
             .semantic_label = "Navigation",
             .interactive = true,
         },
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void tab_bar(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::Navigation;
+    options.interactive = true;
+    options.semantic_label = chrome_label_or(options.semantic_label, "Tab Bar");
+    material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void tab_bar(F&& builder,
+             char const* semantic_label = "Tab Bar") {
+    material_surface(
+        glass_surface_options(GlassSurfacePreset::TabBar, semantic_label),
         std::forward<F>(builder));
 }
 

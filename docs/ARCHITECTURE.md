@@ -315,19 +315,20 @@ high-level Apple-glass surface presets used by examples. They are not a new
 renderer path: each preset lowers to `MaterialSurfaceOptions`, then to the same
 pure `MaterialStyle` and `MaterialRect` command contract as
 `layout::material_surface`. The preset enum captures product roles such as
-window, toolbar, toolbar group, segmented control, navigation, sidebar,
-content, status bar, popover, tooltip, context menu, sheet, inspector, and
-command palette so example code does not hand-roll blur thickness, semantic
-role, alignment, and chrome radius for every surface.
+window, toolbar, toolbar group, segmented control, navigation, tab bar,
+sidebar, content, status bar, popover, tooltip, context menu, sheet,
+inspector, command palette, snackbar, and toast so example code does not
+hand-roll blur thickness, semantic role, alignment, and chrome radius for
+every surface.
 `MaterialSurfaceOptions.interactive` is the surface-level opt-in for glass that
 belongs to controls. It does not create a backend policy branch: it marks the
 resolved material container descriptor as interactive before command emission,
 so `plan_material_surface` can decide the response from immutable input.
-`ToolbarGroup`, `SegmentedControl`, `Navigation`, `Popover`, `ContextMenu`,
-`Sheet`, `Inspector`, and `CommandPalette` presets set this flag by default
-because they represent clickable or transient chrome; passive window, content,
-sidebar, tooltip, and status-bar surfaces stay noninteractive unless the app
-opts in explicitly.
+`ToolbarGroup`, `SegmentedControl`, `Navigation`, `TabBar`, `Popover`,
+`ContextMenu`, `Sheet`, `Inspector`, `CommandPalette`, and `Snackbar` presets
+set this flag by default because they represent clickable or transient chrome;
+passive window, content, sidebar, tooltip, toast, and status-bar surfaces stay
+noninteractive unless the app opts in explicitly.
 `layout::dialog` now lowers its card to a `Dialog Sheet` material node through
 the same sheet preset, so modal overlay chrome has a resolved `MaterialPlan`
 instead of an untyped painted card. `widget::tabs` uses the same material
