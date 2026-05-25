@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 83);
+    assert(material_plan_contract_version == 84);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -271,6 +271,26 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.glass_transmission.volume_absorption < 0.20f);
     assert(plan.glass_transmission.interlayer_refraction > 0.04f);
     assert(plan.glass_transmission.interlayer_refraction < 0.22f);
+    assert(plan.glass_surface_cohesion.active);
+    assert(plan.glass_surface_cohesion.thickness_driven);
+    assert(plan.glass_surface_cohesion.transmission_driven);
+    assert(plan.glass_surface_cohesion.meniscus_driven);
+    assert(plan.glass_surface_cohesion.caustic_driven);
+    assert(!plan.glass_surface_cohesion.interaction_driven);
+    assert(!plan.glass_surface_cohesion.reduced_motion_suppressed);
+    assert(plan.glass_surface_cohesion.bounded);
+    assert(std::string_view(plan.glass_surface_cohesion.model)
+        == "adaptive-glass-surface-cohesion");
+    assert(std::string_view(plan.glass_surface_cohesion.source)
+        == "transmission-meniscus-caustic-glass-cohesion");
+    assert(plan.glass_surface_cohesion.surface_response > 0.16f);
+    assert(plan.glass_surface_cohesion.surface_response < 0.46f);
+    assert(plan.glass_surface_cohesion.edge_adhesion > 0.10f);
+    assert(plan.glass_surface_cohesion.edge_adhesion < 0.36f);
+    assert(plan.glass_surface_cohesion.shape_coalescence > 0.10f);
+    assert(plan.glass_surface_cohesion.shape_coalescence < 0.34f);
+    assert(plan.glass_surface_cohesion.luma_stability > 0.18f);
+    assert(plan.glass_surface_cohesion.luma_stability < 0.42f);
     assert(plan.glass_thickness.active);
     assert(plan.glass_thickness.size_driven);
     assert(!plan.glass_thickness.transition_driven);
@@ -428,6 +448,9 @@ void test_sampled_backdrop_access_contract() {
     assert(std::string_view(
                plan.optical_composition.glass_transmission_source)
         == "depth-caustic-environment-volume-transmission");
+    assert(std::string_view(
+               plan.optical_composition.glass_surface_cohesion_source)
+        == "transmission-meniscus-caustic-glass-cohesion");
     assert(std::string_view(plan.optical_composition.glass_thickness_source)
         == "size-adaptive-thickness-lensing");
     assert(std::string_view(plan.optical_composition.glass_dispersion_source)
@@ -467,6 +490,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_composition.glass_caustic_flow_required);
     assert(plan.optical_composition.glass_meniscus_required);
     assert(plan.optical_composition.glass_transmission_required);
+    assert(plan.optical_composition.glass_surface_cohesion_required);
     assert(plan.optical_composition.glass_thickness_required);
     assert(plan.optical_composition.glass_dispersion_required);
     assert(plan.optical_composition.glass_stabilization_required);
@@ -545,6 +569,14 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_transmission.volume_absorption);
     assert(plan.optical_composition.glass_interlayer_refraction
            == plan.glass_transmission.interlayer_refraction);
+    assert(plan.optical_composition.glass_surface_response
+           == plan.glass_surface_cohesion.surface_response);
+    assert(plan.optical_composition.glass_edge_adhesion
+           == plan.glass_surface_cohesion.edge_adhesion);
+    assert(plan.optical_composition.glass_shape_coalescence
+           == plan.glass_surface_cohesion.shape_coalescence);
+    assert(plan.optical_composition.glass_luma_stability
+           == plan.glass_surface_cohesion.luma_stability);
     assert(plan.optical_composition.glass_thickness
            == plan.glass_thickness.thickness);
     assert(plan.optical_composition.glass_lensing_gain
@@ -602,6 +634,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_response.glass_caustic_flow_active);
     assert(plan.optical_response.glass_meniscus_active);
     assert(plan.optical_response.glass_transmission_active);
+    assert(plan.optical_response.glass_surface_cohesion_active);
     assert(plan.optical_response.glass_thickness_active);
     assert(plan.optical_response.glass_dispersion_active);
     assert(plan.optical_response.glass_stabilization_active);
@@ -689,6 +722,17 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_transmission.volume_absorption);
     assert(plan.execution_stages[2].optics.glass_interlayer_refraction
            == plan.glass_transmission.interlayer_refraction);
+    assert(std::string_view(
+               plan.execution_stages[2].optics.glass_surface_cohesion_model)
+        == "adaptive-glass-surface-cohesion");
+    assert(plan.execution_stages[2].optics.glass_surface_response
+           == plan.glass_surface_cohesion.surface_response);
+    assert(plan.execution_stages[2].optics.glass_edge_adhesion
+           == plan.glass_surface_cohesion.edge_adhesion);
+    assert(plan.execution_stages[2].optics.glass_shape_coalescence
+           == plan.glass_surface_cohesion.shape_coalescence);
+    assert(plan.execution_stages[2].optics.glass_luma_stability
+           == plan.glass_surface_cohesion.luma_stability);
     assert(std::string_view(plan.execution_stages[2].optics.glass_thickness_model)
         == "adaptive-glass-thickness");
     assert(plan.execution_stages[2].optics.glass_thickness
