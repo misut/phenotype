@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 79);
+    assert(material_plan_contract_version == 80);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -272,6 +272,25 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.glass_environment.color_pickup > 0.0f);
     assert(plan.glass_environment.luminance_balance > 0.0f);
     assert(plan.glass_environment.transmission_balance > 0.0f);
+    assert(plan.glass_depth.active);
+    assert(plan.glass_depth.thickness_driven);
+    assert(plan.glass_depth.environment_driven);
+    assert(plan.glass_depth.geometry_driven);
+    assert(plan.glass_depth.luminance_driven);
+    assert(plan.glass_depth.stabilization_driven);
+    assert(plan.glass_depth.bounded);
+    assert(std::string_view(plan.glass_depth.model)
+        == "adaptive-glass-depth-response");
+    assert(std::string_view(plan.glass_depth.source)
+        == "stabilized-environment-glass-depth");
+    assert(plan.glass_depth.depth_separation > 0.34f);
+    assert(plan.glass_depth.depth_separation < 0.52f);
+    assert(plan.glass_depth.inner_shadow > 0.10f);
+    assert(plan.glass_depth.inner_shadow < 0.20f);
+    assert(plan.glass_depth.surface_lift > 0.10f);
+    assert(plan.glass_depth.surface_lift < 0.20f);
+    assert(plan.glass_depth.parallax_gain > 0.12f);
+    assert(plan.glass_depth.parallax_gain < 0.24f);
     assert(!plan.scroll_edge.active);
     assert(std::string_view(plan.scroll_edge.model) == "none");
     assert(std::string_view(plan.scroll_edge.source) == "none");
@@ -317,7 +336,7 @@ void test_sampled_backdrop_access_contract() {
     assert(std::string_view(plan.optical_response.color_strategy)
         == "adaptive-backdrop-color");
     assert(std::string_view(plan.optical_response.depth_strategy)
-        == "layered-shadow-edge-noise");
+        == "adaptive-glass-depth");
     assert(plan.optical_composition.schema_version
            == material_plan_contract_version);
     assert(std::string_view(plan.optical_composition.model)
@@ -331,7 +350,7 @@ void test_sampled_backdrop_access_contract() {
     assert(std::string_view(plan.optical_composition.luminance_source)
         == "adaptive-backdrop-luma");
     assert(std::string_view(plan.optical_composition.depth_source)
-        == "layered-shadow-edge-noise");
+        == "adaptive-glass-depth");
     assert(std::string_view(plan.optical_composition.refraction_source)
         == "sampled-backdrop-edge-refraction");
     assert(std::string_view(plan.optical_composition.spectral_tint_source)
@@ -348,6 +367,8 @@ void test_sampled_backdrop_access_contract() {
     assert(std::string_view(
                plan.optical_composition.glass_environment_source)
         == "stabilized-backdrop-glass-environment");
+    assert(std::string_view(plan.optical_composition.glass_depth_source)
+        == "stabilized-environment-glass-depth");
     assert(std::string_view(plan.optical_composition.scroll_edge_source)
         == "none");
     assert(std::string_view(
@@ -376,6 +397,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_composition.glass_dispersion_required);
     assert(plan.optical_composition.glass_stabilization_required);
     assert(plan.optical_composition.glass_environment_required);
+    assert(plan.optical_composition.glass_depth_required);
     assert(!plan.optical_composition.scroll_edge_required);
     assert(!plan.optical_composition.clear_glass_legibility_required);
     assert(!plan.optical_composition.fallback_required);
@@ -457,6 +479,14 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_environment.luminance_balance);
     assert(plan.optical_composition.glass_environment_transmission_balance
            == plan.glass_environment.transmission_balance);
+    assert(plan.optical_composition.glass_depth_separation
+           == plan.glass_depth.depth_separation);
+    assert(plan.optical_composition.glass_depth_inner_shadow
+           == plan.glass_depth.inner_shadow);
+    assert(plan.optical_composition.glass_depth_surface_lift
+           == plan.glass_depth.surface_lift);
+    assert(plan.optical_composition.glass_depth_parallax_gain
+           == plan.glass_depth.parallax_gain);
     assert(plan.optical_composition.clear_glass_dimming == 0.0f);
     assert(plan.optical_composition.clear_glass_contrast == 0.0f);
     assert(plan.optical_response.backdrop_driven);
@@ -475,6 +505,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_response.glass_dispersion_active);
     assert(plan.optical_response.glass_stabilization_active);
     assert(plan.optical_response.glass_environment_active);
+    assert(plan.optical_response.glass_depth_active);
     assert(!plan.optical_response.scroll_edge_active);
     assert(!plan.optical_response.clear_glass_legibility_active);
     assert(plan.optical_response.foreground_vibrancy_active);
@@ -573,6 +604,16 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.execution_stages[2].optics
                .glass_environment_transmission_balance
            == plan.glass_environment.transmission_balance);
+    assert(std::string_view(plan.execution_stages[2].optics.glass_depth_model)
+        == "adaptive-glass-depth-response");
+    assert(plan.execution_stages[2].optics.glass_depth_separation
+           == plan.glass_depth.depth_separation);
+    assert(plan.execution_stages[2].optics.glass_depth_inner_shadow
+           == plan.glass_depth.inner_shadow);
+    assert(plan.execution_stages[2].optics.glass_depth_surface_lift
+           == plan.glass_depth.surface_lift);
+    assert(plan.execution_stages[2].optics.glass_depth_parallax_gain
+           == plan.glass_depth.parallax_gain);
     assert(plan.paint_layer_count == 0u);
     assert(plan.dropped_paint_layer_count == 0u);
     assert(plan.resource_budget.max_paint_layers == material_max_paint_layers);

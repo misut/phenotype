@@ -2452,6 +2452,34 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.glass_environment[1] = plan.glass_environment.color_pickup;
     inst.glass_environment[2] = plan.glass_environment.luminance_balance;
     inst.glass_environment[3] = plan.glass_environment.transmission_balance;
+    inst.thickness[1] = std::clamp(
+        inst.thickness[1]
+            + 0.080f * plan.glass_depth.parallax_gain
+            + 0.040f * plan.glass_depth.surface_lift,
+        1.0f,
+        1.62f);
+    inst.thickness[2] = std::clamp(
+        inst.thickness[2]
+            + 0.060f * plan.glass_depth.depth_separation
+            + 0.050f * plan.glass_depth.inner_shadow,
+        1.0f,
+        1.62f);
+    inst.refraction[2] = std::clamp(
+        inst.refraction[2] * (1.0f + 0.10f * plan.glass_depth.parallax_gain),
+        0.0f,
+        8.0f);
+    inst.edge_optics[0] = std::clamp(
+        inst.edge_optics[0] + plan.glass_depth.surface_lift * 1.8f,
+        0.0f,
+        18.0f);
+    inst.edge_optics[1] = std::clamp(
+        inst.edge_optics[1] + 0.050f * plan.glass_depth.surface_lift,
+        0.0f,
+        0.90f);
+    inst.edge_optics[2] = std::clamp(
+        inst.edge_optics[2] + 0.075f * plan.glass_depth.inner_shadow,
+        0.0f,
+        0.80f);
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];
