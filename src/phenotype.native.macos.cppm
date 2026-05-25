@@ -33238,6 +33238,330 @@ fragment float4 fs_material(
                + 0.0014 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float contact_pressure_field_strength = clamp(
+        0.007 * overlap_response_strength
+            + 0.007 * fusion_strength
+            + 0.006 * group_blend_strength * shared_backdrop_scope
+            + 0.006 * group_blend_strength * group_surface_execution
+            + 0.007 * bridge_band
+            + 0.19 * internal_shadow_field_strength
+            + 0.17 * subsurface_caustic_field_strength
+            + 0.12 * transmission_depth_field_strength
+            + 0.10 * interlayer_refraction_field_strength
+            + 0.08 * layer_separation_field_strength
+            + 0.026 * container_morph_field_strength
+            + 0.024 * edge_meniscus_field_strength
+            + 0.018 * foreground_sheen_field_strength,
+        0.0,
+        0.034);
+    if (contact_pressure_field_strength > 0.0001) {
+        float contact_center =
+            1.0 - smoothstep(0.14, 1.02, normalized_len);
+        float contact_rim =
+            edge_lens
+            * (0.44
+               + 0.56
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.05, 0.66),
+                       signed_edge_distance)));
+        float contact_bridge =
+            bridge_band * (0.36 + 0.64 * bridge_core);
+        float contact_stack = clamp(
+            overlap_response_strength * 0.30
+                + fusion_strength * 0.24
+                + group_blend_strength * shared_backdrop_scope * 0.18
+                + group_surface_execution * group_blend_strength * 0.16
+                + contact_bridge * 0.20,
+            0.0,
+            1.0);
+        float contact_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float contact_presence = clamp(
+            contact_center * 0.18
+                + contact_rim * 0.24
+                + contact_stack * 0.26
+                + contact_bridge * 0.18
+                + contact_pointer * 0.08
+                + prominent_intensity * 0.06,
+            0.0,
+            1.0);
+        float2 contact_group_norm = normalized_local;
+        float contact_group_active = 0.0;
+        if (in.group_rect.z > 0.0 && in.group_rect.w > 0.0) {
+            float2 contact_group_size =
+                max(in.group_rect.zw, float2(1.0));
+            float2 contact_group_local = clamp(
+                in.screen_pos - in.group_rect.xy,
+                float2(0.0),
+                contact_group_size);
+            contact_group_norm =
+                (contact_group_local / contact_group_size - float2(0.5))
+                * 2.0;
+            contact_group_active = group_blend_strength;
+        }
+        float2 contact_axis_raw =
+            bridge_dir * (0.36 + 0.24 * contact_bridge)
+            + refraction_dir * (0.24 + 0.18 * glass_lensing_gain)
+            - dynamic_light_dir * (0.22 + 0.16 * dynamic_light_highlight)
+            + pointer_dir * (0.15 + 0.14 * contact_pointer)
+            + dispersion_tangent
+                * (0.12
+                   + 0.08 * spectral_dispersion
+                   + 0.06 * glass_dispersion_tangential)
+            + contact_group_norm
+                * contact_group_active
+                * (0.12 + 0.08 * contact_stack);
+        float contact_axis_len = length(contact_axis_raw);
+        float2 contact_axis =
+            contact_axis_len > 0.0001
+                ? contact_axis_raw / contact_axis_len
+                : bridge_dir;
+        float2 contact_cross =
+            float2(-contact_axis.y, contact_axis.x);
+        float contact_light_face =
+            smoothstep(-0.24, 0.88, dot(contact_axis, -dynamic_light_dir));
+        float contact_bridge_alignment =
+            smoothstep(-0.18, 0.90, abs(dot(contact_axis, bridge_dir)));
+        float contact_phase = clamp(
+            dot(normalized_local, contact_axis)
+                    * (4.4 + 1.5 * contact_presence)
+                + dot(normalized_local, contact_cross)
+                    * (2.9 + 1.1 * contact_stack)
+                + dot(contact_group_norm, contact_axis)
+                    * contact_group_active
+                    * (2.0 + 1.0 * contact_bridge)
+                + bridge_axial * (2.4 + 1.3 * bridge_core)
+                + bridge_shear * contact_bridge * 1.9
+                + spectral_dispersion * 3.6
+                + glass_caustic_spread * 2.8,
+            -12.0,
+            12.0);
+        float contact_wave =
+            0.5 + 0.5 * sin(contact_phase);
+        float contact_counter =
+            0.5 + 0.5 * cos(
+                contact_phase * 0.72
+                + glass_caustic_spread * 4.2
+                + contact_stack * 2.4);
+        float contact_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(contact_wave - 0.55));
+        float contact_return_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(contact_counter - 0.48));
+        float contact_squeeze =
+            clamp(
+                contact_stack * 0.34
+                    + contact_bridge_alignment * 0.24
+                    + contact_rim * 0.18
+                    + contact_lobe * 0.14
+                    + contact_pointer * 0.10,
+                0.0,
+                1.0);
+        float contact_focus =
+            (0.5 + 0.5 * cos(contact_phase * 1.22 + normalized_len * 2.8))
+            * (0.38 + 0.62 * contact_lobe);
+        float contact_span =
+            (0.62
+             + 1.35 * glass_thickness
+             + 0.95 * clear_glass_detail
+             + 1.05 * contact_presence
+             + 0.026 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float contact_cross_span =
+            (0.44
+             + 0.76 * glass_dispersion_tangential
+             + 0.68 * spectral_dispersion
+             + 0.84 * contact_squeeze)
+            * content_scale;
+        float contact_channel_span =
+            (0.36
+             + 0.54 * glass_dispersion_tangential
+             + 0.58 * spectral_dispersion
+             + 0.48 * glass_caustic_spread)
+            * content_scale
+            * (0.82 + 0.18 * contact_focus);
+        float2 contact_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.09 + 0.10 * contact_squeeze),
+            float2(0.0),
+            float2(1.0));
+        float2 contact_press_uv = clamp(
+            contact_base_uv
+                - contact_axis
+                    * texel
+                    * contact_span
+                    * (0.18 + 0.16 * contact_squeeze)
+                - dynamic_light_dir
+                    * texel
+                    * contact_span
+                    * (0.14 + 0.10 * contact_light_face),
+            float2(0.0),
+            float2(1.0));
+        float2 contact_release_uv = clamp(
+            contact_base_uv
+                + contact_axis
+                    * texel
+                    * contact_span
+                    * (0.20 + 0.14 * contact_return_lobe)
+                + dynamic_light_dir
+                    * texel
+                    * contact_span
+                    * (0.16 + 0.10 * (1.0 - contact_light_face)),
+            float2(0.0),
+            float2(1.0));
+        float2 contact_core_uv = clamp(
+            contact_base_uv
+                + bridge_dir
+                    * texel
+                    * contact_span
+                    * contact_bridge
+                    * 0.18
+                + contact_axis
+                    * texel
+                    * contact_span
+                    * contact_center
+                    * 0.12,
+            float2(0.0),
+            float2(1.0));
+        float2 contact_warm_uv = clamp(
+            contact_base_uv
+                + contact_cross
+                    * texel
+                    * contact_cross_span
+                    * (0.24 + 0.12 * contact_wave)
+                + dispersion_tangent
+                    * texel
+                    * contact_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float2 contact_cool_uv = clamp(
+            contact_base_uv
+                - contact_cross
+                    * texel
+                    * contact_cross_span
+                    * (0.24 + 0.12 * contact_lobe)
+                - dispersion_tangent
+                    * texel
+                    * contact_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float3 contact_press_rgb =
+            backdrop.sample(samp, contact_press_uv).rgb;
+        float3 contact_release_rgb =
+            backdrop.sample(samp, contact_release_uv).rgb;
+        float3 contact_core_rgb =
+            backdrop.sample(samp, contact_core_uv).rgb;
+        float3 contact_warm_rgb =
+            backdrop.sample(samp, contact_warm_uv).rgb;
+        float3 contact_cool_rgb =
+            backdrop.sample(samp, contact_cool_uv).rgb;
+        float3 contact_probe =
+            contact_press_rgb * 0.25
+            + contact_release_rgb * 0.21
+            + contact_core_rgb * 0.24
+            + contact_warm_rgb * 0.15
+            + contact_cool_rgb * 0.15;
+        float3 contact_split = float3(
+            contact_warm_rgb.r,
+            (contact_core_rgb.g + contact_probe.g) * 0.5,
+            contact_cool_rgb.b);
+        float contact_press_luma =
+            dot(contact_press_rgb, float3(0.2126, 0.7152, 0.0722));
+        float contact_release_luma =
+            dot(contact_release_rgb, float3(0.2126, 0.7152, 0.0722));
+        float contact_probe_luma =
+            dot(contact_probe, float3(0.2126, 0.7152, 0.0722));
+        float contact_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float contact_pressure_delta = clamp(
+            abs(contact_press_luma - contact_release_luma) * 0.34
+                + abs(contact_probe_luma - contact_surface_luma) * 0.24
+                + length(contact_press_rgb - contact_release_rgb) * 0.20
+                + length(contact_warm_rgb - contact_cool_rgb) * 0.16
+                + contact_squeeze * 0.10,
+            0.0,
+            1.0);
+        float contact_coherence =
+            1.0 - smoothstep(0.10, 0.44, contact_pressure_delta);
+        float contact_darkening = smoothstep(
+            0.010,
+            0.28,
+            max(contact_surface_luma - contact_probe_luma, 0.0) * 0.46
+                + max(contact_press_luma - contact_release_luma, 0.0) * 0.30
+                + contact_squeeze * 0.16);
+        float contact_lift = smoothstep(
+            contact_surface_luma - 0.05,
+            contact_surface_luma + 0.26,
+            contact_probe_luma);
+        float3 contact_pressure_layer = mix(
+            contact_probe,
+            contact_split,
+            0.12
+                + 0.12 * contact_focus
+                + 0.10 * contact_light_face
+                + 0.10 * contact_squeeze);
+        contact_pressure_layer = mix(
+            contact_pressure_layer,
+            float3(contact_probe_luma),
+            contact_darkening * (0.10 + 0.16 * glass_shadow_gain)
+                + contact_coherence * 0.08);
+        contact_pressure_layer = clamp(
+            (contact_pressure_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.010
+                       + contact_lift * 0.008
+                       - contact_darkening * 0.018)
+                + float3(0.50),
+            0.0,
+            1.0);
+        contact_pressure_layer *= float3(
+            1.0 + spectral_warmth * 0.34 + tint_chroma * in.tint.r * 0.012,
+            1.0 + spectral_rim_tint * 0.12 + tint_chroma * in.tint.g * 0.010,
+            1.0 + spectral_coolness * 0.34 + tint_chroma * in.tint.b * 0.012);
+        float contact_gate = clamp(
+            contact_presence * 0.28
+                + contact_stack * 0.25
+                + contact_rim * 0.18
+                + contact_squeeze * 0.16
+                + contact_focus * 0.10
+                + contact_coherence * 0.08,
+            0.0,
+            1.0);
+        float contact_weight =
+            contact_pressure_field_strength
+            * contact_gate
+            * (0.27
+               + 0.19 * contact_squeeze
+               + 0.16 * contact_darkening
+               + 0.14 * contact_focus
+               + 0.12 * contact_bridge_alignment);
+        rgb = mix(
+            rgb,
+            contact_pressure_layer,
+            contact_weight
+                * (0.10
+                   + 0.08 * contact_focus
+                   + 0.08 * contact_presence));
+        float3 contact_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.10,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.08,
+            spectral_coolness + tint_chroma * in.tint.b * 0.10);
+        rgb += contact_prism
+            * contact_weight
+            * max(contact_lobe, contact_return_lobe * 0.68)
+            * (0.0005
+               + 0.0016 * spectral_rim_tint
+               + 0.0014 * glass_scattering_gain);
+        float contact_absorption =
+            contact_darkening
+            * contact_weight
+            * (0.0014 + 0.0048 * glass_shadow_gain)
+            * (0.55 + 0.45 * (1.0 - contact_light_face));
+        rgb *= 1.0 - clamp(contact_absorption, 0.0, 0.018);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
