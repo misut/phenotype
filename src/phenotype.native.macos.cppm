@@ -27756,6 +27756,343 @@ fragment float4 fs_material(
                + 0.0024 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float environment_envelope_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.009 * glass_lensing_gain
+            + 0.008 * glass_scattering_gain
+            + 0.007 * glass_prismatic_gain
+            + 0.30 * critical_angle_reflection_strength
+            + 0.26 * spectral_grazing_glint_strength
+            + 0.22 * thin_film_interference_strength
+            + 0.18 * edge_caustic_dispersion_strength
+            + 0.14 * edge_reflection_strength
+            + 0.006 * ambient_seal_field_strength
+            + 0.005 * substrate_adhesion_strength
+            + 0.005 * transition_seam_lock_strength
+            + 0.004 * container_irradiance_lock_strength,
+        0.0,
+        0.066);
+    if (environment_envelope_strength > 0.0001) {
+        float2 environment_surface_center_screen =
+            in.screen_pos + (in.rect_size * 0.5 - in.local_pos);
+        float2 environment_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 environment_group_center_screen =
+            in.group_rect.xy + environment_group_size * 0.5;
+        float environment_group_active =
+            in.group_rect.z > 0.0 && in.group_rect.w > 0.0 ? 1.0 : 0.0;
+        float2 environment_anchor_screen = mix(
+            environment_surface_center_screen,
+            environment_group_center_screen,
+            environment_group_active);
+        float2 environment_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 environment_anchor_uv = clamp(
+            environment_anchor_screen / environment_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 environment_to_anchor =
+            environment_anchor_uv - in.screen_uv;
+        float environment_anchor_distance = length(environment_to_anchor);
+        float2 environment_anchor_dir =
+            environment_anchor_distance > 0.0001
+                ? environment_to_anchor / environment_anchor_distance
+                : refraction_dir;
+        float environment_radius = length(normalized_local);
+        float environment_center =
+            1.0 - smoothstep(0.18, 1.14, environment_radius);
+        float environment_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.75, 1.0),
+                signed_edge_distance);
+        float environment_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float environment_transition = clamp(
+            glass_effect_match_execution * 0.26
+                + morph_execution * 0.20
+                + materialize_wave_strength * 0.16
+                + critical_angle_reflection_strength * 1.6
+                + spectral_grazing_glint_strength * 1.4
+                + thin_film_interference_strength * 1.2
+                + transition_seam_lock_strength * 1.0
+                + environment_group_active * group_blend_strength * 0.18,
+            0.0,
+            1.0);
+        float2 environment_axis_raw =
+            environment_anchor_dir * (0.34 + 0.22 * environment_center)
+            + refraction_dir * (0.28 + 0.20 * glass_lensing_gain)
+            - dynamic_light_dir
+                * (0.24 + 0.18 * dynamic_light_highlight)
+            + bridge_dir * (0.20 + 0.20 * environment_bridge)
+            + dispersion_tangent
+                * (0.12
+                   + 0.10 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential);
+        float environment_axis_len = length(environment_axis_raw);
+        float2 environment_axis =
+            environment_axis_len > 0.0001
+                ? environment_axis_raw / environment_axis_len
+                : refraction_dir;
+        float2 environment_cross =
+            float2(-environment_axis.y, environment_axis.x);
+        float environment_light_face =
+            smoothstep(-0.20, 0.94, dot(environment_axis, -dynamic_light_dir));
+        float environment_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(environment_axis, bridge_dir)));
+        float environment_grazing = clamp(
+            1.0 - abs(dot(normalized_local, -dynamic_light_dir)),
+            0.0,
+            1.0);
+        float environment_phase = clamp(
+            dot(normalized_local, environment_axis)
+                    * (4.4 + 1.8 * environment_transition)
+                + dot(normalized_local, environment_cross)
+                    * (2.6 + 1.2 * environment_bridge)
+                + signed_edge_distance
+                    / max(edge_bevel_width * 2.30, 1.0)
+                    * (2.4 + 1.5 * glass_thickness)
+                + bridge_axial * (2.4 + 1.4 * bridge_core)
+                + bridge_shear * bridge_band * 1.8
+                + materialize_rim_position * materialize_wave_strength * 2.2,
+            -12.0,
+            12.0);
+        float environment_wave =
+            0.5 + 0.5 * sin(environment_phase);
+        float environment_counter =
+            0.5 + 0.5 * cos(
+                environment_phase * 0.74
+                + spectral_dispersion * 5.4
+                + glass_caustic_spread * 4.6);
+        float environment_lobe =
+            1.0 - smoothstep(
+                0.0,
+                0.34,
+                abs(environment_wave - 0.56));
+        float environment_counter_lobe =
+            1.0 - smoothstep(
+                0.0,
+                0.36,
+                abs(environment_counter - 0.52));
+        float environment_gate = clamp(
+            environment_center * 0.20
+                + environment_edge * 0.22
+                + environment_bridge * 0.20
+                + environment_transition * 0.22
+                + environment_light_face * 0.12
+                + environment_grazing * 0.10
+                + environment_group_active * group_blend_strength * 0.10,
+            0.0,
+            1.0);
+        float environment_span =
+            (0.74
+             + 1.8 * glass_thickness
+             + 1.3 * clear_glass_detail
+             + 1.2 * environment_transition
+             + 0.034 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float environment_cross_span =
+            (0.48
+             + 1.0 * glass_dispersion_tangential
+             + 0.9 * spectral_dispersion
+             + 0.8 * environment_bridge_alignment)
+            * content_scale;
+        float environment_channel_span =
+            (0.22
+             + 0.60 * spectral_dispersion
+             + 0.50 * glass_caustic_spread
+             + 0.36 * glass_dispersion_tangential)
+            * content_scale
+            * (0.80 + 0.20 * environment_lobe);
+        float2 environment_anchor_sample_uv = clamp(
+            mix(
+                in.screen_uv,
+                environment_anchor_uv,
+                0.12 + 0.12 * environment_center),
+            float2(0.0),
+            float2(1.0));
+        float2 environment_reflect_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.12
+                + environment_axis
+                    * texel
+                    * environment_span
+                    * (0.24 + 0.14 * environment_lobe)
+                - dynamic_light_dir
+                    * texel
+                    * environment_span
+                    * (0.10 + 0.08 * environment_light_face),
+            float2(0.0),
+            float2(1.0));
+        float2 environment_counter_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - environment_axis
+                    * texel
+                    * environment_span
+                    * (0.22 + 0.14 * environment_counter_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 environment_warm_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + environment_cross
+                    * texel
+                    * environment_cross_span
+                    * (0.26 + 0.14 * environment_wave)
+                + dispersion_tangent
+                    * texel
+                    * environment_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float2 environment_cool_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - environment_cross
+                    * texel
+                    * environment_cross_span
+                    * (0.24 + 0.14 * environment_lobe)
+                - dispersion_tangent
+                    * texel
+                    * environment_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float2 environment_edge_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + normalized_local
+                    * texel
+                    * environment_span
+                    * (0.18 + 0.14 * environment_edge),
+            float2(0.0),
+            float2(1.0));
+        float3 environment_anchor_rgb =
+            backdrop.sample(samp, environment_anchor_sample_uv).rgb;
+        float3 environment_reflect_rgb =
+            backdrop.sample(samp, environment_reflect_uv).rgb;
+        float3 environment_counter_rgb =
+            backdrop.sample(samp, environment_counter_uv).rgb;
+        float3 environment_warm_rgb =
+            backdrop.sample(samp, environment_warm_uv).rgb;
+        float3 environment_cool_rgb =
+            backdrop.sample(samp, environment_cool_uv).rgb;
+        float3 environment_edge_rgb =
+            backdrop.sample(samp, environment_edge_uv).rgb;
+        float3 environment_split = float3(
+            environment_warm_rgb.r,
+            (environment_reflect_rgb.g + environment_anchor_rgb.g) * 0.5,
+            environment_cool_rgb.b);
+        float3 environment_probe =
+            environment_anchor_rgb * 0.24
+            + environment_reflect_rgb * 0.24
+            + environment_counter_rgb * 0.18
+            + environment_split * 0.18
+            + environment_edge_rgb * 0.16;
+        float environment_luma =
+            dot(environment_probe, float3(0.2126, 0.7152, 0.0722));
+        float environment_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float environment_chroma = max(
+            max(abs(environment_probe.r - environment_probe.g),
+                abs(environment_probe.g - environment_probe.b)),
+            abs(environment_probe.b - environment_probe.r));
+        float environment_color_pickup =
+            smoothstep(0.030, 0.34, environment_chroma);
+        float environment_range = clamp(
+            length(environment_reflect_rgb - environment_counter_rgb) * 0.28
+                + length(environment_warm_rgb - environment_cool_rgb) * 0.24
+                + length(environment_anchor_rgb - environment_edge_rgb) * 0.18
+                + abs(environment_luma - environment_surface_luma) * 0.18
+                + environment_lobe * 0.06,
+            0.0,
+            1.0);
+        float environment_coherence =
+            1.0 - smoothstep(0.08, 0.38, environment_range);
+        float environment_lift = smoothstep(
+            environment_surface_luma - 0.06,
+            environment_surface_luma + 0.32,
+            environment_luma);
+        float environment_depth = smoothstep(
+            0.08,
+            0.34,
+            environment_surface_luma - environment_luma);
+        float3 environment_neutral = mix(
+            environment_probe,
+            float3(environment_luma),
+            environment_depth * (0.12 + 0.14 * glass_shadow_gain)
+                + environment_coherence * 0.14);
+        float3 environment_layer = mix(
+            environment_neutral,
+            environment_split,
+            0.20
+                + 0.18 * environment_color_pickup
+                + 0.16 * environment_lobe
+                + 0.12 * environment_light_face);
+        environment_layer = clamp(
+            (environment_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.014
+                       + environment_lift * 0.012
+                       + environment_transition * 0.012
+                       - environment_depth * 0.018)
+                + float3(0.50),
+            0.0,
+            1.0);
+        environment_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.018
+                   + 0.030 * tint_chroma * prominent_intensity);
+        float3 environment_prism = float3(
+            spectral_warmth,
+            0.15 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        environment_layer += environment_prism
+            * environment_color_pickup
+            * (0.0010
+               + 0.0030 * spectral_rim_tint
+               + 0.0028 * glass_prismatic_gain
+               + 0.0024 * glass_scattering_gain)
+            * (0.34
+               + 0.22 * environment_light_face
+               + 0.20 * environment_lobe
+               + 0.16 * environment_coherence);
+        float environment_weight =
+            environment_envelope_strength
+            * environment_gate
+            * (0.28
+               + 0.20 * environment_coherence
+               + 0.18 * environment_lift
+               + 0.16 * environment_color_pickup
+               + 0.12 * environment_bridge_alignment
+               + 0.10 * environment_grazing);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                environment_layer,
+                0.08 + 0.14 * environment_lobe),
+            environment_weight * 0.26);
+        rgb += environment_prism
+            * environment_weight
+            * max(environment_lobe, environment_counter_lobe * 0.72)
+            * (0.0007
+               + 0.0024 * dynamic_light_highlight
+               + 0.0024 * glass_scattering_gain);
+        float environment_shadow =
+            environment_depth
+            * environment_weight
+            * (0.003 + 0.009 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - environment_light_face));
+        rgb *= 1.0 - clamp(environment_shadow, 0.0, 0.026);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
