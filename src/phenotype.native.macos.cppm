@@ -30406,6 +30406,272 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(pressure_shadow, 0.0, 0.022);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float interactive_tint_gate = clamp(
+        tint_strength * (0.54 + 0.46 * tint_chroma),
+        0.0,
+        1.0);
+    float interactive_tint_field_strength = clamp(
+        interactive_tint_gate
+            * (0.018
+               + 0.012 * prominent_intensity
+               + 0.010 * clear_glass_detail
+               + 0.010 * glass_scattering_gain
+               + 0.008 * glass_prismatic_gain
+               + 0.16 * container_pressure_field_strength
+               + 0.14 * foreground_sheen_field_strength
+               + 0.12 * interactive_kinetic_field_strength
+               + 0.10 * container_cohesion_field_strength
+               + 0.08 * lensing_flow_field_strength),
+        0.0,
+        0.052);
+    if (interactive_tint_field_strength > 0.0001) {
+        float tint_center =
+            1.0 - smoothstep(0.22, 1.12, normalized_len);
+        float tint_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.80, 1.0),
+                signed_edge_distance);
+        float tint_bridge =
+            bridge_band * (0.32 + 0.68 * bridge_core);
+        float tint_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float tint_interaction = clamp(
+            tint_center * 0.18
+                + tint_edge * 0.18
+                + tint_bridge * 0.18
+                + tint_pointer * 0.20
+                + group_blend_strength * 0.14
+                + prominent_intensity * 0.12
+                + container_pressure_field_strength * 2.4,
+            0.0,
+            1.0);
+        float2 tint_axis_raw =
+            -dynamic_light_dir * (0.34 + 0.20 * dynamic_light_highlight)
+            + pointer_dir * (0.26 + 0.22 * tint_pointer)
+            + bridge_dir * (0.22 + 0.20 * tint_bridge)
+            + refraction_dir * (0.20 + 0.16 * glass_lensing_gain)
+            + dispersion_tangent
+                * (0.14
+                   + 0.10 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential);
+        float tint_axis_len = length(tint_axis_raw);
+        float2 tint_axis =
+            tint_axis_len > 0.0001
+                ? tint_axis_raw / tint_axis_len
+                : -dynamic_light_dir;
+        float2 tint_cross = float2(-tint_axis.y, tint_axis.x);
+        float tint_light_face =
+            smoothstep(-0.20, 0.94, dot(tint_axis, -dynamic_light_dir));
+        float tint_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(tint_axis, bridge_dir)));
+        float tint_phase = clamp(
+            dot(normalized_local, tint_axis)
+                    * (4.4 + 1.8 * tint_interaction)
+                + dot(normalized_local, tint_cross)
+                    * (2.8 + 1.2 * tint_bridge)
+                + bridge_axial * (2.2 + 1.3 * bridge_core)
+                + bridge_shear * bridge_band * 1.8
+                + spectral_dispersion * 4.6,
+            -12.0,
+            12.0);
+        float tint_wave = 0.5 + 0.5 * sin(tint_phase);
+        float tint_counter =
+            0.5 + 0.5 * cos(tint_phase * 0.72 + glass_caustic_spread * 4.0);
+        float tint_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(tint_wave - 0.55));
+        float tint_return_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(tint_counter - 0.52));
+        float tint_span =
+            (0.84
+             + 1.7 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.3 * tint_interaction
+             + 0.036 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float tint_cross_span =
+            (0.56
+             + 1.1 * spectral_dispersion
+             + 1.0 * glass_dispersion_tangential
+             + 0.8 * tint_bridge_alignment)
+            * content_scale;
+        float2 tint_center_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.08 + 0.04 * tint_interaction),
+            float2(0.0),
+            float2(1.0));
+        float2 tint_light_uv = clamp(
+            in.screen_uv
+                - dynamic_light_dir
+                    * texel
+                    * tint_span
+                    * (0.20 + 0.12 * tint_light_face)
+                + tint_axis
+                    * texel
+                    * tint_span
+                    * (0.12 + 0.10 * tint_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 tint_shadow_uv = clamp(
+            in.screen_uv
+                + dynamic_light_dir
+                    * texel
+                    * tint_span
+                    * (0.18 + 0.12 * (1.0 - tint_light_face))
+                - tint_axis
+                    * texel
+                    * tint_span
+                    * (0.10 + 0.08 * tint_return_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 tint_cross_a_uv = clamp(
+            in.screen_uv
+                + tint_cross
+                    * texel
+                    * tint_cross_span
+                    * (0.28 + 0.12 * tint_wave)
+                + dispersion_tangent
+                    * texel
+                    * tint_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 tint_cross_b_uv = clamp(
+            in.screen_uv
+                - tint_cross
+                    * texel
+                    * tint_cross_span
+                    * (0.26 + 0.12 * tint_lobe)
+                - dispersion_tangent
+                    * texel
+                    * tint_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float3 tint_center_rgb =
+            backdrop.sample(samp, tint_center_uv).rgb;
+        float3 tint_light_rgb =
+            backdrop.sample(samp, tint_light_uv).rgb;
+        float3 tint_shadow_rgb =
+            backdrop.sample(samp, tint_shadow_uv).rgb;
+        float3 tint_cross_a_rgb =
+            backdrop.sample(samp, tint_cross_a_uv).rgb;
+        float3 tint_cross_b_rgb =
+            backdrop.sample(samp, tint_cross_b_uv).rgb;
+        float3 tint_backdrop_rgb =
+            tint_center_rgb * 0.28
+            + tint_light_rgb * 0.22
+            + tint_shadow_rgb * 0.18
+            + tint_cross_a_rgb * 0.16
+            + tint_cross_b_rgb * 0.16;
+        float3 tint_rgb = clamp(in.tint.rgb, 0.0, 1.0);
+        float tint_backdrop_luma =
+            dot(tint_backdrop_rgb, float3(0.2126, 0.7152, 0.0722));
+        float tint_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float tint_color_luma =
+            dot(tint_rgb, float3(0.2126, 0.7152, 0.0722));
+        float tint_backdrop_range = clamp(
+            length(tint_light_rgb - tint_shadow_rgb) * 0.24
+                + length(tint_cross_a_rgb - tint_cross_b_rgb) * 0.22
+                + abs(tint_backdrop_luma - tint_surface_luma) * 0.18
+                + tint_lobe * 0.10
+                + tint_interaction * 0.10,
+            0.0,
+            1.0);
+        float tint_coherence =
+            1.0 - smoothstep(0.08, 0.38, tint_backdrop_range);
+        float tint_lift = smoothstep(
+            tint_surface_luma - 0.06,
+            tint_surface_luma + 0.30,
+            tint_backdrop_luma);
+        float tint_depth = smoothstep(
+            0.08,
+            0.34,
+            tint_surface_luma - tint_backdrop_luma);
+        float3 tint_neutral = mix(
+            tint_backdrop_rgb,
+            float3(tint_backdrop_luma),
+            tint_depth * (0.10 + 0.12 * glass_shadow_gain)
+                + tint_coherence * 0.10);
+        float3 tint_colored = mix(
+            tint_neutral,
+            mix(tint_rgb, tint_backdrop_rgb * (float3(1.0) + tint_rgb * 0.32),
+                0.34 + 0.24 * tint_coherence),
+            0.20
+                + 0.26 * tint_chroma
+                + 0.18 * tint_interaction
+                + 0.12 * tint_lobe);
+        tint_colored = clamp(
+            (tint_colored - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + tint_lift * 0.010
+                       + tint_interaction * 0.010
+                       - tint_depth * 0.014)
+                + float3(0.50),
+            0.0,
+            1.0);
+        float tint_complement_bias = clamp(
+            abs(tint_color_luma - tint_backdrop_luma)
+                + tint_chroma * 0.40,
+            0.0,
+            1.0);
+        float3 tint_prism = float3(
+            spectral_warmth + tint_rgb.r * 0.18,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_rgb.g * 0.10,
+            spectral_coolness + tint_rgb.b * 0.18);
+        tint_colored += tint_prism
+            * (0.0006
+               + 0.0024 * spectral_rim_tint
+               + 0.0020 * glass_prismatic_gain
+               + 0.0018 * glass_scattering_gain)
+            * (0.30
+               + 0.22 * tint_light_face
+               + 0.20 * tint_lobe
+               + 0.18 * tint_interaction
+               + 0.12 * tint_complement_bias);
+        float tint_gate = clamp(
+            tint_interaction * 0.28
+                + tint_lobe * 0.20
+                + tint_bridge * 0.16
+                + tint_pointer * 0.16
+                + tint_light_face * 0.10
+                + tint_coherence * 0.10,
+            0.0,
+            1.0);
+        float tint_weight =
+            interactive_tint_field_strength
+            * tint_gate
+            * (0.30
+               + 0.22 * tint_chroma
+               + 0.18 * tint_lift
+               + 0.14 * tint_coherence
+               + 0.12 * tint_bridge_alignment
+               + 0.10 * tint_complement_bias);
+        rgb = mix(
+            rgb,
+            tint_colored,
+            tint_weight
+                * (0.18
+                   + 0.14 * tint_lobe
+                   + 0.10 * tint_interaction));
+        rgb += tint_prism
+            * tint_weight
+            * max(tint_lobe, tint_return_lobe * 0.72)
+            * (0.0005
+               + 0.0018 * dynamic_light_highlight
+               + 0.0014 * glass_scattering_gain);
+        float tint_shadow =
+            tint_depth
+            * tint_weight
+            * (0.0018 + 0.0055 * glass_shadow_gain)
+            * (0.50 + 0.50 * (1.0 - tint_light_face));
+        rgb *= 1.0 - clamp(tint_shadow, 0.0, 0.018);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
