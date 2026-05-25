@@ -1661,6 +1661,8 @@ struct MaterialInstanceGPU {
     float group_effects[4]{};
     // fusion strength, lensing gain, edge lift, shadow gain
     float fusion_optics[4]{};
+    // cohesion strength, pressure, falloff, stabilization
+    float container_cohesion[4]{};
     // bridge direction x/y, anchor x/y for container/matched flow
     float bridge_motion[4]{};
     // bridge strength, flow offset gain, ribbon width, highlight gain
@@ -3538,6 +3540,10 @@ inline void apply_material_container_execution_descriptors(
             inst.fusion_optics[1] = execution->fusion_lensing_gain;
             inst.fusion_optics[2] = execution->fusion_edge_lift;
             inst.fusion_optics[3] = execution->fusion_shadow_gain;
+            inst.container_cohesion[0] = execution->cohesion_strength;
+            inst.container_cohesion[1] = execution->cohesion_pressure;
+            inst.container_cohesion[2] = execution->cohesion_falloff;
+            inst.container_cohesion[3] = execution->cohesion_stabilization;
         }
     }
 }
@@ -5489,6 +5495,7 @@ struct MaterialVsOut {
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
+    float4 container_cohesion;
     float4 bridge_motion;
     float4 bridge_optics;
 };
@@ -5518,6 +5525,7 @@ struct MaterialInstance {
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
+    float4 container_cohesion;
     float4 bridge_motion;
     float4 bridge_optics;
 };
@@ -5580,6 +5588,7 @@ vertex MaterialVsOut vs_material(
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
     out.fusion_optics = inst.fusion_optics;
+    out.container_cohesion = inst.container_cohesion;
     out.bridge_motion = inst.bridge_motion;
     out.bridge_optics = inst.bridge_optics;
     return out;
@@ -5617,6 +5626,56 @@ fragment float4 fs_material(
     float fusion_edge_lift = clamp(in.fusion_optics.z, 0.0, 0.16);
     float fusion_shadow_gain = clamp(in.fusion_optics.w, 1.0, 1.32);
     float overlap_response_strength = clamp(in.group_effects.w, 0.0, 1.0);
+    float container_cohesion_strength =
+        clamp(in.container_cohesion.x, 0.0, 1.0);
+    float container_cohesion_pressure =
+        clamp(in.container_cohesion.y, 0.0, 1.0);
+    float container_cohesion_falloff =
+        clamp(in.container_cohesion.z, 0.0, 1.0);
+    float container_cohesion_stabilization =
+        clamp(in.container_cohesion.w, 0.0, 1.0);
+    group_blend_strength = clamp(
+        max(group_blend_strength,
+            container_cohesion_strength
+                * (0.84 + 0.10 * container_cohesion_pressure)),
+        0.0,
+        1.0);
+    inner_edge_alpha_blend_strength = clamp(
+        max(inner_edge_alpha_blend_strength,
+            container_cohesion_strength
+                * (0.18 + 0.10 * (1.0 - container_cohesion_falloff))),
+        0.0,
+        1.0);
+    fusion_strength = clamp(
+        max(fusion_strength,
+            container_cohesion_strength
+                * (0.58 + 0.18 * container_cohesion_pressure)),
+        0.0,
+        1.0);
+    fusion_lensing_gain = clamp(
+        fusion_lensing_gain
+            + 0.050 * container_cohesion_strength
+            + 0.035 * container_cohesion_pressure,
+        1.0,
+        1.35);
+    fusion_edge_lift = clamp(
+        fusion_edge_lift
+            + 0.030 * container_cohesion_strength
+            + 0.020 * container_cohesion_stabilization,
+        0.0,
+        0.18);
+    fusion_shadow_gain = clamp(
+        fusion_shadow_gain
+            + 0.040 * container_cohesion_strength
+            + 0.030 * container_cohesion_stabilization,
+        1.0,
+        1.36);
+    overlap_response_strength = clamp(
+        max(overlap_response_strength,
+            container_cohesion_pressure
+                * (0.50 + 0.20 * container_cohesion_strength)),
+        0.0,
+        1.0);
     float bridge_motion_strength = clamp(in.bridge_optics.x, 0.0, 1.0);
     float bridge_flow_offset_gain = clamp(in.bridge_optics.y, 0.0, 0.60);
     float bridge_ribbon_width = clamp(in.bridge_optics.z, 0.08, 0.32);
@@ -31297,6 +31356,9 @@ fragment float4 fs_material(
                + 0.008 * shared_backdrop_scope
                + 0.008 * group_surface_execution
                + 0.006 * bridge_motion_strength)
+            + 0.012 * container_cohesion_strength
+            + 0.010 * container_cohesion_pressure
+            + 0.008 * container_cohesion_stabilization
             + 0.07 * bounds_anchor_field_strength
             + 0.06 * container_pressure_field_strength
             + 0.05 * edge_meniscus_field_strength
@@ -31360,7 +31422,9 @@ fragment float4 fs_material(
                 + shape_blend_execution * group_blend_strength * 0.20
                 + shared_backdrop_scope * group_blend_strength * 0.18
                 + group_surface_execution * group_blend_strength * 0.16
-                + morph_bridge * 0.22,
+                + morph_bridge * 0.22
+                + container_cohesion_strength * 0.20
+                + container_cohesion_pressure * 0.12,
             0.0,
             1.0);
         float morph_pointer =
@@ -31372,7 +31436,8 @@ fragment float4 fs_material(
                 + morph_edge * 0.16
                 + morph_bridge * 0.18
                 + morph_transition * 0.22
-                + morph_pointer * 0.10,
+                + morph_pointer * 0.10
+                + container_cohesion_stabilization * 0.12,
             0.0,
             1.0);
         float2 morph_axis_raw =
@@ -31439,7 +31504,9 @@ fragment float4 fs_material(
                 + 0.24 * morph_transition
                 + 0.20 * group_blend_strength
                 + 0.18 * shared_backdrop_scope
-                + 0.16 * morph_bridge,
+                + 0.16 * morph_bridge
+                + 0.12 * container_cohesion_strength
+                    * (1.0 - container_cohesion_falloff),
             0.0,
             0.58);
         float2 morph_base_uv = clamp(

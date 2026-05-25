@@ -1748,6 +1748,16 @@ struct MaterialContainerExecutionDescriptor {
     float fusion_lensing_gain = 1.0f;
     float fusion_edge_lift = 0.0f;
     float fusion_shadow_gain = 1.0f;
+    char const* cohesion_model = "none";
+    bool cohesion_active = false;
+    bool cohesion_spacing_driven = false;
+    bool cohesion_morph_driven = false;
+    bool cohesion_union_driven = false;
+    bool cohesion_overlap_driven = false;
+    float cohesion_strength = 0.0f;
+    float cohesion_pressure = 0.0f;
+    float cohesion_falloff = 0.0f;
+    float cohesion_stabilization = 0.0f;
     bool overlap_response_active = false;
     std::uint32_t overlap_pair_count = 0;
     float overlap_response_strength = 0.0f;
@@ -3268,6 +3278,44 @@ inline float material_container_overlap_response_strength(
         1.0f);
 }
 
+inline char const* material_container_cohesion_model_name(
+        MaterialContainerExecutionDescriptor const& execution) noexcept {
+    if (execution.glass_effect_match_execution)
+        return "matched-liquid-glass-cohesion";
+    if (execution.union_execution)
+        return "union-liquid-glass-cohesion";
+    if (execution.group_surface_execution)
+        return "proximity-liquid-glass-cohesion";
+    if (execution.morph_execution)
+        return "morph-liquid-glass-cohesion";
+    if (execution.shape_blend_execution)
+        return "spacing-liquid-glass-cohesion";
+    return "none";
+}
+
+inline float material_container_spacing_proximity(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (!group.has_shape_gap)
+        return 0.0f;
+    if (group.max_blend_distance <= 0.0f)
+        return group.min_shape_gap <= 0.5f ? 1.0f : 0.0f;
+    return std::clamp(
+        (group.max_blend_distance - group.min_shape_gap)
+            / group.max_blend_distance,
+        0.0f,
+        1.0f);
+}
+
+inline float material_container_spacing_falloff(
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (!group.has_shape_gap || group.max_blend_distance <= 0.0f)
+        return 0.0f;
+    return std::clamp(
+        group.min_shape_gap / group.max_blend_distance,
+        0.0f,
+        1.0f);
+}
+
 inline char const* material_container_fusion_model_name(
         MaterialContainerExecutionDescriptor const& execution) noexcept {
     if (execution.glass_effect_match_execution)
@@ -3360,6 +3408,81 @@ inline void material_apply_container_fusion_optics(
         material_container_overlap_response_strength(group);
     execution.overlap_response_active =
         execution.overlap_response_strength > 0.0001f;
+}
+
+inline void material_apply_container_cohesion_profile(
+        MaterialContainerExecutionDescriptor& execution,
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (!execution.shape_blend_execution
+        || execution.shape_blend_strength <= 0.0001f) {
+        execution.cohesion_model = "none";
+        execution.cohesion_active = false;
+        execution.cohesion_spacing_driven = false;
+        execution.cohesion_morph_driven = false;
+        execution.cohesion_union_driven = false;
+        execution.cohesion_overlap_driven = false;
+        execution.cohesion_strength = 0.0f;
+        execution.cohesion_pressure = 0.0f;
+        execution.cohesion_falloff = 0.0f;
+        execution.cohesion_stabilization = 0.0f;
+        return;
+    }
+
+    auto const continuity = material_container_group_blend_continuity(group);
+    auto const overlap = material_container_overlap_response_strength(group);
+    auto const overlap_density = material_container_overlap_density(group);
+    auto const spacing_proximity =
+        material_container_spacing_proximity(group);
+    auto const spacing_falloff = material_container_spacing_falloff(group);
+    auto const member_density =
+        group.surface_count > 1u
+            ? std::clamp(
+                (static_cast<float>(group.surface_count) - 2.0f) / 4.0f,
+                0.0f,
+                1.0f)
+            : 0.0f;
+    auto const morph = execution.morph_execution ? 1.0f : 0.0f;
+    auto const union_bias = execution.union_execution ? 1.0f : 0.0f;
+    auto const match = execution.glass_effect_match_execution ? 1.0f : 0.0f;
+    auto const shared = execution.shared_backdrop_scope ? 1.0f : 0.0f;
+
+    execution.cohesion_model = material_container_cohesion_model_name(execution);
+    execution.cohesion_active = true;
+    execution.cohesion_spacing_driven = spacing_proximity > 0.0001f;
+    execution.cohesion_morph_driven = morph > 0.0f || match > 0.0f;
+    execution.cohesion_union_driven = union_bias > 0.0f;
+    execution.cohesion_overlap_driven = overlap > 0.0001f;
+    execution.cohesion_strength = std::clamp(
+        execution.shape_blend_strength
+                * (0.50f
+                   + 0.22f * continuity
+                   + 0.14f * spacing_proximity
+                   + 0.08f * overlap
+                   + 0.06f * member_density)
+            + 0.050f * match
+            + 0.040f * union_bias,
+        0.0f,
+        1.0f);
+    execution.cohesion_pressure = std::clamp(
+        0.35f * spacing_proximity
+            + 0.20f * overlap
+            + 0.15f * continuity
+            + 0.12f * morph
+            + 0.10f * shared
+            + 0.08f * member_density,
+        0.0f,
+        1.0f);
+    execution.cohesion_falloff = spacing_falloff;
+    execution.cohesion_stabilization = std::clamp(
+        0.30f * execution.cohesion_strength
+            + 0.24f * execution.fusion_strength
+            + 0.18f * execution.cohesion_pressure
+            + 0.12f * overlap
+            + 0.10f * match
+            + 0.06f * union_bias
+            + 0.04f * overlap_density,
+        0.0f,
+        1.0f);
 }
 
 inline float material_container_shape_blend_strength_for_gap(
@@ -4904,6 +5027,7 @@ material_container_execution_descriptor_from_group(
     auto const& fusion_group =
         descriptor.union_execution ? union_group : group;
     material_apply_container_fusion_optics(descriptor, fusion_group);
+    material_apply_container_cohesion_profile(descriptor, fusion_group);
     if (descriptor.glass_effect_match_execution) {
         if (auto const* source = match_source.record) {
             descriptor.glass_effect_match_source_valid = true;
