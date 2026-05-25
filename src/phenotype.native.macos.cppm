@@ -23437,6 +23437,254 @@ fragment float4 fs_material(
                + 0.0024 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float edge_caustic_dispersion_strength = clamp(
+        0.010 * glass_caustic_spread
+            + 0.009 * spectral_dispersion
+            + 0.008 * glass_dispersion_tangential
+            + 0.007 * spectral_rim_tint
+            + 0.006 * edge_reflection_strength
+            + 0.005 * shadow_transmission_strength
+            + 0.005 * substrate_adhesion_strength
+            + 0.004 * ambient_seal_field_strength
+            + 0.004 * focus_field_strength,
+        0.0,
+        0.060);
+    if (edge_caustic_dispersion_strength > 0.0001
+        && edge_bevel_width > 0.0001) {
+        float edge_caustic_outer =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.45, 1.0),
+                signed_edge_distance);
+        float edge_caustic_inner = smoothstep(
+            max(edge_bevel_width * 0.20, 0.10),
+            max(edge_bevel_width * 2.10, 1.0),
+            signed_edge_distance);
+        float edge_caustic_band = clamp(
+            edge_caustic_outer
+                * (0.50 + 0.50 * edge_lens)
+                * (0.54 + 0.46 * edge_caustic_inner),
+            0.0,
+            1.0);
+        float edge_caustic_transition = clamp(
+            glass_effect_match_execution * 0.22
+                + morph_execution * 0.18
+                + materialize_wave_strength * 0.14
+                + edge_reflection_strength * 1.5
+                + shadow_transmission_strength * 1.2
+                + substrate_adhesion_strength * 1.1
+                + contact_shadow_field_strength * 0.9
+                + dynamic_light_highlight * 0.10,
+            0.0,
+            1.0);
+        float2 edge_caustic_tangent =
+            float2(-normalized_local.y, normalized_local.x);
+        float edge_caustic_tangent_len =
+            length(edge_caustic_tangent);
+        edge_caustic_tangent =
+            edge_caustic_tangent_len > 0.0001
+                ? edge_caustic_tangent / edge_caustic_tangent_len
+                : float2(-dynamic_light_dir.y, dynamic_light_dir.x);
+        float2 edge_caustic_axis_raw =
+            edge_caustic_tangent
+                * (0.38 + 0.26 * edge_caustic_band)
+            + refraction_dir
+                * (0.30 + 0.22 * glass_lensing_gain)
+            - dynamic_light_dir
+                * (0.20 + 0.18 * dynamic_light_highlight)
+            + bridge_dir * (0.12 + 0.14 * bridge_band);
+        float edge_caustic_axis_len = length(edge_caustic_axis_raw);
+        float2 edge_caustic_axis =
+            edge_caustic_axis_len > 0.0001
+                ? edge_caustic_axis_raw / edge_caustic_axis_len
+                : edge_caustic_tangent;
+        float2 edge_caustic_cross =
+            float2(-edge_caustic_axis.y, edge_caustic_axis.x);
+        float edge_caustic_light_face =
+            smoothstep(-0.22, 0.92, dot(edge_caustic_axis, -dynamic_light_dir));
+        float edge_caustic_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(edge_caustic_axis, bridge_dir)));
+        float edge_caustic_phase = clamp(
+            dot(normalized_local, edge_caustic_axis)
+                    * (4.4 + 1.8 * edge_caustic_transition)
+                + dot(normalized_local, edge_caustic_cross)
+                    * (2.8 + 1.2 * bridge_band)
+                + signed_edge_distance
+                    / max(edge_bevel_width * 2.2, 1.0)
+                    * (2.4 + 1.4 * glass_caustic_spread)
+                + bridge_shear * bridge_band * 1.6,
+            -10.0,
+            10.0);
+        float edge_caustic_wave = 0.5 + 0.5 * sin(edge_caustic_phase);
+        float edge_caustic_lock =
+            1.0 - smoothstep(
+                0.0,
+                0.34,
+                abs(edge_caustic_wave - 0.58));
+        float edge_caustic_gate = clamp(
+            edge_caustic_band
+                * (0.28
+                   + 0.18 * edge_caustic_light_face
+                   + 0.16 * edge_caustic_bridge_alignment
+                   + 0.16 * edge_caustic_lock
+                   + 0.12 * edge_caustic_transition
+                   + 0.10 * dynamic_light_highlight
+                   + 0.08 * edge_depth),
+            0.0,
+            1.0);
+        float edge_caustic_span =
+            (0.44
+             + 1.1 * glass_thickness
+             + 0.9 * clear_glass_detail
+             + 1.6 * glass_caustic_spread
+             + 1.1 * spectral_dispersion
+             + 0.018 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float edge_caustic_lateral_span =
+            (0.30
+             + 0.9 * glass_dispersion_tangential
+             + 0.8 * spectral_dispersion
+             + 0.6 * edge_caustic_bridge_alignment)
+            * content_scale;
+        float edge_caustic_channel_spread =
+            (0.20
+             + 0.70 * spectral_dispersion
+             + 0.65 * glass_caustic_spread
+             + 0.40 * glass_dispersion_tangential)
+            * content_scale
+            * (0.80 + 0.20 * edge_caustic_lock);
+        float2 edge_caustic_red_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + edge_caustic_axis
+                    * texel
+                    * edge_caustic_span
+                    * (0.22 + 0.12 * edge_caustic_lock)
+                + edge_caustic_tangent
+                    * texel
+                    * edge_caustic_channel_spread,
+            float2(0.0),
+            float2(1.0));
+        float2 edge_caustic_green_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + edge_caustic_cross
+                    * texel
+                    * edge_caustic_lateral_span
+                    * (edge_caustic_wave - 0.50),
+            float2(0.0),
+            float2(1.0));
+        float2 edge_caustic_blue_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - edge_caustic_axis
+                    * texel
+                    * edge_caustic_span
+                    * (0.18 + 0.12 * edge_caustic_transition)
+                - edge_caustic_tangent
+                    * texel
+                    * edge_caustic_channel_spread,
+            float2(0.0),
+            float2(1.0));
+        float2 edge_caustic_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - edge_caustic_cross
+                    * texel
+                    * edge_caustic_lateral_span
+                    * (0.18 + 0.12 * edge_caustic_lock),
+            float2(0.0),
+            float2(1.0));
+        float3 edge_caustic_red_rgb =
+            backdrop.sample(samp, edge_caustic_red_uv).rgb;
+        float3 edge_caustic_green_rgb =
+            backdrop.sample(samp, edge_caustic_green_uv).rgb;
+        float3 edge_caustic_blue_rgb =
+            backdrop.sample(samp, edge_caustic_blue_uv).rgb;
+        float3 edge_caustic_return_rgb =
+            backdrop.sample(samp, edge_caustic_return_uv).rgb;
+        float3 edge_caustic_split = float3(
+            edge_caustic_red_rgb.r,
+            edge_caustic_green_rgb.g,
+            edge_caustic_blue_rgb.b);
+        float3 edge_caustic_probe =
+            edge_caustic_split * 0.46
+            + edge_caustic_return_rgb * 0.22
+            + edge_caustic_green_rgb * 0.18
+            + edge_caustic_blue_rgb * 0.14;
+        float edge_caustic_luma =
+            dot(edge_caustic_probe, float3(0.2126, 0.7152, 0.0722));
+        float edge_caustic_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float edge_caustic_range = clamp(
+            length(edge_caustic_red_rgb - edge_caustic_blue_rgb) * 0.30
+                + length(edge_caustic_green_rgb - edge_caustic_return_rgb) * 0.22
+                + abs(edge_caustic_luma - edge_caustic_surface_luma) * 0.18
+                + edge_caustic_lock * 0.08,
+            0.0,
+            1.0);
+        float edge_caustic_coherence =
+            1.0 - smoothstep(0.08, 0.38, edge_caustic_range);
+        float edge_caustic_lift = smoothstep(
+            edge_caustic_surface_luma - 0.04,
+            edge_caustic_surface_luma + 0.30,
+            edge_caustic_luma);
+        float3 edge_caustic_layer = mix(
+            edge_caustic_probe,
+            edge_caustic_split,
+            0.18
+                + 0.20 * edge_caustic_lock
+                + 0.14 * spectral_dispersion);
+        edge_caustic_layer = clamp(
+            (edge_caustic_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.016
+                       + edge_caustic_transition * 0.016
+                       + edge_caustic_lift * 0.012
+                       - glass_shadow_gain * 0.008)
+                + float3(0.50),
+            0.0,
+            1.0);
+        edge_caustic_layer *= float3(
+            1.0 + spectral_warmth * 0.44,
+            1.0 + spectral_rim_tint * 0.20,
+            1.0 + spectral_coolness * 0.44);
+        float3 edge_caustic_prism = float3(
+            spectral_warmth,
+            0.16 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        edge_caustic_layer += edge_caustic_prism
+            * (0.0012
+               + 0.0034 * spectral_rim_tint
+               + 0.0032 * glass_caustic_spread
+               + 0.0026 * glass_prismatic_gain)
+            * (0.38
+               + 0.24 * edge_caustic_light_face
+               + 0.22 * edge_caustic_lock
+               + 0.16 * edge_caustic_coherence);
+        float edge_caustic_weight =
+            edge_caustic_dispersion_strength
+            * edge_caustic_gate
+            * (0.30
+               + 0.20 * edge_caustic_coherence
+               + 0.16 * edge_caustic_lift
+               + 0.16 * edge_caustic_light_face
+               + 0.12 * edge_caustic_transition);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                edge_caustic_layer,
+                0.07 + 0.15 * edge_caustic_lock),
+            edge_caustic_weight * 0.28);
+        rgb += edge_caustic_prism
+            * edge_caustic_weight
+            * (0.0008
+               + 0.0028 * dynamic_light_highlight
+               + 0.0028 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
