@@ -2456,6 +2456,54 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.glass_union[1] = plan.glass_surface_cohesion.edge_adhesion;
     inst.glass_union[2] = plan.glass_surface_cohesion.shape_coalescence;
     inst.glass_union[3] = plan.glass_surface_cohesion.luma_stability;
+    inst.clear_glass[0] = std::clamp(
+        inst.clear_glass[0]
+            + 0.050f * plan.glass_substrate_adhesion.settle_depth
+            + 0.035f * plan.glass_substrate_adhesion.contact_shadow,
+        0.0f,
+        0.36f);
+    inst.clear_glass[2] = std::clamp(
+        inst.clear_glass[2]
+            + 0.30f * plan.glass_substrate_adhesion.contact_strength,
+        0.0f,
+        1.0f);
+    inst.thickness[2] = std::clamp(
+        inst.thickness[2]
+            + 0.16f * plan.glass_substrate_adhesion.contact_shadow
+            + 0.08f * plan.glass_substrate_adhesion.settle_depth,
+        1.0f,
+        1.62f);
+    inst.thickness[3] = std::clamp(
+        inst.thickness[3]
+            + 0.10f * plan.glass_substrate_adhesion.contact_strength,
+        1.0f,
+        1.45f);
+    inst.refraction[1] = std::clamp(
+        inst.refraction[1]
+            + 0.12f * plan.glass_substrate_adhesion.refraction_crawl,
+        0.0f,
+        0.90f);
+    inst.refraction[2] = std::clamp(
+        inst.refraction[2]
+            * (1.0f
+               + 0.16f * plan.glass_substrate_adhesion.refraction_crawl),
+        0.0f,
+        8.0f);
+    inst.glass_union[0] = std::clamp(
+        inst.glass_union[0]
+            + 0.24f * plan.glass_substrate_adhesion.contact_strength,
+        0.0f,
+        1.0f);
+    inst.glass_union[1] = std::clamp(
+        inst.glass_union[1]
+            + 0.20f * plan.glass_substrate_adhesion.settle_depth,
+        0.0f,
+        1.0f);
+    inst.glass_union[3] = std::clamp(
+        inst.glass_union[3]
+            + 0.16f * plan.glass_substrate_adhesion.contact_shadow,
+        0.0f,
+        1.0f);
     inst.thickness[1] = std::clamp(
         inst.thickness[1]
             + 0.080f * plan.glass_depth.parallax_gain
