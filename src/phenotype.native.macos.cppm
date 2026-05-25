@@ -39291,6 +39291,406 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(adaptive_absorption, 0.0, 0.0068);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float motion_settling_field_strength = clamp(
+        0.005 * bridge_motion_strength
+            + 0.004 * materialize_wave_strength
+            + 0.003 * morph_execution * group_blend_strength
+            + 0.003 * glass_effect_match_execution * group_blend_strength
+            + 0.003 * pointer_lens_strength
+                * (0.36 * pointer_lens_raw + 0.64 * pointer_lens)
+            + 0.17 * adaptive_transmission_field_strength
+            + 0.16 * morph_continuity_field_strength
+            + 0.15 * interaction_response_field_strength
+            + 0.14 * contextual_reflection_field_strength
+            + 0.12 * hierarchy_separation_field_strength
+            + 0.10 * surface_identity_field_strength
+            + 0.085 * tonal_equilibrium_field_strength
+            + 0.070 * chroma_containment_field_strength
+            + 0.056 * legibility_preservation_field_strength
+            + 0.046 * depth_separation_field_strength
+            + 0.038 * specular_flow_field_strength
+            + 0.032 * phase_equalization_field_strength
+            + 0.026 * edge_continuity_field_strength
+            + 0.022 * rim_coalescence_field_strength,
+        0.0,
+        0.019);
+    if (motion_settling_field_strength > 0.0001
+        && (bridge_motion_strength > 0.0001
+            || materialize_wave_strength > 0.0001
+            || pointer_lens_strength > 0.0001
+            || group_blend_strength > 0.0001)) {
+        float settling_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float settling_motion = clamp(
+            bridge_motion_strength * 0.28
+                + materialize_wave_strength * 0.22
+                + pointer_lens_strength
+                    * (0.36 * pointer_lens_raw + 0.64 * pointer_lens)
+                    * 0.18
+                + group_blend_strength
+                    * (0.12 + 0.08 * morph_execution)
+                + settling_bridge * 0.18
+                + control_morph_depth * 0.16,
+            0.0,
+            1.0);
+        float settling_rim =
+            edge_lens
+            * (0.54
+               + 0.46
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.68, 0.84),
+                       signed_edge_distance)));
+        float settling_materialize_ring =
+            materialize_wave_strength
+            * (1.0 - smoothstep(
+                0.0,
+                0.22,
+                abs(normalized_len - materialize_rim_position)));
+        float settling_pointer = clamp(
+            pointer_lens_strength
+                * (0.44 * pointer_lens_raw + 0.56 * pointer_lens),
+            0.0,
+            1.0);
+        float settling_presence = clamp(
+            settling_motion * 0.30
+                + settling_bridge * 0.18
+                + settling_materialize_ring * 0.16
+                + settling_pointer * 0.14
+                + settling_rim * 0.10
+                + adaptive_transmission_field_strength * 3.0
+                + morph_continuity_field_strength * 2.8
+                + interaction_response_field_strength * 2.4,
+            0.0,
+            1.0);
+        float settling_shear =
+            smoothstep(0.05, 0.92, abs(bridge_shear)) * settling_bridge;
+        float settling_flow_sign = bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 settling_axis_raw =
+            bridge_dir * (0.30 + 0.26 * settling_bridge)
+            + refraction_dir * (0.24 + 0.14 * glass_lensing_gain)
+            - dynamic_light_dir * (0.20 + 0.12 * dynamic_light_highlight)
+            + pointer_dir * settling_pointer * 0.14
+            + bridge_tangent
+                * settling_flow_sign
+                * (0.16 + 0.16 * settling_shear)
+            + dispersion_tangent
+                * (0.09
+                   + 0.05 * spectral_dispersion
+                   + 0.04 * glass_dispersion_tangential);
+        float settling_axis_len = length(settling_axis_raw);
+        float2 settling_axis =
+            settling_axis_len > 0.0001
+                ? settling_axis_raw / settling_axis_len
+                : (normalized_len > 0.0001
+                    ? refraction_dir
+                    : float2(1.0, 0.0));
+        float2 settling_cross =
+            float2(-settling_axis.y, settling_axis.x);
+        float settling_light_face =
+            smoothstep(-0.18, 0.94, dot(settling_axis, -dynamic_light_dir));
+        float settling_bridge_alignment =
+            smoothstep(-0.12, 0.94, abs(dot(settling_axis, bridge_tangent)));
+        float settling_phase = clamp(
+            dot(normalized_local, settling_axis)
+                    * (2.6 + 1.0 * settling_presence)
+                + dot(normalized_local, settling_cross)
+                    * (1.7 + 0.8 * settling_motion)
+                + bridge_axial * (1.4 + 0.9 * bridge_core)
+                + bridge_lateral_signed * settling_bridge * 0.9
+                + bridge_shear * settling_bridge * 1.2
+                + materialize_rim_position * materialize_wave_strength * 1.8
+                + pointer_lens_raw * settling_pointer * 1.2
+                + spectral_dispersion * 1.2
+                + glass_caustic_spread * 1.0,
+            -12.0,
+            12.0);
+        float settling_wave =
+            0.5 + 0.5 * sin(settling_phase);
+        float settling_counter_wave =
+            0.5 + 0.5 * cos(
+                settling_phase * 0.60
+                + settling_motion * 1.6
+                + glass_caustic_spread * 1.4);
+        float settling_lobe =
+            1.0 - smoothstep(0.0, 0.46, abs(settling_wave - 0.50));
+        float settling_return_lobe =
+            1.0 - smoothstep(0.0, 0.48, abs(settling_counter_wave - 0.50));
+        float settling_support = clamp(
+            settling_presence * 0.30
+                + settling_motion * 0.21
+                + settling_bridge * 0.15
+                + settling_materialize_ring * 0.12
+                + settling_rim * 0.10
+                + settling_bridge_alignment * 0.10,
+            0.0,
+            1.0);
+        float settling_focus =
+            (0.5
+             + 0.5 * cos(settling_phase * 0.96 + normalized_len * 1.1))
+            * (0.36 + 0.64 * settling_lobe);
+        float settling_damping = clamp(
+            0.46
+                + 0.20 * settling_support
+                + 0.14 * settling_light_face
+                + 0.12 * clear_glass_detail
+                - 0.10 * abs(bridge_shear) * settling_bridge
+                - 0.08 * materialize_wave_strength,
+            0.30,
+            0.82);
+        float settling_span =
+            (0.26
+             + 0.46 * glass_thickness
+             + 0.42 * clear_glass_detail
+             + 0.50 * settling_presence
+             + 0.010 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float settling_cross_span =
+            (0.20
+             + 0.32 * glass_dispersion_tangential
+             + 0.32 * spectral_dispersion
+             + 0.44 * settling_support)
+            * content_scale;
+        float settling_motion_span =
+            (0.16
+             + 0.28 * settling_motion
+             + 0.22 * settling_bridge
+             + 0.18 * settling_pointer
+             + 0.14 * glass_caustic_spread)
+            * content_scale;
+        float2 settling_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.028 + 0.044 * settling_support)
+                + settling_axis
+                    * texel
+                    * settling_motion_span
+                    * (0.06 + 0.08 * settling_presence),
+            float2(0.0),
+            float2(1.0));
+        float2 settling_forward_uv = clamp(
+            settling_base_uv
+                + settling_axis
+                    * texel
+                    * settling_span
+                    * (0.11 + 0.10 * settling_focus),
+            float2(0.0),
+            float2(1.0));
+        float2 settling_rest_uv = clamp(
+            settling_base_uv
+                - settling_axis
+                    * texel
+                    * settling_span
+                    * (0.10 + 0.09 * settling_damping),
+            float2(0.0),
+            float2(1.0));
+        float2 settling_shear_uv = clamp(
+            settling_base_uv
+                + settling_cross
+                    * texel
+                    * settling_cross_span
+                    * (0.12 + 0.08 * settling_wave)
+                + bridge_tangent
+                    * texel
+                    * settling_motion_span
+                    * bridge_shear
+                    * (0.16 + 0.14 * settling_bridge),
+            float2(0.0),
+            float2(1.0));
+        float2 settling_return_uv = clamp(
+            settling_base_uv
+                - settling_cross
+                    * texel
+                    * settling_cross_span
+                    * (0.12 + 0.08 * settling_return_lobe)
+                - bridge_tangent
+                    * texel
+                    * settling_motion_span
+                    * bridge_shear
+                    * (0.14 + 0.12 * settling_motion),
+            float2(0.0),
+            float2(1.0));
+        float3 settling_base_rgb =
+            backdrop.sample(samp, settling_base_uv).rgb;
+        float3 settling_forward_rgb =
+            backdrop.sample(samp, settling_forward_uv).rgb;
+        float3 settling_rest_rgb =
+            backdrop.sample(samp, settling_rest_uv).rgb;
+        float3 settling_shear_rgb =
+            backdrop.sample(samp, settling_shear_uv).rgb;
+        float3 settling_return_rgb =
+            backdrop.sample(samp, settling_return_uv).rgb;
+        float3 settling_average =
+            settling_base_rgb * 0.30
+            + settling_forward_rgb * 0.22
+            + settling_rest_rgb * 0.20
+            + settling_shear_rgb * 0.14
+            + settling_return_rgb * 0.14;
+        float3 settling_split = float3(
+            settling_shear_rgb.r,
+            (settling_base_rgb.g + settling_average.g) * 0.5,
+            settling_return_rgb.b);
+        float settling_split_mix = clamp(
+            0.032
+                + 0.044 * spectral_dispersion
+                + 0.038 * glass_dispersion_tangential
+                + 0.040 * settling_support,
+            0.0,
+            0.19);
+        float3 settling_probe = mix(
+            settling_average,
+            settling_split,
+            settling_split_mix);
+        float settling_base_luma =
+            dot(settling_base_rgb, float3(0.2126, 0.7152, 0.0722));
+        float settling_forward_luma =
+            dot(settling_forward_rgb, float3(0.2126, 0.7152, 0.0722));
+        float settling_rest_luma =
+            dot(settling_rest_rgb, float3(0.2126, 0.7152, 0.0722));
+        float settling_shear_luma =
+            dot(settling_shear_rgb, float3(0.2126, 0.7152, 0.0722));
+        float settling_return_luma =
+            dot(settling_return_rgb, float3(0.2126, 0.7152, 0.0722));
+        float settling_probe_luma =
+            dot(settling_probe, float3(0.2126, 0.7152, 0.0722));
+        float settling_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float settling_luma_max =
+            max(max(settling_base_luma, settling_forward_luma),
+                max(max(settling_rest_luma, settling_shear_luma),
+                    settling_return_luma));
+        float settling_luma_min =
+            min(min(settling_base_luma, settling_forward_luma),
+                min(min(settling_rest_luma, settling_shear_luma),
+                    settling_return_luma));
+        float settling_luma_range =
+            clamp(settling_luma_max - settling_luma_min, 0.0, 1.0);
+        float settling_motion_contrast = clamp(
+            length(settling_forward_rgb - settling_rest_rgb) * 0.24
+                + length(settling_shear_rgb - settling_return_rgb) * 0.20
+                + settling_luma_range * 0.18
+                + settling_motion * 0.08,
+            0.0,
+            1.0);
+        float settling_unstable =
+            smoothstep(
+                0.055,
+                0.34,
+                settling_motion_contrast * 0.48
+                    + abs(bridge_shear) * settling_bridge * 0.18
+                    + materialize_wave_strength * 0.16
+                    + settling_pointer * 0.10);
+        float settling_restful =
+            1.0 - smoothstep(
+                0.08,
+                0.38,
+                settling_motion_contrast * 0.48
+                    + materialize_wave_strength * 0.12);
+        float settling_shadow =
+            smoothstep(
+                0.05,
+                0.34,
+                settling_surface_luma
+                    - settling_luma_min
+                    + settling_luma_range * 0.11);
+        float settling_highlight =
+            smoothstep(
+                0.06,
+                0.38,
+                settling_luma_max
+                    - settling_surface_luma
+                    + settling_luma_range * 0.11);
+        float settling_target_luma = clamp(
+            0.50
+                + (settling_probe_luma - 0.50)
+                    * (0.49 + 0.23 * settling_damping)
+                + (settling_highlight - settling_shadow)
+                    * (0.028 + 0.032 * settling_support)
+                - settling_unstable
+                    * clear_glass_dimming
+                    * (0.018 + 0.016 * clear_glass_detail),
+            0.0,
+            1.0);
+        float settling_chroma_keep = clamp(
+            0.52
+                + 0.12 * settling_damping
+                + 0.10 * settling_support
+                + 0.08 * settling_light_face
+                - 0.10 * settling_unstable,
+            0.42,
+            0.86);
+        float3 settling_surface =
+            float3(settling_target_luma)
+            + (settling_probe - float3(settling_probe_luma))
+                * settling_chroma_keep;
+        float3 settling_layer = mix(
+            settling_probe,
+            settling_surface,
+            (0.20 + 0.18 * settling_unstable)
+                * (0.42 + 0.58 * settling_support));
+        settling_layer = clamp(
+            (settling_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.006
+                       + settling_restful * 0.004
+                       - settling_shadow * 0.004
+                       - settling_unstable * 0.003)
+                + float3(0.50),
+            0.0,
+            1.0);
+        settling_layer *= float3(
+            1.0 + spectral_warmth * 0.10 + tint_chroma * in.tint.r * 0.004,
+            1.0 + spectral_rim_tint * 0.050 + tint_chroma * in.tint.g * 0.004,
+            1.0 + spectral_coolness * 0.10 + tint_chroma * in.tint.b * 0.004);
+        float settling_gate = clamp(
+            settling_presence * 0.28
+                + settling_support * 0.20
+                + settling_motion * 0.16
+                + settling_unstable * 0.14
+                + settling_restful * 0.08
+                + settling_rim * 0.08
+                + settling_bridge_alignment * 0.06,
+            0.0,
+            1.0);
+        float settling_weight =
+            motion_settling_field_strength
+            * settling_gate
+            * (0.15
+               + 0.14 * settling_support
+               + 0.12 * settling_damping
+               + 0.10 * settling_focus
+               + 0.08 * settling_unstable);
+        rgb = mix(
+            rgb,
+            settling_layer,
+            settling_weight
+                * (0.048
+                   + 0.042 * settling_presence
+                   + 0.036 * settling_motion));
+        float3 settling_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.028,
+            0.10 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.024,
+            spectral_coolness + tint_chroma * in.tint.b * 0.028);
+        float settling_caustic =
+            max(settling_lobe, settling_return_lobe * 0.48)
+            * (0.34 + 0.66 * settling_damping)
+            * (0.42 + 0.58 * settling_support);
+        rgb += settling_prism
+            * settling_weight
+            * settling_caustic
+            * (0.00013
+               + 0.00042 * spectral_rim_tint
+               + 0.00038 * glass_scattering_gain);
+        float settling_absorption =
+            settling_shadow
+            * settling_weight
+            * settling_unstable
+            * (0.00046 + 0.0014 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - settling_light_face));
+        rgb *= 1.0 - clamp(settling_absorption, 0.0, 0.0066);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
