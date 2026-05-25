@@ -9269,6 +9269,24 @@ inline float material_base_specular_intensity(MaterialKind kind) noexcept {
     return 0.0f;
 }
 
+inline char const* material_glass_specular_source_name(
+        bool caustic_flow_driven,
+        bool depth_driven,
+        bool environment_driven,
+        bool lighting_driven) noexcept {
+    if (caustic_flow_driven && depth_driven && environment_driven)
+        return "caustic-depth-environment-glass-glint";
+    if (caustic_flow_driven && depth_driven)
+        return "caustic-depth-glass-glint";
+    if (caustic_flow_driven && environment_driven)
+        return "caustic-environment-glass-glint";
+    if (caustic_flow_driven)
+        return "caustic-flow-glass-glint";
+    if (depth_driven && lighting_driven)
+        return "depth-light-glass-glint";
+    return "sampled-backdrop-edge-lighting";
+}
+
 inline MaterialSpecularProfile material_resolve_specular_profile(
         MaterialPlan const& plan) noexcept {
     MaterialSpecularProfile profile{};
@@ -9284,32 +9302,97 @@ inline MaterialSpecularProfile material_resolve_specular_profile(
         std::clamp(plan.backdrop.response_strength, 0.0f, 1.0f);
     auto const caustic_response =
         std::clamp(plan.refraction.edge_caustic_intensity, 0.0f, 0.20f);
+    auto const caustic_flow_response = plan.glass_caustic_flow.active
+        ? std::clamp(
+            plan.glass_caustic_flow.flow_strength * 0.36f
+                + plan.glass_caustic_flow.caustic_focus / 0.40f * 0.28f
+                + plan.glass_caustic_flow.highlight_drift / 0.36f * 0.22f
+                + plan.glass_caustic_flow.chroma_shear / 0.32f * 0.14f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const depth_response = plan.glass_depth.active
+        ? std::clamp(
+            plan.glass_depth.depth_separation * 0.34f
+                + plan.glass_depth.surface_lift / 0.42f * 0.28f
+                + plan.glass_depth.parallax_gain / 0.46f * 0.22f
+                + plan.glass_depth.inner_shadow / 0.36f * 0.16f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const environment_response = plan.glass_environment.active
+        ? std::clamp(
+            plan.glass_environment.reflection_strength * 0.40f
+                + plan.glass_environment.color_pickup * 0.22f
+                + plan.glass_environment.transmission_balance * 0.22f
+                + std::fabs(plan.glass_environment.luminance_balance - 0.5f)
+                    * 0.16f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const lighting_response = plan.dynamic_lighting.active
+        ? std::clamp(
+            plan.dynamic_lighting.highlight_strength / 0.45f * 0.46f
+                + plan.dynamic_lighting.shadow_strength / 0.36f * 0.28f
+                + std::fabs(plan.dynamic_lighting.direction_x) * 0.14f
+                + std::fabs(plan.dynamic_lighting.direction_y) * 0.12f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const glint_response = std::clamp(
+        caustic_flow_response * 0.40f
+            + depth_response * 0.24f
+            + environment_response * 0.20f
+            + lighting_response * 0.16f,
+        0.0f,
+        1.0f);
     auto const ambient_intensity = std::clamp(
         (material_base_specular_intensity(plan.kind)
              + 0.030f * shape_roundness
              + 0.045f * std::clamp(plan.edge_highlight, 0.0f, 1.0f)
              + 0.020f * backdrop_response
-             + 0.50f * caustic_response)
+             + 0.50f * caustic_response
+             + 0.060f * glint_response
+             + 0.025f * caustic_flow_response)
             * (plan.transition.active ? plan.transition.optical_gain : 1.0f),
         0.0f,
-        0.24f);
+        0.32f);
     if (ambient_intensity <= 0.0001f)
         return profile;
 
     profile.active = true;
     profile.ambient = true;
-    profile.model = "ambient-glass-sheen";
-    profile.source = "sampled-backdrop-edge-lighting";
+    bool const caustic_flow_driven = caustic_flow_response > 0.0001f;
+    bool const depth_driven = depth_response > 0.0001f;
+    bool const environment_driven = environment_response > 0.0001f;
+    bool const lighting_driven = lighting_response > 0.0001f;
+    profile.model = glint_response > 0.0001f
+        ? "adaptive-liquid-glass-glint"
+        : "ambient-glass-sheen";
+    profile.source = material_glass_specular_source_name(
+        caustic_flow_driven,
+        depth_driven,
+        environment_driven,
+        lighting_driven);
     profile.anchor_x = std::clamp(
-        0.30f + 0.06f * shape_roundness,
+        0.30f
+            + 0.06f * shape_roundness
+            + plan.dynamic_lighting.direction_x * 0.045f
+            + plan.glass_caustic_flow.chroma_shear * 0.16f,
         0.0f,
         1.0f);
     profile.anchor_y = std::clamp(
-        0.18f + 0.04f * backdrop_response,
+        0.18f
+            + 0.04f * backdrop_response
+            + plan.dynamic_lighting.direction_y * 0.035f
+            - plan.glass_depth.surface_lift * 0.050f,
         0.0f,
         1.0f);
     profile.radius = std::clamp(
-        0.58f + 0.18f * shape_roundness,
+        0.58f
+            + 0.18f * shape_roundness
+            + 0.045f * depth_response
+            - 0.070f * caustic_flow_response,
         0.48f,
         0.82f);
     profile.intensity = ambient_intensity;

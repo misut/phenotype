@@ -327,15 +327,17 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.specular.ambient);
     assert(!plan.specular.interaction_driven);
     assert(plan.specular.bounded);
-    assert(std::string_view(plan.specular.model) == "ambient-glass-sheen");
+    assert(std::string_view(plan.specular.model)
+        == "adaptive-liquid-glass-glint");
     assert(std::string_view(plan.specular.source)
-        == "sampled-backdrop-edge-lighting");
+        == "caustic-depth-environment-glass-glint");
     assert(plan.specular.anchor_x > 0.0f);
     assert(plan.specular.anchor_x < 1.0f);
     assert(plan.specular.anchor_y > 0.0f);
     assert(plan.specular.anchor_y < 1.0f);
     assert(plan.specular.radius > 0.0f);
-    assert(plan.specular.intensity > 0.0f);
+    assert(plan.specular.intensity > 0.12f);
+    assert(plan.specular.intensity < 0.32f);
     assert(!plan.interaction.specular_highlight_active);
     assert(plan.observation_contract.shared_frame_capture_required);
     assert(plan.observation_contract.next_frame_capture_required);
@@ -549,7 +551,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.execution_stage_count == 4u);
     assert(std::string_view(plan.execution_stages[2].name) == "edge-highlight");
     assert(std::string_view(plan.execution_stages[2].optics.specular_model)
-        == "ambient-glass-sheen");
+        == "adaptive-liquid-glass-glint");
     assert(plan.execution_stages[2].optics.specular_anchor_x
            == plan.specular.anchor_x);
     assert(plan.execution_stages[2].optics.specular_anchor_y
