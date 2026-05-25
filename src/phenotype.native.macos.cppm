@@ -32595,6 +32595,340 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(transmission_absorption, 0.0, 0.017);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float subsurface_caustic_field_strength = clamp(
+        0.008 * overlap_response_strength
+            + 0.007 * fusion_strength
+            + 0.006 * group_blend_strength * shared_backdrop_scope
+            + 0.006 * group_blend_strength * group_surface_execution
+            + 0.006 * bridge_band
+            + 0.24 * transmission_depth_field_strength
+            + 0.18 * interlayer_refraction_field_strength
+            + 0.14 * layer_separation_field_strength
+            + 0.035 * container_morph_field_strength
+            + 0.030 * edge_meniscus_field_strength
+            + 0.025 * foreground_sheen_field_strength,
+        0.0,
+        0.036);
+    if (subsurface_caustic_field_strength > 0.0001) {
+        float subsurface_center =
+            1.0 - smoothstep(0.18, 1.08, normalized_len);
+        float subsurface_rim =
+            edge_lens
+            * (0.36
+               + 0.64
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.45, 0.75),
+                       signed_edge_distance)));
+        float subsurface_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float subsurface_stack = clamp(
+            overlap_response_strength * 0.28
+                + fusion_strength * 0.22
+                + group_blend_strength * shared_backdrop_scope * 0.18
+                + group_surface_execution * group_blend_strength * 0.16
+                + subsurface_bridge * 0.18,
+            0.0,
+            1.0);
+        float subsurface_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float subsurface_presence = clamp(
+            subsurface_center * 0.22
+                + subsurface_rim * 0.20
+                + subsurface_stack * 0.24
+                + subsurface_bridge * 0.16
+                + subsurface_pointer * 0.10
+                + prominent_intensity * 0.08,
+            0.0,
+            1.0);
+        float2 subsurface_group_norm = normalized_local;
+        float subsurface_group_active = 0.0;
+        if (in.group_rect.z > 0.0 && in.group_rect.w > 0.0) {
+            float2 subsurface_group_size =
+                max(in.group_rect.zw, float2(1.0));
+            float2 subsurface_group_local = clamp(
+                in.screen_pos - in.group_rect.xy,
+                float2(0.0),
+                subsurface_group_size);
+            subsurface_group_norm =
+                (subsurface_group_local / subsurface_group_size
+                 - float2(0.5))
+                * 2.0;
+            subsurface_group_active = group_blend_strength;
+        }
+        float2 subsurface_axis_raw =
+            -dynamic_light_dir * (0.38 + 0.24 * dynamic_light_highlight)
+            + refraction_dir * (0.26 + 0.18 * glass_lensing_gain)
+            + bridge_dir * (0.22 + 0.22 * subsurface_bridge)
+            + pointer_dir * (0.18 + 0.16 * subsurface_pointer)
+            + dispersion_tangent
+                * (0.15
+                   + 0.10 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential)
+            + subsurface_group_norm
+                * subsurface_group_active
+                * (0.10 + 0.08 * subsurface_stack);
+        float subsurface_axis_len = length(subsurface_axis_raw);
+        float2 subsurface_axis =
+            subsurface_axis_len > 0.0001
+                ? subsurface_axis_raw / subsurface_axis_len
+                : -dynamic_light_dir;
+        float2 subsurface_cross =
+            float2(-subsurface_axis.y, subsurface_axis.x);
+        float subsurface_light_face =
+            smoothstep(-0.18, 0.94, dot(subsurface_axis, -dynamic_light_dir));
+        float subsurface_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(subsurface_axis, bridge_dir)));
+        float subsurface_phase = clamp(
+            dot(normalized_local, subsurface_axis)
+                    * (4.8 + 1.9 * subsurface_presence)
+                + dot(normalized_local, subsurface_cross)
+                    * (3.0 + 1.2 * subsurface_stack)
+                + dot(subsurface_group_norm, subsurface_axis)
+                    * subsurface_group_active
+                    * (2.1 + 1.1 * subsurface_bridge)
+                + bridge_axial * (2.5 + 1.4 * bridge_core)
+                + bridge_shear * subsurface_bridge * 1.9
+                + spectral_dispersion * 4.4
+                + glass_caustic_spread * 3.0,
+            -12.0,
+            12.0);
+        float subsurface_wave =
+            0.5 + 0.5 * sin(subsurface_phase);
+        float subsurface_counter =
+            0.5 + 0.5 * cos(
+                subsurface_phase * 0.70
+                + glass_caustic_spread * 4.6
+                + subsurface_stack * 2.2);
+        float subsurface_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(subsurface_wave - 0.56));
+        float subsurface_return_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(subsurface_counter - 0.52));
+        float subsurface_focus =
+            (0.5 + 0.5 * cos(subsurface_phase * 1.28 + normalized_len * 3.0))
+            * (0.40 + 0.60 * subsurface_lobe);
+        float subsurface_span =
+            (0.74
+             + 1.7 * glass_thickness
+             + 1.3 * clear_glass_detail
+             + 1.2 * subsurface_presence
+             + 0.034 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float subsurface_cross_span =
+            (0.54
+             + 1.0 * glass_dispersion_tangential
+             + 0.9 * spectral_dispersion
+             + 0.8 * subsurface_bridge_alignment)
+            * content_scale;
+        float subsurface_channel_spread =
+            (0.42
+             + 0.65 * glass_dispersion_tangential
+             + 0.70 * spectral_dispersion
+             + 0.55 * glass_caustic_spread)
+            * content_scale
+            * (0.78 + 0.22 * subsurface_focus);
+        float2 subsurface_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.12 + 0.08 * subsurface_stack),
+            float2(0.0),
+            float2(1.0));
+        float2 subsurface_focus_uv = clamp(
+            subsurface_base_uv
+                - dynamic_light_dir
+                    * texel
+                    * subsurface_span
+                    * (0.28 + 0.16 * subsurface_light_face)
+                + subsurface_axis
+                    * texel
+                    * subsurface_span
+                    * (0.18 + 0.12 * subsurface_focus),
+            float2(0.0),
+            float2(1.0));
+        float2 subsurface_return_uv = clamp(
+            subsurface_base_uv
+                + dynamic_light_dir
+                    * texel
+                    * subsurface_span
+                    * (0.24 + 0.14 * (1.0 - subsurface_light_face))
+                - subsurface_axis
+                    * texel
+                    * subsurface_span
+                    * (0.14 + 0.10 * subsurface_return_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 subsurface_core_uv = clamp(
+            subsurface_base_uv
+                + subsurface_axis
+                    * texel
+                    * subsurface_span
+                    * (0.24 + 0.16 * subsurface_center)
+                + bridge_dir
+                    * texel
+                    * subsurface_span
+                    * subsurface_bridge
+                    * 0.16,
+            float2(0.0),
+            float2(1.0));
+        float2 subsurface_warm_uv = clamp(
+            subsurface_base_uv
+                + subsurface_cross
+                    * texel
+                    * subsurface_cross_span
+                    * (0.30 + 0.12 * subsurface_wave)
+                + dispersion_tangent
+                    * texel
+                    * subsurface_channel_spread,
+            float2(0.0),
+            float2(1.0));
+        float2 subsurface_cool_uv = clamp(
+            subsurface_base_uv
+                - subsurface_cross
+                    * texel
+                    * subsurface_cross_span
+                    * (0.28 + 0.12 * subsurface_lobe)
+                - dispersion_tangent
+                    * texel
+                    * subsurface_channel_spread,
+            float2(0.0),
+            float2(1.0));
+        float3 subsurface_focus_rgb =
+            backdrop.sample(samp, subsurface_focus_uv).rgb;
+        float3 subsurface_return_rgb =
+            backdrop.sample(samp, subsurface_return_uv).rgb;
+        float3 subsurface_core_rgb =
+            backdrop.sample(samp, subsurface_core_uv).rgb;
+        float3 subsurface_warm_rgb =
+            backdrop.sample(samp, subsurface_warm_uv).rgb;
+        float3 subsurface_cool_rgb =
+            backdrop.sample(samp, subsurface_cool_uv).rgb;
+        float3 subsurface_split = float3(
+            subsurface_warm_rgb.r,
+            (subsurface_core_rgb.g + subsurface_focus_rgb.g) * 0.5,
+            subsurface_cool_rgb.b);
+        float3 subsurface_probe =
+            subsurface_focus_rgb * 0.25
+            + subsurface_return_rgb * 0.18
+            + subsurface_core_rgb * 0.23
+            + subsurface_warm_rgb * 0.17
+            + subsurface_cool_rgb * 0.17;
+        float subsurface_luma =
+            dot(subsurface_probe, float3(0.2126, 0.7152, 0.0722));
+        float subsurface_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float subsurface_range = clamp(
+            length(subsurface_focus_rgb - subsurface_return_rgb) * 0.24
+                + length(subsurface_warm_rgb - subsurface_cool_rgb) * 0.24
+                + length(subsurface_core_rgb - subsurface_probe) * 0.18
+                + abs(subsurface_luma - subsurface_surface_luma) * 0.18
+                + subsurface_focus * 0.10
+                + subsurface_presence * 0.08,
+            0.0,
+            1.0);
+        float subsurface_coherence =
+            1.0 - smoothstep(0.08, 0.38, subsurface_range);
+        float subsurface_lift = smoothstep(
+            subsurface_surface_luma - 0.05,
+            subsurface_surface_luma + 0.30,
+            subsurface_luma);
+        float subsurface_depth = smoothstep(
+            0.08,
+            0.34,
+            subsurface_surface_luma - subsurface_luma);
+        float subsurface_focus_luma =
+            dot(subsurface_focus_rgb, float3(0.2126, 0.7152, 0.0722));
+        float subsurface_focus_pickup = smoothstep(
+            subsurface_surface_luma - 0.06,
+            subsurface_surface_luma + 0.28,
+            subsurface_focus_luma);
+        float subsurface_body = clamp(
+            subsurface_range * 0.30
+                + subsurface_focus_pickup * 0.24
+                + subsurface_stack * 0.18
+                + subsurface_focus * 0.16
+                + subsurface_bridge_alignment * 0.12,
+            0.0,
+            1.0);
+        float3 subsurface_neutral = mix(
+            subsurface_probe,
+            float3(subsurface_luma),
+            subsurface_depth * (0.12 + 0.14 * glass_shadow_gain)
+                + subsurface_coherence * 0.12);
+        float3 subsurface_layer = mix(
+            subsurface_neutral,
+            subsurface_split,
+            0.14
+                + 0.16 * subsurface_body
+                + 0.14 * subsurface_focus
+                + 0.12 * subsurface_light_face
+                + 0.10 * subsurface_focus_pickup);
+        subsurface_layer = clamp(
+            (subsurface_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + subsurface_lift * 0.010
+                       + subsurface_body * 0.012
+                       - subsurface_depth * 0.014)
+                + float3(0.50),
+            0.0,
+            1.0);
+        subsurface_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.010
+                   + 0.020 * tint_chroma * prominent_intensity);
+        float3 subsurface_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.10,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.08,
+            spectral_coolness + tint_chroma * in.tint.b * 0.10);
+        subsurface_layer += subsurface_prism
+            * subsurface_focus_pickup
+            * (0.0006
+               + 0.0022 * spectral_rim_tint
+               + 0.0022 * glass_prismatic_gain
+               + 0.0018 * glass_scattering_gain)
+            * (0.32
+               + 0.22 * subsurface_light_face
+               + 0.20 * subsurface_focus
+               + 0.18 * subsurface_body);
+        float subsurface_gate = clamp(
+            subsurface_presence * 0.28
+                + subsurface_stack * 0.24
+                + subsurface_rim * 0.16
+                + subsurface_focus * 0.14
+                + subsurface_light_face * 0.10
+                + subsurface_coherence * 0.10,
+            0.0,
+            1.0);
+        float subsurface_weight =
+            subsurface_caustic_field_strength
+            * subsurface_gate
+            * (0.30
+               + 0.20 * subsurface_body
+               + 0.16 * subsurface_focus_pickup
+               + 0.14 * subsurface_coherence
+               + 0.12 * subsurface_bridge_alignment);
+        rgb = mix(
+            rgb,
+            subsurface_layer,
+            subsurface_weight
+                * (0.14
+                   + 0.12 * subsurface_focus
+                   + 0.10 * subsurface_presence));
+        rgb += subsurface_prism
+            * subsurface_weight
+            * max(subsurface_lobe, subsurface_return_lobe * 0.70)
+            * (0.0006
+               + 0.0018 * dynamic_light_highlight
+               + 0.0018 * glass_scattering_gain);
+        float subsurface_absorption =
+            subsurface_depth
+            * subsurface_weight
+            * (0.0016 + 0.0054 * glass_shadow_gain)
+            * (0.50 + 0.50 * (1.0 - subsurface_light_face));
+        rgb *= 1.0 - clamp(subsurface_absorption, 0.0, 0.017);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
