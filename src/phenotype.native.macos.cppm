@@ -30065,6 +30065,347 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(sheen_cavity, 0.0, 0.016);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float container_pressure_field_strength = clamp(
+        0.018 * group_blend_strength * group_surface_execution
+            + 0.016 * bridge_band * (0.40 + 0.60 * bridge_core)
+            + 0.014 * union_execution * group_blend_strength
+            + 0.012 * morph_execution * group_blend_strength
+            + 0.010 * shape_blend_execution * group_blend_strength
+            + 0.008 * shared_backdrop_scope * group_blend_strength
+            + 0.14 * foreground_sheen_field_strength
+            + 0.12 * container_cohesion_field_strength
+            + 0.10 * lensing_flow_field_strength
+            + 0.08 * ambient_chromatic_field_strength,
+        0.0,
+        0.056);
+    if (container_pressure_field_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 pressure_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 pressure_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            pressure_group_size);
+        float2 pressure_group_norm =
+            (pressure_group_local / pressure_group_size - float2(0.5)) * 2.0;
+        float2 pressure_group_center_screen =
+            in.group_rect.xy + pressure_group_size * 0.5;
+        float2 pressure_viewport_guess =
+            float2(float(backdrop.get_width()), float(backdrop.get_height()))
+            / content_scale;
+        float2 pressure_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : pressure_viewport_guess.x,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : pressure_viewport_guess.y),
+            float2(1.0));
+        float2 pressure_group_center_uv = clamp(
+            pressure_group_center_screen / pressure_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 pressure_center_delta =
+            pressure_group_center_uv - in.screen_uv;
+        float pressure_center_distance = length(pressure_center_delta);
+        float2 pressure_center_dir =
+            pressure_center_distance > 0.0001
+                ? pressure_center_delta / pressure_center_distance
+                : refraction_dir;
+        float pressure_group_center =
+            1.0 - smoothstep(0.18, 1.14, length(pressure_group_norm));
+        float pressure_local_center =
+            1.0 - smoothstep(0.20, 1.10, normalized_len);
+        float pressure_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 3.0, 1.0),
+                signed_edge_distance);
+        float pressure_bridge =
+            bridge_band * (0.30 + 0.70 * bridge_core);
+        float pressure_transition = clamp(
+            group_surface_execution * group_blend_strength * 0.28
+                + shared_backdrop_scope * group_blend_strength * 0.22
+                + union_execution * group_blend_strength * 0.20
+                + morph_execution * group_blend_strength * 0.18
+                + shape_blend_execution * group_blend_strength * 0.14
+                + pressure_bridge * 0.20,
+            0.0,
+            1.0);
+        float2 pressure_axis_raw =
+            pressure_center_dir * (0.34 + 0.28 * pressure_transition)
+            + bridge_dir * (0.26 + 0.24 * pressure_bridge)
+            + refraction_dir * (0.22 + 0.14 * glass_lensing_gain)
+            - dynamic_light_dir
+                * (0.20 + 0.16 * dynamic_light_highlight)
+            + dispersion_tangent
+                * (0.12
+                   + 0.10 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential);
+        float pressure_axis_len = length(pressure_axis_raw);
+        float2 pressure_axis =
+            pressure_axis_len > 0.0001
+                ? pressure_axis_raw / pressure_axis_len
+                : pressure_center_dir;
+        float2 pressure_cross =
+            float2(-pressure_axis.y, pressure_axis.x);
+        float pressure_light_face =
+            smoothstep(-0.22, 0.92, dot(pressure_axis, -dynamic_light_dir));
+        float pressure_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(pressure_axis, bridge_dir)));
+        float pressure_phase = clamp(
+            dot(pressure_group_norm, pressure_axis)
+                    * (4.0 + 1.7 * pressure_transition)
+                + dot(pressure_group_norm, pressure_cross)
+                    * (2.8 + 1.2 * pressure_bridge)
+                + dot(normalized_local, pressure_axis)
+                    * (2.4 + 1.1 * pressure_local_center)
+                + bridge_axial * (2.6 + 1.4 * bridge_core)
+                + bridge_shear * bridge_band * 2.0
+                + spectral_dispersion * 4.4,
+            -12.0,
+            12.0);
+        float pressure_wave = 0.5 + 0.5 * sin(pressure_phase);
+        float pressure_counter = 0.5 + 0.5 * cos(
+            pressure_phase * 0.68
+            + glass_caustic_spread * 4.0
+            + materialize_rim_position * materialize_wave_strength * 2.0);
+        float pressure_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(pressure_wave - 0.54));
+        float pressure_return_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(pressure_counter - 0.52));
+        float pressure_presence = clamp(
+            pressure_group_center * 0.20
+                + pressure_local_center * 0.12
+                + pressure_edge * 0.18
+                + pressure_bridge * 0.20
+                + pressure_transition * 0.22
+                + pressure_lobe * 0.10
+                + group_blend_strength * 0.12,
+            0.0,
+            1.0);
+        float pressure_span =
+            (0.92
+             + 1.9 * glass_thickness
+             + 1.6 * clear_glass_detail
+             + 1.4 * pressure_presence
+             + 0.040 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float pressure_cross_span =
+            (0.62
+             + 1.2 * glass_dispersion_tangential
+             + 1.1 * spectral_dispersion
+             + 0.9 * pressure_bridge_alignment)
+            * content_scale;
+        float pressure_center_pull = clamp(
+            0.12
+                + 0.24 * group_blend_strength
+                + 0.20 * shared_backdrop_scope
+                + 0.18 * pressure_transition
+                + 0.16 * pressure_bridge,
+            0.0,
+            0.56);
+        float2 pressure_base_uv = clamp(
+            mix(in.screen_uv, pressure_group_center_uv, pressure_center_pull)
+                + refraction_uv * (0.10 + 0.06 * pressure_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 pressure_forward_uv = clamp(
+            pressure_base_uv
+                + pressure_axis
+                    * texel
+                    * pressure_span
+                    * (0.28 + 0.14 * pressure_lobe)
+                + bridge_dir
+                    * texel
+                    * pressure_span
+                    * pressure_bridge
+                    * 0.16,
+            float2(0.0),
+            float2(1.0));
+        float2 pressure_return_uv = clamp(
+            pressure_base_uv
+                - pressure_axis
+                    * texel
+                    * pressure_span
+                    * (0.26 + 0.14 * pressure_return_lobe)
+                - bridge_dir
+                    * texel
+                    * pressure_span
+                    * pressure_bridge
+                    * 0.12,
+            float2(0.0),
+            float2(1.0));
+        float2 pressure_cross_a_uv = clamp(
+            pressure_base_uv
+                + pressure_cross
+                    * texel
+                    * pressure_cross_span
+                    * (0.30 + 0.12 * pressure_wave)
+                + dispersion_tangent
+                    * texel
+                    * pressure_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 pressure_cross_b_uv = clamp(
+            pressure_base_uv
+                - pressure_cross
+                    * texel
+                    * pressure_cross_span
+                    * (0.28 + 0.12 * pressure_lobe)
+                - dispersion_tangent
+                    * texel
+                    * pressure_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 pressure_light_uv = clamp(
+            pressure_base_uv
+                - dynamic_light_dir
+                    * texel
+                    * pressure_span
+                    * (0.16 + 0.12 * pressure_light_face),
+            float2(0.0),
+            float2(1.0));
+        float3 pressure_base_rgb =
+            backdrop.sample(samp, pressure_base_uv).rgb;
+        float3 pressure_forward_rgb =
+            backdrop.sample(samp, pressure_forward_uv).rgb;
+        float3 pressure_return_rgb =
+            backdrop.sample(samp, pressure_return_uv).rgb;
+        float3 pressure_cross_a_rgb =
+            backdrop.sample(samp, pressure_cross_a_uv).rgb;
+        float3 pressure_cross_b_rgb =
+            backdrop.sample(samp, pressure_cross_b_uv).rgb;
+        float3 pressure_light_rgb =
+            backdrop.sample(samp, pressure_light_uv).rgb;
+        float3 pressure_membrane_rgb =
+            pressure_base_rgb * 0.24
+            + pressure_forward_rgb * 0.18
+            + pressure_return_rgb * 0.18
+            + pressure_cross_a_rgb * 0.14
+            + pressure_cross_b_rgb * 0.14
+            + pressure_light_rgb * 0.12;
+        float3 pressure_split = float3(
+            pressure_forward_rgb.r,
+            (pressure_base_rgb.g + pressure_light_rgb.g) * 0.5,
+            pressure_return_rgb.b);
+        float pressure_luma =
+            dot(pressure_membrane_rgb, float3(0.2126, 0.7152, 0.0722));
+        float pressure_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float pressure_chroma = max(
+            max(abs(pressure_membrane_rgb.r - pressure_membrane_rgb.g),
+                abs(pressure_membrane_rgb.g - pressure_membrane_rgb.b)),
+            abs(pressure_membrane_rgb.b - pressure_membrane_rgb.r));
+        float pressure_pickup =
+            smoothstep(0.030, 0.34, pressure_chroma);
+        float pressure_range = clamp(
+            length(pressure_forward_rgb - pressure_return_rgb) * 0.24
+                + length(pressure_cross_a_rgb - pressure_cross_b_rgb) * 0.22
+                + length(pressure_light_rgb - pressure_base_rgb) * 0.16
+                + abs(pressure_luma - pressure_surface_luma) * 0.18
+                + pressure_lobe * 0.10
+                + pressure_presence * 0.10,
+            0.0,
+            1.0);
+        float pressure_coherence =
+            1.0 - smoothstep(0.08, 0.38, pressure_range);
+        float pressure_lift = smoothstep(
+            pressure_surface_luma - 0.06,
+            pressure_surface_luma + 0.30,
+            pressure_luma);
+        float pressure_depth = smoothstep(
+            0.08,
+            0.34,
+            pressure_surface_luma - pressure_luma);
+        float3 pressure_neutral = mix(
+            pressure_membrane_rgb,
+            float3(pressure_luma),
+            pressure_depth * (0.12 + 0.14 * glass_shadow_gain)
+                + pressure_coherence * 0.12);
+        float3 pressure_layer = mix(
+            pressure_neutral,
+            pressure_split,
+            0.16
+                + 0.16 * pressure_pickup
+                + 0.14 * pressure_lobe
+                + 0.12 * pressure_presence
+                + 0.10 * pressure_light_face);
+        pressure_layer = clamp(
+            (pressure_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + pressure_lift * 0.010
+                       + pressure_transition * 0.010
+                       - pressure_depth * 0.016)
+                + float3(0.50),
+            0.0,
+            1.0);
+        pressure_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.012
+                   + 0.026 * tint_chroma * prominent_intensity);
+        float3 pressure_prism = float3(
+            spectral_warmth,
+            0.13 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        pressure_layer += pressure_prism
+            * pressure_pickup
+            * (0.0008
+               + 0.0026 * spectral_rim_tint
+               + 0.0022 * glass_prismatic_gain
+               + 0.0018 * glass_scattering_gain)
+            * (0.32
+               + 0.22 * pressure_light_face
+               + 0.20 * pressure_lobe
+               + 0.18 * pressure_presence
+               + 0.14 * pressure_coherence);
+        float pressure_gate = clamp(
+            pressure_presence * 0.28
+                + pressure_transition * 0.22
+                + pressure_bridge * 0.18
+                + pressure_lobe * 0.14
+                + pressure_light_face * 0.10
+                + pressure_coherence * 0.10,
+            0.0,
+            1.0);
+        float pressure_weight =
+            container_pressure_field_strength
+            * pressure_gate
+            * (0.30
+               + 0.20 * pressure_coherence
+               + 0.16 * pressure_pickup
+               + 0.14 * pressure_lift
+               + 0.12 * pressure_bridge_alignment
+               + 0.10 * pressure_presence);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                pressure_layer,
+                0.06
+                    + 0.12 * pressure_lobe
+                    + 0.10 * pressure_transition
+                    + 0.08 * pressure_pickup),
+            pressure_weight * 0.24);
+        rgb += pressure_prism
+            * pressure_weight
+            * max(pressure_lobe, pressure_return_lobe * 0.72)
+            * (0.0006
+               + 0.0020 * dynamic_light_highlight
+               + 0.0018 * glass_scattering_gain);
+        float pressure_shadow =
+            pressure_depth
+            * pressure_weight
+            * (0.0022 + 0.0070 * glass_shadow_gain)
+            * (0.52 + 0.48 * (1.0 - pressure_light_face));
+        rgb *= 1.0 - clamp(pressure_shadow, 0.0, 0.022);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
