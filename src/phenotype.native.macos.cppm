@@ -1657,7 +1657,7 @@ struct MaterialInstanceGPU {
     float glass_stability[4]{};
     // environment reflection, color pickup, luminance balance, transmission
     float glass_environment[4]{};
-    // union response strength, edge continuity, coalescence, luma stability
+    // surface/union response, edge adhesion/continuity, coalescence, luma stability
     float glass_union[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
@@ -2452,6 +2452,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.glass_environment[1] = plan.glass_environment.color_pickup;
     inst.glass_environment[2] = plan.glass_environment.luminance_balance;
     inst.glass_environment[3] = plan.glass_environment.transmission_balance;
+    inst.glass_union[0] = plan.glass_surface_cohesion.surface_response;
+    inst.glass_union[1] = plan.glass_surface_cohesion.edge_adhesion;
+    inst.glass_union[2] = plan.glass_surface_cohesion.shape_coalescence;
+    inst.glass_union[3] = plan.glass_surface_cohesion.luma_stability;
     inst.thickness[1] = std::clamp(
         inst.thickness[1]
             + 0.080f * plan.glass_depth.parallax_gain
@@ -3742,10 +3746,18 @@ inline void apply_material_container_execution_descriptors(
             inst.container_cohesion[1] = execution->cohesion_pressure;
             inst.container_cohesion[2] = execution->cohesion_falloff;
             inst.container_cohesion[3] = execution->cohesion_stabilization;
-            inst.glass_union[0] = execution->union_response_strength;
-            inst.glass_union[1] = execution->union_edge_continuity;
-            inst.glass_union[2] = execution->union_shape_coalescence;
-            inst.glass_union[3] = execution->union_luma_stability;
+            inst.glass_union[0] = std::max(
+                inst.glass_union[0],
+                execution->union_response_strength);
+            inst.glass_union[1] = std::max(
+                inst.glass_union[1],
+                execution->union_edge_continuity);
+            inst.glass_union[2] = std::max(
+                inst.glass_union[2],
+                execution->union_shape_coalescence);
+            inst.glass_union[3] = std::max(
+                inst.glass_union[3],
+                execution->union_luma_stability);
         }
     }
 }
