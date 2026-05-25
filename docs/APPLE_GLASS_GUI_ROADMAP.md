@@ -209,11 +209,11 @@ chrome can now opt in with `MaterialSurfaceOptions.interactive`; the built-in
 toolbar-group and navigation glass presets use that opt-in so Finder-style
 toolbar clusters and segmented navigation controls expose interaction response
 without requiring every app to wrap them in a separate material container.
-Segmented controls, popovers, tooltips, and context menus are now first-class
-glass presets as well:
+Segmented controls, tab bars, popovers, tooltips, and context menus are now
+first-class glass presets as well:
 `widget::tabs` emits a material-backed segmented control by default,
 `TabsStyleOptions` lets callers choose kind/role/label, and
-`layout::segmented_control_surface` / `layout::popover` /
+`layout::segmented_control_surface` / `layout::tab_bar` / `layout::popover` /
 `layout::tooltip` / `layout::context_menu` keep Finder-style toolbar,
 overflow, help, and contextual chrome on the typed MaterialRect path.
 Finder-style search fields now use the same typed path through
@@ -231,10 +231,11 @@ Finder-style split controls now use `GlassSplitButtonStyleOptions` and
 container, union, spacing, hover/press, and morph metadata as immutable widget
 input before the backend sees a command, so grouped toolbar actions can join the
 same material-container contract as surrounding glass surfaces.
-Overlay panels now include first-class `Sheet`, `Inspector`, and
-`CommandPalette` surface presets. `layout::dialog` consumes the sheet preset as
-`Dialog Sheet`, so modal chrome is emitted as an interactive overlay material
-node with the same pure planning, fallback, and artifact contract as popovers.
+Overlay panels now include first-class `Sheet`, `Inspector`, `CommandPalette`,
+`Snackbar`, and `Toast` surface presets. `layout::dialog` consumes the sheet
+preset as `Dialog Sheet`, so modal chrome is emitted as an interactive overlay
+material node with the same pure planning, fallback, and artifact contract as
+popovers.
 Finder-style popover menu actions now use `GlassMenuItemStyleOptions` and
 `widget::glass_menu_item_button_style`, giving transient overlay action chrome
 a clear material plan while keeping disabled or hidden actions out of the
@@ -761,10 +762,10 @@ Apple-style glass interface while preserving platform parity:
   the glass contract into an app-like file-management workflow with toolbar,
   sidebar/location navigation, list content, preview, search, create, and
   delete actions;
-- first-class material app-chrome helpers for toolbar, navigation, sidebar,
-  status bar, split buttons, outline/list rows, popovers, tooltips, context
-  menus, popover menu items, and table headers so examples do not need to
-  hand-roll every glass container shape;
+- first-class material app-chrome helpers for toolbar, navigation, tab bar,
+  sidebar, status bar, split buttons, outline/list rows, popovers, tooltips,
+  context menus, popover menu items, table headers, snackbars, and toasts so
+  examples do not need to hand-roll every glass container shape;
 - tests that cover command encoding, parser behavior, fallback policy, and at
   least one captured-frame invariant on native backends.
 
