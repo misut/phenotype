@@ -1657,6 +1657,8 @@ struct MaterialInstanceGPU {
     float glass_stability[4]{};
     // environment reflection, color pickup, luminance balance, transmission
     float glass_environment[4]{};
+    // union response strength, edge continuity, coalescence, luma stability
+    float glass_union[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
     // shape blend strength, inner-edge alpha blend strength, flags, command index
@@ -3550,6 +3552,10 @@ inline void apply_material_container_execution_descriptors(
             inst.container_cohesion[1] = execution->cohesion_pressure;
             inst.container_cohesion[2] = execution->cohesion_falloff;
             inst.container_cohesion[3] = execution->cohesion_stabilization;
+            inst.glass_union[0] = execution->union_response_strength;
+            inst.glass_union[1] = execution->union_edge_continuity;
+            inst.glass_union[2] = execution->union_shape_coalescence;
+            inst.glass_union[3] = execution->union_luma_stability;
         }
     }
 }
@@ -5499,6 +5505,7 @@ struct MaterialVsOut {
     float4 clear_glass;
     float4 glass_stability;
     float4 glass_environment;
+    float4 glass_union;
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
@@ -5530,6 +5537,7 @@ struct MaterialInstance {
     float4 clear_glass;
     float4 glass_stability;
     float4 glass_environment;
+    float4 glass_union;
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
@@ -5594,6 +5602,7 @@ vertex MaterialVsOut vs_material(
     out.clear_glass = inst.clear_glass;
     out.glass_stability = inst.glass_stability;
     out.glass_environment = inst.glass_environment;
+    out.glass_union = inst.glass_union;
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
     out.fusion_optics = inst.fusion_optics;
@@ -5701,6 +5710,14 @@ fragment float4 fs_material(
         floor(fmod(floor(group_effect_flags / 16.0), 2.0));
     float group_surface_execution =
         floor(fmod(floor(group_effect_flags / 32.0), 2.0));
+    float planned_union_response_strength =
+        clamp(in.glass_union.x, 0.0, 1.0);
+    float planned_union_edge_continuity =
+        clamp(in.glass_union.y, 0.0, 1.0);
+    float planned_union_shape_coalescence =
+        clamp(in.glass_union.z, 0.0, 1.0);
+    float planned_union_luma_stability =
+        clamp(in.glass_union.w, 0.0, 1.0);
     float bridge_caustic_gain =
         clamp(
             1.0
@@ -7828,7 +7845,9 @@ fragment float4 fs_material(
     float coalescence_strength = clamp(
         bridge_flow_strength * (0.34 + 0.66 * group_blend_strength)
             + bridge_band * fusion_strength * 0.30
-            + bridge_band * union_execution * 0.24,
+            + bridge_band * union_execution * 0.24
+            + 0.10 * planned_union_shape_coalescence
+            + 0.06 * planned_union_response_strength,
         0.0,
         0.80);
     if (coalescence_strength > 0.0001 && bridge_dir_length > 0.0001) {
@@ -7948,7 +7967,9 @@ fragment float4 fs_material(
             * (0.20 + 0.32 * bridge_core)
             + bridge_band * union_execution * 0.18
             + bridge_band * overlap_response_strength * 0.12
-            + coalescence_strength * 0.30,
+            + coalescence_strength * 0.30
+            + 0.07 * planned_union_edge_continuity
+            + 0.05 * planned_union_shape_coalescence,
         0.0,
         0.46);
     if (union_interference_strength > 0.0001
@@ -14299,14 +14320,18 @@ fragment float4 fs_material(
             + 0.018 * legibility_veil_strength
             + 0.018 * bridge_band * (0.36 + 0.64 * bridge_core)
             + 0.012 * pointer_lens_strength * pointer_lens_raw
-            + 0.008 * group_blend_strength * union_execution,
+            + 0.008 * group_blend_strength * union_execution
+            + 0.014 * planned_union_response_strength
+            + 0.010 * planned_union_edge_continuity
+            + 0.008 * planned_union_shape_coalescence,
         0.0,
         0.10);
     if (glass_union_glow_strength > 0.0001) {
         float union_channel = clamp(
             bridge_band * (0.42 + 0.58 * bridge_core)
                 + pointer_lens * pointer_lens_strength * 0.36
-                + edge_lens * surface_tension_strength * 0.24,
+                + edge_lens * surface_tension_strength * 0.24
+                + planned_union_response_strength * 0.16,
             0.0,
             1.0);
         float union_neck = clamp(
@@ -14318,7 +14343,8 @@ fragment float4 fs_material(
                 * (1.0 - smoothstep(
                     bridge_length * 0.72,
                     bridge_length + 0.12,
-                    bridge_axial)),
+                    bridge_axial))
+                + planned_union_shape_coalescence * 0.10,
             0.0,
             1.0);
         float union_interactive = clamp(
@@ -14331,7 +14357,8 @@ fragment float4 fs_material(
             union_channel * 0.40
                 + union_neck * 0.30
                 + union_interactive * 0.20
-                + clear_glass_detail * 0.14,
+                + clear_glass_detail * 0.14
+                + planned_union_edge_continuity * 0.10,
             0.0,
             1.0);
         float2 union_axis = length(bridge_dir) > 0.0001
@@ -14405,11 +14432,17 @@ fragment float4 fs_material(
             0.0,
             1.0);
         float union_softness =
-            1.0 - smoothstep(0.08, 0.34, union_gradient);
+            clamp(
+                1.0 - smoothstep(0.08, 0.34, union_gradient)
+                    + planned_union_luma_stability * 0.10,
+                0.0,
+                1.0);
         float3 union_neutral =
             mix(union_probe,
                 float3(union_probe_luma),
-                0.30 + 0.18 * union_softness);
+                0.30
+                    + 0.18 * union_softness
+                    + 0.08 * planned_union_luma_stability);
         float3 union_warm =
             union_neutral
             * (float3(1.0)
@@ -14447,7 +14480,8 @@ fragment float4 fs_material(
                + 0.22 * union_neck
                + 0.18 * union_interactive
                + 0.16 * union_softness
-               + 0.10 * union_channel);
+               + 0.10 * union_channel
+               + 0.10 * planned_union_response_strength);
         rgb = mix(
             rgb,
             clamp(union_layer, 0.0, 1.0),
@@ -14469,7 +14503,9 @@ fragment float4 fs_material(
             + 0.014 * union_execution * group_blend_strength
             + 0.018 * bridge_band * (0.34 + 0.66 * bridge_core)
             + 0.014 * coalescence_strength
-            + 0.012 * glass_union_glow_strength,
+            + 0.012 * glass_union_glow_strength
+            + 0.010 * planned_union_response_strength
+            + 0.008 * planned_union_shape_coalescence,
         0.0,
         0.10);
     if (container_field_strength > 0.0001) {
@@ -34352,7 +34388,9 @@ fragment float4 fs_material(
             + 0.06 * layer_separation_field_strength
             + 0.024 * edge_meniscus_field_strength
             + 0.019 * container_morph_field_strength
-            + 0.014 * foreground_sheen_field_strength,
+            + 0.014 * foreground_sheen_field_strength
+            + 0.012 * planned_union_shape_coalescence
+            + 0.010 * planned_union_edge_continuity,
         0.0,
         0.033);
     if (rim_coalescence_field_strength > 0.0001) {

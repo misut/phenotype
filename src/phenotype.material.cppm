@@ -1806,6 +1806,15 @@ struct MaterialContainerExecutionDescriptor {
     float cohesion_pressure = 0.0f;
     float cohesion_falloff = 0.0f;
     float cohesion_stabilization = 0.0f;
+    char const* union_response_model = "none";
+    bool union_response_active = false;
+    bool union_response_spacing_driven = false;
+    bool union_response_member_driven = false;
+    bool union_response_overlap_driven = false;
+    float union_response_strength = 0.0f;
+    float union_edge_continuity = 0.0f;
+    float union_shape_coalescence = 0.0f;
+    float union_luma_stability = 0.0f;
     bool overlap_response_active = false;
     std::uint32_t overlap_pair_count = 0;
     float overlap_response_strength = 0.0f;
@@ -3533,6 +3542,99 @@ inline void material_apply_container_cohesion_profile(
         1.0f);
 }
 
+inline void material_apply_glass_union_response_profile(
+        MaterialContainerExecutionDescriptor& execution,
+        MaterialContainerGroupAccumulator const& group) noexcept {
+    if (!execution.union_execution
+        || !execution.shape_blend_execution
+        || execution.shape_blend_strength <= 0.0001f) {
+        execution.union_response_model = "none";
+        execution.union_response_active = false;
+        execution.union_response_spacing_driven = false;
+        execution.union_response_member_driven = false;
+        execution.union_response_overlap_driven = false;
+        execution.union_response_strength = 0.0f;
+        execution.union_edge_continuity = 0.0f;
+        execution.union_shape_coalescence = 0.0f;
+        execution.union_luma_stability = 0.0f;
+        return;
+    }
+
+    auto const spacing_proximity =
+        material_container_spacing_proximity(group);
+    auto const spacing_falloff = material_container_spacing_falloff(group);
+    auto const overlap = material_container_overlap_response_strength(group);
+    auto const overlap_density = material_container_overlap_density(group);
+    auto const member_density =
+        group.surface_count > 1u
+            ? std::clamp(
+                (static_cast<float>(group.surface_count) - 2.0f) / 4.0f,
+                0.0f,
+                1.0f)
+            : 0.0f;
+    auto aspect_spread = 0.0f;
+    if (group.has_bounds) {
+        auto const width =
+            std::max(material_container_group_bounds_width(group), 1.0f);
+        auto const height =
+            std::max(material_container_group_bounds_height(group), 1.0f);
+        auto const min_extent = std::max(std::min(width, height), 1.0f);
+        auto const max_extent = std::max(width, height);
+        aspect_spread = std::clamp(
+            (max_extent / min_extent - 1.0f) / 4.0f,
+            0.0f,
+            1.0f);
+    }
+    auto const edge_lift =
+        std::clamp(execution.fusion_edge_lift / 0.16f, 0.0f, 1.0f);
+    auto const shadow_gain =
+        std::clamp((execution.fusion_shadow_gain - 1.0f) / 0.32f,
+                   0.0f,
+                   1.0f);
+
+    execution.union_response_model = "glass-effect-union-response";
+    execution.union_response_active = true;
+    execution.union_response_spacing_driven = spacing_proximity > 0.0001f;
+    execution.union_response_member_driven = member_density > 0.0001f
+        || group.surface_count > 1u;
+    execution.union_response_overlap_driven = overlap > 0.0001f
+        || overlap_density > 0.0001f;
+    execution.union_response_strength = std::clamp(
+        0.36f
+            + 0.28f * execution.shape_blend_strength
+            + 0.12f * spacing_proximity
+            + 0.10f * execution.fusion_strength
+            + 0.08f * member_density
+            + 0.06f * overlap,
+        0.0f,
+        1.0f);
+    execution.union_edge_continuity = std::clamp(
+        0.30f
+            + 0.26f * execution.shape_blend_strength
+            + 0.18f * spacing_proximity
+            + 0.14f * (1.0f - spacing_falloff)
+            + 0.10f * edge_lift
+            + 0.08f * overlap,
+        0.0f,
+        1.0f);
+    execution.union_shape_coalescence = std::clamp(
+        0.28f
+            + 0.34f * execution.fusion_strength
+            + 0.18f * execution.cohesion_strength
+            + 0.12f * member_density
+            + 0.08f * (1.0f - aspect_spread),
+        0.0f,
+        1.0f);
+    execution.union_luma_stability = std::clamp(
+        0.32f
+            + 0.26f * execution.cohesion_stabilization
+            + 0.14f * shadow_gain
+            + 0.10f * (1.0f - overlap_density)
+            + 0.08f * (1.0f - spacing_falloff),
+        0.0f,
+        1.0f);
+}
+
 inline float material_container_shape_blend_strength_for_gap(
         float gap,
         float blend_distance) noexcept {
@@ -5076,6 +5178,7 @@ material_container_execution_descriptor_from_group(
         descriptor.union_execution ? union_group : group;
     material_apply_container_fusion_optics(descriptor, fusion_group);
     material_apply_container_cohesion_profile(descriptor, fusion_group);
+    material_apply_glass_union_response_profile(descriptor, fusion_group);
     if (descriptor.glass_effect_match_execution) {
         if (auto const* source = match_source.record) {
             descriptor.glass_effect_match_source_valid = true;

@@ -4043,6 +4043,21 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     assert(first_execution.fusion_edge_lift < 0.09f);
     assert(first_execution.fusion_shadow_gain > 1.15f);
     assert(first_execution.fusion_shadow_gain < 1.18f);
+    assert(first_execution.union_response_active);
+    assert(peer_execution.union_response_active);
+    assert(first_execution.union_response_spacing_driven);
+    assert(first_execution.union_response_member_driven);
+    assert(!first_execution.union_response_overlap_driven);
+    assert(std::string_view(first_execution.union_response_model)
+           == "glass-effect-union-response");
+    assert(first_execution.union_response_strength > 0.78f);
+    assert(first_execution.union_response_strength < 0.84f);
+    assert(first_execution.union_edge_continuity > 0.76f);
+    assert(first_execution.union_edge_continuity < 0.82f);
+    assert(first_execution.union_shape_coalescence > 0.78f);
+    assert(first_execution.union_shape_coalescence < 0.86f);
+    assert(first_execution.union_luma_stability > 0.68f);
+    assert(first_execution.union_luma_stability < 0.76f);
 
     auto const first_bridge_motion =
         material_container_bridge_motion_optics(
@@ -4093,6 +4108,7 @@ void test_glass_effect_union_uses_compatible_render_bounds() {
     assert(!different_variant_execution.union_execution);
     assert(!different_shape_execution.union_execution);
     assert(!different_namespace_execution.union_execution);
+    assert(!different_union_execution.union_response_active);
 
     std::puts("PASS: glass effect union uses compatible render bounds");
 }
