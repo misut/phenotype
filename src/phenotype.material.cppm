@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 80;
+inline constexpr std::uint32_t material_plan_contract_version = 81;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -469,6 +469,11 @@ struct MaterialStageOptics {
     float dynamic_light_direction_y = 0.0f;
     float dynamic_light_highlight = 0.0f;
     float dynamic_light_shadow = 0.0f;
+    char const* glass_caustic_flow_model = "none";
+    float glass_caustic_flow_strength = 0.0f;
+    float glass_caustic_chroma_shear = 0.0f;
+    float glass_caustic_highlight_drift = 0.0f;
+    float glass_caustic_focus = 0.0f;
     char const* glass_thickness_model = "none";
     float glass_thickness = 0.0f;
     float glass_lensing_gain = 1.0f;
@@ -696,6 +701,23 @@ struct MaterialDynamicLightingProfile {
     float shadow_strength = 0.0f;
 };
 
+struct MaterialGlassCausticFlowProfile {
+    char const* model = "none";
+    char const* source = "none";
+    bool active = false;
+    bool backdrop_driven = false;
+    bool lighting_driven = false;
+    bool dispersion_driven = false;
+    bool depth_driven = false;
+    bool interaction_driven = false;
+    bool reduced_motion_suppressed = false;
+    bool bounded = true;
+    float flow_strength = 0.0f;
+    float chroma_shear = 0.0f;
+    float highlight_drift = 0.0f;
+    float caustic_focus = 0.0f;
+};
+
 struct MaterialGlassEnvironmentProfile {
     char const* model = "none";
     char const* source = "none";
@@ -894,6 +916,7 @@ struct MaterialOpticalResponseContract {
     bool refraction_active = false;
     bool spectral_tint_active = false;
     bool dynamic_lighting_active = false;
+    bool glass_caustic_flow_active = false;
     bool glass_thickness_active = false;
     bool glass_dispersion_active = false;
     bool glass_stabilization_active = false;
@@ -920,6 +943,7 @@ struct MaterialOpticalComposition {
     char const* refraction_source = "none";
     char const* spectral_tint_source = "none";
     char const* dynamic_lighting_source = "none";
+    char const* glass_caustic_flow_source = "none";
     char const* glass_thickness_source = "none";
     char const* glass_dispersion_source = "none";
     char const* glass_stabilization_source = "none";
@@ -947,6 +971,7 @@ struct MaterialOpticalComposition {
     bool refraction_required = false;
     bool spectral_tint_required = false;
     bool dynamic_lighting_required = false;
+    bool glass_caustic_flow_required = false;
     bool glass_thickness_required = false;
     bool glass_dispersion_required = false;
     bool glass_stabilization_required = false;
@@ -993,6 +1018,10 @@ struct MaterialOpticalComposition {
     float dynamic_light_direction_y = 0.0f;
     float dynamic_light_highlight = 0.0f;
     float dynamic_light_shadow = 0.0f;
+    float glass_caustic_flow_strength = 0.0f;
+    float glass_caustic_chroma_shear = 0.0f;
+    float glass_caustic_highlight_drift = 0.0f;
+    float glass_caustic_focus = 0.0f;
     float glass_thickness = 0.0f;
     float glass_lensing_gain = 1.0f;
     float glass_shadow_gain = 1.0f;
@@ -1246,6 +1275,7 @@ struct MaterialPlan {
     MaterialEdgeOpticsProfile edge_optics{};
     MaterialSpectralTintProfile spectral_tint{};
     MaterialDynamicLightingProfile dynamic_lighting{};
+    MaterialGlassCausticFlowProfile glass_caustic_flow{};
     MaterialGlassThicknessProfile glass_thickness{};
     MaterialGlassDispersionProfile glass_dispersion{};
     MaterialGlassStabilizationProfile glass_stabilization{};
@@ -1328,6 +1358,15 @@ inline MaterialStageOptics material_primary_stage_optics(
     optics.dynamic_light_highlight =
         plan.dynamic_lighting.highlight_strength;
     optics.dynamic_light_shadow = plan.dynamic_lighting.shadow_strength;
+    optics.glass_caustic_flow_model = plan.glass_caustic_flow.model;
+    optics.glass_caustic_flow_strength =
+        plan.glass_caustic_flow.flow_strength;
+    optics.glass_caustic_chroma_shear =
+        plan.glass_caustic_flow.chroma_shear;
+    optics.glass_caustic_highlight_drift =
+        plan.glass_caustic_flow.highlight_drift;
+    optics.glass_caustic_focus =
+        plan.glass_caustic_flow.caustic_focus;
     optics.glass_thickness_model = plan.glass_thickness.model;
     optics.glass_thickness = plan.glass_thickness.thickness;
     optics.glass_lensing_gain = plan.glass_thickness.lensing_gain;
@@ -1438,6 +1477,15 @@ inline MaterialStageOptics material_edge_stage_optics(
     optics.dynamic_light_highlight =
         plan.dynamic_lighting.highlight_strength;
     optics.dynamic_light_shadow = plan.dynamic_lighting.shadow_strength;
+    optics.glass_caustic_flow_model = plan.glass_caustic_flow.model;
+    optics.glass_caustic_flow_strength =
+        plan.glass_caustic_flow.flow_strength;
+    optics.glass_caustic_chroma_shear =
+        plan.glass_caustic_flow.chroma_shear;
+    optics.glass_caustic_highlight_drift =
+        plan.glass_caustic_flow.highlight_drift;
+    optics.glass_caustic_focus =
+        plan.glass_caustic_flow.caustic_focus;
     optics.glass_thickness_model = plan.glass_thickness.model;
     optics.glass_thickness = plan.glass_thickness.thickness;
     optics.glass_lensing_gain = plan.glass_thickness.lensing_gain;
@@ -9065,6 +9113,151 @@ material_resolve_glass_depth_profile(MaterialPlan const& plan) noexcept {
     return profile;
 }
 
+inline char const* material_glass_caustic_flow_source_name(
+        bool lighting_driven,
+        bool dispersion_driven,
+        bool depth_driven,
+        bool interaction_driven) noexcept {
+    if (interaction_driven && depth_driven)
+        return "interactive-depth-caustic-flow";
+    if (depth_driven && dispersion_driven && lighting_driven)
+        return "depth-prismatic-caustic-flow";
+    if (dispersion_driven && lighting_driven)
+        return "prismatic-light-caustic-flow";
+    if (depth_driven)
+        return "depth-caustic-flow";
+    if (dispersion_driven)
+        return "prismatic-caustic-flow";
+    return "sampled-backdrop-caustic-flow";
+}
+
+inline MaterialGlassCausticFlowProfile
+material_resolve_glass_caustic_flow_profile(MaterialPlan const& plan) noexcept {
+    MaterialGlassCausticFlowProfile profile{};
+    profile.bounded = true;
+    if (!plan.backdrop_sampling
+        || plan.fallback()
+        || plan.kind == MaterialKind::None) {
+        return profile;
+    }
+
+    auto const source = plan.backdrop.color_mean;
+    auto const colorfulness = material_colorfulness(source);
+    auto const luma_span = std::clamp(plan.backdrop.luma_span, 0.0f, 1.0f);
+    auto const backdrop_response = std::clamp(
+        plan.backdrop.response_strength * 0.34f
+            + luma_span * 0.28f
+            + colorfulness * 0.20f
+            + (plan.glass_environment.active
+                   ? plan.glass_environment.reflection_strength * 0.18f
+                   : 0.0f),
+        0.0f,
+        1.0f);
+    auto const lighting_response = plan.dynamic_lighting.active
+        ? std::clamp(
+            plan.dynamic_lighting.highlight_strength / 0.45f * 0.48f
+                + plan.dynamic_lighting.shadow_strength / 0.36f * 0.30f
+                + std::fabs(plan.dynamic_lighting.direction_x) * 0.12f
+                + std::fabs(plan.dynamic_lighting.direction_y) * 0.10f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const dispersion_response = plan.glass_dispersion.active
+        ? std::clamp(
+            plan.glass_dispersion.axial_offset_pixels / 3.20f * 0.24f
+                + plan.glass_dispersion.tangential_offset_pixels / 2.45f
+                    * 0.22f
+                + (plan.glass_dispersion.prismatic_gain - 1.0f) / 0.75f
+                    * 0.24f
+                + plan.glass_dispersion.caustic_spread / 0.40f * 0.30f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const depth_response = plan.glass_depth.active
+        ? std::clamp(
+            plan.glass_depth.depth_separation * 0.32f
+                + plan.glass_depth.surface_lift / 0.42f * 0.24f
+                + plan.glass_depth.parallax_gain / 0.46f * 0.24f
+                + plan.glass_depth.inner_shadow / 0.36f * 0.20f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const interaction_response = plan.interaction.active
+        ? std::clamp(
+            plan.interaction.response_strength * 0.56f
+                + plan.interaction.pointer_lens_strength * 0.24f
+                + plan.interaction.control_morph_depth * 0.20f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const reduced_motion_scale =
+        plan.decision_trace.reduce_motion ? 0.58f : 1.0f;
+    auto const response = std::clamp(
+        0.12f
+            + 0.24f * lighting_response
+            + 0.22f * dispersion_response
+            + 0.20f * depth_response
+            + 0.16f * backdrop_response
+            + 0.06f * interaction_response,
+        0.0f,
+        1.0f);
+
+    profile.flow_strength = std::clamp(
+        reduced_motion_scale
+            * (0.10f
+               + 0.46f * response
+               + 0.14f * dispersion_response
+               + 0.10f * depth_response),
+        0.0f,
+        1.0f);
+    profile.chroma_shear = std::clamp(
+        reduced_motion_scale
+            * (0.024f
+               + 0.105f * dispersion_response
+               + 0.060f * colorfulness
+               + 0.050f * backdrop_response),
+        0.0f,
+        0.32f);
+    profile.highlight_drift = std::clamp(
+        reduced_motion_scale
+            * (0.034f
+               + 0.125f * lighting_response
+               + 0.075f * depth_response
+               + 0.050f * interaction_response),
+        0.0f,
+        0.36f);
+    profile.caustic_focus = std::clamp(
+        0.044f
+            + 0.145f * dispersion_response
+            + 0.110f * lighting_response
+            + 0.085f * depth_response
+            + 0.055f * backdrop_response,
+        0.0f,
+        0.40f);
+    if (profile.flow_strength <= 0.0001f
+        && profile.chroma_shear <= 0.0001f
+        && profile.highlight_drift <= 0.0001f
+        && profile.caustic_focus <= 0.0001f) {
+        return MaterialGlassCausticFlowProfile{};
+    }
+
+    profile.active = true;
+    profile.backdrop_driven = backdrop_response > 0.0001f;
+    profile.lighting_driven = lighting_response > 0.0001f;
+    profile.dispersion_driven = dispersion_response > 0.0001f;
+    profile.depth_driven = depth_response > 0.0001f;
+    profile.interaction_driven = interaction_response > 0.0001f;
+    profile.reduced_motion_suppressed =
+        plan.decision_trace.reduce_motion && reduced_motion_scale < 1.0f;
+    profile.model = "adaptive-glass-caustic-flow";
+    profile.source = material_glass_caustic_flow_source_name(
+        profile.lighting_driven,
+        profile.dispersion_driven,
+        profile.depth_driven,
+        profile.interaction_driven);
+    return profile;
+}
+
 inline float material_base_specular_intensity(MaterialKind kind) noexcept {
     switch (kind) {
         case MaterialKind::Clear: return 0.050f;
@@ -9501,6 +9694,15 @@ inline char const* material_optical_dynamic_lighting_source_name(
     return "none";
 }
 
+inline char const* material_optical_glass_caustic_flow_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.glass_caustic_flow.active
+        && plan.glass_caustic_flow.source
+        && plan.glass_caustic_flow.source[0])
+        return plan.glass_caustic_flow.source;
+    return "none";
+}
+
 inline char const* material_optical_glass_thickness_source_name(
         MaterialPlan const& plan) noexcept {
     if (plan.glass_thickness.active
@@ -9653,6 +9855,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         material_optical_spectral_tint_source_name(plan);
     composition.dynamic_lighting_source =
         material_optical_dynamic_lighting_source_name(plan);
+    composition.glass_caustic_flow_source =
+        material_optical_glass_caustic_flow_source_name(plan);
     composition.glass_thickness_source =
         material_optical_glass_thickness_source_name(plan);
     composition.glass_dispersion_source =
@@ -9704,6 +9908,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
     composition.refraction_required = plan.refraction.active;
     composition.spectral_tint_required = plan.spectral_tint.active;
     composition.dynamic_lighting_required = plan.dynamic_lighting.active;
+    composition.glass_caustic_flow_required =
+        plan.glass_caustic_flow.active;
     composition.glass_thickness_required = plan.glass_thickness.active;
     composition.glass_dispersion_required = plan.glass_dispersion.active;
     composition.glass_stabilization_required =
@@ -9736,6 +9942,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         && plan.edge_optics.bounded
         && plan.spectral_tint.bounded
         && plan.dynamic_lighting.bounded
+        && plan.glass_caustic_flow.bounded
         && plan.glass_thickness.bounded
         && plan.glass_dispersion.bounded
         && plan.glass_stabilization.bounded
@@ -9785,6 +9992,14 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.dynamic_lighting.highlight_strength;
     composition.dynamic_light_shadow =
         plan.dynamic_lighting.shadow_strength;
+    composition.glass_caustic_flow_strength =
+        plan.glass_caustic_flow.flow_strength;
+    composition.glass_caustic_chroma_shear =
+        plan.glass_caustic_flow.chroma_shear;
+    composition.glass_caustic_highlight_drift =
+        plan.glass_caustic_flow.highlight_drift;
+    composition.glass_caustic_focus =
+        plan.glass_caustic_flow.caustic_focus;
     composition.glass_thickness = plan.glass_thickness.thickness;
     composition.glass_lensing_gain = plan.glass_thickness.lensing_gain;
     composition.glass_shadow_gain = plan.glass_thickness.shadow_gain;
@@ -9914,6 +10129,8 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
     response.spectral_tint_active = composition.spectral_tint_required;
     response.dynamic_lighting_active =
         composition.dynamic_lighting_required;
+    response.glass_caustic_flow_active =
+        composition.glass_caustic_flow_required;
     response.glass_thickness_active =
         composition.glass_thickness_required;
     response.glass_dispersion_active =
@@ -10267,6 +10484,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         material_resolve_glass_environment_profile(plan);
     plan.glass_depth =
         material_resolve_glass_depth_profile(plan);
+    plan.glass_caustic_flow =
+        material_resolve_glass_caustic_flow_profile(plan);
     plan.specular = material_resolve_specular_profile(plan);
     plan.luminance_curve = material_resolve_luminance_curve(
         plan.backdrop_sampling,

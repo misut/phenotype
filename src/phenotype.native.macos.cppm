@@ -2480,6 +2480,66 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
         inst.edge_optics[2] + 0.075f * plan.glass_depth.inner_shadow,
         0.0f,
         0.80f);
+    inst.lighting[2] = std::clamp(
+        inst.lighting[2]
+            + 0.075f * plan.glass_caustic_flow.flow_strength
+            + 0.060f * plan.glass_caustic_flow.highlight_drift
+            + 0.040f * plan.glass_caustic_flow.caustic_focus,
+        0.0f,
+        0.50f);
+    inst.lighting[3] = std::clamp(
+        inst.lighting[3]
+            + 0.045f * plan.glass_caustic_flow.flow_strength
+            + 0.035f * plan.glass_caustic_flow.caustic_focus,
+        0.0f,
+        0.40f);
+    inst.refraction[2] = std::clamp(
+        inst.refraction[2]
+            * (1.0f + 0.080f * plan.glass_caustic_flow.flow_strength),
+        0.0f,
+        8.0f);
+    inst.refraction[3] = std::clamp(
+        inst.refraction[3]
+            + 0.075f * plan.glass_caustic_flow.caustic_focus
+            + 0.045f * plan.glass_caustic_flow.flow_strength,
+        0.0f,
+        0.40f);
+    inst.edge_optics[3] = std::clamp(
+        inst.edge_optics[3]
+            + 0.035f * plan.glass_caustic_flow.chroma_shear,
+        0.0f,
+        0.18f);
+    inst.spectral_tint[2] = std::clamp(
+        inst.spectral_tint[2]
+            + 0.045f * plan.glass_caustic_flow.chroma_shear,
+        0.0f,
+        0.24f);
+    inst.spectral_tint[3] = std::clamp(
+        inst.spectral_tint[3]
+            + 0.050f * plan.glass_caustic_flow.caustic_focus,
+        0.0f,
+        0.30f);
+    inst.dispersion[0] = std::clamp(
+        inst.dispersion[0]
+            + 0.18f * plan.glass_caustic_flow.flow_strength,
+        0.0f,
+        3.40f);
+    inst.dispersion[1] = std::clamp(
+        inst.dispersion[1]
+            + 0.14f * plan.glass_caustic_flow.chroma_shear,
+        0.0f,
+        2.60f);
+    inst.dispersion[2] = std::clamp(
+        inst.dispersion[2]
+            + 0.060f * plan.glass_caustic_flow.caustic_focus,
+        1.0f,
+        1.80f);
+    inst.dispersion[3] = std::clamp(
+        inst.dispersion[3]
+            + 0.060f * plan.glass_caustic_flow.caustic_focus
+            + 0.040f * plan.glass_caustic_flow.flow_strength,
+        0.0f,
+        0.44f);
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];
