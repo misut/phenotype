@@ -31625,6 +31625,327 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(morph_shadow, 0.0, 0.020);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float layer_separation_field_strength = clamp(
+        0.014 * overlap_response_strength
+            + 0.012 * fusion_strength
+            + 0.010 * group_blend_strength * shared_backdrop_scope
+            + 0.008 * group_blend_strength * group_surface_execution
+            + 0.008 * bridge_band
+            + 0.06 * container_morph_field_strength
+            + 0.05 * bounds_anchor_field_strength
+            + 0.05 * container_pressure_field_strength
+            + 0.04 * edge_meniscus_field_strength,
+        0.0,
+        0.048);
+    if (layer_separation_field_strength > 0.0001) {
+        float separation_center =
+            1.0 - smoothstep(0.18, 1.10, normalized_len);
+        float separation_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.70, 1.0),
+                signed_edge_distance);
+        float separation_bridge =
+            bridge_band * (0.32 + 0.68 * bridge_core);
+        float separation_overlap = clamp(
+            overlap_response_strength * 0.34
+                + fusion_strength * 0.24
+                + group_blend_strength * shared_backdrop_scope * 0.20
+                + group_surface_execution * group_blend_strength * 0.16
+                + separation_bridge * 0.18,
+            0.0,
+            1.0);
+        float separation_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float separation_presence = clamp(
+            separation_center * 0.18
+                + separation_edge * 0.20
+                + separation_bridge * 0.18
+                + separation_overlap * 0.24
+                + separation_pointer * 0.12
+                + prominent_intensity * 0.08,
+            0.0,
+            1.0);
+        float2 separation_group_norm = normalized_local;
+        float separation_group_active = 0.0;
+        if (in.group_rect.z > 0.0 && in.group_rect.w > 0.0) {
+            float2 separation_group_size =
+                max(in.group_rect.zw, float2(1.0));
+            float2 separation_group_local = clamp(
+                in.screen_pos - in.group_rect.xy,
+                float2(0.0),
+                separation_group_size);
+            separation_group_norm =
+                (separation_group_local / separation_group_size - float2(0.5))
+                * 2.0;
+            separation_group_active = group_blend_strength;
+        }
+        float2 separation_axis_raw =
+            -dynamic_light_dir
+                * (0.34 + 0.22 * dynamic_light_highlight)
+            + refraction_dir * (0.30 + 0.20 * glass_lensing_gain)
+            + bridge_dir * (0.24 + 0.22 * separation_bridge)
+            + pointer_dir * (0.20 + 0.18 * separation_pointer)
+            + dispersion_tangent
+                * (0.16
+                   + 0.10 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential)
+            + separation_group_norm
+                * separation_group_active
+                * (0.10 + 0.08 * separation_overlap);
+        float separation_axis_len = length(separation_axis_raw);
+        float2 separation_axis =
+            separation_axis_len > 0.0001
+                ? separation_axis_raw / separation_axis_len
+                : refraction_dir;
+        float2 separation_cross =
+            float2(-separation_axis.y, separation_axis.x);
+        float separation_light_face =
+            smoothstep(-0.20, 0.94, dot(separation_axis, -dynamic_light_dir));
+        float separation_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(separation_axis, bridge_dir)));
+        float separation_phase = clamp(
+            dot(normalized_local, separation_axis)
+                    * (4.8 + 1.8 * separation_presence)
+                + dot(normalized_local, separation_cross)
+                    * (3.0 + 1.2 * separation_overlap)
+                + dot(separation_group_norm, separation_axis)
+                    * separation_group_active
+                    * (2.2 + 1.2 * separation_bridge)
+                + bridge_axial * (2.4 + 1.4 * bridge_core)
+                + bridge_shear * separation_bridge * 1.9
+                + spectral_dispersion * 4.6,
+            -12.0,
+            12.0);
+        float separation_wave =
+            0.5 + 0.5 * sin(separation_phase);
+        float separation_counter =
+            0.5 + 0.5 * cos(
+                separation_phase * 0.72
+                + glass_caustic_spread * 4.4
+                + separation_overlap * 2.2);
+        float separation_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(separation_wave - 0.56));
+        float separation_return_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(separation_counter - 0.52));
+        float separation_span =
+            (0.86
+             + 1.8 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.3 * separation_presence
+             + 0.036 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float separation_cross_span =
+            (0.58
+             + 1.1 * glass_dispersion_tangential
+             + 1.0 * spectral_dispersion
+             + 0.8 * separation_bridge_alignment)
+            * content_scale;
+        float2 separation_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.10 + 0.06 * separation_overlap),
+            float2(0.0),
+            float2(1.0));
+        float2 separation_front_uv = clamp(
+            separation_base_uv
+                - dynamic_light_dir
+                    * texel
+                    * separation_span
+                    * (0.24 + 0.14 * separation_light_face)
+                + separation_axis
+                    * texel
+                    * separation_span
+                    * (0.14 + 0.10 * separation_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 separation_back_uv = clamp(
+            separation_base_uv
+                + dynamic_light_dir
+                    * texel
+                    * separation_span
+                    * (0.24 + 0.14 * (1.0 - separation_light_face))
+                - separation_axis
+                    * texel
+                    * separation_span
+                    * (0.12 + 0.10 * separation_return_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 separation_warm_uv = clamp(
+            separation_base_uv
+                + separation_cross
+                    * texel
+                    * separation_cross_span
+                    * (0.30 + 0.12 * separation_wave)
+                + dispersion_tangent
+                    * texel
+                    * separation_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 separation_cool_uv = clamp(
+            separation_base_uv
+                - separation_cross
+                    * texel
+                    * separation_cross_span
+                    * (0.28 + 0.12 * separation_lobe)
+                - dispersion_tangent
+                    * texel
+                    * separation_span
+                    * (0.08 + 0.08 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 separation_far_uv = clamp(
+            separation_base_uv
+                + separation_axis
+                    * texel
+                    * separation_span
+                    * (0.34 + 0.18 * separation_overlap),
+            float2(0.0),
+            float2(1.0));
+        float3 separation_base_rgb =
+            backdrop.sample(samp, separation_base_uv).rgb;
+        float3 separation_front_rgb =
+            backdrop.sample(samp, separation_front_uv).rgb;
+        float3 separation_back_rgb =
+            backdrop.sample(samp, separation_back_uv).rgb;
+        float3 separation_warm_rgb =
+            backdrop.sample(samp, separation_warm_uv).rgb;
+        float3 separation_cool_rgb =
+            backdrop.sample(samp, separation_cool_uv).rgb;
+        float3 separation_far_rgb =
+            backdrop.sample(samp, separation_far_uv).rgb;
+        float3 separation_probe =
+            separation_base_rgb * 0.24
+            + separation_front_rgb * 0.21
+            + separation_back_rgb * 0.18
+            + separation_warm_rgb * 0.14
+            + separation_cool_rgb * 0.14
+            + separation_far_rgb * 0.09;
+        float3 separation_split = float3(
+            separation_warm_rgb.r,
+            (separation_base_rgb.g + separation_front_rgb.g) * 0.5,
+            separation_cool_rgb.b);
+        float separation_luma =
+            dot(separation_probe, float3(0.2126, 0.7152, 0.0722));
+        float separation_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float separation_chroma = max(
+            max(abs(separation_probe.r - separation_probe.g),
+                abs(separation_probe.g - separation_probe.b)),
+            abs(separation_probe.b - separation_probe.r));
+        float separation_pickup =
+            smoothstep(0.030, 0.34, separation_chroma);
+        float separation_range = clamp(
+            length(separation_front_rgb - separation_back_rgb) * 0.24
+                + length(separation_warm_rgb - separation_cool_rgb) * 0.22
+                + length(separation_far_rgb - separation_base_rgb) * 0.16
+                + abs(separation_luma - separation_surface_luma) * 0.18
+                + separation_lobe * 0.10
+                + separation_presence * 0.10,
+            0.0,
+            1.0);
+        float separation_coherence =
+            1.0 - smoothstep(0.08, 0.38, separation_range);
+        float separation_lift = smoothstep(
+            separation_surface_luma - 0.06,
+            separation_surface_luma + 0.30,
+            separation_luma);
+        float separation_depth = smoothstep(
+            0.08,
+            0.34,
+            separation_surface_luma - separation_luma);
+        float separation_front_luma =
+            dot(separation_front_rgb, float3(0.2126, 0.7152, 0.0722));
+        float separation_back_luma =
+            dot(separation_back_rgb, float3(0.2126, 0.7152, 0.0722));
+        float separation_relief = clamp(
+            abs(separation_front_luma - separation_back_luma) * 1.2
+                + separation_lift * 0.22
+                + separation_depth * 0.22
+                + separation_overlap * 0.18,
+            0.0,
+            1.0);
+        float3 separation_neutral = mix(
+            separation_probe,
+            float3(separation_luma),
+            separation_depth * (0.12 + 0.14 * glass_shadow_gain)
+                + separation_coherence * 0.12);
+        float3 separation_layer = mix(
+            separation_neutral,
+            separation_split,
+            0.15
+                + 0.16 * separation_pickup
+                + 0.14 * separation_lobe
+                + 0.12 * separation_light_face
+                + 0.10 * separation_relief);
+        separation_layer = clamp(
+            (separation_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + separation_lift * 0.010
+                       + separation_relief * 0.012
+                       - separation_depth * 0.016)
+                + float3(0.50),
+            0.0,
+            1.0);
+        separation_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.010
+                   + 0.022 * tint_chroma * prominent_intensity);
+        float3 separation_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.10,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.08,
+            spectral_coolness + tint_chroma * in.tint.b * 0.10);
+        separation_layer += separation_prism
+            * separation_pickup
+            * (0.0007
+               + 0.0024 * spectral_rim_tint
+               + 0.0022 * glass_prismatic_gain
+               + 0.0018 * glass_scattering_gain)
+            * (0.32
+               + 0.22 * separation_light_face
+               + 0.20 * separation_lobe
+               + 0.18 * separation_relief);
+        float separation_gate = clamp(
+            separation_presence * 0.28
+                + separation_overlap * 0.24
+                + separation_edge * 0.16
+                + separation_lobe * 0.14
+                + separation_light_face * 0.10
+                + separation_coherence * 0.10,
+            0.0,
+            1.0);
+        float separation_weight =
+            layer_separation_field_strength
+            * separation_gate
+            * (0.30
+               + 0.20 * separation_relief
+               + 0.16 * separation_pickup
+               + 0.14 * separation_coherence
+               + 0.12 * separation_bridge_alignment);
+        rgb = mix(
+            rgb,
+            separation_layer,
+            separation_weight
+                * (0.16
+                   + 0.12 * separation_lobe
+                   + 0.10 * separation_presence));
+        rgb += separation_prism
+            * separation_weight
+            * max(separation_lobe, separation_return_lobe * 0.70)
+            * (0.0006
+               + 0.0020 * dynamic_light_highlight
+               + 0.0016 * glass_scattering_gain);
+        float separation_shadow =
+            separation_depth
+            * separation_weight
+            * (0.0018 + 0.0060 * glass_shadow_gain)
+            * (0.52 + 0.48 * (1.0 - separation_light_face));
+        rgb *= 1.0 - clamp(separation_shadow, 0.0, 0.018);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
