@@ -38560,6 +38560,357 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(interaction_absorption, 0.0, 0.0072);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float morph_continuity_field_strength = clamp(
+        0.004 * group_blend_strength * shared_backdrop_scope
+            + 0.004 * group_blend_strength * group_surface_execution
+            + 0.006 * bridge_band * (0.34 + 0.66 * bridge_core)
+            + 0.20 * interaction_response_field_strength
+            + 0.19 * contextual_reflection_field_strength
+            + 0.18 * hierarchy_separation_field_strength
+            + 0.16 * surface_identity_field_strength
+            + 0.13 * tonal_equilibrium_field_strength
+            + 0.11 * chroma_containment_field_strength
+            + 0.09 * legibility_preservation_field_strength
+            + 0.08 * depth_separation_field_strength
+            + 0.07 * specular_flow_field_strength
+            + 0.06 * phase_equalization_field_strength
+            + 0.052 * edge_continuity_field_strength
+            + 0.044 * rim_coalescence_field_strength
+            + 0.038 * edge_adhesion_field_strength
+            + 0.032 * elastic_tension_field_strength
+            + 0.027 * contact_pressure_field_strength
+            + 0.022 * internal_shadow_field_strength
+            + 0.018 * container_morph_field_strength,
+        0.0,
+        0.021);
+    if (morph_continuity_field_strength > 0.0001
+        && (bridge_band > 0.0001 || group_blend_strength > 0.0001)) {
+        float continuity_bridge =
+            bridge_band * (0.36 + 0.64 * bridge_core);
+        float continuity_group = clamp(
+            group_blend_strength * 0.36
+                + shared_backdrop_scope * group_blend_strength * 0.24
+                + group_surface_execution * group_blend_strength * 0.20
+                + continuity_bridge * 0.26
+                + container_morph_field_strength * 3.0,
+            0.0,
+            1.0);
+        float continuity_neck =
+            smoothstep(0.08, 0.92, continuity_bridge)
+            * (0.48 + 0.52 * bridge_core);
+        float continuity_shear =
+            smoothstep(0.05, 0.92, abs(bridge_shear)) * continuity_bridge;
+        float continuity_rim =
+            edge_lens
+            * (0.60
+               + 0.40
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.82, 0.88),
+                       signed_edge_distance)));
+        float continuity_presence = clamp(
+            continuity_group * 0.29
+                + continuity_neck * 0.25
+                + continuity_rim * 0.14
+                + continuity_shear * 0.12
+                + interaction_response_field_strength * 3.4
+                + contextual_reflection_field_strength * 3.0
+                + hierarchy_separation_field_strength * 2.8,
+            0.0,
+            1.0);
+        float2 continuity_axis_raw =
+            bridge_dir * (0.42 + 0.24 * continuity_bridge)
+            + refraction_dir * (0.22 + 0.14 * glass_lensing_gain)
+            - dynamic_light_dir * (0.20 + 0.13 * dynamic_light_highlight)
+            + bridge_tangent
+                * (bridge_shear >= 0.0 ? 1.0 : -1.0)
+                * (0.20 + 0.18 * continuity_shear)
+            + pointer_dir
+                * pointer_lens_strength
+                * pointer_lens_raw
+                * 0.08
+            + dispersion_tangent
+                * (0.10
+                   + 0.06 * spectral_dispersion
+                   + 0.04 * glass_dispersion_tangential);
+        float continuity_axis_len = length(continuity_axis_raw);
+        float2 continuity_axis =
+            continuity_axis_len > 0.0001
+                ? continuity_axis_raw / continuity_axis_len
+                : (normalized_len > 0.0001
+                    ? refraction_dir
+                    : float2(1.0, 0.0));
+        float2 continuity_cross =
+            float2(-continuity_axis.y, continuity_axis.x);
+        float continuity_light_face =
+            smoothstep(-0.16, 0.94, dot(continuity_axis, -dynamic_light_dir));
+        float continuity_bridge_alignment =
+            smoothstep(-0.12, 0.94, abs(dot(continuity_axis, bridge_tangent)));
+        float continuity_phase = clamp(
+            dot(normalized_local, continuity_axis)
+                    * (3.1 + 1.0 * continuity_presence)
+                + dot(normalized_local, continuity_cross)
+                    * (2.0 + 0.9 * continuity_group)
+                + bridge_axial * (1.8 + 1.1 * bridge_core)
+                + bridge_lateral_signed * continuity_bridge * 1.2
+                + bridge_shear * continuity_bridge * 1.4
+                + spectral_dispersion * 1.5
+                + glass_caustic_spread * 1.2,
+            -12.0,
+            12.0);
+        float continuity_wave =
+            0.5 + 0.5 * sin(continuity_phase);
+        float continuity_counter_wave =
+            0.5 + 0.5 * cos(
+                continuity_phase * 0.56
+                + continuity_group * 1.7
+                + glass_caustic_spread * 1.8);
+        float continuity_lobe =
+            1.0 - smoothstep(0.0, 0.43, abs(continuity_wave - 0.50));
+        float continuity_return_lobe =
+            1.0 - smoothstep(0.0, 0.46, abs(continuity_counter_wave - 0.50));
+        float continuity_support = clamp(
+            continuity_presence * 0.30
+                + continuity_group * 0.22
+                + continuity_neck * 0.18
+                + continuity_rim * 0.12
+                + continuity_lobe * 0.08
+                + continuity_bridge_alignment * 0.10,
+            0.0,
+            1.0);
+        float continuity_focus =
+            (0.5
+             + 0.5 * cos(continuity_phase * 1.02 + normalized_len * 1.4))
+            * (0.34 + 0.66 * continuity_lobe);
+        float continuity_span =
+            (0.30
+             + 0.56 * glass_thickness
+             + 0.46 * clear_glass_detail
+             + 0.68 * continuity_presence
+             + 0.010 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float continuity_cross_span =
+            (0.24
+             + 0.36 * glass_dispersion_tangential
+             + 0.34 * spectral_dispersion
+             + 0.50 * continuity_support)
+            * content_scale;
+        float continuity_neck_span =
+            (0.20
+             + 0.36 * continuity_bridge
+             + 0.28 * continuity_group
+             + 0.18 * glass_caustic_spread)
+            * content_scale;
+        float2 continuity_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.032 + 0.048 * continuity_support)
+                + bridge_dir
+                    * texel
+                    * continuity_neck_span
+                    * (0.08 + 0.10 * continuity_neck),
+            float2(0.0),
+            float2(1.0));
+        float2 continuity_neck_uv = clamp(
+            continuity_base_uv
+                + bridge_dir
+                    * texel
+                    * continuity_span
+                    * (0.12 + 0.10 * continuity_neck),
+            float2(0.0),
+            float2(1.0));
+        float2 continuity_body_uv = clamp(
+            continuity_base_uv
+                - bridge_dir
+                    * texel
+                    * continuity_span
+                    * (0.11 + 0.09 * continuity_group),
+            float2(0.0),
+            float2(1.0));
+        float2 continuity_shear_uv = clamp(
+            continuity_base_uv
+                + continuity_cross
+                    * texel
+                    * continuity_cross_span
+                    * (0.13 + 0.09 * continuity_wave)
+                + bridge_tangent
+                    * texel
+                    * continuity_neck_span
+                    * bridge_shear
+                    * (0.18 + 0.16 * continuity_bridge),
+            float2(0.0),
+            float2(1.0));
+        float2 continuity_return_uv = clamp(
+            continuity_base_uv
+                - continuity_cross
+                    * texel
+                    * continuity_cross_span
+                    * (0.13 + 0.09 * continuity_lobe)
+                - bridge_tangent
+                    * texel
+                    * continuity_neck_span
+                    * bridge_shear
+                    * (0.16 + 0.14 * continuity_group),
+            float2(0.0),
+            float2(1.0));
+        float3 continuity_neck_rgb =
+            backdrop.sample(samp, continuity_neck_uv).rgb;
+        float3 continuity_body_rgb =
+            backdrop.sample(samp, continuity_body_uv).rgb;
+        float3 continuity_shear_rgb =
+            backdrop.sample(samp, continuity_shear_uv).rgb;
+        float3 continuity_return_rgb =
+            backdrop.sample(samp, continuity_return_uv).rgb;
+        float3 continuity_average =
+            continuity_neck_rgb * 0.30
+            + continuity_body_rgb * 0.26
+            + continuity_shear_rgb * 0.22
+            + continuity_return_rgb * 0.22;
+        float3 continuity_split = float3(
+            continuity_shear_rgb.r,
+            (continuity_neck_rgb.g + continuity_average.g) * 0.5,
+            continuity_return_rgb.b);
+        float continuity_split_mix = clamp(
+            0.040
+                + 0.052 * spectral_dispersion
+                + 0.044 * glass_dispersion_tangential
+                + 0.052 * continuity_support,
+            0.0,
+            0.22);
+        float3 continuity_probe = mix(
+            continuity_average,
+            continuity_split,
+            continuity_split_mix);
+        float continuity_neck_luma =
+            dot(continuity_neck_rgb, float3(0.2126, 0.7152, 0.0722));
+        float continuity_body_luma =
+            dot(continuity_body_rgb, float3(0.2126, 0.7152, 0.0722));
+        float continuity_shear_luma =
+            dot(continuity_shear_rgb, float3(0.2126, 0.7152, 0.0722));
+        float continuity_return_luma =
+            dot(continuity_return_rgb, float3(0.2126, 0.7152, 0.0722));
+        float continuity_probe_luma =
+            dot(continuity_probe, float3(0.2126, 0.7152, 0.0722));
+        float continuity_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float continuity_luma_range =
+            clamp(
+                max(max(continuity_neck_luma, continuity_body_luma),
+                    max(continuity_shear_luma, continuity_return_luma))
+                    - min(min(continuity_neck_luma, continuity_body_luma),
+                          min(continuity_shear_luma,
+                              continuity_return_luma)),
+                0.0,
+                1.0);
+        float continuity_delta = clamp(
+            abs(continuity_neck_luma - continuity_body_luma) * 0.26
+                + length(continuity_neck_rgb - continuity_body_rgb) * 0.18
+                + length(continuity_shear_rgb - continuity_return_rgb) * 0.15
+                + continuity_luma_range * 0.17
+                + continuity_support * 0.08,
+            0.0,
+            1.0);
+        float continuity_collapse =
+            1.0 - smoothstep(0.07, 0.36, continuity_delta);
+        float continuity_highlight =
+            smoothstep(
+                0.06,
+                0.38,
+                max(continuity_neck_luma, continuity_shear_luma)
+                    - continuity_surface_luma
+                    + continuity_luma_range * 0.12);
+        float continuity_shadow =
+            smoothstep(
+                0.05,
+                0.34,
+                continuity_surface_luma
+                    - min(continuity_body_luma, continuity_return_luma)
+                    + continuity_luma_range * 0.12);
+        float continuity_target_luma = clamp(
+            0.50
+                + (continuity_probe_luma - 0.50)
+                    * (0.58 + 0.18 * continuity_support)
+                + (continuity_highlight - continuity_shadow)
+                    * (0.034 + 0.034 * continuity_neck),
+            0.0,
+            1.0);
+        float continuity_chroma_keep = clamp(
+            0.54
+                + 0.13 * continuity_support
+                + 0.10 * continuity_group
+                + 0.08 * continuity_light_face
+                - 0.08 * continuity_collapse,
+            0.43,
+            0.86);
+        float3 continuity_surface =
+            float3(continuity_target_luma)
+            + (continuity_probe - float3(continuity_probe_luma))
+                * continuity_chroma_keep;
+        float3 continuity_layer = mix(
+            continuity_probe,
+            continuity_surface,
+            (0.22 + 0.18 * continuity_collapse)
+                * (0.45 + 0.55 * continuity_support));
+        continuity_layer = clamp(
+            (continuity_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.005
+                       + continuity_neck * 0.006
+                       - continuity_collapse * 0.005)
+                + float3(0.50),
+            0.0,
+            1.0);
+        continuity_layer *= float3(
+            1.0 + spectral_warmth * 0.12 + tint_chroma * in.tint.r * 0.005,
+            1.0 + spectral_rim_tint * 0.06 + tint_chroma * in.tint.g * 0.005,
+            1.0 + spectral_coolness * 0.12 + tint_chroma * in.tint.b * 0.005);
+        float continuity_gate = clamp(
+            continuity_presence * 0.28
+                + continuity_group * 0.22
+                + continuity_neck * 0.18
+                + continuity_support * 0.14
+                + continuity_rim * 0.10
+                + continuity_collapse * 0.08,
+            0.0,
+            1.0);
+        float continuity_weight =
+            morph_continuity_field_strength
+            * continuity_gate
+            * (0.17
+               + 0.15 * continuity_support
+               + 0.12 * continuity_neck
+               + 0.10 * continuity_focus
+               + 0.08 * continuity_bridge_alignment);
+        rgb = mix(
+            rgb,
+            continuity_layer,
+            continuity_weight
+                * (0.052
+                   + 0.046 * continuity_presence
+                   + 0.040 * continuity_group));
+        float3 continuity_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.032,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.028,
+            spectral_coolness + tint_chroma * in.tint.b * 0.032);
+        float continuity_caustic =
+            max(continuity_lobe, continuity_return_lobe * 0.52)
+            * max(continuity_neck, continuity_rim * 0.42)
+            * (0.46 + 0.54 * continuity_support);
+        rgb += continuity_prism
+            * continuity_weight
+            * continuity_caustic
+            * (0.00015
+               + 0.00050 * spectral_rim_tint
+               + 0.00044 * glass_scattering_gain);
+        float continuity_absorption =
+            continuity_shadow
+            * continuity_weight
+            * (0.00050 + 0.0016 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - continuity_light_face));
+        rgb *= 1.0 - clamp(continuity_absorption, 0.0, 0.0070);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
