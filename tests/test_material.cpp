@@ -3373,8 +3373,25 @@ void test_container_member_shape_blend_uses_spacing_falloff() {
     assert(first_execution.fusion_lensing_gain > 1.0f);
     assert(first_execution.fusion_edge_lift > 0.0f);
     assert(first_execution.fusion_shadow_gain > 1.0f);
+    assert(first_execution.cohesion_active);
+    assert(first_execution.cohesion_spacing_driven);
+    assert(first_execution.cohesion_morph_driven);
+    assert(!first_execution.cohesion_union_driven);
+    assert(!first_execution.cohesion_overlap_driven);
+    assert(std::string_view(first_execution.cohesion_model)
+           == "proximity-liquid-glass-cohesion");
+    assert(first_execution.cohesion_strength > 0.35f);
+    assert(first_execution.cohesion_strength < 0.42f);
+    assert(first_execution.cohesion_pressure > 0.50f);
+    assert(first_execution.cohesion_pressure < 0.58f);
+    assert(std::fabs(first_execution.cohesion_falloff - 0.5f)
+           < 0.0001f);
+    assert(first_execution.cohesion_stabilization > 0.30f);
+    assert(first_execution.cohesion_stabilization < 0.36f);
     assert(!distant_execution.fusion_optics_active);
     assert(std::string_view(distant_execution.fusion_model) == "none");
+    assert(!distant_execution.cohesion_active);
+    assert(std::string_view(distant_execution.cohesion_model) == "none");
 
     auto const first_bridge_motion =
         material_container_bridge_motion_optics(
