@@ -16683,6 +16683,280 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(refract_shadow, 0.0, 0.034);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float normal_coupler_strength = clamp(
+        0.014 * refraction_coupler_strength
+            + 0.012 * luminance_coupler_strength
+            + 0.012 * liquid_response_strength
+            + 0.010 * specular_sheet_strength
+            + 0.010 * bridge_meniscus_reflection_strength
+            + 0.010 * shared_shell_strength
+            + 0.010 * glass_effect_match_execution * group_blend_strength
+            + 0.008 * morph_execution * group_blend_strength
+            + 0.006 * clear_glass_detail
+            + 0.006 * dynamic_light_highlight,
+        0.0,
+        0.070);
+    if (normal_coupler_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 normal_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 normal_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            normal_group_size);
+        float2 normal_group_norm =
+            (normal_group_local / normal_group_size - float2(0.5)) * 2.0;
+        float normal_group_len = length(normal_group_norm);
+        float normal_center =
+            1.0 - smoothstep(0.20, 1.14, normal_group_len);
+        float2 normal_group_edge = min(
+            normal_group_local,
+            max(normal_group_size - normal_group_local, float2(0.0)));
+        float normal_edge_distance =
+            min(normal_group_edge.x, normal_group_edge.y);
+        float normal_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.4, 1.0),
+                normal_edge_distance);
+        float normal_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float normal_transition = clamp(
+            glass_effect_match_execution * 0.34
+                + morph_execution * 0.22
+                + shape_blend_execution * 0.14
+                + union_execution * 0.12
+                + refraction_coupler_strength * 1.8
+                + luminance_coupler_strength * 1.5
+                + specular_sheet_strength * 1.4,
+            0.0,
+            1.0);
+        float normal_gate = clamp(
+            normal_center * 0.18
+                + normal_edge * 0.24
+                + normal_bridge * 0.24
+                + normal_transition * group_blend_strength * 0.24
+                + edge_lens * 0.10,
+            0.0,
+            1.0);
+        float2 normal_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 normal_group_center_screen =
+            in.group_rect.xy + normal_group_size * 0.5;
+        float2 normal_group_center_uv = clamp(
+            normal_group_center_screen / normal_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 normal_to_center =
+            normal_group_center_uv - in.screen_uv;
+        float normal_center_distance = length(normal_to_center);
+        float2 normal_center_dir =
+            normal_center_distance > 0.0001
+                ? normal_to_center / normal_center_distance
+                : refraction_dir;
+        float2 normal_axis_raw =
+            normal_center_dir * (0.32 + 0.20 * normal_center)
+            + refraction_dir * (0.30 + 0.20 * clear_glass_detail)
+            + bridge_dir * (0.28 + 0.22 * normal_bridge)
+            - dynamic_light_dir * (0.18 + 0.14 * dynamic_light_highlight);
+        float normal_axis_len = length(normal_axis_raw);
+        float2 normal_axis = normal_axis_len > 0.0001
+            ? normal_axis_raw / normal_axis_len
+            : refraction_dir;
+        float2 normal_cross = float2(-normal_axis.y, normal_axis.x);
+        float normal_phase = clamp(
+            dot(normal_group_norm, normal_axis)
+                    * (4.6 + 2.6 * normal_transition)
+                + dot(normal_group_norm, normal_cross)
+                    * (2.0 + 1.6 * normal_bridge)
+                + bridge_axial * (3.0 + 2.0 * normal_bridge)
+                + bridge_shear * normal_bridge * 2.0
+                + dynamic_light_highlight * 1.4,
+            -10.0,
+            10.0);
+        float normal_wave = 0.5 + 0.5 * sin(normal_phase);
+        float normal_focus =
+            1.0 - smoothstep(0.0, 0.30, abs(normal_wave - 0.60));
+        float normal_span =
+            (0.72
+             + 1.6 * glass_thickness
+             + 1.2 * clear_glass_detail
+             + 1.0 * normal_gate
+             + 0.036 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float normal_cross_span =
+            (0.64
+             + 1.1 * glass_dispersion_tangential
+             + 1.1 * spectral_dispersion
+             + 0.8 * normal_transition)
+            * content_scale;
+        float2 normal_center_uv = clamp(
+            mix(in.screen_uv,
+                normal_group_center_uv,
+                0.14 + 0.14 * normal_center),
+            float2(0.0),
+            float2(1.0));
+        float2 normal_front_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + normal_axis
+                    * texel
+                    * normal_span
+                    * (0.26 + 0.14 * normal_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 normal_back_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - normal_axis
+                    * texel
+                    * normal_span
+                    * (0.24 + 0.14 * normal_focus),
+            float2(0.0),
+            float2(1.0));
+        float2 normal_left_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                + normal_cross
+                    * texel
+                    * normal_cross_span
+                    * (0.24 + 0.14 * normal_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 normal_right_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - normal_cross
+                    * texel
+                    * normal_cross_span
+                    * (0.24 + 0.14 * normal_bridge),
+            float2(0.0),
+            float2(1.0));
+        float3 normal_center_rgb =
+            backdrop.sample(samp, normal_center_uv).rgb;
+        float3 normal_front_rgb =
+            backdrop.sample(samp, normal_front_uv).rgb;
+        float3 normal_back_rgb =
+            backdrop.sample(samp, normal_back_uv).rgb;
+        float3 normal_left_rgb =
+            backdrop.sample(samp, normal_left_uv).rgb;
+        float3 normal_right_rgb =
+            backdrop.sample(samp, normal_right_uv).rgb;
+        float normal_center_luma =
+            dot(normal_center_rgb, float3(0.2126, 0.7152, 0.0722));
+        float normal_front_luma =
+            dot(normal_front_rgb, float3(0.2126, 0.7152, 0.0722));
+        float normal_back_luma =
+            dot(normal_back_rgb, float3(0.2126, 0.7152, 0.0722));
+        float normal_left_luma =
+            dot(normal_left_rgb, float3(0.2126, 0.7152, 0.0722));
+        float normal_right_luma =
+            dot(normal_right_rgb, float3(0.2126, 0.7152, 0.0722));
+        float2 normal_gradient_raw =
+            normal_axis * (normal_front_luma - normal_back_luma)
+            + normal_cross * (normal_left_luma - normal_right_luma);
+        float normal_gradient_len = length(normal_gradient_raw);
+        float2 normal_gradient = normal_gradient_len > 0.0001
+            ? normal_gradient_raw / normal_gradient_len
+            : normal_axis;
+        float normal_alignment =
+            smoothstep(-0.28, 0.92, dot(normal_gradient, -dynamic_light_dir));
+        float normal_curvature = clamp(
+            abs(normal_front_luma - normal_back_luma) * 0.32
+                + abs(normal_left_luma - normal_right_luma) * 0.28
+                + abs(normal_center_luma
+                      - dot(rgb, float3(0.2126, 0.7152, 0.0722))) * 0.22
+                + normal_focus * 0.08,
+            0.0,
+            1.0);
+        float normal_coherence =
+            1.0 - smoothstep(0.08, 0.34, normal_curvature);
+        float normal_fresnel = clamp(
+            normal_edge * 0.28
+                + normal_focus * 0.22
+                + normal_alignment * 0.20
+                + normal_transition * 0.16
+                + normal_bridge * 0.14,
+            0.0,
+            1.0);
+        float3 normal_probe =
+            normal_center_rgb * 0.30
+            + normal_front_rgb * 0.24
+            + normal_back_rgb * 0.20
+            + normal_left_rgb * 0.14
+            + normal_right_rgb * 0.12;
+        float3 normal_edge_tint = mix(
+            float3(1.0),
+            float3(
+                spectral_warmth,
+                0.12 * (spectral_warmth + spectral_coolness),
+                spectral_coolness),
+            clamp(0.18 + 0.42 * spectral_rim_tint, 0.0, 1.0));
+        float normal_lift = smoothstep(
+            dot(rgb, float3(0.2126, 0.7152, 0.0722)) - 0.06,
+            dot(rgb, float3(0.2126, 0.7152, 0.0722)) + 0.28,
+            normal_center_luma);
+        float normal_dark = smoothstep(
+            0.08,
+            0.34,
+            dot(rgb, float3(0.2126, 0.7152, 0.0722)) - normal_center_luma);
+        float3 normal_layer = mix(
+            normal_probe,
+            rgb + normal_edge_tint
+                * (0.020
+                   + 0.050 * normal_alignment
+                   + 0.040 * normal_focus),
+            0.12
+                + 0.16 * normal_fresnel
+                + 0.10 * normal_coherence);
+        normal_layer = clamp(
+            (normal_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.014
+                       + normal_fresnel * 0.012
+                       + normal_lift * 0.010
+                       - glass_shadow_gain * 0.005)
+                + float3(0.50),
+            0.0,
+            1.0);
+        normal_layer += normal_edge_tint
+            * normal_fresnel
+            * (0.0010
+               + 0.0028 * spectral_rim_tint
+               + 0.0024 * glass_prismatic_gain
+               + 0.0020 * glass_scattering_gain)
+            * (0.34
+               + 0.24 * normal_coherence
+               + 0.22 * normal_focus
+               + 0.20 * normal_lift);
+        float normal_weight =
+            normal_coupler_strength
+            * normal_gate
+            * (0.30
+               + 0.20 * normal_coherence
+               + 0.18 * normal_fresnel
+               + 0.16 * normal_alignment
+               + 0.14 * normal_bridge);
+        rgb = mix(
+            rgb,
+            clamp(normal_layer, 0.0, 1.0),
+            normal_weight * 0.32);
+        float normal_shadow =
+            normal_dark
+            * normal_weight
+            * (0.005 + 0.014 * glass_shadow_gain)
+            * (0.56 + 0.44 * (1.0 - normal_alignment));
+        rgb *= 1.0 - clamp(normal_shadow, 0.0, 0.032);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float depth_aperture_strength = clamp(
         0.014 * clear_glass_detail
             + 0.012 * clear_glass_contrast
@@ -16696,6 +16970,7 @@ fragment float4 fs_material(
             + 0.012 * optical_equilibrium_strength
             + 0.012 * luminance_coupler_strength
             + 0.012 * refraction_coupler_strength
+            + 0.012 * normal_coupler_strength
             + 0.012 * legibility_veil_strength,
         0.0,
         0.10);
@@ -19244,6 +19519,7 @@ fragment float4 fs_material(
             + 0.010 * container_pressure_halo_strength
             + 0.008 * luminance_coupler_strength
             + 0.008 * refraction_coupler_strength
+            + 0.008 * normal_coupler_strength
             + 0.008 * shared_shell_strength
             + 0.008 * edge_contact_caustic_strength
             + 0.006 * surrounding_light_wrap_strength,
@@ -19504,6 +19780,7 @@ fragment float4 fs_material(
             + 0.008 * container_pressure_halo_strength
             + 0.007 * luminance_coupler_strength
             + 0.007 * refraction_coupler_strength
+            + 0.007 * normal_coupler_strength
             + 0.006 * surrounding_light_wrap_strength,
         0.0,
         0.078);
@@ -20579,6 +20856,7 @@ fragment float4 fs_material(
             + 0.006 * specular_handoff_strength
             + 0.006 * luminance_coupler_strength
             + 0.006 * refraction_coupler_strength
+            + 0.006 * normal_coupler_strength
             + 0.006 * matched_tether_sheath_strength
             + 0.006 * container_pressure_halo_strength,
         0.0,
