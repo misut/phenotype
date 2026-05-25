@@ -33562,6 +33562,337 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(contact_absorption, 0.0, 0.018);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float elastic_tension_field_strength = clamp(
+        0.006 * overlap_response_strength
+            + 0.006 * fusion_strength
+            + 0.006 * group_blend_strength * shared_backdrop_scope
+            + 0.005 * group_blend_strength * group_surface_execution
+            + 0.007 * bridge_band
+            + 0.22 * contact_pressure_field_strength
+            + 0.15 * internal_shadow_field_strength
+            + 0.13 * subsurface_caustic_field_strength
+            + 0.10 * transmission_depth_field_strength
+            + 0.08 * interlayer_refraction_field_strength
+            + 0.07 * layer_separation_field_strength
+            + 0.024 * container_morph_field_strength
+            + 0.026 * edge_meniscus_field_strength
+            + 0.016 * foreground_sheen_field_strength,
+        0.0,
+        0.033);
+    if (elastic_tension_field_strength > 0.0001) {
+        float elastic_center =
+            1.0 - smoothstep(0.12, 1.00, normalized_len);
+        float elastic_rim =
+            edge_lens
+            * (0.46
+               + 0.54
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 1.95, 0.62),
+                       signed_edge_distance)));
+        float elastic_bridge =
+            bridge_band * (0.38 + 0.62 * bridge_core);
+        float elastic_stack = clamp(
+            overlap_response_strength * 0.28
+                + fusion_strength * 0.24
+                + group_blend_strength * shared_backdrop_scope * 0.18
+                + group_surface_execution * group_blend_strength * 0.16
+                + elastic_bridge * 0.22,
+            0.0,
+            1.0);
+        float elastic_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float elastic_presence = clamp(
+            elastic_center * 0.17
+                + elastic_rim * 0.25
+                + elastic_stack * 0.26
+                + elastic_bridge * 0.18
+                + elastic_pointer * 0.08
+                + prominent_intensity * 0.06,
+            0.0,
+            1.0);
+        float2 elastic_group_norm = normalized_local;
+        float elastic_group_active = 0.0;
+        if (in.group_rect.z > 0.0 && in.group_rect.w > 0.0) {
+            float2 elastic_group_size =
+                max(in.group_rect.zw, float2(1.0));
+            float2 elastic_group_local = clamp(
+                in.screen_pos - in.group_rect.xy,
+                float2(0.0),
+                elastic_group_size);
+            elastic_group_norm =
+                (elastic_group_local / elastic_group_size - float2(0.5))
+                * 2.0;
+            elastic_group_active = group_blend_strength;
+        }
+        float elastic_shear_sign =
+            bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 elastic_axis_raw =
+            bridge_tangent
+                * elastic_shear_sign
+                * (0.34 + 0.22 * abs(bridge_shear) * elastic_bridge)
+            + bridge_dir * (0.28 + 0.20 * elastic_bridge)
+            + refraction_dir * (0.22 + 0.18 * glass_lensing_gain)
+            - dynamic_light_dir * (0.18 + 0.14 * dynamic_light_highlight)
+            + pointer_dir * (0.14 + 0.12 * elastic_pointer)
+            + dispersion_tangent
+                * (0.11
+                   + 0.08 * spectral_dispersion
+                   + 0.06 * glass_dispersion_tangential)
+            + elastic_group_norm
+                * elastic_group_active
+                * (0.12 + 0.08 * elastic_stack);
+        float elastic_axis_len = length(elastic_axis_raw);
+        float2 elastic_axis =
+            elastic_axis_len > 0.0001
+                ? elastic_axis_raw / elastic_axis_len
+                : bridge_tangent;
+        float2 elastic_cross =
+            float2(-elastic_axis.y, elastic_axis.x);
+        float elastic_light_face =
+            smoothstep(-0.26, 0.86, dot(elastic_axis, -dynamic_light_dir));
+        float elastic_bridge_alignment =
+            smoothstep(-0.20, 0.90, abs(dot(elastic_axis, bridge_tangent)));
+        float elastic_phase = clamp(
+            dot(normalized_local, elastic_axis)
+                    * (4.8 + 1.7 * elastic_presence)
+                + dot(normalized_local, elastic_cross)
+                    * (3.1 + 1.2 * elastic_stack)
+                + dot(elastic_group_norm, elastic_axis)
+                    * elastic_group_active
+                    * (2.0 + 1.0 * elastic_bridge)
+                + bridge_axial * (2.0 + 1.2 * bridge_core)
+                + bridge_shear * elastic_bridge * 2.2
+                + spectral_dispersion * 3.5
+                + glass_caustic_spread * 2.7,
+            -12.0,
+            12.0);
+        float elastic_wave =
+            0.5 + 0.5 * sin(elastic_phase);
+        float elastic_rebound_wave =
+            0.5 + 0.5 * cos(
+                elastic_phase * 0.76
+                + glass_caustic_spread * 4.0
+                + elastic_stack * 2.2);
+        float elastic_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(elastic_wave - 0.54));
+        float elastic_return_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(elastic_rebound_wave - 0.48));
+        float elastic_rebound = clamp(
+            elastic_stack * 0.30
+                + elastic_bridge_alignment * 0.24
+                + elastic_rim * 0.18
+                + elastic_lobe * 0.14
+                + elastic_return_lobe * 0.10
+                + elastic_pointer * 0.08,
+            0.0,
+            1.0);
+        float elastic_focus =
+            (0.5 + 0.5 * cos(elastic_phase * 1.30 + normalized_len * 3.1))
+            * (0.36 + 0.64 * elastic_lobe);
+        float elastic_span =
+            (0.58
+             + 1.25 * glass_thickness
+             + 0.88 * clear_glass_detail
+             + 1.00 * elastic_presence
+             + 0.024 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float elastic_cross_span =
+            (0.42
+             + 0.72 * glass_dispersion_tangential
+             + 0.66 * spectral_dispersion
+             + 0.92 * elastic_rebound)
+            * content_scale;
+        float elastic_channel_span =
+            (0.34
+             + 0.50 * glass_dispersion_tangential
+             + 0.56 * spectral_dispersion
+             + 0.48 * glass_caustic_spread)
+            * content_scale
+            * (0.82 + 0.18 * elastic_focus);
+        float2 elastic_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.08 + 0.10 * elastic_rebound),
+            float2(0.0),
+            float2(1.0));
+        float2 elastic_pull_uv = clamp(
+            elastic_base_uv
+                + elastic_axis
+                    * texel
+                    * elastic_span
+                    * (0.18 + 0.16 * elastic_rebound)
+                - dynamic_light_dir
+                    * texel
+                    * elastic_span
+                    * (0.12 + 0.10 * elastic_light_face),
+            float2(0.0),
+            float2(1.0));
+        float2 elastic_release_uv = clamp(
+            elastic_base_uv
+                - elastic_axis
+                    * texel
+                    * elastic_span
+                    * (0.18 + 0.14 * elastic_return_lobe)
+                + dynamic_light_dir
+                    * texel
+                    * elastic_span
+                    * (0.14 + 0.10 * (1.0 - elastic_light_face)),
+            float2(0.0),
+            float2(1.0));
+        float2 elastic_core_uv = clamp(
+            elastic_base_uv
+                + bridge_dir
+                    * texel
+                    * elastic_span
+                    * elastic_bridge
+                    * 0.16
+                + elastic_axis
+                    * texel
+                    * elastic_span
+                    * elastic_center
+                    * 0.10,
+            float2(0.0),
+            float2(1.0));
+        float2 elastic_warm_uv = clamp(
+            elastic_base_uv
+                + elastic_cross
+                    * texel
+                    * elastic_cross_span
+                    * (0.22 + 0.12 * elastic_wave)
+                + dispersion_tangent
+                    * texel
+                    * elastic_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float2 elastic_cool_uv = clamp(
+            elastic_base_uv
+                - elastic_cross
+                    * texel
+                    * elastic_cross_span
+                    * (0.22 + 0.12 * elastic_lobe)
+                - dispersion_tangent
+                    * texel
+                    * elastic_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float3 elastic_pull_rgb =
+            backdrop.sample(samp, elastic_pull_uv).rgb;
+        float3 elastic_release_rgb =
+            backdrop.sample(samp, elastic_release_uv).rgb;
+        float3 elastic_core_rgb =
+            backdrop.sample(samp, elastic_core_uv).rgb;
+        float3 elastic_warm_rgb =
+            backdrop.sample(samp, elastic_warm_uv).rgb;
+        float3 elastic_cool_rgb =
+            backdrop.sample(samp, elastic_cool_uv).rgb;
+        float3 elastic_probe =
+            elastic_pull_rgb * 0.24
+            + elastic_release_rgb * 0.22
+            + elastic_core_rgb * 0.24
+            + elastic_warm_rgb * 0.15
+            + elastic_cool_rgb * 0.15;
+        float3 elastic_split = float3(
+            elastic_warm_rgb.r,
+            (elastic_core_rgb.g + elastic_probe.g) * 0.5,
+            elastic_cool_rgb.b);
+        float elastic_pull_luma =
+            dot(elastic_pull_rgb, float3(0.2126, 0.7152, 0.0722));
+        float elastic_release_luma =
+            dot(elastic_release_rgb, float3(0.2126, 0.7152, 0.0722));
+        float elastic_probe_luma =
+            dot(elastic_probe, float3(0.2126, 0.7152, 0.0722));
+        float elastic_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float elastic_membrane_delta = clamp(
+            abs(elastic_pull_luma - elastic_release_luma) * 0.32
+                + abs(elastic_probe_luma - elastic_surface_luma) * 0.22
+                + length(elastic_pull_rgb - elastic_release_rgb) * 0.20
+                + length(elastic_warm_rgb - elastic_cool_rgb) * 0.16
+                + elastic_rebound * 0.10,
+            0.0,
+            1.0);
+        float elastic_coherence =
+            1.0 - smoothstep(0.10, 0.42, elastic_membrane_delta);
+        float elastic_brightening = smoothstep(
+            elastic_surface_luma - 0.06,
+            elastic_surface_luma + 0.28,
+            elastic_probe_luma);
+        float elastic_relief = smoothstep(
+            0.012,
+            0.30,
+            max(elastic_probe_luma - elastic_surface_luma, 0.0) * 0.38
+                + max(elastic_release_luma - elastic_pull_luma, 0.0) * 0.28
+                + elastic_rebound * 0.18);
+        float3 elastic_tension_layer = mix(
+            elastic_probe,
+            elastic_split,
+            0.12
+                + 0.12 * elastic_focus
+                + 0.10 * elastic_light_face
+                + 0.10 * elastic_rebound);
+        elastic_tension_layer = mix(
+            elastic_tension_layer,
+            float3(elastic_probe_luma),
+            (1.0 - elastic_brightening)
+                    * (0.08 + 0.14 * glass_shadow_gain)
+                + elastic_coherence * 0.08);
+        elastic_tension_layer = clamp(
+            (elastic_tension_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.010
+                       + elastic_relief * 0.010
+                       - (1.0 - elastic_brightening) * 0.014)
+                + float3(0.50),
+            0.0,
+            1.0);
+        elastic_tension_layer *= float3(
+            1.0 + spectral_warmth * 0.32 + tint_chroma * in.tint.r * 0.012,
+            1.0 + spectral_rim_tint * 0.12 + tint_chroma * in.tint.g * 0.010,
+            1.0 + spectral_coolness * 0.32 + tint_chroma * in.tint.b * 0.012);
+        float elastic_gate = clamp(
+            elastic_presence * 0.27
+                + elastic_stack * 0.24
+                + elastic_rim * 0.18
+                + elastic_rebound * 0.18
+                + elastic_focus * 0.10
+                + elastic_coherence * 0.08,
+            0.0,
+            1.0);
+        float elastic_weight =
+            elastic_tension_field_strength
+            * elastic_gate
+            * (0.26
+               + 0.20 * elastic_rebound
+               + 0.16 * elastic_relief
+               + 0.14 * elastic_focus
+               + 0.12 * elastic_bridge_alignment);
+        rgb = mix(
+            rgb,
+            elastic_tension_layer,
+            elastic_weight
+                * (0.09
+                   + 0.08 * elastic_focus
+                   + 0.08 * elastic_presence));
+        float3 elastic_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.10,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.08,
+            spectral_coolness + tint_chroma * in.tint.b * 0.10);
+        rgb += elastic_prism
+            * elastic_weight
+            * max(elastic_lobe, elastic_return_lobe * 0.68)
+            * (0.0005
+               + 0.0015 * spectral_rim_tint
+               + 0.0014 * glass_scattering_gain);
+        float elastic_absorption =
+            (1.0 - elastic_brightening)
+            * elastic_weight
+            * (0.0012 + 0.0046 * glass_shadow_gain)
+            * (0.52 + 0.48 * (1.0 - elastic_light_face));
+        rgb *= 1.0 - clamp(elastic_absorption, 0.0, 0.016);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
