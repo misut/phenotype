@@ -36698,6 +36698,404 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(containment_absorption, 0.0, 0.010);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float tonal_equilibrium_field_strength = clamp(
+        0.003 * overlap_response_strength
+            + 0.004 * fusion_strength
+            + 0.005 * group_blend_strength * shared_backdrop_scope
+            + 0.004 * group_blend_strength * group_surface_execution
+            + 0.004 * bridge_band
+            + 0.26 * chroma_containment_field_strength
+            + 0.22 * legibility_preservation_field_strength
+            + 0.18 * depth_separation_field_strength
+            + 0.15 * specular_flow_field_strength
+            + 0.12 * phase_equalization_field_strength
+            + 0.10 * edge_continuity_field_strength
+            + 0.08 * rim_coalescence_field_strength
+            + 0.07 * edge_adhesion_field_strength
+            + 0.06 * elastic_tension_field_strength
+            + 0.05 * contact_pressure_field_strength
+            + 0.045 * internal_shadow_field_strength
+            + 0.038 * subsurface_caustic_field_strength
+            + 0.030 * transmission_depth_field_strength
+            + 0.024 * interlayer_refraction_field_strength
+            + 0.019 * layer_separation_field_strength
+            + 0.012 * edge_meniscus_field_strength
+            + 0.010 * container_morph_field_strength
+            + 0.009 * foreground_sheen_field_strength,
+        0.0,
+        0.024);
+    if (tonal_equilibrium_field_strength > 0.0001) {
+        float equilibrium_rim =
+            edge_lens
+            * (0.56
+               + 0.44
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.52, 0.84),
+                       signed_edge_distance)));
+        float equilibrium_bridge =
+            bridge_band * (0.48 + 0.52 * bridge_core);
+        float equilibrium_stack = clamp(
+            overlap_response_strength * 0.27
+                + fusion_strength * 0.23
+                + group_blend_strength * shared_backdrop_scope * 0.20
+                + group_surface_execution * group_blend_strength * 0.16
+                + equilibrium_bridge * 0.23,
+            0.0,
+            1.0);
+        float equilibrium_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float equilibrium_lock = clamp(
+            equilibrium_rim * 0.29
+                + equilibrium_bridge * 0.22
+                + equilibrium_stack * 0.18
+                + chroma_containment_field_strength * 4.8
+                + legibility_preservation_field_strength * 4.0
+                + depth_separation_field_strength * 3.2
+                + specular_flow_field_strength * 2.7
+                + phase_equalization_field_strength * 2.1
+                + equilibrium_pointer * 0.06,
+            0.0,
+            1.0);
+        float equilibrium_presence = clamp(
+            equilibrium_rim * 0.30
+                + equilibrium_stack * 0.24
+                + equilibrium_bridge * 0.18
+                + equilibrium_lock * 0.17
+                + prominent_intensity * 0.05
+                + equilibrium_pointer * 0.05,
+            0.0,
+            1.0);
+        float equilibrium_shear_sign =
+            bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 equilibrium_axis_raw =
+            -dynamic_light_dir * (0.34 + 0.18 * dynamic_light_highlight)
+            + refraction_dir * (0.26 + 0.15 * glass_lensing_gain)
+            + bridge_tangent
+                * equilibrium_shear_sign
+                * (0.24 + 0.16 * abs(bridge_shear) * equilibrium_bridge)
+            + bridge_dir * (0.18 + 0.14 * equilibrium_bridge)
+            + dispersion_tangent
+                * (0.11
+                   + 0.06 * spectral_dispersion
+                   + 0.05 * glass_dispersion_tangential)
+            + pointer_dir * (0.09 + 0.07 * equilibrium_pointer);
+        float equilibrium_axis_len = length(equilibrium_axis_raw);
+        float2 equilibrium_axis =
+            equilibrium_axis_len > 0.0001
+                ? equilibrium_axis_raw / equilibrium_axis_len
+                : (normalized_len > 0.0001
+                    ? refraction_dir
+                    : float2(1.0, 0.0));
+        float2 equilibrium_cross =
+            float2(-equilibrium_axis.y, equilibrium_axis.x);
+        float equilibrium_light_face =
+            smoothstep(-0.16, 0.92, dot(equilibrium_axis, -dynamic_light_dir));
+        float equilibrium_bridge_alignment =
+            smoothstep(-0.14, 0.92, abs(dot(equilibrium_axis, bridge_tangent)));
+        float equilibrium_phase = clamp(
+            dot(normalized_local, equilibrium_axis)
+                    * (3.2 + 0.9 * equilibrium_presence)
+                + dot(normalized_local, equilibrium_cross)
+                    * (1.9 + 0.8 * equilibrium_stack)
+                + bridge_axial * (1.5 + 0.7 * bridge_core)
+                + bridge_lateral_signed * equilibrium_bridge * 1.1
+                + bridge_shear * equilibrium_bridge * 1.3
+                + spectral_dispersion * 1.8
+                + glass_caustic_spread * 1.4,
+            -12.0,
+            12.0);
+        float equilibrium_wave =
+            0.5 + 0.5 * sin(equilibrium_phase);
+        float equilibrium_counter_wave =
+            0.5 + 0.5 * cos(
+                equilibrium_phase * 0.54
+                + glass_caustic_spread * 2.2
+                + equilibrium_stack * 1.4);
+        float equilibrium_lobe =
+            1.0 - smoothstep(0.0, 0.43, abs(equilibrium_wave - 0.50));
+        float equilibrium_return_lobe =
+            1.0 - smoothstep(0.0, 0.45, abs(equilibrium_counter_wave - 0.50));
+        float equilibrium_support = clamp(
+            equilibrium_lock * 0.32
+                + equilibrium_bridge_alignment * 0.18
+                + equilibrium_rim * 0.18
+                + equilibrium_lobe * 0.10
+                + equilibrium_return_lobe * 0.08
+                + equilibrium_pointer * 0.07,
+            0.0,
+            1.0);
+        float equilibrium_focus =
+            (0.5
+             + 0.5
+                 * cos(equilibrium_phase * 1.00 + normalized_len * 1.7))
+            * (0.34 + 0.66 * equilibrium_lobe);
+        float equilibrium_span =
+            (0.34
+             + 0.68 * glass_thickness
+             + 0.54 * clear_glass_detail
+             + 0.70 * equilibrium_presence
+             + 0.012 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float equilibrium_cross_span =
+            (0.26
+             + 0.42 * glass_dispersion_tangential
+             + 0.38 * spectral_dispersion
+             + 0.56 * equilibrium_support)
+            * content_scale;
+        float equilibrium_channel_span =
+            (0.18
+             + 0.28 * glass_dispersion_tangential
+             + 0.30 * spectral_dispersion
+             + 0.24 * glass_caustic_spread)
+            * content_scale
+            * (0.82 + 0.18 * equilibrium_focus);
+        float2 equilibrium_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.04 + 0.05 * equilibrium_support),
+            float2(0.0),
+            float2(1.0));
+        float2 equilibrium_high_uv = clamp(
+            equilibrium_base_uv
+                - dynamic_light_dir
+                    * texel
+                    * equilibrium_span
+                    * (0.13 + 0.10 * equilibrium_light_face)
+                + equilibrium_axis
+                    * texel
+                    * equilibrium_span
+                    * (0.07 + 0.08 * equilibrium_support),
+            float2(0.0),
+            float2(1.0));
+        float2 equilibrium_low_uv = clamp(
+            equilibrium_base_uv
+                + dynamic_light_dir
+                    * texel
+                    * equilibrium_span
+                    * (0.14 + 0.10 * (1.0 - equilibrium_light_face))
+                - equilibrium_axis
+                    * texel
+                    * equilibrium_span
+                    * (0.07 + 0.08 * equilibrium_return_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 equilibrium_core_uv = clamp(
+            equilibrium_base_uv
+                + refraction_dir
+                    * texel
+                    * equilibrium_span
+                    * (0.06 + 0.06 * equilibrium_rim)
+                + bridge_dir
+                    * texel
+                    * equilibrium_span
+                    * equilibrium_bridge
+                    * 0.05,
+            float2(0.0),
+            float2(1.0));
+        float2 equilibrium_warm_uv = clamp(
+            equilibrium_base_uv
+                + equilibrium_cross
+                    * texel
+                    * equilibrium_cross_span
+                    * (0.13 + 0.08 * equilibrium_wave)
+                + dispersion_tangent
+                    * texel
+                    * equilibrium_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float2 equilibrium_cool_uv = clamp(
+            equilibrium_base_uv
+                - equilibrium_cross
+                    * texel
+                    * equilibrium_cross_span
+                    * (0.13 + 0.08 * equilibrium_lobe)
+                - dispersion_tangent
+                    * texel
+                    * equilibrium_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float3 equilibrium_high_rgb =
+            backdrop.sample(samp, equilibrium_high_uv).rgb;
+        float3 equilibrium_low_rgb =
+            backdrop.sample(samp, equilibrium_low_uv).rgb;
+        float3 equilibrium_core_rgb =
+            backdrop.sample(samp, equilibrium_core_uv).rgb;
+        float3 equilibrium_warm_rgb =
+            backdrop.sample(samp, equilibrium_warm_uv).rgb;
+        float3 equilibrium_cool_rgb =
+            backdrop.sample(samp, equilibrium_cool_uv).rgb;
+        float3 equilibrium_average =
+            equilibrium_high_rgb * 0.21
+            + equilibrium_low_rgb * 0.21
+            + equilibrium_core_rgb * 0.30
+            + equilibrium_warm_rgb * 0.14
+            + equilibrium_cool_rgb * 0.14;
+        float3 equilibrium_split = float3(
+            equilibrium_warm_rgb.r,
+            (equilibrium_core_rgb.g + equilibrium_average.g) * 0.5,
+            equilibrium_cool_rgb.b);
+        float equilibrium_split_mix = clamp(
+            0.05
+                + 0.06 * spectral_dispersion
+                + 0.05 * glass_dispersion_tangential
+                + 0.05 * equilibrium_support,
+            0.0,
+            0.24);
+        float3 equilibrium_probe = mix(
+            equilibrium_average,
+            equilibrium_split,
+            equilibrium_split_mix);
+        float equilibrium_high_luma =
+            dot(equilibrium_high_rgb, float3(0.2126, 0.7152, 0.0722));
+        float equilibrium_low_luma =
+            dot(equilibrium_low_rgb, float3(0.2126, 0.7152, 0.0722));
+        float equilibrium_core_luma =
+            dot(equilibrium_core_rgb, float3(0.2126, 0.7152, 0.0722));
+        float equilibrium_warm_luma =
+            dot(equilibrium_warm_rgb, float3(0.2126, 0.7152, 0.0722));
+        float equilibrium_cool_luma =
+            dot(equilibrium_cool_rgb, float3(0.2126, 0.7152, 0.0722));
+        float equilibrium_probe_luma =
+            dot(equilibrium_probe, float3(0.2126, 0.7152, 0.0722));
+        float equilibrium_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float equilibrium_luma_min = min(
+            min(equilibrium_high_luma, equilibrium_low_luma),
+            min(equilibrium_core_luma,
+                min(equilibrium_warm_luma, equilibrium_cool_luma)));
+        float equilibrium_luma_max = max(
+            max(equilibrium_high_luma, equilibrium_low_luma),
+            max(equilibrium_core_luma,
+                max(equilibrium_warm_luma, equilibrium_cool_luma)));
+        float equilibrium_luma_range =
+            clamp(equilibrium_luma_max - equilibrium_luma_min, 0.0, 1.0);
+        float equilibrium_local_mean = clamp(
+            equilibrium_probe_luma * 0.50
+                + equilibrium_core_luma * 0.22
+                + equilibrium_surface_luma * 0.28,
+            0.0,
+            1.0);
+        float equilibrium_bright_spike = smoothstep(
+            0.08,
+            0.44,
+            max(equilibrium_high_luma, equilibrium_warm_luma)
+                - equilibrium_local_mean
+                + equilibrium_luma_range * 0.18);
+        float equilibrium_dark_pocket = smoothstep(
+            0.08,
+            0.44,
+            equilibrium_local_mean
+                - min(equilibrium_low_luma, equilibrium_cool_luma)
+                + equilibrium_luma_range * 0.18);
+        float equilibrium_instability = smoothstep(
+            0.05,
+            0.38,
+            equilibrium_luma_range * 0.48
+                + abs(equilibrium_probe_luma - equilibrium_surface_luma) * 0.24
+                + abs(equilibrium_high_luma - equilibrium_low_luma) * 0.20
+                + equilibrium_support * 0.08);
+        float equilibrium_mid_luma =
+            0.50
+            + (equilibrium_local_mean - 0.50)
+                * (0.62 + 0.20 * (1.0 - equilibrium_instability));
+        float equilibrium_target_luma = clamp(
+            mix(
+                equilibrium_probe_luma,
+                equilibrium_mid_luma,
+                equilibrium_instability
+                    * (0.30
+                       + 0.18 * max(equilibrium_bright_spike,
+                                    equilibrium_dark_pocket))),
+            0.0,
+            1.0);
+        float equilibrium_chroma = clamp(
+            length(equilibrium_probe - float3(equilibrium_probe_luma)),
+            0.0,
+            1.0);
+        float equilibrium_chroma_keep = clamp(
+            0.54
+                + 0.20 * (1.0 - equilibrium_instability)
+                + 0.12 * equilibrium_support
+                + 0.08 * equilibrium_light_face,
+            0.46,
+            0.88);
+        float3 equilibrium_tone =
+            float3(equilibrium_target_luma)
+            + (equilibrium_probe - float3(equilibrium_probe_luma))
+                * equilibrium_chroma_keep;
+        float3 equilibrium_layer = mix(
+            equilibrium_probe,
+            equilibrium_tone,
+            equilibrium_instability
+                * (0.24 + 0.16 * equilibrium_chroma));
+        equilibrium_layer = mix(
+            equilibrium_layer,
+            equilibrium_core_rgb,
+            (1.0 - equilibrium_instability)
+                * (0.07 + 0.07 * equilibrium_focus));
+        equilibrium_layer = clamp(
+            (equilibrium_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.006
+                       + equilibrium_support * 0.005
+                       - equilibrium_instability * 0.008)
+                + float3(0.50),
+            0.0,
+            1.0);
+        equilibrium_layer *= float3(
+            1.0 + spectral_warmth * 0.18 + tint_chroma * in.tint.r * 0.006,
+            1.0 + spectral_rim_tint * 0.07 + tint_chroma * in.tint.g * 0.006,
+            1.0 + spectral_coolness * 0.18 + tint_chroma * in.tint.b * 0.006);
+        float equilibrium_gate = clamp(
+            equilibrium_presence * 0.27
+                + equilibrium_stack * 0.22
+                + equilibrium_rim * 0.20
+                + equilibrium_support * 0.15
+                + equilibrium_instability * 0.12
+                + max(equilibrium_bright_spike, equilibrium_dark_pocket) * 0.07,
+            0.0,
+            1.0);
+        float equilibrium_weight =
+            tonal_equilibrium_field_strength
+            * equilibrium_gate
+            * (0.20
+               + 0.16 * equilibrium_support
+               + 0.15 * equilibrium_instability
+               + 0.12 * max(equilibrium_bright_spike,
+                             equilibrium_dark_pocket)
+               + 0.10 * equilibrium_bridge_alignment);
+        rgb = mix(
+            rgb,
+            equilibrium_layer,
+            equilibrium_weight
+                * (0.060
+                   + 0.052 * equilibrium_focus
+                   + 0.052 * equilibrium_presence));
+        float3 equilibrium_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.045,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.038,
+            spectral_coolness + tint_chroma * in.tint.b * 0.045);
+        float equilibrium_edge_glint =
+            max(equilibrium_lobe, equilibrium_return_lobe * 0.52)
+            * equilibrium_rim
+            * (1.0 - equilibrium_instability * 0.26);
+        rgb += equilibrium_prism
+            * equilibrium_weight
+            * equilibrium_edge_glint
+            * (0.00022
+               + 0.0007 * spectral_rim_tint
+               + 0.0006 * glass_scattering_gain);
+        float equilibrium_absorption =
+            equilibrium_instability
+            * max(equilibrium_bright_spike, equilibrium_dark_pocket)
+            * equilibrium_weight
+            * (0.0007 + 0.0024 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - equilibrium_light_face));
+        rgb *= 1.0 - clamp(equilibrium_absorption, 0.0, 0.009);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
