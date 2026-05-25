@@ -2540,6 +2540,49 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
             + 0.040f * plan.glass_caustic_flow.flow_strength,
         0.0f,
         0.44f);
+    inst.refraction[0] = std::clamp(
+        inst.refraction[0] * plan.glass_meniscus.refraction_gain,
+        0.0f,
+        0.82f);
+    inst.refraction[1] = std::clamp(
+        inst.refraction[1] + 0.10f * plan.glass_meniscus.edge_pull,
+        0.0f,
+        0.88f);
+    inst.refraction[2] = std::clamp(
+        inst.refraction[2]
+            * (1.0f
+               + 0.045f * (plan.glass_meniscus.refraction_gain - 1.0f)
+               + 0.060f * plan.glass_meniscus.edge_pull),
+        0.0f,
+        8.0f);
+    inst.edge_optics[0] = std::clamp(
+        inst.edge_optics[0] + plan.glass_meniscus.rim_width * 1.10f,
+        0.0f,
+        18.0f);
+    inst.edge_optics[1] = std::clamp(
+        inst.edge_optics[1] * plan.glass_meniscus.highlight_gain
+            + 0.045f * plan.glass_meniscus.edge_pull,
+        0.0f,
+        0.95f);
+    inst.edge_optics[2] = std::clamp(
+        inst.edge_optics[2] + 0.055f * plan.glass_meniscus.edge_pull,
+        0.0f,
+        0.82f);
+    inst.edge_optics[3] = std::clamp(
+        inst.edge_optics[3] + 0.020f * plan.glass_meniscus.edge_pull,
+        0.0f,
+        0.20f);
+    inst.spectral_tint[3] = std::clamp(
+        inst.spectral_tint[3]
+            + 0.034f * (plan.glass_meniscus.highlight_gain - 1.0f),
+        0.0f,
+        0.32f);
+    inst.lighting[2] = std::clamp(
+        inst.lighting[2]
+            + 0.030f * (plan.glass_meniscus.highlight_gain - 1.0f)
+            + 0.020f * plan.glass_meniscus.edge_pull,
+        0.0f,
+        0.54f);
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];

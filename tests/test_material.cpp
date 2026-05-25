@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 81);
+    assert(material_plan_contract_version == 82);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -230,6 +230,26 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.glass_caustic_flow.highlight_drift < 0.22f);
     assert(plan.glass_caustic_flow.caustic_focus > 0.12f);
     assert(plan.glass_caustic_flow.caustic_focus < 0.30f);
+    assert(plan.glass_meniscus.active);
+    assert(plan.glass_meniscus.edge_driven);
+    assert(plan.glass_meniscus.depth_driven);
+    assert(plan.glass_meniscus.caustic_driven);
+    assert(plan.glass_meniscus.environment_driven);
+    assert(!plan.glass_meniscus.interaction_driven);
+    assert(!plan.glass_meniscus.reduced_motion_suppressed);
+    assert(plan.glass_meniscus.bounded);
+    assert(std::string_view(plan.glass_meniscus.model)
+        == "adaptive-glass-meniscus-rim");
+    assert(std::string_view(plan.glass_meniscus.source)
+        == "depth-caustic-environment-meniscus-rim");
+    assert(plan.glass_meniscus.rim_width > 2.0f);
+    assert(plan.glass_meniscus.rim_width < 6.0f);
+    assert(plan.glass_meniscus.edge_pull > 0.04f);
+    assert(plan.glass_meniscus.edge_pull < 0.24f);
+    assert(plan.glass_meniscus.highlight_gain > 1.08f);
+    assert(plan.glass_meniscus.highlight_gain < 1.40f);
+    assert(plan.glass_meniscus.refraction_gain > 1.04f);
+    assert(plan.glass_meniscus.refraction_gain < 1.28f);
     assert(plan.glass_thickness.active);
     assert(plan.glass_thickness.size_driven);
     assert(!plan.glass_thickness.transition_driven);
@@ -382,6 +402,8 @@ void test_sampled_backdrop_access_contract() {
     assert(std::string_view(
                plan.optical_composition.glass_caustic_flow_source)
         == "depth-prismatic-caustic-flow");
+    assert(std::string_view(plan.optical_composition.glass_meniscus_source)
+        == "depth-caustic-environment-meniscus-rim");
     assert(std::string_view(plan.optical_composition.glass_thickness_source)
         == "size-adaptive-thickness-lensing");
     assert(std::string_view(plan.optical_composition.glass_dispersion_source)
@@ -419,6 +441,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_composition.spectral_tint_required);
     assert(plan.optical_composition.dynamic_lighting_required);
     assert(plan.optical_composition.glass_caustic_flow_required);
+    assert(plan.optical_composition.glass_meniscus_required);
     assert(plan.optical_composition.glass_thickness_required);
     assert(plan.optical_composition.glass_dispersion_required);
     assert(plan.optical_composition.glass_stabilization_required);
@@ -481,6 +504,14 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_caustic_flow.highlight_drift);
     assert(plan.optical_composition.glass_caustic_focus
            == plan.glass_caustic_flow.caustic_focus);
+    assert(plan.optical_composition.glass_meniscus_rim_width
+           == plan.glass_meniscus.rim_width);
+    assert(plan.optical_composition.glass_meniscus_edge_pull
+           == plan.glass_meniscus.edge_pull);
+    assert(plan.optical_composition.glass_meniscus_highlight_gain
+           == plan.glass_meniscus.highlight_gain);
+    assert(plan.optical_composition.glass_meniscus_refraction_gain
+           == plan.glass_meniscus.refraction_gain);
     assert(plan.optical_composition.glass_thickness
            == plan.glass_thickness.thickness);
     assert(plan.optical_composition.glass_lensing_gain
@@ -536,6 +567,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_response.spectral_tint_active);
     assert(plan.optical_response.dynamic_lighting_active);
     assert(plan.optical_response.glass_caustic_flow_active);
+    assert(plan.optical_response.glass_meniscus_active);
     assert(plan.optical_response.glass_thickness_active);
     assert(plan.optical_response.glass_dispersion_active);
     assert(plan.optical_response.glass_stabilization_active);
@@ -602,6 +634,16 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_caustic_flow.highlight_drift);
     assert(plan.execution_stages[2].optics.glass_caustic_focus
            == plan.glass_caustic_flow.caustic_focus);
+    assert(std::string_view(plan.execution_stages[2].optics.glass_meniscus_model)
+        == "adaptive-glass-meniscus-rim");
+    assert(plan.execution_stages[2].optics.glass_meniscus_rim_width
+           == plan.glass_meniscus.rim_width);
+    assert(plan.execution_stages[2].optics.glass_meniscus_edge_pull
+           == plan.glass_meniscus.edge_pull);
+    assert(plan.execution_stages[2].optics.glass_meniscus_highlight_gain
+           == plan.glass_meniscus.highlight_gain);
+    assert(plan.execution_stages[2].optics.glass_meniscus_refraction_gain
+           == plan.glass_meniscus.refraction_gain);
     assert(std::string_view(plan.execution_stages[2].optics.glass_thickness_model)
         == "adaptive-glass-thickness");
     assert(plan.execution_stages[2].optics.glass_thickness
