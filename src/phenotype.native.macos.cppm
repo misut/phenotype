@@ -18549,6 +18549,331 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(irradiance_absorption, 0.0, 0.030);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float transition_seam_lock_strength = clamp(
+        0.013 * container_irradiance_lock_strength
+            + 0.012 * spectral_phase_lock_strength
+            + 0.011 * phase_field_strength
+            + 0.010 * morph_coupler_strength
+            + 0.009 * thickness_coupler_strength
+            + 0.008 * refraction_coupler_strength
+            + 0.008 * normal_coupler_strength
+            + 0.007 * luminance_coupler_strength
+            + 0.008 * glass_effect_match_execution * group_blend_strength
+            + 0.007 * morph_execution * group_blend_strength
+            + 0.007 * materialize_wave_strength,
+        0.0,
+        0.066);
+    if (transition_seam_lock_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 seam_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 seam_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            seam_group_size);
+        float2 seam_group_norm =
+            (seam_group_local / seam_group_size - float2(0.5)) * 2.0;
+        float seam_group_radius = length(seam_group_norm);
+        float seam_center =
+            1.0 - smoothstep(0.18, 1.14, seam_group_radius);
+        float2 seam_group_edge = min(
+            seam_group_local,
+            max(seam_group_size - seam_group_local, float2(0.0)));
+        float seam_edge_distance =
+            min(seam_group_edge.x, seam_group_edge.y);
+        float seam_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.7, 1.0),
+                seam_edge_distance);
+        float seam_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float seam_transition = clamp(
+            glass_effect_match_execution * 0.34
+                + morph_execution * 0.26
+                + materialize_wave_strength * 0.20
+                + shape_blend_execution * 0.14
+                + union_execution * 0.12
+                + container_irradiance_lock_strength * 2.0
+                + spectral_phase_lock_strength * 1.6,
+            0.0,
+            1.0);
+        float seam_gate = clamp(
+            seam_bridge * 0.28
+                + seam_edge * 0.22
+                + seam_center * 0.20
+                + seam_transition * group_blend_strength * 0.24
+                + edge_lens * 0.12
+                + phase_field_strength * 1.2,
+            0.0,
+            1.0);
+        float2 seam_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 seam_group_center_screen =
+            in.group_rect.xy + seam_group_size * 0.5;
+        float2 seam_group_center_uv = clamp(
+            seam_group_center_screen / seam_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 seam_to_center = seam_group_center_uv - in.screen_uv;
+        float seam_center_distance = length(seam_to_center);
+        float2 seam_center_dir =
+            seam_center_distance > 0.0001
+                ? seam_to_center / seam_center_distance
+                : refraction_dir;
+        float2 seam_axis_raw =
+            bridge_dir * (0.38 + 0.24 * seam_bridge)
+            + refraction_dir * (0.24 + 0.18 * clear_glass_detail)
+            + seam_center_dir * (0.30 + 0.20 * seam_center)
+            + dispersion_tangent
+                * (0.18
+                   + 0.12 * spectral_dispersion
+                   + 0.10 * glass_dispersion_tangential)
+            - dynamic_light_dir
+                * (0.18 + 0.14 * dynamic_light_highlight);
+        float seam_axis_len = length(seam_axis_raw);
+        float2 seam_axis =
+            seam_axis_len > 0.0001
+                ? seam_axis_raw / seam_axis_len
+                : refraction_dir;
+        float2 seam_cross = float2(-seam_axis.y, seam_axis.x);
+        float seam_alignment =
+            smoothstep(-0.30, 0.90, dot(seam_axis, bridge_dir));
+        float seam_light_face =
+            smoothstep(-0.26, 0.92, dot(seam_axis, -dynamic_light_dir));
+        float seam_phase = clamp(
+            dot(seam_group_norm, seam_axis)
+                    * (5.0 + 2.6 * seam_transition)
+                + dot(seam_group_norm, seam_cross)
+                    * (2.4 + 1.8 * seam_bridge)
+                + bridge_axial * (3.4 + 2.2 * seam_bridge)
+                + bridge_shear * seam_bridge * 2.4
+                + materialize_rim_position
+                    * materialize_wave_strength
+                    * 2.8
+                + dynamic_light_highlight * 1.4,
+            -10.0,
+            10.0);
+        float seam_wave = 0.5 + 0.5 * sin(seam_phase);
+        float seam_counter = 0.5 + 0.5 * cos(
+            seam_phase * 0.72
+            + bridge_shear * 2.6
+            + glass_caustic_spread * 6.0);
+        float seam_ridge =
+            1.0 - smoothstep(0.0, 0.32, abs(seam_wave - 0.56));
+        float seam_counter_ridge =
+            1.0 - smoothstep(0.0, 0.34, abs(seam_counter - 0.52));
+        float seam_span =
+            (0.92
+             + 2.1 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.1 * seam_gate
+             + 0.044 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float seam_cross_span =
+            (0.68
+             + 1.2 * glass_dispersion_tangential
+             + 1.4 * spectral_dispersion
+             + 0.92 * seam_transition)
+            * content_scale;
+        float2 seam_core_uv = clamp(
+            mix(
+                in.screen_uv,
+                seam_group_center_uv,
+                0.14 + 0.14 * seam_center),
+            float2(0.0),
+            float2(1.0));
+        float2 seam_lead_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + seam_axis
+                    * texel
+                    * seam_span
+                    * (0.28 + 0.16 * seam_wave)
+                - dynamic_light_dir
+                    * texel
+                    * seam_span
+                    * (0.10 + 0.08 * seam_light_face),
+            float2(0.0),
+            float2(1.0));
+        float2 seam_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - seam_axis
+                    * texel
+                    * seam_span
+                    * (0.30 + 0.15 * seam_ridge)
+                + seam_center_dir
+                    * texel
+                    * seam_span
+                    * (0.10 + 0.08 * seam_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 seam_upper_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.15
+                + seam_cross
+                    * texel
+                    * seam_cross_span
+                    * (0.28 + 0.15 * seam_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 seam_lower_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.15
+                - seam_cross
+                    * texel
+                    * seam_cross_span
+                    * (0.26 + 0.15 * seam_counter_ridge)
+                + dispersion_tangent
+                    * texel
+                    * seam_cross_span
+                    * (0.10 + 0.12 * spectral_rim_tint),
+            float2(0.0),
+            float2(1.0));
+        float2 seam_diagonal_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.12
+                + normalize(seam_axis + seam_cross)
+                    * texel
+                    * seam_cross_span
+                    * (0.24 + 0.14 * seam_bridge)
+                - dynamic_light_dir
+                    * texel
+                    * seam_span
+                    * (0.08 + 0.08 * dynamic_light_highlight),
+            float2(0.0),
+            float2(1.0));
+        float3 seam_core_rgb =
+            backdrop.sample(samp, seam_core_uv).rgb;
+        float3 seam_lead_rgb =
+            backdrop.sample(samp, seam_lead_uv).rgb;
+        float3 seam_return_rgb =
+            backdrop.sample(samp, seam_return_uv).rgb;
+        float3 seam_upper_rgb =
+            backdrop.sample(samp, seam_upper_uv).rgb;
+        float3 seam_lower_rgb =
+            backdrop.sample(samp, seam_lower_uv).rgb;
+        float3 seam_diagonal_rgb =
+            backdrop.sample(samp, seam_diagonal_uv).rgb;
+        float3 seam_probe =
+            seam_core_rgb * 0.24
+            + seam_lead_rgb * 0.22
+            + seam_return_rgb * 0.18
+            + seam_upper_rgb * 0.14
+            + seam_lower_rgb * 0.12
+            + seam_diagonal_rgb * 0.10;
+        float seam_luma =
+            dot(seam_probe, float3(0.2126, 0.7152, 0.0722));
+        float seam_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float seam_chroma = max(
+            max(abs(seam_probe.r - seam_probe.g),
+                abs(seam_probe.g - seam_probe.b)),
+            abs(seam_probe.b - seam_probe.r));
+        float seam_color_pickup =
+            smoothstep(0.035, 0.34, seam_chroma);
+        float seam_range = clamp(
+            length(seam_lead_rgb - seam_return_rgb) * 0.30
+                + length(seam_upper_rgb - seam_lower_rgb) * 0.24
+                + length(seam_diagonal_rgb - seam_core_rgb) * 0.18
+                + abs(seam_luma - seam_surface_luma) * 0.20
+                + seam_ridge * 0.06
+                + seam_counter_ridge * 0.05,
+            0.0,
+            1.0);
+        float seam_coherence =
+            1.0 - smoothstep(0.08, 0.38, seam_range);
+        float seam_bright = smoothstep(
+            seam_surface_luma - 0.07,
+            seam_surface_luma + 0.30,
+            seam_luma);
+        float seam_dark = smoothstep(
+            0.08,
+            0.34,
+            seam_surface_luma - seam_luma);
+        float seam_fresnel = clamp(
+            seam_edge * 0.26
+                + seam_bridge * 0.24
+                + seam_transition * 0.20
+                + seam_alignment * 0.14
+                + seam_light_face * 0.12
+                + materialize_wave_strength * 0.10,
+            0.0,
+            1.0);
+        float3 seam_neutral = mix(
+            seam_probe,
+            float3(seam_luma),
+            seam_dark * (0.14 + 0.16 * glass_shadow_gain)
+                + seam_coherence * 0.14);
+        float3 seam_layer = mix(
+            seam_neutral,
+            seam_probe,
+            0.40
+                + 0.26 * seam_color_pickup
+                + 0.12 * seam_light_face);
+        seam_layer = mix(
+            seam_layer,
+            seam_layer
+                * (float3(1.0)
+                   + in.tint.rgb
+                       * (0.026
+                          + 0.040 * tint_chroma * prominent_intensity)),
+            0.26 + 0.22 * group_blend_strength);
+        seam_layer += float3(
+            spectral_warmth,
+            0.13 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * seam_fresnel
+            * seam_color_pickup
+            * (0.004
+               + 0.010 * spectral_rim_tint
+               + 0.007 * glass_prismatic_gain);
+        seam_layer = clamp(
+            (seam_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + seam_bright * 0.010
+                       + seam_fresnel * 0.008
+                       - seam_dark * 0.018)
+                + float3(0.50),
+            0.0,
+            1.0);
+        float seam_weight =
+            transition_seam_lock_strength
+            * seam_gate
+            * (0.28
+               + 0.20 * seam_coherence
+               + 0.18 * seam_fresnel
+               + 0.16 * seam_bright
+               + 0.14 * seam_ridge
+               + 0.12 * seam_bridge);
+        rgb = mix(
+            rgb,
+            clamp(seam_layer, 0.0, 1.0),
+            seam_weight * 0.30);
+        rgb += seam_layer
+            * seam_weight
+            * max(seam_ridge, seam_counter_ridge * 0.78)
+            * (0.0010
+               + 0.0032 * glass_prismatic_gain
+               + 0.0028 * glass_scattering_gain);
+        float seam_shadow =
+            seam_dark
+            * seam_weight
+            * (0.005 + 0.014 * glass_shadow_gain)
+            * (0.56 + 0.44 * (1.0 - seam_alignment));
+        rgb *= 1.0 - clamp(seam_shadow, 0.0, 0.034);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float depth_aperture_strength = clamp(
         0.014 * clear_glass_detail
             + 0.012 * clear_glass_contrast
@@ -18568,6 +18893,7 @@ fragment float4 fs_material(
             + 0.010 * phase_field_strength
             + 0.009 * spectral_phase_lock_strength
             + 0.008 * container_irradiance_lock_strength
+            + 0.008 * transition_seam_lock_strength
             + 0.012 * legibility_veil_strength,
         0.0,
         0.10);
@@ -18741,6 +19067,7 @@ fragment float4 fs_material(
             + 0.018 * depth_aperture_strength
             + 0.012 * optical_equilibrium_strength
             + 0.008 * container_irradiance_lock_strength
+            + 0.007 * transition_seam_lock_strength
             + 0.010 * spectral_rim_tint,
         0.0,
         0.095);
@@ -18905,6 +19232,7 @@ fragment float4 fs_material(
             + 0.014 * depth_aperture_strength
             + 0.012 * reflection_finish_strength
             + 0.008 * container_irradiance_lock_strength
+            + 0.007 * transition_seam_lock_strength
             + 0.010 * optical_equilibrium_strength,
         0.0,
         0.10);
@@ -19299,7 +19627,8 @@ fragment float4 fs_material(
             + 0.007 * morph_coupler_strength
             + 0.006 * phase_field_strength
             + 0.006 * spectral_phase_lock_strength
-            + 0.006 * container_irradiance_lock_strength,
+            + 0.006 * container_irradiance_lock_strength
+            + 0.006 * transition_seam_lock_strength,
         0.0,
         0.085);
     if (edge_contact_caustic_strength > 0.0001) {
@@ -20447,6 +20776,7 @@ fragment float4 fs_material(
             + 0.006 * internal_diffusion_strength
             + 0.006 * edge_contact_caustic_strength
             + 0.006 * container_irradiance_lock_strength
+            + 0.006 * transition_seam_lock_strength
             + 0.006 * liquid_response_strength,
         0.0,
         0.070);
@@ -20621,7 +20951,8 @@ fragment float4 fs_material(
             + 0.010 * spacing_meniscus_strength
             + 0.008 * shared_shell_strength
             + 0.008 * edge_contact_caustic_strength
-            + 0.006 * surrounding_light_wrap_strength,
+            + 0.006 * surrounding_light_wrap_strength
+            + 0.006 * transition_seam_lock_strength,
         0.0,
         0.080);
     if (container_pressure_halo_strength > 0.0001
@@ -20874,7 +21205,8 @@ fragment float4 fs_material(
             + 0.010 * spacing_meniscus_strength
             + 0.010 * edge_contact_caustic_strength
             + 0.008 * shared_shell_strength
-            + 0.008 * surrounding_light_wrap_strength,
+            + 0.008 * surrounding_light_wrap_strength
+            + 0.006 * transition_seam_lock_strength,
         0.0,
         0.082);
     if (matched_tether_sheath_strength > 0.0001
@@ -21131,7 +21463,8 @@ fragment float4 fs_material(
             + 0.006 * container_irradiance_lock_strength
             + 0.008 * shared_shell_strength
             + 0.008 * edge_contact_caustic_strength
-            + 0.006 * surrounding_light_wrap_strength,
+            + 0.006 * surrounding_light_wrap_strength
+            + 0.006 * transition_seam_lock_strength,
         0.0,
         0.074);
     if (specular_handoff_strength > 0.0001
@@ -21395,7 +21728,8 @@ fragment float4 fs_material(
             + 0.006 * phase_field_strength
             + 0.006 * spectral_phase_lock_strength
             + 0.006 * container_irradiance_lock_strength
-            + 0.006 * surrounding_light_wrap_strength,
+            + 0.006 * surrounding_light_wrap_strength
+            + 0.006 * transition_seam_lock_strength,
         0.0,
         0.078);
     if (reflection_wake_strength > 0.0001
@@ -21670,7 +22004,8 @@ fragment float4 fs_material(
             + 0.006 * phase_field_strength
             + 0.006 * spectral_phase_lock_strength
             + 0.006 * container_irradiance_lock_strength
-            + 0.006 * matched_tether_sheath_strength,
+            + 0.006 * matched_tether_sheath_strength
+            + 0.006 * transition_seam_lock_strength,
         0.0,
         0.072);
     if (transmission_caustic_strength > 0.0001
@@ -21948,6 +22283,7 @@ fragment float4 fs_material(
             + 0.006 * spectral_phase_lock_strength
             + 0.006 * container_irradiance_lock_strength
             + 0.006 * matched_tether_sheath_strength
+            + 0.006 * transition_seam_lock_strength
             + 0.006 * pointer_lens_strength
                 * (0.38 * pointer_lens_raw + 0.62 * pointer_lens),
         0.0,
@@ -22230,6 +22566,7 @@ fragment float4 fs_material(
             + 0.005 * phase_field_strength
             + 0.005 * spectral_phase_lock_strength
             + 0.005 * container_irradiance_lock_strength
+            + 0.005 * transition_seam_lock_strength
             + 0.006 * pointer_lens_strength
                 * (0.36 * pointer_lens_raw + 0.64 * pointer_lens),
         0.0,
@@ -22488,6 +22825,7 @@ fragment float4 fs_material(
             + 0.005 * phase_field_strength
             + 0.005 * spectral_phase_lock_strength
             + 0.005 * container_irradiance_lock_strength
+            + 0.005 * transition_seam_lock_strength
             + 0.006 * matched_tether_sheath_strength
             + 0.006 * container_pressure_halo_strength,
         0.0,
@@ -22753,6 +23091,7 @@ fragment float4 fs_material(
             + 0.006 * transmission_caustic_strength
             + 0.006 * reflection_wake_strength
             + 0.006 * container_pressure_halo_strength
+            + 0.005 * transition_seam_lock_strength
             + 0.006 * glass_effect_match_execution * group_blend_strength,
         0.0,
         0.062);
@@ -22986,6 +23325,7 @@ fragment float4 fs_material(
             + 0.006 * depth_seal_strength
             + 0.006 * transition_clarity_strength
             + 0.006 * reflection_wake_strength
+            + 0.005 * transition_seam_lock_strength
             + 0.006 * glass_effect_match_execution * group_blend_strength,
         0.0,
         0.058);
@@ -23231,6 +23571,7 @@ fragment float4 fs_material(
             + 0.005 * depth_seal_strength
             + 0.005 * transition_clarity_strength
             + 0.005 * reflection_wake_strength
+            + 0.004 * transition_seam_lock_strength
             + 0.005 * glass_effect_match_execution * group_blend_strength,
         0.0,
         0.060);
@@ -25418,6 +25759,7 @@ fragment float4 fs_material(
             + 0.004 * aperture_field_strength
             + 0.004 * transition_clarity_strength
             + 0.004 * container_irradiance_lock_strength
+            + 0.004 * transition_seam_lock_strength
             + 0.004 * glass_effect_match_execution * group_blend_strength,
         0.0,
         0.052);
@@ -26174,6 +26516,7 @@ fragment float4 fs_material(
             + 0.005 * contact_shadow_field_strength
             + 0.004 * depth_fusion_strength
             + 0.004 * container_irradiance_lock_strength
+            + 0.004 * transition_seam_lock_strength
             + 0.004 * focus_field_strength,
         0.0,
         0.058);
