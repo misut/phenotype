@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 82);
+    assert(material_plan_contract_version == 83);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -250,6 +250,27 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.glass_meniscus.highlight_gain < 1.40f);
     assert(plan.glass_meniscus.refraction_gain > 1.04f);
     assert(plan.glass_meniscus.refraction_gain < 1.28f);
+    assert(plan.glass_transmission.active);
+    assert(plan.glass_transmission.thickness_driven);
+    assert(plan.glass_transmission.depth_driven);
+    assert(plan.glass_transmission.environment_driven);
+    assert(plan.glass_transmission.caustic_driven);
+    assert(plan.glass_transmission.stabilization_driven);
+    assert(!plan.glass_transmission.interaction_driven);
+    assert(!plan.glass_transmission.reduced_motion_suppressed);
+    assert(plan.glass_transmission.bounded);
+    assert(std::string_view(plan.glass_transmission.model)
+        == "adaptive-glass-volume-transmission");
+    assert(std::string_view(plan.glass_transmission.source)
+        == "depth-caustic-environment-volume-transmission");
+    assert(plan.glass_transmission.internal_transmission > 0.12f);
+    assert(plan.glass_transmission.internal_transmission < 0.40f);
+    assert(plan.glass_transmission.subsurface_scatter > 0.04f);
+    assert(plan.glass_transmission.subsurface_scatter < 0.22f);
+    assert(plan.glass_transmission.volume_absorption > 0.04f);
+    assert(plan.glass_transmission.volume_absorption < 0.20f);
+    assert(plan.glass_transmission.interlayer_refraction > 0.04f);
+    assert(plan.glass_transmission.interlayer_refraction < 0.22f);
     assert(plan.glass_thickness.active);
     assert(plan.glass_thickness.size_driven);
     assert(!plan.glass_thickness.transition_driven);
@@ -404,6 +425,9 @@ void test_sampled_backdrop_access_contract() {
         == "depth-prismatic-caustic-flow");
     assert(std::string_view(plan.optical_composition.glass_meniscus_source)
         == "depth-caustic-environment-meniscus-rim");
+    assert(std::string_view(
+               plan.optical_composition.glass_transmission_source)
+        == "depth-caustic-environment-volume-transmission");
     assert(std::string_view(plan.optical_composition.glass_thickness_source)
         == "size-adaptive-thickness-lensing");
     assert(std::string_view(plan.optical_composition.glass_dispersion_source)
@@ -442,6 +466,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_composition.dynamic_lighting_required);
     assert(plan.optical_composition.glass_caustic_flow_required);
     assert(plan.optical_composition.glass_meniscus_required);
+    assert(plan.optical_composition.glass_transmission_required);
     assert(plan.optical_composition.glass_thickness_required);
     assert(plan.optical_composition.glass_dispersion_required);
     assert(plan.optical_composition.glass_stabilization_required);
@@ -512,6 +537,14 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_meniscus.highlight_gain);
     assert(plan.optical_composition.glass_meniscus_refraction_gain
            == plan.glass_meniscus.refraction_gain);
+    assert(plan.optical_composition.glass_internal_transmission
+           == plan.glass_transmission.internal_transmission);
+    assert(plan.optical_composition.glass_subsurface_scatter
+           == plan.glass_transmission.subsurface_scatter);
+    assert(plan.optical_composition.glass_volume_absorption
+           == plan.glass_transmission.volume_absorption);
+    assert(plan.optical_composition.glass_interlayer_refraction
+           == plan.glass_transmission.interlayer_refraction);
     assert(plan.optical_composition.glass_thickness
            == plan.glass_thickness.thickness);
     assert(plan.optical_composition.glass_lensing_gain
@@ -568,6 +601,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_response.dynamic_lighting_active);
     assert(plan.optical_response.glass_caustic_flow_active);
     assert(plan.optical_response.glass_meniscus_active);
+    assert(plan.optical_response.glass_transmission_active);
     assert(plan.optical_response.glass_thickness_active);
     assert(plan.optical_response.glass_dispersion_active);
     assert(plan.optical_response.glass_stabilization_active);
@@ -644,6 +678,17 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_meniscus.highlight_gain);
     assert(plan.execution_stages[2].optics.glass_meniscus_refraction_gain
            == plan.glass_meniscus.refraction_gain);
+    assert(std::string_view(
+               plan.execution_stages[2].optics.glass_transmission_model)
+        == "adaptive-glass-volume-transmission");
+    assert(plan.execution_stages[2].optics.glass_internal_transmission
+           == plan.glass_transmission.internal_transmission);
+    assert(plan.execution_stages[2].optics.glass_subsurface_scatter
+           == plan.glass_transmission.subsurface_scatter);
+    assert(plan.execution_stages[2].optics.glass_volume_absorption
+           == plan.glass_transmission.volume_absorption);
+    assert(plan.execution_stages[2].optics.glass_interlayer_refraction
+           == plan.glass_transmission.interlayer_refraction);
     assert(std::string_view(plan.execution_stages[2].optics.glass_thickness_model)
         == "adaptive-glass-thickness");
     assert(plan.execution_stages[2].optics.glass_thickness
