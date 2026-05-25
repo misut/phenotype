@@ -16408,6 +16408,281 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(coupler_shadow, 0.0, 0.032);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float refraction_coupler_strength = clamp(
+        0.014 * liquid_response_strength
+            + 0.012 * luminance_coupler_strength
+            + 0.010 * specular_sheet_strength
+            + 0.010 * bridge_meniscus_reflection_strength
+            + 0.010 * shared_membrane_strength
+            + 0.010 * shared_shell_strength
+            + 0.010 * glass_effect_match_execution * group_blend_strength
+            + 0.008 * morph_execution * group_blend_strength
+            + 0.006 * glass_dispersion_tangential
+            + 0.006 * (glass_prismatic_gain - 1.0),
+        0.0,
+        0.074);
+    if (refraction_coupler_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 refract_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 refract_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            refract_group_size);
+        float2 refract_group_norm =
+            (refract_group_local / refract_group_size - float2(0.5)) * 2.0;
+        float refract_group_len = length(refract_group_norm);
+        float refract_center =
+            1.0 - smoothstep(0.20, 1.16, refract_group_len);
+        float2 refract_group_edge = min(
+            refract_group_local,
+            max(refract_group_size - refract_group_local, float2(0.0)));
+        float refract_edge_distance =
+            min(refract_group_edge.x, refract_group_edge.y);
+        float refract_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.3, 1.0),
+                refract_edge_distance);
+        float refract_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float refract_transition = clamp(
+            glass_effect_match_execution * 0.34
+                + morph_execution * 0.22
+                + shape_blend_execution * 0.14
+                + union_execution * 0.12
+                + luminance_coupler_strength * 1.8
+                + specular_sheet_strength * 1.7
+                + liquid_response_strength * 1.4,
+            0.0,
+            1.0);
+        float refract_gate = clamp(
+            refract_center * 0.18
+                + refract_edge * 0.24
+                + refract_bridge * 0.24
+                + refract_transition * group_blend_strength * 0.24
+                + shared_backdrop_scope * 0.10,
+            0.0,
+            1.0);
+        float2 refract_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 refract_group_center_screen =
+            in.group_rect.xy + refract_group_size * 0.5;
+        float2 refract_group_center_uv = clamp(
+            refract_group_center_screen / refract_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 refract_to_center =
+            refract_group_center_uv - in.screen_uv;
+        float refract_center_distance = length(refract_to_center);
+        float2 refract_center_dir =
+            refract_center_distance > 0.0001
+                ? refract_to_center / refract_center_distance
+                : refraction_dir;
+        float2 refract_axis_raw =
+            refraction_dir * (0.34 + 0.24 * clear_glass_detail)
+            + refract_center_dir * (0.30 + 0.18 * refract_center)
+            + bridge_dir * (0.26 + 0.22 * refract_bridge)
+            - dynamic_light_dir * (0.18 + 0.14 * dynamic_light_highlight);
+        float refract_axis_len = length(refract_axis_raw);
+        float2 refract_axis = refract_axis_len > 0.0001
+            ? refract_axis_raw / refract_axis_len
+            : refraction_dir;
+        float2 refract_cross = float2(-refract_axis.y, refract_axis.x);
+        float refract_alignment =
+            smoothstep(-0.24, 0.92, dot(refract_axis, refraction_dir));
+        float refract_phase = clamp(
+            dot(refract_group_norm, refract_axis)
+                    * (4.8 + 2.8 * refract_transition)
+                + dot(refract_group_norm, refract_cross)
+                    * (2.2 + 1.6 * refract_bridge)
+                + bridge_axial * (3.0 + 2.0 * refract_bridge)
+                + bridge_shear * refract_bridge * 2.0
+                + glass_dispersion_tangential * 0.8,
+            -10.0,
+            10.0);
+        float refract_wave = 0.5 + 0.5 * sin(refract_phase);
+        float refract_focus =
+            1.0 - smoothstep(0.0, 0.32, abs(refract_wave - 0.58));
+        float refract_span =
+            (0.88
+             + 1.9 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.2 * refract_gate
+             + 0.040 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float refract_chroma_span =
+            (0.56
+             + 1.5 * glass_dispersion_axial
+             + 1.7 * glass_dispersion_tangential
+             + 1.0 * spectral_dispersion
+             + 0.7 * refract_focus)
+            * content_scale;
+        float2 refract_center_uv = clamp(
+            mix(in.screen_uv,
+                refract_group_center_uv,
+                0.16 + 0.14 * refract_center),
+            float2(0.0),
+            float2(1.0));
+        float2 refract_lead_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.22
+                + refract_axis
+                    * texel
+                    * refract_span
+                    * (0.30 + 0.16 * refract_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 refract_trail_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                - refract_axis
+                    * texel
+                    * refract_span
+                    * (0.26 + 0.14 * refract_focus),
+            float2(0.0),
+            float2(1.0));
+        float2 refract_red_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + refract_axis
+                    * texel
+                    * refract_chroma_span
+                    * (0.18 + 0.12 * refract_focus)
+                + refract_cross
+                    * texel
+                    * refract_chroma_span
+                    * (0.26 + 0.14 * refract_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 refract_blue_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - refract_axis
+                    * texel
+                    * refract_chroma_span
+                    * (0.16 + 0.12 * refract_wave)
+                - refract_cross
+                    * texel
+                    * refract_chroma_span
+                    * (0.24 + 0.14 * refract_bridge),
+            float2(0.0),
+            float2(1.0));
+        float3 refract_center_rgb =
+            backdrop.sample(samp, refract_center_uv).rgb;
+        float3 refract_lead_rgb =
+            backdrop.sample(samp, refract_lead_uv).rgb;
+        float3 refract_trail_rgb =
+            backdrop.sample(samp, refract_trail_uv).rgb;
+        float3 refract_red_rgb =
+            backdrop.sample(samp, refract_red_uv).rgb;
+        float3 refract_blue_rgb =
+            backdrop.sample(samp, refract_blue_uv).rgb;
+        float3 refract_probe =
+            refract_center_rgb * 0.28
+            + refract_lead_rgb * 0.30
+            + refract_trail_rgb * 0.24
+            + (refract_red_rgb + refract_blue_rgb) * 0.09;
+        float3 refract_split = float3(
+            refract_red_rgb.r,
+            (refract_center_rgb.g + refract_lead_rgb.g) * 0.5,
+            refract_blue_rgb.b);
+        float refract_probe_luma =
+            dot(refract_probe, float3(0.2126, 0.7152, 0.0722));
+        float refract_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float refract_range = clamp(
+            length(refract_lead_rgb - refract_trail_rgb) * 0.28
+                + length(refract_red_rgb - refract_blue_rgb) * 0.22
+                + abs(refract_probe_luma - refract_surface_luma) * 0.20
+                + refract_focus * 0.08,
+            0.0,
+            1.0);
+        float refract_coherence =
+            1.0 - smoothstep(0.08, 0.36, refract_range);
+        float refract_lift = smoothstep(
+            refract_surface_luma - 0.06,
+            refract_surface_luma + 0.28,
+            refract_probe_luma);
+        float refract_dark = smoothstep(
+            0.08,
+            0.34,
+            refract_surface_luma - refract_probe_luma);
+        float refract_fresnel = clamp(
+            refract_edge * 0.28
+                + refract_focus * 0.24
+                + refract_alignment * 0.18
+                + refract_transition * 0.16
+                + refract_bridge * 0.14,
+            0.0,
+            1.0);
+        float3 refract_layer = mix(
+            refract_probe,
+            refract_split,
+            0.16
+                + 0.18 * refract_fresnel
+                + 0.14 * spectral_dispersion
+                + 0.12 * refract_focus);
+        refract_layer = clamp(
+            (refract_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.016
+                       + refract_lift * 0.014
+                       + refract_fresnel * 0.012
+                       - glass_shadow_gain * 0.005)
+                + float3(0.50),
+            0.0,
+            1.0);
+        refract_layer *= float3(
+            1.0
+                + spectral_warmth
+                    * (0.20 + 0.16 * refract_wave),
+            1.0 + spectral_rim_tint * 0.14,
+            1.0
+                + spectral_coolness
+                    * (0.20 + 0.16 * (1.0 - refract_wave)));
+        float3 refract_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        refract_layer += refract_prism
+            * refract_fresnel
+            * (0.0010
+               + 0.0030 * spectral_rim_tint
+               + 0.0028 * glass_caustic_spread
+               + 0.0024 * glass_prismatic_gain)
+            * (0.34
+               + 0.24 * refract_coherence
+               + 0.22 * refract_focus
+               + 0.20 * refract_lift);
+        float refract_weight =
+            refraction_coupler_strength
+            * refract_gate
+            * (0.30
+               + 0.20 * refract_coherence
+               + 0.18 * refract_fresnel
+               + 0.16 * refract_focus
+               + 0.14 * refract_bridge);
+        rgb = mix(
+            rgb,
+            clamp(refract_layer, 0.0, 1.0),
+            refract_weight * 0.34);
+        float refract_shadow =
+            refract_dark
+            * refract_weight
+            * (0.005 + 0.014 * glass_shadow_gain)
+            * (0.58 + 0.42 * (1.0 - refract_coherence));
+        rgb *= 1.0 - clamp(refract_shadow, 0.0, 0.034);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float depth_aperture_strength = clamp(
         0.014 * clear_glass_detail
             + 0.012 * clear_glass_contrast
@@ -16420,6 +16695,7 @@ fragment float4 fs_material(
             + 0.014 * clarity_balance_strength
             + 0.012 * optical_equilibrium_strength
             + 0.012 * luminance_coupler_strength
+            + 0.012 * refraction_coupler_strength
             + 0.012 * legibility_veil_strength,
         0.0,
         0.10);
@@ -18967,6 +19243,7 @@ fragment float4 fs_material(
             + 0.010 * matched_tether_sheath_strength
             + 0.010 * container_pressure_halo_strength
             + 0.008 * luminance_coupler_strength
+            + 0.008 * refraction_coupler_strength
             + 0.008 * shared_shell_strength
             + 0.008 * edge_contact_caustic_strength
             + 0.006 * surrounding_light_wrap_strength,
@@ -19226,6 +19503,7 @@ fragment float4 fs_material(
             + 0.008 * matched_tether_sheath_strength
             + 0.008 * container_pressure_halo_strength
             + 0.007 * luminance_coupler_strength
+            + 0.007 * refraction_coupler_strength
             + 0.006 * surrounding_light_wrap_strength,
         0.0,
         0.078);
@@ -20300,6 +20578,7 @@ fragment float4 fs_material(
             + 0.007 * reflection_wake_strength
             + 0.006 * specular_handoff_strength
             + 0.006 * luminance_coupler_strength
+            + 0.006 * refraction_coupler_strength
             + 0.006 * matched_tether_sheath_strength
             + 0.006 * container_pressure_halo_strength,
         0.0,
