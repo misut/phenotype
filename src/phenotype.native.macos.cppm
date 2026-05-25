@@ -21053,6 +21053,272 @@ fragment float4 fs_material(
                + 0.003 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float polarization_field_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.009 * clear_glass_brightness
+            + 0.008 * glass_thickness
+            + 0.008 * dynamic_light_highlight
+            + 0.007 * glass_prismatic_gain
+            + 0.006 * aperture_field_strength
+            + 0.006 * accommodation_field_strength
+            + 0.005 * volume_veil_strength
+            + 0.005 * catchlight_strength
+            + 0.004 * transition_clarity_strength
+            + 0.004 * reflection_wake_strength
+            + 0.004 * glass_effect_match_execution * group_blend_strength,
+        0.0,
+        0.054);
+    if (polarization_field_strength > 0.0001) {
+        float polarization_interior = smoothstep(
+            max(edge_bevel_width * 0.56, 0.18),
+            max(edge_bevel_width * 2.80, 1.0),
+            signed_edge_distance);
+        float polarization_radius = length(normalized_local);
+        float polarization_center =
+            1.0 - smoothstep(0.18, 1.10, polarization_radius);
+        float polarization_ring =
+            smoothstep(0.26, 0.64, polarization_radius)
+            * (1.0 - smoothstep(0.66, 1.10, polarization_radius));
+        float polarization_body = clamp(
+            polarization_interior
+                * (0.36
+                   + 0.28 * polarization_center
+                   + 0.22 * polarization_ring
+                   + 0.14 * edge_lens),
+            0.0,
+            1.0);
+        float polarization_pointer = clamp(
+            pointer_lens_strength
+                * (0.28 * pointer_lens_raw + 0.72 * pointer_lens),
+            0.0,
+            1.0);
+        float polarization_transition = clamp(
+            glass_effect_match_execution * 0.26
+                + morph_execution * 0.20
+                + materialize_wave_strength * 0.16
+                + aperture_field_strength * 1.2
+                + accommodation_field_strength * 1.1
+                + volume_veil_strength * 0.9
+                + catchlight_strength * 0.9
+                + transition_clarity_strength * 0.8
+                + reflection_wake_strength * 0.8
+                + polarization_pointer * 0.14,
+            0.0,
+            1.0);
+        float2 polarization_axis_raw =
+            dynamic_light_dir * (0.36 + 0.20 * dynamic_light_highlight)
+            + bridge_dir * (0.28 + 0.18 * bridge_band)
+            + refraction_dir * (0.24 + 0.18 * glass_lensing_gain)
+            + normalized_local * (0.10 + 0.12 * polarization_center);
+        float polarization_axis_len = length(polarization_axis_raw);
+        float2 polarization_axis = polarization_axis_len > 0.0001
+            ? polarization_axis_raw / polarization_axis_len
+            : refraction_dir;
+        float2 polarization_cross =
+            float2(-polarization_axis.y, polarization_axis.x);
+        float polarization_bridge_alignment =
+            smoothstep(-0.26, 0.88, abs(dot(polarization_axis, bridge_dir)));
+        float polarization_light_alignment =
+            smoothstep(-0.20, 0.90, abs(dot(polarization_axis, dynamic_light_dir)));
+        float polarization_grazing =
+            1.0 - smoothstep(
+                0.20,
+                0.90,
+                abs(dot(polarization_axis, -dynamic_light_dir)));
+        float polarization_phase = clamp(
+            dot(normalized_local, polarization_axis)
+                    * (4.4 + 1.8 * polarization_transition)
+                + dot(normalized_local, polarization_cross)
+                    * (2.8 + 1.2 * bridge_band)
+                + bridge_axial * (2.6 + 1.4 * bridge_core)
+                + bridge_shear * bridge_band * 1.8
+                + materialize_rim_position
+                    * materialize_wave_strength
+                    * 2.0,
+            -10.0,
+            10.0);
+        float polarization_wave =
+            0.5 + 0.5 * sin(polarization_phase);
+        float polarization_sheen =
+            1.0 - smoothstep(
+                0.0,
+                0.34,
+                abs(polarization_wave - 0.58));
+        float polarization_gate = clamp(
+            polarization_body
+                * (0.32
+                   + 0.18 * polarization_center
+                   + 0.18 * polarization_ring
+                   + 0.14 * polarization_bridge_alignment
+                   + 0.12 * polarization_light_alignment
+                   + 0.10 * polarization_transition
+                   + 0.08 * polarization_sheen
+                   + 0.08 * polarization_pointer),
+            0.0,
+            1.0);
+        float polarization_span =
+            (0.76
+             + 1.5 * glass_thickness
+             + 1.1 * clear_glass_detail
+             + 0.8 * polarization_transition
+             + 0.030 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float polarization_cross_span =
+            (0.50
+             + 0.8 * glass_dispersion_tangential
+             + 0.8 * spectral_dispersion
+             + 0.7 * polarization_bridge_alignment)
+            * content_scale;
+        float2 polarization_core_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08,
+            float2(0.0),
+            float2(1.0));
+        float2 polarization_parallel_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + polarization_axis
+                    * texel
+                    * polarization_span
+                    * (0.26 + 0.12 * polarization_sheen),
+            float2(0.0),
+            float2(1.0));
+        float2 polarization_parallel_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - polarization_axis
+                    * texel
+                    * polarization_span
+                    * (0.24 + 0.12 * polarization_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 polarization_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                + polarization_cross
+                    * texel
+                    * polarization_cross_span
+                    * (0.24 + 0.12 * polarization_ring),
+            float2(0.0),
+            float2(1.0));
+        float2 polarization_cross_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                - polarization_cross
+                    * texel
+                    * polarization_cross_span
+                    * (0.22 + 0.12 * polarization_sheen),
+            float2(0.0),
+            float2(1.0));
+        float3 polarization_core_rgb =
+            backdrop.sample(samp, polarization_core_uv).rgb;
+        float3 polarization_parallel_rgb =
+            backdrop.sample(samp, polarization_parallel_uv).rgb;
+        float3 polarization_parallel_return_rgb =
+            backdrop.sample(samp, polarization_parallel_return_uv).rgb;
+        float3 polarization_cross_rgb =
+            backdrop.sample(samp, polarization_cross_uv).rgb;
+        float3 polarization_cross_return_rgb =
+            backdrop.sample(samp, polarization_cross_return_uv).rgb;
+        float3 polarization_probe =
+            polarization_core_rgb * 0.32
+            + polarization_parallel_rgb * 0.22
+            + polarization_parallel_return_rgb * 0.18
+            + polarization_cross_rgb * 0.15
+            + polarization_cross_return_rgb * 0.13;
+        float polarization_luma =
+            dot(polarization_probe, float3(0.2126, 0.7152, 0.0722));
+        float polarization_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float polarization_parallel_range =
+            length(polarization_parallel_rgb - polarization_parallel_return_rgb);
+        float polarization_cross_range =
+            length(polarization_cross_rgb - polarization_cross_return_rgb);
+        float polarization_anisotropy = clamp(
+            abs(polarization_parallel_range - polarization_cross_range) * 0.75
+                + polarization_grazing * 0.12
+                + polarization_sheen * 0.10,
+            0.0,
+            1.0);
+        float polarization_range = clamp(
+            polarization_parallel_range * 0.28
+                + polarization_cross_range * 0.24
+                + length(polarization_core_rgb - polarization_probe) * 0.18
+                + abs(polarization_luma - polarization_surface_luma) * 0.16
+                + polarization_anisotropy * 0.08,
+            0.0,
+            1.0);
+        float polarization_coherence =
+            1.0 - smoothstep(0.08, 0.38, polarization_range);
+        float polarization_lift = smoothstep(
+            polarization_surface_luma - 0.04,
+            polarization_surface_luma + 0.28,
+            polarization_luma);
+        float polarization_depth = smoothstep(
+            0.05,
+            0.32,
+            polarization_surface_luma - polarization_luma);
+        float3 polarization_neutral = mix(
+            polarization_probe,
+            float3(polarization_luma),
+            polarization_coherence * 0.12
+                + polarization_depth * (0.10 + 0.10 * glass_shadow_gain));
+        float3 polarization_layer = clamp(
+            (polarization_neutral - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.026
+                       + polarization_transition * 0.022
+                       - polarization_depth * 0.026)
+                + float3(0.50),
+            0.0,
+            1.0);
+        polarization_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.010
+                   + 0.018 * tint_chroma * prominent_intensity);
+        float3 polarization_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        float polarization_prism_gate = clamp(
+            polarization_sheen * 0.28
+                + polarization_anisotropy * 0.24
+                + polarization_light_alignment * 0.18
+                + polarization_bridge_alignment * 0.16
+                + polarization_transition * 0.14,
+            0.0,
+            1.0);
+        polarization_layer += polarization_prism
+            * polarization_prism_gate
+            * (0.0012
+               + 0.004 * spectral_rim_tint
+               + 0.003 * glass_prismatic_gain);
+        float polarization_weight = polarization_field_strength
+            * polarization_gate
+            * (0.28
+               + 0.20 * polarization_anisotropy
+               + 0.18 * polarization_coherence
+               + 0.14 * polarization_lift
+               + 0.12 * polarization_transition);
+        rgb = mix(
+            rgb,
+            mix(rgb, polarization_layer, 0.08 + 0.14 * polarization_anisotropy),
+            polarization_weight * 0.28);
+        float polarization_settle =
+            polarization_depth
+            * polarization_weight
+            * (0.0025 + 0.007 * clear_glass_dimming)
+            * (0.52 + 0.48 * polarization_body);
+        rgb *= 1.0 - clamp(polarization_settle, 0.0, 0.022);
+        rgb += polarization_prism
+            * polarization_weight
+            * polarization_prism_gate
+            * (0.0010
+               + 0.003 * dynamic_light_highlight
+               + 0.003 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
