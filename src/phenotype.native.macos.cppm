@@ -40937,6 +40937,214 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(caustic_absorption, 0.0, 0.0060);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float fresnel_flare_field_strength = clamp(
+        0.004 * planned_environment_reflection
+            + 0.003 * planned_environment_color_pickup
+            + 0.003 * glass_prismatic_gain
+            + 0.003 * glass_caustic_spread
+            + 0.16 * specular_caustic_field_strength
+            + 0.14 * contextual_reflection_field_strength
+            + 0.12 * adaptive_transmission_field_strength
+            + 0.10 * motion_settling_field_strength
+            + 0.08 * specular_flow_field_strength
+            + 0.06 * foreground_sheen_field_strength
+            + 0.05 * environment_sheen_bias
+            + 0.04 * adaptive_vibrancy_bias,
+        0.0,
+        0.015);
+    if (fresnel_flare_field_strength > 0.0001
+        && (planned_environment_reflection > 0.0001
+            || specular_caustic_field_strength > 0.0001
+            || adaptive_vibrancy_bias > 0.0001
+            || glass_prismatic_gain > 0.0001)) {
+        float fresnel_edge =
+            edge_lens
+            * (0.62
+               + 0.38
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.70, 0.82),
+                       signed_edge_distance)));
+        float2 fresnel_normal =
+            normalized_len > 0.0001 ? normalized_local / normalized_len
+                                     : -dynamic_light_dir;
+        float fresnel_grazing = clamp(
+            1.0 - abs(dot(fresnel_normal, -dynamic_light_dir)),
+            0.0,
+            1.0);
+        fresnel_grazing =
+            fresnel_grazing
+            * fresnel_grazing
+            * (0.52 + 0.48 * fresnel_edge);
+        float fresnel_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float fresnel_pointer = clamp(
+            pointer_lens_strength
+                * (0.34 * pointer_lens_raw + 0.66 * pointer_lens),
+            0.0,
+            1.0);
+        float fresnel_presence = clamp(
+            fresnel_edge * 0.30
+                + fresnel_grazing * 0.22
+                + fresnel_bridge * 0.14
+                + planned_environment_reflection * 0.13
+                + specular_caustic_field_strength * 4.0
+                + adaptive_vibrancy_bias * 0.10
+                + fresnel_pointer * 0.06,
+            0.0,
+            1.0);
+        float fresnel_flow_sign = bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 fresnel_axis_raw =
+            -dynamic_light_dir
+                * (0.32
+                   + 0.18 * dynamic_light_highlight
+                   + 0.10 * planned_environment_reflection)
+            + fresnel_normal * (0.24 + 0.12 * fresnel_grazing)
+            + bridge_tangent
+                * fresnel_flow_sign
+                * (0.14 + 0.12 * abs(bridge_shear) * fresnel_bridge)
+            + bridge_dir * (0.12 + 0.16 * fresnel_bridge)
+            + dispersion_tangent
+                * (0.10
+                   + 0.10 * spectral_dispersion
+                   + 0.07 * glass_dispersion_tangential)
+            + pointer_dir * fresnel_pointer * 0.10;
+        float fresnel_axis_len = length(fresnel_axis_raw);
+        float2 fresnel_axis =
+            fresnel_axis_len > 0.0001
+                ? fresnel_axis_raw / fresnel_axis_len
+                : fresnel_normal;
+        float2 fresnel_cross =
+            float2(-fresnel_axis.y, fresnel_axis.x);
+        float fresnel_light_face =
+            smoothstep(-0.18, 0.94, dot(fresnel_axis, -dynamic_light_dir));
+        float fresnel_alignment =
+            smoothstep(-0.12, 0.94, abs(dot(fresnel_axis, bridge_tangent)));
+        float fresnel_phase = clamp(
+            dot(normalized_local, fresnel_axis)
+                    * (4.2 + 1.6 * fresnel_presence)
+                + dot(normalized_local, fresnel_cross)
+                    * (2.8 + 1.0 * adaptive_vibrancy_bias)
+                + bridge_axial * (1.8 + 1.2 * fresnel_bridge)
+                + bridge_lateral_signed * fresnel_bridge * 1.0
+                + bridge_shear * fresnel_bridge * 1.2
+                + spectral_dispersion * 3.8
+                + glass_caustic_spread * 3.2
+                + planned_environment_reflection * 2.2,
+            -12.0,
+            12.0);
+        float fresnel_wave =
+            0.5 + 0.5 * sin(fresnel_phase);
+        float fresnel_counter_wave =
+            0.5 + 0.5 * cos(
+                fresnel_phase * 0.68
+                + adaptive_vibrancy_bias * 2.0
+                + glass_caustic_spread * 2.8);
+        float fresnel_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(fresnel_wave - 0.58));
+        float fresnel_return_lobe =
+            1.0 - smoothstep(0.0, 0.38, abs(fresnel_counter_wave - 0.52));
+        float fresnel_thread =
+            max(fresnel_lobe, fresnel_return_lobe * 0.46)
+            * (0.40 + 0.60 * fresnel_edge)
+            * (0.42 + 0.58 * fresnel_grazing);
+        float fresnel_support = clamp(
+            fresnel_presence * 0.30
+                + fresnel_thread * 0.18
+                + fresnel_alignment * 0.16
+                + fresnel_light_face * 0.14
+                + planned_environment_reflection * 0.12
+                + adaptive_vibrancy_bias * 0.10,
+            0.0,
+            1.0);
+        float fresnel_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float fresnel_luma_window = smoothstep(
+            0.12,
+            0.86,
+            fresnel_surface_luma
+                + fresnel_light_face * 0.10
+                + planned_environment_reflection * 0.08);
+        float fresnel_flash = clamp(
+            fresnel_thread * 0.34
+                + fresnel_grazing * 0.24
+                + fresnel_support * 0.18
+                + specular_caustic_field_strength * 5.0
+                + adaptive_vibrancy_bias * 0.12
+                - fresnel_surface_luma * 0.08,
+            0.0,
+            1.0);
+        float3 fresnel_color = float3(
+            1.0 + spectral_warmth * 0.20 + tint_chroma * in.tint.r * 0.010,
+            1.0 + spectral_rim_tint * 0.10 + tint_chroma * in.tint.g * 0.008,
+            1.0 + spectral_coolness * 0.20 + tint_chroma * in.tint.b * 0.010);
+        fresnel_color = clamp(
+            fresnel_color
+                + in.tint.rgb
+                    * (0.010
+                       + 0.018 * planned_environment_color_pickup
+                       + 0.014 * adaptive_vibrancy_bias),
+            0.0,
+            1.36);
+        float fresnel_contrast = clamp(
+            clear_glass_contrast * 0.005
+                + fresnel_support * 0.006
+                + fresnel_flash * 0.005
+                - fresnel_surface_luma * 0.002,
+            -0.006,
+            0.020);
+        float3 fresnel_layer = clamp(
+            (rgb - float3(0.50)) * (1.0 + fresnel_contrast)
+                + float3(0.50)
+                + fresnel_color
+                    * fresnel_flash
+                    * (0.0010
+                       + 0.0014 * fresnel_luma_window
+                       + 0.0010 * planned_environment_reflection),
+            0.0,
+            1.0);
+        float fresnel_gate = clamp(
+            fresnel_presence * 0.28
+                + fresnel_edge * 0.20
+                + fresnel_grazing * 0.18
+                + fresnel_thread * 0.14
+                + fresnel_support * 0.12
+                + fresnel_flash * 0.08
+                + adaptive_vibrancy_bias * 0.08,
+            0.0,
+            1.0);
+        float fresnel_weight =
+            fresnel_flare_field_strength
+            * fresnel_gate
+            * (0.14
+               + 0.13 * fresnel_support
+               + 0.11 * fresnel_flash
+               + 0.09 * fresnel_light_face
+               + 0.08 * planned_environment_reflection);
+        rgb = mix(
+            rgb,
+            fresnel_layer,
+            fresnel_weight
+                * (0.052
+                   + 0.044 * fresnel_presence
+                   + 0.034 * fresnel_thread));
+        rgb += fresnel_color
+            * fresnel_weight
+            * fresnel_thread
+            * (0.00018
+               + 0.00048 * spectral_rim_tint
+               + 0.00038 * glass_prismatic_gain
+               + 0.00030 * adaptive_vibrancy_bias);
+        float fresnel_guard = clamp(
+            fresnel_surface_luma
+                * fresnel_weight
+                * (0.00036 + 0.0011 * glass_shadow_gain)
+                * (1.0 - fresnel_grazing * 0.42),
+            0.0,
+            0.0048);
+        rgb *= 1.0 - fresnel_guard;
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
