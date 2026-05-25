@@ -32929,6 +32929,315 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(subsurface_absorption, 0.0, 0.017);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float internal_shadow_field_strength = clamp(
+        0.007 * overlap_response_strength
+            + 0.006 * fusion_strength
+            + 0.005 * group_blend_strength * shared_backdrop_scope
+            + 0.005 * group_blend_strength * group_surface_execution
+            + 0.005 * bridge_band
+            + 0.20 * subsurface_caustic_field_strength
+            + 0.16 * transmission_depth_field_strength
+            + 0.12 * interlayer_refraction_field_strength
+            + 0.10 * layer_separation_field_strength
+            + 0.028 * container_morph_field_strength
+            + 0.024 * edge_meniscus_field_strength
+            + 0.020 * foreground_sheen_field_strength,
+        0.0,
+        0.032);
+    if (internal_shadow_field_strength > 0.0001) {
+        float internal_center =
+            1.0 - smoothstep(0.16, 1.04, normalized_len);
+        float internal_rim =
+            edge_lens
+            * (0.40
+               + 0.60
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.20, 0.70),
+                       signed_edge_distance)));
+        float internal_bridge =
+            bridge_band * (0.32 + 0.68 * bridge_core);
+        float internal_stack = clamp(
+            overlap_response_strength * 0.26
+                + fusion_strength * 0.22
+                + group_blend_strength * shared_backdrop_scope * 0.18
+                + group_surface_execution * group_blend_strength * 0.16
+                + internal_bridge * 0.18,
+            0.0,
+            1.0);
+        float internal_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float internal_presence = clamp(
+            internal_center * 0.20
+                + internal_rim * 0.22
+                + internal_stack * 0.24
+                + internal_bridge * 0.16
+                + internal_pointer * 0.10
+                + prominent_intensity * 0.08,
+            0.0,
+            1.0);
+        float2 internal_group_norm = normalized_local;
+        float internal_group_active = 0.0;
+        if (in.group_rect.z > 0.0 && in.group_rect.w > 0.0) {
+            float2 internal_group_size =
+                max(in.group_rect.zw, float2(1.0));
+            float2 internal_group_local = clamp(
+                in.screen_pos - in.group_rect.xy,
+                float2(0.0),
+                internal_group_size);
+            internal_group_norm =
+                (internal_group_local / internal_group_size - float2(0.5))
+                * 2.0;
+            internal_group_active = group_blend_strength;
+        }
+        float2 internal_axis_raw =
+            dynamic_light_dir * (0.42 + 0.24 * dynamic_light_highlight)
+            - refraction_dir * (0.26 + 0.18 * glass_lensing_gain)
+            + bridge_dir * (0.20 + 0.20 * internal_bridge)
+            + pointer_dir * (0.16 + 0.16 * internal_pointer)
+            + dispersion_tangent
+                * (0.13
+                   + 0.09 * spectral_dispersion
+                   + 0.07 * glass_dispersion_tangential)
+            + internal_group_norm
+                * internal_group_active
+                * (0.10 + 0.08 * internal_stack);
+        float internal_axis_len = length(internal_axis_raw);
+        float2 internal_axis =
+            internal_axis_len > 0.0001
+                ? internal_axis_raw / internal_axis_len
+                : dynamic_light_dir;
+        float2 internal_cross =
+            float2(-internal_axis.y, internal_axis.x);
+        float internal_light_face =
+            smoothstep(-0.20, 0.92, dot(internal_axis, dynamic_light_dir));
+        float internal_bridge_alignment =
+            smoothstep(-0.22, 0.86, abs(dot(internal_axis, bridge_dir)));
+        float internal_phase = clamp(
+            dot(normalized_local, internal_axis)
+                    * (4.0 + 1.6 * internal_presence)
+                + dot(normalized_local, internal_cross)
+                    * (2.7 + 1.1 * internal_stack)
+                + dot(internal_group_norm, internal_axis)
+                    * internal_group_active
+                    * (1.8 + 1.0 * internal_bridge)
+                + bridge_axial * (2.0 + 1.2 * bridge_core)
+                + bridge_shear * internal_bridge * 1.6
+                + spectral_dispersion * 3.8
+                + glass_caustic_spread * 2.6,
+            -12.0,
+            12.0);
+        float internal_wave =
+            0.5 + 0.5 * sin(internal_phase);
+        float internal_counter =
+            0.5 + 0.5 * cos(
+                internal_phase * 0.66
+                + glass_caustic_spread * 4.0
+                + internal_stack * 2.0);
+        float internal_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(internal_wave - 0.54));
+        float internal_return_lobe =
+            1.0 - smoothstep(0.0, 0.38, abs(internal_counter - 0.50));
+        float internal_focus =
+            (0.5 + 0.5 * cos(internal_phase * 1.18 + normalized_len * 2.6))
+            * (0.40 + 0.60 * internal_lobe);
+        float internal_span =
+            (0.68
+             + 1.45 * glass_thickness
+             + 1.05 * clear_glass_detail
+             + 1.05 * internal_presence
+             + 0.030 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float internal_cross_span =
+            (0.48
+             + 0.88 * glass_dispersion_tangential
+             + 0.74 * spectral_dispersion
+             + 0.72 * internal_bridge_alignment)
+            * content_scale;
+        float2 internal_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.10 + 0.08 * internal_stack),
+            float2(0.0),
+            float2(1.0));
+        float2 internal_light_uv = clamp(
+            internal_base_uv
+                - dynamic_light_dir
+                    * texel
+                    * internal_span
+                    * (0.22 + 0.14 * internal_light_face)
+                + internal_axis
+                    * texel
+                    * internal_span
+                    * (0.12 + 0.10 * internal_focus),
+            float2(0.0),
+            float2(1.0));
+        float2 internal_shadow_uv = clamp(
+            internal_base_uv
+                + dynamic_light_dir
+                    * texel
+                    * internal_span
+                    * (0.26 + 0.16 * (1.0 - internal_light_face))
+                - internal_axis
+                    * texel
+                    * internal_span
+                    * (0.16 + 0.10 * internal_return_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 internal_core_uv = clamp(
+            internal_base_uv
+                + internal_axis
+                    * texel
+                    * internal_span
+                    * (0.18 + 0.14 * internal_center)
+                + bridge_dir
+                    * texel
+                    * internal_span
+                    * internal_bridge
+                    * 0.14,
+            float2(0.0),
+            float2(1.0));
+        float2 internal_warm_uv = clamp(
+            internal_base_uv
+                + internal_cross
+                    * texel
+                    * internal_cross_span
+                    * (0.24 + 0.12 * internal_wave)
+                + dispersion_tangent
+                    * texel
+                    * internal_cross_span
+                    * (0.32 + 0.30 * glass_caustic_spread),
+            float2(0.0),
+            float2(1.0));
+        float2 internal_cool_uv = clamp(
+            internal_base_uv
+                - internal_cross
+                    * texel
+                    * internal_cross_span
+                    * (0.24 + 0.12 * internal_lobe)
+                - dispersion_tangent
+                    * texel
+                    * internal_cross_span
+                    * (0.30 + 0.28 * glass_caustic_spread),
+            float2(0.0),
+            float2(1.0));
+        float3 internal_light_rgb =
+            backdrop.sample(samp, internal_light_uv).rgb;
+        float3 internal_shadow_rgb =
+            backdrop.sample(samp, internal_shadow_uv).rgb;
+        float3 internal_core_rgb =
+            backdrop.sample(samp, internal_core_uv).rgb;
+        float3 internal_warm_rgb =
+            backdrop.sample(samp, internal_warm_uv).rgb;
+        float3 internal_cool_rgb =
+            backdrop.sample(samp, internal_cool_uv).rgb;
+        float3 internal_probe =
+            internal_light_rgb * 0.24
+            + internal_shadow_rgb * 0.24
+            + internal_core_rgb * 0.24
+            + internal_warm_rgb * 0.14
+            + internal_cool_rgb * 0.14;
+        float internal_light_luma =
+            dot(internal_light_rgb, float3(0.2126, 0.7152, 0.0722));
+        float internal_shadow_luma =
+            dot(internal_shadow_rgb, float3(0.2126, 0.7152, 0.0722));
+        float internal_probe_luma =
+            dot(internal_probe, float3(0.2126, 0.7152, 0.0722));
+        float internal_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float internal_luma_drop = clamp(
+            internal_surface_luma - internal_probe_luma,
+            0.0,
+            1.0);
+        float internal_backdrop_drop = clamp(
+            internal_light_luma - internal_shadow_luma,
+            0.0,
+            1.0);
+        float internal_split_range = clamp(
+            length(internal_warm_rgb - internal_cool_rgb) * 0.22
+                + length(internal_light_rgb - internal_shadow_rgb) * 0.20
+                + abs(internal_probe_luma - internal_surface_luma) * 0.18
+                + internal_focus * 0.08
+                + internal_presence * 0.08,
+            0.0,
+            1.0);
+        float internal_occlusion = smoothstep(
+            0.015,
+            0.30,
+            internal_luma_drop * 0.42
+                + internal_backdrop_drop * 0.32
+                + internal_split_range * 0.18
+                + internal_stack * 0.08);
+        float internal_coherence =
+            1.0 - smoothstep(0.10, 0.42, internal_split_range);
+        float3 internal_shadow_layer = mix(
+            internal_probe,
+            float3(internal_probe_luma),
+            internal_occlusion * (0.12 + 0.16 * glass_shadow_gain)
+                + internal_coherence * 0.10);
+        internal_shadow_layer = mix(
+            internal_shadow_layer,
+            float3(internal_warm_rgb.r,
+                   (internal_core_rgb.g + internal_probe.g) * 0.5,
+                   internal_cool_rgb.b),
+            0.10
+                + 0.12 * internal_focus
+                + 0.10 * internal_light_face
+                + 0.08 * internal_bridge_alignment);
+        internal_shadow_layer = clamp(
+            (internal_shadow_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.010
+                       - internal_occlusion * 0.018
+                       + internal_focus * 0.008)
+                + float3(0.50),
+            0.0,
+            1.0);
+        internal_shadow_layer *= float3(
+            1.0 + spectral_warmth * 0.30 + tint_chroma * in.tint.r * 0.012,
+            1.0 + spectral_rim_tint * 0.12 + tint_chroma * in.tint.g * 0.010,
+            1.0 + spectral_coolness * 0.30 + tint_chroma * in.tint.b * 0.012);
+        float internal_gate = clamp(
+            internal_presence * 0.28
+                + internal_stack * 0.24
+                + internal_rim * 0.18
+                + internal_focus * 0.12
+                + internal_occlusion * 0.10
+                + internal_coherence * 0.08,
+            0.0,
+            1.0);
+        float internal_weight =
+            internal_shadow_field_strength
+            * internal_gate
+            * (0.28
+               + 0.18 * internal_occlusion
+               + 0.16 * internal_focus
+               + 0.14 * internal_bridge_alignment
+               + 0.12 * internal_coherence);
+        rgb = mix(
+            rgb,
+            internal_shadow_layer,
+            internal_weight
+                * (0.11
+                   + 0.09 * internal_focus
+                   + 0.08 * internal_presence));
+        float internal_absorption =
+            internal_occlusion
+            * internal_weight
+            * (0.0014 + 0.0050 * glass_shadow_gain)
+            * (0.55 + 0.45 * (1.0 - internal_light_face));
+        rgb *= 1.0 - clamp(internal_absorption, 0.0, 0.018);
+        rgb += float3(
+                spectral_warmth,
+                0.12 * (spectral_warmth + spectral_coolness),
+                spectral_coolness)
+            * internal_weight
+            * max(internal_lobe, internal_return_lobe * 0.68)
+            * (0.0005
+               + 0.0016 * spectral_rim_tint
+               + 0.0014 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
