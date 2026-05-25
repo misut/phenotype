@@ -41145,6 +41145,234 @@ fragment float4 fs_material(
         rgb *= 1.0 - fresnel_guard;
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float iridescent_film_field_strength = clamp(
+        0.004 * spectral_dispersion
+            + 0.003 * spectral_rim_tint
+            + 0.003 * glass_prismatic_gain
+            + 0.003 * planned_environment_reflection
+            + 0.002 * planned_environment_color_pickup
+            + 0.18 * fresnel_flare_field_strength
+            + 0.15 * specular_caustic_field_strength
+            + 0.10 * contextual_reflection_field_strength
+            + 0.08 * adaptive_transmission_field_strength
+            + 0.06 * environment_sheen_bias
+            + 0.05 * adaptive_vibrancy_bias,
+        0.0,
+        0.014);
+    if (iridescent_film_field_strength > 0.0001
+        && (spectral_dispersion > 0.0001
+            || spectral_rim_tint > 0.0001
+            || glass_prismatic_gain > 0.0001
+            || planned_environment_reflection > 0.0001
+            || fresnel_flare_field_strength > 0.0001)) {
+        float film_edge =
+            edge_lens
+            * (0.58
+               + 0.42
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.62, 0.80),
+                       signed_edge_distance)));
+        float2 film_normal =
+            normalized_len > 0.0001 ? normalized_local / normalized_len
+                                     : -dynamic_light_dir;
+        float film_grazing = clamp(
+            1.0 - abs(dot(film_normal, -dynamic_light_dir)),
+            0.0,
+            1.0);
+        film_grazing =
+            film_grazing
+            * film_grazing
+            * (0.48 + 0.52 * film_edge);
+        float film_bridge =
+            bridge_band * (0.30 + 0.70 * bridge_core);
+        float film_pointer = clamp(
+            pointer_lens_strength
+                * (0.30 * pointer_lens_raw + 0.70 * pointer_lens),
+            0.0,
+            1.0);
+        float film_presence = clamp(
+            film_edge * 0.30
+                + film_grazing * 0.24
+                + film_bridge * 0.12
+                + planned_environment_reflection * 0.12
+                + spectral_rim_tint * 0.12
+                + adaptive_vibrancy_bias * 0.08
+                + film_pointer * 0.06,
+            0.0,
+            1.0);
+        float film_flow_sign = bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 film_axis_raw =
+            film_normal * (0.28 + 0.14 * film_grazing)
+            - dynamic_light_dir
+                * (0.24
+                   + 0.14 * dynamic_light_highlight
+                   + 0.08 * planned_environment_reflection)
+            + bridge_tangent
+                * film_flow_sign
+                * (0.14 + 0.12 * abs(bridge_shear) * film_bridge)
+            + bridge_dir * (0.10 + 0.14 * film_bridge)
+            + dispersion_tangent
+                * (0.14
+                   + 0.14 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential)
+            + pointer_dir * film_pointer * 0.08;
+        float film_axis_len = length(film_axis_raw);
+        float2 film_axis =
+            film_axis_len > 0.0001 ? film_axis_raw / film_axis_len
+                                   : film_normal;
+        float2 film_cross =
+            float2(-film_axis.y, film_axis.x);
+        float film_light_face =
+            smoothstep(-0.18, 0.94, dot(film_axis, -dynamic_light_dir));
+        float film_alignment =
+            smoothstep(-0.12, 0.94, abs(dot(film_axis, bridge_tangent)));
+        float film_phase = clamp(
+            dot(normalized_local, film_axis)
+                    * (5.4 + 2.0 * film_presence)
+                + dot(normalized_local, film_cross)
+                    * (3.8 + 1.4 * spectral_dispersion)
+                + normalized_len * (1.4 + 1.2 * film_edge)
+                + bridge_axial * (1.6 + 1.0 * film_bridge)
+                + bridge_lateral_signed * film_bridge * 1.0
+                + bridge_shear * film_bridge * 1.1
+                + spectral_dispersion * 5.0
+                + spectral_rim_tint * 3.0
+                + glass_caustic_spread * 2.4
+                + planned_environment_reflection * 2.0,
+            -12.0,
+            12.0);
+        float film_wave_r =
+            0.5 + 0.5 * sin(film_phase + spectral_warmth * 3.0);
+        float film_wave_g =
+            0.5 + 0.5 * sin(
+                film_phase * 0.78
+                + spectral_rim_tint * 2.6
+                + film_alignment);
+        float film_wave_b =
+            0.5 + 0.5 * cos(
+                film_phase * 0.64
+                + spectral_coolness * 3.0
+                + glass_prismatic_gain * 1.8);
+        float film_thread =
+            max(max(film_wave_r, film_wave_g), film_wave_b)
+            * (0.38 + 0.62 * film_edge)
+            * (0.42 + 0.58 * film_grazing);
+        float film_band = clamp(
+            abs(film_wave_r - film_wave_b) * 0.34
+                + abs(film_wave_g - 0.50) * 0.24
+                + film_thread * 0.18
+                + spectral_dispersion * 0.14
+                + adaptive_vibrancy_bias * 0.10,
+            0.0,
+            1.0);
+        float film_support = clamp(
+            film_presence * 0.30
+                + film_thread * 0.20
+                + film_alignment * 0.14
+                + film_light_face * 0.12
+                + spectral_rim_tint * 0.12
+                + planned_environment_reflection * 0.10
+                + adaptive_vibrancy_bias * 0.08,
+            0.0,
+            1.0);
+        float film_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float film_highlight_room =
+            1.0 - smoothstep(0.72, 0.98, film_surface_luma);
+        float film_visibility = clamp(
+            film_band * 0.32
+                + film_grazing * 0.24
+                + film_support * 0.18
+                + fresnel_flare_field_strength * 5.0
+                + specular_caustic_field_strength * 4.0
+                + film_highlight_room * 0.10,
+            0.0,
+            1.0);
+        float3 film_spectrum = float3(
+            film_wave_r
+                * (1.0 + spectral_warmth * 0.32)
+                + tint_chroma * in.tint.r * 0.012,
+            film_wave_g
+                * (1.0 + spectral_rim_tint * 0.18)
+                + tint_chroma * in.tint.g * 0.010,
+            film_wave_b
+                * (1.0 + spectral_coolness * 0.32)
+                + tint_chroma * in.tint.b * 0.012);
+        film_spectrum = clamp(
+            film_spectrum
+                + in.tint.rgb
+                    * (0.010
+                       + 0.018 * planned_environment_color_pickup
+                       + 0.012 * adaptive_vibrancy_bias),
+            0.0,
+            1.38);
+        float film_luma =
+            dot(film_spectrum, float3(0.2126, 0.7152, 0.0722));
+        float film_chroma_keep = clamp(
+            0.48
+                + 0.14 * film_support
+                + 0.10 * film_light_face
+                + 0.10 * spectral_dispersion
+                + 0.08 * adaptive_vibrancy_bias
+                - 0.08 * film_surface_luma,
+            0.36,
+            0.86);
+        float3 film_color =
+            float3(film_luma)
+            + (film_spectrum - float3(film_luma)) * film_chroma_keep;
+        float film_gate = clamp(
+            film_presence * 0.28
+                + film_edge * 0.20
+                + film_grazing * 0.18
+                + film_band * 0.14
+                + film_support * 0.12
+                + film_visibility * 0.08
+                + adaptive_vibrancy_bias * 0.08,
+            0.0,
+            1.0);
+        float film_weight =
+            iridescent_film_field_strength
+            * film_gate
+            * (0.13
+               + 0.12 * film_support
+               + 0.11 * film_visibility
+               + 0.09 * film_light_face
+               + 0.08 * spectral_rim_tint);
+        float3 film_layer = clamp(
+            rgb
+                + film_color
+                    * film_visibility
+                    * film_highlight_room
+                    * (0.0008
+                       + 0.0012 * spectral_dispersion
+                       + 0.0010 * planned_environment_reflection),
+            0.0,
+            1.0);
+        rgb = mix(
+            rgb,
+            film_layer,
+            film_weight
+                * (0.046
+                   + 0.038 * film_presence
+                   + 0.034 * film_thread));
+        rgb += film_color
+            * film_weight
+            * film_thread
+            * (0.00012
+               + 0.00042 * spectral_rim_tint
+               + 0.00034 * glass_prismatic_gain
+               + 0.00028 * adaptive_vibrancy_bias);
+        float film_guard = clamp(
+            film_surface_luma
+                * film_weight
+                * (0.00032 + 0.0010 * glass_shadow_gain)
+                * (1.0 - film_grazing * 0.38),
+            0.0,
+            0.0044);
+        rgb *= 1.0 - film_guard;
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
