@@ -36311,6 +36311,393 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(legibility_absorption, 0.0, 0.011);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float chroma_containment_field_strength = clamp(
+        0.003 * overlap_response_strength
+            + 0.005 * fusion_strength
+            + 0.005 * group_blend_strength * shared_backdrop_scope
+            + 0.004 * group_blend_strength * group_surface_execution
+            + 0.004 * bridge_band
+            + 0.25 * legibility_preservation_field_strength
+            + 0.21 * depth_separation_field_strength
+            + 0.18 * specular_flow_field_strength
+            + 0.15 * phase_equalization_field_strength
+            + 0.12 * edge_continuity_field_strength
+            + 0.10 * rim_coalescence_field_strength
+            + 0.08 * edge_adhesion_field_strength
+            + 0.07 * elastic_tension_field_strength
+            + 0.06 * contact_pressure_field_strength
+            + 0.05 * internal_shadow_field_strength
+            + 0.045 * subsurface_caustic_field_strength
+            + 0.035 * transmission_depth_field_strength
+            + 0.026 * interlayer_refraction_field_strength
+            + 0.022 * layer_separation_field_strength
+            + 0.013 * edge_meniscus_field_strength
+            + 0.011 * container_morph_field_strength
+            + 0.010 * foreground_sheen_field_strength,
+        0.0,
+        0.026);
+    if (chroma_containment_field_strength > 0.0001) {
+        float containment_rim =
+            edge_lens
+            * (0.58
+               + 0.42
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.64, 0.86),
+                       signed_edge_distance)));
+        float containment_bridge =
+            bridge_band * (0.50 + 0.50 * bridge_core);
+        float containment_stack = clamp(
+            overlap_response_strength * 0.28
+                + fusion_strength * 0.24
+                + group_blend_strength * shared_backdrop_scope * 0.20
+                + group_surface_execution * group_blend_strength * 0.16
+                + containment_bridge * 0.22,
+            0.0,
+            1.0);
+        float containment_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float containment_lock = clamp(
+            containment_rim * 0.30
+                + containment_bridge * 0.22
+                + containment_stack * 0.18
+                + legibility_preservation_field_strength * 4.6
+                + depth_separation_field_strength * 3.8
+                + specular_flow_field_strength * 3.2
+                + phase_equalization_field_strength * 2.6
+                + edge_continuity_field_strength * 2.0
+                + containment_pointer * 0.06,
+            0.0,
+            1.0);
+        float containment_presence = clamp(
+            containment_rim * 0.30
+                + containment_stack * 0.24
+                + containment_bridge * 0.18
+                + containment_lock * 0.17
+                + prominent_intensity * 0.05
+                + containment_pointer * 0.05,
+            0.0,
+            1.0);
+        float containment_shear_sign =
+            bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 containment_axis_raw =
+            -dynamic_light_dir * (0.32 + 0.18 * dynamic_light_highlight)
+            + refraction_dir * (0.28 + 0.16 * glass_lensing_gain)
+            + bridge_tangent
+                * containment_shear_sign
+                * (0.26 + 0.16 * abs(bridge_shear) * containment_bridge)
+            + bridge_dir * (0.18 + 0.14 * containment_bridge)
+            + dispersion_tangent
+                * (0.12
+                   + 0.07 * spectral_dispersion
+                   + 0.05 * glass_dispersion_tangential)
+            + pointer_dir * (0.09 + 0.08 * containment_pointer);
+        float containment_axis_len = length(containment_axis_raw);
+        float2 containment_axis =
+            containment_axis_len > 0.0001
+                ? containment_axis_raw / containment_axis_len
+                : (normalized_len > 0.0001
+                    ? refraction_dir
+                    : float2(1.0, 0.0));
+        float2 containment_cross =
+            float2(-containment_axis.y, containment_axis.x);
+        float containment_light_face =
+            smoothstep(-0.16, 0.92, dot(containment_axis, -dynamic_light_dir));
+        float containment_bridge_alignment =
+            smoothstep(-0.14, 0.92, abs(dot(containment_axis, bridge_tangent)));
+        float containment_phase = clamp(
+            dot(normalized_local, containment_axis)
+                    * (3.4 + 0.9 * containment_presence)
+                + dot(normalized_local, containment_cross)
+                    * (2.0 + 0.8 * containment_stack)
+                + bridge_axial * (1.5 + 0.8 * bridge_core)
+                + bridge_lateral_signed * containment_bridge * 1.2
+                + bridge_shear * containment_bridge * 1.4
+                + spectral_dispersion * 2.0
+                + glass_caustic_spread * 1.5,
+            -12.0,
+            12.0);
+        float containment_wave =
+            0.5 + 0.5 * sin(containment_phase);
+        float containment_counter_wave =
+            0.5 + 0.5 * cos(
+                containment_phase * 0.56
+                + glass_caustic_spread * 2.4
+                + containment_stack * 1.5);
+        float containment_lobe =
+            1.0 - smoothstep(0.0, 0.42, abs(containment_wave - 0.50));
+        float containment_return_lobe =
+            1.0 - smoothstep(0.0, 0.44, abs(containment_counter_wave - 0.50));
+        float containment_support = clamp(
+            containment_lock * 0.32
+                + containment_bridge_alignment * 0.18
+                + containment_rim * 0.18
+                + containment_lobe * 0.10
+                + containment_return_lobe * 0.08
+                + containment_pointer * 0.07,
+            0.0,
+            1.0);
+        float containment_focus =
+            (0.5
+             + 0.5
+                 * cos(containment_phase * 1.02 + normalized_len * 1.8))
+            * (0.34 + 0.66 * containment_lobe);
+        float containment_span =
+            (0.36
+             + 0.72 * glass_thickness
+             + 0.58 * clear_glass_detail
+             + 0.72 * containment_presence
+             + 0.012 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float containment_cross_span =
+            (0.28
+             + 0.46 * glass_dispersion_tangential
+             + 0.42 * spectral_dispersion
+             + 0.60 * containment_support)
+            * content_scale;
+        float containment_channel_span =
+            (0.20
+             + 0.30 * glass_dispersion_tangential
+             + 0.34 * spectral_dispersion
+             + 0.28 * glass_caustic_spread)
+            * content_scale
+            * (0.82 + 0.18 * containment_focus);
+        float2 containment_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.04 + 0.06 * containment_support),
+            float2(0.0),
+            float2(1.0));
+        float2 containment_light_uv = clamp(
+            containment_base_uv
+                - dynamic_light_dir
+                    * texel
+                    * containment_span
+                    * (0.12 + 0.10 * containment_light_face)
+                + containment_axis
+                    * texel
+                    * containment_span
+                    * (0.08 + 0.08 * containment_support),
+            float2(0.0),
+            float2(1.0));
+        float2 containment_shadow_uv = clamp(
+            containment_base_uv
+                + dynamic_light_dir
+                    * texel
+                    * containment_span
+                    * (0.13 + 0.10 * (1.0 - containment_light_face))
+                - containment_axis
+                    * texel
+                    * containment_span
+                    * (0.08 + 0.08 * containment_return_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 containment_core_uv = clamp(
+            containment_base_uv
+                + refraction_dir
+                    * texel
+                    * containment_span
+                    * (0.06 + 0.07 * containment_rim)
+                + bridge_dir
+                    * texel
+                    * containment_span
+                    * containment_bridge
+                    * 0.05,
+            float2(0.0),
+            float2(1.0));
+        float2 containment_warm_uv = clamp(
+            containment_base_uv
+                + containment_cross
+                    * texel
+                    * containment_cross_span
+                    * (0.14 + 0.08 * containment_wave)
+                + dispersion_tangent
+                    * texel
+                    * containment_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float2 containment_cool_uv = clamp(
+            containment_base_uv
+                - containment_cross
+                    * texel
+                    * containment_cross_span
+                    * (0.14 + 0.08 * containment_lobe)
+                - dispersion_tangent
+                    * texel
+                    * containment_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float3 containment_light_rgb =
+            backdrop.sample(samp, containment_light_uv).rgb;
+        float3 containment_shadow_rgb =
+            backdrop.sample(samp, containment_shadow_uv).rgb;
+        float3 containment_core_rgb =
+            backdrop.sample(samp, containment_core_uv).rgb;
+        float3 containment_warm_rgb =
+            backdrop.sample(samp, containment_warm_uv).rgb;
+        float3 containment_cool_rgb =
+            backdrop.sample(samp, containment_cool_uv).rgb;
+        float3 containment_average =
+            containment_light_rgb * 0.22
+            + containment_shadow_rgb * 0.22
+            + containment_core_rgb * 0.28
+            + containment_warm_rgb * 0.14
+            + containment_cool_rgb * 0.14;
+        float3 containment_split = float3(
+            containment_warm_rgb.r,
+            (containment_core_rgb.g + containment_average.g) * 0.5,
+            containment_cool_rgb.b);
+        float containment_split_mix = clamp(
+            0.06
+                + 0.07 * spectral_dispersion
+                + 0.05 * glass_dispersion_tangential
+                + 0.06 * containment_support,
+            0.0,
+            0.26);
+        float3 containment_probe = mix(
+            containment_average,
+            containment_split,
+            containment_split_mix);
+        float containment_light_luma =
+            dot(containment_light_rgb, float3(0.2126, 0.7152, 0.0722));
+        float containment_shadow_luma =
+            dot(containment_shadow_rgb, float3(0.2126, 0.7152, 0.0722));
+        float containment_core_luma =
+            dot(containment_core_rgb, float3(0.2126, 0.7152, 0.0722));
+        float containment_warm_luma =
+            dot(containment_warm_rgb, float3(0.2126, 0.7152, 0.0722));
+        float containment_cool_luma =
+            dot(containment_cool_rgb, float3(0.2126, 0.7152, 0.0722));
+        float containment_probe_luma =
+            dot(containment_probe, float3(0.2126, 0.7152, 0.0722));
+        float containment_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float containment_luma_min = min(
+            min(containment_light_luma, containment_shadow_luma),
+            min(containment_core_luma,
+                min(containment_warm_luma, containment_cool_luma)));
+        float containment_luma_max = max(
+            max(containment_light_luma, containment_shadow_luma),
+            max(containment_core_luma,
+                max(containment_warm_luma, containment_cool_luma)));
+        float containment_luma_range =
+            clamp(containment_luma_max - containment_luma_min, 0.0, 1.0);
+        float containment_backdrop_chroma = clamp(
+            length(containment_warm_rgb - containment_cool_rgb) * 0.22
+                + length(containment_light_rgb - containment_shadow_rgb) * 0.16
+                + length(containment_split - containment_average) * 0.14,
+            0.0,
+            1.0);
+        float containment_probe_chroma = clamp(
+            length(containment_probe - float3(containment_probe_luma)),
+            0.0,
+            1.0);
+        float containment_surface_chroma = clamp(
+            length(rgb - float3(containment_surface_luma)),
+            0.0,
+            1.0);
+        float containment_chroma_risk = smoothstep(
+            0.04,
+            0.31,
+            containment_backdrop_chroma * 0.44
+                + containment_probe_chroma * 0.28
+                + containment_surface_chroma * 0.18
+                + containment_luma_range * 0.14
+                + containment_support * 0.06);
+        float containment_luma_guard =
+            1.0
+            - smoothstep(
+                0.08,
+                0.40,
+                abs(containment_probe_luma - containment_surface_luma)
+                    + containment_luma_range * 0.24
+                    + containment_support * 0.08);
+        float containment_chroma_keep = clamp(
+            0.48
+                + 0.24 * (1.0 - containment_chroma_risk)
+                + 0.14 * containment_support
+                + 0.10 * containment_light_face,
+            0.42,
+            0.88);
+        float3 containment_muted =
+            float3(containment_probe_luma)
+            + (containment_probe - float3(containment_probe_luma))
+                * containment_chroma_keep;
+        float containment_target_luma =
+            0.50
+            + (containment_probe_luma - 0.50)
+                * (0.58 + 0.20 * (1.0 - containment_chroma_risk));
+        float3 containment_layer = mix(
+            containment_muted,
+            float3(containment_target_luma),
+            containment_chroma_risk
+                * (0.18 + 0.16 * containment_luma_guard));
+        containment_layer = mix(
+            containment_layer,
+            containment_core_rgb,
+            (1.0 - containment_chroma_risk)
+                * (0.07 + 0.07 * containment_focus));
+        containment_layer = clamp(
+            (containment_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.006
+                       + containment_support * 0.005
+                       - containment_chroma_risk * 0.009)
+                + float3(0.50),
+            0.0,
+            1.0);
+        containment_layer *= float3(
+            1.0 + spectral_warmth * 0.20 + tint_chroma * in.tint.r * 0.007,
+            1.0 + spectral_rim_tint * 0.08 + tint_chroma * in.tint.g * 0.006,
+            1.0 + spectral_coolness * 0.20 + tint_chroma * in.tint.b * 0.007);
+        float containment_gate = clamp(
+            containment_presence * 0.27
+                + containment_stack * 0.22
+                + containment_rim * 0.20
+                + containment_support * 0.15
+                + containment_chroma_risk * 0.12
+                + containment_luma_guard * 0.07,
+            0.0,
+            1.0);
+        float containment_weight =
+            chroma_containment_field_strength
+            * containment_gate
+            * (0.21
+               + 0.17 * containment_support
+               + 0.16 * containment_chroma_risk
+               + 0.12 * containment_luma_guard
+               + 0.10 * containment_bridge_alignment);
+        rgb = mix(
+            rgb,
+            containment_layer,
+            containment_weight
+                * (0.065
+                   + 0.055 * containment_focus
+                   + 0.055 * containment_presence));
+        float3 containment_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.05,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.04,
+            spectral_coolness + tint_chroma * in.tint.b * 0.05);
+        float containment_edge_glint =
+            max(containment_lobe, containment_return_lobe * 0.54)
+            * (1.0 - containment_chroma_risk * 0.32)
+            * containment_rim;
+        rgb += containment_prism
+            * containment_weight
+            * containment_edge_glint
+            * (0.00025
+               + 0.0008 * spectral_rim_tint
+               + 0.0007 * glass_scattering_gain);
+        float containment_absorption =
+            containment_chroma_risk
+            * containment_luma_guard
+            * containment_weight
+            * (0.0007 + 0.0026 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - containment_light_face));
+        rgb *= 1.0 - clamp(containment_absorption, 0.0, 0.010);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
