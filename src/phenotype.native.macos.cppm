@@ -38911,6 +38911,386 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(continuity_absorption, 0.0, 0.0070);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float adaptive_transmission_field_strength = clamp(
+        0.004 * clear_glass_detail
+            + 0.003 * glass_thickness
+            + 0.004 * group_blend_strength * shared_backdrop_scope
+            + 0.003 * group_blend_strength * group_surface_execution
+            + 0.004 * bridge_band * (0.36 + 0.64 * bridge_core)
+            + 0.18 * morph_continuity_field_strength
+            + 0.17 * interaction_response_field_strength
+            + 0.16 * contextual_reflection_field_strength
+            + 0.15 * hierarchy_separation_field_strength
+            + 0.13 * surface_identity_field_strength
+            + 0.11 * tonal_equilibrium_field_strength
+            + 0.095 * chroma_containment_field_strength
+            + 0.080 * legibility_preservation_field_strength
+            + 0.064 * depth_separation_field_strength
+            + 0.052 * specular_flow_field_strength
+            + 0.044 * phase_equalization_field_strength
+            + 0.036 * edge_continuity_field_strength
+            + 0.030 * rim_coalescence_field_strength
+            + 0.024 * edge_adhesion_field_strength
+            + 0.020 * elastic_tension_field_strength,
+        0.0,
+        0.020);
+    if (adaptive_transmission_field_strength > 0.0001
+        && (clear_glass_detail > 0.0001
+            || group_blend_strength > 0.0001
+            || bridge_band > 0.0001
+            || pointer_lens_strength > 0.0001)) {
+        float adaptive_bridge =
+            bridge_band * (0.38 + 0.62 * bridge_core);
+        float adaptive_group = clamp(
+            group_blend_strength * 0.32
+                + shared_backdrop_scope * group_blend_strength * 0.24
+                + group_surface_execution * group_blend_strength * 0.18
+                + adaptive_bridge * 0.24
+                + container_morph_field_strength * 2.6,
+            0.0,
+            1.0);
+        float adaptive_pointer = clamp(
+            pointer_lens_strength
+                * (0.42 * pointer_lens_raw + 0.58 * pointer_lens),
+            0.0,
+            1.0);
+        float adaptive_rim =
+            edge_lens
+            * (0.56
+               + 0.44
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.74, 0.86),
+                       signed_edge_distance)));
+        float adaptive_presence = clamp(
+            adaptive_group * 0.24
+                + adaptive_bridge * 0.20
+                + adaptive_pointer * 0.17
+                + adaptive_rim * 0.13
+                + clear_glass_detail * 0.10
+                + morph_continuity_field_strength * 3.6
+                + interaction_response_field_strength * 3.2
+                + contextual_reflection_field_strength * 2.8,
+            0.0,
+            1.0);
+        float2 adaptive_axis_raw =
+            refraction_dir * (0.30 + 0.16 * glass_lensing_gain)
+            - dynamic_light_dir * (0.22 + 0.14 * dynamic_light_highlight)
+            + bridge_dir * (0.18 + 0.20 * adaptive_bridge)
+            + pointer_dir * adaptive_pointer * 0.12
+            + bridge_tangent
+                * (bridge_shear >= 0.0 ? 1.0 : -1.0)
+                * (0.12 + 0.16 * abs(bridge_shear) * adaptive_bridge)
+            + dispersion_tangent
+                * (0.10
+                   + 0.06 * spectral_dispersion
+                   + 0.04 * glass_dispersion_tangential);
+        float adaptive_axis_len = length(adaptive_axis_raw);
+        float2 adaptive_axis =
+            adaptive_axis_len > 0.0001
+                ? adaptive_axis_raw / adaptive_axis_len
+                : (normalized_len > 0.0001
+                    ? refraction_dir
+                    : float2(1.0, 0.0));
+        float2 adaptive_cross =
+            float2(-adaptive_axis.y, adaptive_axis.x);
+        float adaptive_light_face =
+            smoothstep(-0.18, 0.94, dot(adaptive_axis, -dynamic_light_dir));
+        float adaptive_bridge_alignment =
+            smoothstep(-0.12, 0.94, abs(dot(adaptive_axis, bridge_tangent)));
+        float adaptive_phase = clamp(
+            dot(normalized_local, adaptive_axis)
+                    * (2.8 + 1.0 * adaptive_presence)
+                + dot(normalized_local, adaptive_cross)
+                    * (1.8 + 0.8 * adaptive_group)
+                + bridge_axial * (1.4 + 1.0 * bridge_core)
+                + bridge_lateral_signed * adaptive_bridge * 1.0
+                + pointer_lens_raw * adaptive_pointer * 1.4
+                + spectral_dispersion * 1.3
+                + glass_caustic_spread * 1.1,
+            -12.0,
+            12.0);
+        float adaptive_wave =
+            0.5 + 0.5 * sin(adaptive_phase);
+        float adaptive_counter_wave =
+            0.5 + 0.5 * cos(
+                adaptive_phase * 0.62
+                + adaptive_presence * 1.8
+                + glass_caustic_spread * 1.6);
+        float adaptive_lobe =
+            1.0 - smoothstep(0.0, 0.45, abs(adaptive_wave - 0.50));
+        float adaptive_return_lobe =
+            1.0 - smoothstep(0.0, 0.48, abs(adaptive_counter_wave - 0.50));
+        float adaptive_support = clamp(
+            adaptive_presence * 0.30
+                + adaptive_group * 0.20
+                + adaptive_bridge * 0.16
+                + adaptive_pointer * 0.14
+                + adaptive_rim * 0.10
+                + adaptive_bridge_alignment * 0.10,
+            0.0,
+            1.0);
+        float adaptive_focus =
+            (0.5
+             + 0.5 * cos(adaptive_phase * 0.98 + normalized_len * 1.2))
+            * (0.34 + 0.66 * adaptive_lobe);
+        float adaptive_span =
+            (0.30
+             + 0.50 * glass_thickness
+             + 0.48 * clear_glass_detail
+             + 0.58 * adaptive_presence
+             + 0.010 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float adaptive_cross_span =
+            (0.22
+             + 0.34 * glass_dispersion_tangential
+             + 0.34 * spectral_dispersion
+             + 0.48 * adaptive_support)
+            * content_scale;
+        float adaptive_depth_span =
+            (0.18
+             + 0.30 * adaptive_group
+             + 0.24 * adaptive_bridge
+             + 0.20 * adaptive_pointer
+             + 0.16 * glass_caustic_spread)
+            * content_scale;
+        float2 adaptive_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.030 + 0.046 * adaptive_support)
+                + adaptive_axis
+                    * texel
+                    * adaptive_depth_span
+                    * (0.05 + 0.08 * adaptive_presence),
+            float2(0.0),
+            float2(1.0));
+        float2 adaptive_lead_uv = clamp(
+            adaptive_base_uv
+                + adaptive_axis
+                    * texel
+                    * adaptive_span
+                    * (0.12 + 0.10 * adaptive_focus),
+            float2(0.0),
+            float2(1.0));
+        float2 adaptive_trail_uv = clamp(
+            adaptive_base_uv
+                - adaptive_axis
+                    * texel
+                    * adaptive_span
+                    * (0.11 + 0.09 * adaptive_support),
+            float2(0.0),
+            float2(1.0));
+        float2 adaptive_cross_uv = clamp(
+            adaptive_base_uv
+                + adaptive_cross
+                    * texel
+                    * adaptive_cross_span
+                    * (0.13 + 0.08 * adaptive_wave)
+                + dispersion_tangent
+                    * texel
+                    * adaptive_depth_span
+                    * (0.22 + 0.16 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float2 adaptive_return_uv = clamp(
+            adaptive_base_uv
+                - adaptive_cross
+                    * texel
+                    * adaptive_cross_span
+                    * (0.13 + 0.08 * adaptive_return_lobe)
+                - dispersion_tangent
+                    * texel
+                    * adaptive_depth_span
+                    * (0.22 + 0.16 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float3 adaptive_base_rgb =
+            backdrop.sample(samp, adaptive_base_uv).rgb;
+        float3 adaptive_lead_rgb =
+            backdrop.sample(samp, adaptive_lead_uv).rgb;
+        float3 adaptive_trail_rgb =
+            backdrop.sample(samp, adaptive_trail_uv).rgb;
+        float3 adaptive_cross_rgb =
+            backdrop.sample(samp, adaptive_cross_uv).rgb;
+        float3 adaptive_return_rgb =
+            backdrop.sample(samp, adaptive_return_uv).rgb;
+        float3 adaptive_average =
+            adaptive_base_rgb * 0.28
+            + adaptive_lead_rgb * 0.22
+            + adaptive_trail_rgb * 0.20
+            + adaptive_cross_rgb * 0.15
+            + adaptive_return_rgb * 0.15;
+        float3 adaptive_split = float3(
+            adaptive_cross_rgb.r,
+            (adaptive_base_rgb.g + adaptive_average.g) * 0.5,
+            adaptive_return_rgb.b);
+        float adaptive_split_mix = clamp(
+            0.036
+                + 0.048 * spectral_dispersion
+                + 0.040 * glass_dispersion_tangential
+                + 0.044 * adaptive_support,
+            0.0,
+            0.20);
+        float3 adaptive_probe = mix(
+            adaptive_average,
+            adaptive_split,
+            adaptive_split_mix);
+        float adaptive_base_luma =
+            dot(adaptive_base_rgb, float3(0.2126, 0.7152, 0.0722));
+        float adaptive_lead_luma =
+            dot(adaptive_lead_rgb, float3(0.2126, 0.7152, 0.0722));
+        float adaptive_trail_luma =
+            dot(adaptive_trail_rgb, float3(0.2126, 0.7152, 0.0722));
+        float adaptive_cross_luma =
+            dot(adaptive_cross_rgb, float3(0.2126, 0.7152, 0.0722));
+        float adaptive_return_luma =
+            dot(adaptive_return_rgb, float3(0.2126, 0.7152, 0.0722));
+        float adaptive_probe_luma =
+            dot(adaptive_probe, float3(0.2126, 0.7152, 0.0722));
+        float adaptive_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float adaptive_luma_max =
+            max(max(adaptive_base_luma, adaptive_lead_luma),
+                max(max(adaptive_trail_luma, adaptive_cross_luma),
+                    adaptive_return_luma));
+        float adaptive_luma_min =
+            min(min(adaptive_base_luma, adaptive_lead_luma),
+                min(min(adaptive_trail_luma, adaptive_cross_luma),
+                    adaptive_return_luma));
+        float adaptive_luma_range =
+            clamp(adaptive_luma_max - adaptive_luma_min, 0.0, 1.0);
+        float adaptive_chroma_range = clamp(
+            length(adaptive_lead_rgb - adaptive_trail_rgb) * 0.24
+                + length(adaptive_cross_rgb - adaptive_return_rgb) * 0.20
+                + length(adaptive_base_rgb - adaptive_average) * 0.18,
+            0.0,
+            1.0);
+        float adaptive_backdrop_busy =
+            smoothstep(
+                0.055,
+                0.34,
+                adaptive_luma_range * 0.52
+                    + adaptive_chroma_range * 0.30
+                    + adaptive_support * 0.08);
+        float adaptive_backdrop_quiet =
+            1.0 - smoothstep(
+                0.09,
+                0.42,
+                adaptive_luma_range * 0.52
+                    + adaptive_chroma_range * 0.30);
+        float adaptive_shadow =
+            smoothstep(
+                0.05,
+                0.34,
+                adaptive_surface_luma
+                    - adaptive_luma_min
+                    + adaptive_luma_range * 0.11);
+        float adaptive_highlight =
+            smoothstep(
+                0.06,
+                0.38,
+                adaptive_luma_max
+                    - adaptive_surface_luma
+                    + adaptive_luma_range * 0.11);
+        float adaptive_transmission = clamp(
+            0.48
+                + 0.18 * adaptive_backdrop_quiet
+                + 0.12 * adaptive_light_face
+                + 0.10 * clear_glass_detail
+                - 0.14 * adaptive_backdrop_busy
+                - 0.08 * adaptive_shadow,
+            0.34,
+            0.82);
+        float adaptive_target_luma = clamp(
+            0.50
+                + (adaptive_probe_luma - 0.50)
+                    * (0.50 + 0.22 * adaptive_transmission)
+                + (adaptive_highlight - adaptive_shadow)
+                    * (0.030 + 0.034 * adaptive_support)
+                - adaptive_backdrop_busy
+                    * clear_glass_dimming
+                    * (0.020 + 0.018 * clear_glass_detail),
+            0.0,
+            1.0);
+        float adaptive_chroma_keep = clamp(
+            0.52
+                + 0.12 * adaptive_transmission
+                + 0.10 * adaptive_support
+                + 0.08 * adaptive_light_face
+                - 0.10 * adaptive_backdrop_busy,
+            0.42,
+            0.86);
+        float3 adaptive_surface =
+            float3(adaptive_target_luma)
+            + (adaptive_probe - float3(adaptive_probe_luma))
+                * adaptive_chroma_keep;
+        float3 adaptive_layer = mix(
+            adaptive_probe,
+            adaptive_surface,
+            (0.22 + 0.18 * adaptive_backdrop_busy)
+                * (0.42 + 0.58 * adaptive_support));
+        adaptive_layer = clamp(
+            (adaptive_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.006
+                       + adaptive_backdrop_busy * 0.006
+                       - adaptive_shadow * 0.004)
+                + float3(0.50),
+            0.0,
+            1.0);
+        adaptive_layer *= float3(
+            1.0 + spectral_warmth * 0.11 + tint_chroma * in.tint.r * 0.004,
+            1.0 + spectral_rim_tint * 0.055 + tint_chroma * in.tint.g * 0.004,
+            1.0 + spectral_coolness * 0.11 + tint_chroma * in.tint.b * 0.004);
+        float adaptive_gate = clamp(
+            adaptive_presence * 0.28
+                + adaptive_support * 0.20
+                + adaptive_backdrop_busy * 0.18
+                + adaptive_backdrop_quiet * 0.10
+                + adaptive_rim * 0.10
+                + adaptive_lobe * 0.08
+                + adaptive_bridge_alignment * 0.06,
+            0.0,
+            1.0);
+        float adaptive_weight =
+            adaptive_transmission_field_strength
+            * adaptive_gate
+            * (0.16
+               + 0.14 * adaptive_support
+               + 0.12 * adaptive_transmission
+               + 0.10 * adaptive_focus
+               + 0.08 * adaptive_backdrop_busy);
+        rgb = mix(
+            rgb,
+            adaptive_layer,
+            adaptive_weight
+                * (0.050
+                   + 0.044 * adaptive_presence
+                   + 0.038 * adaptive_backdrop_busy));
+        float3 adaptive_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.030,
+            0.11 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.026,
+            spectral_coolness + tint_chroma * in.tint.b * 0.030);
+        float adaptive_caustic =
+            max(adaptive_lobe, adaptive_return_lobe * 0.50)
+            * (0.34 + 0.66 * adaptive_transmission)
+            * (0.42 + 0.58 * adaptive_support);
+        rgb += adaptive_prism
+            * adaptive_weight
+            * adaptive_caustic
+            * (0.00014
+               + 0.00046 * spectral_rim_tint
+               + 0.00040 * glass_scattering_gain);
+        float adaptive_absorption =
+            adaptive_shadow
+            * adaptive_weight
+            * adaptive_backdrop_busy
+            * (0.00048 + 0.0015 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - adaptive_light_face));
+        rgb *= 1.0 - clamp(adaptive_absorption, 0.0, 0.0068);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
