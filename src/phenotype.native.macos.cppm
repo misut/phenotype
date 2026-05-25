@@ -23207,6 +23207,236 @@ fragment float4 fs_material(
                + 0.0020 * glass_scattering_gain);
     }
     rgb *= (1.0 - transmitted_shadow);
+    float edge_reflection_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.009 * glass_lensing_gain
+            + 0.008 * glass_scattering_gain
+            + 0.007 * glass_prismatic_gain
+            + 0.006 * shadow_transmission_strength
+            + 0.006 * substrate_adhesion_strength
+            + 0.005 * ambient_seal_field_strength
+            + 0.005 * contact_shadow_field_strength
+            + 0.004 * depth_fusion_strength
+            + 0.004 * focus_field_strength,
+        0.0,
+        0.058);
+    if (edge_reflection_strength > 0.0001 && edge_bevel_width > 0.0001) {
+        float edge_reflection_outer =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.20, 1.0),
+                signed_edge_distance);
+        float edge_reflection_inner = smoothstep(
+            max(edge_bevel_width * 0.28, 0.12),
+            max(edge_bevel_width * 2.80, 1.0),
+            signed_edge_distance);
+        float edge_reflection_band = clamp(
+            edge_reflection_outer
+                * (0.52 + 0.48 * edge_lens)
+                * (0.56 + 0.44 * edge_reflection_inner),
+            0.0,
+            1.0);
+        float edge_reflection_transition = clamp(
+            glass_effect_match_execution * 0.24
+                + morph_execution * 0.18
+                + materialize_wave_strength * 0.14
+                + shadow_transmission_strength * 1.4
+                + substrate_adhesion_strength * 1.3
+                + ambient_seal_field_strength * 1.1
+                + contact_shadow_field_strength * 1.0
+                + depth_fusion_strength * 0.9
+                + focus_field_strength * 0.8,
+            0.0,
+            1.0);
+        float2 edge_reflection_tangent =
+            float2(-normalized_local.y, normalized_local.x);
+        float edge_reflection_tangent_len =
+            length(edge_reflection_tangent);
+        edge_reflection_tangent =
+            edge_reflection_tangent_len > 0.0001
+                ? edge_reflection_tangent / edge_reflection_tangent_len
+                : float2(-dynamic_light_dir.y, dynamic_light_dir.x);
+        float2 edge_reflection_axis_raw =
+            refraction_dir * (0.34 + 0.26 * glass_lensing_gain)
+            + edge_reflection_tangent
+                * (0.30 + 0.20 * edge_reflection_band)
+            - dynamic_light_dir
+                * (0.24 + 0.18 * dynamic_light_highlight)
+            + bridge_dir * (0.12 + 0.14 * bridge_band);
+        float edge_reflection_axis_len =
+            length(edge_reflection_axis_raw);
+        float2 edge_reflection_axis =
+            edge_reflection_axis_len > 0.0001
+                ? edge_reflection_axis_raw / edge_reflection_axis_len
+                : edge_reflection_tangent;
+        float2 edge_reflection_cross =
+            float2(-edge_reflection_axis.y, edge_reflection_axis.x);
+        float edge_reflection_light_face =
+            smoothstep(-0.20, 0.92, dot(edge_reflection_axis, -dynamic_light_dir));
+        float edge_reflection_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(edge_reflection_axis, bridge_dir)));
+        float edge_reflection_phase = clamp(
+            dot(normalized_local, edge_reflection_axis)
+                    * (4.1 + 1.4 * edge_reflection_transition)
+                + dot(normalized_local, edge_reflection_cross)
+                    * (2.5 + 1.0 * bridge_band)
+                + signed_edge_distance
+                    / max(edge_bevel_width * 2.4, 1.0)
+                    * (2.0 + 1.2 * edge_reflection_band)
+                + bridge_axial * (2.0 + 1.1 * bridge_core),
+            -10.0,
+            10.0);
+        float edge_reflection_wave =
+            0.5 + 0.5 * sin(edge_reflection_phase);
+        float edge_reflection_lock =
+            1.0 - smoothstep(
+                0.0,
+                0.36,
+                abs(edge_reflection_wave - 0.54));
+        float edge_reflection_gate = clamp(
+            edge_reflection_band
+                * (0.30
+                   + 0.18 * edge_reflection_light_face
+                   + 0.16 * edge_reflection_bridge_alignment
+                   + 0.14 * edge_reflection_lock
+                   + 0.12 * edge_reflection_transition
+                   + 0.10 * dynamic_light_highlight
+                   + 0.08 * edge_depth),
+            0.0,
+            1.0);
+        float edge_reflection_span =
+            (0.52
+             + 1.2 * glass_thickness
+             + 1.0 * clear_glass_detail
+             + 0.7 * edge_reflection_transition
+             + 0.018 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float edge_reflection_cross_span =
+            (0.36
+             + 0.7 * glass_dispersion_tangential
+             + 0.6 * spectral_dispersion
+             + 0.5 * edge_reflection_bridge_alignment)
+            * content_scale;
+        float2 edge_reflection_face_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + edge_reflection_axis
+                    * texel
+                    * edge_reflection_span
+                    * (0.22 + 0.12 * edge_reflection_lock),
+            float2(0.0),
+            float2(1.0));
+        float2 edge_reflection_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - edge_reflection_axis
+                    * texel
+                    * edge_reflection_span
+                    * (0.20 + 0.12 * edge_reflection_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 edge_reflection_tangent_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + edge_reflection_tangent
+                    * texel
+                    * edge_reflection_cross_span
+                    * (0.22 + 0.12 * edge_reflection_band),
+            float2(0.0),
+            float2(1.0));
+        float2 edge_reflection_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - edge_reflection_cross
+                    * texel
+                    * edge_reflection_cross_span
+                    * (0.18 + 0.12 * edge_reflection_lock),
+            float2(0.0),
+            float2(1.0));
+        float3 edge_reflection_face_rgb =
+            backdrop.sample(samp, edge_reflection_face_uv).rgb;
+        float3 edge_reflection_return_rgb =
+            backdrop.sample(samp, edge_reflection_return_uv).rgb;
+        float3 edge_reflection_tangent_rgb =
+            backdrop.sample(samp, edge_reflection_tangent_uv).rgb;
+        float3 edge_reflection_cross_rgb =
+            backdrop.sample(samp, edge_reflection_cross_uv).rgb;
+        float3 edge_reflection_probe =
+            edge_reflection_face_rgb * 0.32
+            + edge_reflection_return_rgb * 0.24
+            + edge_reflection_tangent_rgb * 0.24
+            + edge_reflection_cross_rgb * 0.20;
+        float edge_reflection_luma =
+            dot(edge_reflection_probe, float3(0.2126, 0.7152, 0.0722));
+        float edge_reflection_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float edge_reflection_range = clamp(
+            length(edge_reflection_face_rgb - edge_reflection_return_rgb) * 0.30
+                + length(edge_reflection_tangent_rgb - edge_reflection_cross_rgb) * 0.24
+                + abs(edge_reflection_luma - edge_reflection_surface_luma) * 0.20
+                + edge_reflection_lock * 0.06,
+            0.0,
+            1.0);
+        float edge_reflection_coherence =
+            1.0 - smoothstep(0.08, 0.36, edge_reflection_range);
+        float edge_reflection_lift = smoothstep(
+            edge_reflection_surface_luma - 0.04,
+            edge_reflection_surface_luma + 0.28,
+            edge_reflection_luma);
+        float3 edge_reflection_layer = mix(
+            edge_reflection_probe,
+            float3(edge_reflection_luma),
+            edge_reflection_coherence * 0.14
+                + glass_shadow_gain * 0.06);
+        edge_reflection_layer = clamp(
+            (edge_reflection_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.018
+                       + edge_reflection_transition * 0.016
+                       + edge_reflection_lift * 0.012
+                       - glass_shadow_gain * 0.010)
+                + float3(0.50),
+            0.0,
+            1.0);
+        edge_reflection_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.008
+                   + 0.014 * tint_chroma * prominent_intensity);
+        float3 edge_reflection_prism = float3(
+            spectral_warmth,
+            0.14 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        edge_reflection_layer += edge_reflection_prism
+            * (0.0010
+               + 0.0030 * spectral_rim_tint
+               + 0.0026 * glass_prismatic_gain)
+            * (0.42
+               + 0.24 * edge_reflection_light_face
+               + 0.20 * edge_reflection_lock
+               + 0.14 * edge_reflection_coherence);
+        float edge_reflection_weight =
+            edge_reflection_strength
+            * edge_reflection_gate
+            * (0.30
+               + 0.20 * edge_reflection_coherence
+               + 0.16 * edge_reflection_lift
+               + 0.14 * edge_reflection_light_face
+               + 0.12 * edge_reflection_transition);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                edge_reflection_layer,
+                0.08 + 0.16 * edge_reflection_light_face),
+            edge_reflection_weight * 0.30);
+        rgb += edge_reflection_prism
+            * edge_reflection_weight
+            * (0.0008
+               + 0.0024 * dynamic_light_highlight
+               + 0.0024 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
