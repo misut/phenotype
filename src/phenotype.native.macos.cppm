@@ -16957,6 +16957,301 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(normal_shadow, 0.0, 0.032);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float thickness_coupler_strength = clamp(
+        0.014 * normal_coupler_strength
+            + 0.012 * refraction_coupler_strength
+            + 0.012 * luminance_coupler_strength
+            + 0.012 * liquid_response_strength
+            + 0.010 * specular_sheet_strength
+            + 0.010 * bridge_meniscus_reflection_strength
+            + 0.010 * shared_shell_strength
+            + 0.010 * glass_thickness
+            + 0.008 * glass_effect_match_execution * group_blend_strength
+            + 0.006 * clear_glass_detail,
+        0.0,
+        0.072);
+    if (thickness_coupler_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 thickness_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 thickness_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            thickness_group_size);
+        float2 thickness_group_norm =
+            (thickness_group_local / thickness_group_size - float2(0.5))
+            * 2.0;
+        float thickness_group_len = length(thickness_group_norm);
+        float thickness_center =
+            1.0 - smoothstep(0.18, 1.16, thickness_group_len);
+        float2 thickness_group_edge = min(
+            thickness_group_local,
+            max(thickness_group_size - thickness_group_local, float2(0.0)));
+        float thickness_edge_distance =
+            min(thickness_group_edge.x, thickness_group_edge.y);
+        float thickness_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.5, 1.0),
+                thickness_edge_distance);
+        float thickness_bridge =
+            bridge_band * (0.36 + 0.64 * bridge_core);
+        float thickness_transition = clamp(
+            glass_effect_match_execution * 0.32
+                + morph_execution * 0.22
+                + shape_blend_execution * 0.14
+                + union_execution * 0.10
+                + normal_coupler_strength * 1.9
+                + refraction_coupler_strength * 1.6
+                + luminance_coupler_strength * 1.4,
+            0.0,
+            1.0);
+        float thickness_gate = clamp(
+            thickness_center * 0.20
+                + thickness_edge * 0.24
+                + thickness_bridge * 0.24
+                + thickness_transition * group_blend_strength * 0.22
+                + edge_lens * 0.10,
+            0.0,
+            1.0);
+        float2 thickness_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 thickness_group_center_screen =
+            in.group_rect.xy + thickness_group_size * 0.5;
+        float2 thickness_group_center_uv = clamp(
+            thickness_group_center_screen / thickness_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 thickness_to_center =
+            thickness_group_center_uv - in.screen_uv;
+        float thickness_center_distance = length(thickness_to_center);
+        float2 thickness_center_dir =
+            thickness_center_distance > 0.0001
+                ? thickness_to_center / thickness_center_distance
+                : refraction_dir;
+        float2 thickness_axis_raw =
+            refraction_dir * (0.34 + 0.20 * clear_glass_detail)
+            + thickness_center_dir * (0.30 + 0.20 * thickness_center)
+            + bridge_dir * (0.28 + 0.22 * thickness_bridge)
+            - dynamic_light_dir * (0.18 + 0.14 * dynamic_light_highlight);
+        float thickness_axis_len = length(thickness_axis_raw);
+        float2 thickness_axis = thickness_axis_len > 0.0001
+            ? thickness_axis_raw / thickness_axis_len
+            : refraction_dir;
+        float2 thickness_cross =
+            float2(-thickness_axis.y, thickness_axis.x);
+        float thickness_phase = clamp(
+            dot(thickness_group_norm, thickness_axis)
+                    * (4.8 + 2.4 * thickness_transition)
+                + dot(thickness_group_norm, thickness_cross)
+                    * (2.1 + 1.5 * thickness_bridge)
+                + bridge_axial * (3.2 + 2.0 * thickness_bridge)
+                + bridge_shear * thickness_bridge * 1.9
+                + dynamic_light_highlight * 1.5,
+            -10.0,
+            10.0);
+        float thickness_wave = 0.5 + 0.5 * sin(thickness_phase);
+        float thickness_core =
+            1.0 - smoothstep(0.0, 0.31, abs(thickness_wave - 0.58));
+        float thickness_span =
+            (0.84
+             + 2.1 * glass_thickness
+             + 1.3 * clear_glass_detail
+             + 1.0 * thickness_gate
+             + 0.040 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float thickness_cross_span =
+            (0.64
+             + 1.2 * glass_dispersion_tangential
+             + 1.2 * spectral_dispersion
+             + 0.8 * thickness_transition)
+            * content_scale;
+        float2 thickness_center_sample_uv = clamp(
+            mix(
+                in.screen_uv,
+                thickness_group_center_uv,
+                0.12 + 0.14 * thickness_center),
+            float2(0.0),
+            float2(1.0));
+        float2 thickness_inner_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                + thickness_axis
+                    * texel
+                    * thickness_span
+                    * (0.22 + 0.14 * thickness_core),
+            float2(0.0),
+            float2(1.0));
+        float2 thickness_outer_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - thickness_axis
+                    * texel
+                    * thickness_span
+                    * (0.26 + 0.16 * thickness_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 thickness_upper_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                + thickness_cross
+                    * texel
+                    * thickness_cross_span
+                    * (0.24 + 0.16 * thickness_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 thickness_lower_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.13
+                - thickness_cross
+                    * texel
+                    * thickness_cross_span
+                    * (0.22 + 0.14 * thickness_bridge),
+            float2(0.0),
+            float2(1.0));
+        float3 thickness_center_rgb =
+            backdrop.sample(samp, thickness_center_sample_uv).rgb;
+        float3 thickness_inner_rgb =
+            backdrop.sample(samp, thickness_inner_uv).rgb;
+        float3 thickness_outer_rgb =
+            backdrop.sample(samp, thickness_outer_uv).rgb;
+        float3 thickness_upper_rgb =
+            backdrop.sample(samp, thickness_upper_uv).rgb;
+        float3 thickness_lower_rgb =
+            backdrop.sample(samp, thickness_lower_uv).rgb;
+        float3 thickness_probe =
+            thickness_center_rgb * 0.30
+            + thickness_inner_rgb * 0.22
+            + thickness_outer_rgb * 0.20
+            + thickness_upper_rgb * 0.15
+            + thickness_lower_rgb * 0.13;
+        float thickness_probe_luma =
+            dot(thickness_probe, float3(0.2126, 0.7152, 0.0722));
+        float thickness_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float thickness_center_luma =
+            dot(thickness_center_rgb, float3(0.2126, 0.7152, 0.0722));
+        float thickness_inner_luma =
+            dot(thickness_inner_rgb, float3(0.2126, 0.7152, 0.0722));
+        float thickness_outer_luma =
+            dot(thickness_outer_rgb, float3(0.2126, 0.7152, 0.0722));
+        float thickness_upper_luma =
+            dot(thickness_upper_rgb, float3(0.2126, 0.7152, 0.0722));
+        float thickness_lower_luma =
+            dot(thickness_lower_rgb, float3(0.2126, 0.7152, 0.0722));
+        float thickness_range = clamp(
+            abs(thickness_inner_luma - thickness_outer_luma) * 0.30
+                + abs(thickness_upper_luma - thickness_lower_luma) * 0.24
+                + abs(thickness_center_luma - thickness_surface_luma) * 0.20
+                + thickness_core * 0.10,
+            0.0,
+            1.0);
+        float thickness_coherence =
+            1.0 - smoothstep(0.08, 0.35, thickness_range);
+        float thickness_absorption = clamp(
+            smoothstep(
+                0.05,
+                0.32,
+                thickness_surface_luma - thickness_probe_luma)
+                * (0.34 + 0.28 * thickness_edge + 0.22 * thickness_bridge)
+                + glass_shadow_gain * 0.18,
+            0.0,
+            1.0);
+        float thickness_transmission = smoothstep(
+            thickness_surface_luma - 0.06,
+            thickness_surface_luma + 0.26,
+            thickness_probe_luma);
+        float thickness_alignment =
+            smoothstep(-0.28, 0.90, dot(thickness_axis, -dynamic_light_dir));
+        float thickness_fresnel = clamp(
+            thickness_edge * 0.28
+                + thickness_core * 0.22
+                + thickness_alignment * 0.18
+                + thickness_transition * 0.16
+                + thickness_bridge * 0.16,
+            0.0,
+            1.0);
+        float3 thickness_tint = mix(
+            float3(1.0),
+            float3(
+                spectral_warmth,
+                0.14 * (spectral_warmth + spectral_coolness),
+                spectral_coolness),
+            clamp(0.18 + 0.42 * spectral_rim_tint, 0.0, 1.0));
+        float3 thickness_neutral = mix(
+            thickness_probe,
+            float3(thickness_probe_luma),
+            thickness_absorption * (0.10 + 0.16 * glass_shadow_gain)
+                + thickness_coherence * 0.12);
+        float3 thickness_layer =
+            thickness_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.018
+                      + 0.032 * tint_chroma * prominent_intensity));
+        thickness_layer = mix(
+            thickness_layer,
+            rgb + thickness_tint
+                * (0.014
+                   + 0.034 * thickness_transmission
+                   + 0.028 * thickness_fresnel),
+            0.12
+                + 0.12 * thickness_coherence
+                + 0.10 * thickness_transmission);
+        thickness_layer = clamp(
+            (thickness_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + thickness_fresnel * 0.010
+                       + thickness_transmission * 0.008
+                       - glass_shadow_gain * 0.004)
+                + float3(0.50),
+            0.0,
+            1.0);
+        thickness_layer += thickness_tint
+            * thickness_fresnel
+            * (0.0010
+               + 0.0028 * spectral_rim_tint
+               + 0.0022 * glass_prismatic_gain
+               + 0.0022 * glass_scattering_gain)
+            * (0.34
+               + 0.22 * thickness_coherence
+               + 0.22 * thickness_core
+               + 0.22 * thickness_transmission);
+        float thickness_weight =
+            thickness_coupler_strength
+            * thickness_gate
+            * (0.30
+               + 0.20 * thickness_coherence
+               + 0.18 * thickness_fresnel
+               + 0.16 * thickness_transmission
+               + 0.16 * thickness_bridge);
+        rgb = mix(
+            rgb,
+            clamp(thickness_layer, 0.0, 1.0),
+            thickness_weight * 0.32);
+        rgb += thickness_tint
+            * thickness_weight
+            * thickness_core
+            * (0.0012
+               + 0.0038 * glass_prismatic_gain
+               + 0.0032 * glass_scattering_gain);
+        float thickness_shadow =
+            thickness_absorption
+            * thickness_weight
+            * (0.005 + 0.014 * glass_shadow_gain)
+            * (0.56 + 0.44 * (1.0 - thickness_alignment));
+        rgb *= 1.0 - clamp(thickness_shadow, 0.0, 0.034);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float depth_aperture_strength = clamp(
         0.014 * clear_glass_detail
             + 0.012 * clear_glass_contrast
@@ -16971,6 +17266,7 @@ fragment float4 fs_material(
             + 0.012 * luminance_coupler_strength
             + 0.012 * refraction_coupler_strength
             + 0.012 * normal_coupler_strength
+            + 0.012 * thickness_coupler_strength
             + 0.012 * legibility_veil_strength,
         0.0,
         0.10);
@@ -19520,6 +19816,7 @@ fragment float4 fs_material(
             + 0.008 * luminance_coupler_strength
             + 0.008 * refraction_coupler_strength
             + 0.008 * normal_coupler_strength
+            + 0.008 * thickness_coupler_strength
             + 0.008 * shared_shell_strength
             + 0.008 * edge_contact_caustic_strength
             + 0.006 * surrounding_light_wrap_strength,
@@ -19781,6 +20078,7 @@ fragment float4 fs_material(
             + 0.007 * luminance_coupler_strength
             + 0.007 * refraction_coupler_strength
             + 0.007 * normal_coupler_strength
+            + 0.007 * thickness_coupler_strength
             + 0.006 * surrounding_light_wrap_strength,
         0.0,
         0.078);
@@ -20857,6 +21155,7 @@ fragment float4 fs_material(
             + 0.006 * luminance_coupler_strength
             + 0.006 * refraction_coupler_strength
             + 0.006 * normal_coupler_strength
+            + 0.006 * thickness_coupler_strength
             + 0.006 * matched_tether_sheath_strength
             + 0.006 * container_pressure_halo_strength,
         0.0,
