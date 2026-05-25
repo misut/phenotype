@@ -17252,6 +17252,302 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(thickness_shadow, 0.0, 0.034);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float morph_coupler_strength = clamp(
+        0.014 * morph_field_strength
+            + 0.012 * thickness_coupler_strength
+            + 0.010 * normal_coupler_strength
+            + 0.010 * refraction_coupler_strength
+            + 0.010 * luminance_coupler_strength
+            + 0.010 * glass_effect_match_execution * group_blend_strength
+            + 0.008 * morph_execution * group_blend_strength
+            + 0.008 * materialize_wave_strength
+            + 0.008 * bridge_band * (0.36 + 0.64 * bridge_core)
+            + 0.006 * shared_shell_strength,
+        0.0,
+        0.074);
+    if (morph_coupler_strength > 0.0001
+        && in.group_rect.z > 0.0
+        && in.group_rect.w > 0.0) {
+        float2 morph_coupler_group_size = max(in.group_rect.zw, float2(1.0));
+        float2 morph_coupler_group_local = clamp(
+            in.screen_pos - in.group_rect.xy,
+            float2(0.0),
+            morph_coupler_group_size);
+        float2 morph_coupler_group_norm =
+            (morph_coupler_group_local / morph_coupler_group_size
+             - float2(0.5))
+            * 2.0;
+        float morph_coupler_group_len =
+            length(morph_coupler_group_norm);
+        float morph_coupler_center =
+            1.0 - smoothstep(0.16, 1.14, morph_coupler_group_len);
+        float2 morph_coupler_group_edge = min(
+            morph_coupler_group_local,
+            max(morph_coupler_group_size - morph_coupler_group_local,
+                float2(0.0)));
+        float morph_coupler_edge_distance =
+            min(morph_coupler_group_edge.x, morph_coupler_group_edge.y);
+        float morph_coupler_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.4, 1.0),
+                morph_coupler_edge_distance);
+        float morph_coupler_bridge =
+            bridge_band * (0.38 + 0.62 * bridge_core);
+        float morph_coupler_transition = clamp(
+            glass_effect_match_execution * 0.34
+                + morph_execution * 0.26
+                + materialize_wave_strength * 0.16
+                + shape_blend_execution * 0.12
+                + union_execution * 0.10
+                + morph_field_strength * 1.5
+                + thickness_coupler_strength * 1.5,
+            0.0,
+            1.0);
+        float morph_coupler_gate = clamp(
+            morph_coupler_center * 0.18
+                + morph_coupler_edge * 0.22
+                + morph_coupler_bridge * 0.26
+                + morph_coupler_transition * group_blend_strength * 0.24
+                + edge_lens * 0.10,
+            0.0,
+            1.0);
+        float2 morph_coupler_viewport_size = max(
+            float2(
+                in.screen_uv.x > 0.0001
+                    ? in.screen_pos.x / in.screen_uv.x
+                    : float(backdrop.get_width()) / content_scale,
+                in.screen_uv.y > 0.0001
+                    ? in.screen_pos.y / in.screen_uv.y
+                    : float(backdrop.get_height()) / content_scale),
+            float2(1.0));
+        float2 morph_coupler_group_center_screen =
+            in.group_rect.xy + morph_coupler_group_size * 0.5;
+        float2 morph_coupler_group_center_uv = clamp(
+            morph_coupler_group_center_screen / morph_coupler_viewport_size,
+            float2(0.0),
+            float2(1.0));
+        float2 morph_coupler_to_center =
+            morph_coupler_group_center_uv - in.screen_uv;
+        float morph_coupler_center_distance =
+            length(morph_coupler_to_center);
+        float2 morph_coupler_center_dir =
+            morph_coupler_center_distance > 0.0001
+                ? morph_coupler_to_center / morph_coupler_center_distance
+                : refraction_dir;
+        float2 morph_coupler_axis_raw =
+            bridge_dir * (0.34 + 0.24 * morph_coupler_bridge)
+            + refraction_dir * (0.26 + 0.18 * clear_glass_detail)
+            + morph_coupler_center_dir
+                * (0.24 + 0.18 * morph_coupler_center)
+            - dynamic_light_dir
+                * (0.18 + 0.14 * dynamic_light_highlight);
+        float morph_coupler_axis_len = length(morph_coupler_axis_raw);
+        float2 morph_coupler_axis =
+            morph_coupler_axis_len > 0.0001
+                ? morph_coupler_axis_raw / morph_coupler_axis_len
+                : refraction_dir;
+        float2 morph_coupler_cross =
+            float2(-morph_coupler_axis.y, morph_coupler_axis.x);
+        float morph_coupler_alignment =
+            smoothstep(-0.30, 0.90, dot(morph_coupler_axis, bridge_dir));
+        float morph_coupler_phase = clamp(
+            dot(morph_coupler_group_norm, morph_coupler_axis)
+                    * (5.0 + 2.6 * morph_coupler_transition)
+                + dot(morph_coupler_group_norm, morph_coupler_cross)
+                    * (2.3 + 1.6 * morph_coupler_bridge)
+                + bridge_axial * (3.4 + 2.2 * morph_coupler_bridge)
+                + bridge_shear * morph_coupler_bridge * 2.0
+                + materialize_rim_position
+                    * materialize_wave_strength
+                    * 2.4
+                + dynamic_light_highlight * 1.5,
+            -10.0,
+            10.0);
+        float morph_coupler_wave =
+            0.5 + 0.5 * sin(morph_coupler_phase);
+        float morph_coupler_focus =
+            1.0 - smoothstep(
+                0.0,
+                0.30,
+                abs(morph_coupler_wave - 0.60));
+        float morph_coupler_span =
+            (0.90
+             + 2.0 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.1 * morph_coupler_gate
+             + 0.042 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float morph_coupler_cross_span =
+            (0.68
+             + 1.2 * glass_dispersion_tangential
+             + 1.2 * spectral_dispersion
+             + 0.9 * morph_coupler_transition)
+            * content_scale;
+        float2 morph_coupler_center_uv = clamp(
+            mix(
+                in.screen_uv,
+                morph_coupler_group_center_uv,
+                0.12 + 0.14 * morph_coupler_center),
+            float2(0.0),
+            float2(1.0));
+        float2 morph_coupler_lead_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.20
+                + morph_coupler_axis
+                    * texel
+                    * morph_coupler_span
+                    * (0.30 + 0.16 * morph_coupler_wave),
+            float2(0.0),
+            float2(1.0));
+        float2 morph_coupler_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                - morph_coupler_axis
+                    * texel
+                    * morph_coupler_span
+                    * (0.28 + 0.16 * morph_coupler_focus),
+            float2(0.0),
+            float2(1.0));
+        float2 morph_coupler_upper_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.15
+                + morph_coupler_cross
+                    * texel
+                    * morph_coupler_cross_span
+                    * (0.28 + 0.16 * morph_coupler_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 morph_coupler_lower_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                - morph_coupler_cross
+                    * texel
+                    * morph_coupler_cross_span
+                    * (0.24 + 0.14 * morph_coupler_bridge),
+            float2(0.0),
+            float2(1.0));
+        float3 morph_coupler_center_rgb =
+            backdrop.sample(samp, morph_coupler_center_uv).rgb;
+        float3 morph_coupler_lead_rgb =
+            backdrop.sample(samp, morph_coupler_lead_uv).rgb;
+        float3 morph_coupler_return_rgb =
+            backdrop.sample(samp, morph_coupler_return_uv).rgb;
+        float3 morph_coupler_upper_rgb =
+            backdrop.sample(samp, morph_coupler_upper_uv).rgb;
+        float3 morph_coupler_lower_rgb =
+            backdrop.sample(samp, morph_coupler_lower_uv).rgb;
+        float3 morph_coupler_probe =
+            morph_coupler_center_rgb * 0.28
+            + morph_coupler_lead_rgb * 0.24
+            + morph_coupler_return_rgb * 0.20
+            + morph_coupler_upper_rgb * 0.15
+            + morph_coupler_lower_rgb * 0.13;
+        float morph_coupler_luma =
+            dot(morph_coupler_probe, float3(0.2126, 0.7152, 0.0722));
+        float morph_coupler_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float morph_coupler_range = clamp(
+            length(morph_coupler_lead_rgb - morph_coupler_return_rgb) * 0.30
+                + length(morph_coupler_upper_rgb - morph_coupler_lower_rgb)
+                    * 0.24
+                + abs(morph_coupler_luma - morph_coupler_surface_luma)
+                    * 0.20
+                + morph_coupler_focus * 0.10,
+            0.0,
+            1.0);
+        float morph_coupler_coherence =
+            1.0 - smoothstep(0.08, 0.35, morph_coupler_range);
+        float morph_coupler_bright = smoothstep(
+            morph_coupler_surface_luma - 0.07,
+            morph_coupler_surface_luma + 0.28,
+            morph_coupler_luma);
+        float morph_coupler_dark = smoothstep(
+            0.08,
+            0.34,
+            morph_coupler_surface_luma - morph_coupler_luma);
+        float morph_coupler_fresnel = clamp(
+            morph_coupler_focus * 0.28
+                + morph_coupler_edge * 0.22
+                + morph_coupler_alignment * 0.20
+                + morph_coupler_transition * 0.16
+                + morph_coupler_bridge * 0.14,
+            0.0,
+            1.0);
+        float3 morph_coupler_tint = mix(
+            float3(1.0),
+            float3(
+                spectral_warmth,
+                0.14 * (spectral_warmth + spectral_coolness),
+                spectral_coolness),
+            clamp(0.18 + 0.42 * spectral_rim_tint, 0.0, 1.0));
+        float3 morph_coupler_neutral = mix(
+            morph_coupler_probe,
+            float3(morph_coupler_luma),
+            morph_coupler_dark * (0.12 + 0.16 * glass_shadow_gain)
+                + morph_coupler_coherence * 0.12);
+        float3 morph_coupler_layer =
+            morph_coupler_neutral
+            * (float3(1.0)
+               + in.tint.rgb
+                   * (0.020
+                      + 0.034 * tint_chroma * prominent_intensity));
+        morph_coupler_layer = mix(
+            morph_coupler_layer,
+            rgb + morph_coupler_tint
+                * (0.014
+                   + 0.032 * morph_coupler_bright
+                   + 0.030 * morph_coupler_fresnel),
+            0.12
+                + 0.12 * morph_coupler_coherence
+                + 0.10 * morph_coupler_transition);
+        morph_coupler_layer = clamp(
+            (morph_coupler_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.012
+                       + morph_coupler_fresnel * 0.010
+                       + morph_coupler_bright * 0.008
+                       - glass_shadow_gain * 0.004)
+                + float3(0.50),
+            0.0,
+            1.0);
+        morph_coupler_layer += morph_coupler_tint
+            * morph_coupler_fresnel
+            * (0.0010
+               + 0.0028 * spectral_rim_tint
+               + 0.0024 * glass_prismatic_gain
+               + 0.0020 * glass_scattering_gain)
+            * (0.32
+               + 0.22 * morph_coupler_coherence
+               + 0.24 * morph_coupler_focus
+               + 0.22 * morph_coupler_bright);
+        float morph_coupler_weight =
+            morph_coupler_strength
+            * morph_coupler_gate
+            * (0.30
+               + 0.20 * morph_coupler_coherence
+               + 0.18 * morph_coupler_fresnel
+               + 0.16 * morph_coupler_bright
+               + 0.16 * morph_coupler_bridge);
+        rgb = mix(
+            rgb,
+            clamp(morph_coupler_layer, 0.0, 1.0),
+            morph_coupler_weight * 0.32);
+        rgb += morph_coupler_tint
+            * morph_coupler_weight
+            * morph_coupler_focus
+            * (0.0012
+               + 0.0038 * glass_prismatic_gain
+               + 0.0032 * glass_scattering_gain);
+        float morph_coupler_shadow =
+            morph_coupler_dark
+            * morph_coupler_weight
+            * (0.005 + 0.014 * glass_shadow_gain)
+            * (0.56 + 0.44 * (1.0 - morph_coupler_alignment));
+        rgb *= 1.0 - clamp(morph_coupler_shadow, 0.0, 0.034);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float depth_aperture_strength = clamp(
         0.014 * clear_glass_detail
             + 0.012 * clear_glass_contrast
@@ -17267,6 +17563,7 @@ fragment float4 fs_material(
             + 0.012 * refraction_coupler_strength
             + 0.012 * normal_coupler_strength
             + 0.012 * thickness_coupler_strength
+            + 0.010 * morph_coupler_strength
             + 0.012 * legibility_veil_strength,
         0.0,
         0.10);
@@ -17992,7 +18289,8 @@ fragment float4 fs_material(
             + 0.010 * liquid_response_strength
             + 0.010 * reflection_finish_strength
             + 0.008 * glass_effect_match_execution * group_blend_strength
-            + 0.008 * morph_execution * group_blend_strength,
+            + 0.008 * morph_execution * group_blend_strength
+            + 0.007 * morph_coupler_strength,
         0.0,
         0.085);
     if (edge_contact_caustic_strength > 0.0001) {
@@ -19817,6 +20115,7 @@ fragment float4 fs_material(
             + 0.008 * refraction_coupler_strength
             + 0.008 * normal_coupler_strength
             + 0.008 * thickness_coupler_strength
+            + 0.007 * morph_coupler_strength
             + 0.008 * shared_shell_strength
             + 0.008 * edge_contact_caustic_strength
             + 0.006 * surrounding_light_wrap_strength,
@@ -20079,6 +20378,7 @@ fragment float4 fs_material(
             + 0.007 * refraction_coupler_strength
             + 0.007 * normal_coupler_strength
             + 0.007 * thickness_coupler_strength
+            + 0.007 * morph_coupler_strength
             + 0.006 * surrounding_light_wrap_strength,
         0.0,
         0.078);
@@ -20350,6 +20650,7 @@ fragment float4 fs_material(
             + 0.010 * glass_effect_match_execution * group_blend_strength
             + 0.008 * reflection_wake_strength
             + 0.008 * specular_handoff_strength
+            + 0.006 * morph_coupler_strength
             + 0.006 * matched_tether_sheath_strength,
         0.0,
         0.072);
@@ -20623,6 +20924,7 @@ fragment float4 fs_material(
             + 0.010 * transmission_caustic_strength
             + 0.008 * reflection_wake_strength
             + 0.008 * specular_handoff_strength
+            + 0.006 * morph_coupler_strength
             + 0.006 * matched_tether_sheath_strength
             + 0.006 * pointer_lens_strength
                 * (0.38 * pointer_lens_raw + 0.62 * pointer_lens),
@@ -20902,6 +21204,7 @@ fragment float4 fs_material(
             + 0.007 * transmission_caustic_strength
             + 0.006 * reflection_wake_strength
             + 0.006 * transition_clarity_strength
+            + 0.005 * morph_coupler_strength
             + 0.006 * pointer_lens_strength
                 * (0.36 * pointer_lens_raw + 0.64 * pointer_lens),
         0.0,
@@ -21156,6 +21459,7 @@ fragment float4 fs_material(
             + 0.006 * refraction_coupler_strength
             + 0.006 * normal_coupler_strength
             + 0.006 * thickness_coupler_strength
+            + 0.006 * morph_coupler_strength
             + 0.006 * matched_tether_sheath_strength
             + 0.006 * container_pressure_halo_strength,
         0.0,
