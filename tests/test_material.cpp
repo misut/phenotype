@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 80);
+    assert(material_plan_contract_version == 81);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -210,6 +210,26 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.dynamic_lighting.direction_y < 0.0f);
     assert(plan.dynamic_lighting.highlight_strength > 0.0f);
     assert(plan.dynamic_lighting.shadow_strength > 0.0f);
+    assert(plan.glass_caustic_flow.active);
+    assert(plan.glass_caustic_flow.backdrop_driven);
+    assert(plan.glass_caustic_flow.lighting_driven);
+    assert(plan.glass_caustic_flow.dispersion_driven);
+    assert(plan.glass_caustic_flow.depth_driven);
+    assert(!plan.glass_caustic_flow.interaction_driven);
+    assert(!plan.glass_caustic_flow.reduced_motion_suppressed);
+    assert(plan.glass_caustic_flow.bounded);
+    assert(std::string_view(plan.glass_caustic_flow.model)
+        == "adaptive-glass-caustic-flow");
+    assert(std::string_view(plan.glass_caustic_flow.source)
+        == "depth-prismatic-caustic-flow");
+    assert(plan.glass_caustic_flow.flow_strength > 0.28f);
+    assert(plan.glass_caustic_flow.flow_strength < 0.62f);
+    assert(plan.glass_caustic_flow.chroma_shear > 0.04f);
+    assert(plan.glass_caustic_flow.chroma_shear < 0.16f);
+    assert(plan.glass_caustic_flow.highlight_drift > 0.08f);
+    assert(plan.glass_caustic_flow.highlight_drift < 0.22f);
+    assert(plan.glass_caustic_flow.caustic_focus > 0.12f);
+    assert(plan.glass_caustic_flow.caustic_focus < 0.30f);
     assert(plan.glass_thickness.active);
     assert(plan.glass_thickness.size_driven);
     assert(!plan.glass_thickness.transition_driven);
@@ -357,6 +377,9 @@ void test_sampled_backdrop_access_contract() {
         == "sampled-backdrop-spectral-rim");
     assert(std::string_view(plan.optical_composition.dynamic_lighting_source)
         == "sampled-backdrop-caustic-lighting");
+    assert(std::string_view(
+               plan.optical_composition.glass_caustic_flow_source)
+        == "depth-prismatic-caustic-flow");
     assert(std::string_view(plan.optical_composition.glass_thickness_source)
         == "size-adaptive-thickness-lensing");
     assert(std::string_view(plan.optical_composition.glass_dispersion_source)
@@ -393,6 +416,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_composition.refraction_required);
     assert(plan.optical_composition.spectral_tint_required);
     assert(plan.optical_composition.dynamic_lighting_required);
+    assert(plan.optical_composition.glass_caustic_flow_required);
     assert(plan.optical_composition.glass_thickness_required);
     assert(plan.optical_composition.glass_dispersion_required);
     assert(plan.optical_composition.glass_stabilization_required);
@@ -447,6 +471,14 @@ void test_sampled_backdrop_access_contract() {
            == plan.dynamic_lighting.highlight_strength);
     assert(plan.optical_composition.dynamic_light_shadow
            == plan.dynamic_lighting.shadow_strength);
+    assert(plan.optical_composition.glass_caustic_flow_strength
+           == plan.glass_caustic_flow.flow_strength);
+    assert(plan.optical_composition.glass_caustic_chroma_shear
+           == plan.glass_caustic_flow.chroma_shear);
+    assert(plan.optical_composition.glass_caustic_highlight_drift
+           == plan.glass_caustic_flow.highlight_drift);
+    assert(plan.optical_composition.glass_caustic_focus
+           == plan.glass_caustic_flow.caustic_focus);
     assert(plan.optical_composition.glass_thickness
            == plan.glass_thickness.thickness);
     assert(plan.optical_composition.glass_lensing_gain
@@ -501,6 +533,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_response.refraction_active);
     assert(plan.optical_response.spectral_tint_active);
     assert(plan.optical_response.dynamic_lighting_active);
+    assert(plan.optical_response.glass_caustic_flow_active);
     assert(plan.optical_response.glass_thickness_active);
     assert(plan.optical_response.glass_dispersion_active);
     assert(plan.optical_response.glass_stabilization_active);
@@ -556,6 +589,17 @@ void test_sampled_backdrop_access_contract() {
            == plan.dynamic_lighting.highlight_strength);
     assert(plan.execution_stages[2].optics.dynamic_light_shadow
            == plan.dynamic_lighting.shadow_strength);
+    assert(std::string_view(
+               plan.execution_stages[2].optics.glass_caustic_flow_model)
+        == "adaptive-glass-caustic-flow");
+    assert(plan.execution_stages[2].optics.glass_caustic_flow_strength
+           == plan.glass_caustic_flow.flow_strength);
+    assert(plan.execution_stages[2].optics.glass_caustic_chroma_shear
+           == plan.glass_caustic_flow.chroma_shear);
+    assert(plan.execution_stages[2].optics.glass_caustic_highlight_drift
+           == plan.glass_caustic_flow.highlight_drift);
+    assert(plan.execution_stages[2].optics.glass_caustic_focus
+           == plan.glass_caustic_flow.caustic_focus);
     assert(std::string_view(plan.execution_stages[2].optics.glass_thickness_model)
         == "adaptive-glass-thickness");
     assert(plan.execution_stages[2].optics.glass_thickness
