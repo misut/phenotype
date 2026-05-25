@@ -34877,6 +34877,350 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(continuity_absorption, 0.0, 0.014);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float phase_equalization_field_strength = clamp(
+        0.004 * overlap_response_strength
+            + 0.006 * fusion_strength
+            + 0.006 * group_blend_strength * shared_backdrop_scope
+            + 0.005 * group_blend_strength * group_surface_execution
+            + 0.005 * bridge_band
+            + 0.22 * edge_continuity_field_strength
+            + 0.18 * rim_coalescence_field_strength
+            + 0.15 * edge_adhesion_field_strength
+            + 0.13 * elastic_tension_field_strength
+            + 0.11 * contact_pressure_field_strength
+            + 0.10 * internal_shadow_field_strength
+            + 0.09 * subsurface_caustic_field_strength
+            + 0.07 * transmission_depth_field_strength
+            + 0.06 * interlayer_refraction_field_strength
+            + 0.05 * layer_separation_field_strength
+            + 0.020 * edge_meniscus_field_strength
+            + 0.016 * container_morph_field_strength
+            + 0.012 * foreground_sheen_field_strength,
+        0.0,
+        0.031);
+    if (phase_equalization_field_strength > 0.0001) {
+        float equalization_rim =
+            edge_lens
+            * (0.53
+               + 0.47
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.42, 0.78),
+                       signed_edge_distance)));
+        float equalization_bridge =
+            bridge_band * (0.46 + 0.54 * bridge_core);
+        float equalization_stack = clamp(
+            overlap_response_strength * 0.30
+                + fusion_strength * 0.25
+                + group_blend_strength * shared_backdrop_scope * 0.18
+                + group_surface_execution * group_blend_strength * 0.15
+                + equalization_bridge * 0.25,
+            0.0,
+            1.0);
+        float equalization_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float equalization_lock = clamp(
+            equalization_rim * 0.28
+                + equalization_bridge * 0.23
+                + equalization_stack * 0.21
+                + edge_continuity_field_strength * 4.5
+                + rim_coalescence_field_strength * 3.5
+                + edge_adhesion_field_strength * 2.8
+                + elastic_tension_field_strength * 2.2
+                + contact_pressure_field_strength * 1.8
+                + equalization_pointer * 0.05,
+            0.0,
+            1.0);
+        float equalization_presence = clamp(
+            equalization_rim * 0.30
+                + equalization_stack * 0.25
+                + equalization_bridge * 0.18
+                + equalization_lock * 0.18
+                + prominent_intensity * 0.05
+                + equalization_pointer * 0.04,
+            0.0,
+            1.0);
+        float equalization_shear_sign =
+            bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 equalization_axis_raw =
+            bridge_tangent
+                * equalization_shear_sign
+                * (0.42 + 0.21 * abs(bridge_shear) * equalization_bridge)
+            + refraction_dir * (0.32 + 0.15 * glass_lensing_gain)
+            + bridge_dir * (0.20 + 0.18 * equalization_bridge)
+            - dynamic_light_dir * (0.15 + 0.11 * dynamic_light_highlight)
+            + dispersion_tangent
+                * (0.14
+                   + 0.08 * spectral_dispersion
+                   + 0.05 * glass_dispersion_tangential)
+            + pointer_dir * (0.08 + 0.07 * equalization_pointer);
+        float equalization_axis_len = length(equalization_axis_raw);
+        float2 equalization_axis =
+            equalization_axis_len > 0.0001
+                ? equalization_axis_raw / equalization_axis_len
+                : (normalized_len > 0.0001
+                    ? refraction_dir
+                    : float2(1.0, 0.0));
+        float2 equalization_cross =
+            float2(-equalization_axis.y, equalization_axis.x);
+        float equalization_light_face =
+            smoothstep(-0.18, 0.88, dot(equalization_axis, -dynamic_light_dir));
+        float equalization_bridge_alignment =
+            smoothstep(-0.14, 0.90, abs(dot(equalization_axis, bridge_tangent)));
+        float equalization_phase = clamp(
+            dot(normalized_local, equalization_axis)
+                    * (4.5 + 1.3 * equalization_presence)
+                + dot(normalized_local, equalization_cross)
+                    * (2.6 + 1.1 * equalization_stack)
+                + bridge_axial * (2.0 + 1.0 * bridge_core)
+                + bridge_lateral_signed * equalization_bridge * 1.7
+                + bridge_shear * equalization_bridge * 2.0
+                + spectral_dispersion * 2.8
+                + glass_caustic_spread * 2.2,
+            -12.0,
+            12.0);
+        float equalization_wave =
+            0.5 + 0.5 * sin(equalization_phase);
+        float equalization_counter_wave =
+            0.5 + 0.5 * cos(
+                equalization_phase * 0.66
+                + glass_caustic_spread * 3.4
+                + equalization_stack * 2.1);
+        float equalization_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(equalization_wave - 0.50));
+        float equalization_return_lobe =
+            1.0 - smoothstep(0.0, 0.38, abs(equalization_counter_wave - 0.50));
+        float equalization_balance = clamp(
+            equalization_lock * 0.31
+                + equalization_bridge_alignment * 0.20
+                + equalization_rim * 0.18
+                + equalization_lobe * 0.12
+                + equalization_return_lobe * 0.11
+                + equalization_pointer * 0.06,
+            0.0,
+            1.0);
+        float equalization_focus =
+            (0.5
+             + 0.5
+                 * cos(equalization_phase * 1.16 + normalized_len * 2.4))
+            * (0.34 + 0.66 * equalization_lobe);
+        float equalization_span =
+            (0.44
+             + 0.90 * glass_thickness
+             + 0.70 * clear_glass_detail
+             + 0.84 * equalization_presence
+             + 0.016 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float equalization_cross_span =
+            (0.34
+             + 0.58 * glass_dispersion_tangential
+             + 0.52 * spectral_dispersion
+             + 0.74 * equalization_balance)
+            * content_scale;
+        float equalization_channel_span =
+            (0.26
+             + 0.40 * glass_dispersion_tangential
+             + 0.44 * spectral_dispersion
+             + 0.36 * glass_caustic_spread)
+            * content_scale
+            * (0.82 + 0.18 * equalization_focus);
+        float2 equalization_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.06 + 0.08 * equalization_balance),
+            float2(0.0),
+            float2(1.0));
+        float2 equalization_lead_uv = clamp(
+            equalization_base_uv
+                + equalization_axis
+                    * texel
+                    * equalization_span
+                    * (0.15 + 0.12 * equalization_balance)
+                + bridge_dir
+                    * texel
+                    * equalization_span
+                    * equalization_bridge
+                    * 0.09,
+            float2(0.0),
+            float2(1.0));
+        float2 equalization_trail_uv = clamp(
+            equalization_base_uv
+                - equalization_axis
+                    * texel
+                    * equalization_span
+                    * (0.15 + 0.12 * equalization_return_lobe)
+                - bridge_dir
+                    * texel
+                    * equalization_span
+                    * equalization_bridge
+                    * 0.08,
+            float2(0.0),
+            float2(1.0));
+        float2 equalization_mid_uv = clamp(
+            equalization_base_uv
+                + refraction_dir
+                    * texel
+                    * equalization_span
+                    * (0.08 + 0.10 * equalization_rim)
+                - dynamic_light_dir
+                    * texel
+                    * equalization_span
+                    * (0.08 + 0.10 * equalization_light_face),
+            float2(0.0),
+            float2(1.0));
+        float2 equalization_warm_uv = clamp(
+            equalization_base_uv
+                + equalization_cross
+                    * texel
+                    * equalization_cross_span
+                    * (0.19 + 0.10 * equalization_wave)
+                + dispersion_tangent
+                    * texel
+                    * equalization_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float2 equalization_cool_uv = clamp(
+            equalization_base_uv
+                - equalization_cross
+                    * texel
+                    * equalization_cross_span
+                    * (0.19 + 0.10 * equalization_lobe)
+                - dispersion_tangent
+                    * texel
+                    * equalization_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float3 equalization_lead_rgb =
+            backdrop.sample(samp, equalization_lead_uv).rgb;
+        float3 equalization_trail_rgb =
+            backdrop.sample(samp, equalization_trail_uv).rgb;
+        float3 equalization_mid_rgb =
+            backdrop.sample(samp, equalization_mid_uv).rgb;
+        float3 equalization_warm_rgb =
+            backdrop.sample(samp, equalization_warm_uv).rgb;
+        float3 equalization_cool_rgb =
+            backdrop.sample(samp, equalization_cool_uv).rgb;
+        float3 equalization_average =
+            equalization_lead_rgb * 0.24
+            + equalization_trail_rgb * 0.24
+            + equalization_mid_rgb * 0.24
+            + equalization_warm_rgb * 0.14
+            + equalization_cool_rgb * 0.14;
+        float3 equalization_split = float3(
+            equalization_warm_rgb.r,
+            (equalization_mid_rgb.g + equalization_average.g) * 0.5,
+            equalization_cool_rgb.b);
+        float equalization_split_mix = clamp(
+            0.10
+                + 0.10 * spectral_dispersion
+                + 0.08 * glass_dispersion_tangential
+                + 0.08 * equalization_balance,
+            0.0,
+            0.36);
+        float3 equalization_probe = mix(
+            equalization_average,
+            equalization_split,
+            equalization_split_mix);
+        float equalization_lead_luma =
+            dot(equalization_lead_rgb, float3(0.2126, 0.7152, 0.0722));
+        float equalization_trail_luma =
+            dot(equalization_trail_rgb, float3(0.2126, 0.7152, 0.0722));
+        float equalization_probe_luma =
+            dot(equalization_probe, float3(0.2126, 0.7152, 0.0722));
+        float equalization_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float equalization_delta = clamp(
+            abs(equalization_lead_luma - equalization_trail_luma) * 0.26
+                + abs(equalization_probe_luma - equalization_surface_luma)
+                    * 0.20
+                + length(equalization_lead_rgb - equalization_trail_rgb)
+                    * 0.18
+                + length(equalization_warm_rgb - equalization_cool_rgb)
+                    * 0.14
+                + length(equalization_split - equalization_average) * 0.12
+                + equalization_balance * 0.09,
+            0.0,
+            1.0);
+        float equalization_coherence =
+            1.0 - smoothstep(0.09, 0.40, equalization_delta);
+        float equalization_smoothing = smoothstep(
+            0.010,
+            0.26,
+            abs(equalization_probe_luma - equalization_surface_luma) * 0.30
+                + equalization_balance * 0.16
+                + equalization_coherence * 0.14);
+        float equalization_lift = smoothstep(
+            equalization_surface_luma - 0.05,
+            equalization_surface_luma + 0.23,
+            equalization_probe_luma);
+        float3 equalization_layer = mix(
+            equalization_average,
+            equalization_probe,
+            0.12
+                + 0.12 * equalization_focus
+                + 0.10 * equalization_light_face
+                + 0.10 * equalization_balance);
+        equalization_layer = mix(
+            equalization_layer,
+            float3(equalization_probe_luma),
+            equalization_smoothing * (0.08 + 0.12 * glass_shadow_gain)
+                + equalization_coherence * 0.08);
+        equalization_layer = clamp(
+            (equalization_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.008
+                       + equalization_lift * 0.007
+                       - equalization_smoothing * 0.010)
+                + float3(0.50),
+            0.0,
+            1.0);
+        equalization_layer *= float3(
+            1.0 + spectral_warmth * 0.29 + tint_chroma * in.tint.r * 0.010,
+            1.0 + spectral_rim_tint * 0.10 + tint_chroma * in.tint.g * 0.009,
+            1.0 + spectral_coolness * 0.29 + tint_chroma * in.tint.b * 0.010);
+        float equalization_gate = clamp(
+            equalization_presence * 0.28
+                + equalization_stack * 0.24
+                + equalization_rim * 0.19
+                + equalization_balance * 0.17
+                + equalization_focus * 0.09
+                + equalization_coherence * 0.08,
+            0.0,
+            1.0);
+        float equalization_weight =
+            phase_equalization_field_strength
+            * equalization_gate
+            * (0.23
+               + 0.20 * equalization_balance
+               + 0.15 * equalization_lift
+               + 0.13 * equalization_focus
+               + 0.12 * equalization_bridge_alignment);
+        rgb = mix(
+            rgb,
+            equalization_layer,
+            equalization_weight
+                * (0.078
+                   + 0.068 * equalization_focus
+                   + 0.068 * equalization_presence));
+        float3 equalization_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.08,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.07,
+            spectral_coolness + tint_chroma * in.tint.b * 0.08);
+        rgb += equalization_prism
+            * equalization_weight
+            * max(equalization_lobe, equalization_return_lobe * 0.62)
+            * (0.0004
+               + 0.0012 * spectral_rim_tint
+               + 0.0011 * glass_scattering_gain);
+        float equalization_absorption =
+            equalization_smoothing
+            * equalization_weight
+            * (0.0010 + 0.0035 * glass_shadow_gain)
+            * (0.52 + 0.48 * (1.0 - equalization_light_face));
+        rgb *= 1.0 - clamp(equalization_absorption, 0.0, 0.013);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
