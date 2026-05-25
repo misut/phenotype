@@ -34216,6 +34216,340 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(adhesion_absorption, 0.0, 0.016);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float rim_coalescence_field_strength = clamp(
+        0.005 * overlap_response_strength
+            + 0.006 * fusion_strength
+            + 0.006 * group_blend_strength * shared_backdrop_scope
+            + 0.005 * group_blend_strength * group_surface_execution
+            + 0.006 * bridge_band
+            + 0.23 * edge_adhesion_field_strength
+            + 0.18 * elastic_tension_field_strength
+            + 0.14 * contact_pressure_field_strength
+            + 0.12 * internal_shadow_field_strength
+            + 0.11 * subsurface_caustic_field_strength
+            + 0.09 * transmission_depth_field_strength
+            + 0.08 * interlayer_refraction_field_strength
+            + 0.06 * layer_separation_field_strength
+            + 0.024 * edge_meniscus_field_strength
+            + 0.019 * container_morph_field_strength
+            + 0.014 * foreground_sheen_field_strength,
+        0.0,
+        0.033);
+    if (rim_coalescence_field_strength > 0.0001) {
+        float coalescence_rim =
+            edge_lens
+            * (0.50
+               + 0.50
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.18, 0.70),
+                       signed_edge_distance)));
+        float coalescence_bridge =
+            bridge_band * (0.44 + 0.56 * bridge_core);
+        float coalescence_stack = clamp(
+            overlap_response_strength * 0.30
+                + fusion_strength * 0.25
+                + group_blend_strength * shared_backdrop_scope * 0.18
+                + group_surface_execution * group_blend_strength * 0.15
+                + coalescence_bridge * 0.24,
+            0.0,
+            1.0);
+        float coalescence_pointer =
+            pointer_lens_raw * pointer_lens_strength;
+        float coalescence_cling = clamp(
+            coalescence_rim * 0.27
+                + coalescence_bridge * 0.23
+                + coalescence_stack * 0.21
+                + edge_adhesion_field_strength * 4.3
+                + elastic_tension_field_strength * 3.5
+                + contact_pressure_field_strength * 2.8
+                + coalescence_pointer * 0.05,
+            0.0,
+            1.0);
+        float coalescence_presence = clamp(
+            coalescence_rim * 0.28
+                + coalescence_stack * 0.25
+                + coalescence_bridge * 0.19
+                + coalescence_cling * 0.18
+                + prominent_intensity * 0.06
+                + coalescence_pointer * 0.04,
+            0.0,
+            1.0);
+        float coalescence_shear_sign =
+            bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 coalescence_axis_raw =
+            bridge_tangent
+                * coalescence_shear_sign
+                * (0.38 + 0.22 * abs(bridge_shear) * coalescence_bridge)
+            + refraction_dir * (0.30 + 0.17 * glass_lensing_gain)
+            + bridge_dir * (0.22 + 0.18 * coalescence_bridge)
+            - dynamic_light_dir * (0.16 + 0.13 * dynamic_light_highlight)
+            + dispersion_tangent
+                * (0.13
+                   + 0.08 * spectral_dispersion
+                   + 0.05 * glass_dispersion_tangential)
+            + pointer_dir * (0.10 + 0.08 * coalescence_pointer);
+        float coalescence_axis_len = length(coalescence_axis_raw);
+        float2 coalescence_axis =
+            coalescence_axis_len > 0.0001
+                ? coalescence_axis_raw / coalescence_axis_len
+                : (normalized_len > 0.0001
+                    ? refraction_dir
+                    : float2(1.0, 0.0));
+        float2 coalescence_cross =
+            float2(-coalescence_axis.y, coalescence_axis.x);
+        float coalescence_light_face =
+            smoothstep(
+                -0.22,
+                0.88,
+                dot(coalescence_axis, -dynamic_light_dir));
+        float coalescence_bridge_alignment =
+            smoothstep(
+                -0.16,
+                0.90,
+                abs(dot(coalescence_axis, bridge_tangent)));
+        float coalescence_phase = clamp(
+            dot(normalized_local, coalescence_axis)
+                    * (4.9 + 1.5 * coalescence_presence)
+                + dot(normalized_local, coalescence_cross)
+                    * (2.8 + 1.2 * coalescence_stack)
+                + bridge_axial * (2.2 + 1.0 * bridge_core)
+                + bridge_lateral_signed * coalescence_bridge * 1.9
+                + bridge_shear * coalescence_bridge * 2.2
+                + spectral_dispersion * 3.2
+                + glass_caustic_spread * 2.6,
+            -12.0,
+            12.0);
+        float coalescence_wave =
+            0.5 + 0.5 * sin(coalescence_phase);
+        float coalescence_merge_wave =
+            0.5 + 0.5 * cos(
+                coalescence_phase * 0.70
+                + glass_caustic_spread * 3.9
+                + coalescence_stack * 2.3);
+        float coalescence_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(coalescence_wave - 0.52));
+        float coalescence_return_lobe =
+            1.0 - smoothstep(0.0, 0.36, abs(coalescence_merge_wave - 0.48));
+        float coalescence_merge = clamp(
+            coalescence_cling * 0.29
+                + coalescence_bridge_alignment * 0.22
+                + coalescence_rim * 0.19
+                + coalescence_lobe * 0.13
+                + coalescence_return_lobe * 0.11
+                + coalescence_pointer * 0.06,
+            0.0,
+            1.0);
+        float coalescence_focus =
+            (0.5
+             + 0.5
+                 * cos(coalescence_phase * 1.24 + normalized_len * 2.8))
+            * (0.34 + 0.66 * coalescence_lobe);
+        float coalescence_span =
+            (0.48
+             + 1.02 * glass_thickness
+             + 0.78 * clear_glass_detail
+             + 0.92 * coalescence_presence
+             + 0.020 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float coalescence_cross_span =
+            (0.38
+             + 0.66 * glass_dispersion_tangential
+             + 0.60 * spectral_dispersion
+             + 0.82 * coalescence_merge)
+            * content_scale;
+        float coalescence_channel_span =
+            (0.30
+             + 0.46 * glass_dispersion_tangential
+             + 0.50 * spectral_dispersion
+             + 0.44 * glass_caustic_spread)
+            * content_scale
+            * (0.82 + 0.18 * coalescence_focus);
+        float2 coalescence_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.07 + 0.09 * coalescence_merge),
+            float2(0.0),
+            float2(1.0));
+        float2 coalescence_join_uv = clamp(
+            coalescence_base_uv
+                + coalescence_axis
+                    * texel
+                    * coalescence_span
+                    * (0.17 + 0.14 * coalescence_merge)
+                + bridge_dir
+                    * texel
+                    * coalescence_span
+                    * coalescence_bridge
+                    * 0.11,
+            float2(0.0),
+            float2(1.0));
+        float2 coalescence_return_uv = clamp(
+            coalescence_base_uv
+                - coalescence_axis
+                    * texel
+                    * coalescence_span
+                    * (0.17 + 0.13 * coalescence_return_lobe)
+                - bridge_dir
+                    * texel
+                    * coalescence_span
+                    * coalescence_bridge
+                    * 0.09,
+            float2(0.0),
+            float2(1.0));
+        float2 coalescence_core_uv = clamp(
+            coalescence_base_uv
+                + refraction_dir
+                    * texel
+                    * coalescence_span
+                    * (0.10 + 0.11 * coalescence_rim)
+                - dynamic_light_dir
+                    * texel
+                    * coalescence_span
+                    * (0.10 + 0.11 * coalescence_light_face),
+            float2(0.0),
+            float2(1.0));
+        float2 coalescence_warm_uv = clamp(
+            coalescence_base_uv
+                + coalescence_cross
+                    * texel
+                    * coalescence_cross_span
+                    * (0.21 + 0.11 * coalescence_wave)
+                + dispersion_tangent
+                    * texel
+                    * coalescence_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float2 coalescence_cool_uv = clamp(
+            coalescence_base_uv
+                - coalescence_cross
+                    * texel
+                    * coalescence_cross_span
+                    * (0.21 + 0.11 * coalescence_lobe)
+                - dispersion_tangent
+                    * texel
+                    * coalescence_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float3 coalescence_join_rgb =
+            backdrop.sample(samp, coalescence_join_uv).rgb;
+        float3 coalescence_return_rgb =
+            backdrop.sample(samp, coalescence_return_uv).rgb;
+        float3 coalescence_core_rgb =
+            backdrop.sample(samp, coalescence_core_uv).rgb;
+        float3 coalescence_warm_rgb =
+            backdrop.sample(samp, coalescence_warm_uv).rgb;
+        float3 coalescence_cool_rgb =
+            backdrop.sample(samp, coalescence_cool_uv).rgb;
+        float3 coalescence_probe =
+            coalescence_join_rgb * 0.25
+            + coalescence_return_rgb * 0.23
+            + coalescence_core_rgb * 0.24
+            + coalescence_warm_rgb * 0.14
+            + coalescence_cool_rgb * 0.14;
+        float3 coalescence_split = float3(
+            coalescence_warm_rgb.r,
+            (coalescence_core_rgb.g + coalescence_probe.g) * 0.5,
+            coalescence_cool_rgb.b);
+        float coalescence_join_luma =
+            dot(coalescence_join_rgb, float3(0.2126, 0.7152, 0.0722));
+        float coalescence_return_luma =
+            dot(coalescence_return_rgb, float3(0.2126, 0.7152, 0.0722));
+        float coalescence_probe_luma =
+            dot(coalescence_probe, float3(0.2126, 0.7152, 0.0722));
+        float coalescence_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float coalescence_delta = clamp(
+            abs(coalescence_join_luma - coalescence_return_luma) * 0.30
+                + abs(coalescence_probe_luma - coalescence_surface_luma)
+                    * 0.22
+                + length(coalescence_join_rgb - coalescence_return_rgb)
+                    * 0.20
+                + length(coalescence_warm_rgb - coalescence_cool_rgb)
+                    * 0.15
+                + coalescence_merge * 0.10,
+            0.0,
+            1.0);
+        float coalescence_coherence =
+            1.0 - smoothstep(0.10, 0.42, coalescence_delta);
+        float coalescence_softening = smoothstep(
+            0.010,
+            0.28,
+            abs(coalescence_probe_luma - coalescence_surface_luma) * 0.34
+                + coalescence_merge * 0.18
+                + coalescence_coherence * 0.12);
+        float coalescence_lift = smoothstep(
+            coalescence_surface_luma - 0.05,
+            coalescence_surface_luma + 0.25,
+            coalescence_probe_luma);
+        float3 coalescence_layer = mix(
+            coalescence_probe,
+            coalescence_split,
+            0.10
+                + 0.12 * coalescence_focus
+                + 0.10 * coalescence_light_face
+                + 0.10 * coalescence_merge);
+        coalescence_layer = mix(
+            coalescence_layer,
+            float3(coalescence_probe_luma),
+            coalescence_softening * (0.08 + 0.12 * glass_shadow_gain)
+                + coalescence_coherence * 0.08);
+        coalescence_layer = clamp(
+            (coalescence_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.009
+                       + coalescence_lift * 0.008
+                       - coalescence_softening * 0.012)
+                + float3(0.50),
+            0.0,
+            1.0);
+        coalescence_layer *= float3(
+            1.0 + spectral_warmth * 0.32 + tint_chroma * in.tint.r * 0.011,
+            1.0 + spectral_rim_tint * 0.11 + tint_chroma * in.tint.g * 0.010,
+            1.0 + spectral_coolness * 0.32 + tint_chroma * in.tint.b * 0.011);
+        float coalescence_gate = clamp(
+            coalescence_presence * 0.28
+                + coalescence_stack * 0.24
+                + coalescence_rim * 0.19
+                + coalescence_merge * 0.17
+                + coalescence_focus * 0.09
+                + coalescence_coherence * 0.08,
+            0.0,
+            1.0);
+        float coalescence_weight =
+            rim_coalescence_field_strength
+            * coalescence_gate
+            * (0.25
+               + 0.20 * coalescence_merge
+               + 0.15 * coalescence_lift
+               + 0.14 * coalescence_focus
+               + 0.12 * coalescence_bridge_alignment);
+        rgb = mix(
+            rgb,
+            coalescence_layer,
+            coalescence_weight
+                * (0.085
+                   + 0.075 * coalescence_focus
+                   + 0.075 * coalescence_presence));
+        float3 coalescence_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.09,
+            0.12 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.08,
+            spectral_coolness + tint_chroma * in.tint.b * 0.09);
+        rgb += coalescence_prism
+            * coalescence_weight
+            * max(coalescence_lobe, coalescence_return_lobe * 0.66)
+            * (0.0004
+               + 0.0014 * spectral_rim_tint
+               + 0.0013 * glass_scattering_gain);
+        float coalescence_absorption =
+            coalescence_softening
+            * coalescence_weight
+            * (0.0011 + 0.0042 * glass_shadow_gain)
+            * (0.52 + 0.48 * (1.0 - coalescence_light_face));
+        rgb *= 1.0 - clamp(coalescence_absorption, 0.0, 0.015);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
