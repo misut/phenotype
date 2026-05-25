@@ -20264,6 +20264,255 @@ fragment float4 fs_material(
                + 0.004 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float volume_veil_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.010 * glass_thickness
+            + 0.008 * clear_glass_brightness
+            + 0.008 * glass_lensing_gain
+            + 0.007 * glass_scattering_gain
+            + 0.006 * catchlight_strength
+            + 0.006 * rim_compression_strength
+            + 0.006 * continuity_finish_strength
+            + 0.005 * depth_seal_strength
+            + 0.005 * transition_clarity_strength
+            + 0.005 * reflection_wake_strength
+            + 0.005 * glass_effect_match_execution * group_blend_strength,
+        0.0,
+        0.060);
+    if (volume_veil_strength > 0.0001) {
+        float volume_interior = smoothstep(
+            max(edge_bevel_width * 0.80, 0.25),
+            max(edge_bevel_width * 3.60, 1.0),
+            signed_edge_distance);
+        float volume_center =
+            1.0 - smoothstep(0.26, 1.18, length(normalized_local));
+        float volume_corner_relief =
+            1.0 - smoothstep(
+                0.72,
+                1.06,
+                max(abs(normalized_local.x), abs(normalized_local.y)));
+        float volume_body = clamp(
+            volume_interior
+                * (0.40
+                   + 0.34 * volume_center
+                   + 0.18 * volume_corner_relief
+                   + 0.12 * edge_lens),
+            0.0,
+            1.0);
+        float volume_pointer = clamp(
+            pointer_lens_strength
+                * (0.32 * pointer_lens_raw + 0.68 * pointer_lens),
+            0.0,
+            1.0);
+        float volume_transition = clamp(
+            glass_effect_match_execution * 0.28
+                + morph_execution * 0.22
+                + materialize_wave_strength * 0.18
+                + transition_clarity_strength * 1.2
+                + reflection_wake_strength * 1.2
+                + catchlight_strength * 1.3
+                + rim_compression_strength * 1.0
+                + continuity_finish_strength * 0.9
+                + volume_pointer * 0.16,
+            0.0,
+            1.0);
+        float2 volume_direction_raw =
+            refraction_dir * (0.42 + 0.22 * glass_lensing_gain)
+            - dynamic_light_dir * (0.34 + 0.20 * dynamic_light_highlight)
+            + bridge_dir * (0.22 + 0.18 * bridge_band)
+            + normalized_local * (0.10 + 0.10 * volume_center);
+        float volume_direction_len = length(volume_direction_raw);
+        float2 volume_direction = volume_direction_len > 0.0001
+            ? volume_direction_raw / volume_direction_len
+            : refraction_dir;
+        float2 volume_cross =
+            float2(-volume_direction.y, volume_direction.x);
+        float volume_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(volume_direction, bridge_dir)));
+        float volume_light_face =
+            smoothstep(-0.18, 0.90, dot(volume_direction, -dynamic_light_dir));
+        float volume_phase = clamp(
+            dot(normalized_local, volume_direction)
+                    * (4.2 + 2.0 * volume_transition)
+                + dot(normalized_local, volume_cross)
+                    * (2.2 + 1.4 * bridge_band)
+                + bridge_axial * (2.6 + 1.8 * bridge_core)
+                + bridge_shear * bridge_band * 2.2
+                + materialize_rim_position
+                    * materialize_wave_strength
+                    * 2.4,
+            -10.0,
+            10.0);
+        float volume_wave = 0.5 + 0.5 * sin(volume_phase);
+        float volume_sheen =
+            1.0 - smoothstep(0.0, 0.34, abs(volume_wave - 0.58));
+        float volume_gate = clamp(
+            volume_body
+                * (0.36
+                   + 0.20 * volume_center
+                   + 0.16 * volume_light_face
+                   + 0.14 * volume_alignment
+                   + 0.10 * volume_transition
+                   + 0.08 * volume_sheen
+                   + 0.08 * volume_pointer),
+            0.0,
+            1.0);
+        float volume_span =
+            (0.82
+             + 1.8 * glass_thickness
+             + 1.4 * clear_glass_detail
+             + 1.0 * volume_transition
+             + 0.034 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float volume_cross_span =
+            (0.54
+             + 0.9 * glass_dispersion_tangential
+             + 0.8 * spectral_dispersion
+             + 0.8 * volume_alignment)
+            * content_scale;
+        float2 volume_core_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - dynamic_light_dir
+                    * texel
+                    * volume_span
+                    * (0.08 + 0.08 * volume_light_face),
+            float2(0.0),
+            float2(1.0));
+        float2 volume_lead_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.14
+                + volume_direction
+                    * texel
+                    * volume_span
+                    * (0.24 + 0.16 * volume_sheen),
+            float2(0.0),
+            float2(1.0));
+        float2 volume_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.12
+                - volume_direction
+                    * texel
+                    * volume_span
+                    * (0.24 + 0.14 * volume_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 volume_upper_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + volume_cross
+                    * texel
+                    * volume_cross_span
+                    * (0.26 + 0.14 * volume_alignment),
+            float2(0.0),
+            float2(1.0));
+        float2 volume_lower_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - volume_cross
+                    * texel
+                    * volume_cross_span
+                    * (0.24 + 0.14 * volume_sheen),
+            float2(0.0),
+            float2(1.0));
+        float3 volume_core_rgb =
+            backdrop.sample(samp, volume_core_uv).rgb;
+        float3 volume_lead_rgb =
+            backdrop.sample(samp, volume_lead_uv).rgb;
+        float3 volume_return_rgb =
+            backdrop.sample(samp, volume_return_uv).rgb;
+        float3 volume_upper_rgb =
+            backdrop.sample(samp, volume_upper_uv).rgb;
+        float3 volume_lower_rgb =
+            backdrop.sample(samp, volume_lower_uv).rgb;
+        float3 volume_probe =
+            volume_core_rgb * 0.30
+            + volume_lead_rgb * 0.22
+            + volume_return_rgb * 0.20
+            + volume_upper_rgb * 0.15
+            + volume_lower_rgb * 0.13;
+        float volume_luma =
+            dot(volume_probe, float3(0.2126, 0.7152, 0.0722));
+        float volume_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float volume_range = clamp(
+            length(volume_lead_rgb - volume_return_rgb) * 0.28
+                + length(volume_upper_rgb - volume_lower_rgb) * 0.24
+                + length(volume_core_rgb - volume_probe) * 0.18
+                + abs(volume_luma - volume_surface_luma) * 0.18
+                + volume_sheen * 0.06,
+            0.0,
+            1.0);
+        float volume_calm =
+            1.0 - smoothstep(0.08, 0.36, volume_range);
+        float volume_lift = smoothstep(
+            volume_surface_luma - 0.05,
+            volume_surface_luma + 0.28,
+            volume_luma);
+        float volume_depth = smoothstep(
+            0.05,
+            0.32,
+            volume_surface_luma - volume_luma);
+        float3 volume_neutral = mix(
+            volume_probe,
+            float3(volume_luma),
+            volume_calm * 0.16
+                + volume_depth * (0.10 + 0.12 * glass_shadow_gain));
+        float3 volume_layer = clamp(
+            (volume_neutral - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.032
+                       + volume_transition * 0.026)
+                + float3(0.50),
+            0.0,
+            1.0);
+        volume_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.012
+                   + 0.018 * tint_chroma * prominent_intensity);
+        float3 volume_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        float volume_prism_gate = clamp(
+            volume_sheen * 0.28
+                + volume_light_face * 0.22
+                + volume_alignment * 0.18
+                + volume_transition * 0.18
+                + volume_body * 0.12,
+            0.0,
+            1.0);
+        volume_layer += volume_prism
+            * volume_prism_gate
+            * (0.0015
+               + 0.005 * spectral_rim_tint
+               + 0.004 * glass_prismatic_gain);
+        float volume_weight = volume_veil_strength
+            * volume_gate
+            * (0.30
+               + 0.20 * volume_calm
+               + 0.18 * volume_lift
+               + 0.14 * volume_sheen
+               + 0.12 * volume_transition);
+        rgb = mix(
+            rgb,
+            mix(rgb, volume_layer, 0.10 + 0.12 * volume_lift),
+            volume_weight * 0.30);
+        float volume_dimming =
+            volume_depth
+            * volume_weight
+            * (0.003 + 0.008 * clear_glass_dimming)
+            * (0.52 + 0.48 * volume_body);
+        rgb *= 1.0 - clamp(volume_dimming, 0.0, 0.024);
+        rgb += volume_prism
+            * volume_weight
+            * volume_prism_gate
+            * (0.0012
+               + 0.003 * dynamic_light_highlight
+               + 0.004 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
