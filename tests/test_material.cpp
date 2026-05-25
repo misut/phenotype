@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 78);
+    assert(material_plan_contract_version == 79);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -256,6 +256,22 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.glass_stabilization.damping > 0.0f);
     assert(plan.glass_stabilization.shimmer_reduction > 0.0f);
     assert(plan.glass_stabilization.transmission_bias < 0.0f);
+    assert(plan.glass_environment.active);
+    assert(plan.glass_environment.backdrop_driven);
+    assert(!plan.glass_environment.color_driven);
+    assert(plan.glass_environment.luminance_driven);
+    assert(plan.glass_environment.reflection_driven);
+    assert(plan.glass_environment.stabilization_driven);
+    assert(!plan.glass_environment.container_driven);
+    assert(plan.glass_environment.bounded);
+    assert(std::string_view(plan.glass_environment.model)
+        == "adaptive-glass-environment-response");
+    assert(std::string_view(plan.glass_environment.source)
+        == "stabilized-backdrop-glass-environment");
+    assert(plan.glass_environment.reflection_strength > 0.0f);
+    assert(plan.glass_environment.color_pickup > 0.0f);
+    assert(plan.glass_environment.luminance_balance > 0.0f);
+    assert(plan.glass_environment.transmission_balance > 0.0f);
     assert(!plan.scroll_edge.active);
     assert(std::string_view(plan.scroll_edge.model) == "none");
     assert(std::string_view(plan.scroll_edge.source) == "none");
@@ -329,6 +345,9 @@ void test_sampled_backdrop_access_contract() {
     assert(std::string_view(
                plan.optical_composition.glass_stabilization_source)
         == "sampled-backdrop-glass-stabilization");
+    assert(std::string_view(
+               plan.optical_composition.glass_environment_source)
+        == "stabilized-backdrop-glass-environment");
     assert(std::string_view(plan.optical_composition.scroll_edge_source)
         == "none");
     assert(std::string_view(
@@ -356,6 +375,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_composition.glass_thickness_required);
     assert(plan.optical_composition.glass_dispersion_required);
     assert(plan.optical_composition.glass_stabilization_required);
+    assert(plan.optical_composition.glass_environment_required);
     assert(!plan.optical_composition.scroll_edge_required);
     assert(!plan.optical_composition.clear_glass_legibility_required);
     assert(!plan.optical_composition.fallback_required);
@@ -429,6 +449,14 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_stabilization.shimmer_reduction);
     assert(plan.optical_composition.glass_stabilization_transmission_bias
            == plan.glass_stabilization.transmission_bias);
+    assert(plan.optical_composition.glass_environment_reflection_strength
+           == plan.glass_environment.reflection_strength);
+    assert(plan.optical_composition.glass_environment_color_pickup
+           == plan.glass_environment.color_pickup);
+    assert(plan.optical_composition.glass_environment_luminance_balance
+           == plan.glass_environment.luminance_balance);
+    assert(plan.optical_composition.glass_environment_transmission_balance
+           == plan.glass_environment.transmission_balance);
     assert(plan.optical_composition.clear_glass_dimming == 0.0f);
     assert(plan.optical_composition.clear_glass_contrast == 0.0f);
     assert(plan.optical_response.backdrop_driven);
@@ -446,6 +474,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_response.glass_thickness_active);
     assert(plan.optical_response.glass_dispersion_active);
     assert(plan.optical_response.glass_stabilization_active);
+    assert(plan.optical_response.glass_environment_active);
     assert(!plan.optical_response.scroll_edge_active);
     assert(!plan.optical_response.clear_glass_legibility_active);
     assert(plan.optical_response.foreground_vibrancy_active);
@@ -530,6 +559,20 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.execution_stages[2].optics
                .glass_stabilization_transmission_bias
            == plan.glass_stabilization.transmission_bias);
+    assert(std::string_view(
+               plan.execution_stages[2].optics.glass_environment_model)
+        == "adaptive-glass-environment-response");
+    assert(plan.execution_stages[2].optics
+               .glass_environment_reflection_strength
+           == plan.glass_environment.reflection_strength);
+    assert(plan.execution_stages[2].optics.glass_environment_color_pickup
+           == plan.glass_environment.color_pickup);
+    assert(plan.execution_stages[2].optics
+               .glass_environment_luminance_balance
+           == plan.glass_environment.luminance_balance);
+    assert(plan.execution_stages[2].optics
+               .glass_environment_transmission_balance
+           == plan.glass_environment.transmission_balance);
     assert(plan.paint_layer_count == 0u);
     assert(plan.dropped_paint_layer_count == 0u);
     assert(plan.resource_budget.max_paint_layers == material_max_paint_layers);

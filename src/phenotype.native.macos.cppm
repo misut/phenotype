@@ -1655,6 +1655,8 @@ struct MaterialInstanceGPU {
     float clear_glass[4]{};
     // stabilization strength, damping, shimmer reduction, transmission bias
     float glass_stability[4]{};
+    // environment reflection, color pickup, luminance balance, transmission
+    float glass_environment[4]{};
     // group x/y/w/h for container edge-continuity execution
     float group_rect[4]{};
     // shape blend strength, inner-edge alpha blend strength, flags, command index
@@ -2444,6 +2446,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.glass_stability[1] = plan.glass_stabilization.damping;
     inst.glass_stability[2] = plan.glass_stabilization.shimmer_reduction;
     inst.glass_stability[3] = plan.glass_stabilization.transmission_bias;
+    inst.glass_environment[0] = plan.glass_environment.reflection_strength;
+    inst.glass_environment[1] = plan.glass_environment.color_pickup;
+    inst.glass_environment[2] = plan.glass_environment.luminance_balance;
+    inst.glass_environment[3] = plan.glass_environment.transmission_balance;
     inst.group_rect[0] = inst.rect[0];
     inst.group_rect[1] = inst.rect[1];
     inst.group_rect[2] = inst.rect[2];
@@ -5492,6 +5498,7 @@ struct MaterialVsOut {
     float4 prominent_glass;
     float4 clear_glass;
     float4 glass_stability;
+    float4 glass_environment;
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
@@ -5522,6 +5529,7 @@ struct MaterialInstance {
     float4 prominent_glass;
     float4 clear_glass;
     float4 glass_stability;
+    float4 glass_environment;
     float4 group_rect;
     float4 group_effects;
     float4 fusion_optics;
@@ -5585,6 +5593,7 @@ vertex MaterialVsOut vs_material(
     out.prominent_glass = inst.prominent_glass;
     out.clear_glass = inst.clear_glass;
     out.glass_stability = inst.glass_stability;
+    out.glass_environment = inst.glass_environment;
     out.group_rect = inst.group_rect;
     out.group_effects = inst.group_effects;
     out.fusion_optics = inst.fusion_optics;
@@ -5835,6 +5844,14 @@ fragment float4 fs_material(
         clamp(in.glass_stability.z, 0.0, 1.0);
     float glass_stabilization_transmission_bias =
         clamp(in.glass_stability.w, -0.24, 0.24);
+    float planned_environment_reflection =
+        clamp(in.glass_environment.x, 0.0, 1.0);
+    float planned_environment_color_pickup =
+        clamp(in.glass_environment.y, 0.0, 1.0);
+    float planned_environment_luminance_balance =
+        clamp(in.glass_environment.z, 0.0, 1.0);
+    float planned_environment_transmission_balance =
+        clamp(in.glass_environment.w, 0.0, 1.0);
     clear_glass_dimming = max(
         clear_glass_dimming,
         0.060 * overlap_response_strength);
@@ -27845,7 +27862,12 @@ fragment float4 fs_material(
             + 0.006 * ambient_seal_field_strength
             + 0.005 * substrate_adhesion_strength
             + 0.005 * transition_seam_lock_strength
-            + 0.004 * container_irradiance_lock_strength,
+            + 0.004 * container_irradiance_lock_strength
+            + 0.012 * planned_environment_reflection
+            + 0.010 * planned_environment_color_pickup
+            + 0.008
+                * abs(planned_environment_luminance_balance - 0.5)
+            + 0.008 * planned_environment_transmission_balance,
         0.0,
         0.066);
     if (environment_envelope_strength > 0.0001) {
@@ -27898,7 +27920,9 @@ fragment float4 fs_material(
                 + spectral_grazing_glint_strength * 1.4
                 + thin_film_interference_strength * 1.2
                 + transition_seam_lock_strength * 1.0
-                + environment_group_active * group_blend_strength * 0.18,
+                + environment_group_active * group_blend_strength * 0.18
+                + planned_environment_reflection * 0.20
+                + planned_environment_transmission_balance * 0.08,
             0.0,
             1.0);
         float2 environment_axis_raw =
@@ -27963,7 +27987,9 @@ fragment float4 fs_material(
                 + environment_transition * 0.22
                 + environment_light_face * 0.12
                 + environment_grazing * 0.10
-                + environment_group_active * group_blend_strength * 0.10,
+                + environment_group_active * group_blend_strength * 0.10
+                + planned_environment_reflection * 0.08
+                + planned_environment_transmission_balance * 0.06,
             0.0,
             1.0);
         float environment_span =
@@ -28080,7 +28106,11 @@ fragment float4 fs_material(
                 abs(environment_probe.g - environment_probe.b)),
             abs(environment_probe.b - environment_probe.r));
         float environment_color_pickup =
-            smoothstep(0.030, 0.34, environment_chroma);
+            clamp(
+                smoothstep(0.030, 0.34, environment_chroma)
+                    + planned_environment_color_pickup * 0.28,
+                0.0,
+                1.0);
         float environment_range = clamp(
             length(environment_reflect_rgb - environment_counter_rgb) * 0.28
                 + length(environment_warm_rgb - environment_cool_rgb) * 0.24
@@ -28103,20 +28133,24 @@ fragment float4 fs_material(
             environment_probe,
             float3(environment_luma),
             environment_depth * (0.12 + 0.14 * glass_shadow_gain)
-                + environment_coherence * 0.14);
+                + environment_coherence * 0.14
+                + abs(planned_environment_luminance_balance - 0.5) * 0.08);
         float3 environment_layer = mix(
             environment_neutral,
             environment_split,
             0.20
                 + 0.18 * environment_color_pickup
                 + 0.16 * environment_lobe
-                + 0.12 * environment_light_face);
+                + 0.12 * environment_light_face
+                + 0.10 * planned_environment_color_pickup);
         environment_layer = clamp(
             (environment_layer - float3(0.50))
                     * (1.0
                        + clear_glass_contrast * 0.014
                        + environment_lift * 0.012
                        + environment_transition * 0.012
+                       + (planned_environment_luminance_balance - 0.5)
+                           * 0.020
                        - environment_depth * 0.018)
                 + float3(0.50),
             0.0,
@@ -28147,7 +28181,9 @@ fragment float4 fs_material(
                + 0.18 * environment_lift
                + 0.16 * environment_color_pickup
                + 0.12 * environment_bridge_alignment
-               + 0.10 * environment_grazing);
+               + 0.10 * environment_grazing
+               + 0.12 * planned_environment_reflection
+               + 0.08 * planned_environment_transmission_balance);
         rgb = mix(
             rgb,
             mix(
@@ -37977,6 +38013,8 @@ fragment float4 fs_material(
             + 0.005 * group_blend_strength * shared_backdrop_scope
             + 0.004 * group_blend_strength * group_surface_execution
             + 0.004 * bridge_band
+            + 0.007 * planned_environment_reflection
+            + 0.005 * planned_environment_color_pickup
             + 0.25 * hierarchy_separation_field_strength
             + 0.22 * surface_identity_field_strength
             + 0.19 * tonal_equilibrium_field_strength
@@ -39001,6 +39039,8 @@ fragment float4 fs_material(
             + 0.004 * glass_stabilization_strength
             + 0.003 * glass_stabilization_shimmer_reduction
             + 0.002 * abs(glass_stabilization_transmission_bias)
+            + 0.004 * planned_environment_transmission_balance
+            + 0.003 * planned_environment_reflection
             + 0.004 * group_blend_strength * shared_backdrop_scope
             + 0.003 * group_blend_strength * group_surface_execution
             + 0.004 * bridge_band * (0.36 + 0.64 * bridge_core)
@@ -39024,6 +39064,7 @@ fragment float4 fs_material(
     if (adaptive_transmission_field_strength > 0.0001
         && (clear_glass_detail > 0.0001
             || glass_stabilization_strength > 0.0001
+            || planned_environment_transmission_balance > 0.0001
             || group_blend_strength > 0.0001
             || bridge_band > 0.0001
             || pointer_lens_strength > 0.0001)) {
