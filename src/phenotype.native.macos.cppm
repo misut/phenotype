@@ -23685,6 +23685,260 @@ fragment float4 fs_material(
                + 0.0028 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float thin_film_interference_strength = clamp(
+        0.010 * glass_thickness
+            + 0.009 * spectral_rim_tint
+            + 0.008 * spectral_dispersion
+            + 0.007 * glass_prismatic_gain
+            + 0.006 * edge_caustic_dispersion_strength
+            + 0.006 * edge_reflection_strength
+            + 0.005 * glass_caustic_spread
+            + 0.004 * dynamic_light_highlight
+            + 0.004 * focus_field_strength,
+        0.0,
+        0.060);
+    if (thin_film_interference_strength > 0.0001
+        && edge_bevel_width > 0.0001) {
+        float thin_film_outer =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.70, 1.0),
+                signed_edge_distance);
+        float thin_film_inner = smoothstep(
+            max(edge_bevel_width * 0.24, 0.10),
+            max(edge_bevel_width * 2.45, 1.0),
+            signed_edge_distance);
+        float thin_film_band = clamp(
+            thin_film_outer
+                * (0.54 + 0.46 * edge_lens)
+                * (0.52 + 0.48 * thin_film_inner),
+            0.0,
+            1.0);
+        float thin_film_transition = clamp(
+            glass_effect_match_execution * 0.22
+                + morph_execution * 0.18
+                + materialize_wave_strength * 0.14
+                + edge_caustic_dispersion_strength * 1.5
+                + edge_reflection_strength * 1.2
+                + shadow_transmission_strength * 1.0
+                + substrate_adhesion_strength * 0.9
+                + dynamic_light_highlight * 0.12,
+            0.0,
+            1.0);
+        float2 thin_film_tangent =
+            float2(-normalized_local.y, normalized_local.x);
+        float thin_film_tangent_len = length(thin_film_tangent);
+        thin_film_tangent =
+            thin_film_tangent_len > 0.0001
+                ? thin_film_tangent / thin_film_tangent_len
+                : float2(-dynamic_light_dir.y, dynamic_light_dir.x);
+        float2 thin_film_axis_raw =
+            thin_film_tangent
+                * (0.36 + 0.24 * thin_film_band)
+            + refraction_dir
+                * (0.32 + 0.22 * glass_lensing_gain)
+            - dynamic_light_dir
+                * (0.22 + 0.18 * dynamic_light_highlight)
+            + bridge_dir * (0.12 + 0.14 * bridge_band);
+        float thin_film_axis_len = length(thin_film_axis_raw);
+        float2 thin_film_axis =
+            thin_film_axis_len > 0.0001
+                ? thin_film_axis_raw / thin_film_axis_len
+                : thin_film_tangent;
+        float2 thin_film_cross =
+            float2(-thin_film_axis.y, thin_film_axis.x);
+        float thin_film_light_face =
+            smoothstep(-0.22, 0.94, dot(thin_film_axis, -dynamic_light_dir));
+        float thin_film_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(thin_film_axis, bridge_dir)));
+        float thin_film_grazing = clamp(
+            1.0 - abs(dot(normalized_local, -dynamic_light_dir)),
+            0.0,
+            1.0);
+        float thin_film_phase = clamp(
+            dot(normalized_local, thin_film_axis)
+                    * (4.6 + 1.8 * thin_film_transition)
+                + dot(normalized_local, thin_film_cross)
+                    * (2.9 + 1.2 * bridge_band)
+                + signed_edge_distance
+                    / max(edge_bevel_width * 2.1, 1.0)
+                    * (2.5 + 1.8 * glass_thickness)
+                + glass_thickness * 8.0
+                + spectral_dispersion * 6.0
+                + bridge_shear * bridge_band * 1.6,
+            -12.0,
+            12.0);
+        float thin_film_red_wave =
+            0.5 + 0.5 * sin(thin_film_phase + 1.70);
+        float thin_film_green_wave =
+            0.5 + 0.5 * sin(thin_film_phase + 0.10);
+        float thin_film_blue_wave =
+            0.5 + 0.5 * sin(thin_film_phase - 1.45);
+        float thin_film_lock =
+            clamp(
+                thin_film_red_wave * 0.32
+                    + thin_film_green_wave * 0.36
+                    + thin_film_blue_wave * 0.32,
+                0.0,
+                1.0);
+        float thin_film_gate = clamp(
+            thin_film_band
+                * (0.28
+                   + 0.18 * thin_film_light_face
+                   + 0.16 * thin_film_bridge_alignment
+                   + 0.16 * thin_film_lock
+                   + 0.12 * thin_film_transition
+                   + 0.10 * thin_film_grazing
+                   + 0.08 * edge_depth),
+            0.0,
+            1.0);
+        float thin_film_span =
+            (0.42
+             + 1.3 * glass_thickness
+             + 0.9 * clear_glass_detail
+             + 1.0 * spectral_dispersion
+             + 0.9 * glass_caustic_spread
+             + 0.018 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float thin_film_cross_span =
+            (0.30
+             + 0.8 * glass_dispersion_tangential
+             + 0.8 * spectral_dispersion
+             + 0.6 * thin_film_bridge_alignment)
+            * content_scale;
+        float2 thin_film_face_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + thin_film_axis
+                    * texel
+                    * thin_film_span
+                    * (0.20 + 0.12 * thin_film_lock),
+            float2(0.0),
+            float2(1.0));
+        float2 thin_film_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - thin_film_axis
+                    * texel
+                    * thin_film_span
+                    * (0.18 + 0.12 * thin_film_transition),
+            float2(0.0),
+            float2(1.0));
+        float2 thin_film_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + thin_film_cross
+                    * texel
+                    * thin_film_cross_span
+                    * (thin_film_lock - 0.50),
+            float2(0.0),
+            float2(1.0));
+        float2 thin_film_shear_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - thin_film_cross
+                    * texel
+                    * thin_film_cross_span
+                    * (0.18 + 0.12 * thin_film_grazing),
+            float2(0.0),
+            float2(1.0));
+        float3 thin_film_face_rgb =
+            backdrop.sample(samp, thin_film_face_uv).rgb;
+        float3 thin_film_return_rgb =
+            backdrop.sample(samp, thin_film_return_uv).rgb;
+        float3 thin_film_cross_rgb =
+            backdrop.sample(samp, thin_film_cross_uv).rgb;
+        float3 thin_film_shear_rgb =
+            backdrop.sample(samp, thin_film_shear_uv).rgb;
+        float3 thin_film_probe =
+            thin_film_face_rgb * 0.34
+            + thin_film_return_rgb * 0.24
+            + thin_film_cross_rgb * 0.22
+            + thin_film_shear_rgb * 0.20;
+        float thin_film_luma =
+            dot(thin_film_probe, float3(0.2126, 0.7152, 0.0722));
+        float thin_film_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float thin_film_range = clamp(
+            length(thin_film_face_rgb - thin_film_return_rgb) * 0.28
+                + length(thin_film_cross_rgb - thin_film_shear_rgb) * 0.22
+                + abs(thin_film_luma - thin_film_surface_luma) * 0.18
+                + thin_film_grazing * 0.08,
+            0.0,
+            1.0);
+        float thin_film_coherence =
+            1.0 - smoothstep(0.08, 0.38, thin_film_range);
+        float thin_film_lift = smoothstep(
+            thin_film_surface_luma - 0.04,
+            thin_film_surface_luma + 0.30,
+            thin_film_luma);
+        float3 thin_film_interference = float3(
+            thin_film_red_wave,
+            thin_film_green_wave,
+            thin_film_blue_wave);
+        thin_film_interference = mix(
+            float3(0.50),
+            thin_film_interference,
+            0.42
+                + 0.26 * spectral_dispersion
+                + 0.22 * thin_film_grazing
+                + 0.10 * thin_film_light_face);
+        float3 thin_film_layer = mix(
+            thin_film_probe,
+            thin_film_probe * (0.88 + 0.24 * thin_film_interference),
+            0.22
+                + 0.18 * thin_film_lock
+                + 0.16 * thin_film_coherence);
+        thin_film_layer = clamp(
+            (thin_film_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.014
+                       + thin_film_transition * 0.014
+                       + thin_film_lift * 0.010
+                       - glass_shadow_gain * 0.008)
+                + float3(0.50),
+            0.0,
+            1.0);
+        thin_film_layer *= float3(
+            1.0 + spectral_warmth * (0.26 + 0.18 * thin_film_red_wave),
+            1.0 + spectral_rim_tint * 0.18,
+            1.0 + spectral_coolness * (0.26 + 0.18 * thin_film_blue_wave));
+        float3 thin_film_prism = float3(
+            spectral_warmth,
+            0.18 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        thin_film_layer += thin_film_prism
+            * (0.0010
+               + 0.0032 * spectral_rim_tint
+               + 0.0028 * spectral_dispersion
+               + 0.0024 * glass_prismatic_gain)
+            * (0.36
+               + 0.24 * thin_film_light_face
+               + 0.22 * thin_film_lock
+               + 0.18 * thin_film_coherence);
+        float thin_film_weight =
+            thin_film_interference_strength
+            * thin_film_gate
+            * (0.30
+               + 0.20 * thin_film_coherence
+               + 0.16 * thin_film_lift
+               + 0.16 * thin_film_light_face
+               + 0.12 * thin_film_grazing);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                thin_film_layer,
+                0.07 + 0.15 * thin_film_lock),
+            thin_film_weight * 0.26);
+        rgb += thin_film_prism
+            * thin_film_weight
+            * (0.0007
+               + 0.0024 * dynamic_light_highlight
+               + 0.0024 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
