@@ -24209,6 +24209,253 @@ fragment float4 fs_material(
                + 0.0023 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float critical_angle_reflection_strength = clamp(
+        0.010 * glass_thickness
+            + 0.009 * (glass_lensing_gain - 1.0)
+            + 0.008 * glass_caustic_spread
+            + 0.008 * spectral_dispersion
+            + 0.006 * dynamic_light_highlight
+            + 0.30 * spectral_grazing_glint_strength
+            + 0.24 * thin_film_interference_strength
+            + 0.18 * edge_reflection_strength
+            + 0.16 * edge_caustic_dispersion_strength
+            + 0.004 * glass_effect_match_execution,
+        0.0,
+        0.064);
+    if (critical_angle_reflection_strength > 0.0001
+        && edge_bevel_width > 0.0001) {
+        float critical_outer =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.85, 1.0),
+                signed_edge_distance);
+        float critical_inner = smoothstep(
+            max(edge_bevel_width * 0.18, 0.10),
+            max(edge_bevel_width * 2.55, 1.0),
+            signed_edge_distance);
+        float critical_surface =
+            1.0 - smoothstep(0.20, 1.18, length(normalized_local));
+        float critical_band = clamp(
+            critical_outer * (0.54 + 0.46 * edge_lens)
+                + critical_inner * critical_surface * 0.24,
+            0.0,
+            1.0);
+        float2 critical_normal =
+            normalized_len > 0.0001
+                ? normalized_local / normalized_len
+                : -dynamic_light_dir;
+        float2 critical_reflect_dir =
+            dynamic_light_dir
+            - critical_normal * (2.0 * dot(dynamic_light_dir,
+                                           critical_normal));
+        float critical_reflect_len = length(critical_reflect_dir);
+        critical_reflect_dir =
+            critical_reflect_len > 0.0001
+                ? critical_reflect_dir / critical_reflect_len
+                : -dynamic_light_dir;
+        float2 critical_tangent =
+            float2(-critical_reflect_dir.y, critical_reflect_dir.x);
+        float critical_grazing = clamp(
+            1.0 - abs(dot(critical_normal, -dynamic_light_dir)),
+            0.0,
+            1.0);
+        float critical_grazing_lock =
+            smoothstep(0.40, 0.96, critical_grazing);
+        float critical_bridge_alignment =
+            smoothstep(
+                -0.24,
+                0.88,
+                abs(dot(critical_reflect_dir, bridge_dir)));
+        float critical_phase = clamp(
+            dot(normalized_local, critical_reflect_dir)
+                    * (5.8 + 2.2 * critical_grazing_lock)
+                + dot(normalized_local, critical_tangent)
+                    * (2.8 + 1.3 * spectral_dispersion)
+                + signed_edge_distance
+                    / max(edge_bevel_width * 1.90, 1.0)
+                    * (2.8 + 1.7 * glass_thickness)
+                + glass_caustic_spread * 5.8
+                + bridge_shear * bridge_band * 1.8,
+            -12.0,
+            12.0);
+        float critical_wave =
+            0.5 + 0.5 * sin(critical_phase);
+        float critical_line =
+            1.0 - smoothstep(
+                0.0,
+                0.30,
+                abs(critical_wave - 0.62));
+        float critical_gate = clamp(
+            critical_band
+                * (0.28
+                   + 0.20 * critical_grazing_lock
+                   + 0.16 * critical_line
+                   + 0.14 * critical_bridge_alignment
+                   + 0.12 * dynamic_light_highlight
+                   + 0.10 * edge_depth),
+            0.0,
+            1.0);
+        float critical_span =
+            (0.48
+             + 1.4 * glass_thickness
+             + 1.1 * glass_caustic_spread
+             + 0.9 * clear_glass_detail
+             + 0.8 * spectral_dispersion
+             + 0.018 * blur_points)
+            * content_scale
+            * (0.84 + 0.16 * glass_lensing_gain);
+        float critical_cross_span =
+            (0.34
+             + 0.9 * glass_dispersion_tangential
+             + 0.8 * spectral_dispersion
+             + 0.6 * critical_bridge_alignment)
+            * content_scale;
+        float2 critical_channel_tangent =
+            float2(-critical_normal.y, critical_normal.x);
+        float critical_channel_tangent_len =
+            length(critical_channel_tangent);
+        critical_channel_tangent =
+            critical_channel_tangent_len > 0.0001
+                ? critical_channel_tangent / critical_channel_tangent_len
+                : critical_tangent;
+        float critical_channel_span =
+            (0.18
+             + 0.56 * spectral_dispersion
+             + 0.46 * glass_caustic_spread)
+            * content_scale
+            * (0.82 + 0.18 * critical_line);
+        float2 critical_front_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + critical_reflect_dir
+                    * texel
+                    * critical_span
+                    * (0.22 + 0.14 * critical_line),
+            float2(0.0),
+            float2(1.0));
+        float2 critical_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - critical_reflect_dir
+                    * texel
+                    * critical_span
+                    * (0.20 + 0.12 * critical_grazing_lock),
+            float2(0.0),
+            float2(1.0));
+        float2 critical_warm_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                + critical_tangent
+                    * texel
+                    * critical_cross_span
+                    * (0.28 + 0.16 * critical_wave)
+                + critical_channel_tangent
+                    * texel
+                    * critical_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float2 critical_cool_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08
+                - critical_tangent
+                    * texel
+                    * critical_cross_span
+                    * (0.26 + 0.16 * critical_line)
+                - critical_channel_tangent
+                    * texel
+                    * critical_channel_span,
+            float2(0.0),
+            float2(1.0));
+        float3 critical_front_rgb =
+            backdrop.sample(samp, critical_front_uv).rgb;
+        float3 critical_return_rgb =
+            backdrop.sample(samp, critical_return_uv).rgb;
+        float3 critical_warm_rgb =
+            backdrop.sample(samp, critical_warm_uv).rgb;
+        float3 critical_cool_rgb =
+            backdrop.sample(samp, critical_cool_uv).rgb;
+        float3 critical_mirror =
+            critical_front_rgb * 0.36
+            + critical_return_rgb * 0.24
+            + critical_warm_rgb * 0.22
+            + critical_cool_rgb * 0.18;
+        float3 critical_split = float3(
+            critical_warm_rgb.r,
+            (critical_front_rgb.g + critical_return_rgb.g) * 0.5,
+            critical_cool_rgb.b);
+        float critical_luma =
+            dot(critical_mirror, float3(0.2126, 0.7152, 0.0722));
+        float critical_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float critical_range = clamp(
+            length(critical_front_rgb - critical_return_rgb) * 0.28
+                + length(critical_warm_rgb - critical_cool_rgb) * 0.24
+                + abs(critical_luma - critical_surface_luma) * 0.18
+                + critical_line * 0.08,
+            0.0,
+            1.0);
+        float critical_coherence =
+            1.0 - smoothstep(0.08, 0.38, critical_range);
+        float critical_lift = smoothstep(
+            critical_surface_luma - 0.05,
+            critical_surface_luma + 0.32,
+            critical_luma);
+        float3 critical_layer = mix(
+            critical_mirror,
+            critical_split,
+            0.18
+                + 0.18 * critical_line
+                + 0.16 * critical_grazing_lock
+                + 0.12 * spectral_dispersion);
+        critical_layer = clamp(
+            (critical_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.014
+                       + critical_lift * 0.012
+                       + critical_grazing_lock * 0.010
+                       - glass_shadow_gain * 0.008)
+                + float3(0.50),
+            0.0,
+            1.0);
+        critical_layer *= float3(
+            1.0 + spectral_warmth * (0.24 + 0.16 * critical_wave),
+            1.0 + spectral_rim_tint * 0.18,
+            1.0 + spectral_coolness * (0.24 + 0.16 * (1.0 - critical_wave)));
+        float3 critical_prism = float3(
+            spectral_warmth,
+            0.16 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        critical_layer += critical_prism
+            * (0.0010
+               + 0.0032 * spectral_rim_tint
+               + 0.0028 * glass_caustic_spread
+               + 0.0024 * glass_prismatic_gain)
+            * (0.34
+               + 0.24 * critical_grazing_lock
+               + 0.22 * critical_line
+               + 0.20 * critical_coherence);
+        float critical_weight =
+            critical_angle_reflection_strength
+            * critical_gate
+            * (0.28
+               + 0.20 * critical_coherence
+               + 0.18 * critical_lift
+               + 0.18 * critical_grazing_lock
+               + 0.10 * critical_bridge_alignment);
+        rgb = mix(
+            rgb,
+            mix(
+                rgb,
+                critical_layer,
+                0.06 + 0.14 * critical_line),
+            critical_weight * 0.25);
+        rgb += critical_prism
+            * critical_weight
+            * (0.0007
+               + 0.0024 * dynamic_light_highlight
+               + 0.0024 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float noise = fract(sin(dot(
         in.screen_uv * float2(float(backdrop.get_width()),
                               float(backdrop.get_height())),
