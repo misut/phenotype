@@ -22157,6 +22157,299 @@ fragment float4 fs_material(
                + 0.003 * glass_scattering_gain);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float contact_shadow_field_strength = clamp(
+        0.010 * clear_glass_detail
+            + 0.009 * glass_thickness
+            + 0.008 * clear_glass_dimming
+            + 0.007 * glass_lensing_gain
+            + 0.006 * depth_fusion_strength
+            + 0.006 * focus_field_strength
+            + 0.005 * parallax_field_strength
+            + 0.005 * aperture_field_strength
+            + 0.004 * polarization_field_strength
+            + 0.004 * volume_veil_strength
+            + 0.004 * transition_clarity_strength
+            + 0.004 * glass_effect_match_execution * group_blend_strength,
+        0.0,
+        0.052);
+    if (contact_shadow_field_strength > 0.0001) {
+        float contact_shadow_edge =
+            1.0 - smoothstep(
+                0.0,
+                max(edge_bevel_width * 2.70, 1.0),
+                signed_edge_distance);
+        float contact_shadow_interior = smoothstep(
+            max(edge_bevel_width * 0.58, 0.20),
+            max(edge_bevel_width * 3.00, 1.0),
+            signed_edge_distance);
+        float contact_shadow_radius = length(normalized_local);
+        float contact_shadow_center =
+            1.0 - smoothstep(0.18, 1.10, contact_shadow_radius);
+        float contact_shadow_basin =
+            smoothstep(0.22, 0.68, contact_shadow_radius)
+            * (1.0 - smoothstep(0.72, 1.12, contact_shadow_radius));
+        float contact_shadow_pointer = clamp(
+            pointer_lens_strength
+                * (0.30 * pointer_lens_raw + 0.70 * pointer_lens),
+            0.0,
+            1.0);
+        float contact_shadow_contact = clamp(
+            contact_shadow_edge * 0.34
+                + edge_lens * 0.24
+                + contact_shadow_pointer * 0.16
+                + bridge_band * 0.14
+                + glass_effect_match_execution * group_blend_strength * 0.12,
+            0.0,
+            1.0);
+        float contact_shadow_body = clamp(
+            contact_shadow_interior
+                * (0.30
+                   + 0.24 * contact_shadow_center
+                   + 0.20 * contact_shadow_basin
+                   + 0.16 * contact_shadow_contact
+                   + 0.10 * (1.0 - contact_shadow_edge)),
+            0.0,
+            1.0);
+        float contact_shadow_transition = clamp(
+            glass_effect_match_execution * 0.28
+                + morph_execution * 0.20
+                + materialize_wave_strength * 0.16
+                + depth_fusion_strength * 1.3
+                + focus_field_strength * 1.2
+                + parallax_field_strength * 1.0
+                + aperture_field_strength * 0.9
+                + transition_clarity_strength * 0.8
+                + reflection_wake_strength * 0.8
+                + contact_shadow_contact * 0.16,
+            0.0,
+            1.0);
+        float2 contact_shadow_axis_raw =
+            bridge_dir * (0.34 + 0.20 * bridge_band)
+            - dynamic_light_dir * (0.28 + 0.18 * dynamic_light_highlight)
+            + refraction_dir * (0.24 + 0.18 * glass_lensing_gain)
+            + normalized_local * (0.12 + 0.12 * contact_shadow_center);
+        float contact_shadow_axis_len = length(contact_shadow_axis_raw);
+        float2 contact_shadow_axis = contact_shadow_axis_len > 0.0001
+            ? contact_shadow_axis_raw / contact_shadow_axis_len
+            : refraction_dir;
+        float2 contact_shadow_cross =
+            float2(-contact_shadow_axis.y, contact_shadow_axis.x);
+        float contact_shadow_bridge_alignment =
+            smoothstep(-0.24, 0.88, abs(dot(contact_shadow_axis, bridge_dir)));
+        float contact_shadow_light_face =
+            smoothstep(-0.18, 0.90, dot(contact_shadow_axis, -dynamic_light_dir));
+        float contact_shadow_phase = clamp(
+            dot(normalized_local, contact_shadow_axis)
+                    * (3.8 + 1.6 * contact_shadow_transition)
+                + dot(normalized_local, contact_shadow_cross)
+                    * (2.5 + 1.1 * bridge_band)
+                + bridge_axial * (2.3 + 1.4 * bridge_core)
+                + bridge_shear * bridge_band * 1.6
+                + materialize_rim_position
+                    * materialize_wave_strength
+                    * 1.8,
+            -10.0,
+            10.0);
+        float contact_shadow_wave =
+            0.5 + 0.5 * sin(contact_shadow_phase);
+        float contact_shadow_pool =
+            1.0 - smoothstep(
+                0.0,
+                0.36,
+                abs(contact_shadow_wave - 0.58));
+        float contact_shadow_gate = clamp(
+            contact_shadow_body
+                * (0.30
+                   + 0.20 * contact_shadow_contact
+                   + 0.16 * contact_shadow_basin
+                   + 0.14 * contact_shadow_bridge_alignment
+                   + 0.12 * contact_shadow_light_face
+                   + 0.10 * contact_shadow_transition
+                   + 0.08 * contact_shadow_pool
+                   + 0.08 * contact_shadow_pointer),
+            0.0,
+            1.0);
+        float contact_shadow_span =
+            (0.70
+             + 1.5 * glass_thickness
+             + 1.1 * clear_glass_detail
+             + 0.8 * contact_shadow_transition
+             + 0.028 * blur_points)
+            * content_scale
+            * (0.88 + 0.12 * glass_lensing_gain);
+        float contact_shadow_cross_span =
+            (0.46
+             + 0.8 * glass_dispersion_tangential
+             + 0.7 * spectral_dispersion
+             + 0.7 * contact_shadow_bridge_alignment)
+            * content_scale;
+        float contact_shadow_edge_span =
+            (0.42
+             + 0.9 * glass_thickness
+             + 0.7 * glass_lensing_gain
+             + 0.6 * contact_shadow_contact)
+            * content_scale;
+        float2 contact_shadow_core_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.08,
+            float2(0.0),
+            float2(1.0));
+        float2 contact_shadow_floor_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                - dynamic_light_dir
+                    * texel
+                    * contact_shadow_span
+                    * (0.24 + 0.14 * contact_shadow_contact),
+            float2(0.0),
+            float2(1.0));
+        float2 contact_shadow_lift_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + contact_shadow_axis
+                    * texel
+                    * contact_shadow_span
+                    * (0.22 + 0.12 * contact_shadow_pool),
+            float2(0.0),
+            float2(1.0));
+        float2 contact_shadow_edge_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.10
+                + normalized_local
+                    * texel
+                    * contact_shadow_edge_span
+                    * (0.24 + 0.16 * contact_shadow_edge),
+            float2(0.0),
+            float2(1.0));
+        float2 contact_shadow_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                + contact_shadow_cross
+                    * texel
+                    * contact_shadow_cross_span
+                    * (0.22 + 0.12 * contact_shadow_basin),
+            float2(0.0),
+            float2(1.0));
+        float2 contact_shadow_return_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.09
+                - contact_shadow_cross
+                    * texel
+                    * contact_shadow_cross_span
+                    * (0.20 + 0.12 * contact_shadow_pool),
+            float2(0.0),
+            float2(1.0));
+        float3 contact_shadow_core_rgb =
+            backdrop.sample(samp, contact_shadow_core_uv).rgb;
+        float3 contact_shadow_floor_rgb =
+            backdrop.sample(samp, contact_shadow_floor_uv).rgb;
+        float3 contact_shadow_lift_rgb =
+            backdrop.sample(samp, contact_shadow_lift_uv).rgb;
+        float3 contact_shadow_edge_rgb =
+            backdrop.sample(samp, contact_shadow_edge_uv).rgb;
+        float3 contact_shadow_cross_rgb =
+            backdrop.sample(samp, contact_shadow_cross_uv).rgb;
+        float3 contact_shadow_return_rgb =
+            backdrop.sample(samp, contact_shadow_return_uv).rgb;
+        float3 contact_shadow_probe =
+            contact_shadow_core_rgb * 0.30
+            + contact_shadow_floor_rgb * 0.22
+            + contact_shadow_lift_rgb * 0.16
+            + contact_shadow_edge_rgb * 0.14
+            + contact_shadow_cross_rgb * 0.10
+            + contact_shadow_return_rgb * 0.08;
+        float contact_shadow_luma =
+            dot(contact_shadow_probe, float3(0.2126, 0.7152, 0.0722));
+        float contact_shadow_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float contact_shadow_range = clamp(
+            length(contact_shadow_floor_rgb - contact_shadow_lift_rgb) * 0.28
+                + length(contact_shadow_cross_rgb - contact_shadow_return_rgb) * 0.22
+                + length(contact_shadow_edge_rgb - contact_shadow_core_rgb) * 0.20
+                + abs(contact_shadow_luma - contact_shadow_surface_luma) * 0.18
+                + contact_shadow_contact * 0.06,
+            0.0,
+            1.0);
+        float contact_shadow_coherence =
+            1.0 - smoothstep(0.08, 0.36, contact_shadow_range);
+        float contact_shadow_lift = smoothstep(
+            contact_shadow_surface_luma - 0.04,
+            contact_shadow_surface_luma + 0.26,
+            contact_shadow_luma);
+        float contact_shadow_depth = smoothstep(
+            0.04,
+            0.32,
+            contact_shadow_surface_luma - contact_shadow_luma);
+        float contact_shadow_anchor = clamp(
+            contact_shadow_contact * 0.30
+                + contact_shadow_coherence * 0.22
+                + contact_shadow_pool * 0.18
+                + contact_shadow_basin * 0.14
+                + contact_shadow_light_face * 0.10,
+            0.0,
+            1.0);
+        float3 contact_shadow_neutral = mix(
+            contact_shadow_probe,
+            float3(contact_shadow_luma),
+            contact_shadow_coherence * 0.14
+                + contact_shadow_depth * (0.10 + 0.12 * glass_shadow_gain)
+                + contact_shadow_contact * 0.08);
+        float3 contact_shadow_layer = clamp(
+            (contact_shadow_neutral - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.022
+                       + contact_shadow_transition * 0.020
+                       - contact_shadow_depth * 0.030
+                       - contact_shadow_anchor * 0.010)
+                + float3(0.50),
+            0.0,
+            1.0);
+        contact_shadow_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.008
+                   + 0.016 * tint_chroma * prominent_intensity);
+        float3 contact_shadow_prism = float3(
+            spectral_warmth,
+            0.12 * (spectral_warmth + spectral_coolness),
+            spectral_coolness);
+        float contact_shadow_prism_gate = clamp(
+            contact_shadow_anchor * 0.24
+                + contact_shadow_bridge_alignment * 0.20
+                + contact_shadow_light_face * 0.18
+                + contact_shadow_transition * 0.14
+                + contact_shadow_pool * 0.12,
+            0.0,
+            1.0);
+        contact_shadow_layer += contact_shadow_prism
+            * contact_shadow_prism_gate
+            * (0.0010
+               + 0.003 * spectral_rim_tint
+               + 0.0025 * glass_prismatic_gain);
+        float contact_shadow_weight = contact_shadow_field_strength
+            * contact_shadow_gate
+            * (0.28
+               + 0.20 * contact_shadow_anchor
+               + 0.18 * contact_shadow_coherence
+               + 0.14 * contact_shadow_lift
+               + 0.12 * contact_shadow_transition);
+        rgb = mix(
+            rgb,
+            mix(rgb, contact_shadow_layer, 0.08 + 0.14 * contact_shadow_anchor),
+            contact_shadow_weight * 0.26);
+        float contact_shadow_settle =
+            (contact_shadow_depth * 0.70 + contact_shadow_contact * 0.30)
+            * contact_shadow_weight
+            * (0.003 + 0.008 * clear_glass_dimming)
+            * (0.54 + 0.46 * contact_shadow_body);
+        rgb *= 1.0 - clamp(contact_shadow_settle, 0.0, 0.026);
+        rgb += contact_shadow_prism
+            * contact_shadow_weight
+            * contact_shadow_prism_gate
+            * (0.0008
+               + 0.0025 * dynamic_light_highlight
+               + 0.0025 * glass_scattering_gain);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
