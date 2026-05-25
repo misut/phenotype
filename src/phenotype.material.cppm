@@ -14,7 +14,7 @@ import phenotype.theme_contract;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 84;
+inline constexpr std::uint32_t material_plan_contract_version = 85;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -489,6 +489,11 @@ struct MaterialStageOptics {
     float glass_edge_adhesion = 0.0f;
     float glass_shape_coalescence = 0.0f;
     float glass_luma_stability = 0.0f;
+    char const* glass_substrate_adhesion_model = "none";
+    float glass_substrate_contact = 0.0f;
+    float glass_substrate_settle = 0.0f;
+    float glass_substrate_shadow = 0.0f;
+    float glass_substrate_refraction = 0.0f;
     char const* glass_thickness_model = "none";
     float glass_thickness = 0.0f;
     float glass_lensing_gain = 1.0f;
@@ -785,6 +790,23 @@ struct MaterialGlassSurfaceCohesionProfile {
     float luma_stability = 0.0f;
 };
 
+struct MaterialGlassSubstrateAdhesionProfile {
+    char const* model = "none";
+    char const* source = "none";
+    bool active = false;
+    bool surface_driven = false;
+    bool transmission_driven = false;
+    bool depth_driven = false;
+    bool environment_driven = false;
+    bool interaction_driven = false;
+    bool reduced_motion_suppressed = false;
+    bool bounded = true;
+    float contact_strength = 0.0f;
+    float settle_depth = 0.0f;
+    float contact_shadow = 0.0f;
+    float refraction_crawl = 0.0f;
+};
+
 struct MaterialGlassEnvironmentProfile {
     char const* model = "none";
     char const* source = "none";
@@ -987,6 +1009,7 @@ struct MaterialOpticalResponseContract {
     bool glass_meniscus_active = false;
     bool glass_transmission_active = false;
     bool glass_surface_cohesion_active = false;
+    bool glass_substrate_adhesion_active = false;
     bool glass_thickness_active = false;
     bool glass_dispersion_active = false;
     bool glass_stabilization_active = false;
@@ -1017,6 +1040,7 @@ struct MaterialOpticalComposition {
     char const* glass_meniscus_source = "none";
     char const* glass_transmission_source = "none";
     char const* glass_surface_cohesion_source = "none";
+    char const* glass_substrate_adhesion_source = "none";
     char const* glass_thickness_source = "none";
     char const* glass_dispersion_source = "none";
     char const* glass_stabilization_source = "none";
@@ -1048,6 +1072,7 @@ struct MaterialOpticalComposition {
     bool glass_meniscus_required = false;
     bool glass_transmission_required = false;
     bool glass_surface_cohesion_required = false;
+    bool glass_substrate_adhesion_required = false;
     bool glass_thickness_required = false;
     bool glass_dispersion_required = false;
     bool glass_stabilization_required = false;
@@ -1110,6 +1135,10 @@ struct MaterialOpticalComposition {
     float glass_edge_adhesion = 0.0f;
     float glass_shape_coalescence = 0.0f;
     float glass_luma_stability = 0.0f;
+    float glass_substrate_contact = 0.0f;
+    float glass_substrate_settle = 0.0f;
+    float glass_substrate_shadow = 0.0f;
+    float glass_substrate_refraction = 0.0f;
     float glass_thickness = 0.0f;
     float glass_lensing_gain = 1.0f;
     float glass_shadow_gain = 1.0f;
@@ -1367,6 +1396,7 @@ struct MaterialPlan {
     MaterialGlassMeniscusProfile glass_meniscus{};
     MaterialGlassTransmissionProfile glass_transmission{};
     MaterialGlassSurfaceCohesionProfile glass_surface_cohesion{};
+    MaterialGlassSubstrateAdhesionProfile glass_substrate_adhesion{};
     MaterialGlassThicknessProfile glass_thickness{};
     MaterialGlassDispersionProfile glass_dispersion{};
     MaterialGlassStabilizationProfile glass_stabilization{};
@@ -1486,6 +1516,16 @@ inline MaterialStageOptics material_primary_stage_optics(
         plan.glass_surface_cohesion.shape_coalescence;
     optics.glass_luma_stability =
         plan.glass_surface_cohesion.luma_stability;
+    optics.glass_substrate_adhesion_model =
+        plan.glass_substrate_adhesion.model;
+    optics.glass_substrate_contact =
+        plan.glass_substrate_adhesion.contact_strength;
+    optics.glass_substrate_settle =
+        plan.glass_substrate_adhesion.settle_depth;
+    optics.glass_substrate_shadow =
+        plan.glass_substrate_adhesion.contact_shadow;
+    optics.glass_substrate_refraction =
+        plan.glass_substrate_adhesion.refraction_crawl;
     optics.glass_thickness_model = plan.glass_thickness.model;
     optics.glass_thickness = plan.glass_thickness.thickness;
     optics.glass_lensing_gain = plan.glass_thickness.lensing_gain;
@@ -1633,6 +1673,16 @@ inline MaterialStageOptics material_edge_stage_optics(
         plan.glass_surface_cohesion.shape_coalescence;
     optics.glass_luma_stability =
         plan.glass_surface_cohesion.luma_stability;
+    optics.glass_substrate_adhesion_model =
+        plan.glass_substrate_adhesion.model;
+    optics.glass_substrate_contact =
+        plan.glass_substrate_adhesion.contact_strength;
+    optics.glass_substrate_settle =
+        plan.glass_substrate_adhesion.settle_depth;
+    optics.glass_substrate_shadow =
+        plan.glass_substrate_adhesion.contact_shadow;
+    optics.glass_substrate_refraction =
+        plan.glass_substrate_adhesion.refraction_crawl;
     optics.glass_thickness_model = plan.glass_thickness.model;
     optics.glass_thickness = plan.glass_thickness.thickness;
     optics.glass_lensing_gain = plan.glass_thickness.lensing_gain;
@@ -9863,6 +9913,155 @@ material_resolve_glass_surface_cohesion_profile(
     return profile;
 }
 
+inline char const* material_glass_substrate_adhesion_source_name(
+        bool surface_driven,
+        bool transmission_driven,
+        bool depth_driven,
+        bool environment_driven,
+        bool interaction_driven) noexcept {
+    if (interaction_driven && surface_driven)
+        return "interactive-surface-substrate-adhesion";
+    if (surface_driven && transmission_driven && depth_driven)
+        return "surface-transmission-depth-substrate-adhesion";
+    if (surface_driven && environment_driven && depth_driven)
+        return "surface-environment-depth-substrate-adhesion";
+    if (surface_driven && transmission_driven)
+        return "surface-transmission-substrate-adhesion";
+    if (surface_driven)
+        return "surface-substrate-adhesion";
+    return "sampled-backdrop-substrate-adhesion";
+}
+
+inline MaterialGlassSubstrateAdhesionProfile
+material_resolve_glass_substrate_adhesion_profile(
+        MaterialPlan const& plan) noexcept {
+    MaterialGlassSubstrateAdhesionProfile profile{};
+    profile.bounded = true;
+    if (!plan.backdrop_sampling
+        || plan.fallback()
+        || plan.kind == MaterialKind::None) {
+        return profile;
+    }
+
+    auto const surface_response = plan.glass_surface_cohesion.active
+        ? std::clamp(
+            plan.glass_surface_cohesion.surface_response / 0.64f * 0.30f
+                + plan.glass_surface_cohesion.edge_adhesion / 0.56f
+                    * 0.28f
+                + plan.glass_surface_cohesion.shape_coalescence / 0.54f
+                    * 0.22f
+                + plan.glass_surface_cohesion.luma_stability / 0.62f
+                    * 0.20f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const transmission_response = plan.glass_transmission.active
+        ? std::clamp(
+            plan.glass_transmission.internal_transmission / 0.52f * 0.30f
+                + plan.glass_transmission.subsurface_scatter / 0.34f
+                    * 0.26f
+                + plan.glass_transmission.volume_absorption / 0.30f
+                    * 0.24f
+                + plan.glass_transmission.interlayer_refraction / 0.32f
+                    * 0.20f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const depth_response = plan.glass_depth.active
+        ? std::clamp(
+            plan.glass_depth.depth_separation * 0.30f
+                + plan.glass_depth.inner_shadow / 0.36f * 0.28f
+                + plan.glass_depth.surface_lift / 0.42f * 0.22f
+                + plan.glass_depth.parallax_gain / 0.46f * 0.20f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const environment_response = plan.glass_environment.active
+        ? std::clamp(
+            plan.glass_environment.reflection_strength * 0.28f
+                + plan.glass_environment.transmission_balance * 0.26f
+                + plan.glass_environment.color_pickup * 0.18f
+                + std::fabs(plan.glass_environment.luminance_balance - 0.5f)
+                    * 0.28f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const interaction_response = plan.interaction.active
+        ? std::clamp(
+            plan.interaction.response_strength * 0.44f
+                + plan.interaction.pointer_lens_strength * 0.30f
+                + plan.interaction.control_morph_shadow * 0.16f
+                + plan.interaction.control_morph_depth * 0.10f,
+            0.0f,
+            1.0f)
+        : 0.0f;
+    auto const reduced_motion_scale =
+        plan.decision_trace.reduce_motion ? 0.74f : 1.0f;
+    auto const response = std::clamp(
+        0.08f
+            + 0.26f * surface_response
+            + 0.22f * transmission_response
+            + 0.20f * depth_response
+            + 0.18f * environment_response
+            + 0.10f * interaction_response,
+        0.0f,
+        1.0f);
+
+    profile.contact_strength = std::clamp(
+        reduced_motion_scale
+            * (0.045f
+               + 0.30f * response
+               + 0.10f * surface_response
+               + 0.06f * environment_response),
+        0.0f,
+        0.46f);
+    profile.settle_depth = std::clamp(
+        0.030f
+            + 0.18f * depth_response
+            + 0.16f * surface_response
+            + 0.10f * transmission_response,
+        0.0f,
+        0.34f);
+    profile.contact_shadow = std::clamp(
+        0.020f
+            + 0.16f * depth_response
+            + 0.13f * transmission_response
+            + 0.10f * environment_response,
+        0.0f,
+        0.30f);
+    profile.refraction_crawl = std::clamp(
+        reduced_motion_scale
+            * (0.018f
+               + 0.14f * surface_response
+               + 0.12f * transmission_response
+               + 0.08f * interaction_response),
+        0.0f,
+        0.28f);
+    if (profile.contact_strength <= 0.0001f
+        && profile.settle_depth <= 0.0001f
+        && profile.contact_shadow <= 0.0001f
+        && profile.refraction_crawl <= 0.0001f) {
+        return MaterialGlassSubstrateAdhesionProfile{};
+    }
+
+    profile.active = true;
+    profile.surface_driven = surface_response > 0.0001f;
+    profile.transmission_driven = transmission_response > 0.0001f;
+    profile.depth_driven = depth_response > 0.0001f;
+    profile.environment_driven = environment_response > 0.0001f;
+    profile.interaction_driven = interaction_response > 0.0001f;
+    profile.reduced_motion_suppressed =
+        plan.decision_trace.reduce_motion && reduced_motion_scale < 1.0f;
+    profile.model = "adaptive-glass-substrate-adhesion";
+    profile.source = material_glass_substrate_adhesion_source_name(
+        profile.surface_driven,
+        profile.transmission_driven,
+        profile.depth_driven,
+        profile.environment_driven,
+        profile.interaction_driven);
+    return profile;
+}
+
 inline float material_base_specular_intensity(MaterialKind kind) noexcept {
     switch (kind) {
         case MaterialKind::Clear: return 0.050f;
@@ -10418,6 +10617,15 @@ inline char const* material_optical_glass_surface_cohesion_source_name(
     return "none";
 }
 
+inline char const* material_optical_glass_substrate_adhesion_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.glass_substrate_adhesion.active
+        && plan.glass_substrate_adhesion.source
+        && plan.glass_substrate_adhesion.source[0])
+        return plan.glass_substrate_adhesion.source;
+    return "none";
+}
+
 inline char const* material_optical_glass_thickness_source_name(
         MaterialPlan const& plan) noexcept {
     if (plan.glass_thickness.active
@@ -10578,6 +10786,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         material_optical_glass_transmission_source_name(plan);
     composition.glass_surface_cohesion_source =
         material_optical_glass_surface_cohesion_source_name(plan);
+    composition.glass_substrate_adhesion_source =
+        material_optical_glass_substrate_adhesion_source_name(plan);
     composition.glass_thickness_source =
         material_optical_glass_thickness_source_name(plan);
     composition.glass_dispersion_source =
@@ -10636,6 +10846,8 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.glass_transmission.active;
     composition.glass_surface_cohesion_required =
         plan.glass_surface_cohesion.active;
+    composition.glass_substrate_adhesion_required =
+        plan.glass_substrate_adhesion.active;
     composition.glass_thickness_required = plan.glass_thickness.active;
     composition.glass_dispersion_required = plan.glass_dispersion.active;
     composition.glass_stabilization_required =
@@ -10672,6 +10884,7 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         && plan.glass_meniscus.bounded
         && plan.glass_transmission.bounded
         && plan.glass_surface_cohesion.bounded
+        && plan.glass_substrate_adhesion.bounded
         && plan.glass_thickness.bounded
         && plan.glass_dispersion.bounded
         && plan.glass_stabilization.bounded
@@ -10753,6 +10966,14 @@ inline MaterialOpticalComposition material_resolve_optical_composition(
         plan.glass_surface_cohesion.shape_coalescence;
     composition.glass_luma_stability =
         plan.glass_surface_cohesion.luma_stability;
+    composition.glass_substrate_contact =
+        plan.glass_substrate_adhesion.contact_strength;
+    composition.glass_substrate_settle =
+        plan.glass_substrate_adhesion.settle_depth;
+    composition.glass_substrate_shadow =
+        plan.glass_substrate_adhesion.contact_shadow;
+    composition.glass_substrate_refraction =
+        plan.glass_substrate_adhesion.refraction_crawl;
     composition.glass_thickness = plan.glass_thickness.thickness;
     composition.glass_lensing_gain = plan.glass_thickness.lensing_gain;
     composition.glass_shadow_gain = plan.glass_thickness.shadow_gain;
@@ -10890,6 +11111,8 @@ inline MaterialOpticalResponseContract material_resolve_optical_response(
         composition.glass_transmission_required;
     response.glass_surface_cohesion_active =
         composition.glass_surface_cohesion_required;
+    response.glass_substrate_adhesion_active =
+        composition.glass_substrate_adhesion_required;
     response.glass_thickness_active =
         composition.glass_thickness_required;
     response.glass_dispersion_active =
@@ -11251,6 +11474,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         material_resolve_glass_transmission_profile(plan);
     plan.glass_surface_cohesion =
         material_resolve_glass_surface_cohesion_profile(plan);
+    plan.glass_substrate_adhesion =
+        material_resolve_glass_substrate_adhesion_profile(plan);
     plan.specular = material_resolve_specular_profile(plan);
     plan.luminance_curve = material_resolve_luminance_curve(
         plan.backdrop_sampling,
