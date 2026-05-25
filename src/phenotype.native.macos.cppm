@@ -6043,6 +6043,77 @@ fragment float4 fs_material(
         clamp(in.transition_optics.z, 1.0, 1.32);
     float materialize_rim_position =
         clamp(in.transition_optics.w, 0.0, 1.0);
+    float container_bounds_gate =
+        (in.group_rect.z > 0.0 && in.group_rect.w > 0.0) ? 1.0 : 0.0;
+    float materialize_container_gate = max(
+        container_bounds_gate,
+        max(shape_blend_execution, max(group_surface_execution, union_execution)));
+    float container_morph_continuity = clamp(
+        max(
+            max(
+                glass_effect_match_execution
+                    * (0.54 + 0.46 * group_blend_strength),
+                morph_execution
+                    * max(group_blend_strength, bridge_motion_strength)
+                    * (0.62 + 0.22 * planned_union_shape_coalescence)),
+            materialize_wave_strength
+                * materialize_container_gate
+                * (0.34
+                   + 0.20 * group_blend_strength
+                   + 0.16 * planned_union_edge_continuity)),
+        0.0,
+        1.0);
+    if (container_morph_continuity > 0.0001) {
+        group_blend_strength = clamp(
+            max(
+                group_blend_strength,
+                container_morph_continuity
+                    * (0.38
+                       + 0.24 * morph_execution
+                       + 0.18 * glass_effect_match_execution)),
+            0.0,
+            1.0);
+        inner_edge_alpha_blend_strength = clamp(
+            max(
+                inner_edge_alpha_blend_strength,
+                container_morph_continuity
+                    * (0.18
+                       + 0.12 * planned_union_edge_continuity)),
+            0.0,
+            1.0);
+        fusion_strength = clamp(
+            max(
+                fusion_strength,
+                container_morph_continuity
+                    * (0.44
+                       + 0.18 * planned_union_shape_coalescence)),
+            0.0,
+            1.0);
+        fusion_lensing_gain = clamp(
+            fusion_lensing_gain + 0.055 * container_morph_continuity,
+            1.0,
+            1.38);
+        fusion_edge_lift = clamp(
+            fusion_edge_lift + 0.026 * container_morph_continuity,
+            0.0,
+            0.20);
+        fusion_shadow_gain = clamp(
+            fusion_shadow_gain + 0.035 * container_morph_continuity,
+            1.0,
+            1.38);
+        bridge_motion_strength = clamp(
+            max(bridge_motion_strength, 0.42 * container_morph_continuity),
+            0.0,
+            1.0);
+        bridge_flow_offset_gain = clamp(
+            max(bridge_flow_offset_gain, 0.18 + 0.18 * container_morph_continuity),
+            0.0,
+            0.62);
+        bridge_ribbon_width = clamp(
+            bridge_ribbon_width + 0.035 * container_morph_continuity,
+            0.08,
+            0.34);
+    }
     if (group_blend_strength > 0.0
         && in.group_rect.z > 0.0
         && in.group_rect.w > 0.0) {
@@ -6114,6 +6185,7 @@ fragment float4 fs_material(
         * glass_lensing_gain
         * fusion_lensing_gain
         * materialize_lensing_gain
+        * (1.0 + 0.08 * container_morph_continuity)
         * (1.0 - 0.12 * overlap_response_strength);
     float refraction_edge_caustic =
         clamp(
@@ -6121,7 +6193,8 @@ fragment float4 fs_material(
                 * glass_lensing_gain
                 * (1.0
                    + 0.34 * fusion_strength
-                   + 0.24 * materialize_wave_strength),
+                   + 0.24 * materialize_wave_strength
+                   + 0.18 * container_morph_continuity),
             0.0,
             0.46);
     float edge_bevel_width = clamp(
@@ -7047,6 +7120,53 @@ fragment float4 fs_material(
             * fusion_rim
             * fusion_edge_lift
             * (0.42 + 0.58 * group_blend_strength);
+        backdrop_rgb = clamp(backdrop_rgb, 0.0, 1.0);
+    }
+    if (container_morph_continuity > 0.0001) {
+        float morph_center =
+            1.0 - smoothstep(0.14, 1.14, normalized_len);
+        float morph_edge = edge_lens
+            * (0.46
+               + 0.54
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_width * 1.9, 0.5),
+                       signed_edge_distance)));
+        float morph_ribbon = max(
+            bridge_band,
+            max(morph_edge * 0.42, morph_center * 0.26));
+        float morph_luma =
+            dot(backdrop_rgb, float3(0.2126, 0.7152, 0.0722));
+        float3 morph_settled = mix(
+            backdrop_rgb,
+            float3(morph_luma),
+            0.22 + 0.16 * container_morph_continuity);
+        morph_settled = clamp(
+            (morph_settled - float3(0.50))
+                    * (1.0
+                       + 0.060 * container_morph_continuity
+                       + 0.040 * planned_union_luma_stability)
+                + float3(0.50),
+            0.0,
+            1.0);
+        backdrop_rgb = mix(
+            backdrop_rgb,
+            morph_settled,
+            container_morph_continuity
+                * (0.08 + 0.13 * morph_ribbon));
+        backdrop_rgb += float3(1.0)
+            * morph_ribbon
+            * container_morph_continuity
+            * (0.010
+               + 0.030 * fusion_edge_lift
+               + 0.018 * materialize_edge_lift);
+        backdrop_rgb += float3(
+            spectral_warmth,
+            0.05 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * morph_ribbon
+            * container_morph_continuity
+            * 0.045;
         backdrop_rgb = clamp(backdrop_rgb, 0.0, 1.0);
     }
     if (materialize_wave_strength > 0.0001) {
