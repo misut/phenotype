@@ -116,7 +116,7 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 | `link(label, href)` | Hyperlink that opens via the host shim — text colour cross-fades on hover |
 | `image(url, width, height)` | Async image; the JS shim or native backend keeps a persistent atlas |
 | `canvas(width, height, paint, on_gesture?)` | Fixed-size leaf for arbitrary 2D drawing via a `Painter` callback |
-| `button<Msg>(label, msg, variant?, disabled?)` / `ButtonStyleOptions` | Clickable button that posts `msg` on click; background and focus ring fade on hover / focus, with optional explicit chrome for app-like controls including glass control, selection, popover menu item, table header, and disclosure presets |
+| `button<Msg>(label, msg, variant?, disabled?)` / `glass_selection_button` / `glass_outline_row_button` / `glass_menu_item_button` / `glass_table_header_button` / `glass_disclosure_header_button` | Clickable button surfaces that post `msg` on click; background and focus ring fade on hover / focus, with direct Liquid Glass helpers for app-like selection, outline/list rows, popover menu actions, table headers, and disclosure headers |
 | `checkbox<Msg>(label, checked, msg)` / `radio<Msg>(label, selected, msg)` | Selection controls with a hover highlight on the row and a halo on focus |
 | `switch_<Msg>(label, on, msg)` | Labelled on/off toggle; the thumb slides and the track cross-fades on flip |
 | `tabs<Msg>(items, selected, on_select, TabsStyleOptions?)` | Material-backed segmented row with a 2 px sliding indicator under the selected tab |

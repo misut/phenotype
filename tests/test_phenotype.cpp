@@ -6744,6 +6744,122 @@ void test_glass_disclosure_header_style_material_contract() {
     std::puts("PASS: glass disclosure header style emits material contract");
 }
 
+void test_glass_widget_helpers_emit_material_buttons() {
+    set_theme(Theme{});
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.callback_roles.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+
+    auto const identity =
+        layout::glass_effect_identity("widget-helpers", "outline-row");
+    auto effect_glass = layout::glass_regular()
+        .effect_id(identity)
+        .matched_geometry(0.5f, true)
+        .effect_union("widget-helpers", "rows", 12.0f);
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::glass_selection_button<button_test::ButtonMsg>(
+        "Recents",
+        button_test::Click{},
+        GlassSelectionStyleOptions{
+            .chrome = GlassSelectionChrome::SidebarPill,
+            .role = MaterialSurfaceRole::Sidebar,
+            .selected = true,
+            .width = 188.0f,
+            .height = 30.0f,
+        });
+    widget::glass_outline_row_button<button_test::ButtonMsg>(
+        "Documents",
+        button_test::Click{},
+        effect_glass,
+        GlassOutlineRowStyleOptions{
+            .chrome = GlassOutlineRowChrome::ColumnRow,
+            .role = MaterialSurfaceRole::Content,
+            .selected = true,
+            .width = 220.0f,
+            .height = 28.0f,
+        });
+    widget::glass_menu_item_button<button_test::ButtonMsg>(
+        "Rename",
+        button_test::Click{},
+        GlassMenuItemStyleOptions{
+            .width = 180.0f,
+            .height = 30.0f,
+        });
+    widget::glass_table_header_button<button_test::ButtonMsg>(
+        "Name",
+        button_test::Click{},
+        GlassTableHeaderStyleOptions{
+            .sorted = true,
+            .width = 160.0f,
+            .height = 28.0f,
+        });
+    widget::glass_disclosure_header_button<button_test::ButtonMsg>(
+        "Details",
+        button_test::Click{},
+        GlassDisclosureStyleOptions{
+            .expanded = true,
+            .width = 240.0f,
+            .height = 34.0f,
+        });
+    Scope::set_current(nullptr);
+
+    auto const& root = detail::node_at(root_h);
+    assert(root.children.size() == 5u);
+    assert(detail::g_app.callbacks.size() == 5u);
+    assert(detail::g_app.callback_roles.size() == 5u);
+
+    auto const& selection = detail::node_at(root.children[0]);
+    assert(selection.text == "Recents");
+    assert(selection.interaction_role == InteractionRole::Button);
+    assert(selection.material.kind == MaterialKind::Thin);
+    assert(selection.material.role == MaterialSurfaceRole::Sidebar);
+    assert(selection.material_shape == MaterialSurfaceShape::Capsule);
+    assert(selection.style.max_width == 188.0f);
+    assert(selection.style.fixed_height == 30.0f);
+
+    auto const& outline = detail::node_at(root.children[1]);
+    assert(outline.text == "Documents");
+    assert(outline.material.kind == MaterialKind::Thin);
+    assert(outline.material.role == MaterialSurfaceRole::Content);
+    assert(outline.material.glass_identity == identity);
+    assert(outline.material.transition.kind
+           == MaterialGlassTransitionKind::MatchedGeometry);
+    assert(std::fabs(outline.material.transition.progress - 0.5f) < 0.0001f);
+    assert(outline.material.container.container_id
+           == layout::glass_effect_stable_id("widget-helpers"));
+    assert(outline.material.container.union_id
+           == layout::glass_effect_stable_id("rows"));
+    assert(outline.material.container.interactive);
+
+    auto const& menu = detail::node_at(root.children[2]);
+    assert(menu.text == "Rename");
+    assert(menu.material.kind == MaterialKind::Clear);
+    assert(menu.material.role == MaterialSurfaceRole::Overlay);
+    assert(menu.style.max_width == 180.0f);
+    assert(menu.style.fixed_height == 30.0f);
+
+    auto const& header = detail::node_at(root.children[3]);
+    assert(header.text == "Name");
+    assert(header.material.kind == MaterialKind::Clear);
+    assert(header.material.role == MaterialSurfaceRole::Content);
+    assert(header.border_width == 1.0f);
+
+    auto const& disclosure = detail::node_at(root.children[4]);
+    assert(disclosure.text == "Details");
+    assert(disclosure.material.kind == MaterialKind::Clear);
+    assert(disclosure.material.role == MaterialSurfaceRole::Content);
+    assert(disclosure.style.fixed_height == 34.0f);
+
+    std::puts("PASS: glass widget helpers emit material buttons");
+}
+
 void assert_glass_effect_context(
         MaterialStyle const& material,
         MaterialGlassIdentityDescriptor identity,
@@ -8529,6 +8645,7 @@ int main() {
     test_glass_menu_item_symbol_button_material_contract();
     test_glass_table_header_button_material_contract();
     test_glass_disclosure_header_style_material_contract();
+    test_glass_widget_helpers_emit_material_buttons();
     test_glass_effect_context_reaches_control_styles();
     test_glass_effect_context_reaches_indicator_controls();
     test_glass_effect_context_reaches_tabs();
