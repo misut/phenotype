@@ -121,10 +121,75 @@ void test_dialog_two_invocations_are_independent() {
     std::puts("PASS: two dialogs in one view register two overlays");
 }
 
+void test_glass_overlay_helpers_register_preset_chrome() {
+    build([&] {
+        layout::popover_overlay([&] { widget::text("popover"); },
+                                320.0f,
+                                12,
+                                "Quick Popover");
+        layout::tooltip_overlay([&] { widget::text("tooltip"); },
+                                260.0f,
+                                8,
+                                "Hover Tip");
+        layout::context_menu_overlay([&] { widget::text("menu"); },
+                                     240.0f,
+                                     16,
+                                     "Action Menu");
+        layout::command_palette_overlay([&] { widget::text("commands"); },
+                                        560.0f,
+                                        20,
+                                        "Command Search");
+    });
+
+    auto& overlays = detail::g_app.overlays;
+    assert(overlays.size() == 4);
+
+    auto assert_overlay_surface =
+        [](NodeHandle overlay_h,
+           char const* label,
+           MaterialKind kind,
+           bool interactive,
+           float max_width,
+           float top_padding) {
+            auto& overlay = detail::node_at(overlay_h);
+            assert(overlay.children.size() == 2);
+            auto& spacer = detail::node_at(overlay.children[0]);
+            assert(spacer.style.fixed_height == top_padding);
+            auto& row = detail::node_at(overlay.children[1]);
+            assert(row.style.flex_direction == FlexDirection::Row);
+            assert(row.style.main_align == MainAxisAlignment::Center);
+            auto& sized = detail::node_at(row.children[0]);
+            assert(sized.style.max_width == max_width);
+            auto& surface = detail::node_at(sized.children[0]);
+            assert(surface.debug_semantic_label.compare(label) == 0);
+            assert(surface.material.kind == kind);
+            assert(surface.material.role == MaterialSurfaceRole::Overlay);
+            assert(surface.material.container.interactive == interactive);
+            assert(surface.style.max_width == max_width);
+            assert(surface.background == surface.material.tint);
+            assert(surface.border_color == surface.material.border);
+        };
+
+    assert_overlay_surface(
+        overlays[0], "Quick Popover", MaterialKind::Regular,
+        true, 320.0f, 12.0f);
+    assert_overlay_surface(
+        overlays[1], "Hover Tip", MaterialKind::Thin,
+        false, 260.0f, 8.0f);
+    assert_overlay_surface(
+        overlays[2], "Action Menu", MaterialKind::Regular,
+        true, 240.0f, 16.0f);
+    assert_overlay_surface(
+        overlays[3], "Command Search", MaterialKind::Thick,
+        true, 560.0f, 20.0f);
+    std::puts("PASS: glass overlay helpers register preset chrome");
+}
+
 int main() {
     test_dialog_registers_overlay_with_centered_card();
     test_dialog_horizontal_centering();
     test_dialog_two_invocations_are_independent();
+    test_glass_overlay_helpers_register_preset_chrome();
     std::puts("\nAll dialog tests passed.");
     return 0;
 }

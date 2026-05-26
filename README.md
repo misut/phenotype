@@ -100,7 +100,7 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 | `material_surface(kind, builder)` | Debug-visible material container with clear/thin/regular/thick semantics, macOS sampled-backdrop rendering through pure sampling-kernel and luminance-curve contracts, and resolved deterministic fallback plans elsewhere |
 | `glass_surface(preset, builder)` / `tab_bar(builder)` | Apple-style glass chrome presets for toolbars, navigation, tab bars, overlays, and transient surfaces that lower to the same material command contract |
 | `scroll_view(fixed_height, builder)` | Per-node scroll viewport that catches wheel events inside its bounds |
-| `overlay(builder)` | Top-of-stack layer that paints after the main tree (foundation for dialogs, popovers, tooltips) |
+| `overlay(builder)` / `popover_overlay(builder)` / `tooltip_overlay(builder)` / `context_menu_overlay(builder)` / `command_palette_overlay(builder)` | Top-of-stack layers that paint after the main tree, including fixed screen glass overlays for common floating chrome |
 | `dialog(builder, max_width=360, top_padding=96)` | Centered modal card on top of an `overlay` |
 | `accordion(title, builder)` | Collapsible section with a material-backed disclosure header; expand state lives in `framework_local<bool>` keyed to the call site |
 | `list_items(builder)` + `item(str)` | Bulleted list |
