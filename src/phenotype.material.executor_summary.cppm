@@ -7,6 +7,7 @@ module;
 export module phenotype.material.executor_summary;
 
 import phenotype.material.plan;
+import phenotype.material.runtime;
 import phenotype.material.types;
 import phenotype.types;
 

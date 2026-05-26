@@ -1277,7 +1277,7 @@ phenotype (umbrella re-export)
 ├── phenotype.theme_contract — pure Apple-like glass theme and preference resolver metadata
 ├── phenotype.material.types — pure MaterialPlan, request, policy, and descriptor contracts
 ├── phenotype.material.plan — pure material planner and runtime execution helpers
-├── phenotype.material.runtime — pure material runtime summary aggregation helpers
+├── phenotype.material.runtime — pure material runtime execution and summary helpers
 ├── phenotype.material.executor_summary — pure material executor summary aggregation helpers
 ├── phenotype.state       — Arena, AppState, Scope, InputHandler, message queue
 ├── phenotype.diag        — OTel-shaped Counter, Gauge, Histogram, log ring, JSON snapshot
