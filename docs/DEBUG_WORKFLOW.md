@@ -220,6 +220,7 @@ mise exec -- exon build
   --prefer-system-color-scheme --system-color-scheme dark \
   --font-scale 1.2 --scroll 1.5 --json
 .exon/debug/phenotype_cli io contract --json
+.exon/debug/phenotype_cli debug contract --json
 ```
 
 `theme contract` reports the `phenotype_theme_contract` version, Apple-like
@@ -243,6 +244,22 @@ This keeps fallback artifacts from pretending they consumed OS preferences.
 output observation kinds, deterministic replay sample, LLM-debuggable artifact
 sample, edge-effect policy, and release-adapter bypass policy. It should stay
 green before investigating an example-specific driver or renderer artifact.
+`debug contract` reports the live debug protocol contract shared by the CLI,
+debug side panel, and future agent endpoint. The first contract pins
+versioned JSON command/event transport, debug-build local-only token gating,
+semantic-target-first agent control, side-panel reuse of the same protocol, the
+macOS `Cmd+F12` and Windows `Ctrl+F12` panel shortcuts, and the required
+domains for session/target/input/layout/overlay/console/performance/artifact
+and trace replay. It should stay green before adding a new panel section,
+native event injector, layout highlighter, console sink, or performance
+monitor.
+
+Debug builds of `examples/native` register the side-panel shortcut directly in
+the native key-command registry. The panel is intentionally a protocol client:
+it reads the same input debug snapshot, semantic/layout capability flags,
+console ring, and performance counters that CLI agents must eventually observe
+or drive through the local endpoint. Release builds keep the shortcut disabled
+and should continue to rely on artifact and CLI observation surfaces.
 
 The CLI also exposes the verifier through an edge wrapper:
 

@@ -1093,6 +1093,26 @@ auto spec() -> cppx::cli::CommandSpec {
                 .category = "metadata",
             },
             {
+                .name = "debug",
+                .summary = "Inspect live debug protocol and side-panel contracts",
+                .options = {help_option()},
+                .subcommands = {
+                    {
+                        .name = "contract",
+                        .summary =
+                            "Emit the CLI, agent, and side-panel debug contract",
+                        .options = {help_option(), json_option()},
+                        .allow_positionals = false,
+                        .examples = {
+                            "phenotype debug contract --json",
+                            "phenotype debug contract",
+                        },
+                    },
+                },
+                .allow_positionals = false,
+                .category = "runtime",
+            },
+            {
                 .name = "drive",
                 .summary = "Drive deterministic app input contracts",
                 .options = {help_option()},

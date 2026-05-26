@@ -57,6 +57,7 @@ For the first CLI/package contract:
 cd tools/phenotype_cli
 mise exec -- exon build
 .exon/debug/phenotype_cli doctor --json
+.exon/debug/phenotype_cli debug contract --json
 .exon/debug/phenotype_cli package list --json ../../examples
 .exon/debug/phenotype_cli package inspect --json ../../examples/file_explorer_desktop
 .exon/debug/phenotype_cli package inspect --json ../../examples/file_explorer_mobile
@@ -529,11 +530,16 @@ Gaps:
 | platform diagnostics | no | yes | yes | yes |
 | remote image diagnostics | no | yes | yes | Android local/asset only |
 | material/glass diagnostics | empty runtime contract + semantic fallback | macOS sampled backdrop + resolved runtime plans | resolved runtime fallback plans | resolved runtime fallback plans |
+| debug side panel shortcut | no | `Cmd+F12` in debug builds | `Ctrl+F12` in debug builds | no |
 
 Gaps:
 
 - Desktop native examples can write startup artifact bundles through
   `PHENOTYPE_ARTIFACT_DIR`.
+- `examples/native` now exposes a debug-build side panel that reads the shared
+  protocol contract, input snapshot, layout capabilities, console ring, and
+  performance counters. It is a local manual acceptance surface until the
+  protocol grows a real local endpoint for CLI and agent control.
 - `examples/glass_showcase` is the material-focused startup artifact target
   and includes exact labels plus all public material kinds for verifier gates.
 - `examples/file_explorer_desktop` and `examples/file_explorer_mobile` are

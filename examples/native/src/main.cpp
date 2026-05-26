@@ -1,6 +1,7 @@
 #include <filesystem>
 #include <string>
 #include <variant>
+#include <vector>
 
 import phenotype;
 import phenotype.native;
@@ -19,6 +20,7 @@ struct ValidationChanged { std::string text; };
 struct ToggleAgreed {};
 struct ToggleNotifications {};
 struct ToggleDialog {};
+struct ToggleDebugPanel {};
 struct SetChoice { int value; };
 struct SelectTab { std::size_t value; };
 struct Resized { int width; int height; float scale; };
@@ -32,6 +34,7 @@ using Msg = std::variant<
     ToggleAgreed,
     ToggleNotifications,
     ToggleDialog,
+    ToggleDebugPanel,
     SetChoice,
     SelectTab,
     Resized>;
@@ -46,6 +49,7 @@ struct State {
     bool agreed = false;
     bool notifications = false;
     bool dialog_open = false;
+    bool debug_panel_open = false;
     int choice = 0;
     std::size_t selected_tab = 0;
     int viewport_width = 0;
@@ -67,6 +71,7 @@ void update(State& state, Msg msg) {
         else if constexpr (std::same_as<T, ToggleAgreed>) state.agreed = !state.agreed;
         else if constexpr (std::same_as<T, ToggleNotifications>) state.notifications = !state.notifications;
         else if constexpr (std::same_as<T, ToggleDialog>) state.dialog_open = !state.dialog_open;
+        else if constexpr (std::same_as<T, ToggleDebugPanel>) state.debug_panel_open = !state.debug_panel_open;
         else if constexpr (std::same_as<T, SetChoice>)  state.choice = m.value;
         else if constexpr (std::same_as<T, SelectTab>)  state.selected_tab = m.value;
         else if constexpr (std::same_as<T, Resized>) {
@@ -158,6 +163,22 @@ static std::string debug_rect_text(phenotype::diag::RectSnapshot const& rect) {
     return text;
 }
 
+static int debug_panel_modifier() {
+#ifdef __APPLE__
+    return static_cast<int>(phenotype::native::Modifier::Super);
+#else
+    return static_cast<int>(phenotype::native::Modifier::Control);
+#endif
+}
+
+static std::string debug_panel_shortcut_text() {
+#ifdef __APPLE__
+    return "Cmd+F12";
+#else
+    return "Ctrl+F12";
+#endif
+}
+
 static std::string input_debug_block(phenotype::diag::InputDebugSnapshot const& debug) {
     auto platform_name = phenotype::native::current_platform().name;
     std::string block;
@@ -220,6 +241,164 @@ static std::string input_debug_block(phenotype::diag::InputDebugSnapshot const& 
     block += "\ncomposition text: ";
     block += debug.composition_text.empty() ? "(empty)" : debug.composition_text;
     return block;
+}
+
+static std::string debug_protocol_block() {
+    namespace io = phenotype::io;
+    std::string block;
+    block += "protocol_version: ";
+    block += std::to_string(io::debug_protocol_contract_version);
+    block += "\ntransport: ";
+    block += std::string{io::debug_transport_policy()};
+    block += "\nsecurity: ";
+    block += std::string{io::debug_security_policy()};
+    block += "\npanel: ";
+    block += std::string{io::debug_side_panel_policy()};
+    block += "\nagent_control: ";
+    block += std::string{io::debug_agent_control_policy()};
+    block += "\ndomains: ";
+    block += std::to_string(io::debug_protocol_domains.size());
+    block += "\ncommands: ";
+    block += std::to_string(io::debug_protocol_commands.size());
+    block += "\nsections: ";
+    block += std::to_string(io::debug_panel_sections.size());
+    block += "\nagent_complete: ";
+    block += io::debug_protocol_is_agent_complete() ? "true" : "false";
+    return block;
+}
+
+static std::string layout_debug_block(
+        phenotype::diag::InputDebugSnapshot const& debug) {
+    auto capabilities = phenotype::native::debug::capabilities();
+    std::string block;
+    block += "hovered_id: ";
+    block += debug_id_text(debug.hovered_id);
+    block += "\nfocused_id: ";
+    block += debug_id_text(debug.focused_id);
+    block += "\npressed_id: ";
+    block += debug_id_text(debug.pressed_id);
+    block += "\nrole: ";
+    block += debug.role;
+    block += "\nfocused_role: ";
+    block += debug.focused_role;
+    block += "\nsemantic_tree: ";
+    block += capabilities.semantic_tree ? "true" : "false";
+    block += "\nplatform_runtime: ";
+    block += capabilities.platform_runtime ? "true" : "false";
+    block += "\nframe_capture: ";
+    block += capabilities.capture_frame_rgba ? "true" : "false";
+    block += "\nwrite_artifact_bundle: ";
+    block += capabilities.write_artifact_bundle ? "true" : "false";
+    block += "\nlayout_hover_highlight: protocol-ready";
+    return block;
+}
+
+static std::string console_log_block() {
+    auto records = phenotype::log::recent_records(6);
+    if (records.empty())
+        return "(no console records yet)";
+
+    std::string block;
+    for (auto const& record : records) {
+        if (!block.empty())
+            block += "\n";
+        block += phenotype::log::severity_text(record.severity);
+        block += " ";
+        block += record.scope_name.empty() ? "phenotype" : record.scope_name;
+        block += ": ";
+        block += record.body.empty() ? "(empty)" : record.body;
+    }
+    return block;
+}
+
+static std::string performance_debug_block() {
+    using namespace phenotype;
+    std::string block;
+    block += "rebuilds: ";
+    block += std::to_string(metrics::inst::rebuilds.total());
+    block += "\ninput_events: ";
+    block += std::to_string(metrics::inst::input_events.total());
+    block += "\nflush_calls: ";
+    block += std::to_string(metrics::inst::flush_calls.total());
+    block += "\nframes_skipped: ";
+    block += std::to_string(metrics::inst::frames_skipped.total());
+    block += "\nmeasure_text_calls: ";
+    block += std::to_string(metrics::inst::measure_text_calls.total());
+    block += "\nmeasure_text_cache_hits: ";
+    block += std::to_string(metrics::inst::measure_text_cache_hits.total());
+    block += "\nlayout_nodes_computed: ";
+    block += std::to_string(metrics::inst::layout_nodes_computed.total());
+    block += "\nlayout_nodes_skipped: ";
+    block += std::to_string(metrics::inst::layout_nodes_skipped.total());
+    block += "\npaint_subtrees_blitted: ";
+    block += std::to_string(metrics::inst::paint_subtrees_blitted.total());
+    block += "\nnative_texture_upload_bytes: ";
+    block += std::to_string(metrics::inst::native_texture_upload_bytes.total());
+    block += "\nnative_buffer_reallocations: ";
+    block += std::to_string(metrics::inst::native_buffer_reallocations.total());
+    return block;
+}
+
+static void render_debug_side_panel(
+        State const& state,
+        phenotype::diag::InputDebugSnapshot const& input_debug) {
+    using namespace phenotype;
+    float panel_height = state.viewport_height > 120
+        ? static_cast<float>(state.viewport_height - 32)
+        : 620.0f;
+    layout::overlay([&] {
+        layout::row([&] {
+            layout::sized_box(380.0f, [&] {
+                layout::sidebar(380.0f, [&] {
+                    widget::text("Debug");
+                    widget::text(std::string("Toggle: ") + debug_panel_shortcut_text());
+                    layout::spacer(8);
+                    layout::scroll_view(panel_height, [&] {
+                        widget::text("Protocol");
+                        layout::spacer(4);
+                        widget::code(debug_protocol_block());
+                        layout::spacer(10);
+                        widget::text("Input");
+                        layout::spacer(4);
+                        widget::code(input_debug_block(input_debug));
+                        layout::spacer(10);
+                        widget::text("Layout");
+                        layout::spacer(4);
+                        widget::code(layout_debug_block(input_debug));
+                        layout::spacer(10);
+                        widget::text("Console");
+                        layout::spacer(4);
+                        widget::code(console_log_block());
+                        layout::spacer(10);
+                        widget::text("Performance");
+                        layout::spacer(4);
+                        widget::code(performance_debug_block());
+                    });
+                });
+            });
+        }, SpaceToken::Md, CrossAxisAlignment::Start, MainAxisAlignment::End);
+    });
+}
+
+static void register_debug_panel_shortcut() {
+#ifndef NDEBUG
+    phenotype::app::key_command<Msg>(
+        static_cast<unsigned int>(phenotype::native::Key::F12),
+        debug_panel_modifier(),
+        ToggleDebugPanel{},
+        phenotype::KeyCommandOptions{
+            .allow_when_input_focused = true,
+            .debug_label = "toggle-debug-panel",
+        });
+#endif
+}
+
+static bool debug_panel_available() {
+#ifdef NDEBUG
+    return false;
+#else
+    return true;
+#endif
 }
 
 static void render_expectation_card(phenotype::str title, phenotype::str body) {
@@ -298,6 +477,7 @@ static void render_paint_command_showcase() {
 void view(State const& state) {
     using namespace phenotype;
     auto input_debug = phenotype::diag::input_debug_snapshot();
+    register_debug_panel_shortcut();
 
     layout::scaffold(
         [] {
@@ -328,11 +508,13 @@ void view(State const& state) {
         layout::card([&] {
             widget::text("Input Debug Panel");
             layout::spacer(6);
-            widget::text("Use this panel to distinguish whether the shared shell received an input, ignored it, handled it, or let a platform-specific hook consume it.");
+            widget::text(std::string("Use this panel to distinguish whether the shared shell received an input, ignored it, handled it, or let a platform-specific hook consume it. In debug builds, ") + debug_panel_shortcut_text() + " opens the side debug panel.");
             layout::spacer(8);
             widget::code(input_debug_block(input_debug));
             layout::spacer(8);
-            widget::text("Manual check: hover a control, click it, drag-select inside a field, try Cmd/Ctrl+A, type to replace the selection, then scroll with both wheel and keyboard and confirm the panel changes immediately.");
+            widget::text(std::string{debug_panel_available()
+                ? "Manual check: open the side panel, hover a control, click it, drag-select inside a field, try Cmd/Ctrl+A, type to replace the selection, then scroll with both wheel and keyboard and confirm the panel changes immediately."
+                : "Manual check: release builds keep the side-panel client disabled; use artifact and CLI observation instead."});
         });
 
         layout::spacer(12);
@@ -777,6 +959,9 @@ void view(State const& state) {
             widget::text("Tab through the controls, type in both fields, drag a partial selection, try Cmd/Ctrl+A, verify replacement and backspace over the selection, inspect both image slots, then scroll and resize the window.");
         }
     );
+
+    if (state.debug_panel_open)
+        render_debug_side_panel(state, input_debug);
 }
 
 // ---- Entry point ----

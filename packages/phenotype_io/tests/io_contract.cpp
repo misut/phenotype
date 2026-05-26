@@ -9,6 +9,7 @@ namespace io = phenotype::io;
 
 int main() {
     assert(io::io_contract_version == 1);
+    assert(io::debug_protocol_contract_version == 1);
 
     assert(io::input_event_kinds.size() == 7);
     assert(io::input_event_kind_name(io::InputEventKind::Pointer) == "pointer");
@@ -75,6 +76,24 @@ int main() {
     assert(io::output_observation_kind_name(io::OutputObservationKind::ArtifactBundle)
            == "artifact_bundle");
 
+    assert(io::debug_protocol_domains.size() == 9);
+    assert(io::debug_protocol_domain_name(io::DebugProtocolDomain::Input)
+           == "input");
+    assert(io::debug_protocol_domain_name(io::DebugProtocolDomain::Layout)
+           == "layout");
+    assert(io::debug_protocol_domain_name(io::DebugProtocolDomain::Performance)
+           == "performance");
+    assert(io::debug_protocol_commands.size() == 15);
+    assert(io::debug_protocol_command_name(io::DebugProtocolCommand::SendInput)
+           == "send_input");
+    assert(io::debug_protocol_command_name(io::DebugProtocolCommand::HighlightNode)
+           == "highlight_node");
+    assert(io::debug_protocol_command_name(io::DebugProtocolCommand::ReplayScript)
+           == "replay_script");
+    assert(io::debug_panel_sections.size() == 7);
+    assert(io::debug_panel_section_name(io::DebugPanelSection::Console)
+           == "console");
+
     io::OutputObservation observation{
         .semantic_tree_present = true,
         .command_stream_present = true,
@@ -128,6 +147,15 @@ int main() {
            != std::string_view::npos);
     assert(io::production_bypass_policy().find("release_adapters")
            != std::string_view::npos);
+    assert(io::debug_transport_policy().find("json_commands")
+           != std::string_view::npos);
+    assert(io::debug_security_policy().find("local_only")
+           != std::string_view::npos);
+    assert(io::debug_side_panel_policy().find("same_debug_protocol")
+           != std::string_view::npos);
+    assert(io::debug_agent_control_policy().find("semantic_targets")
+           != std::string_view::npos);
+    assert(io::debug_protocol_is_agent_complete());
 
     std::puts("PASS: pure phenotype.io contract");
 }

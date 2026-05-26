@@ -89,4 +89,11 @@ int main() {
     assert_direct_material_bound_options(find_command(
         tree,
         {"phenotype", "artifact", "verify-file-explorer"}));
+
+    auto const& debug_contract = find_command(
+        tree,
+        {"phenotype", "debug", "contract"});
+    auto const& json = find_option(debug_contract, "json");
+    auto arity = json_string_at(json, {"arity"});
+    assert(arity && *arity == "none");
 }

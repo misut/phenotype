@@ -87,6 +87,7 @@ The first durable CLI should expose a small command tree with stable JSON:
 | `phenotype package verify-bundle` | Recompute staged bundle resource integrity without the original package root. | new |
 | `phenotype theme contract` | Emit the pure Apple-like default glass theme and macOS/Finder icon-language contract shared by root `Theme`, CLI metadata, and example artifacts. | new |
 | `phenotype io contract` | Emit the pure input-frame and output-observation contract used by CLI/native adapters. | new |
+| `phenotype debug contract` | Emit the versioned live-debug protocol contract shared by CLI agents and the debug side panel. | new |
 | `phenotype drive file-explorer` | Feed deterministic file workflow inputs into the shared desktop/mobile model. | new |
 | `phenotype drive glass-showcase` | Feed deterministic material probe inputs into the shared glass showcase model. | new |
 | `phenotype observe <artifact-or-run>` | Emit semantic tree, material plans, compact executor budget, runtime summaries, pixel-region summaries, and likely failing pass/layer. | new |
@@ -144,6 +145,7 @@ Current commands:
 | `phenotype svg inspect <path>` | implemented | Reads a package or local SVG file at the CLI edge, then parses it through `phenotype_svg_contract` so Linux CI and native developers can see the supported SVG subset, source byte count, viewBox, shape count, unsupported command count, diagnostics, paintability, and renderer-facing `Painter` path without launching a backend. |
 | `phenotype theme contract` | implemented | Emits the pure `phenotype_theme_contract` baseline for the default Apple-like glass theme, including Pretendard typography, Liquid Glass usage boundary, macOS/Finder-style iconography policy, owned/permissive SVG asset policy, grouped-container policy, performance bounds, accessibility fallback policy, unsupported-backend degradation policy, color tokens, radii, typography, and semantic surface roles. |
 | `phenotype io contract` | implemented | Emits the pure `phenotype.io` contract for typed input events, deterministic input scripts, output observation summaries, LLM-debuggable artifact descriptors, edge-effect placement, and release-adapter bypass policy. |
+| `phenotype debug contract` | implemented | Emits the pure live-debug contract for debug-build local-only JSON command/event sessions, semantic-target-first agent control, side-panel protocol reuse, required input/layout/overlay/console/performance/artifact/replay commands, and the desktop panel shortcuts. |
 | `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs or line-based scripts through the `phenotype_cli.file_explorer` module and emits a stable observation JSON with trace, entries including file-type symbol metadata, `entry_symbol_summary`, viewport, view mode, pure Finder chrome/grid metrics including density policy and icon-grid top inset, default glass theme metadata, capabilities, operation receipt, preview excerpt fields, localized labels, package-resource metadata, the keyboard-vs-pointer `input_model` focus contract, and optional expectation results. |
 | `phenotype drive glass-showcase` | implemented | Drives the shared material probe model through the `phenotype_cli.glass_showcase` module from typed CLI inputs or line-based scripts and emits a stable observation JSON with final state, trace, public material kinds, expected material plan count, expected execution-stage budget, expected sample-tap budget, backdrop/inspector/density/viewport state, progress value, the pure `GlassProbeContract`, per-probe material kind/container/pass/kernel/luminance/fallback metadata, and optional expectation results. |
 | `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, passes package-root environment when a manifest exists, validates file explorer `--input`/`--script` through the shared model, and emits a stable JSON launch receipt with build/run output tails, input counts, timeout state, artifact bundle summary, optional `--observe-output` artifact observation, and explicit environment overrides. |
@@ -542,6 +544,11 @@ without a visible window:
   event kinds, replayability rules, output observation kinds, artifact bundle
   predicates, and edge-effect policy strings that CLI and native adapters can
   validate without platform APIs.
+- `phenotype debug contract` is the matching live-debug contract. It pins the
+  command/event vocabulary for launch, attach, snapshot, subscribe, send input,
+  query layout, highlight nodes, read console logs, read performance counters,
+  capture artifacts, and trace/replay before the native endpoint becomes an
+  edge-effect adapter.
 - Output observations include command-buffer summaries, semantic material
   nodes, resolved `MaterialPlan` records, runtime/executor summaries, pixel
   sample regions, fallback reasons, and likely pass/layer suggestions.

@@ -195,6 +195,7 @@ inline Key win32_key(WPARAM key) {
         case VK_HOME: return Key::Home;
         case VK_END: return Key::End;
         case VK_ESCAPE: return Key::Escape;
+        case VK_F12: return Key::F12;
         case 'A': return Key::A;
         case 'D': return Key::D;
         case 'F': return Key::F;
