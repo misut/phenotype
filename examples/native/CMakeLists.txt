@@ -61,6 +61,7 @@ target_sources(phenotype
     ${PHENOTYPE_ROOT}/src/phenotype.native.macos.image.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.native.macos.render.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.native.macos.material.cppm
+    ${PHENOTYPE_ROOT}/src/phenotype.native.macos.commands.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.native.macos.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.native.windows.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.cppm

@@ -1296,6 +1296,7 @@ phenotype (umbrella re-export)
 ├── phenotype.native.macos.image — macOS image atlas cache + loading worker
 ├── phenotype.native.macos.render — macOS Metal instance staging types
 ├── phenotype.native.macos.material — macOS material instance/container execution helpers
+├── phenotype.native.macos.commands — macOS command buffer decode and primitive staging
 ├── phenotype.native.macos — macOS text + Metal renderer
 ├── phenotype.native.windows — Windows text + Direct3D 12 renderer
 └── phenotype.native.stub — shared stub backend for non-macOS native targets
