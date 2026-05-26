@@ -116,7 +116,7 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 | `link(label, href)` | Hyperlink that opens via the host shim — text colour cross-fades on hover |
 | `image(url, width, height)` | Async image; the JS shim or native backend keeps a persistent atlas |
 | `canvas(width, height, paint, on_gesture?)` | Fixed-size leaf for arbitrary 2D drawing via a `Painter` callback |
-| `button<Msg>(label, msg, variant?, disabled?)` / `glass_selection_button` / `glass_outline_row_button` / `glass_menu_item_button` / `glass_table_header_button` / `glass_disclosure_header_button` | Clickable button surfaces that post `msg` on click; background and focus ring fade on hover / focus, with direct Liquid Glass helpers for app-like selection, outline/list rows, popover menu actions, table headers, and disclosure headers |
+| `button<Msg>(label, msg, variant?, disabled?)` / `glass_selection_button` / `glass_outline_row_button` / `glass_menu_item_button` / `glass_dropdown_button` / `glass_table_header_button` / `glass_disclosure_header_button` | Clickable button surfaces that post `msg` on click; background and focus ring fade on hover / focus, with direct Liquid Glass helpers for app-like selection, outline/list rows, popover menu actions, menu-backed dropdowns, table headers, and disclosure headers |
 | `checkbox<Msg>(label, checked, msg)` / `radio<Msg>(label, selected, msg)` | Selection controls with a hover highlight on the row and a halo on focus |
 | `switch_<Msg>(label, on, msg)` | Labelled on/off toggle; the thumb slides and the track cross-fades on flip |
 | `tabs<Msg>(items, selected, on_select, TabsStyleOptions?)` | Material-backed segmented row with a 2 px sliding indicator under the selected tab |
@@ -384,7 +384,7 @@ for the current feature-to-example coverage matrix.
 - [ ] Animation easings beyond linear interpolation (cubic / spring / overshoot) and animated layout values like Column gap / row main_align
 - [ ] `framework_local` Scope seeding — thread `parent_id` into `Scope` construction so siblings in different parent scopes stop colliding at `widget_id_seed = 0`
 - [ ] Accordion body height-clip animation + chevron rotation
-- [ ] More widgets (slider, dropdown, tooltip)
+- [ ] More widgets (slider, tooltip; `widget::glass_dropdown_button` is available)
 - [ ] Linux native renderer / text stack — useful after the Windows path proves out the current platform contracts
 - [ ] Android / iOS
 

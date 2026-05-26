@@ -1564,6 +1564,20 @@ struct GlassMenuItemStyleOptions {
     MaterialSurfaceShape shape = MaterialSurfaceShape::Default;
 };
 
+struct GlassDropdownStyleOptions {
+    MaterialKind button_kind = MaterialKind::Clear;
+    MaterialSurfaceRole button_role = MaterialSurfaceRole::Navigation;
+    MaterialKind menu_item_kind = MaterialKind::Clear;
+    MaterialSurfaceRole menu_item_role = MaterialSurfaceRole::Overlay;
+    bool disabled = false;
+    float button_width = 0.0f;
+    float button_height = -1.0f;
+    float menu_width = 240.0f;
+    float item_height = 30.0f;
+    unsigned int top_padding = 72;
+    char const* semantic_label = "Dropdown Menu";
+};
+
 struct GlassTableHeaderStyleOptions {
     MaterialKind kind = MaterialKind::Clear;
     MaterialSurfaceRole role = MaterialSurfaceRole::Content;
