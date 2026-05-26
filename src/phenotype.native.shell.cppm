@@ -67,6 +67,7 @@ enum class Key : int {
     D         = 68,
     F         = 70,
     N         = 78,
+    F12       = 301,
     Other     = -1,
 };
 
@@ -91,6 +92,7 @@ inline Key key_from_legacy_code(int key) {
         case static_cast<int>(Key::D): return Key::D;
         case static_cast<int>(Key::F): return Key::F;
         case static_cast<int>(Key::N): return Key::N;
+        case static_cast<int>(Key::F12): return Key::F12;
         default: return Key::Other;
     }
 }
@@ -1036,6 +1038,7 @@ inline char const* key_detail_name(Key key, bool shift) {
         case Key::D: return "d";
         case Key::F: return "f";
         case Key::N: return "n";
+        case Key::F12: return "f12";
         case Key::Other: return "key";
     }
     return "key";
@@ -1232,6 +1235,7 @@ inline bool dispatch_key(Key key, KeyAction action, int mods) {
         case Key::D:
         case Key::F:
         case Key::N:
+        case Key::F12:
             if (dispatch_registered_key_command(key, mods, detail))
                 return true;
             ::phenotype::detail::note_input_event(

@@ -13,6 +13,7 @@ export module phenotype.io;
 export namespace phenotype::io {
 
 inline constexpr std::uint32_t io_contract_version = 1;
+inline constexpr std::uint32_t debug_protocol_contract_version = 1;
 
 enum class InputEventKind {
     Pointer,
@@ -180,6 +181,86 @@ struct ArtifactBundleDescriptor {
     OutputObservation observation;
 };
 
+enum class DebugProtocolDomain {
+    Session,
+    Target,
+    Input,
+    Layout,
+    Overlay,
+    Console,
+    Performance,
+    Artifact,
+    TraceReplay,
+};
+
+inline constexpr std::array debug_protocol_domains = {
+    DebugProtocolDomain::Session,
+    DebugProtocolDomain::Target,
+    DebugProtocolDomain::Input,
+    DebugProtocolDomain::Layout,
+    DebugProtocolDomain::Overlay,
+    DebugProtocolDomain::Console,
+    DebugProtocolDomain::Performance,
+    DebugProtocolDomain::Artifact,
+    DebugProtocolDomain::TraceReplay,
+};
+
+enum class DebugProtocolCommand {
+    Launch,
+    Attach,
+    Detach,
+    Snapshot,
+    Subscribe,
+    SendInput,
+    QueryLayout,
+    HighlightNode,
+    SetOverlay,
+    ReadConsole,
+    ReadPerformance,
+    StartTrace,
+    StopTrace,
+    ReplayScript,
+    WriteArtifact,
+};
+
+inline constexpr std::array debug_protocol_commands = {
+    DebugProtocolCommand::Launch,
+    DebugProtocolCommand::Attach,
+    DebugProtocolCommand::Detach,
+    DebugProtocolCommand::Snapshot,
+    DebugProtocolCommand::Subscribe,
+    DebugProtocolCommand::SendInput,
+    DebugProtocolCommand::QueryLayout,
+    DebugProtocolCommand::HighlightNode,
+    DebugProtocolCommand::SetOverlay,
+    DebugProtocolCommand::ReadConsole,
+    DebugProtocolCommand::ReadPerformance,
+    DebugProtocolCommand::StartTrace,
+    DebugProtocolCommand::StopTrace,
+    DebugProtocolCommand::ReplayScript,
+    DebugProtocolCommand::WriteArtifact,
+};
+
+enum class DebugPanelSection {
+    Summary,
+    Elements,
+    Input,
+    Console,
+    Performance,
+    Layout,
+    TraceReplay,
+};
+
+inline constexpr std::array debug_panel_sections = {
+    DebugPanelSection::Summary,
+    DebugPanelSection::Elements,
+    DebugPanelSection::Input,
+    DebugPanelSection::Console,
+    DebugPanelSection::Performance,
+    DebugPanelSection::Layout,
+    DebugPanelSection::TraceReplay,
+};
+
 inline auto input_event_kind_name(InputEventKind kind) noexcept
         -> std::string_view {
     switch (kind) {
@@ -228,6 +309,58 @@ inline auto output_observation_kind_name(OutputObservationKind kind) noexcept
     return "artifact_bundle";
 }
 
+inline auto debug_protocol_domain_name(DebugProtocolDomain domain) noexcept
+        -> std::string_view {
+    switch (domain) {
+    case DebugProtocolDomain::Session:     return "session";
+    case DebugProtocolDomain::Target:      return "target";
+    case DebugProtocolDomain::Input:       return "input";
+    case DebugProtocolDomain::Layout:      return "layout";
+    case DebugProtocolDomain::Overlay:     return "overlay";
+    case DebugProtocolDomain::Console:     return "console";
+    case DebugProtocolDomain::Performance: return "performance";
+    case DebugProtocolDomain::Artifact:    return "artifact";
+    case DebugProtocolDomain::TraceReplay: return "trace_replay";
+    }
+    return "session";
+}
+
+inline auto debug_protocol_command_name(DebugProtocolCommand command) noexcept
+        -> std::string_view {
+    switch (command) {
+    case DebugProtocolCommand::Launch:          return "launch";
+    case DebugProtocolCommand::Attach:          return "attach";
+    case DebugProtocolCommand::Detach:          return "detach";
+    case DebugProtocolCommand::Snapshot:        return "snapshot";
+    case DebugProtocolCommand::Subscribe:       return "subscribe";
+    case DebugProtocolCommand::SendInput:       return "send_input";
+    case DebugProtocolCommand::QueryLayout:     return "query_layout";
+    case DebugProtocolCommand::HighlightNode:   return "highlight_node";
+    case DebugProtocolCommand::SetOverlay:      return "set_overlay";
+    case DebugProtocolCommand::ReadConsole:     return "read_console";
+    case DebugProtocolCommand::ReadPerformance: return "read_performance";
+    case DebugProtocolCommand::StartTrace:      return "start_trace";
+    case DebugProtocolCommand::StopTrace:       return "stop_trace";
+    case DebugProtocolCommand::ReplayScript:    return "replay_script";
+    case DebugProtocolCommand::WriteArtifact:   return "write_artifact";
+    }
+    return "snapshot";
+}
+
+inline auto debug_panel_section_name(DebugPanelSection section) noexcept
+        -> std::string_view {
+    switch (section) {
+    case DebugPanelSection::Summary:     return "summary";
+    case DebugPanelSection::Elements:    return "elements";
+    case DebugPanelSection::Input:       return "input";
+    case DebugPanelSection::Console:     return "console";
+    case DebugPanelSection::Performance: return "performance";
+    case DebugPanelSection::Layout:      return "layout";
+    case DebugPanelSection::TraceReplay: return "trace_replay";
+    }
+    return "summary";
+}
+
 inline auto input_contract_policy() noexcept -> std::string_view {
     return "platform_edge_events_lower_to_typed_input_frames";
 }
@@ -242,6 +375,22 @@ inline auto edge_effect_policy() noexcept -> std::string_view {
 
 inline auto production_bypass_policy() noexcept -> std::string_view {
     return "release_adapters_may_bypass_debug_serialization_but_keep_value_contract";
+}
+
+inline auto debug_transport_policy() noexcept -> std::string_view {
+    return "debug_session_uses_versioned_json_commands_and_events";
+}
+
+inline auto debug_security_policy() noexcept -> std::string_view {
+    return "debug_endpoint_is_debug_build_local_only_and_token_gated";
+}
+
+inline auto debug_side_panel_policy() noexcept -> std::string_view {
+    return "side_panel_is_a_client_of_the_same_debug_protocol_as_cli_agents";
+}
+
+inline auto debug_agent_control_policy() noexcept -> std::string_view {
+    return "agents_use_semantic_targets_first_and_coordinates_when_needed";
 }
 
 inline auto input_frame_event_count(InputFrame const& frame) noexcept
@@ -285,6 +434,18 @@ inline bool artifact_bundle_is_llm_debuggable(
         && bundle.frame_image
         && bundle.platform_runtime_details
         && output_observation_is_llm_debuggable(bundle.observation);
+}
+
+inline bool debug_protocol_is_agent_complete() noexcept {
+    return debug_protocol_domains.size() >= 9
+        && debug_protocol_commands.size() >= 15
+        && debug_panel_sections.size() >= 7
+        && debug_transport_policy().find("json_commands")
+            != std::string_view::npos
+        && debug_security_policy().find("local_only")
+            != std::string_view::npos
+        && debug_agent_control_policy().find("semantic_targets")
+            != std::string_view::npos;
 }
 
 } // namespace phenotype::io

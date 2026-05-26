@@ -11,6 +11,7 @@ import phenotype_cli.command_tree;
 import phenotype_cli.common;
 import phenotype_cli.commands;
 import phenotype_cli.contracts;
+import phenotype_cli.debug;
 import phenotype_cli.doctor;
 import phenotype_cli.file_explorer;
 import phenotype_cli.file_explorer_gate;
@@ -33,6 +34,7 @@ using namespace phenotype_cli::common;
 using namespace phenotype_cli::command_tree;
 using namespace phenotype_cli::commands;
 using namespace phenotype_cli::contracts;
+using namespace phenotype_cli::debug;
 using namespace phenotype_cli::doctor;
 using namespace phenotype_cli::file_explorer;
 using namespace phenotype_cli::file_explorer_gate;
@@ -1041,6 +1043,9 @@ int run(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "io", "contract"})
         return run_io_contract(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "debug", "contract"})
+        return run_debug_contract(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "drive", "file-explorer"})
         return run_drive_file_explorer(*parsed);

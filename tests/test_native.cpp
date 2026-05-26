@@ -74,6 +74,7 @@ static constexpr int LEGACY_KEY_ESCAPE = static_cast<int>(Key::Escape);
 static constexpr int LEGACY_KEY_A = static_cast<int>(Key::A);
 static constexpr int LEGACY_KEY_D = static_cast<int>(Key::D);
 static constexpr int LEGACY_KEY_F = static_cast<int>(Key::F);
+static constexpr int LEGACY_KEY_F12 = static_cast<int>(Key::F12);
 
 static constexpr char kLocalExampleImageAsset[] = "showcase-local.bmp";
 static constexpr char kRemoteExampleImageAsset[] = "showcase.bmp";
@@ -795,6 +796,14 @@ static int select_all_mods() {
 #endif
 }
 
+static int debug_panel_mods() {
+#ifdef __APPLE__
+    return LEGACY_MOD_SUPER;
+#else
+    return LEGACY_MOD_CONTROL;
+#endif
+}
+
 namespace input_regression {
 
 struct ActivateButton {};
@@ -803,6 +812,7 @@ struct SelectChoice { int value; };
 struct TextChanged { std::string text; };
 struct TriggerCommand {};
 struct TriggerInputCommand {};
+struct TriggerDebugCommand {};
 
 using Msg = std::variant<
     ActivateButton,
@@ -810,7 +820,8 @@ using Msg = std::variant<
     SelectChoice,
     TextChanged,
     TriggerCommand,
-    TriggerInputCommand>;
+    TriggerInputCommand,
+    TriggerDebugCommand>;
 
 struct State {
     int button_activations = 0;
@@ -819,6 +830,7 @@ struct State {
     std::string text;
     int command_activations = 0;
     int input_command_activations = 0;
+    int debug_command_activations = 0;
 };
 
 inline State g_observed_state{};
@@ -885,6 +897,8 @@ static void update(State& state, Msg msg) {
         state.command_activations += 1;
     } else if (std::get_if<TriggerInputCommand>(&msg)) {
         state.input_command_activations += 1;
+    } else if (std::get_if<TriggerDebugCommand>(&msg)) {
+        state.debug_command_activations += 1;
     }
     g_observed_state = state;
 }
@@ -926,6 +940,14 @@ static void key_command_view(State const& state) {
             .allow_when_input_focused = true,
             .debug_label = "find",
         });
+    phenotype::app::key_command<Msg>(
+        static_cast<unsigned int>(Key::F12),
+        debug_panel_mods(),
+        TriggerDebugCommand{},
+        phenotype::KeyCommandOptions{
+            .allow_when_input_focused = true,
+            .debug_label = "toggle-debug-panel",
+        });
     phenotype::layout::column([&] {
         phenotype::widget::text_field<Msg>("Type here", state.text, +map_text);
     });
@@ -953,6 +975,16 @@ static bool has_metric(std::string_view event,
             return true;
     }
     return false;
+}
+
+static unsigned int first_text_field_callback_id() {
+    auto const& roles = phenotype::detail::g_app.callback_roles;
+    for (std::size_t i = 0; i < roles.size(); ++i) {
+        if (roles[i] == phenotype::InteractionRole::TextField)
+            return static_cast<unsigned int>(i);
+    }
+    assert(false && "missing text field callback");
+    return invalid_callback_id;
 }
 
 struct Harness {
@@ -997,8 +1029,8 @@ struct KeyCommandHarness {
         reset_core_state();
         host.platform = &platform;
         phenotype::native::run<State, Msg>(host, key_command_view, update);
-        assert(phenotype::detail::g_app.key_commands.size() == 2);
-        assert(phenotype::detail::g_app.callbacks.size() == 3);
+        assert(phenotype::detail::g_app.key_commands.size() == 3);
+        assert(phenotype::detail::g_app.callbacks.size() == 4);
     }
 
     ~KeyCommandHarness() {
@@ -1347,7 +1379,7 @@ static void test_shell_key_commands_respect_input_focus_policy() {
     assert(debug.role == "command");
     assert(has_metric("key", "d", "handled", "command"));
 
-    phenotype::detail::set_focus_id(2, "test", "setup");
+    phenotype::detail::set_focus_id(first_text_field_callback_id(), "test", "setup");
     assert(!phenotype::native::detail::dispatch_key(
         LEGACY_KEY_D,
         LEGACY_PRESS,
@@ -1361,6 +1393,16 @@ static void test_shell_key_commands_respect_input_focus_policy() {
     assert(g_observed_state.input_command_activations == 1);
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.detail == "f");
+    assert(debug.result == "handled");
+    assert(debug.role == "command");
+
+    assert(phenotype::native::detail::dispatch_key(
+        LEGACY_KEY_F12,
+        LEGACY_PRESS,
+        debug_panel_mods()));
+    assert(g_observed_state.debug_command_activations == 1);
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.detail == "f12");
     assert(debug.result == "handled");
     assert(debug.role == "command");
     std::puts("PASS: shared shell key commands respect input focus policy");

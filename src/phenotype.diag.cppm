@@ -105,6 +105,21 @@ namespace detail {
 inline Severity current_level() noexcept { return detail::g_level; }
 inline void set_level(Severity s) noexcept { detail::g_level = s; }
 
+inline std::vector<Record> recent_records(std::size_t limit = detail::LOG_RING_CAPACITY) {
+    std::vector<Record> out;
+    auto& r = detail::ring();
+    auto const count = limit < r.count ? limit : r.count;
+    out.reserve(count);
+    auto const start = r.count - count;
+    for (std::size_t i = start; i < r.count; ++i) {
+        std::size_t idx =
+            (r.head + detail::LOG_RING_CAPACITY - r.count + i)
+            % detail::LOG_RING_CAPACITY;
+        out.push_back(r.entries[idx]);
+    }
+    return out;
+}
+
 // std::format-based convenience templates. Each level checks the
 // runtime threshold *before* doing any formatting work, so disabled
 // log calls are O(1).

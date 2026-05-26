@@ -161,6 +161,7 @@ inline Key appkit_key(unsigned short key_code) {
         case 53: return Key::Escape;
         case 45: return Key::N;
         case 76: return Key::KpEnter;
+        case 111: return Key::F12;
         case 115: return Key::Home;
         case 116: return Key::PageUp;
         case 117: return Key::Delete;
