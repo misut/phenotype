@@ -24,19 +24,12 @@ export module phenotype.native.shell.macos;
 
 #if defined(__APPLE__) && !defined(__wasi__) && !defined(__ANDROID__)
 export import phenotype.native.shell;
+import phenotype.native.macos.objc;
 import phenotype.native.platform;
 import phenotype.state;
 
 export namespace phenotype::native {
 namespace detail {
-
-template<typename R, typename... Args>
-inline R objc_send(id object, SEL selector, Args... args) {
-    return reinterpret_cast<R (*)(id, SEL, Args...)>(objc_msgSend)(
-        object,
-        selector,
-        args...);
-}
 
 inline id class_id(char const* name) {
     return reinterpret_cast<id>(objc_getClass(name));
