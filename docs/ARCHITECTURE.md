@@ -1292,6 +1292,7 @@ phenotype (umbrella re-export)
 ├── phenotype.native.shell.windows — Win32 event loop driver
 ├── phenotype.native.platform — shared native capability and surface contracts
 ├── phenotype.native.macos.objc — macOS ObjC selector/message bridge
+├── phenotype.native.macos.text — macOS CoreText font cache + text atlas
 ├── phenotype.native.macos — macOS text + Metal renderer
 ├── phenotype.native.windows — Windows text + Direct3D 12 renderer
 └── phenotype.native.stub — shared stub backend for non-macOS native targets
