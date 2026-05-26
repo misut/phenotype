@@ -5607,6 +5607,113 @@ inline void glass_prominent_button(str label,
 }
 
 template<typename Msg>
+inline void glass_selection_button(str label,
+                                   Msg msg,
+                                   GlassSelectionStyleOptions options = {}) {
+    button(
+        label,
+        std::move(msg),
+        glass_selection_button_style(options));
+}
+
+template<typename Msg>
+inline void glass_selection_button(str label,
+                                   Msg msg,
+                                   layout::GlassEffectStyle glass,
+                                   GlassSelectionStyleOptions options = {}) {
+    button(
+        label,
+        std::move(msg),
+        glass_selection_button_style(glass, options));
+}
+
+template<typename Msg>
+inline void glass_outline_row_button(str label,
+                                     Msg msg,
+                                     GlassOutlineRowStyleOptions options = {}) {
+    button(
+        label,
+        std::move(msg),
+        glass_outline_row_button_style(options));
+}
+
+template<typename Msg>
+inline void glass_outline_row_button(str label,
+                                     Msg msg,
+                                     layout::GlassEffectStyle glass,
+                                     GlassOutlineRowStyleOptions options = {}) {
+    button(
+        label,
+        std::move(msg),
+        glass_outline_row_button_style(glass, options));
+}
+
+template<typename Msg>
+inline void glass_menu_item_button(str label,
+                                   Msg msg,
+                                   GlassMenuItemStyleOptions options = {}) {
+    button(
+        label,
+        std::move(msg),
+        glass_menu_item_button_style(options));
+}
+
+template<typename Msg>
+inline void glass_menu_item_button(str label,
+                                   Msg msg,
+                                   layout::GlassEffectStyle glass,
+                                   GlassMenuItemStyleOptions options = {}) {
+    button(
+        label,
+        std::move(msg),
+        glass_menu_item_button_style(glass, options));
+}
+
+template<typename Msg>
+inline void glass_table_header_button(str label,
+                                      Msg msg,
+                                      GlassTableHeaderStyleOptions options = {}) {
+    button(
+        label,
+        std::move(msg),
+        glass_table_header_button_style(options));
+}
+
+template<typename Msg>
+inline void glass_table_header_button(str label,
+                                      Msg msg,
+                                      layout::GlassEffectStyle glass,
+                                      GlassTableHeaderStyleOptions options = {}) {
+    button(
+        label,
+        std::move(msg),
+        glass_table_header_button_style(glass, options));
+}
+
+template<typename Msg>
+inline void glass_disclosure_header_button(
+        str label,
+        Msg msg,
+        GlassDisclosureStyleOptions options = {}) {
+    button(
+        label,
+        std::move(msg),
+        glass_disclosure_header_style(options));
+}
+
+template<typename Msg>
+inline void glass_disclosure_header_button(
+        str label,
+        Msg msg,
+        layout::GlassEffectStyle glass,
+        GlassDisclosureStyleOptions options = {}) {
+    button(
+        label,
+        std::move(msg),
+        glass_disclosure_header_style(glass, options));
+}
+
+template<typename Msg>
 inline void glass_text_field(str hint,
                              std::string const& current,
                              Msg(*mapper)(std::string),
