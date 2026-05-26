@@ -6,7 +6,7 @@ phenotype = **platform-agnostic core** (C++23 modules) + **platform backends**.
 
 The core handles widgets, layout, state management, vDOM diff, and draw-command emission. It knows nothing about windows, GPUs, or font files — those are provided by the backend via a thin host interface.
 
-- **Core modules**: types, material, io, theme_contract, state, layout, widget.glass, paint, commands, diag, theme_json
+- **Core modules**: types, material.types, material, io, theme_contract, state, layout, widget.glass, paint, commands, diag, theme_json
 - **Backend contract**: `phenotype_host.h` (5 host functions) + `phenotype.commands` (typed draw commands)
 - **Current backends**: WASM+JS (production), macOS native (AppKit shell + CoreText + Metal), Windows native (Win32 shell + DirectWrite + Direct3D 12), Linux stub native backend
 - **Planned backends**: platform-specific native renderers/text systems behind the same shell + command-buffer contract
@@ -1275,6 +1275,7 @@ phenotype (umbrella re-export)
 ├── phenotype.icons       — audited SVG icon catalog
 ├── phenotype.io          — pure input frame and output observation contracts
 ├── phenotype.theme_contract — pure Apple-like glass theme and preference resolver metadata
+├── phenotype.material.types — pure MaterialPlan, request, policy, and descriptor contracts
 ├── phenotype.state       — Arena, AppState, Scope, InputHandler, message queue
 ├── phenotype.diag        — OTel-shaped Counter, Gauge, Histogram, log ring, JSON snapshot
 ├── phenotype.layout      — flexbox engine, measure_text cache, vDOM diff
