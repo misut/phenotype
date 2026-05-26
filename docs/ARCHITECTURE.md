@@ -1294,6 +1294,7 @@ phenotype (umbrella re-export)
 ├── phenotype.native.macos.objc — macOS ObjC selector/message bridge
 ├── phenotype.native.macos.text — macOS CoreText font cache + text atlas
 ├── phenotype.native.macos.image — macOS image atlas cache + loading worker
+├── phenotype.native.macos.render — macOS Metal instance staging types
 ├── phenotype.native.macos — macOS text + Metal renderer
 ├── phenotype.native.windows — Windows text + Direct3D 12 renderer
 └── phenotype.native.stub — shared stub backend for non-macOS native targets
