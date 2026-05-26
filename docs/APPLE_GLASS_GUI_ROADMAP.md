@@ -648,9 +648,10 @@ requiring a backend policy branch.
 `layout::sheet`, `layout::inspector_panel`, and `layout::command_palette` now
 cover overlay panels with typed glass presets; `layout::dialog` uses the sheet
 preset instead of a raw painted card.
-`widget::glass_menu_item_button_style` and
-`widget::glass_table_header_button_style` cover transient overlay actions and
-content-layer table headers without moving those policies into a backend.
+`widget::glass_menu_item_button_style`,
+`widget::glass_dropdown_button`, and `widget::glass_table_header_button_style`
+cover transient overlay actions, menu-backed selection, and content-layer table
+headers without moving those policies into a backend.
 
 ### CLI and packaging direction
 
@@ -996,12 +997,12 @@ Current seed:
 
 The initial G0-G4 path is now landed, and segmented controls/popovers/tooltips/
 context menus/sheets/inspectors/command palettes/search fields/selected rows/
-split buttons/outline rows/menu items/table headers/disclosure rows now use the
-first-class material helper path. The next useful PR should avoid another
+split buttons/outline rows/menu items/dropdowns/table headers/disclosure rows now
+use the first-class material helper path. The next useful PR should avoid another
 schema-only increment unless a real failure appears. Recommended directions:
 
-- expand first-class material-aware controls into richer scroll/list selection
-  and transient overlay states;
+- expand first-class material-aware controls into richer scroll/list selection,
+  slider, and tooltip-specific interaction states;
 - tighten macOS material executor budgets after collecting a small sample of
   local and CI timing/copy values;
 - add Android CI emulator wiring if runner capacity and cost are acceptable;

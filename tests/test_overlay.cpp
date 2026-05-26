@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -51,6 +52,27 @@ NodeHandle build(View&& view) {
     Scope::set_current(nullptr);
     detail::prune_local_store();
     return root_h;
+}
+
+LayoutNode const* find_text(NodeHandle h, char const* text) {
+    auto const& node = detail::node_at(h);
+    if (node.text.compare(text) == 0)
+        return &node;
+    for (auto child : node.children) {
+        if (auto const* found = find_text(child, text))
+            return found;
+    }
+    return nullptr;
+}
+
+enum class DropdownMsg { Icon, List, Column };
+
+DropdownMsg dropdown_pick(std::size_t index) {
+    if (index == 1)
+        return DropdownMsg::List;
+    if (index == 2)
+        return DropdownMsg::Column;
+    return DropdownMsg::Icon;
 }
 
 }  // namespace
@@ -165,11 +187,92 @@ void test_overlay_focusables_collected() {
     std::puts("PASS: overlay focusables collected for Tab navigation");
 }
 
+void test_glass_dropdown_button_opens_context_menu() {
+    detail::msg_queue().clear();
+    std::vector<str> items;
+    items.emplace_back("Icon", 4u);
+    items.emplace_back("List", 4u);
+    items.emplace_back("Column", 6u);
+    GlassDropdownStyleOptions options;
+    options.menu_width = 180.0f;
+    options.item_height = 32.0f;
+    options.top_padding = 24;
+
+    auto render = [&] {
+        return build([&] {
+            widget::glass_dropdown_button<DropdownMsg>(
+                "View",
+                items,
+                0,
+                dropdown_pick,
+                options);
+        });
+    };
+
+    auto root_h = render();
+    assert(detail::g_app.overlays.empty());
+    auto const& closed_root = detail::node_at(root_h);
+    assert(closed_root.children.size() == 1);
+    auto const& closed_button = detail::node_at(closed_root.children[0]);
+    assert(closed_button.text.compare("View: Icon") == 0);
+    assert(closed_button.material.kind == MaterialKind::Clear);
+    assert(closed_button.material.role == MaterialSurfaceRole::Navigation);
+    assert(detail::g_app.callbacks.size() == 1);
+
+    detail::g_app.callbacks[closed_button.callback_id]();
+
+    root_h = render();
+    assert(detail::g_app.overlays.size() == 1);
+    assert(detail::g_app.callbacks.size() == items.size() + 1);
+    auto const* icon = find_text(detail::g_app.overlays[0], "Icon");
+    auto const* list = find_text(detail::g_app.overlays[0], "List");
+    assert(icon != nullptr);
+    assert(list != nullptr);
+    assert(icon->material.kind == MaterialKind::Thin);
+    assert(icon->material.role == MaterialSurfaceRole::Overlay);
+    assert(list->material.kind == MaterialKind::Clear);
+    assert(list->material.role == MaterialSurfaceRole::Overlay);
+
+    detail::g_app.callbacks[2]();
+    auto messages = detail::drain<DropdownMsg>();
+    assert(messages.size() == 1);
+    assert(messages[0] == DropdownMsg::List);
+
+    render();
+    assert(detail::g_app.overlays.empty());
+    std::puts("PASS: glass dropdown opens a material context menu");
+}
+
+void test_glass_dropdown_button_accepts_effect_style() {
+    std::vector<str> items;
+    items.emplace_back("Icon", 4u);
+    items.emplace_back("List", 4u);
+    auto root_h = build([&] {
+        widget::glass_dropdown_button<DropdownMsg>(
+            "View",
+            items,
+            1,
+            dropdown_pick,
+            layout::glass_regular(),
+            GlassDropdownStyleOptions{.button_role = MaterialSurfaceRole::Toolbar});
+    });
+
+    auto const& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    auto const& button = detail::node_at(root.children[0]);
+    assert(button.text.compare("View: List") == 0);
+    assert(button.material.kind == MaterialKind::Regular);
+    assert(button.material.role == MaterialSurfaceRole::Toolbar);
+    std::puts("PASS: glass dropdown accepts effect style");
+}
+
 int main() {
     test_overlay_registers_off_main_tree();
     test_overlay_paints_on_top_of_main_tree();
     test_overlay_cleared_between_rebuilds();
     test_overlay_focusables_collected();
+    test_glass_dropdown_button_opens_context_menu();
+    test_glass_dropdown_button_accepts_effect_style();
     std::puts("\nAll overlay tests passed.");
     return 0;
 }

@@ -933,8 +933,11 @@ inline TextFieldStyleOptions glass_text_field_style(
     return style;
 }
 
-template<typename Msg>
-inline void button(str label, Msg msg, ButtonStyleOptions options) {
+namespace _impl {
+
+inline void action_button(str label,
+                          ButtonStyleOptions options,
+                          std::function<void()> callback) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     auto const& t = detail::g_app.theme;
@@ -1057,14 +1060,21 @@ inline void button(str label, Msg msg, ButtonStyleOptions options) {
         is_focused);
     node.cursor_type = 1;
 
-    detail::g_app.callbacks.push_back([msg = std::move(msg)] {
-        detail::post<Msg>(msg);
-        detail::trigger_rebuild();
-    });
+    detail::g_app.callbacks.push_back(std::move(callback));
     detail::g_app.callback_roles.push_back(InteractionRole::Button);
     node.callback_id = id;
 
     detail::attach_to_scope(h);
+}
+
+} // namespace _impl
+
+template<typename Msg>
+inline void button(str label, Msg msg, ButtonStyleOptions options) {
+    _impl::action_button(label, options, [msg = std::move(msg)] {
+        detail::post<Msg>(msg);
+        detail::trigger_rebuild();
+    });
 }
 
 template<typename Msg>
@@ -5667,6 +5677,181 @@ inline void glass_menu_item_button(str label,
         label,
         std::move(msg),
         glass_menu_item_button_style(glass, options));
+}
+
+namespace _impl {
+
+inline std::string dropdown_button_label(str label,
+                                         std::vector<str> const& items,
+                                         std::size_t selected) {
+    std::string display(label.data, label.len);
+    if (selected < items.size() && items[selected].len > 0) {
+        if (!display.empty())
+            display += ": ";
+        display.append(items[selected].data, items[selected].len);
+    }
+    return display;
+}
+
+inline GlassControlStyleOptions dropdown_button_options(
+        GlassDropdownStyleOptions const& options,
+        bool open,
+        bool disabled) {
+    return GlassControlStyleOptions{
+        .kind = options.button_kind,
+        .role = options.button_role,
+        .selected = open,
+        .disabled = disabled,
+        .width = options.button_width,
+        .height = options.button_height,
+        .text_align = TextAlign::Start};
+}
+
+inline ButtonStyleOptions dropdown_button_style(
+        GlassDropdownStyleOptions const& options,
+        bool open,
+        bool disabled) {
+    return glass_control_button_style(
+        dropdown_button_options(options, open, disabled));
+}
+
+inline ButtonStyleOptions dropdown_button_style(
+        layout::GlassEffectStyle glass,
+        GlassDropdownStyleOptions const& options,
+        bool open,
+        bool disabled) {
+    return glass_control_button_style(
+        glass,
+        dropdown_button_options(options, open, disabled));
+}
+
+inline ButtonStyleOptions dropdown_menu_item_style(
+        GlassDropdownStyleOptions const& options,
+        bool selected) {
+    if (selected) {
+        return glass_selection_button_style(GlassSelectionStyleOptions{
+            .role = options.menu_item_role,
+            .selected = true,
+            .width = options.menu_width,
+            .height = options.item_height,
+            .text_align = TextAlign::Start});
+    }
+
+    auto style = glass_menu_item_button_style(GlassMenuItemStyleOptions{
+        .kind = options.menu_item_kind,
+        .role = options.menu_item_role,
+        .width = options.menu_width,
+        .height = options.item_height});
+    style.text_align = TextAlign::Start;
+    return style;
+}
+
+inline ButtonStyleOptions dropdown_menu_item_style(
+        layout::GlassEffectStyle glass,
+        GlassDropdownStyleOptions const& options,
+        bool selected) {
+    if (selected) {
+        return glass_selection_button_style(
+            glass,
+            GlassSelectionStyleOptions{
+                .role = options.menu_item_role,
+                .selected = true,
+                .width = options.menu_width,
+                .height = options.item_height,
+                .text_align = TextAlign::Start});
+    }
+
+    auto style = glass_menu_item_button_style(
+        glass,
+        GlassMenuItemStyleOptions{
+            .kind = options.menu_item_kind,
+            .role = options.menu_item_role,
+            .width = options.menu_width,
+            .height = options.item_height});
+    style.text_align = TextAlign::Start;
+    return style;
+}
+
+template<typename Msg, typename ButtonStyle, typename MenuItemStyle>
+inline void glass_dropdown_button_impl(str label,
+                                       std::vector<str> const& items,
+                                       std::size_t selected,
+                                       Msg (*on_select)(std::size_t),
+                                       GlassDropdownStyleOptions options,
+                                       ButtonStyle&& button_style,
+                                       MenuItemStyle&& menu_item_style) {
+    auto& open = framework_local<bool>(false);
+    auto* open_ptr = &open;
+    bool const disabled = options.disabled || items.empty();
+
+    auto const display = dropdown_button_label(label, items, selected);
+    action_button(
+        str(display),
+        button_style(open, disabled),
+        [open_ptr] {
+            *open_ptr = !*open_ptr;
+            detail::trigger_rebuild();
+        });
+
+    if (!open || disabled || on_select == nullptr)
+        return;
+
+    layout::context_menu_overlay([&] {
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            auto const item_label = std::string(items[i].data, items[i].len);
+            action_button(
+                str(item_label),
+                menu_item_style(i == selected),
+                [open_ptr, on_select, idx = i] {
+                    *open_ptr = false;
+                    detail::post<Msg>(on_select(idx));
+                    detail::trigger_rebuild();
+                });
+        }
+    }, options.menu_width, options.top_padding, options.semantic_label);
+}
+
+} // namespace _impl
+
+template<typename Msg>
+inline void glass_dropdown_button(str label,
+                                  std::vector<str> const& items,
+                                  std::size_t selected,
+                                  Msg (*on_select)(std::size_t),
+                                  GlassDropdownStyleOptions options = {}) {
+    _impl::glass_dropdown_button_impl<Msg>(
+        label,
+        items,
+        selected,
+        on_select,
+        options,
+        [&](bool open, bool disabled) {
+            return _impl::dropdown_button_style(options, open, disabled);
+        },
+        [&](bool is_selected) {
+            return _impl::dropdown_menu_item_style(options, is_selected);
+        });
+}
+
+template<typename Msg>
+inline void glass_dropdown_button(str label,
+                                  std::vector<str> const& items,
+                                  std::size_t selected,
+                                  Msg (*on_select)(std::size_t),
+                                  layout::GlassEffectStyle glass,
+                                  GlassDropdownStyleOptions options = {}) {
+    _impl::glass_dropdown_button_impl<Msg>(
+        label,
+        items,
+        selected,
+        on_select,
+        options,
+        [&](bool open, bool disabled) {
+            return _impl::dropdown_button_style(glass, options, open, disabled);
+        },
+        [&](bool is_selected) {
+            return _impl::dropdown_menu_item_style(glass, options, is_selected);
+        });
 }
 
 template<typename Msg>
