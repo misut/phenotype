@@ -2540,6 +2540,12 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
             + 0.10f * plan.glass_surface_cohesion.surface_response,
         0.0f,
         1.0f);
+    inst.glass_environment[0] = std::clamp(
+        inst.glass_environment[0]
+            + 0.36f * plan.glass_ambient_reflection.reflection_gain
+            + 0.08f * plan.glass_ambient_reflection.sheen_coherence,
+        0.0f,
+        1.0f);
     inst.glass_environment[1] = std::clamp(
         inst.glass_environment[1]
             + 0.12f * plan.glass_substrate_adhesion.contact_strength
@@ -2554,12 +2560,53 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
             - 0.040f * plan.glass_transmission.volume_absorption,
         0.0f,
         1.0f);
+    inst.glass_environment[1] = std::clamp(
+        inst.glass_environment[1]
+            + 0.28f * plan.glass_ambient_reflection.color_bleed,
+        0.0f,
+        1.0f);
+    inst.glass_environment[2] = std::clamp(
+        0.5f
+            + (inst.glass_environment[2] - 0.5f)
+                * (1.0f
+                   + 0.24f
+                       * plan.glass_ambient_reflection.luma_polarization)
+            + 0.05f * plan.glass_ambient_reflection.sheen_coherence,
+        0.0f,
+        1.0f);
+    inst.glass_environment[3] = std::clamp(
+        inst.glass_environment[3]
+            + 0.24f * plan.glass_ambient_reflection.reflection_gain
+            - 0.06f * plan.glass_ambient_reflection.luma_polarization,
+        0.0f,
+        1.0f);
+    inst.clear_glass[3] = std::clamp(
+        inst.clear_glass[3]
+            + 0.18f * plan.glass_ambient_reflection.sheen_coherence,
+        0.0f,
+        1.0f);
     inst.lighting[2] = std::clamp(
         inst.lighting[2]
             + 0.040f * plan.glass_substrate_adhesion.contact_strength
             + 0.030f * plan.glass_substrate_adhesion.refraction_crawl,
         0.0f,
         0.50f);
+    inst.lighting[2] = std::clamp(
+        inst.lighting[2]
+            + 0.060f * plan.glass_ambient_reflection.reflection_gain
+            + 0.040f * plan.glass_ambient_reflection.sheen_coherence,
+        0.0f,
+        0.54f);
+    inst.edge_optics[1] = std::clamp(
+        inst.edge_optics[1]
+            + 0.040f * plan.glass_ambient_reflection.reflection_gain,
+        0.0f,
+        0.95f);
+    inst.spectral_tint[3] = std::clamp(
+        inst.spectral_tint[3]
+            + 0.025f * plan.glass_ambient_reflection.color_bleed,
+        0.0f,
+        0.34f);
     inst.thickness[1] = std::clamp(
         inst.thickness[1]
             + 0.080f * plan.glass_depth.parallax_gain

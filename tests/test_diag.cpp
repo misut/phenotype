@@ -1959,8 +1959,13 @@ int main() {
     std::printf("PASS: material container semantic debug fields\n");
     test_overlay_semantic_debug_nodes_are_screen_fixed();
     std::printf("PASS: overlay semantic debug nodes stay screen fixed\n");
+#ifndef __wasi__
     test_material_runtime_record_json_contract();
     std::printf("PASS: material runtime record JSON contract\n");
+#else
+    std::printf(
+        "SKIP: material runtime record JSON contract under WASI\n");
+#endif
 #ifdef __wasi__
     test_wasi_debug_artifact_bundle_contract();
     std::printf("PASS: WASI debug artifact bundle contract\n");

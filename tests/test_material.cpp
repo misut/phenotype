@@ -83,7 +83,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 85);
+    assert(material_plan_contract_version == 86);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -311,6 +311,27 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.glass_substrate_adhesion.contact_shadow < 0.22f);
     assert(plan.glass_substrate_adhesion.refraction_crawl > 0.04f);
     assert(plan.glass_substrate_adhesion.refraction_crawl < 0.20f);
+    assert(plan.glass_ambient_reflection.active);
+    assert(plan.glass_ambient_reflection.environment_driven);
+    assert(plan.glass_ambient_reflection.transmission_driven);
+    assert(plan.glass_ambient_reflection.substrate_driven);
+    assert(plan.glass_ambient_reflection.surface_driven);
+    assert(plan.glass_ambient_reflection.lighting_driven);
+    assert(!plan.glass_ambient_reflection.interaction_driven);
+    assert(!plan.glass_ambient_reflection.reduced_motion_suppressed);
+    assert(plan.glass_ambient_reflection.bounded);
+    assert(std::string_view(plan.glass_ambient_reflection.model)
+        == "adaptive-glass-ambient-reflection");
+    assert(std::string_view(plan.glass_ambient_reflection.source)
+        == "environment-transmission-substrate-ambient-reflection");
+    assert(plan.glass_ambient_reflection.reflection_gain > 0.10f);
+    assert(plan.glass_ambient_reflection.reflection_gain < 0.34f);
+    assert(plan.glass_ambient_reflection.color_bleed > 0.06f);
+    assert(plan.glass_ambient_reflection.color_bleed < 0.24f);
+    assert(plan.glass_ambient_reflection.luma_polarization > 0.04f);
+    assert(plan.glass_ambient_reflection.luma_polarization < 0.22f);
+    assert(plan.glass_ambient_reflection.sheen_coherence > 0.08f);
+    assert(plan.glass_ambient_reflection.sheen_coherence < 0.36f);
     assert(plan.glass_thickness.active);
     assert(plan.glass_thickness.size_driven);
     assert(!plan.glass_thickness.transition_driven);
@@ -474,6 +495,9 @@ void test_sampled_backdrop_access_contract() {
     assert(std::string_view(
                plan.optical_composition.glass_substrate_adhesion_source)
         == "surface-transmission-depth-substrate-adhesion");
+    assert(std::string_view(
+               plan.optical_composition.glass_ambient_reflection_source)
+        == "environment-transmission-substrate-ambient-reflection");
     assert(std::string_view(plan.optical_composition.glass_thickness_source)
         == "size-adaptive-thickness-lensing");
     assert(std::string_view(plan.optical_composition.glass_dispersion_source)
@@ -515,6 +539,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_composition.glass_transmission_required);
     assert(plan.optical_composition.glass_surface_cohesion_required);
     assert(plan.optical_composition.glass_substrate_adhesion_required);
+    assert(plan.optical_composition.glass_ambient_reflection_required);
     assert(plan.optical_composition.glass_thickness_required);
     assert(plan.optical_composition.glass_dispersion_required);
     assert(plan.optical_composition.glass_stabilization_required);
@@ -609,6 +634,14 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_substrate_adhesion.contact_shadow);
     assert(plan.optical_composition.glass_substrate_refraction
            == plan.glass_substrate_adhesion.refraction_crawl);
+    assert(plan.optical_composition.glass_ambient_reflection_gain
+           == plan.glass_ambient_reflection.reflection_gain);
+    assert(plan.optical_composition.glass_ambient_color_bleed
+           == plan.glass_ambient_reflection.color_bleed);
+    assert(plan.optical_composition.glass_ambient_luma_polarization
+           == plan.glass_ambient_reflection.luma_polarization);
+    assert(plan.optical_composition.glass_ambient_sheen_coherence
+           == plan.glass_ambient_reflection.sheen_coherence);
     assert(plan.optical_composition.glass_thickness
            == plan.glass_thickness.thickness);
     assert(plan.optical_composition.glass_lensing_gain
@@ -668,6 +701,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.optical_response.glass_transmission_active);
     assert(plan.optical_response.glass_surface_cohesion_active);
     assert(plan.optical_response.glass_substrate_adhesion_active);
+    assert(plan.optical_response.glass_ambient_reflection_active);
     assert(plan.optical_response.glass_thickness_active);
     assert(plan.optical_response.glass_dispersion_active);
     assert(plan.optical_response.glass_stabilization_active);
@@ -777,6 +811,17 @@ void test_sampled_backdrop_access_contract() {
            == plan.glass_substrate_adhesion.contact_shadow);
     assert(plan.execution_stages[2].optics.glass_substrate_refraction
            == plan.glass_substrate_adhesion.refraction_crawl);
+    assert(std::string_view(
+               plan.execution_stages[2].optics.glass_ambient_reflection_model)
+        == "adaptive-glass-ambient-reflection");
+    assert(plan.execution_stages[2].optics.glass_ambient_reflection_gain
+           == plan.glass_ambient_reflection.reflection_gain);
+    assert(plan.execution_stages[2].optics.glass_ambient_color_bleed
+           == plan.glass_ambient_reflection.color_bleed);
+    assert(plan.execution_stages[2].optics.glass_ambient_luma_polarization
+           == plan.glass_ambient_reflection.luma_polarization);
+    assert(plan.execution_stages[2].optics.glass_ambient_sheen_coherence
+           == plan.glass_ambient_reflection.sheen_coherence);
     assert(std::string_view(plan.execution_stages[2].optics.glass_thickness_model)
         == "adaptive-glass-thickness");
     assert(plan.execution_stages[2].optics.glass_thickness
