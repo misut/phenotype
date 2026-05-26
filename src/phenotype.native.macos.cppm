@@ -2504,10 +2504,60 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
             + 0.16f * plan.glass_substrate_adhesion.contact_shadow,
         0.0f,
         1.0f);
+    inst.edge_optics[0] = std::clamp(
+        inst.edge_optics[0]
+            + 2.40f * plan.glass_substrate_adhesion.contact_strength
+            + 1.20f * plan.glass_substrate_adhesion.settle_depth,
+        0.0f,
+        18.0f);
+    inst.edge_optics[1] = std::clamp(
+        inst.edge_optics[1]
+            + 0.055f * plan.glass_substrate_adhesion.contact_strength
+            + 0.040f * plan.glass_substrate_adhesion.refraction_crawl,
+        0.0f,
+        0.95f);
+    inst.edge_optics[2] = std::clamp(
+        inst.edge_optics[2]
+            + 0.070f * plan.glass_substrate_adhesion.contact_shadow
+            + 0.035f * plan.glass_substrate_adhesion.settle_depth,
+        0.0f,
+        0.84f);
+    inst.edge_optics[3] = std::clamp(
+        inst.edge_optics[3]
+            + 0.018f * plan.glass_substrate_adhesion.refraction_crawl
+            + 0.012f * plan.glass_surface_cohesion.edge_adhesion,
+        0.0f,
+        0.20f);
+    inst.clear_glass[3] = std::clamp(
+        inst.clear_glass[3]
+            + 0.24f * plan.glass_substrate_adhesion.contact_strength
+            + 0.12f * plan.glass_surface_cohesion.luma_stability,
+        0.0f,
+        1.0f);
+    inst.glass_environment[0] = std::clamp(
+        inst.glass_environment[0]
+            + 0.16f * plan.glass_substrate_adhesion.contact_strength
+            + 0.10f * plan.glass_surface_cohesion.surface_response,
+        0.0f,
+        1.0f);
     inst.glass_environment[0] = std::clamp(
         inst.glass_environment[0]
             + 0.36f * plan.glass_ambient_reflection.reflection_gain
             + 0.08f * plan.glass_ambient_reflection.sheen_coherence,
+        0.0f,
+        1.0f);
+    inst.glass_environment[1] = std::clamp(
+        inst.glass_environment[1]
+            + 0.12f * plan.glass_substrate_adhesion.contact_strength
+            + 0.10f * plan.glass_surface_cohesion.surface_response
+            + 0.08f * plan.glass_transmission.subsurface_scatter,
+        0.0f,
+        1.0f);
+    inst.glass_environment[2] = std::clamp(
+        inst.glass_environment[2]
+            + 0.060f * plan.glass_surface_cohesion.luma_stability
+            + 0.040f * plan.glass_substrate_adhesion.contact_shadow
+            - 0.040f * plan.glass_transmission.volume_absorption,
         0.0f,
         1.0f);
     inst.glass_environment[1] = std::clamp(
@@ -2535,6 +2585,12 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
             + 0.18f * plan.glass_ambient_reflection.sheen_coherence,
         0.0f,
         1.0f);
+    inst.lighting[2] = std::clamp(
+        inst.lighting[2]
+            + 0.040f * plan.glass_substrate_adhesion.contact_strength
+            + 0.030f * plan.glass_substrate_adhesion.refraction_crawl,
+        0.0f,
+        0.50f);
     inst.lighting[2] = std::clamp(
         inst.lighting[2]
             + 0.060f * plan.glass_ambient_reflection.reflection_gain
@@ -2696,6 +2752,8 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.glass_environment[3] = std::clamp(
         inst.glass_environment[3]
             + 0.44f * plan.glass_transmission.internal_transmission
+            + 0.10f * plan.glass_substrate_adhesion.refraction_crawl
+            + 0.08f * plan.glass_surface_cohesion.shape_coalescence
             - 0.14f * plan.glass_transmission.volume_absorption,
         0.0f,
         1.0f);
@@ -6032,6 +6090,77 @@ fragment float4 fs_material(
         clamp(in.transition_optics.z, 1.0, 1.32);
     float materialize_rim_position =
         clamp(in.transition_optics.w, 0.0, 1.0);
+    float container_bounds_gate =
+        (in.group_rect.z > 0.0 && in.group_rect.w > 0.0) ? 1.0 : 0.0;
+    float materialize_container_gate = max(
+        container_bounds_gate,
+        max(shape_blend_execution, max(group_surface_execution, union_execution)));
+    float container_morph_continuity = clamp(
+        max(
+            max(
+                glass_effect_match_execution
+                    * (0.54 + 0.46 * group_blend_strength),
+                morph_execution
+                    * max(group_blend_strength, bridge_motion_strength)
+                    * (0.62 + 0.22 * planned_union_shape_coalescence)),
+            materialize_wave_strength
+                * materialize_container_gate
+                * (0.34
+                   + 0.20 * group_blend_strength
+                   + 0.16 * planned_union_edge_continuity)),
+        0.0,
+        1.0);
+    if (container_morph_continuity > 0.0001) {
+        group_blend_strength = clamp(
+            max(
+                group_blend_strength,
+                container_morph_continuity
+                    * (0.38
+                       + 0.24 * morph_execution
+                       + 0.18 * glass_effect_match_execution)),
+            0.0,
+            1.0);
+        inner_edge_alpha_blend_strength = clamp(
+            max(
+                inner_edge_alpha_blend_strength,
+                container_morph_continuity
+                    * (0.18
+                       + 0.12 * planned_union_edge_continuity)),
+            0.0,
+            1.0);
+        fusion_strength = clamp(
+            max(
+                fusion_strength,
+                container_morph_continuity
+                    * (0.44
+                       + 0.18 * planned_union_shape_coalescence)),
+            0.0,
+            1.0);
+        fusion_lensing_gain = clamp(
+            fusion_lensing_gain + 0.055 * container_morph_continuity,
+            1.0,
+            1.38);
+        fusion_edge_lift = clamp(
+            fusion_edge_lift + 0.026 * container_morph_continuity,
+            0.0,
+            0.20);
+        fusion_shadow_gain = clamp(
+            fusion_shadow_gain + 0.035 * container_morph_continuity,
+            1.0,
+            1.38);
+        bridge_motion_strength = clamp(
+            max(bridge_motion_strength, 0.42 * container_morph_continuity),
+            0.0,
+            1.0);
+        bridge_flow_offset_gain = clamp(
+            max(bridge_flow_offset_gain, 0.18 + 0.18 * container_morph_continuity),
+            0.0,
+            0.62);
+        bridge_ribbon_width = clamp(
+            bridge_ribbon_width + 0.035 * container_morph_continuity,
+            0.08,
+            0.34);
+    }
     if (group_blend_strength > 0.0
         && in.group_rect.z > 0.0
         && in.group_rect.w > 0.0) {
@@ -6103,6 +6232,7 @@ fragment float4 fs_material(
         * glass_lensing_gain
         * fusion_lensing_gain
         * materialize_lensing_gain
+        * (1.0 + 0.08 * container_morph_continuity)
         * (1.0 - 0.12 * overlap_response_strength);
     float refraction_edge_caustic =
         clamp(
@@ -6110,7 +6240,8 @@ fragment float4 fs_material(
                 * glass_lensing_gain
                 * (1.0
                    + 0.34 * fusion_strength
-                   + 0.24 * materialize_wave_strength),
+                   + 0.24 * materialize_wave_strength
+                   + 0.18 * container_morph_continuity),
             0.0,
             0.46);
     float edge_bevel_width = clamp(
@@ -7038,6 +7169,53 @@ fragment float4 fs_material(
             * (0.42 + 0.58 * group_blend_strength);
         backdrop_rgb = clamp(backdrop_rgb, 0.0, 1.0);
     }
+    if (container_morph_continuity > 0.0001) {
+        float morph_center =
+            1.0 - smoothstep(0.14, 1.14, normalized_len);
+        float morph_edge = edge_lens
+            * (0.46
+               + 0.54
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_width * 1.9, 0.5),
+                       signed_edge_distance)));
+        float morph_ribbon = max(
+            bridge_band,
+            max(morph_edge * 0.42, morph_center * 0.26));
+        float morph_luma =
+            dot(backdrop_rgb, float3(0.2126, 0.7152, 0.0722));
+        float3 morph_settled = mix(
+            backdrop_rgb,
+            float3(morph_luma),
+            0.22 + 0.16 * container_morph_continuity);
+        morph_settled = clamp(
+            (morph_settled - float3(0.50))
+                    * (1.0
+                       + 0.060 * container_morph_continuity
+                       + 0.040 * planned_union_luma_stability)
+                + float3(0.50),
+            0.0,
+            1.0);
+        backdrop_rgb = mix(
+            backdrop_rgb,
+            morph_settled,
+            container_morph_continuity
+                * (0.08 + 0.13 * morph_ribbon));
+        backdrop_rgb += float3(1.0)
+            * morph_ribbon
+            * container_morph_continuity
+            * (0.010
+               + 0.030 * fusion_edge_lift
+               + 0.018 * materialize_edge_lift);
+        backdrop_rgb += float3(
+            spectral_warmth,
+            0.05 * (spectral_warmth + spectral_coolness),
+            spectral_coolness)
+            * morph_ribbon
+            * container_morph_continuity
+            * 0.045;
+        backdrop_rgb = clamp(backdrop_rgb, 0.0, 1.0);
+    }
     if (materialize_wave_strength > 0.0001) {
         float materialize_band = 1.0 - smoothstep(
             0.0,
@@ -7083,12 +7261,18 @@ fragment float4 fs_material(
             + 0.050 * glass_thickness
             + 0.038 * glass_caustic_spread
             + 0.032 * (glass_lensing_gain - 1.0)
-            + 0.018 * prominent_intensity,
+            + 0.018 * prominent_intensity
+            + 0.026 * planned_environment_reflection
+            + 0.018 * planned_environment_color_pickup
+            + 0.012 * planned_environment_transmission_balance,
         0.0,
-        0.18);
+        0.20);
     if (environment_reflection_strength > 0.0001) {
         float2 reflection_raw_dir =
-            -dynamic_light_dir + refraction_dir * (0.34 + 0.36 * edge_lens);
+            -dynamic_light_dir * (1.0 + 0.18 * planned_environment_reflection)
+            + refraction_dir * (0.34 + 0.36 * edge_lens)
+            + dispersion_tangent
+                * (0.10 * planned_environment_color_pickup);
         float reflection_raw_len = length(reflection_raw_dir);
         float2 reflection_dir = reflection_raw_len > 0.0001
             ? reflection_raw_dir / reflection_raw_len
@@ -7099,10 +7283,15 @@ fragment float4 fs_material(
             (4.0
              + 12.0 * glass_thickness
              + 0.28 * blur_points
-             + 3.5 * glass_caustic_spread)
+             + 3.5 * glass_caustic_spread
+             + 2.4 * planned_environment_reflection
+             + 1.4 * planned_environment_transmission_balance)
             * content_scale;
         float2 reflection_base_uv =
-            refraction_uv * (0.38 + 0.42 * edge_lens);
+            refraction_uv
+            * (0.38
+               + 0.42 * edge_lens
+               + 0.08 * planned_environment_transmission_balance);
         float2 forward_uv = clamp(
             in.screen_uv
                 + reflection_base_uv
@@ -7153,18 +7342,24 @@ fragment float4 fs_material(
                        signed_edge_distance)));
         float reflection_gate = clamp(
             0.36 * reflection_surface * reflection_sweep
-                + 0.64 * reflection_rim,
+                + 0.64 * reflection_rim
+                + 0.10 * planned_environment_reflection
+                + 0.06 * planned_environment_color_pickup,
             0.0,
             1.0);
         float3 reflected_tint = mix(
             mix(float3(reflected_luma), reflected_rgb, 0.78),
             reflected_rgb * (float3(1.0) + 0.22 * in.tint.rgb),
-            tint_chroma);
+            clamp(tint_chroma + 0.18 * planned_environment_color_pickup,
+                  0.0,
+                  1.0));
         rgb += reflected_tint
             * environment_reflection_strength
             * reflection_gate
             * (0.18 + 0.34 * reflected_light)
-            * (0.72 + 0.28 * refraction_strength);
+            * (0.72
+               + 0.28 * refraction_strength
+               + 0.08 * planned_environment_transmission_balance);
         float reflection_shadow = dark_reflection
             * environment_reflection_strength
             * reflection_gate
@@ -14789,6 +14984,192 @@ fragment float4 fs_material(
             * (0.006 + 0.012 * glass_shadow_gain)
             * (1.0 - union_softness * 0.42);
         rgb *= 1.0 - clamp(union_shadow_trim, 0.0, 0.030);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
+    float glass_edge_diffusion_strength = clamp(
+        0.012 * glass_union_glow_strength
+            + 0.018 * planned_union_edge_continuity
+            + 0.014 * planned_union_luma_stability
+            + 0.012 * clear_glass_detail
+            + 0.010 * glass_scattering_gain
+            + 0.014 * edge_inner_highlight
+            + 0.010 * edge_outer_shadow
+            + 0.010 * planned_environment_reflection
+            + 0.008 * planned_environment_color_pickup
+            + 0.006 * planned_environment_transmission_balance,
+        0.0,
+        0.12);
+    if (glass_edge_diffusion_strength > 0.0001
+        && edge_bevel_width > 0.0001) {
+        float diffusion_outer = 1.0 - smoothstep(
+            0.0,
+            max(edge_bevel_width * 2.25, 1.0),
+            signed_edge_distance);
+        float diffusion_inner = 1.0 - smoothstep(
+            0.0,
+            max(edge_width * 0.62, 0.5),
+            signed_edge_distance);
+        float diffusion_band = clamp(
+            diffusion_outer - diffusion_inner * 0.42,
+            0.0,
+            1.0)
+            * (0.36 + 0.64 * edge_lens);
+        float diffusion_contact = clamp(
+            planned_union_response_strength * 0.28
+                + planned_union_edge_continuity * 0.28
+                + planned_union_shape_coalescence * 0.18
+                + planned_environment_reflection * 0.16
+                + planned_environment_color_pickup * 0.12
+                + edge_lens * 0.18
+                + glass_union_glow_strength * 1.40,
+            0.0,
+            1.0);
+        float2 diffusion_axis_raw =
+            refraction_dir
+                * (0.44 + 0.28 * planned_union_edge_continuity)
+            - dynamic_light_dir
+                * (0.24
+                   + 0.18 * dynamic_light_highlight
+                   + 0.10 * planned_environment_reflection)
+            + dispersion_tangent
+                * (0.14
+                   + 0.12 * planned_union_shape_coalescence
+                   + 0.09 * planned_environment_color_pickup);
+        float diffusion_axis_length = length(diffusion_axis_raw);
+        float2 diffusion_axis = diffusion_axis_length > 0.0001
+            ? diffusion_axis_raw / diffusion_axis_length
+            : refraction_dir;
+        float2 diffusion_cross =
+            float2(-diffusion_axis.y, diffusion_axis.x);
+        float diffusion_span =
+            (1.4
+             + 3.4 * glass_thickness
+             + 2.0 * planned_union_edge_continuity
+             + 1.2 * planned_union_luma_stability
+             + 1.0 * planned_environment_reflection
+             + 0.6 * planned_environment_transmission_balance
+             + 0.05 * blur_points)
+            * content_scale
+            * (0.80 + 0.20 * glass_lensing_gain);
+        float diffusion_micro_span =
+            (0.7
+             + 1.8 * glass_dispersion_tangential
+             + 3.2 * spectral_dispersion
+             + 0.7 * planned_environment_color_pickup)
+            * content_scale;
+        float2 diffusion_near_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.22
+                + diffusion_axis
+                    * texel
+                    * diffusion_span
+                    * (0.30 + 0.18 * diffusion_contact),
+            float2(0.0),
+            float2(1.0));
+        float2 diffusion_far_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.18
+                - diffusion_axis
+                    * texel
+                    * diffusion_span
+                    * (0.34 + 0.16 * diffusion_band)
+                + diffusion_cross
+                    * texel
+                    * diffusion_micro_span
+                    * 0.18,
+            float2(0.0),
+            float2(1.0));
+        float2 diffusion_cross_uv = clamp(
+            in.screen_uv
+                + refraction_uv * 0.16
+                + diffusion_cross
+                    * texel
+                    * diffusion_span
+                    * (0.24 + 0.16 * diffusion_contact)
+                - dispersion_tangent
+                    * texel
+                    * diffusion_micro_span
+                    * 0.14,
+            float2(0.0),
+            float2(1.0));
+        float3 diffusion_near =
+            backdrop.sample(samp, diffusion_near_uv).rgb;
+        float3 diffusion_far =
+            backdrop.sample(samp, diffusion_far_uv).rgb;
+        float3 diffusion_cross_rgb =
+            backdrop.sample(samp, diffusion_cross_uv).rgb;
+        float3 diffusion_probe =
+            diffusion_near * 0.38
+            + diffusion_far * 0.36
+            + diffusion_cross_rgb * 0.26;
+        float diffusion_luma =
+            dot(diffusion_probe, float3(0.2126, 0.7152, 0.0722));
+        float diffusion_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float diffusion_gradient = clamp(
+            length(diffusion_near - diffusion_far) * 0.30
+                + length(diffusion_cross_rgb - diffusion_probe) * 0.22
+                + abs(diffusion_luma - diffusion_surface_luma) * 0.26,
+            0.0,
+            1.0);
+        float diffusion_calm = clamp(
+            1.0 - smoothstep(0.10, 0.42, diffusion_gradient)
+                + planned_union_luma_stability * 0.12,
+            0.0,
+            1.0);
+        float3 diffusion_neutral = mix(
+            diffusion_probe,
+            float3(diffusion_luma),
+            0.28
+                + 0.20 * diffusion_calm
+                + 0.10 * planned_union_luma_stability);
+        float3 diffusion_layer = mix(
+            rgb,
+            diffusion_neutral
+                * (float3(1.0)
+                   + in.tint.rgb
+                       * (0.024
+                          + 0.032 * prominent_intensity * tint_chroma)),
+            0.07
+                + 0.09 * diffusion_calm
+                + 0.08 * diffusion_contact);
+        float3 diffusion_luma_rgb =
+            float3(dot(diffusion_layer,
+                       float3(0.2126, 0.7152, 0.0722)));
+        diffusion_layer =
+            diffusion_luma_rgb
+            + (diffusion_layer - diffusion_luma_rgb)
+                * (0.88 + 0.10 * diffusion_contact);
+        diffusion_layer *= float3(1.0)
+            + in.tint.rgb
+                * (0.010 * planned_environment_color_pickup
+                   + 0.008 * planned_environment_reflection);
+        float diffusion_weight =
+            glass_edge_diffusion_strength
+            * diffusion_band
+            * (0.36
+               + 0.22 * diffusion_contact
+               + 0.18 * diffusion_calm
+               + 0.14 * planned_union_edge_continuity
+               + 0.10 * edge_inner_highlight
+               + 0.08 * planned_environment_reflection);
+        rgb = mix(
+            rgb,
+            clamp(diffusion_layer, 0.0, 1.0),
+            diffusion_weight * 0.42);
+        float diffusion_highlight =
+            diffusion_weight
+            * (0.006
+               + 0.012 * glass_scattering_gain
+               + 0.010 * planned_environment_reflection
+               + 0.006 * planned_environment_color_pickup)
+            * (0.42 + 0.58 * diffusion_calm);
+        rgb += diffusion_neutral * diffusion_highlight;
+        float diffusion_shadow =
+            diffusion_weight
+            * (1.0 - diffusion_calm * 0.45)
+            * (0.005 + 0.010 * glass_shadow_gain);
+        rgb *= 1.0 - clamp(diffusion_shadow, 0.0, 0.026);
         rgb = clamp(rgb, 0.0, 1.0);
     }
     float container_field_strength = clamp(
@@ -30230,19 +30611,30 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(legibility_settle, 0.0, 0.018);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float environment_sheen_bias = clamp(
+        planned_environment_reflection * 0.42
+            + planned_environment_color_pickup * 0.32
+            + planned_environment_transmission_balance * 0.22
+            + abs(planned_environment_luminance_balance - 0.5) * 0.18,
+        0.0,
+        1.0);
     float foreground_sheen_field_strength = clamp(
         0.012 * specular_intensity
             + 0.010 * clear_glass_detail
             + 0.009 * glass_prismatic_gain
             + 0.008 * glass_scattering_gain
             + 0.006 * prominent_intensity
+            + 0.010 * planned_environment_reflection
+            + 0.008 * planned_environment_color_pickup
+            + 0.006 * planned_environment_transmission_balance
             + 0.16 * adaptive_legibility_field_strength
             + 0.14 * interactive_kinetic_field_strength
             + 0.12 * container_cohesion_field_strength
             + 0.10 * lensing_flow_field_strength
-            + 0.08 * ambient_chromatic_field_strength,
+            + 0.08 * ambient_chromatic_field_strength
+            + 0.07 * environment_sheen_bias,
         0.0,
-        0.050);
+        0.060);
     if (foreground_sheen_field_strength > 0.0001) {
         float2 sheen_bounds_norm =
             (in.local_pos / max(in.rect_size, float2(1.0))
@@ -30278,10 +30670,12 @@ fragment float4 fs_material(
             + sheen_anchor_dir * (0.28 + 0.18 * specular_intensity)
             + refraction_dir * (0.22 + 0.16 * glass_lensing_gain)
             + bridge_dir * (0.18 + 0.18 * sheen_bridge)
+            - dynamic_light_dir * (0.08 * planned_environment_reflection)
             + dispersion_tangent
                 * (0.14
                    + 0.10 * spectral_dispersion
-                   + 0.08 * glass_dispersion_tangential);
+                   + 0.08 * glass_dispersion_tangential
+                   + 0.10 * planned_environment_color_pickup);
         float sheen_axis_len = length(sheen_axis_raw);
         float2 sheen_axis =
             sheen_axis_len > 0.0001
@@ -30302,7 +30696,8 @@ fragment float4 fs_material(
                     * (2.8 + 1.4 * sheen_bridge)
                 + sheen_anchor_lobe * 3.2
                 + bridge_axial * (2.2 + 1.2 * bridge_core)
-                + spectral_dispersion * 4.6,
+                + spectral_dispersion * 4.6
+                + environment_sheen_bias * 2.6,
             -12.0,
             12.0);
         float sheen_wave = 0.5 + 0.5 * sin(sheen_phase);
@@ -30320,7 +30715,10 @@ fragment float4 fs_material(
                 + sheen_bridge * 0.16
                 + sheen_anchor_lobe * 0.16
                 + pointer_lens_strength * pointer_lens_raw * 0.14
-                + prominent_intensity * 0.10,
+                + prominent_intensity * 0.10
+                + planned_environment_reflection * 0.12
+                + planned_environment_color_pickup * 0.10
+                + environment_sheen_bias * 0.08,
             0.0,
             1.0);
         float sheen_span =
@@ -30328,6 +30726,8 @@ fragment float4 fs_material(
              + 1.5 * glass_thickness
              + 1.4 * clear_glass_detail
              + 1.2 * sheen_presence
+             + 1.1 * planned_environment_reflection
+             + 0.7 * planned_environment_transmission_balance
              + 0.032 * blur_points)
             * content_scale
             * (0.88 + 0.12 * glass_lensing_gain);
@@ -30335,11 +30735,15 @@ fragment float4 fs_material(
             (0.52
              + 1.0 * spectral_dispersion
              + 0.9 * glass_dispersion_tangential
-             + 0.7 * sheen_bridge)
+             + 0.7 * sheen_bridge
+             + 0.9 * planned_environment_color_pickup)
             * content_scale;
         float2 sheen_center_uv = clamp(
             in.screen_uv
-                + refraction_uv * (0.08 + 0.04 * sheen_presence),
+                + refraction_uv
+                    * (0.08
+                       + 0.04 * sheen_presence
+                       + 0.04 * planned_environment_transmission_balance),
             float2(0.0),
             float2(1.0));
         float2 sheen_highlight_uv = clamp(
@@ -30347,11 +30751,15 @@ fragment float4 fs_material(
                 - dynamic_light_dir
                     * texel
                     * sheen_span
-                    * (0.28 + 0.14 * sheen_light_face)
+                    * (0.28
+                       + 0.14 * sheen_light_face
+                       + 0.08 * planned_environment_reflection)
                 + sheen_axis
                     * texel
                     * sheen_span
-                    * (0.12 + 0.10 * sheen_ribbon),
+                    * (0.12
+                       + 0.10 * sheen_ribbon
+                       + 0.06 * environment_sheen_bias),
             float2(0.0),
             float2(1.0));
         float2 sheen_shadow_uv = clamp(
@@ -30359,11 +30767,15 @@ fragment float4 fs_material(
                 + dynamic_light_dir
                     * texel
                     * sheen_span
-                    * (0.22 + 0.12 * (1.0 - sheen_light_face))
+                    * (0.22
+                       + 0.12 * (1.0 - sheen_light_face)
+                       + 0.05 * planned_environment_transmission_balance)
                 - sheen_axis
                     * texel
                     * sheen_span
-                    * (0.10 + 0.08 * sheen_bounds_rim),
+                    * (0.10
+                       + 0.08 * sheen_bounds_rim
+                       + 0.05 * environment_sheen_bias),
             float2(0.0),
             float2(1.0));
         float2 sheen_warm_uv = clamp(
@@ -30371,11 +30783,15 @@ fragment float4 fs_material(
                 + sheen_cross
                     * texel
                     * sheen_chroma_span
-                    * (0.30 + 0.14 * sheen_wave)
+                    * (0.30
+                       + 0.14 * sheen_wave
+                       + 0.08 * planned_environment_color_pickup)
                 + dispersion_tangent
                     * texel
                     * sheen_span
-                    * (0.08 + 0.08 * spectral_rim_tint),
+                    * (0.08
+                       + 0.08 * spectral_rim_tint
+                       + 0.05 * environment_sheen_bias),
             float2(0.0),
             float2(1.0));
         float2 sheen_cool_uv = clamp(
@@ -30383,11 +30799,15 @@ fragment float4 fs_material(
                 - sheen_cross
                     * texel
                     * sheen_chroma_span
-                    * (0.28 + 0.12 * sheen_ribbon)
+                    * (0.28
+                       + 0.12 * sheen_ribbon
+                       + 0.07 * planned_environment_color_pickup)
                 - dispersion_tangent
                     * texel
                     * sheen_span
-                    * (0.08 + 0.08 * spectral_rim_tint),
+                    * (0.08
+                       + 0.08 * spectral_rim_tint
+                       + 0.05 * environment_sheen_bias),
             float2(0.0),
             float2(1.0));
         float3 sheen_center_rgb =
@@ -30419,14 +30839,18 @@ fragment float4 fs_material(
                 abs(sheen_probe.g - sheen_probe.b)),
             abs(sheen_probe.b - sheen_probe.r));
         float sheen_pickup =
-            smoothstep(0.028, 0.32, sheen_chroma);
+            smoothstep(
+                0.022 - 0.006 * planned_environment_color_pickup,
+                0.32,
+                sheen_chroma);
         float sheen_contrast = clamp(
             length(sheen_highlight_rgb - sheen_shadow_rgb) * 0.24
                 + length(sheen_warm_rgb - sheen_cool_rgb) * 0.22
                 + abs(sheen_luma - sheen_surface_luma) * 0.18
                 + sheen_ribbon * 0.12
                 + sheen_edge * 0.10
-                + sheen_presence * 0.08,
+                + sheen_presence * 0.08
+                + environment_sheen_bias * 0.08,
             0.0,
             1.0);
         float sheen_coherence =
@@ -30446,20 +30870,23 @@ fragment float4 fs_material(
             0.16
                 + 0.16 * sheen_pickup
                 + 0.14 * sheen_ribbon
-                + 0.12 * sheen_light_face);
+                + 0.12 * sheen_light_face
+                + 0.10 * planned_environment_color_pickup);
         sheen_layer = clamp(
             (sheen_layer - float3(0.50))
                     * (1.0
                        + clear_glass_contrast * 0.014
                        + sheen_bright * 0.012
-                       + sheen_presence * 0.010)
+                       + sheen_presence * 0.010
+                       + planned_environment_reflection * 0.010)
                 + float3(0.50),
             0.0,
             1.0);
         sheen_layer *= float3(1.0)
             + in.tint.rgb
                 * (0.012
-                   + 0.024 * tint_chroma * prominent_intensity);
+                   + 0.024 * tint_chroma * prominent_intensity
+                   + 0.018 * planned_environment_color_pickup);
         float3 sheen_prism = float3(
             spectral_warmth,
             0.12 * (spectral_warmth + spectral_coolness),
@@ -30468,18 +30895,24 @@ fragment float4 fs_material(
             * (0.0007
                + 0.0024 * spectral_rim_tint
                + 0.0020 * glass_prismatic_gain
-               + 0.0016 * glass_scattering_gain)
+               + 0.0016 * glass_scattering_gain
+               + 0.0018 * planned_environment_reflection
+               + 0.0014 * planned_environment_color_pickup)
             * (0.34
                + 0.24 * sheen_pickup
                + 0.22 * sheen_light_face
-               + 0.20 * sheen_ribbon);
+               + 0.20 * sheen_ribbon
+               + 0.12 * environment_sheen_bias);
         float sheen_gate = clamp(
             sheen_presence * 0.26
                 + sheen_ribbon * 0.22
                 + sheen_bounds_rim * 0.18
                 + sheen_light_face * 0.12
                 + sheen_pickup * 0.12
-                + sheen_coherence * 0.10,
+                + sheen_coherence * 0.10
+                + planned_environment_reflection * 0.08
+                + planned_environment_color_pickup * 0.06
+                + environment_sheen_bias * 0.06,
             0.0,
             1.0);
         float sheen_weight =
@@ -30489,19 +30922,22 @@ fragment float4 fs_material(
                + 0.20 * sheen_bright
                + 0.18 * sheen_pickup
                + 0.16 * sheen_ribbon
-               + 0.14 * sheen_coherence);
+               + 0.14 * sheen_coherence
+               + 0.12 * environment_sheen_bias);
         rgb = mix(
             rgb,
             sheen_layer,
             sheen_weight
                 * (0.18
                    + 0.14 * sheen_ribbon
-                   + 0.10 * sheen_presence));
+                   + 0.10 * sheen_presence
+                   + 0.08 * planned_environment_reflection));
         rgb += sheen_prism
             * sheen_weight
             * (0.0006
                + 0.0018 * dynamic_light_highlight
-               + 0.0014 * glass_scattering_gain);
+               + 0.0014 * glass_scattering_gain
+               + 0.0010 * environment_sheen_bias);
         float sheen_cavity =
             (1.0 - sheen_bright)
             * sheen_weight
@@ -31123,12 +31559,16 @@ fragment float4 fs_material(
             + 0.010 * glass_caustic_spread
             + 0.008 * (glass_lensing_gain - 1.0)
             + 0.008 * spectral_rim_tint
+            + 0.008 * planned_environment_reflection
+            + 0.006 * planned_environment_color_pickup
+            + 0.006 * planned_environment_transmission_balance
             + 0.08 * interactive_tint_field_strength
             + 0.07 * container_pressure_field_strength
             + 0.06 * foreground_sheen_field_strength
-            + 0.05 * ambient_chromatic_field_strength,
+            + 0.05 * ambient_chromatic_field_strength
+            + 0.06 * environment_sheen_bias,
         0.0,
-        0.046);
+        0.054);
     if (edge_meniscus_field_strength > 0.0001) {
         float meniscus_edge =
             1.0 - smoothstep(
@@ -31152,7 +31592,10 @@ fragment float4 fs_material(
                 + meniscus_corner * 0.16
                 + meniscus_bridge * 0.16
                 + meniscus_pointer * 0.12
-                + tint_strength * 0.08,
+                + tint_strength * 0.08
+                + planned_environment_reflection * 0.10
+                + planned_environment_color_pickup * 0.08
+                + environment_sheen_bias * 0.08,
             0.0,
             1.0);
         float2 meniscus_axis_raw =
@@ -31161,10 +31604,12 @@ fragment float4 fs_material(
                 * (0.30 + 0.22 * dynamic_light_highlight)
             + pointer_dir * (0.22 + 0.18 * meniscus_pointer)
             + bridge_dir * (0.20 + 0.18 * meniscus_bridge)
+            - dynamic_light_dir * (0.08 * planned_environment_reflection)
             + dispersion_tangent
                 * (0.16
                    + 0.12 * spectral_dispersion
-                   + 0.10 * glass_dispersion_tangential);
+                   + 0.10 * glass_dispersion_tangential
+                   + 0.09 * planned_environment_color_pickup);
         float meniscus_axis_len = length(meniscus_axis_raw);
         float2 meniscus_axis =
             meniscus_axis_len > 0.0001
@@ -31184,7 +31629,8 @@ fragment float4 fs_material(
                 + bridge_axial * (2.4 + 1.2 * bridge_core)
                 + bridge_shear * bridge_band * 1.8
                 + materialize_rim_position * materialize_wave_strength * 2.2
-                + spectral_dispersion * 4.8,
+                + spectral_dispersion * 4.8
+                + environment_sheen_bias * 2.4,
             -12.0,
             12.0);
         float meniscus_wave = 0.5 + 0.5 * sin(meniscus_phase);
@@ -31202,6 +31648,8 @@ fragment float4 fs_material(
              + 1.4 * glass_thickness
              + 1.2 * glass_caustic_spread
              + 1.0 * meniscus_presence
+             + 0.8 * planned_environment_reflection
+             + 0.6 * planned_environment_transmission_balance
              + 0.032 * blur_points)
             * content_scale
             * (0.88 + 0.12 * glass_lensing_gain);
@@ -31209,11 +31657,15 @@ fragment float4 fs_material(
             (0.48
              + 1.0 * glass_dispersion_tangential
              + 0.9 * spectral_dispersion
-             + 0.8 * meniscus_bridge_alignment)
+             + 0.8 * meniscus_bridge_alignment
+             + 0.8 * planned_environment_color_pickup)
             * content_scale;
         float2 meniscus_base_uv = clamp(
             in.screen_uv
-                + refraction_uv * (0.08 + 0.05 * meniscus_presence),
+                + refraction_uv
+                    * (0.08
+                       + 0.05 * meniscus_presence
+                       + 0.04 * planned_environment_transmission_balance),
             float2(0.0),
             float2(1.0));
         float2 meniscus_light_uv = clamp(
@@ -31221,11 +31673,15 @@ fragment float4 fs_material(
                 - dynamic_light_dir
                     * texel
                     * meniscus_span
-                    * (0.24 + 0.14 * meniscus_light_face)
+                    * (0.24
+                       + 0.14 * meniscus_light_face
+                       + 0.07 * planned_environment_reflection)
                 + meniscus_axis
                     * texel
                     * meniscus_span
-                    * (0.14 + 0.10 * meniscus_lobe),
+                    * (0.14
+                       + 0.10 * meniscus_lobe
+                       + 0.05 * environment_sheen_bias),
             float2(0.0),
             float2(1.0));
         float2 meniscus_shadow_uv = clamp(
@@ -31233,11 +31689,15 @@ fragment float4 fs_material(
                 + dynamic_light_dir
                     * texel
                     * meniscus_span
-                    * (0.20 + 0.12 * (1.0 - meniscus_light_face))
+                    * (0.20
+                       + 0.12 * (1.0 - meniscus_light_face)
+                       + 0.05 * planned_environment_transmission_balance)
                 - meniscus_axis
                     * texel
                     * meniscus_span
-                    * (0.12 + 0.08 * meniscus_return_lobe),
+                    * (0.12
+                       + 0.08 * meniscus_return_lobe
+                       + 0.05 * environment_sheen_bias),
             float2(0.0),
             float2(1.0));
         float2 meniscus_warm_uv = clamp(
@@ -31245,11 +31705,15 @@ fragment float4 fs_material(
                 + meniscus_cross
                     * texel
                     * meniscus_chroma_span
-                    * (0.30 + 0.12 * meniscus_wave)
+                    * (0.30
+                       + 0.12 * meniscus_wave
+                       + 0.07 * planned_environment_color_pickup)
                 + dispersion_tangent
                     * texel
                     * meniscus_span
-                    * (0.10 + 0.08 * spectral_rim_tint),
+                    * (0.10
+                       + 0.08 * spectral_rim_tint
+                       + 0.04 * environment_sheen_bias),
             float2(0.0),
             float2(1.0));
         float2 meniscus_cool_uv = clamp(
@@ -31257,11 +31721,15 @@ fragment float4 fs_material(
                 - meniscus_cross
                     * texel
                     * meniscus_chroma_span
-                    * (0.28 + 0.12 * meniscus_lobe)
+                    * (0.28
+                       + 0.12 * meniscus_lobe
+                       + 0.07 * planned_environment_color_pickup)
                 - dispersion_tangent
                     * texel
                     * meniscus_span
-                    * (0.10 + 0.08 * spectral_rim_tint),
+                    * (0.10
+                       + 0.08 * spectral_rim_tint
+                       + 0.04 * environment_sheen_bias),
             float2(0.0),
             float2(1.0));
         float3 meniscus_base_rgb =
@@ -31293,13 +31761,17 @@ fragment float4 fs_material(
                 abs(meniscus_probe.g - meniscus_probe.b)),
             abs(meniscus_probe.b - meniscus_probe.r));
         float meniscus_pickup =
-            smoothstep(0.028, 0.32, meniscus_chroma);
+            smoothstep(
+                0.022 - 0.006 * planned_environment_color_pickup,
+                0.32,
+                meniscus_chroma);
         float meniscus_range = clamp(
             length(meniscus_light_rgb - meniscus_shadow_rgb) * 0.24
                 + length(meniscus_warm_rgb - meniscus_cool_rgb) * 0.22
                 + abs(meniscus_luma - meniscus_surface_luma) * 0.18
                 + meniscus_lobe * 0.12
-                + meniscus_presence * 0.10,
+                + meniscus_presence * 0.10
+                + environment_sheen_bias * 0.08,
             0.0,
             1.0);
         float meniscus_coherence =
@@ -31323,13 +31795,15 @@ fragment float4 fs_material(
             0.15
                 + 0.16 * meniscus_pickup
                 + 0.14 * meniscus_lobe
-                + 0.12 * meniscus_light_face);
+                + 0.12 * meniscus_light_face
+                + 0.10 * planned_environment_color_pickup);
         meniscus_layer = clamp(
             (meniscus_layer - float3(0.50))
                     * (1.0
                        + clear_glass_contrast * 0.012
                        + meniscus_lift * 0.012
                        + meniscus_presence * 0.010
+                       + planned_environment_reflection * 0.010
                        - meniscus_depth * 0.014)
                 + float3(0.50),
             0.0,
@@ -31337,7 +31811,8 @@ fragment float4 fs_material(
         meniscus_layer *= float3(1.0)
             + in.tint.rgb
                 * (0.010
-                   + 0.022 * tint_chroma * prominent_intensity);
+                   + 0.022 * tint_chroma * prominent_intensity
+                   + 0.016 * planned_environment_color_pickup);
         float3 meniscus_prism = float3(
             spectral_warmth + tint_chroma * in.tint.r * 0.12,
             0.12 * (spectral_warmth + spectral_coolness)
@@ -31347,18 +31822,28 @@ fragment float4 fs_material(
             * (0.0007
                + 0.0024 * spectral_rim_tint
                + 0.0022 * glass_prismatic_gain
-               + 0.0018 * glass_scattering_gain)
+               + 0.0018 * glass_scattering_gain
+               + 0.0015 * planned_environment_reflection
+               + 0.0012 * planned_environment_color_pickup)
             * (0.32
                + 0.22 * meniscus_pickup
                + 0.20 * meniscus_light_face
-               + 0.18 * meniscus_lobe);
+               + 0.18 * meniscus_lobe
+               + 0.12 * environment_sheen_bias);
+        float meniscus_halo =
+            max(meniscus_lobe, meniscus_return_lobe * 0.68)
+            * meniscus_edge
+            * (0.44 + 0.56 * environment_sheen_bias);
         float meniscus_gate = clamp(
             meniscus_presence * 0.30
                 + meniscus_edge * 0.22
                 + meniscus_lobe * 0.16
                 + meniscus_bridge * 0.12
                 + meniscus_light_face * 0.10
-                + meniscus_coherence * 0.10,
+                + meniscus_coherence * 0.10
+                + planned_environment_reflection * 0.08
+                + planned_environment_color_pickup * 0.06
+                + environment_sheen_bias * 0.06,
             0.0,
             1.0);
         float meniscus_weight =
@@ -31368,20 +31853,27 @@ fragment float4 fs_material(
                + 0.18 * meniscus_lift
                + 0.16 * meniscus_pickup
                + 0.14 * meniscus_coherence
-               + 0.12 * meniscus_bridge_alignment);
+               + 0.12 * meniscus_bridge_alignment
+               + 0.10 * environment_sheen_bias);
         rgb = mix(
             rgb,
             meniscus_layer,
             meniscus_weight
                 * (0.16
                    + 0.14 * meniscus_lobe
-                   + 0.10 * meniscus_presence));
+                   + 0.10 * meniscus_presence
+                   + 0.08 * planned_environment_reflection));
+        rgb += meniscus_layer
+            * meniscus_weight
+            * meniscus_halo
+            * (0.0020 + 0.0035 * planned_environment_reflection);
         rgb += meniscus_prism
             * meniscus_weight
-            * max(meniscus_lobe, meniscus_return_lobe * 0.70)
+            * max(meniscus_lobe, max(meniscus_return_lobe * 0.70, meniscus_halo))
             * (0.0006
                + 0.0020 * dynamic_light_highlight
-               + 0.0016 * glass_scattering_gain);
+               + 0.0016 * glass_scattering_gain
+               + 0.0010 * environment_sheen_bias);
         float meniscus_shadow =
             meniscus_depth
             * meniscus_weight
@@ -38342,6 +38834,16 @@ fragment float4 fs_material(
         rgb *= 1.0 - clamp(hierarchy_absorption, 0.0, 0.0080);
         rgb = clamp(rgb, 0.0, 1.0);
     }
+    float environment_luminance_bias =
+        planned_environment_luminance_balance - 0.5;
+    float adaptive_vibrancy_bias = clamp(
+        planned_environment_color_pickup * 0.34
+            + planned_environment_reflection * 0.26
+            + planned_environment_transmission_balance * 0.22
+            + abs(environment_luminance_bias) * 0.20
+            + environment_sheen_bias * 0.18,
+        0.0,
+        1.0);
     float contextual_reflection_field_strength = clamp(
         0.003 * overlap_response_strength
             + 0.004 * fusion_strength
@@ -38350,6 +38852,8 @@ fragment float4 fs_material(
             + 0.004 * bridge_band
             + 0.007 * planned_environment_reflection
             + 0.005 * planned_environment_color_pickup
+            + 0.004 * planned_environment_transmission_balance
+            + 0.003 * abs(environment_luminance_bias)
             + 0.25 * hierarchy_separation_field_strength
             + 0.22 * surface_identity_field_strength
             + 0.19 * tonal_equilibrium_field_strength
@@ -38369,9 +38873,11 @@ fragment float4 fs_material(
             + 0.013 * interlayer_refraction_field_strength
             + 0.010 * layer_separation_field_strength
             + 0.008 * edge_meniscus_field_strength
-            + 0.006 * foreground_sheen_field_strength,
+            + 0.006 * foreground_sheen_field_strength
+            + 0.050 * environment_sheen_bias
+            + 0.040 * adaptive_vibrancy_bias,
         0.0,
-        0.020);
+        0.023);
     if (contextual_reflection_field_strength > 0.0001) {
         float reflection_center =
             1.0 - smoothstep(0.26, 1.08, normalized_len);
@@ -38404,6 +38910,7 @@ fragment float4 fs_material(
                 + tonal_equilibrium_field_strength * 3.6
                 + chroma_containment_field_strength * 3.0
                 + specular_flow_field_strength * 2.4
+                + adaptive_vibrancy_bias * 0.30
                 + reflection_pointer * 0.06,
             0.0,
             1.0);
@@ -38413,13 +38920,19 @@ fragment float4 fs_material(
                 + reflection_lock * 0.18
                 + reflection_bridge * 0.16
                 + reflection_center * 0.06
-                + reflection_pointer * 0.05,
+                + reflection_pointer * 0.05
+                + planned_environment_reflection * 0.10
+                + planned_environment_color_pickup * 0.08
+                + adaptive_vibrancy_bias * 0.08,
             0.0,
             1.0);
         float reflection_shear_sign =
             bridge_shear >= 0.0 ? 1.0 : -1.0;
         float2 reflection_axis_raw =
-            -dynamic_light_dir * (0.34 + 0.18 * dynamic_light_highlight)
+            -dynamic_light_dir
+                * (0.34
+                   + 0.18 * dynamic_light_highlight
+                   + 0.08 * planned_environment_reflection)
             + refraction_dir * (0.23 + 0.15 * glass_lensing_gain)
             + bridge_tangent
                 * reflection_shear_sign
@@ -38428,7 +38941,8 @@ fragment float4 fs_material(
             + dispersion_tangent
                 * (0.12
                    + 0.07 * spectral_dispersion
-                   + 0.05 * glass_dispersion_tangential)
+                   + 0.05 * glass_dispersion_tangential
+                   + 0.08 * planned_environment_color_pickup)
             + pointer_dir * (0.08 + 0.06 * reflection_pointer);
         float reflection_axis_len = length(reflection_axis_raw);
         float2 reflection_axis =
@@ -38451,7 +38965,8 @@ fragment float4 fs_material(
                 + reflection_rim * 0.20
                 + reflection_center * 0.08
                 + reflection_grazing * reflection_rim * 0.10
-                + reflection_pointer * 0.06,
+                + reflection_pointer * 0.06
+                + adaptive_vibrancy_bias * 0.10,
             0.0,
             1.0);
         float reflection_span =
@@ -38459,6 +38974,8 @@ fragment float4 fs_material(
              + 0.58 * glass_thickness
              + 0.48 * clear_glass_detail
              + 0.62 * reflection_presence
+             + 0.56 * planned_environment_reflection
+             + 0.36 * planned_environment_transmission_balance
              + 0.010 * blur_points)
             * content_scale
             * (0.86 + 0.14 * glass_lensing_gain);
@@ -38466,11 +38983,15 @@ fragment float4 fs_material(
             (0.24
              + 0.38 * glass_dispersion_tangential
              + 0.34 * spectral_dispersion
-             + 0.48 * reflection_support)
+             + 0.48 * reflection_support
+             + 0.42 * planned_environment_color_pickup)
             * content_scale;
         float2 reflection_base_uv = clamp(
             in.screen_uv
-                + refraction_uv * (0.032 + 0.046 * reflection_support),
+                + refraction_uv
+                    * (0.032
+                       + 0.046 * reflection_support
+                       + 0.030 * planned_environment_transmission_balance),
             float2(0.0),
             float2(1.0));
         float2 reflection_key_uv = clamp(
@@ -38534,9 +39055,10 @@ fragment float4 fs_material(
             0.045
                 + 0.055 * spectral_dispersion
                 + 0.045 * glass_dispersion_tangential
-                + 0.045 * reflection_support,
+                + 0.045 * reflection_support
+                + 0.055 * planned_environment_color_pickup,
             0.0,
-            0.21);
+            0.24);
         float3 reflection_probe = mix(
             reflection_average,
             reflection_split,
@@ -38562,12 +39084,13 @@ fragment float4 fs_material(
                 0.0,
                 1.0);
         float reflection_pickup = smoothstep(
-            0.05,
+            0.046 - 0.010 * planned_environment_color_pickup,
             0.38,
             length(reflection_key_rgb - reflection_fill_rgb) * 0.22
                 + length(reflection_ridge_rgb - reflection_valley_rgb) * 0.18
                 + reflection_luma_range * 0.20
-                + reflection_support * 0.08);
+                + reflection_support * 0.08
+                + adaptive_vibrancy_bias * 0.08);
         float reflection_shadow =
             smoothstep(
                 0.05,
@@ -38587,6 +39110,7 @@ fragment float4 fs_material(
                 + 0.13 * reflection_support
                 + 0.10 * reflection_light_face
                 + 0.08 * reflection_pickup
+                + 0.08 * planned_environment_color_pickup
                 - 0.08 * reflection_shadow,
             0.44,
             0.86);
@@ -38595,7 +39119,9 @@ fragment float4 fs_material(
                 + (reflection_probe_luma - 0.50)
                     * (0.58 + 0.18 * reflection_support)
                 + (reflection_highlight - reflection_shadow)
-                    * (0.036 + 0.040 * reflection_rim),
+                    * (0.036 + 0.040 * reflection_rim)
+                + environment_luminance_bias
+                    * (0.022 + 0.028 * adaptive_vibrancy_bias),
             0.0,
             1.0);
         float3 reflection_surface =
@@ -38612,21 +39138,25 @@ fragment float4 fs_material(
                     * (1.0
                        + clear_glass_contrast * 0.005
                        + reflection_pickup * 0.006
+                       + adaptive_vibrancy_bias * 0.005
                        - reflection_shadow * 0.005)
                 + float3(0.50),
             0.0,
             1.0);
         reflection_layer *= float3(
-            1.0 + spectral_warmth * 0.13 + tint_chroma * in.tint.r * 0.005,
+            1.0 + spectral_warmth * 0.13 + tint_chroma * in.tint.r * 0.005
+                + planned_environment_color_pickup * in.tint.r * 0.008,
             1.0 + spectral_rim_tint * 0.07 + tint_chroma * in.tint.g * 0.005,
-            1.0 + spectral_coolness * 0.13 + tint_chroma * in.tint.b * 0.005);
+            1.0 + spectral_coolness * 0.13 + tint_chroma * in.tint.b * 0.005
+                + planned_environment_color_pickup * in.tint.b * 0.008);
         float reflection_gate = clamp(
             reflection_presence * 0.27
                 + reflection_stack * 0.21
                 + reflection_rim * 0.22
                 + reflection_support * 0.15
                 + reflection_pickup * 0.10
-                + reflection_bridge_alignment * 0.07,
+                + reflection_bridge_alignment * 0.07
+                + adaptive_vibrancy_bias * 0.07,
             0.0,
             1.0);
         float reflection_weight =
@@ -38636,14 +39166,16 @@ fragment float4 fs_material(
                + 0.15 * reflection_support
                + 0.12 * reflection_pickup
                + 0.10 * reflection_highlight
-               + 0.08 * reflection_grazing);
+               + 0.08 * reflection_grazing
+               + 0.08 * adaptive_vibrancy_bias);
         rgb = mix(
             rgb,
             reflection_layer,
             reflection_weight
                 * (0.052
                    + 0.046 * reflection_presence
-                   + 0.040 * reflection_rim));
+                   + 0.040 * reflection_rim
+                   + 0.030 * planned_environment_reflection));
         float3 reflection_prism = float3(
             spectral_warmth + tint_chroma * in.tint.r * 0.034,
             0.12 * (spectral_warmth + spectral_coolness)
@@ -38654,7 +39186,8 @@ fragment float4 fs_material(
             * reflection_rim
             * (0.00016
                + 0.00054 * spectral_rim_tint
-               + 0.00046 * glass_scattering_gain)
+               + 0.00046 * glass_scattering_gain
+               + 0.00030 * adaptive_vibrancy_bias)
             * (0.50 + 0.50 * reflection_highlight);
         float reflection_absorption =
             reflection_shadow
@@ -39376,6 +39909,8 @@ fragment float4 fs_material(
             + 0.002 * abs(glass_stabilization_transmission_bias)
             + 0.004 * planned_environment_transmission_balance
             + 0.003 * planned_environment_reflection
+            + 0.004 * planned_environment_color_pickup
+            + 0.003 * abs(environment_luminance_bias)
             + 0.004 * group_blend_strength * shared_backdrop_scope
             + 0.003 * group_blend_strength * group_surface_execution
             + 0.004 * bridge_band * (0.36 + 0.64 * bridge_core)
@@ -39393,13 +39928,16 @@ fragment float4 fs_material(
             + 0.036 * edge_continuity_field_strength
             + 0.030 * rim_coalescence_field_strength
             + 0.024 * edge_adhesion_field_strength
-            + 0.020 * elastic_tension_field_strength,
+            + 0.020 * elastic_tension_field_strength
+            + 0.060 * adaptive_vibrancy_bias,
         0.0,
-        0.020);
+        0.023);
     if (adaptive_transmission_field_strength > 0.0001
         && (clear_glass_detail > 0.0001
             || glass_stabilization_strength > 0.0001
             || planned_environment_transmission_balance > 0.0001
+            || planned_environment_color_pickup > 0.0001
+            || planned_environment_reflection > 0.0001
             || group_blend_strength > 0.0001
             || bridge_band > 0.0001
             || pointer_lens_strength > 0.0001)) {
@@ -39434,12 +39972,17 @@ fragment float4 fs_material(
                 + clear_glass_detail * 0.10
                 + morph_continuity_field_strength * 3.6
                 + interaction_response_field_strength * 3.2
-                + contextual_reflection_field_strength * 2.8,
+                + contextual_reflection_field_strength * 2.8
+                + adaptive_vibrancy_bias * 0.18
+                + planned_environment_transmission_balance * 0.12,
             0.0,
             1.0);
         float2 adaptive_axis_raw =
             refraction_dir * (0.30 + 0.16 * glass_lensing_gain)
-            - dynamic_light_dir * (0.22 + 0.14 * dynamic_light_highlight)
+            - dynamic_light_dir
+                * (0.22
+                   + 0.14 * dynamic_light_highlight
+                   + 0.08 * planned_environment_reflection)
             + bridge_dir * (0.18 + 0.20 * adaptive_bridge)
             + pointer_dir * adaptive_pointer * 0.12
             + bridge_tangent
@@ -39448,7 +39991,8 @@ fragment float4 fs_material(
             + dispersion_tangent
                 * (0.10
                    + 0.06 * spectral_dispersion
-                   + 0.04 * glass_dispersion_tangential);
+                   + 0.04 * glass_dispersion_tangential
+                   + 0.08 * planned_environment_color_pickup);
         float adaptive_axis_len = length(adaptive_axis_raw);
         float2 adaptive_axis =
             adaptive_axis_len > 0.0001
@@ -39471,7 +40015,8 @@ fragment float4 fs_material(
                 + bridge_lateral_signed * adaptive_bridge * 1.0
                 + pointer_lens_raw * adaptive_pointer * 1.4
                 + spectral_dispersion * 1.3
-                + glass_caustic_spread * 1.1,
+                + glass_caustic_spread * 1.1
+                + adaptive_vibrancy_bias * 1.8,
             -12.0,
             12.0);
         float adaptive_wave =
@@ -39491,7 +40036,8 @@ fragment float4 fs_material(
                 + adaptive_bridge * 0.16
                 + adaptive_pointer * 0.14
                 + adaptive_rim * 0.10
-                + adaptive_bridge_alignment * 0.10,
+                + adaptive_bridge_alignment * 0.10
+                + adaptive_vibrancy_bias * 0.10,
             0.0,
             1.0);
         float adaptive_focus =
@@ -39503,6 +40049,8 @@ fragment float4 fs_material(
              + 0.50 * glass_thickness
              + 0.48 * clear_glass_detail
              + 0.58 * adaptive_presence
+             + 0.54 * planned_environment_transmission_balance
+             + 0.36 * planned_environment_reflection
              + 0.010 * blur_points)
             * content_scale
             * (0.86 + 0.14 * glass_lensing_gain);
@@ -39510,18 +40058,23 @@ fragment float4 fs_material(
             (0.22
              + 0.34 * glass_dispersion_tangential
              + 0.34 * spectral_dispersion
-             + 0.48 * adaptive_support)
+             + 0.48 * adaptive_support
+             + 0.42 * planned_environment_color_pickup)
             * content_scale;
         float adaptive_depth_span =
             (0.18
              + 0.30 * adaptive_group
              + 0.24 * adaptive_bridge
              + 0.20 * adaptive_pointer
-             + 0.16 * glass_caustic_spread)
+             + 0.16 * glass_caustic_spread
+             + 0.30 * planned_environment_transmission_balance)
             * content_scale;
         float2 adaptive_base_uv = clamp(
             in.screen_uv
-                + refraction_uv * (0.030 + 0.046 * adaptive_support)
+                + refraction_uv
+                    * (0.030
+                       + 0.046 * adaptive_support
+                       + 0.034 * planned_environment_transmission_balance)
                 + adaptive_axis
                     * texel
                     * adaptive_depth_span
@@ -39592,9 +40145,10 @@ fragment float4 fs_material(
             0.036
                 + 0.048 * spectral_dispersion
                 + 0.040 * glass_dispersion_tangential
-                + 0.044 * adaptive_support,
+                + 0.044 * adaptive_support
+                + 0.052 * planned_environment_color_pickup,
             0.0,
-            0.20);
+            0.23);
         float3 adaptive_probe = mix(
             adaptive_average,
             adaptive_split,
@@ -39635,13 +40189,15 @@ fragment float4 fs_material(
                 0.34,
                 adaptive_luma_range * 0.52
                     + adaptive_chroma_range * 0.30
-                    + adaptive_support * 0.08);
+                    + adaptive_support * 0.08
+                    + adaptive_vibrancy_bias * 0.06);
         float adaptive_backdrop_quiet =
             1.0 - smoothstep(
                 0.09,
                 0.42,
                 adaptive_luma_range * 0.52
-                    + adaptive_chroma_range * 0.30);
+                    + adaptive_chroma_range * 0.30
+                    - adaptive_vibrancy_bias * 0.04);
         float adaptive_shadow =
             smoothstep(
                 0.05,
@@ -39661,20 +40217,27 @@ fragment float4 fs_material(
                 + 0.18 * adaptive_backdrop_quiet
                 + 0.12 * adaptive_light_face
                 + 0.10 * clear_glass_detail
+                + 0.08 * planned_environment_transmission_balance
+                + 0.06 * adaptive_vibrancy_bias
+                + 0.04 * max(environment_luminance_bias, 0.0)
                 + 0.05 * glass_stabilization_damping
                 + glass_stabilization_transmission_bias
                 - 0.14 * adaptive_backdrop_busy
                 - 0.06 * glass_stabilization_shimmer_reduction
                     * adaptive_backdrop_busy
+                - 0.04 * max(-environment_luminance_bias, 0.0)
+                    * adaptive_backdrop_busy
                 - 0.08 * adaptive_shadow,
             0.34,
-            0.82);
+            0.86);
         float adaptive_target_luma = clamp(
             0.50
                 + (adaptive_probe_luma - 0.50)
                     * (0.50 + 0.22 * adaptive_transmission)
                 + (adaptive_highlight - adaptive_shadow)
                     * (0.030 + 0.034 * adaptive_support)
+                + environment_luminance_bias
+                    * (0.020 + 0.026 * adaptive_vibrancy_bias)
                 - adaptive_backdrop_busy
                     * clear_glass_dimming
                     * (0.020 + 0.018 * clear_glass_detail),
@@ -39685,9 +40248,11 @@ fragment float4 fs_material(
                 + 0.12 * adaptive_transmission
                 + 0.10 * adaptive_support
                 + 0.08 * adaptive_light_face
+                + 0.08 * planned_environment_color_pickup
+                + 0.06 * adaptive_vibrancy_bias
                 - 0.10 * adaptive_backdrop_busy,
             0.42,
-            0.86);
+            0.90);
         float3 adaptive_surface =
             float3(adaptive_target_luma)
             + (adaptive_probe - float3(adaptive_probe_luma))
@@ -39702,14 +40267,17 @@ fragment float4 fs_material(
                     * (1.0
                        + clear_glass_contrast * 0.006
                        + adaptive_backdrop_busy * 0.006
+                       + adaptive_vibrancy_bias * 0.005
                        - adaptive_shadow * 0.004)
                 + float3(0.50),
             0.0,
             1.0);
         adaptive_layer *= float3(
-            1.0 + spectral_warmth * 0.11 + tint_chroma * in.tint.r * 0.004,
+            1.0 + spectral_warmth * 0.11 + tint_chroma * in.tint.r * 0.004
+                + planned_environment_color_pickup * in.tint.r * 0.008,
             1.0 + spectral_rim_tint * 0.055 + tint_chroma * in.tint.g * 0.004,
-            1.0 + spectral_coolness * 0.11 + tint_chroma * in.tint.b * 0.004);
+            1.0 + spectral_coolness * 0.11 + tint_chroma * in.tint.b * 0.004
+                + planned_environment_color_pickup * in.tint.b * 0.008);
         float adaptive_gate = clamp(
             adaptive_presence * 0.28
                 + adaptive_support * 0.20
@@ -39717,7 +40285,8 @@ fragment float4 fs_material(
                 + adaptive_backdrop_quiet * 0.10
                 + adaptive_rim * 0.10
                 + adaptive_lobe * 0.08
-                + adaptive_bridge_alignment * 0.06,
+                + adaptive_bridge_alignment * 0.06
+                + adaptive_vibrancy_bias * 0.07,
             0.0,
             1.0);
         float adaptive_weight =
@@ -39727,14 +40296,16 @@ fragment float4 fs_material(
                + 0.14 * adaptive_support
                + 0.12 * adaptive_transmission
                + 0.10 * adaptive_focus
-               + 0.08 * adaptive_backdrop_busy);
+               + 0.08 * adaptive_backdrop_busy
+               + 0.08 * adaptive_vibrancy_bias);
         rgb = mix(
             rgb,
             adaptive_layer,
             adaptive_weight
                 * (0.050
                    + 0.044 * adaptive_presence
-                   + 0.038 * adaptive_backdrop_busy));
+                   + 0.038 * adaptive_backdrop_busy
+                   + 0.030 * planned_environment_transmission_balance));
         float3 adaptive_prism = float3(
             spectral_warmth + tint_chroma * in.tint.r * 0.030,
             0.11 * (spectral_warmth + spectral_coolness)
@@ -39749,7 +40320,8 @@ fragment float4 fs_material(
             * adaptive_caustic
             * (0.00014
                + 0.00046 * spectral_rim_tint
-               + 0.00040 * glass_scattering_gain);
+               + 0.00040 * glass_scattering_gain
+               + 0.00028 * adaptive_vibrancy_bias);
         float adaptive_absorption =
             adaptive_shadow
             * adaptive_weight
@@ -40177,6 +40749,795 @@ fragment float4 fs_material(
             * (0.00046 + 0.0014 * glass_shadow_gain)
             * (0.54 + 0.46 * (1.0 - settling_light_face));
         rgb *= 1.0 - clamp(settling_absorption, 0.0, 0.0066);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
+    float specular_caustic_field_strength = clamp(
+        0.004 * planned_environment_reflection
+            + 0.004 * planned_environment_color_pickup
+            + 0.003 * planned_environment_transmission_balance
+            + 0.003 * glass_caustic_spread
+            + 0.003 * glass_prismatic_gain
+            + 0.18 * motion_settling_field_strength
+            + 0.16 * adaptive_transmission_field_strength
+            + 0.15 * contextual_reflection_field_strength
+            + 0.12 * specular_flow_field_strength
+            + 0.10 * subsurface_caustic_field_strength
+            + 0.08 * transmission_depth_field_strength
+            + 0.06 * foreground_sheen_field_strength
+            + 0.05 * environment_sheen_bias
+            + 0.04 * adaptive_vibrancy_bias,
+        0.0,
+        0.017);
+    if (specular_caustic_field_strength > 0.0001
+        && (planned_environment_reflection > 0.0001
+            || glass_caustic_spread > 0.0001
+            || glass_prismatic_gain > 0.0001
+            || adaptive_vibrancy_bias > 0.0001
+            || contextual_reflection_field_strength > 0.0001)) {
+        float caustic_rim =
+            edge_lens
+            * (0.56
+               + 0.44
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.86, 0.86),
+                       signed_edge_distance)));
+        float caustic_bridge =
+            bridge_band * (0.36 + 0.64 * bridge_core);
+        float caustic_pointer = clamp(
+            pointer_lens_strength
+                * (0.40 * pointer_lens_raw + 0.60 * pointer_lens),
+            0.0,
+            1.0);
+        float caustic_presence = clamp(
+            caustic_rim * 0.28
+                + caustic_bridge * 0.20
+                + planned_environment_reflection * 0.17
+                + planned_environment_color_pickup * 0.14
+                + planned_environment_transmission_balance * 0.12
+                + adaptive_vibrancy_bias * 0.12
+                + caustic_pointer * 0.07,
+            0.0,
+            1.0);
+        float caustic_flow_sign = bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 caustic_axis_raw =
+            -dynamic_light_dir
+                * (0.36
+                   + 0.20 * dynamic_light_highlight
+                   + 0.12 * planned_environment_reflection)
+            + refraction_dir * (0.24 + 0.16 * glass_lensing_gain)
+            + bridge_dir * (0.18 + 0.20 * caustic_bridge)
+            + bridge_tangent
+                * caustic_flow_sign
+                * (0.12 + 0.14 * abs(bridge_shear) * caustic_bridge)
+            + dispersion_tangent
+                * (0.14
+                   + 0.12 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential)
+            + pointer_dir * caustic_pointer * 0.12;
+        float caustic_axis_len = length(caustic_axis_raw);
+        float2 caustic_axis =
+            caustic_axis_len > 0.0001
+                ? caustic_axis_raw / caustic_axis_len
+                : (normalized_len > 0.0001
+                    ? refraction_dir
+                    : float2(1.0, 0.0));
+        float2 caustic_cross =
+            float2(-caustic_axis.y, caustic_axis.x);
+        float caustic_light_face =
+            smoothstep(-0.18, 0.94, dot(caustic_axis, -dynamic_light_dir));
+        float caustic_bridge_alignment =
+            smoothstep(-0.16, 0.94, abs(dot(caustic_axis, bridge_tangent)));
+        float caustic_phase = clamp(
+            dot(normalized_local, caustic_axis)
+                    * (5.0 + 2.2 * caustic_presence)
+                + dot(normalized_local, caustic_cross)
+                    * (3.3 + 1.3 * planned_environment_color_pickup)
+                + bridge_axial * (2.2 + 1.2 * bridge_core)
+                + bridge_lateral_signed * caustic_bridge * 1.3
+                + bridge_shear * caustic_bridge * 1.6
+                + spectral_dispersion * 4.6
+                + glass_caustic_spread * 4.2
+                + adaptive_vibrancy_bias * 2.4
+                + materialize_wave_strength * 2.0,
+            -12.0,
+            12.0);
+        float caustic_wave = 0.5 + 0.5 * sin(caustic_phase);
+        float caustic_counter_wave =
+            0.5 + 0.5 * cos(
+                caustic_phase * 0.62
+                + glass_caustic_spread * 4.4
+                + planned_environment_reflection * 2.4);
+        float caustic_lobe =
+            1.0 - smoothstep(0.0, 0.27, abs(caustic_wave - 0.58));
+        float caustic_return_lobe =
+            1.0 - smoothstep(0.0, 0.31, abs(caustic_counter_wave - 0.52));
+        float caustic_focus =
+            caustic_lobe
+            * caustic_lobe
+            * (0.42 + 0.58 * caustic_light_face);
+        float caustic_thread =
+            max(caustic_focus, caustic_return_lobe * 0.44)
+            * (0.42 + 0.58 * caustic_rim)
+            * (0.50 + 0.50 * caustic_presence);
+        float caustic_support = clamp(
+            caustic_presence * 0.30
+                + caustic_bridge_alignment * 0.18
+                + caustic_rim * 0.18
+                + caustic_thread * 0.14
+                + caustic_bridge * 0.10
+                + adaptive_vibrancy_bias * 0.10,
+            0.0,
+            1.0);
+        float caustic_span =
+            (0.24
+             + 0.40 * glass_thickness
+             + 0.32 * clear_glass_detail
+             + 0.54 * caustic_presence
+             + 0.42 * planned_environment_reflection
+             + 0.010 * blur_points)
+            * content_scale
+            * (0.86 + 0.14 * glass_lensing_gain);
+        float caustic_channel_span =
+            (0.16
+             + 0.36 * glass_dispersion_tangential
+             + 0.38 * spectral_dispersion
+             + 0.34 * glass_caustic_spread
+             + 0.28 * caustic_support)
+            * content_scale;
+        float2 caustic_base_uv = clamp(
+            in.screen_uv
+                + refraction_uv * (0.030 + 0.040 * caustic_support)
+                + caustic_axis
+                    * texel
+                    * caustic_span
+                    * caustic_thread
+                    * 0.040,
+            float2(0.0),
+            float2(1.0));
+        float2 caustic_key_uv = clamp(
+            caustic_base_uv
+                - dynamic_light_dir
+                    * texel
+                    * caustic_span
+                    * (0.14 + 0.14 * caustic_light_face)
+                + caustic_axis
+                    * texel
+                    * caustic_span
+                    * (0.10 + 0.12 * caustic_focus),
+            float2(0.0),
+            float2(1.0));
+        float2 caustic_return_uv = clamp(
+            caustic_base_uv
+                + dynamic_light_dir
+                    * texel
+                    * caustic_span
+                    * (0.12 + 0.11 * (1.0 - caustic_light_face))
+                - caustic_axis
+                    * texel
+                    * caustic_span
+                    * (0.08 + 0.10 * caustic_return_lobe),
+            float2(0.0),
+            float2(1.0));
+        float2 caustic_warm_uv = clamp(
+            caustic_base_uv
+                + caustic_cross
+                    * texel
+                    * caustic_channel_span
+                    * (0.18 + 0.14 * caustic_wave)
+                + dispersion_tangent
+                    * texel
+                    * caustic_channel_span
+                    * (0.20 + 0.18 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float2 caustic_cool_uv = clamp(
+            caustic_base_uv
+                - caustic_cross
+                    * texel
+                    * caustic_channel_span
+                    * (0.17 + 0.13 * caustic_return_lobe)
+                - dispersion_tangent
+                    * texel
+                    * caustic_channel_span
+                    * (0.20 + 0.18 * spectral_dispersion),
+            float2(0.0),
+            float2(1.0));
+        float3 caustic_key_rgb =
+            backdrop.sample(samp, caustic_key_uv).rgb;
+        float3 caustic_return_rgb =
+            backdrop.sample(samp, caustic_return_uv).rgb;
+        float3 caustic_warm_rgb =
+            backdrop.sample(samp, caustic_warm_uv).rgb;
+        float3 caustic_cool_rgb =
+            backdrop.sample(samp, caustic_cool_uv).rgb;
+        float3 caustic_probe =
+            caustic_key_rgb * 0.31
+            + caustic_return_rgb * 0.21
+            + caustic_warm_rgb * 0.24
+            + caustic_cool_rgb * 0.24;
+        float3 caustic_split = float3(
+            caustic_warm_rgb.r,
+            (caustic_key_rgb.g + caustic_return_rgb.g) * 0.5,
+            caustic_cool_rgb.b);
+        float caustic_split_mix = clamp(
+            0.048
+                + 0.060 * spectral_dispersion
+                + 0.052 * glass_dispersion_tangential
+                + 0.050 * glass_caustic_spread
+                + 0.048 * caustic_support,
+            0.0,
+            0.24);
+        float3 caustic_mixed =
+            mix(caustic_probe, caustic_split, caustic_split_mix);
+        float caustic_key_luma =
+            dot(caustic_key_rgb, float3(0.2126, 0.7152, 0.0722));
+        float caustic_return_luma =
+            dot(caustic_return_rgb, float3(0.2126, 0.7152, 0.0722));
+        float caustic_warm_luma =
+            dot(caustic_warm_rgb, float3(0.2126, 0.7152, 0.0722));
+        float caustic_cool_luma =
+            dot(caustic_cool_rgb, float3(0.2126, 0.7152, 0.0722));
+        float caustic_probe_luma =
+            dot(caustic_probe, float3(0.2126, 0.7152, 0.0722));
+        float caustic_mixed_luma =
+            dot(caustic_mixed, float3(0.2126, 0.7152, 0.0722));
+        float caustic_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float caustic_luma_max =
+            max(max(caustic_key_luma, caustic_return_luma),
+                max(caustic_warm_luma, caustic_cool_luma));
+        float caustic_luma_min =
+            min(min(caustic_key_luma, caustic_return_luma),
+                min(caustic_warm_luma, caustic_cool_luma));
+        float caustic_luma_range =
+            clamp(caustic_luma_max - caustic_luma_min, 0.0, 1.0);
+        float caustic_pickup = smoothstep(
+            0.046,
+            0.36,
+            length(caustic_key_rgb - caustic_return_rgb) * 0.26
+                + length(caustic_warm_rgb - caustic_cool_rgb) * 0.24
+                + caustic_luma_range * 0.18
+                + caustic_thread * 0.10
+                + adaptive_vibrancy_bias * 0.08);
+        float caustic_highlight = smoothstep(
+            0.055,
+            0.36,
+            caustic_luma_max
+                - caustic_surface_luma
+                + caustic_luma_range * 0.12
+                + planned_environment_reflection * 0.04);
+        float caustic_shadow = smoothstep(
+            0.052,
+            0.32,
+            caustic_surface_luma
+                - caustic_luma_min
+                + caustic_luma_range * 0.10);
+        float caustic_target_luma = clamp(
+            0.50
+                + (caustic_probe_luma - 0.50)
+                    * (0.52 + 0.20 * caustic_support)
+                + (caustic_highlight - caustic_shadow)
+                    * (0.030 + 0.040 * caustic_thread)
+                + environment_luminance_bias
+                    * (0.018 + 0.022 * adaptive_vibrancy_bias),
+            0.0,
+            1.0);
+        float caustic_chroma_keep = clamp(
+            0.54
+                + 0.12 * caustic_support
+                + 0.10 * caustic_light_face
+                + 0.08 * caustic_pickup
+                + 0.08 * planned_environment_color_pickup
+                - 0.08 * caustic_shadow,
+            0.42,
+            0.86);
+        float3 caustic_layer =
+            float3(caustic_target_luma)
+            + (caustic_mixed - float3(caustic_mixed_luma))
+                * caustic_chroma_keep;
+        caustic_layer = clamp(
+            (caustic_layer - float3(0.50))
+                    * (1.0
+                       + clear_glass_contrast * 0.005
+                       + caustic_pickup * 0.006
+                       + caustic_thread * 0.005
+                       - caustic_shadow * 0.004)
+                + float3(0.50),
+            0.0,
+            1.0);
+        caustic_layer *= float3(
+            1.0 + spectral_warmth * 0.12 + tint_chroma * in.tint.r * 0.004,
+            1.0 + spectral_rim_tint * 0.060 + tint_chroma * in.tint.g * 0.004,
+            1.0 + spectral_coolness * 0.12 + tint_chroma * in.tint.b * 0.004);
+        float caustic_gate = clamp(
+            caustic_presence * 0.28
+                + caustic_support * 0.22
+                + caustic_thread * 0.18
+                + caustic_pickup * 0.13
+                + caustic_highlight * 0.10
+                + caustic_bridge_alignment * 0.07
+                + adaptive_vibrancy_bias * 0.07,
+            0.0,
+            1.0);
+        float caustic_weight =
+            specular_caustic_field_strength
+            * caustic_gate
+            * (0.14
+               + 0.13 * caustic_support
+               + 0.12 * caustic_thread
+               + 0.10 * caustic_pickup
+               + 0.08 * caustic_highlight
+               + 0.07 * planned_environment_reflection);
+        rgb = mix(
+            rgb,
+            caustic_layer,
+            caustic_weight
+                * (0.046
+                   + 0.040 * caustic_presence
+                   + 0.034 * caustic_thread
+                   + 0.028 * planned_environment_reflection));
+        float3 caustic_prism = float3(
+            spectral_warmth + tint_chroma * in.tint.r * 0.030,
+            0.11 * (spectral_warmth + spectral_coolness)
+                + tint_chroma * in.tint.g * 0.026,
+            spectral_coolness + tint_chroma * in.tint.b * 0.030);
+        rgb += caustic_prism
+            * caustic_weight
+            * caustic_thread
+            * (0.00014
+               + 0.00050 * spectral_rim_tint
+               + 0.00044 * glass_prismatic_gain
+               + 0.00036 * planned_environment_reflection
+               + 0.00030 * adaptive_vibrancy_bias);
+        rgb += float3(caustic_highlight)
+            * caustic_weight
+            * caustic_thread
+            * (0.00070
+               + 0.0010 * planned_environment_reflection
+               + 0.00080 * glass_caustic_spread);
+        float caustic_absorption =
+            caustic_shadow
+            * caustic_weight
+            * (0.00042 + 0.0013 * glass_shadow_gain)
+            * (0.54 + 0.46 * (1.0 - caustic_light_face));
+        rgb *= 1.0 - clamp(caustic_absorption, 0.0, 0.0060);
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
+    float fresnel_flare_field_strength = clamp(
+        0.004 * planned_environment_reflection
+            + 0.003 * planned_environment_color_pickup
+            + 0.003 * glass_prismatic_gain
+            + 0.003 * glass_caustic_spread
+            + 0.16 * specular_caustic_field_strength
+            + 0.14 * contextual_reflection_field_strength
+            + 0.12 * adaptive_transmission_field_strength
+            + 0.10 * motion_settling_field_strength
+            + 0.08 * specular_flow_field_strength
+            + 0.06 * foreground_sheen_field_strength
+            + 0.05 * environment_sheen_bias
+            + 0.04 * adaptive_vibrancy_bias,
+        0.0,
+        0.015);
+    if (fresnel_flare_field_strength > 0.0001
+        && (planned_environment_reflection > 0.0001
+            || specular_caustic_field_strength > 0.0001
+            || adaptive_vibrancy_bias > 0.0001
+            || glass_prismatic_gain > 0.0001)) {
+        float fresnel_edge =
+            edge_lens
+            * (0.62
+               + 0.38
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.70, 0.82),
+                       signed_edge_distance)));
+        float2 fresnel_normal =
+            normalized_len > 0.0001 ? normalized_local / normalized_len
+                                     : -dynamic_light_dir;
+        float fresnel_grazing = clamp(
+            1.0 - abs(dot(fresnel_normal, -dynamic_light_dir)),
+            0.0,
+            1.0);
+        fresnel_grazing =
+            fresnel_grazing
+            * fresnel_grazing
+            * (0.52 + 0.48 * fresnel_edge);
+        float fresnel_bridge =
+            bridge_band * (0.34 + 0.66 * bridge_core);
+        float fresnel_pointer = clamp(
+            pointer_lens_strength
+                * (0.34 * pointer_lens_raw + 0.66 * pointer_lens),
+            0.0,
+            1.0);
+        float fresnel_presence = clamp(
+            fresnel_edge * 0.30
+                + fresnel_grazing * 0.22
+                + fresnel_bridge * 0.14
+                + planned_environment_reflection * 0.13
+                + specular_caustic_field_strength * 4.0
+                + adaptive_vibrancy_bias * 0.10
+                + fresnel_pointer * 0.06,
+            0.0,
+            1.0);
+        float fresnel_flow_sign = bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 fresnel_axis_raw =
+            -dynamic_light_dir
+                * (0.32
+                   + 0.18 * dynamic_light_highlight
+                   + 0.10 * planned_environment_reflection)
+            + fresnel_normal * (0.24 + 0.12 * fresnel_grazing)
+            + bridge_tangent
+                * fresnel_flow_sign
+                * (0.14 + 0.12 * abs(bridge_shear) * fresnel_bridge)
+            + bridge_dir * (0.12 + 0.16 * fresnel_bridge)
+            + dispersion_tangent
+                * (0.10
+                   + 0.10 * spectral_dispersion
+                   + 0.07 * glass_dispersion_tangential)
+            + pointer_dir * fresnel_pointer * 0.10;
+        float fresnel_axis_len = length(fresnel_axis_raw);
+        float2 fresnel_axis =
+            fresnel_axis_len > 0.0001
+                ? fresnel_axis_raw / fresnel_axis_len
+                : fresnel_normal;
+        float2 fresnel_cross =
+            float2(-fresnel_axis.y, fresnel_axis.x);
+        float fresnel_light_face =
+            smoothstep(-0.18, 0.94, dot(fresnel_axis, -dynamic_light_dir));
+        float fresnel_alignment =
+            smoothstep(-0.12, 0.94, abs(dot(fresnel_axis, bridge_tangent)));
+        float fresnel_phase = clamp(
+            dot(normalized_local, fresnel_axis)
+                    * (4.2 + 1.6 * fresnel_presence)
+                + dot(normalized_local, fresnel_cross)
+                    * (2.8 + 1.0 * adaptive_vibrancy_bias)
+                + bridge_axial * (1.8 + 1.2 * fresnel_bridge)
+                + bridge_lateral_signed * fresnel_bridge * 1.0
+                + bridge_shear * fresnel_bridge * 1.2
+                + spectral_dispersion * 3.8
+                + glass_caustic_spread * 3.2
+                + planned_environment_reflection * 2.2,
+            -12.0,
+            12.0);
+        float fresnel_wave =
+            0.5 + 0.5 * sin(fresnel_phase);
+        float fresnel_counter_wave =
+            0.5 + 0.5 * cos(
+                fresnel_phase * 0.68
+                + adaptive_vibrancy_bias * 2.0
+                + glass_caustic_spread * 2.8);
+        float fresnel_lobe =
+            1.0 - smoothstep(0.0, 0.34, abs(fresnel_wave - 0.58));
+        float fresnel_return_lobe =
+            1.0 - smoothstep(0.0, 0.38, abs(fresnel_counter_wave - 0.52));
+        float fresnel_thread =
+            max(fresnel_lobe, fresnel_return_lobe * 0.46)
+            * (0.40 + 0.60 * fresnel_edge)
+            * (0.42 + 0.58 * fresnel_grazing);
+        float fresnel_support = clamp(
+            fresnel_presence * 0.30
+                + fresnel_thread * 0.18
+                + fresnel_alignment * 0.16
+                + fresnel_light_face * 0.14
+                + planned_environment_reflection * 0.12
+                + adaptive_vibrancy_bias * 0.10,
+            0.0,
+            1.0);
+        float fresnel_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float fresnel_luma_window = smoothstep(
+            0.12,
+            0.86,
+            fresnel_surface_luma
+                + fresnel_light_face * 0.10
+                + planned_environment_reflection * 0.08);
+        float fresnel_flash = clamp(
+            fresnel_thread * 0.34
+                + fresnel_grazing * 0.24
+                + fresnel_support * 0.18
+                + specular_caustic_field_strength * 5.0
+                + adaptive_vibrancy_bias * 0.12
+                - fresnel_surface_luma * 0.08,
+            0.0,
+            1.0);
+        float3 fresnel_color = float3(
+            1.0 + spectral_warmth * 0.20 + tint_chroma * in.tint.r * 0.010,
+            1.0 + spectral_rim_tint * 0.10 + tint_chroma * in.tint.g * 0.008,
+            1.0 + spectral_coolness * 0.20 + tint_chroma * in.tint.b * 0.010);
+        fresnel_color = clamp(
+            fresnel_color
+                + in.tint.rgb
+                    * (0.010
+                       + 0.018 * planned_environment_color_pickup
+                       + 0.014 * adaptive_vibrancy_bias),
+            0.0,
+            1.36);
+        float fresnel_contrast = clamp(
+            clear_glass_contrast * 0.005
+                + fresnel_support * 0.006
+                + fresnel_flash * 0.005
+                - fresnel_surface_luma * 0.002,
+            -0.006,
+            0.020);
+        float3 fresnel_layer = clamp(
+            (rgb - float3(0.50)) * (1.0 + fresnel_contrast)
+                + float3(0.50)
+                + fresnel_color
+                    * fresnel_flash
+                    * (0.0010
+                       + 0.0014 * fresnel_luma_window
+                       + 0.0010 * planned_environment_reflection),
+            0.0,
+            1.0);
+        float fresnel_gate = clamp(
+            fresnel_presence * 0.28
+                + fresnel_edge * 0.20
+                + fresnel_grazing * 0.18
+                + fresnel_thread * 0.14
+                + fresnel_support * 0.12
+                + fresnel_flash * 0.08
+                + adaptive_vibrancy_bias * 0.08,
+            0.0,
+            1.0);
+        float fresnel_weight =
+            fresnel_flare_field_strength
+            * fresnel_gate
+            * (0.14
+               + 0.13 * fresnel_support
+               + 0.11 * fresnel_flash
+               + 0.09 * fresnel_light_face
+               + 0.08 * planned_environment_reflection);
+        rgb = mix(
+            rgb,
+            fresnel_layer,
+            fresnel_weight
+                * (0.052
+                   + 0.044 * fresnel_presence
+                   + 0.034 * fresnel_thread));
+        rgb += fresnel_color
+            * fresnel_weight
+            * fresnel_thread
+            * (0.00018
+               + 0.00048 * spectral_rim_tint
+               + 0.00038 * glass_prismatic_gain
+               + 0.00030 * adaptive_vibrancy_bias);
+        float fresnel_guard = clamp(
+            fresnel_surface_luma
+                * fresnel_weight
+                * (0.00036 + 0.0011 * glass_shadow_gain)
+                * (1.0 - fresnel_grazing * 0.42),
+            0.0,
+            0.0048);
+        rgb *= 1.0 - fresnel_guard;
+        rgb = clamp(rgb, 0.0, 1.0);
+    }
+    float iridescent_film_field_strength = clamp(
+        0.004 * spectral_dispersion
+            + 0.003 * spectral_rim_tint
+            + 0.003 * glass_prismatic_gain
+            + 0.003 * planned_environment_reflection
+            + 0.002 * planned_environment_color_pickup
+            + 0.18 * fresnel_flare_field_strength
+            + 0.15 * specular_caustic_field_strength
+            + 0.10 * contextual_reflection_field_strength
+            + 0.08 * adaptive_transmission_field_strength
+            + 0.06 * environment_sheen_bias
+            + 0.05 * adaptive_vibrancy_bias,
+        0.0,
+        0.014);
+    if (iridescent_film_field_strength > 0.0001
+        && (spectral_dispersion > 0.0001
+            || spectral_rim_tint > 0.0001
+            || glass_prismatic_gain > 0.0001
+            || planned_environment_reflection > 0.0001
+            || fresnel_flare_field_strength > 0.0001)) {
+        float film_edge =
+            edge_lens
+            * (0.58
+               + 0.42
+                   * (1.0 - smoothstep(
+                       0.0,
+                       max(edge_bevel_width * 2.62, 0.80),
+                       signed_edge_distance)));
+        float2 film_normal =
+            normalized_len > 0.0001 ? normalized_local / normalized_len
+                                     : -dynamic_light_dir;
+        float film_grazing = clamp(
+            1.0 - abs(dot(film_normal, -dynamic_light_dir)),
+            0.0,
+            1.0);
+        film_grazing =
+            film_grazing
+            * film_grazing
+            * (0.48 + 0.52 * film_edge);
+        float film_bridge =
+            bridge_band * (0.30 + 0.70 * bridge_core);
+        float film_pointer = clamp(
+            pointer_lens_strength
+                * (0.30 * pointer_lens_raw + 0.70 * pointer_lens),
+            0.0,
+            1.0);
+        float film_presence = clamp(
+            film_edge * 0.30
+                + film_grazing * 0.24
+                + film_bridge * 0.12
+                + planned_environment_reflection * 0.12
+                + spectral_rim_tint * 0.12
+                + adaptive_vibrancy_bias * 0.08
+                + film_pointer * 0.06,
+            0.0,
+            1.0);
+        float film_flow_sign = bridge_shear >= 0.0 ? 1.0 : -1.0;
+        float2 film_axis_raw =
+            film_normal * (0.28 + 0.14 * film_grazing)
+            - dynamic_light_dir
+                * (0.24
+                   + 0.14 * dynamic_light_highlight
+                   + 0.08 * planned_environment_reflection)
+            + bridge_tangent
+                * film_flow_sign
+                * (0.14 + 0.12 * abs(bridge_shear) * film_bridge)
+            + bridge_dir * (0.10 + 0.14 * film_bridge)
+            + dispersion_tangent
+                * (0.14
+                   + 0.14 * spectral_dispersion
+                   + 0.08 * glass_dispersion_tangential)
+            + pointer_dir * film_pointer * 0.08;
+        float film_axis_len = length(film_axis_raw);
+        float2 film_axis =
+            film_axis_len > 0.0001 ? film_axis_raw / film_axis_len
+                                   : film_normal;
+        float2 film_cross =
+            float2(-film_axis.y, film_axis.x);
+        float film_light_face =
+            smoothstep(-0.18, 0.94, dot(film_axis, -dynamic_light_dir));
+        float film_alignment =
+            smoothstep(-0.12, 0.94, abs(dot(film_axis, bridge_tangent)));
+        float film_phase = clamp(
+            dot(normalized_local, film_axis)
+                    * (5.4 + 2.0 * film_presence)
+                + dot(normalized_local, film_cross)
+                    * (3.8 + 1.4 * spectral_dispersion)
+                + normalized_len * (1.4 + 1.2 * film_edge)
+                + bridge_axial * (1.6 + 1.0 * film_bridge)
+                + bridge_lateral_signed * film_bridge * 1.0
+                + bridge_shear * film_bridge * 1.1
+                + spectral_dispersion * 5.0
+                + spectral_rim_tint * 3.0
+                + glass_caustic_spread * 2.4
+                + planned_environment_reflection * 2.0,
+            -12.0,
+            12.0);
+        float film_wave_r =
+            0.5 + 0.5 * sin(film_phase + spectral_warmth * 3.0);
+        float film_wave_g =
+            0.5 + 0.5 * sin(
+                film_phase * 0.78
+                + spectral_rim_tint * 2.6
+                + film_alignment);
+        float film_wave_b =
+            0.5 + 0.5 * cos(
+                film_phase * 0.64
+                + spectral_coolness * 3.0
+                + glass_prismatic_gain * 1.8);
+        float film_thread =
+            max(max(film_wave_r, film_wave_g), film_wave_b)
+            * (0.38 + 0.62 * film_edge)
+            * (0.42 + 0.58 * film_grazing);
+        float film_band = clamp(
+            abs(film_wave_r - film_wave_b) * 0.34
+                + abs(film_wave_g - 0.50) * 0.24
+                + film_thread * 0.18
+                + spectral_dispersion * 0.14
+                + adaptive_vibrancy_bias * 0.10,
+            0.0,
+            1.0);
+        float film_support = clamp(
+            film_presence * 0.30
+                + film_thread * 0.20
+                + film_alignment * 0.14
+                + film_light_face * 0.12
+                + spectral_rim_tint * 0.12
+                + planned_environment_reflection * 0.10
+                + adaptive_vibrancy_bias * 0.08,
+            0.0,
+            1.0);
+        float film_surface_luma =
+            dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        float film_highlight_room =
+            1.0 - smoothstep(0.72, 0.98, film_surface_luma);
+        float film_visibility = clamp(
+            film_band * 0.32
+                + film_grazing * 0.24
+                + film_support * 0.18
+                + fresnel_flare_field_strength * 5.0
+                + specular_caustic_field_strength * 4.0
+                + film_highlight_room * 0.10,
+            0.0,
+            1.0);
+        float3 film_spectrum = float3(
+            film_wave_r
+                * (1.0 + spectral_warmth * 0.32)
+                + tint_chroma * in.tint.r * 0.012,
+            film_wave_g
+                * (1.0 + spectral_rim_tint * 0.18)
+                + tint_chroma * in.tint.g * 0.010,
+            film_wave_b
+                * (1.0 + spectral_coolness * 0.32)
+                + tint_chroma * in.tint.b * 0.012);
+        film_spectrum = clamp(
+            film_spectrum
+                + in.tint.rgb
+                    * (0.010
+                       + 0.018 * planned_environment_color_pickup
+                       + 0.012 * adaptive_vibrancy_bias),
+            0.0,
+            1.38);
+        float film_luma =
+            dot(film_spectrum, float3(0.2126, 0.7152, 0.0722));
+        float film_chroma_keep = clamp(
+            0.48
+                + 0.14 * film_support
+                + 0.10 * film_light_face
+                + 0.10 * spectral_dispersion
+                + 0.08 * adaptive_vibrancy_bias
+                - 0.08 * film_surface_luma,
+            0.36,
+            0.86);
+        float3 film_color =
+            float3(film_luma)
+            + (film_spectrum - float3(film_luma)) * film_chroma_keep;
+        float film_gate = clamp(
+            film_presence * 0.28
+                + film_edge * 0.20
+                + film_grazing * 0.18
+                + film_band * 0.14
+                + film_support * 0.12
+                + film_visibility * 0.08
+                + adaptive_vibrancy_bias * 0.08,
+            0.0,
+            1.0);
+        float film_weight =
+            iridescent_film_field_strength
+            * film_gate
+            * (0.13
+               + 0.12 * film_support
+               + 0.11 * film_visibility
+               + 0.09 * film_light_face
+               + 0.08 * spectral_rim_tint);
+        float3 film_layer = clamp(
+            rgb
+                + film_color
+                    * film_visibility
+                    * film_highlight_room
+                    * (0.0008
+                       + 0.0012 * spectral_dispersion
+                       + 0.0010 * planned_environment_reflection),
+            0.0,
+            1.0);
+        rgb = mix(
+            rgb,
+            film_layer,
+            film_weight
+                * (0.046
+                   + 0.038 * film_presence
+                   + 0.034 * film_thread));
+        rgb += film_color
+            * film_weight
+            * film_thread
+            * (0.00012
+               + 0.00042 * spectral_rim_tint
+               + 0.00034 * glass_prismatic_gain
+               + 0.00028 * adaptive_vibrancy_bias);
+        float film_guard = clamp(
+            film_surface_luma
+                * film_weight
+                * (0.00032 + 0.0010 * glass_shadow_gain)
+                * (1.0 - film_grazing * 0.38),
+            0.0,
+            0.0044);
+        rgb *= 1.0 - film_guard;
         rgb = clamp(rgb, 0.0, 1.0);
     }
     float noise = fract(sin(dot(

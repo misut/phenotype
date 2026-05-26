@@ -580,6 +580,48 @@ void view(State const& state) {
                     },
                     "Glass Toolbar Group");
                 layout::spacer(8);
+                auto tab_bar_options = layout::glass_surface_options(
+                    layout::GlassSurfacePreset::TabBar,
+                    layout::glass_regular()
+                        .tint(Color{64, 156, 255, 74})
+                        .effect_union(
+                            "native.showcase",
+                            "surface.tabbar",
+                            16.0f,
+                            true,
+                            true)
+                        .effect_id("native.showcase", "surface-tabbar")
+                        .matched_geometry(),
+                    "Glass Tab Bar");
+                layout::tab_bar(tab_bar_options, [&] {
+                    auto tab_glass = layout::glass_clear()
+                        .tint(Color{64, 156, 255, 96})
+                        .effect_union(
+                            "native.showcase",
+                            "surface.tabbar.items",
+                            12.0f,
+                            true,
+                            true);
+                    widget::glass_button<Msg>(
+                        "Overview",
+                        Increment{},
+                        tab_glass
+                            .effect_id("native.showcase", "tab-overview")
+                            .matched_geometry());
+                    widget::glass_button<Msg>(
+                        "Files",
+                        Decrement{},
+                        tab_glass
+                            .effect_id("native.showcase", "tab-files")
+                            .matched_geometry());
+                    widget::glass_button<Msg>(
+                        "Alerts",
+                        ToggleNotifications{},
+                        tab_glass
+                            .effect_id("native.showcase", "tab-alerts")
+                            .matched_geometry());
+                });
+                layout::spacer(8);
                 widget::code("layout::glass_effect_container(options, builder);");
             });
             layout::spacer(8);
@@ -655,6 +697,12 @@ void view(State const& state) {
                 widget::text("This modal is rendered through layout::dialog on top of the main tree.");
                 widget::button<Msg>("Close", ToggleDialog{}, ButtonVariant::Primary);
             }, 360.0f, 72);
+        }
+        if (state.notifications) {
+            layout::snackbar_overlay([&] {
+                widget::text("Email notifications are on");
+                widget::button<Msg>("Turn off", ToggleNotifications{});
+            }, 440.0f, 88, "Notification Snackbar");
         }
 
         layout::spacer(12);
