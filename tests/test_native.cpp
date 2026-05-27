@@ -868,6 +868,17 @@ static void reset_core_state() {
     app.debug_panel_open = false;
     app.debug_panel_tab = phenotype::DebugPanelTab::Performance;
     app.input_debug = {};
+    app.action_perf = {};
+    app.frame_perf = {};
+    app.frame_trace_input_active = false;
+    app.frame_trace_input_action = phenotype::FrameTraceAction::None;
+    app.frame_trace_input_start_ns = 0;
+    app.debug_virtual_pointer_valid = false;
+    app.debug_virtual_pointer_x = 0.0f;
+    app.debug_virtual_pointer_y = 0.0f;
+    app.debug_virtual_hit_id = phenotype::native::invalid_callback_id;
+    app.debug_console_copy_buffer.clear();
+    app.debug_console_copy_serial = 0;
     app.arena.reset();
     app.prev_arena.reset();
     phenotype::detail::msg_queue().clear();
@@ -892,9 +903,57 @@ static std::optional<bool> find_debug_panel_surface_interactive(
     return std::nullopt;
 }
 
+static std::optional<MaterialStyle> find_debug_panel_surface_material(
+        NodeHandle node_h) {
+    auto* node = phenotype::detail::g_app.arena.get(node_h);
+    if (!node)
+        return std::nullopt;
+    if (node->debug_semantic_label == "Debug Panel"
+        && node->material.kind != MaterialKind::None) {
+        return node->material;
+    }
+    for (auto child_h : node->children) {
+        if (auto found = find_debug_panel_surface_material(child_h))
+            return found;
+    }
+    return std::nullopt;
+}
+
+static std::optional<unsigned int> find_debug_panel_surface_callback(
+        NodeHandle node_h) {
+    auto* node = phenotype::detail::g_app.arena.get(node_h);
+    if (!node)
+        return std::nullopt;
+    if (node->debug_semantic_label == "Debug Panel"
+        && node->material.kind != MaterialKind::None) {
+        return node->callback_id;
+    }
+    for (auto child_h : node->children) {
+        if (auto found = find_debug_panel_surface_callback(child_h))
+            return found;
+    }
+    return std::nullopt;
+}
+
 static std::optional<bool> debug_panel_surface_interactive() {
     for (auto overlay_h : phenotype::detail::g_app.overlays) {
         if (auto found = find_debug_panel_surface_interactive(overlay_h))
+            return found;
+    }
+    return std::nullopt;
+}
+
+static std::optional<MaterialStyle> debug_panel_surface_material() {
+    for (auto overlay_h : phenotype::detail::g_app.overlays) {
+        if (auto found = find_debug_panel_surface_material(overlay_h))
+            return found;
+    }
+    return std::nullopt;
+}
+
+static std::optional<unsigned int> debug_panel_surface_callback() {
+    for (auto overlay_h : phenotype::detail::g_app.overlays) {
+        if (auto found = find_debug_panel_surface_callback(overlay_h))
             return found;
     }
     return std::nullopt;
@@ -1421,6 +1480,24 @@ static void test_shell_key_commands_respect_input_focus_policy() {
     auto panel_interactive = debug_panel_surface_interactive();
     assert(panel_interactive.has_value());
     assert(!*panel_interactive);
+    auto panel_material = debug_panel_surface_material();
+    assert(panel_material.has_value());
+    assert(panel_material->blur_radius >= 36.0f);
+    assert(panel_material->opacity < 0.8f);
+    assert(panel_material->tint.a < 200);
+    auto panel_callback = debug_panel_surface_callback();
+    assert(panel_callback.has_value());
+    assert(*panel_callback != phenotype::native::invalid_callback_id);
+    auto panel_hit = phenotype::native::detail::hit_test(
+        780.0f,
+        300.0f,
+        phenotype::detail::get_scroll_x(),
+        phenotype::detail::get_scroll_y());
+    assert(panel_hit.has_value());
+    assert(*panel_hit == *panel_callback);
+    auto const& frame_perf = phenotype::detail::g_app.frame_perf;
+    assert(frame_perf.count > 0);
+    assert(frame_perf.last.total_ns > 0);
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.detail == "f12");
     assert(debug.result == "handled");
