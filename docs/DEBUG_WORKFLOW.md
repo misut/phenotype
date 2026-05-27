@@ -71,6 +71,29 @@ The common snapshot schema remains the source of truth for all platforms:
 
 `phenotype_diag_export()` remains the WASI export surface for the snapshot JSON.
 
+## Debug side panel
+
+Debug builds expose the side panel with `Cmd+F12` on macOS and `Ctrl+F12` on
+Windows. The panel is rendered as a blurred inspector surface so it stays
+legible over glass-heavy applications while still preserving the app context
+behind it.
+
+The side panel is organized into focused tabs:
+
+- `Performance` shows action timing sparklines for hover, scroll, click, key,
+  and gesture traffic, with 4.17ms and 16.67ms budget markers plus the existing
+  counter and p95 data.
+- `Layout` mirrors the Chrome DevTools inspect flow: hovering app elements keeps
+  the on-canvas bounds highlight active, while the tab shows the semantic element
+  tree, hovered node box model, material blur/kind, visibility, focusability,
+  and layout state.
+- `Console` tails the in-process diagnostic log ring so agents can watch live
+  logs without exporting a bundle.
+- `Input` preserves the last routed keyboard, pointer, scroll, caret,
+  composition, focus, and callback state.
+- `Protocol` keeps the CLI/debug-plane contract visible, including the command
+  and section counts that make the panel agent-controllable.
+
 ## Artifact bundles
 
 `write_artifact_bundle(directory, reason)` uses one shared bundle layout:

@@ -866,6 +866,7 @@ static void reset_core_state() {
     app.debug_viewport_width = 0.0f;
     app.debug_viewport_height = 0.0f;
     app.debug_panel_open = false;
+    app.debug_panel_tab = phenotype::DebugPanelTab::Performance;
     app.input_debug = {};
     app.arena.reset();
     app.prev_arena.reset();
@@ -1390,6 +1391,8 @@ static void test_shell_key_commands_respect_input_focus_policy() {
         LEGACY_PRESS,
         debug_panel_mods()));
     assert(phenotype::detail::g_app.debug_panel_open);
+    assert(phenotype::detail::g_app.debug_panel_tab
+        == phenotype::DebugPanelTab::Performance);
     assert(!phenotype::detail::g_app.overlays.empty());
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.detail == "f12");
