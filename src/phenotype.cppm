@@ -2145,6 +2145,108 @@ inline void record_action_duration(char const* action,
         ++stats.recent_count;
 }
 
+inline FrameTraceAction frame_trace_action_from_name(
+        std::string_view action) noexcept {
+    if (action == "hover")
+        return FrameTraceAction::Hover;
+    if (action == "scroll")
+        return FrameTraceAction::Scroll;
+    if (action == "click")
+        return FrameTraceAction::Click;
+    if (action == "key")
+        return FrameTraceAction::Key;
+    if (action == "gesture")
+        return FrameTraceAction::Gesture;
+    if (action.empty() || action == "none")
+        return FrameTraceAction::None;
+    return FrameTraceAction::Other;
+}
+
+inline char const* frame_trace_action_label(
+        FrameTraceAction action) noexcept {
+    switch (action) {
+        case FrameTraceAction::None:    return "idle";
+        case FrameTraceAction::Hover:   return "hover";
+        case FrameTraceAction::Scroll:  return "scroll";
+        case FrameTraceAction::Click:   return "click";
+        case FrameTraceAction::Key:     return "key";
+        case FrameTraceAction::Gesture: return "gesture";
+        case FrameTraceAction::Other:   return "other";
+    }
+    return "other";
+}
+
+struct FrameTraceInputContext {
+    bool active = false;
+    FrameTraceAction action = FrameTraceAction::None;
+    std::uint64_t start_ns = 0;
+};
+
+inline bool frame_trace_input_active() noexcept {
+    return g_app.frame_trace_input_active;
+}
+
+inline FrameTraceInputContext begin_frame_trace_input(
+        char const* action) noexcept {
+    FrameTraceInputContext previous{
+        g_app.frame_trace_input_active,
+        g_app.frame_trace_input_action,
+        g_app.frame_trace_input_start_ns,
+    };
+    g_app.frame_trace_input_active = true;
+    g_app.frame_trace_input_action = frame_trace_action_from_name(
+        action ? std::string_view{action} : std::string_view{});
+    g_app.frame_trace_input_start_ns = metrics::detail::now_ns();
+    return previous;
+}
+
+inline void restore_frame_trace_input(
+        FrameTraceInputContext previous) noexcept {
+    g_app.frame_trace_input_active = previous.active;
+    g_app.frame_trace_input_action = previous.action;
+    g_app.frame_trace_input_start_ns = previous.start_ns;
+}
+
+struct FrameTraceInputScope {
+    FrameTraceInputContext previous{};
+
+    explicit FrameTraceInputScope(char const* action) noexcept
+        : previous(begin_frame_trace_input(action)) {}
+
+    ~FrameTraceInputScope() {
+        restore_frame_trace_input(previous);
+    }
+};
+
+inline void record_frame_trace(FrameTraceSample sample,
+                               std::uint64_t frame_start_ns) noexcept {
+    if (g_app.frame_trace_input_active) {
+        sample.action = g_app.frame_trace_input_action;
+        if (g_app.frame_trace_input_start_ns > 0
+            && g_app.frame_trace_input_start_ns <= frame_start_ns) {
+            sample.input_ns =
+                frame_start_ns - g_app.frame_trace_input_start_ns;
+        }
+    }
+
+    auto& stats = g_app.frame_perf;
+    ++stats.count;
+    stats.total_ns += sample.total_ns;
+    stats.last_ns = sample.total_ns;
+    if (stats.min_ns == 0 || sample.total_ns < stats.min_ns)
+        stats.min_ns = sample.total_ns;
+    if (sample.total_ns > stats.max_ns)
+        stats.max_ns = sample.total_ns;
+    if (sample.total_ns > 16'666'667ull)
+        ++stats.over_60fps_budget;
+    stats.last = sample;
+    stats.recent[stats.recent_next] = sample;
+    stats.recent_next = (stats.recent_next + 1)
+        % FrameTraceMonitor::RECENT_CAPACITY;
+    if (stats.recent_count < FrameTraceMonitor::RECENT_CAPACITY)
+        ++stats.recent_count;
+}
+
 inline bool pointer_snapshot_changed(AppState const& app) noexcept {
     return app.pointer_valid != app.prev_pointer_valid
         || (app.pointer_valid
@@ -2202,6 +2304,7 @@ inline void reset_pointer_inputs(AppState& app) noexcept {
 #ifndef NDEBUG
 inline void render_debug_panel_overlay();
 #endif
+inline bool set_pointer_position(float x, float y) noexcept;
 }
 
 // ============================================================
@@ -2338,6 +2441,17 @@ void run(Host& host, View view, Update update) {
         flush_if_changed(host);
         auto t5 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t5 - t4, {{"phase", "flush"}});
+        detail::record_frame_trace(
+            FrameTraceSample{
+                .total_ns = t5 - t0,
+                .update_ns = t1 - t0,
+                .view_ns = t2 - t1,
+                .layout_ns = t3 - t2,
+                .paint_ns = t4 - t3,
+                .flush_ns = t5 - t4,
+                .rebuild = true,
+            },
+            t0);
 
         // Persist the ambient paint inputs for next frame's blit guard.
         detail::persist_paint_inputs(app);
@@ -3178,6 +3292,7 @@ struct MaterialSurfaceOptions {
     char const* semantic_label = "";
     bool inherit_material_container = true;
     bool interactive = false;
+    bool capture_pointer = false;
     bool has_material_override = false;
     MaterialStyle material_override{};
     MaterialContainerDescriptor container{};
@@ -3554,6 +3669,16 @@ void material_surface(MaterialSurfaceOptions options, F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     configure_material_surface(node, options);
+    if (options.capture_pointer) {
+        auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
+        detail::g_app.callbacks.push_back([] {});
+        detail::g_app.callback_roles.push_back(InteractionRole::None);
+        node.callback_id = id;
+        node.focusable = false;
+        node.cursor_type = 0;
+        node.debug_semantic_hidden = true;
+        node.debug_semantic_enabled = false;
+    }
     auto& surface_depth = material_surface_scope_depth();
     auto const pushes_surface_scope = options.kind != MaterialKind::None;
     if (pushes_surface_scope)
@@ -6310,16 +6435,19 @@ inline bool handle_key(unsigned int key_type, unsigned int codepoint,
 template<host_platform Host>
 void repaint(Host& host, float scroll_x, float scroll_y) {
     auto& app = g_app;
+    auto const t0 = metrics::detail::now_ns();
     app.scroll_x = scroll_x;
     app.scroll_y = scroll_y;
     if (!app.root.valid()) return;
     auto* root_ptr = app.arena.get(app.root);
     if (!root_ptr) return;
     float cw = host.canvas_width();
+    auto t1 = t0;
     if (cw != root_ptr->width) {
         layout_node(host, app.root, cw);
         for (auto overlay_h : app.overlays)
             layout_node(host, overlay_h, cw);
+        t1 = metrics::detail::now_ns();
     }
     app.focusable_ids.clear();
     collect_focusable_ids(app.root);
@@ -6335,22 +6463,36 @@ void repaint(Host& host, float scroll_x, float scroll_y) {
     reset_paint_scissor_boundary(host);
     for (auto overlay_h : app.overlays)
         paint_node(host, host, overlay_h, 0, 0, 0.0f, 0.0f, cw, vh);
+    auto const t2 = metrics::detail::now_ns();
     flush_if_changed(host);
+    auto const t3 = metrics::detail::now_ns();
+    record_frame_trace(
+        FrameTraceSample{
+            .total_ns = t3 - t0,
+            .layout_ns = t1 - t0,
+            .paint_ns = t2 - t1,
+            .flush_ns = t3 - t2,
+            .rebuild = false,
+        },
+        t0);
     persist_paint_inputs(app);
 }
 #else
 inline void repaint(float scroll_x, float scroll_y) {
     auto& app = g_app;
+    auto const t0 = metrics::detail::now_ns();
     app.scroll_x = scroll_x;
     app.scroll_y = scroll_y;
     if (!app.root.valid()) return;
     auto* root_ptr = app.arena.get(app.root);
     if (!root_ptr) return;
     float cw = phenotype_get_canvas_width();
+    auto t1 = t0;
     if (cw != root_ptr->width) {
         layout_node(app.root, cw);
         for (auto overlay_h : app.overlays)
             layout_node(overlay_h, cw);
+        t1 = metrics::detail::now_ns();
     }
     app.focusable_ids.clear();
     collect_focusable_ids(app.root);
@@ -6366,7 +6508,18 @@ inline void repaint(float scroll_x, float scroll_y) {
     wasi_reset_paint_scissor_boundary();
     for (auto overlay_h : app.overlays)
         wasi_paint_node(overlay_h, 0, 0, 0.0f, 0.0f, cw, vh);
+    auto const t2 = metrics::detail::now_ns();
     wasi_flush_if_changed();
+    auto const t3 = metrics::detail::now_ns();
+    record_frame_trace(
+        FrameTraceSample{
+            .total_ns = t3 - t0,
+            .layout_ns = t1 - t0,
+            .paint_ns = t2 - t1,
+            .flush_ns = t3 - t2,
+            .rebuild = false,
+        },
+        t0);
     persist_paint_inputs(app);
 }
 #endif
@@ -6868,6 +7021,42 @@ inline void debug_panel_tab_bar() {
     }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
 }
 
+template<typename F>
+    requires std::is_invocable_v<F>
+inline void debug_panel_action_button(char const* label, F&& action) {
+    auto const& t = g_app.theme;
+    ButtonStyleOptions options{};
+    options.has_material = true;
+    options.material = layout::material_style(MaterialKind::Clear);
+    options.material.role = MaterialSurfaceRole::Control;
+    options.material.tint = debug_with_alpha(t.surface, 80);
+    options.material.border = debug_with_alpha(t.border, 150);
+    options.has_background = true;
+    options.background = options.material.tint;
+    options.has_hover_background = true;
+    options.hover_background = debug_with_alpha(t.state_hover_bg, 190);
+    options.has_pressed_background = true;
+    options.pressed_background = debug_with_alpha(t.state_hover_bg, 230);
+    options.has_border_color = true;
+    options.border_color = options.material.border;
+    options.has_text_color = true;
+    options.text_color = t.foreground;
+    options.border_radius = t.radius_sm;
+    options.border_width = 0.5f;
+    options.font_size = t.small_font_size;
+    options.padding_top = 6.0f;
+    options.padding_bottom = 6.0f;
+    options.padding_left = 10.0f;
+    options.padding_right = 10.0f;
+    options.fixed_height = 30.0f;
+    options.text_align = TextAlign::Center;
+
+    widget::_impl::action_button(
+        str{label, static_cast<unsigned int>(std::strlen(label))},
+        options,
+        std::forward<F>(action));
+}
+
 inline std::string debug_protocol_block() {
     std::string block;
     block += "protocol_version: ";
@@ -7132,6 +7321,423 @@ inline std::string layout_tree_block(
     return block;
 }
 
+inline void debug_stroke_rect(Painter& painter,
+                              float x,
+                              float y,
+                              float w,
+                              float h,
+                              float thickness,
+                              Color color) {
+    PaintRect rects[] = {
+        {x, y, w, thickness, color},
+        {x, y + h - thickness, w, thickness, color},
+        {x, y, thickness, h, color},
+        {x + w - thickness, y, thickness, h, color},
+    };
+    painter.fill_rects(rects, 4);
+}
+
+inline std::uint64_t debug_layout_diagram_token(
+        diag::InputDebugSnapshot const& debug,
+        diag::SemanticNodeSnapshot const* root) noexcept {
+    std::uint64_t token = 0x646562756c61796fULL;
+    token = static_cast<std::uint64_t>(hash_combine(token, debug.hovered_id));
+    token = static_cast<std::uint64_t>(hash_combine(token, debug.focused_id));
+    token = static_cast<std::uint64_t>(
+        hash_combine(token, static_cast<unsigned int>(g_app.overlays.size())));
+    if (root) {
+        token = static_cast<std::uint64_t>(
+            hash_combine(token, debug_semantic_node_count(*root)));
+    }
+    return token;
+}
+
+inline void paint_debug_layout_node_rects(
+        Painter& painter,
+        diag::SemanticNodeSnapshot const& node,
+        float offset_x,
+        float offset_y,
+        float scale,
+        unsigned int hovered_id,
+        unsigned int focused_id,
+        unsigned int depth,
+        unsigned int& remaining) {
+    if (remaining == 0)
+        return;
+    --remaining;
+    if (node.bounds.valid && node.visible
+        && node.bounds.w > 0.0f && node.bounds.h > 0.0f) {
+        float const x = offset_x + node.bounds.x * scale;
+        float const y = offset_y + node.bounds.y * scale;
+        float const w = std::max(1.0f, node.bounds.w * scale);
+        float const h = std::max(1.0f, node.bounds.h * scale);
+        bool const hovered = node.callback_id.has_value()
+            && *node.callback_id == hovered_id;
+        bool const focused = node.callback_id.has_value()
+            && *node.callback_id == focused_id;
+        auto const& t = g_app.theme;
+        Color fill = debug_with_alpha(
+            depth % 2 == 0 ? t.accent : t.semantic_success_border,
+            hovered ? 76 : 22);
+        PaintRect bg{x, y, w, h, fill};
+        painter.fill_rects(&bg, 1);
+        debug_stroke_rect(
+            painter,
+            x,
+            y,
+            w,
+            h,
+            hovered ? 2.0f : 1.0f,
+            hovered
+                ? debug_with_alpha(t.accent_strong, 235)
+                : (focused
+                    ? debug_with_alpha(t.semantic_warning_border, 210)
+                    : debug_with_alpha(t.border, 120)));
+        if (hovered || (depth <= 1 && w > 36.0f && h > 14.0f)) {
+            auto label = debug_compact_label(
+                node.role.empty() ? "node" : node.role,
+                18);
+            painter.text(
+                x + 4.0f,
+                y + 3.0f,
+                label.c_str(),
+                static_cast<unsigned int>(label.size()),
+                9.0f,
+                hovered ? t.foreground : t.muted);
+        }
+    }
+    for (auto it = node.children.rbegin(); it != node.children.rend(); ++it) {
+        paint_debug_layout_node_rects(
+            painter,
+            *it,
+            offset_x,
+            offset_y,
+            scale,
+            hovered_id,
+            focused_id,
+            depth + 1,
+            remaining);
+    }
+}
+
+inline void paint_debug_layout_diagram(
+        Painter& painter,
+        std::optional<diag::SemanticNodeSnapshot> root,
+        diag::InputDebugSnapshot debug) {
+    auto const& t = g_app.theme;
+    constexpr float width = 424.0f;
+    constexpr float height = 220.0f;
+    PaintRect bg{0.0f, 0.0f, width, height, debug_with_alpha(t.code_bg, 156)};
+    painter.fill_rects(&bg, 1);
+    if (!root || !root->bounds.valid) {
+        char const* text = "No layout tree";
+        painter.text(16.0f, 18.0f, text, static_cast<unsigned int>(std::strlen(text)),
+                     12.0f, t.muted);
+        return;
+    }
+
+    float const viewport_w = std::max(g_app.debug_viewport_width, root->bounds.w);
+    float const viewport_h = std::max(g_app.debug_viewport_height, root->bounds.h);
+    float const scale = std::min(
+        (width - 32.0f) / std::max(1.0f, viewport_w),
+        (height - 38.0f) / std::max(1.0f, viewport_h));
+    float const diagram_w = viewport_w * scale;
+    float const diagram_h = viewport_h * scale;
+    float const offset_x = (width - diagram_w) * 0.5f;
+    float const offset_y = 28.0f;
+
+    debug_stroke_rect(
+        painter,
+        offset_x,
+        offset_y,
+        diagram_w,
+        diagram_h,
+        1.0f,
+        debug_with_alpha(t.border, 160));
+    painter.text(12.0f, 8.0f, "viewport", 8, 11.0f, t.muted);
+    auto viewport_text = std::format(
+        "{:.0f} x {:.0f}",
+        viewport_w,
+        viewport_h);
+    auto viewport_text_w = painter.measure_text(
+        viewport_text.c_str(),
+        static_cast<unsigned int>(viewport_text.size()),
+        11.0f);
+    painter.text(
+        width - 12.0f - viewport_text_w,
+        8.0f,
+        viewport_text.c_str(),
+        static_cast<unsigned int>(viewport_text.size()),
+        11.0f,
+        t.muted);
+
+    unsigned int remaining = 96;
+    paint_debug_layout_node_rects(
+        painter,
+        *root,
+        offset_x,
+        offset_y,
+        scale,
+        debug.hovered_id,
+        debug.focused_id,
+        0,
+        remaining);
+}
+
+inline void paint_debug_box_model_diagram(
+        Painter& painter,
+        diag::SemanticNodeSnapshot const* node) {
+    auto const& t = g_app.theme;
+    constexpr float width = 424.0f;
+    constexpr float height = 156.0f;
+    PaintRect bg{0.0f, 0.0f, width, height, debug_with_alpha(t.code_bg, 156)};
+    painter.fill_rects(&bg, 1);
+    if (!node || !node->bounds.valid) {
+        char const* text = "Hover an app element";
+        painter.text(16.0f, 18.0f, text, static_cast<unsigned int>(std::strlen(text)),
+                     12.0f, t.muted);
+        return;
+    }
+
+    float const outer_x = 42.0f;
+    float const outer_y = 18.0f;
+    float const outer_w = width - 84.0f;
+    float const outer_h = height - 42.0f;
+    PaintRect margin{outer_x, outer_y, outer_w, outer_h,
+                     debug_with_alpha(t.semantic_warning_border, 40)};
+    PaintRect border{outer_x + 22.0f, outer_y + 18.0f,
+                     outer_w - 44.0f, outer_h - 36.0f,
+                     debug_with_alpha(t.accent, 46)};
+    PaintRect padding{outer_x + 48.0f, outer_y + 36.0f,
+                      outer_w - 96.0f, outer_h - 72.0f,
+                      debug_with_alpha(t.semantic_success_border, 50)};
+    PaintRect content{outer_x + 78.0f, outer_y + 52.0f,
+                      outer_w - 156.0f, outer_h - 104.0f,
+                      debug_with_alpha(t.surface, 210)};
+    PaintRect rects[] = {margin, border, padding, content};
+    painter.fill_rects(rects, 4);
+    debug_stroke_rect(painter, margin.x, margin.y, margin.w, margin.h, 1.0f,
+                      debug_with_alpha(t.semantic_warning_border, 190));
+    debug_stroke_rect(painter, border.x, border.y, border.w, border.h, 1.0f,
+                      debug_with_alpha(t.accent_strong, 190));
+    debug_stroke_rect(painter, padding.x, padding.y, padding.w, padding.h, 1.0f,
+                      debug_with_alpha(t.semantic_success_border, 190));
+    debug_stroke_rect(painter, content.x, content.y, content.w, content.h, 1.0f,
+                      debug_with_alpha(t.border, 220));
+    painter.text(margin.x + 6.0f, margin.y + 4.0f, "margin", 6, 10.0f, t.muted);
+    painter.text(border.x + 6.0f, border.y + 4.0f, "border", 6, 10.0f, t.muted);
+    painter.text(padding.x + 6.0f, padding.y + 4.0f, "padding", 7, 10.0f, t.muted);
+    auto label = std::format(
+        "{:.0f} x {:.0f}",
+        node->bounds.w,
+        node->bounds.h);
+    auto label_w = painter.measure_text(
+        label.c_str(),
+        static_cast<unsigned int>(label.size()),
+        12.0f);
+    painter.text(
+        content.x + (content.w - label_w) * 0.5f,
+        content.y + (content.h - 12.0f) * 0.5f,
+        label.c_str(),
+        static_cast<unsigned int>(label.size()),
+        12.0f,
+        t.foreground);
+}
+
+inline unsigned int debug_find_callback_at_point(
+        NodeHandle node_h,
+        float px,
+        float py,
+        float ox,
+        float oy,
+        float scroll_x,
+        float scroll_y) {
+    if (!node_h.valid())
+        return 0xFFFFFFFFu;
+    auto& node = node_at(node_h);
+    float ax = ox + node.x;
+    float ay = oy + node.y;
+    float draw_x = ax - scroll_x;
+    float draw_y = ay - scroll_y;
+    if (px < draw_x || px > draw_x + node.width
+        || py < draw_y || py > draw_y + node.height) {
+        return 0xFFFFFFFFu;
+    }
+
+    float child_scroll_x = scroll_x;
+    float child_scroll_y = scroll_y;
+    if (node.is_scroll_container && node.scroll_state)
+        child_scroll_y = scroll_y + node.scroll_offset_y;
+    for (auto it = node.children.rbegin(); it != node.children.rend(); ++it) {
+        auto found = debug_find_callback_at_point(
+            *it,
+            px,
+            py,
+            ax,
+            ay,
+            child_scroll_x,
+            child_scroll_y);
+        if (found != 0xFFFFFFFFu)
+            return found;
+    }
+    return node.callback_id;
+}
+
+inline unsigned int debug_find_app_callback_at_point(float x, float y) {
+    return debug_find_callback_at_point(
+        g_app.root,
+        x,
+        y,
+        0.0f,
+        0.0f,
+        g_app.scroll_x,
+        g_app.scroll_y);
+}
+
+inline void debug_set_virtual_pointer(float x, float y) {
+    g_app.debug_virtual_pointer_valid = true;
+    g_app.debug_virtual_pointer_x = std::clamp(
+        x,
+        0.0f,
+        std::max(0.0f, g_app.debug_viewport_width));
+    g_app.debug_virtual_pointer_y = std::clamp(
+        y,
+        0.0f,
+        std::max(0.0f, g_app.debug_viewport_height));
+    g_app.debug_virtual_hit_id = debug_find_app_callback_at_point(
+        g_app.debug_virtual_pointer_x,
+        g_app.debug_virtual_pointer_y);
+    set_pointer_position(
+        g_app.debug_virtual_pointer_x,
+        g_app.debug_virtual_pointer_y);
+    trigger_rebuild();
+}
+
+inline void debug_center_virtual_pointer() {
+    debug_set_virtual_pointer(
+        std::max(1.0f, g_app.debug_viewport_width) * 0.5f,
+        std::max(1.0f, g_app.debug_viewport_height) * 0.5f);
+}
+
+inline void debug_nudge_virtual_pointer(float dx, float dy) {
+    if (!g_app.debug_virtual_pointer_valid)
+        debug_center_virtual_pointer();
+    else
+        debug_set_virtual_pointer(
+            g_app.debug_virtual_pointer_x + dx,
+            g_app.debug_virtual_pointer_y + dy);
+}
+
+inline void debug_virtual_hover() {
+    if (!g_app.debug_virtual_pointer_valid)
+        debug_center_virtual_pointer();
+    auto const hit = debug_find_app_callback_at_point(
+        g_app.debug_virtual_pointer_x,
+        g_app.debug_virtual_pointer_y);
+    g_app.debug_virtual_hit_id = hit;
+    set_hover_id(hit, "debug-panel", "virtual-hover");
+    trigger_rebuild();
+}
+
+inline void debug_virtual_click() {
+    if (!g_app.debug_virtual_pointer_valid)
+        debug_center_virtual_pointer();
+    auto const hit = debug_find_app_callback_at_point(
+        g_app.debug_virtual_pointer_x,
+        g_app.debug_virtual_pointer_y);
+    g_app.debug_virtual_hit_id = hit;
+    set_hover_id(hit, "debug-panel", "virtual-click-hover");
+    if (hit != 0xFFFFFFFFu) {
+        set_pressed_id(hit, "debug-panel", "virtual-click-press");
+        set_focus_id(
+            hit,
+            "debug-panel",
+            "virtual-click-focus",
+            false,
+            InputModality::Programmatic);
+        handle_event(hit, "debug-panel", "virtual-click");
+    } else {
+        set_focus_id(0xFFFFFFFFu, "debug-panel", "virtual-click-clear");
+    }
+    set_pressed_id(0xFFFFFFFFu, "debug-panel", "virtual-click-release");
+    trigger_rebuild();
+}
+
+inline void debug_virtual_clear() {
+    g_app.debug_virtual_pointer_valid = false;
+    g_app.debug_virtual_hit_id = 0xFFFFFFFFu;
+    set_hover_id(0xFFFFFFFFu, "debug-panel", "virtual-clear");
+    set_pressed_id(0xFFFFFFFFu, "debug-panel", "virtual-clear");
+    trigger_rebuild();
+}
+
+inline std::uint64_t debug_virtual_input_token() noexcept {
+    std::uint64_t token = 0x64656275696e7074ULL;
+    token = static_cast<std::uint64_t>(
+        hash_combine(token, g_app.debug_virtual_pointer_valid ? 1u : 0u));
+    token = static_cast<std::uint64_t>(
+        hash_combine(token, static_cast<unsigned int>(g_app.debug_virtual_pointer_x)));
+    token = static_cast<std::uint64_t>(
+        hash_combine(token, static_cast<unsigned int>(g_app.debug_virtual_pointer_y)));
+    token = static_cast<std::uint64_t>(
+        hash_combine(token, g_app.debug_virtual_hit_id));
+    return token;
+}
+
+inline void paint_debug_virtual_input_pad(Painter& painter) {
+    auto const& t = g_app.theme;
+    constexpr float width = 424.0f;
+    constexpr float height = 160.0f;
+    PaintRect bg{0.0f, 0.0f, width, height, debug_with_alpha(t.code_bg, 156)};
+    painter.fill_rects(&bg, 1);
+    float const viewport_w = std::max(1.0f, g_app.debug_viewport_width);
+    float const viewport_h = std::max(1.0f, g_app.debug_viewport_height);
+    float const scale = std::min(
+        (width - 28.0f) / viewport_w,
+        (height - 28.0f) / viewport_h);
+    float const rect_w = viewport_w * scale;
+    float const rect_h = viewport_h * scale;
+    float const rect_x = (width - rect_w) * 0.5f;
+    float const rect_y = (height - rect_h) * 0.5f;
+    debug_stroke_rect(
+        painter,
+        rect_x,
+        rect_y,
+        rect_w,
+        rect_h,
+        1.0f,
+        debug_with_alpha(t.border, 180));
+    painter.line(rect_x, rect_y + rect_h * 0.5f,
+                 rect_x + rect_w, rect_y + rect_h * 0.5f,
+                 1.0f, debug_with_alpha(t.border, 85));
+    painter.line(rect_x + rect_w * 0.5f, rect_y,
+                 rect_x + rect_w * 0.5f, rect_y + rect_h,
+                 1.0f, debug_with_alpha(t.border, 85));
+    if (g_app.debug_virtual_pointer_valid) {
+        float const px = rect_x + g_app.debug_virtual_pointer_x * scale;
+        float const py = rect_y + g_app.debug_virtual_pointer_y * scale;
+        Color pointer_color = g_app.debug_virtual_hit_id == 0xFFFFFFFFu
+            ? debug_with_alpha(t.semantic_warning_border, 235)
+            : debug_with_alpha(t.accent_strong, 240);
+        painter.line(px - 8.0f, py, px + 8.0f, py, 2.0f, pointer_color);
+        painter.line(px, py - 8.0f, px, py + 8.0f, 2.0f, pointer_color);
+        painter.arc(px, py, 7.0f, 0.0f, 6.2831853f, 1.5f, pointer_color);
+    }
+}
+
+inline std::string virtual_input_debug_block() {
+    std::string block;
+    block += "virtual_pointer: ";
+    block += g_app.debug_virtual_pointer_valid ? "active" : "inactive";
+    block += "\nx: ";
+    block += std::format("{:.1f}", g_app.debug_virtual_pointer_x);
+    block += "\ny: ";
+    block += std::format("{:.1f}", g_app.debug_virtual_pointer_y);
+    block += "\nhit_callback_id: ";
+    block += debug_id_text(g_app.debug_virtual_hit_id);
+    return block;
+}
+
 inline std::string console_log_block() {
     auto records = log::recent_records(40);
     if (records.empty())
@@ -7155,19 +7761,148 @@ inline std::string console_log_block() {
     return block;
 }
 
-inline std::uint64_t debug_panel_recent_sample(ActionPerfStats const& stats,
-                                               std::size_t index) noexcept {
-    if (index >= stats.recent_count)
-        return 0;
-    auto const start = stats.recent_count == ActionPerfStats::RECENT_CAPACITY
-        ? stats.recent_next
-        : 0u;
-    return stats.recent_ns[
-        (start + index) % ActionPerfStats::RECENT_CAPACITY];
+inline std::string debug_console_time_text(std::uint64_t unix_ns) {
+    if (unix_ns == 0)
+        return "--:--:--.---";
+    auto const total_ms = unix_ns / 1'000'000ull;
+    auto const ms = total_ms % 1000ull;
+    auto const total_s = total_ms / 1000ull;
+    auto const sec = total_s % 60ull;
+    auto const min = (total_s / 60ull) % 60ull;
+    auto const hour = (total_s / 3600ull) % 24ull;
+    return std::format("{:02}:{:02}:{:02}.{:03}", hour, min, sec, ms);
 }
 
-inline void debug_mix_action_perf_token(std::uint64_t& token,
-                                        ActionPerfStats const& stats) noexcept {
+inline Color debug_console_level_color(log::Severity severity) {
+    auto const& t = g_app.theme;
+    switch (severity) {
+        case log::Severity::trace:
+        case log::Severity::debug:
+            return debug_with_alpha(t.muted, 230);
+        case log::Severity::info:
+            return debug_with_alpha(t.accent_strong, 235);
+        case log::Severity::warn:
+            return debug_with_alpha(t.semantic_warning_border, 240);
+        case log::Severity::error:
+        case log::Severity::fatal:
+            return debug_with_alpha(t.semantic_error_border, 245);
+        default:
+            return debug_with_alpha(t.foreground, 220);
+    }
+}
+
+inline std::string debug_console_record_text(log::Record const& record) {
+    std::string out;
+    out += debug_console_time_text(record.time_unix_nano);
+    out += " ";
+    out += log::severity_text(record.severity);
+    out += " ";
+    out += record.scope_name.empty() ? "phenotype" : record.scope_name;
+    out += " ";
+    out += record.body.empty() ? "(empty)" : record.body;
+    return out;
+}
+
+inline std::string debug_console_records_text(
+        std::vector<log::Record> const& records) {
+    std::string out;
+    for (auto const& record : records) {
+        if (!out.empty())
+            out += "\n";
+        out += debug_console_record_text(record);
+    }
+    return out;
+}
+
+inline void debug_console_copy(std::string text) {
+    g_app.debug_console_copy_buffer = std::move(text);
+    ++g_app.debug_console_copy_serial;
+    trigger_rebuild();
+}
+
+inline void debug_console_clear_copy() {
+    g_app.debug_console_copy_buffer.clear();
+    ++g_app.debug_console_copy_serial;
+    trigger_rebuild();
+}
+
+inline void render_debug_console_record(log::Record const& record) {
+    auto const& t = g_app.theme;
+    auto time_text = debug_console_time_text(record.time_unix_nano);
+    auto level_text = std::string{log::severity_text(record.severity)};
+    auto scope_text = record.scope_name.empty()
+        ? std::string{"phenotype"}
+        : record.scope_name;
+    auto body = record.body.empty() ? std::string{"(empty)"} : record.body;
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::Clear,
+            .role = MaterialSurfaceRole::Content,
+            .direction = FlexDirection::Column,
+            .padding = SpaceToken::Sm,
+            .gap = SpaceToken::Xs,
+            .border_radius = t.radius_sm,
+            .border_width = 0.5f,
+            .semantic_label = "Console Record",
+            .has_material_override = true,
+            .material_override = [&] {
+                auto style = layout::material_style(MaterialKind::Clear);
+                style.tint = debug_with_alpha(t.surface, 54);
+                style.border = debug_with_alpha(t.border, 110);
+                return style;
+            }(),
+        },
+        [&] {
+            layout::row([&] {
+                widget::text(time_text, TextSize::Small, TextColor::Muted);
+                widget::text(
+                    level_text,
+                    TextSize::Small,
+                    record.severity == log::Severity::info
+                        ? TextColor::Accent
+                        : TextColor::Muted);
+                widget::text(scope_text, TextSize::Small, TextColor::Muted);
+                debug_panel_action_button(
+                    "Copy",
+                    [text = debug_console_record_text(record)]() mutable {
+                        debug_console_copy(std::move(text));
+                    });
+            }, SpaceToken::Xs, CrossAxisAlignment::Center,
+               MainAxisAlignment::SpaceBetween);
+            widget::code(body);
+        });
+}
+
+inline FrameTraceSample debug_frame_recent_sample(
+        FrameTraceMonitor const& stats,
+        std::size_t index) noexcept {
+    if (index >= stats.recent_count)
+        return {};
+    auto const start = stats.recent_count == FrameTraceMonitor::RECENT_CAPACITY
+        ? stats.recent_next
+        : 0u;
+    return stats.recent[
+        (start + index) % FrameTraceMonitor::RECENT_CAPACITY];
+}
+
+inline std::uint64_t debug_frame_recent_percentile(
+        FrameTraceMonitor const& stats,
+        double percentile) {
+    if (stats.recent_count == 0)
+        return 0;
+    std::array<std::uint64_t, FrameTraceMonitor::RECENT_CAPACITY> sorted{};
+    for (std::size_t i = 0; i < stats.recent_count; ++i)
+        sorted[i] = debug_frame_recent_sample(stats, i).total_ns;
+    auto first = sorted.begin();
+    auto last = sorted.begin() + static_cast<std::ptrdiff_t>(stats.recent_count);
+    std::sort(first, last);
+    auto const index = static_cast<std::size_t>(
+        std::lround(percentile * static_cast<double>(stats.recent_count - 1)));
+    return sorted[std::min(index, stats.recent_count - 1)];
+}
+
+inline void debug_mix_frame_perf_token(std::uint64_t& token,
+                                       FrameTraceMonitor const& stats) noexcept {
     token = static_cast<std::uint64_t>(hash_combine(token, stats.count));
     token = static_cast<std::uint64_t>(hash_combine(token, stats.last_ns));
     token = static_cast<std::uint64_t>(
@@ -7179,138 +7914,189 @@ inline void debug_mix_action_perf_token(std::uint64_t& token,
 
 inline std::uint64_t debug_performance_chart_token() noexcept {
     std::uint64_t token = 0x6475626770657266ULL;
-    debug_mix_action_perf_token(token, g_app.action_perf.hover);
-    debug_mix_action_perf_token(token, g_app.action_perf.scroll);
-    debug_mix_action_perf_token(token, g_app.action_perf.click);
-    debug_mix_action_perf_token(token, g_app.action_perf.key);
-    debug_mix_action_perf_token(token, g_app.action_perf.gesture);
+    debug_mix_frame_perf_token(token, g_app.frame_perf);
+    token = static_cast<std::uint64_t>(
+        hash_combine(token, static_cast<unsigned int>(g_app.frame_perf.last.action)));
+    token = static_cast<std::uint64_t>(
+        hash_combine(token, g_app.frame_perf.last.paint_ns));
+    token = static_cast<std::uint64_t>(
+        hash_combine(token, g_app.frame_perf.last.flush_ns));
     return token;
 }
 
 inline void paint_debug_performance_chart(Painter& painter) {
     auto const& t = g_app.theme;
     constexpr float width = 424.0f;
-    constexpr float height = 176.0f;
-    constexpr double budget_ms = 16.666667;
+    constexpr float height = 192.0f;
+    constexpr double budget_60_ms = 16.666667;
+    constexpr double budget_240_ms = 4.166667;
     PaintRect bg{0.0f, 0.0f, width, height, debug_with_alpha(t.code_bg, 178)};
     painter.fill_rects(&bg, 1);
 
-    struct Series {
-        char const* label;
-        ActionPerfStats const* stats;
-        Color color;
-    };
-    Series const series[] = {
-        {"hover", &g_app.action_perf.hover, Color{59, 130, 246, 210}},
-        {"scroll", &g_app.action_perf.scroll, Color{16, 185, 129, 210}},
-        {"click", &g_app.action_perf.click, Color{168, 85, 247, 210}},
-        {"key", &g_app.action_perf.key, Color{245, 158, 11, 220}},
-        {"gesture", &g_app.action_perf.gesture, Color{236, 72, 153, 210}},
+    float const left = 42.0f;
+    float const top = 22.0f;
+    float const right = width - 12.0f;
+    float const bottom = 128.0f;
+    float const graph_w = right - left;
+    float const graph_h = bottom - top;
+    auto const& stats = g_app.frame_perf;
+    auto const p95 = debug_frame_recent_percentile(stats, 0.95);
+    double const max_ms = std::max(
+        16.666667,
+        std::max(
+            static_cast<double>(p95) / 1'000'000.0,
+            static_cast<double>(stats.max_ns) / 1'000'000.0));
+    auto y_for_ms = [&](double ms) {
+        double const ratio = std::clamp(ms / max_ms, 0.0, 1.0);
+        return bottom - static_cast<float>(ratio) * graph_h;
     };
 
-    std::vector<PaintRect> rects;
-    rects.reserve(384);
-    float const row_h = height / 5.0f;
-    float const left = 68.0f;
-    float const right_pad = 10.0f;
-    float const graph_w = width - left - right_pad;
-    for (unsigned int row = 0; row < 5; ++row) {
-        auto const& s = series[row];
-        float const row_y = row_h * static_cast<float>(row);
-        painter.text(
-            8.0f,
-            row_y + 8.0f,
-            s.label,
-            static_cast<unsigned int>(std::strlen(s.label)),
-            11.0f,
-            t.muted);
-        painter.line(
-            left,
-            row_y + row_h - 6.0f,
-            width - right_pad,
-            row_y + row_h - 6.0f,
-            1.0f,
-            debug_with_alpha(t.border, 150));
-        painter.line(
-            left,
-            row_y + 5.0f,
-            width - right_pad,
-            row_y + 5.0f,
-            1.0f,
-            debug_with_alpha(t.semantic_error_border, 150));
-        painter.line(
-            left,
-            row_y + row_h - 6.0f
-                - (row_h - 12.0f) * static_cast<float>(4.166667 / budget_ms),
-            width - right_pad,
-            row_y + row_h - 6.0f
-                - (row_h - 12.0f) * static_cast<float>(4.166667 / budget_ms),
-            1.0f,
-            debug_with_alpha(t.semantic_warning_border, 145));
+    painter.text(8.0f, 6.0f, "frame render time", 17, 11.0f, t.muted);
+    painter.line(left, bottom, right, bottom, 1.0f, debug_with_alpha(t.border, 160));
+    painter.line(left, y_for_ms(budget_240_ms), right, y_for_ms(budget_240_ms),
+                 1.0f, debug_with_alpha(t.semantic_success_border, 145));
+    painter.line(left, y_for_ms(budget_60_ms), right, y_for_ms(budget_60_ms),
+                 1.0f, debug_with_alpha(t.semantic_warning_border, 170));
+    painter.text(6.0f, y_for_ms(budget_240_ms) - 6.0f,
+                 "240", 3, 10.0f, t.muted);
+    painter.text(12.0f, y_for_ms(budget_60_ms) - 6.0f,
+                 "60", 2, 10.0f, t.muted);
 
-        auto const count = std::min<std::size_t>(s.stats->recent_count, 64);
-        if (count == 0)
-            continue;
-        float const bar_gap = 1.0f;
-        float const bar_w = std::max(
-            2.0f,
-            (graph_w - bar_gap * static_cast<float>(count - 1))
-                / static_cast<float>(count));
-        auto const start = s.stats->recent_count - count;
+    auto const count = std::min<std::size_t>(stats.recent_count, 96);
+    Color const line_color = Color{37, 99, 235, 230};
+    if (count > 1) {
+        auto const start = stats.recent_count - count;
+        float const step = graph_w / static_cast<float>(count - 1);
+        PathBuilder area;
+        PathBuilder line;
+        area.move_to(left, bottom);
         for (std::size_t i = 0; i < count; ++i) {
-            auto const ns = debug_panel_recent_sample(*s.stats, start + i);
-            double const ms =
-                static_cast<double>(ns) / 1'000'000.0;
-            float const normalized = static_cast<float>(
-                std::clamp(ms / budget_ms, 0.02, 1.0));
-            float const h = normalized * (row_h - 12.0f);
-            rects.push_back(PaintRect{
-                left + static_cast<float>(i) * (bar_w + bar_gap),
-                row_y + row_h - 6.0f - h,
-                bar_w,
-                h,
-                ns > 16'666'667ull
-                    ? debug_with_alpha(t.semantic_error_border, 230)
-                    : s.color,
-            });
+            auto const sample = debug_frame_recent_sample(stats, start + i);
+            float const x = left + static_cast<float>(i) * step;
+            float const y = y_for_ms(
+                static_cast<double>(sample.total_ns) / 1'000'000.0);
+            if (i == 0)
+                line.move_to(x, y);
+            else
+                line.line_to(x, y);
+            area.line_to(x, y);
         }
-
-        auto const p95 = action_perf_recent_percentile(*s.stats, 0.95);
-        std::string stat = std::format(
-            "{:.2f}/{:.2f}ms",
-            static_cast<double>(s.stats->last_ns) / 1'000'000.0,
-            static_cast<double>(p95) / 1'000'000.0);
-        auto const stat_w = painter.measure_text(
-            stat.c_str(),
-            static_cast<unsigned int>(stat.size()),
-            10.0f);
-        painter.text(
-            width - right_pad - stat_w,
-            row_y + 8.0f,
-            stat.c_str(),
-            static_cast<unsigned int>(stat.size()),
-            10.0f,
-            t.foreground);
+        area.line_to(right, bottom);
+        area.close();
+        painter.fill_path(area, debug_with_alpha(line_color, 38));
+        painter.stroke_path(line, 2.0f, line_color);
     }
 
+    auto const last = stats.last;
+    std::string summary = std::format(
+        "{:.2f}ms  p95 {:.2f}ms  {}",
+        static_cast<double>(last.total_ns) / 1'000'000.0,
+        static_cast<double>(p95) / 1'000'000.0,
+        frame_trace_action_label(last.action));
+    auto const summary_w = painter.measure_text(
+        summary.c_str(),
+        static_cast<unsigned int>(summary.size()),
+        11.0f);
+    painter.text(
+        right - summary_w,
+        6.0f,
+        summary.c_str(),
+        static_cast<unsigned int>(summary.size()),
+        11.0f,
+        t.foreground);
+
+    struct Segment {
+        char const* label;
+        std::uint64_t ns;
+        Color color;
+    };
+    Segment const segments[] = {
+        {"input", last.input_ns, Color{168, 85, 247, 210}},
+        {"view", last.view_ns + last.update_ns, Color{59, 130, 246, 210}},
+        {"layout", last.layout_ns, Color{16, 185, 129, 210}},
+        {"paint", last.paint_ns, Color{245, 158, 11, 220}},
+        {"flush", last.flush_ns, Color{236, 72, 153, 210}},
+    };
+    float const bar_x = left;
+    float const bar_y = 150.0f;
+    float const bar_h = 12.0f;
+    float cursor = bar_x;
+    std::vector<PaintRect> rects;
+    rects.reserve(5);
+    std::uint64_t const total = std::max<std::uint64_t>(last.total_ns, 1);
+    for (auto const& segment : segments) {
+        if (segment.ns == 0)
+            continue;
+        float const w = std::max(
+            1.0f,
+            graph_w * static_cast<float>(
+                static_cast<double>(segment.ns)
+                / static_cast<double>(total)));
+        rects.push_back(PaintRect{cursor, bar_y, w, bar_h, segment.color});
+        cursor += w;
+    }
     if (!rects.empty()) {
         painter.fill_rects(
             rects.data(),
             static_cast<unsigned int>(rects.size()));
     }
-    char const* budget = "budget lines: 4.17ms / 16.67ms";
-    painter.text(
-        8.0f,
-        height - 14.0f,
-        budget,
-        static_cast<unsigned int>(std::strlen(budget)),
-        10.0f,
-        t.muted);
+
+    float label_x = left;
+    for (auto const& segment : segments) {
+        std::string label = std::format(
+            "{} {:.2f}",
+            segment.label,
+            static_cast<double>(segment.ns) / 1'000'000.0);
+        painter.text(
+            label_x,
+            170.0f,
+            label.c_str(),
+            static_cast<unsigned int>(label.size()),
+            10.0f,
+            t.muted);
+        label_x += 78.0f;
+    }
 }
 
 inline std::string performance_debug_block() {
+    auto const& frame = g_app.frame_perf;
+    auto const p95 = debug_frame_recent_percentile(frame, 0.95);
+    auto const average_ms = frame.count == 0
+        ? 0.0
+        : (static_cast<double>(frame.total_ns)
+           / static_cast<double>(frame.count))
+            / 1'000'000.0;
+    auto const& last = frame.last;
     std::string block;
-    block += "rebuilds: ";
+    block += "frames: ";
+    block += std::to_string(frame.count);
+    block += "\nlast_frame_ms: ";
+    block += std::format("{:.3f}", static_cast<double>(last.total_ns) / 1'000'000.0);
+    block += "\nlast_frame_fps: ";
+    block += last.total_ns == 0
+        ? "0.0"
+        : std::format("{:.1f}", 1'000'000'000.0 / static_cast<double>(last.total_ns));
+    block += "\np95_frame_ms: ";
+    block += std::format("{:.3f}", static_cast<double>(p95) / 1'000'000.0);
+    block += "\navg_frame_ms: ";
+    block += std::format("{:.3f}", average_ms);
+    block += "\nframes_over_60fps_budget: ";
+    block += std::to_string(frame.over_60fps_budget);
+    block += "\nlast_trace_action: ";
+    block += frame_trace_action_label(last.action);
+    block += "\nlast_input_ms: ";
+    block += std::format("{:.3f}", static_cast<double>(last.input_ns) / 1'000'000.0);
+    block += "\nlast_update_ms: ";
+    block += std::format("{:.3f}", static_cast<double>(last.update_ns) / 1'000'000.0);
+    block += "\nlast_view_ms: ";
+    block += std::format("{:.3f}", static_cast<double>(last.view_ns) / 1'000'000.0);
+    block += "\nlast_layout_ms: ";
+    block += std::format("{:.3f}", static_cast<double>(last.layout_ns) / 1'000'000.0);
+    block += "\nlast_paint_ms: ";
+    block += std::format("{:.3f}", static_cast<double>(last.paint_ns) / 1'000'000.0);
+    block += "\nlast_flush_ms: ";
+    block += std::format("{:.3f}", static_cast<double>(last.flush_ns) / 1'000'000.0);
+    block += "\nrebuilds: ";
     block += std::to_string(metrics::inst::rebuilds.total());
     block += "\ninput_events: ";
     block += std::to_string(metrics::inst::input_events.total());
@@ -7332,48 +8118,16 @@ inline std::string performance_debug_block() {
     block += std::to_string(metrics::inst::native_texture_upload_bytes.total());
     block += "\nnative_buffer_reallocations: ";
     block += std::to_string(metrics::inst::native_buffer_reallocations.total());
-    auto append_action = [&](char const* label, ActionPerfStats const& stats) {
-        auto const p95 = action_perf_recent_percentile(stats, 0.95);
-        double const average_ms = stats.count == 0
-            ? 0.0
-            : (static_cast<double>(stats.total_ns)
-               / static_cast<double>(stats.count))
-                / 1'000'000.0;
-        block += "\n";
-        block += label;
-        block += "_action_count: ";
-        block += std::to_string(stats.count);
-        block += "\n";
-        block += label;
-        block += "_last_ms: ";
-        block += std::format("{:.3f}", static_cast<double>(stats.last_ns) / 1'000'000.0);
-        block += "\n";
-        block += label;
-        block += "_p95_ms: ";
-        block += std::format("{:.3f}", static_cast<double>(p95) / 1'000'000.0);
-        block += "\n";
-        block += label;
-        block += "_avg_ms: ";
-        block += std::format("{:.3f}", average_ms);
-        block += "\n";
-        block += label;
-        block += "_over_60fps_budget: ";
-        block += std::to_string(stats.over_60fps_budget);
-    };
-    block += "\naction_60fps_budget_ms: 16.667";
-    append_action("hover", g_app.action_perf.hover);
-    append_action("scroll", g_app.action_perf.scroll);
-    append_action("click", g_app.action_perf.click);
-    append_action("key", g_app.action_perf.key);
-    append_action("gesture", g_app.action_perf.gesture);
+    block += "\nframe_60fps_budget_ms: 16.667";
+    block += "\nframe_240fps_budget_ms: 4.167";
     return block;
 }
 
 inline void render_debug_performance_tab() {
-    widget::text("Frame timeline", TextSize::Small, TextColor::Muted);
+    widget::text("Frame Timeline", TextSize::Small, TextColor::Muted);
     widget::semantic_canvas(
         424.0f,
-        176.0f,
+        192.0f,
         "Debug Performance Chart",
         [](Painter& painter) {
             paint_debug_performance_chart(painter);
@@ -7393,23 +8147,108 @@ inline void render_debug_layout_tab(
     auto const* hovered = root
         ? find_semantic_node_by_callback(*root, input_debug.hovered_id)
         : nullptr;
-    widget::text("Elements", TextSize::Small, TextColor::Muted);
-    widget::code(layout_tree_block(input_debug, root));
+    std::optional<diag::SemanticNodeSnapshot> hovered_snapshot;
+    if (hovered)
+        hovered_snapshot = *hovered;
+    widget::text("Layout Overview", TextSize::Small, TextColor::Muted);
+    widget::semantic_canvas(
+        424.0f,
+        220.0f,
+        "Debug Layout Overview",
+        [semantic_tree, input_debug](Painter& painter) {
+            paint_debug_layout_diagram(painter, semantic_tree, input_debug);
+        },
+        {},
+        debug_layout_diagram_token(input_debug, root),
+        "diagram");
     layout::spacer(8);
     widget::text("Box Model", TextSize::Small, TextColor::Muted);
-    widget::code(debug_semantic_node_block(hovered));
+    widget::semantic_canvas(
+        424.0f,
+        156.0f,
+        "Debug Box Model",
+        [hovered_snapshot](Painter& painter) {
+            paint_debug_box_model_diagram(
+                painter,
+                hovered_snapshot ? &*hovered_snapshot : nullptr);
+        },
+        {},
+        debug_layout_diagram_token(input_debug, root)
+            ^ 0x626f786d6f64656cULL,
+        "diagram");
     layout::spacer(8);
-    widget::text("Layout State", TextSize::Small, TextColor::Muted);
-    widget::code(layout_debug_block(input_debug, root));
+    widget::text("Selected Node", TextSize::Small, TextColor::Muted);
+    widget::code(debug_semantic_node_block(hovered));
 }
 
 inline void render_debug_console_tab() {
+    auto records = log::recent_records(60);
     widget::text("Live Console", TextSize::Small, TextColor::Muted);
-    widget::code(console_log_block());
+    layout::row([&] {
+        debug_panel_action_button(
+            "Copy visible",
+            [records] {
+                debug_console_copy(debug_console_records_text(records));
+            });
+        debug_panel_action_button(
+            "Copy latest",
+            [records] {
+                if (!records.empty())
+                    debug_console_copy(debug_console_record_text(records.back()));
+            });
+        debug_panel_action_button(
+            "Clear copy",
+            [] { debug_console_clear_copy(); });
+    }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
+    if (!g_app.debug_console_copy_buffer.empty()) {
+        widget::text(
+            std::string{"Copy Buffer #"}
+                + std::to_string(g_app.debug_console_copy_serial),
+            TextSize::Small,
+            TextColor::Muted);
+        widget::code(g_app.debug_console_copy_buffer);
+    }
+    if (records.empty()) {
+        widget::code("live_tail: true\nrecords: 0\n\n(no console records yet)");
+        return;
+    }
+    for (auto const& record : records)
+        render_debug_console_record(record);
 }
 
 inline void render_debug_input_tab(
         diag::InputDebugSnapshot const& input_debug) {
+    widget::text("Virtual Pointer", TextSize::Small, TextColor::Muted);
+    widget::semantic_canvas(
+        424.0f,
+        160.0f,
+        "Debug Virtual Input Pad",
+        [](Painter& painter) {
+            paint_debug_virtual_input_pad(painter);
+        },
+        [](GestureEvent const& ev) {
+            float const viewport_w = std::max(1.0f, g_app.debug_viewport_width);
+            float const viewport_h = std::max(1.0f, g_app.debug_viewport_height);
+            debug_set_virtual_pointer(
+                std::clamp(ev.focus_x / 424.0f, 0.0f, 1.0f) * viewport_w,
+                std::clamp(ev.focus_y / 160.0f, 0.0f, 1.0f) * viewport_h);
+        },
+        debug_virtual_input_token(),
+        "input");
+    layout::row([&] {
+        debug_panel_action_button("Center", [] { debug_center_virtual_pointer(); });
+        debug_panel_action_button("Hover", [] { debug_virtual_hover(); });
+        debug_panel_action_button("Click", [] { debug_virtual_click(); });
+        debug_panel_action_button("Clear", [] { debug_virtual_clear(); });
+    }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
+    layout::row([&] {
+        debug_panel_action_button("Left", [] { debug_nudge_virtual_pointer(-24.0f, 0.0f); });
+        debug_panel_action_button("Up", [] { debug_nudge_virtual_pointer(0.0f, -24.0f); });
+        debug_panel_action_button("Down", [] { debug_nudge_virtual_pointer(0.0f, 24.0f); });
+        debug_panel_action_button("Right", [] { debug_nudge_virtual_pointer(24.0f, 0.0f); });
+    }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
+    widget::code(virtual_input_debug_block());
+    layout::spacer(8);
     widget::text("Input Routing", TextSize::Small, TextColor::Muted);
     widget::code(input_debug_block(input_debug));
 }
@@ -7484,17 +8323,21 @@ inline void render_debug_panel_overlay() {
                 panel_options.kind = MaterialKind::Thick;
                 panel_options.role = MaterialSurfaceRole::Sidebar;
                 panel_options.interactive = false;
+                panel_options.capture_pointer = true;
                 panel_options.max_width = panel_width;
                 panel_options.border_width = 1.0f;
                 panel_options.has_material_override = true;
                 panel_options.material_override =
-                    layout::material_style(MaterialKind::Thick);
+                    layout::glass_background_effect_material_style(
+                        MaterialKind::Thick,
+                        layout::glass_background_feathered(18.0f, 28.0f));
                 panel_options.material_override.tint =
-                    debug_with_alpha(g_app.theme.surface, 216);
+                    debug_with_alpha(g_app.theme.surface, 168);
                 panel_options.material_override.border =
                     debug_with_alpha(g_app.theme.border, 236);
-                panel_options.material_override.blur_radius = 32.0f;
-                panel_options.material_override.opacity = 0.84f;
+                panel_options.material_override.blur_radius = 36.0f;
+                panel_options.material_override.opacity = 0.72f;
+                panel_options.material_override.saturation = 1.22f;
                 layout::material_surface(panel_options, [&] {
                     layout::row([&] {
                         widget::text("Debug", TextSize::Heading);

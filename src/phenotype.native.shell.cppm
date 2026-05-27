@@ -403,6 +403,10 @@ inline void remember_input_frame(std::chrono::steady_clock::time_point start) {
 inline void run_input_frame(char const* action,
                             bool rebuild,
                             std::chrono::steady_clock::time_point start) {
+    auto const start_trace = !::phenotype::detail::frame_trace_input_active();
+    auto trace = start_trace
+        ? ::phenotype::detail::begin_frame_trace_input(action)
+        : ::phenotype::detail::FrameTraceInputContext{};
     bool const previous_input_motion =
         ::phenotype::detail::g_app.has_active_input_motion;
     ::phenotype::detail::g_app.has_active_input_motion = true;
@@ -418,6 +422,8 @@ inline void run_input_frame(char const* action,
     ::phenotype::detail::record_action_duration(
         action,
         static_cast<std::uint64_t>(elapsed.count()));
+    if (start_trace)
+        ::phenotype::detail::restore_frame_trace_input(trace);
     remember_input_frame(start);
 }
 
@@ -450,6 +456,7 @@ inline bool service_deferred_input_frame(
 
 template<typename F>
 inline bool measure_input_action(char const* action, F&& fn) {
+    ::phenotype::detail::FrameTraceInputScope frame_trace(action);
     auto const start = std::chrono::steady_clock::now();
     bool const handled = std::invoke(std::forward<F>(fn));
     auto const end = std::chrono::steady_clock::now();
@@ -728,17 +735,21 @@ inline bool scroll_by_pixels(float delta_pixels,
 inline bool dispatch_scroll_pixels(float delta_pixels,
                                    float viewport_height_value,
                                    char const* detail) {
-    return set_scroll_position(g_app_state.scroll_y - delta_pixels,
-                               viewport_height_value,
-                               detail);
+    return measure_input_action("scroll", [&] {
+        return set_scroll_position(g_app_state.scroll_y - delta_pixels,
+                                   viewport_height_value,
+                                   detail);
+    });
 }
 
 inline bool dispatch_scroll_pixels_x(float delta_pixels,
                                      float viewport_width_value,
                                      char const* detail) {
-    return set_scroll_position_x(g_app_state.scroll_x - delta_pixels,
-                                 viewport_width_value,
-                                 detail);
+    return measure_input_action("scroll", [&] {
+        return set_scroll_position_x(g_app_state.scroll_x - delta_pixels,
+                                     viewport_width_value,
+                                     detail);
+    });
 }
 
 inline bool dispatch_scroll_lines(double delta_lines,
@@ -936,60 +947,62 @@ inline bool dispatch_mouse_button(float mx, float my,
 }
 
 inline bool dispatch_cursor_pos(float mx, float my) {
-    g_app_state.last_mouse_x = mx;
-    g_app_state.last_mouse_y = my;
-    bool const pointer_changed =
-        ::phenotype::detail::set_pointer_position(mx, my);
-    if (g_app_state.host && g_app_state.host->platform
-        && g_app_state.host->platform->input.handle_cursor_pos
-        && g_app_state.host->platform->input.handle_cursor_pos(mx, my)) {
-        g_app_state.hovered_id = invalid_callback_id;
-        ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
-        request_input_frame("hover", false);
-        update_hover_cursor(false);
-        ::phenotype::detail::note_input_event(
-            "hover", "shell", "pointer-move", "platform-consumed", invalid_callback_id);
-        return true;
-    }
+    return measure_input_action("hover", [&] {
+        g_app_state.last_mouse_x = mx;
+        g_app_state.last_mouse_y = my;
+        bool const pointer_changed =
+            ::phenotype::detail::set_pointer_position(mx, my);
+        if (g_app_state.host && g_app_state.host->platform
+            && g_app_state.host->platform->input.handle_cursor_pos
+            && g_app_state.host->platform->input.handle_cursor_pos(mx, my)) {
+            g_app_state.hovered_id = invalid_callback_id;
+            ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
+            request_input_frame("hover", false);
+            update_hover_cursor(false);
+            ::phenotype::detail::note_input_event(
+                "hover", "shell", "pointer-move", "platform-consumed", invalid_callback_id);
+            return true;
+        }
 
-    if (g_app_state.drag_selecting
-        && ::phenotype::detail::focused_is_input()
-        && ::phenotype::detail::get_focused_id() == g_app_state.drag_selection_id) {
+        if (g_app_state.drag_selecting
+            && ::phenotype::detail::focused_is_input()
+            && ::phenotype::detail::get_focused_id() == g_app_state.drag_selection_id) {
+            auto hit = hit_test(mx, my, g_app_state.scroll_x, g_app_state.scroll_y);
+            auto hovered_id = hit.value_or(invalid_callback_id);
+            g_app_state.hovered_id = hovered_id;
+            ::phenotype::detail::set_hover_id_without_event(hovered_id);
+            bool handled = move_focused_selection_from_pointer_x(mx, true);
+            if (handled)
+                request_input_frame("hover", false);
+            else if (pointer_changed)
+                request_input_frame("hover", false);
+            update_hover_cursor(hit.has_value());
+            ::phenotype::detail::note_input_event(
+                "click",
+                "shell",
+                "pointer-drag",
+                handled ? "handled" : "ignored",
+                g_app_state.drag_selection_id);
+            return handled;
+        }
+
         auto hit = hit_test(mx, my, g_app_state.scroll_x, g_app_state.scroll_y);
         auto hovered_id = hit.value_or(invalid_callback_id);
         g_app_state.hovered_id = hovered_id;
-        ::phenotype::detail::set_hover_id_without_event(hovered_id);
-        bool handled = move_focused_selection_from_pointer_x(mx, true);
-        if (handled)
-            request_input_frame("hover", false);
-        else if (pointer_changed)
-            request_input_frame("hover", false);
-        update_hover_cursor(hit.has_value());
-        ::phenotype::detail::note_input_event(
-            "click",
-            "shell",
-            "pointer-drag",
-            handled ? "handled" : "ignored",
-            g_app_state.drag_selection_id);
-        return handled;
-    }
-
-    auto hit = hit_test(mx, my, g_app_state.scroll_x, g_app_state.scroll_y);
-    auto hovered_id = hit.value_or(invalid_callback_id);
-    g_app_state.hovered_id = hovered_id;
-    bool handled = ::phenotype::detail::set_hover_id(
-        hovered_id, "shell", "pointer-move");
-    // Hover transitions are now view-time animations (animate_color in
-    // widget::button etc.), so the new hovered_id has to feed back into
-    // the next view rebuild — `repaint_current` alone leaves the arena
-    // showing the previous frame's hover sample.
+        bool handled = ::phenotype::detail::set_hover_id(
+            hovered_id, "shell", "pointer-move");
+        // Hover transitions are now view-time animations (animate_color in
+        // widget::button etc.), so the new hovered_id has to feed back into
+        // the next view rebuild — `repaint_current` alone leaves the arena
+        // showing the previous frame's hover sample.
         if (handled)
             request_input_frame("hover", true);
         else if (pointer_changed)
             request_input_frame("hover", false);
         update_hover_cursor(hit.has_value());
         return handled || pointer_changed;
-    }
+    });
+}
 
 // Try to route `delta_pixels` into the topmost scroll_view whose
 // painted rect contains the cursor. Walk in reverse because paint_node

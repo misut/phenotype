@@ -195,6 +195,43 @@ struct ActionPerfMonitor {
     ActionPerfStats other;
 };
 
+enum class FrameTraceAction : unsigned char {
+    None,
+    Hover,
+    Scroll,
+    Click,
+    Key,
+    Gesture,
+    Other,
+};
+
+struct FrameTraceSample {
+    std::uint64_t total_ns = 0;
+    std::uint64_t input_ns = 0;
+    std::uint64_t update_ns = 0;
+    std::uint64_t view_ns = 0;
+    std::uint64_t layout_ns = 0;
+    std::uint64_t paint_ns = 0;
+    std::uint64_t flush_ns = 0;
+    FrameTraceAction action = FrameTraceAction::None;
+    bool rebuild = true;
+};
+
+struct FrameTraceMonitor {
+    static constexpr std::size_t RECENT_CAPACITY = 180;
+
+    std::uint64_t count = 0;
+    std::uint64_t total_ns = 0;
+    std::uint64_t last_ns = 0;
+    std::uint64_t min_ns = 0;
+    std::uint64_t max_ns = 0;
+    std::uint64_t over_60fps_budget = 0;
+    FrameTraceSample last{};
+    std::array<FrameTraceSample, RECENT_CAPACITY> recent{};
+    std::size_t recent_count = 0;
+    std::size_t recent_next = 0;
+};
+
 enum class DebugPanelTab {
     Performance,
     Layout,
@@ -305,6 +342,16 @@ struct AppState {
     bool debug_panel_open = false;
     DebugPanelTab debug_panel_tab = DebugPanelTab::Performance;
     ActionPerfMonitor action_perf;
+    FrameTraceMonitor frame_perf;
+    bool frame_trace_input_active = false;
+    FrameTraceAction frame_trace_input_action = FrameTraceAction::None;
+    std::uint64_t frame_trace_input_start_ns = 0;
+    bool debug_virtual_pointer_valid = false;
+    float debug_virtual_pointer_x = 0.0f;
+    float debug_virtual_pointer_y = 0.0f;
+    unsigned int debug_virtual_hit_id = 0xFFFFFFFFu;
+    std::string debug_console_copy_buffer;
+    std::uint64_t debug_console_copy_serial = 0;
 
     // Set during view by `animate_value` whenever an interpolation
     // hasn't reached its target yet, cleared at the start of every
