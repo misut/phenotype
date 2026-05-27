@@ -876,6 +876,30 @@ static void reset_core_state() {
     g_link_open_count = 0;
 }
 
+static std::optional<bool> find_debug_panel_surface_interactive(
+        NodeHandle node_h) {
+    auto* node = phenotype::detail::g_app.arena.get(node_h);
+    if (!node)
+        return std::nullopt;
+    if (node->debug_semantic_label == "Debug Panel"
+        && node->material.kind != MaterialKind::None) {
+        return node->material.container.interactive;
+    }
+    for (auto child_h : node->children) {
+        if (auto found = find_debug_panel_surface_interactive(child_h))
+            return found;
+    }
+    return std::nullopt;
+}
+
+static std::optional<bool> debug_panel_surface_interactive() {
+    for (auto overlay_h : phenotype::detail::g_app.overlays) {
+        if (auto found = find_debug_panel_surface_interactive(overlay_h))
+            return found;
+    }
+    return std::nullopt;
+}
+
 static void open_url(char const*, unsigned int) {
     ++g_link_open_count;
 }
@@ -1394,6 +1418,9 @@ static void test_shell_key_commands_respect_input_focus_policy() {
     assert(phenotype::detail::g_app.debug_panel_tab
         == phenotype::DebugPanelTab::Performance);
     assert(!phenotype::detail::g_app.overlays.empty());
+    auto panel_interactive = debug_panel_surface_interactive();
+    assert(panel_interactive.has_value());
+    assert(!*panel_interactive);
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.detail == "f12");
     assert(debug.result == "handled");
