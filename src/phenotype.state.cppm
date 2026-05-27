@@ -195,6 +195,14 @@ struct ActionPerfMonitor {
     ActionPerfStats other;
 };
 
+enum class DebugPanelTab {
+    Performance,
+    Layout,
+    Console,
+    Input,
+    Protocol,
+};
+
 enum class InputModality {
     None,
     Keyboard,
@@ -295,6 +303,7 @@ struct AppState {
     float debug_viewport_height = 0.0f;
     diag::InputDebugSnapshot input_debug;
     bool debug_panel_open = false;
+    DebugPanelTab debug_panel_tab = DebugPanelTab::Performance;
     ActionPerfMonitor action_perf;
 
     // Set during view by `animate_value` whenever an interpolation

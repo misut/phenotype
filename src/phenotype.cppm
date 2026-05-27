@@ -6789,6 +6789,85 @@ inline std::string debug_panel_shortcut_text() {
 #endif
 }
 
+inline Color debug_with_alpha(Color color, unsigned char alpha) noexcept {
+    color.a = alpha;
+    return color;
+}
+
+inline char const* debug_panel_tab_label(DebugPanelTab tab) noexcept {
+    switch (tab) {
+        case DebugPanelTab::Performance: return "Performance";
+        case DebugPanelTab::Layout:      return "Layout";
+        case DebugPanelTab::Console:     return "Console";
+        case DebugPanelTab::Input:       return "Input";
+        case DebugPanelTab::Protocol:    return "Protocol";
+    }
+    return "Performance";
+}
+
+inline void set_debug_panel_tab(DebugPanelTab tab) {
+    if (g_app.debug_panel_tab == tab)
+        return;
+    g_app.debug_panel_tab = tab;
+    g_app.last_paint_hash = 0;
+    trigger_rebuild();
+}
+
+inline void debug_panel_tab_button(DebugPanelTab tab) {
+    auto const& t = g_app.theme;
+    bool const selected = g_app.debug_panel_tab == tab;
+    ButtonStyleOptions options{};
+    options.has_material = true;
+    options.material = layout::material_style(
+        selected ? MaterialKind::Regular : MaterialKind::Clear);
+    options.material.role = MaterialSurfaceRole::Control;
+    options.material.tint = selected
+        ? debug_with_alpha(t.accent, 218)
+        : debug_with_alpha(t.surface, 70);
+    options.material.border = selected
+        ? debug_with_alpha(t.accent_strong, 230)
+        : debug_with_alpha(t.border, 130);
+    options.has_background = true;
+    options.background = options.material.tint;
+    options.has_hover_background = true;
+    options.hover_background = selected
+        ? debug_with_alpha(t.accent_strong, 230)
+        : debug_with_alpha(t.state_hover_bg, 190);
+    options.has_pressed_background = true;
+    options.pressed_background = selected
+        ? debug_with_alpha(t.accent_strong, 245)
+        : debug_with_alpha(t.state_hover_bg, 230);
+    options.has_border_color = true;
+    options.border_color = options.material.border;
+    options.has_text_color = true;
+    options.text_color = selected ? t.state_active_fg : t.foreground;
+    options.border_radius = t.radius_sm;
+    options.border_width = selected ? 1.0f : 0.5f;
+    options.font_size = t.small_font_size;
+    options.padding_top = 6.0f;
+    options.padding_bottom = 6.0f;
+    options.padding_left = 10.0f;
+    options.padding_right = 10.0f;
+    options.fixed_height = 34.0f;
+    options.text_align = TextAlign::Center;
+
+    auto const* label = debug_panel_tab_label(tab);
+    widget::_impl::action_button(
+        str{label, static_cast<unsigned int>(std::strlen(label))},
+        options,
+        [tab] { set_debug_panel_tab(tab); });
+}
+
+inline void debug_panel_tab_bar() {
+    layout::row([&] {
+        debug_panel_tab_button(DebugPanelTab::Performance);
+        debug_panel_tab_button(DebugPanelTab::Layout);
+        debug_panel_tab_button(DebugPanelTab::Console);
+        debug_panel_tab_button(DebugPanelTab::Input);
+        debug_panel_tab_button(DebugPanelTab::Protocol);
+    }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
+}
+
 inline std::string debug_protocol_block() {
     std::string block;
     block += "protocol_version: ";
@@ -6869,12 +6948,155 @@ inline std::string input_debug_block(diag::InputDebugSnapshot const& debug) {
     return block;
 }
 
-inline std::string layout_debug_block(diag::InputDebugSnapshot const& debug) {
+inline std::optional<diag::SemanticNodeSnapshot>
+debug_panel_app_semantic_tree_snapshot() {
+    std::vector<diag::SemanticNodeSnapshot> nodes;
+    collect_semantic_nodes(g_app.root, 0.0f, 0.0f, nodes);
+    if (nodes.empty())
+        return std::nullopt;
+    return std::move(nodes.front());
+}
+
+inline unsigned int debug_semantic_node_count(
+        diag::SemanticNodeSnapshot const& node) {
+    unsigned int count = 1;
+    for (auto const& child : node.children)
+        count += debug_semantic_node_count(child);
+    return count;
+}
+
+inline diag::SemanticNodeSnapshot const* find_semantic_node_by_callback(
+        diag::SemanticNodeSnapshot const& node,
+        unsigned int callback_id) {
+    if (callback_id == 0xFFFFFFFFu)
+        return nullptr;
+    if (node.callback_id.has_value() && *node.callback_id == callback_id)
+        return &node;
+    for (auto const& child : node.children) {
+        if (auto const* found =
+                find_semantic_node_by_callback(child, callback_id)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+inline std::string debug_compact_label(std::string label,
+                                       std::size_t limit = 42) {
+    for (auto& ch : label) {
+        if (ch == '\n' || ch == '\r' || ch == '\t')
+            ch = ' ';
+    }
+    if (label.size() <= limit)
+        return label;
+    return label.substr(0, limit > 3 ? limit - 3 : limit) + "...";
+}
+
+inline std::string debug_semantic_node_title(
+        diag::SemanticNodeSnapshot const& node) {
+    std::string out = node.role.empty() ? "node" : node.role;
+    if (!node.label.empty()) {
+        out += " \"";
+        out += debug_compact_label(node.label);
+        out += "\"";
+    }
+    if (node.callback_id.has_value()) {
+        out += " #";
+        out += std::to_string(*node.callback_id);
+    }
+    return out;
+}
+
+inline std::string debug_semantic_node_block(
+        diag::SemanticNodeSnapshot const* node) {
+    if (!node)
+        return "hovered_node: none\nbox_model: unavailable";
+
+    std::string block;
+    block += "node: ";
+    block += debug_semantic_node_title(*node);
+    block += "\nbounds: ";
+    block += debug_rect_text(node->bounds);
+    block += "\nvisible: ";
+    block += node->visible ? "true" : "false";
+    block += "\nenabled: ";
+    block += node->enabled ? "true" : "false";
+    block += "\nfocusable: ";
+    block += node->focusable ? "true" : "false";
+    block += "\nfocused: ";
+    block += node->focused ? "true" : "false";
+    block += "\nchildren: ";
+    block += std::to_string(node->children.size());
+    if (node->material.has_value()) {
+        block += "\nmaterial: ";
+        block += node->material->kind;
+        block += "/";
+        block += node->material->role;
+        block += " blur=";
+        block += std::format("{:.1f}", node->material->blur_radius);
+    }
+    return block;
+}
+
+inline void append_semantic_tree_lines(
+        diag::SemanticNodeSnapshot const& node,
+        std::string& block,
+        unsigned int depth,
+        unsigned int& remaining,
+        unsigned int hovered_id,
+        unsigned int focused_id) {
+    if (remaining == 0)
+        return;
+    if (remaining == 1) {
+        block += "\n...";
+        remaining = 0;
+        return;
+    }
+
+    if (!block.empty())
+        block += "\n";
+    for (unsigned int i = 0; i < depth; ++i)
+        block += "  ";
+
+    bool const hovered = node.callback_id.has_value()
+        && *node.callback_id == hovered_id;
+    bool const focused = node.callback_id.has_value()
+        && *node.callback_id == focused_id;
+    block += hovered ? "> " : "  ";
+    if (focused)
+        block += "* ";
+    block += debug_semantic_node_title(node);
+    if (node.bounds.valid) {
+        block += " ";
+        block += std::format(
+            "{:.0f}x{:.0f}@{:.0f},{:.0f}",
+            node.bounds.w,
+            node.bounds.h,
+            node.bounds.x,
+            node.bounds.y);
+    }
+    --remaining;
+
+    for (auto const& child : node.children)
+        append_semantic_tree_lines(
+            child,
+            block,
+            depth + 1,
+            remaining,
+            hovered_id,
+            focused_id);
+}
+
+inline std::string layout_debug_block(
+        diag::InputDebugSnapshot const& debug,
+        diag::SemanticNodeSnapshot const* root) {
     std::string block;
     block += "viewport: ";
     block += std::to_string(g_app.debug_viewport_width);
     block += "x";
     block += std::to_string(g_app.debug_viewport_height);
+    block += "\nsemantic_nodes: ";
+    block += root ? std::to_string(debug_semantic_node_count(*root)) : "0";
     block += "\nhovered_id: ";
     block += debug_id_text(debug.hovered_id);
     block += "\nfocused_id: ";
@@ -6889,25 +7111,201 @@ inline std::string layout_debug_block(diag::InputDebugSnapshot const& debug) {
     block += std::to_string(g_app.overlays.size());
     block += "\nlayout_hover_highlight: ";
     block += debug.hovered_id == 0xFFFFFFFFu ? "inactive" : "active";
+    block += "\ninspect_mode: hover elements to highlight their bounds";
+    return block;
+}
+
+inline std::string layout_tree_block(
+        diag::InputDebugSnapshot const& debug,
+        diag::SemanticNodeSnapshot const* root) {
+    if (!root)
+        return "(no semantic tree)";
+    std::string block;
+    unsigned int remaining = 42;
+    append_semantic_tree_lines(
+        *root,
+        block,
+        0,
+        remaining,
+        debug.hovered_id,
+        debug.focused_id);
     return block;
 }
 
 inline std::string console_log_block() {
-    auto records = log::recent_records(6);
+    auto records = log::recent_records(40);
     if (records.empty())
-        return "(no console records yet)";
+        return "live_tail: true\nrecords: 0\n\n(no console records yet)";
 
     std::string block;
+    block += "live_tail: true\nrecords_shown: ";
+    block += std::to_string(records.size());
+    block += "\nring_capacity: 256\n";
     for (auto const& record : records) {
-        if (!block.empty())
-            block += "\n";
+        block += "\n";
+        block += "[";
         block += log::severity_text(record.severity);
+        block += "] ";
+        block += std::to_string(record.time_unix_nano);
         block += " ";
         block += record.scope_name.empty() ? "phenotype" : record.scope_name;
         block += ": ";
         block += record.body.empty() ? "(empty)" : record.body;
     }
     return block;
+}
+
+inline std::uint64_t debug_panel_recent_sample(ActionPerfStats const& stats,
+                                               std::size_t index) noexcept {
+    if (index >= stats.recent_count)
+        return 0;
+    auto const start = stats.recent_count == ActionPerfStats::RECENT_CAPACITY
+        ? stats.recent_next
+        : 0u;
+    return stats.recent_ns[
+        (start + index) % ActionPerfStats::RECENT_CAPACITY];
+}
+
+inline void debug_mix_action_perf_token(std::uint64_t& token,
+                                        ActionPerfStats const& stats) noexcept {
+    token = static_cast<std::uint64_t>(hash_combine(token, stats.count));
+    token = static_cast<std::uint64_t>(hash_combine(token, stats.last_ns));
+    token = static_cast<std::uint64_t>(
+        hash_combine(token, stats.over_60fps_budget));
+    token = static_cast<std::uint64_t>(
+        hash_combine(token, stats.recent_count));
+    token = static_cast<std::uint64_t>(hash_combine(token, stats.recent_next));
+}
+
+inline std::uint64_t debug_performance_chart_token() noexcept {
+    std::uint64_t token = 0x6475626770657266ULL;
+    debug_mix_action_perf_token(token, g_app.action_perf.hover);
+    debug_mix_action_perf_token(token, g_app.action_perf.scroll);
+    debug_mix_action_perf_token(token, g_app.action_perf.click);
+    debug_mix_action_perf_token(token, g_app.action_perf.key);
+    debug_mix_action_perf_token(token, g_app.action_perf.gesture);
+    return token;
+}
+
+inline void paint_debug_performance_chart(Painter& painter) {
+    auto const& t = g_app.theme;
+    constexpr float width = 424.0f;
+    constexpr float height = 176.0f;
+    constexpr double budget_ms = 16.666667;
+    PaintRect bg{0.0f, 0.0f, width, height, debug_with_alpha(t.code_bg, 178)};
+    painter.fill_rects(&bg, 1);
+
+    struct Series {
+        char const* label;
+        ActionPerfStats const* stats;
+        Color color;
+    };
+    Series const series[] = {
+        {"hover", &g_app.action_perf.hover, Color{59, 130, 246, 210}},
+        {"scroll", &g_app.action_perf.scroll, Color{16, 185, 129, 210}},
+        {"click", &g_app.action_perf.click, Color{168, 85, 247, 210}},
+        {"key", &g_app.action_perf.key, Color{245, 158, 11, 220}},
+        {"gesture", &g_app.action_perf.gesture, Color{236, 72, 153, 210}},
+    };
+
+    std::vector<PaintRect> rects;
+    rects.reserve(384);
+    float const row_h = height / 5.0f;
+    float const left = 68.0f;
+    float const right_pad = 10.0f;
+    float const graph_w = width - left - right_pad;
+    for (unsigned int row = 0; row < 5; ++row) {
+        auto const& s = series[row];
+        float const row_y = row_h * static_cast<float>(row);
+        painter.text(
+            8.0f,
+            row_y + 8.0f,
+            s.label,
+            static_cast<unsigned int>(std::strlen(s.label)),
+            11.0f,
+            t.muted);
+        painter.line(
+            left,
+            row_y + row_h - 6.0f,
+            width - right_pad,
+            row_y + row_h - 6.0f,
+            1.0f,
+            debug_with_alpha(t.border, 150));
+        painter.line(
+            left,
+            row_y + 5.0f,
+            width - right_pad,
+            row_y + 5.0f,
+            1.0f,
+            debug_with_alpha(t.semantic_error_border, 150));
+        painter.line(
+            left,
+            row_y + row_h - 6.0f
+                - (row_h - 12.0f) * static_cast<float>(4.166667 / budget_ms),
+            width - right_pad,
+            row_y + row_h - 6.0f
+                - (row_h - 12.0f) * static_cast<float>(4.166667 / budget_ms),
+            1.0f,
+            debug_with_alpha(t.semantic_warning_border, 145));
+
+        auto const count = std::min<std::size_t>(s.stats->recent_count, 64);
+        if (count == 0)
+            continue;
+        float const bar_gap = 1.0f;
+        float const bar_w = std::max(
+            2.0f,
+            (graph_w - bar_gap * static_cast<float>(count - 1))
+                / static_cast<float>(count));
+        auto const start = s.stats->recent_count - count;
+        for (std::size_t i = 0; i < count; ++i) {
+            auto const ns = debug_panel_recent_sample(*s.stats, start + i);
+            double const ms =
+                static_cast<double>(ns) / 1'000'000.0;
+            float const normalized = static_cast<float>(
+                std::clamp(ms / budget_ms, 0.02, 1.0));
+            float const h = normalized * (row_h - 12.0f);
+            rects.push_back(PaintRect{
+                left + static_cast<float>(i) * (bar_w + bar_gap),
+                row_y + row_h - 6.0f - h,
+                bar_w,
+                h,
+                ns > 16'666'667ull
+                    ? debug_with_alpha(t.semantic_error_border, 230)
+                    : s.color,
+            });
+        }
+
+        auto const p95 = action_perf_recent_percentile(*s.stats, 0.95);
+        std::string stat = std::format(
+            "{:.2f}/{:.2f}ms",
+            static_cast<double>(s.stats->last_ns) / 1'000'000.0,
+            static_cast<double>(p95) / 1'000'000.0);
+        auto const stat_w = painter.measure_text(
+            stat.c_str(),
+            static_cast<unsigned int>(stat.size()),
+            10.0f);
+        painter.text(
+            width - right_pad - stat_w,
+            row_y + 8.0f,
+            stat.c_str(),
+            static_cast<unsigned int>(stat.size()),
+            10.0f,
+            t.foreground);
+    }
+
+    if (!rects.empty()) {
+        painter.fill_rects(
+            rects.data(),
+            static_cast<unsigned int>(rects.size()));
+    }
+    char const* budget = "budget lines: 4.17ms / 16.67ms";
+    painter.text(
+        8.0f,
+        height - 14.0f,
+        budget,
+        static_cast<unsigned int>(std::strlen(budget)),
+        10.0f,
+        t.muted);
 }
 
 inline std::string performance_debug_block() {
@@ -6971,6 +7369,77 @@ inline std::string performance_debug_block() {
     return block;
 }
 
+inline void render_debug_performance_tab() {
+    widget::text("Frame timeline", TextSize::Small, TextColor::Muted);
+    widget::semantic_canvas(
+        424.0f,
+        176.0f,
+        "Debug Performance Chart",
+        [](Painter& painter) {
+            paint_debug_performance_chart(painter);
+        },
+        {},
+        debug_performance_chart_token(),
+        "chart");
+    layout::spacer(8);
+    widget::text("Counters", TextSize::Small, TextColor::Muted);
+    widget::code(performance_debug_block());
+}
+
+inline void render_debug_layout_tab(
+        diag::InputDebugSnapshot const& input_debug) {
+    auto semantic_tree = debug_panel_app_semantic_tree_snapshot();
+    auto const* root = semantic_tree ? &*semantic_tree : nullptr;
+    auto const* hovered = root
+        ? find_semantic_node_by_callback(*root, input_debug.hovered_id)
+        : nullptr;
+    widget::text("Elements", TextSize::Small, TextColor::Muted);
+    widget::code(layout_tree_block(input_debug, root));
+    layout::spacer(8);
+    widget::text("Box Model", TextSize::Small, TextColor::Muted);
+    widget::code(debug_semantic_node_block(hovered));
+    layout::spacer(8);
+    widget::text("Layout State", TextSize::Small, TextColor::Muted);
+    widget::code(layout_debug_block(input_debug, root));
+}
+
+inline void render_debug_console_tab() {
+    widget::text("Live Console", TextSize::Small, TextColor::Muted);
+    widget::code(console_log_block());
+}
+
+inline void render_debug_input_tab(
+        diag::InputDebugSnapshot const& input_debug) {
+    widget::text("Input Routing", TextSize::Small, TextColor::Muted);
+    widget::code(input_debug_block(input_debug));
+}
+
+inline void render_debug_protocol_tab() {
+    widget::text("Agent Protocol", TextSize::Small, TextColor::Muted);
+    widget::code(debug_protocol_block());
+}
+
+inline void render_debug_panel_tab_content(
+        diag::InputDebugSnapshot const& input_debug) {
+    switch (g_app.debug_panel_tab) {
+        case DebugPanelTab::Performance:
+            render_debug_performance_tab();
+            break;
+        case DebugPanelTab::Layout:
+            render_debug_layout_tab(input_debug);
+            break;
+        case DebugPanelTab::Console:
+            render_debug_console_tab();
+            break;
+        case DebugPanelTab::Input:
+            render_debug_input_tab(input_debug);
+            break;
+        case DebugPanelTab::Protocol:
+            render_debug_protocol_tab();
+            break;
+    }
+}
+
 inline void render_debug_panel_overlay() {
     if (!g_app.debug_panel_open)
         return;
@@ -6982,9 +7451,13 @@ inline void render_debug_panel_overlay() {
     float const viewport_height = g_app.debug_viewport_height > 1.0f
         ? g_app.debug_viewport_height
         : 720.0f;
+    float const panel_width = viewport_width > 540.0f
+        ? 480.0f
+        : std::max(320.0f, viewport_width - 24.0f);
     float const panel_height = viewport_height > 120.0f
         ? viewport_height - 32.0f
         : 620.0f;
+    float const content_height = std::max(260.0f, panel_height - 118.0f);
     unsigned int const hovered_id = input_debug.hovered_id;
 
     if (hovered_id != 0xFFFFFFFFu) {
@@ -7004,32 +7477,38 @@ inline void render_debug_panel_overlay() {
 
     layout::overlay([&] {
         layout::row([&] {
-            layout::sized_box(380.0f, [&] {
-                layout::sidebar(380.0f, [&] {
-                    widget::text("Debug");
-                    widget::text(std::string{"Toggle: "} + debug_panel_shortcut_text());
-                    layout::spacer(8);
-                    layout::scroll_view(panel_height, [&] {
-                        widget::text("Protocol");
-                        layout::spacer(4);
-                        widget::code(debug_protocol_block());
-                        layout::spacer(10);
-                        widget::text("Input");
-                        layout::spacer(4);
-                        widget::code(input_debug_block(input_debug));
-                        layout::spacer(10);
-                        widget::text("Layout");
-                        layout::spacer(4);
-                        widget::code(layout_debug_block(input_debug));
-                        layout::spacer(10);
-                        widget::text("Console");
-                        layout::spacer(4);
-                        widget::code(console_log_block());
-                        layout::spacer(10);
-                        widget::text("Performance");
-                        layout::spacer(4);
-                        widget::code(performance_debug_block());
-                    });
+            layout::sized_box(panel_width, [&] {
+                auto panel_options = layout::glass_surface_options(
+                    layout::GlassSurfacePreset::Inspector,
+                    "Debug Panel");
+                panel_options.kind = MaterialKind::Thick;
+                panel_options.role = MaterialSurfaceRole::Sidebar;
+                panel_options.max_width = panel_width;
+                panel_options.border_width = 1.0f;
+                panel_options.has_material_override = true;
+                panel_options.material_override =
+                    layout::material_style(MaterialKind::Thick);
+                panel_options.material_override.tint =
+                    debug_with_alpha(g_app.theme.surface, 216);
+                panel_options.material_override.border =
+                    debug_with_alpha(g_app.theme.border, 236);
+                panel_options.material_override.blur_radius = 32.0f;
+                panel_options.material_override.opacity = 0.84f;
+                layout::material_surface(panel_options, [&] {
+                    layout::row([&] {
+                        widget::text("Debug", TextSize::Heading);
+                        widget::text(
+                            std::string{"Toggle: "}
+                                + debug_panel_shortcut_text(),
+                            TextSize::Small,
+                            TextColor::Muted);
+                    }, SpaceToken::Sm, CrossAxisAlignment::Center,
+                       MainAxisAlignment::SpaceBetween);
+                    debug_panel_tab_bar();
+                    layout::divider();
+                    layout::scroll_view(content_height, [&] {
+                        render_debug_panel_tab_content(input_debug);
+                    }, SpaceToken::Sm);
                 });
             });
         }, SpaceToken::Md, CrossAxisAlignment::Start, MainAxisAlignment::End);
