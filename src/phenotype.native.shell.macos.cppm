@@ -634,6 +634,9 @@ inline std::optional<int> env_positive_int(char const* name, int max_value) {
 struct PerformanceProbeStats {
     std::string mode;
     int frames = 0;
+    int handled_frames = 0;
+    int long_frames = 0;
+    bool debug_panel = false;
     std::uint64_t total_ns = 0;
     std::uint64_t min_ns = 0;
     std::uint64_t max_ns = 0;
@@ -646,8 +649,10 @@ struct PerformanceProbeStats {
     double p95_fps_capacity = 0.0;
     bool idle_240_required = false;
     bool active_60_required = false;
+    bool action_60_required = false;
     bool idle_240_ok = true;
     bool active_60_ok = true;
+    bool action_60_ok = true;
 };
 
 inline std::uint64_t percentile_from_sorted(
@@ -673,6 +678,9 @@ inline std::string performance_probe_json(PerformanceProbeStats const& s) {
         "  \"kind\": \"phenotype.performance_probe\",\n"
         "  \"mode\": \"{}\",\n"
         "  \"frames\": {},\n"
+        "  \"handled_frames\": {},\n"
+        "  \"long_frames\": {},\n"
+        "  \"debug_panel\": {},\n"
         "  \"pace_hz\": {},\n"
         "  \"timing\": {{\n"
         "    \"total_ns\": {},\n"
@@ -688,14 +696,20 @@ inline std::string performance_probe_json(PerformanceProbeStats const& s) {
         "  \"budgets\": {{\n"
         "    \"idle_240_frame_budget_ns\": 4166667,\n"
         "    \"active_60_frame_budget_ns\": 16666667,\n"
+        "    \"action_60_frame_budget_ns\": 16666667,\n"
         "    \"idle_240_required\": {},\n"
         "    \"active_60_required\": {},\n"
+        "    \"action_60_required\": {},\n"
         "    \"idle_240_ok\": {},\n"
-        "    \"active_60_ok\": {}\n"
+        "    \"active_60_ok\": {},\n"
+        "    \"action_60_ok\": {}\n"
         "  }}\n"
         "}}\n",
         s.mode,
         s.frames,
+        s.handled_frames,
+        s.long_frames,
+        s.debug_panel ? "true" : "false",
         s.pace_hz,
         s.total_ns,
         s.average_ns,
@@ -708,8 +722,10 @@ inline std::string performance_probe_json(PerformanceProbeStats const& s) {
         s.p95_fps_capacity,
         s.idle_240_required ? "true" : "false",
         s.active_60_required ? "true" : "false",
+        s.action_60_required ? "true" : "false",
         s.idle_240_ok ? "true" : "false",
-        s.active_60_ok ? "true" : "false");
+        s.active_60_ok ? "true" : "false",
+        s.action_60_ok ? "true" : "false");
 }
 
 inline bool write_performance_probe_report(std::string_view report) {
@@ -738,7 +754,10 @@ inline bool run_performance_probe_if_requested() {
     auto const* mode_env = std::getenv("PHENOTYPE_PERF_MODE");
     auto mode = std::string{
         mode_env && mode_env[0] != '\0' ? mode_env : "idle"};
-    if (mode != "idle" && mode != "rebuild" && mode != "force-flush") {
+    bool const action_mode =
+        mode == "hover" || mode == "scroll" || mode == "mixed-input";
+    if (mode != "idle" && mode != "rebuild" && mode != "force-flush"
+        && !action_mode) {
         std::fprintf(
             stderr,
             "[phenotype-native] unknown PHENOTYPE_PERF_MODE=%s\n",
@@ -748,13 +767,18 @@ inline bool run_performance_probe_if_requested() {
     int pace_hz = 0;
     if (auto configured = env_positive_int("PHENOTYPE_PERF_PACE_HZ", 1000)) {
         pace_hz = *configured;
-    } else if (mode == "force-flush") {
+    } else if (mode == "force-flush" || action_mode) {
         pace_hz = 60;
     }
     auto const pace_duration = pace_hz > 0
         ? std::chrono::nanoseconds{
             static_cast<long long>(1'000'000'000ll / pace_hz)}
         : std::chrono::nanoseconds{0};
+    bool const debug_panel = env_flag_enabled("PHENOTYPE_PERF_DEBUG_PANEL");
+    if (debug_panel && !::phenotype::detail::g_app.debug_panel_open) {
+        ::phenotype::detail::g_app.debug_panel_open = true;
+        ::phenotype::detail::trigger_rebuild();
+    }
 
     auto samples = std::vector<std::uint64_t>{};
     samples.reserve(static_cast<std::size_t>(*frames));
@@ -762,11 +786,74 @@ inline bool run_performance_probe_if_requested() {
         ::phenotype::detail::g_app.has_active_animations;
     if (mode == "force-flush")
         ::phenotype::detail::g_app.has_active_animations = true;
+    int stats_long_frames = 0;
+    int stats_handled_frames = 0;
+    if (mode == "scroll" || mode == "mixed-input") {
+        float const w = g_app_state.host ? g_app_state.host->canvas_width() : 800.0f;
+        float const h = g_app_state.host ? g_app_state.host->canvas_height() : 600.0f;
+        g_app_state.last_mouse_x = w * 0.55f;
+        g_app_state.last_mouse_y = h * 0.55f;
+    }
 
     for (int i = 0; i < *frames; ++i) {
         auto const start = std::chrono::steady_clock::now();
+        bool handled = true;
         if (mode == "rebuild") {
             ::phenotype::detail::trigger_rebuild();
+        } else if (mode == "hover") {
+            float const w = g_app_state.host ? g_app_state.host->canvas_width() : 800.0f;
+            float const h = g_app_state.host ? g_app_state.host->canvas_height() : 600.0f;
+            float const usable_w = std::max(1.0f, w - 96.0f);
+            float const usable_h = std::max(1.0f, h - 96.0f);
+            float const x = 48.0f + std::fmod(static_cast<float>(i * 37), usable_w);
+            float const y = 48.0f + std::fmod(static_cast<float>(i * 29), usable_h);
+            handled = dispatch_cursor_pos(x, y);
+        } else if (mode == "scroll") {
+            double const dy = ((i / 18) % 2 == 0) ? -12.0 : 12.0;
+            float const w = g_app_state.host ? g_app_state.host->canvas_width() : 800.0f;
+            float const h = g_app_state.host ? g_app_state.host->canvas_height() : 600.0f;
+            g_app_state.last_mouse_x = w * 0.55f;
+            g_app_state.last_mouse_y = h * 0.55f;
+            handled = dispatch_scroll_xy(0.0, dy, w, h);
+            if (!handled) {
+                bool const previous_input_motion =
+                    ::phenotype::detail::g_app.has_active_input_motion;
+                ::phenotype::detail::g_app.has_active_input_motion = true;
+                ::phenotype::detail::g_app.last_paint_hash = 0;
+                repaint_current();
+                ::phenotype::detail::g_app.has_active_input_motion =
+                    previous_input_motion;
+            }
+        } else if (mode == "mixed-input") {
+            float const w = g_app_state.host ? g_app_state.host->canvas_width() : 800.0f;
+            float const h = g_app_state.host ? g_app_state.host->canvas_height() : 600.0f;
+            switch (i % 4) {
+                case 0:
+                    handled = dispatch_cursor_pos(
+                        48.0f + std::fmod(static_cast<float>(i * 41), std::max(1.0f, w - 96.0f)),
+                        48.0f + std::fmod(static_cast<float>(i * 31), std::max(1.0f, h - 96.0f)));
+                    break;
+                case 1:
+                    g_app_state.last_mouse_x = w * 0.55f;
+                    g_app_state.last_mouse_y = h * 0.55f;
+                    handled = dispatch_scroll_xy(0.0, ((i / 16) % 2 == 0) ? -12.0 : 12.0, w, h);
+                    if (!handled) {
+                        bool const previous_input_motion =
+                            ::phenotype::detail::g_app.has_active_input_motion;
+                        ::phenotype::detail::g_app.has_active_input_motion = true;
+                        ::phenotype::detail::g_app.last_paint_hash = 0;
+                        repaint_current();
+                        ::phenotype::detail::g_app.has_active_input_motion =
+                            previous_input_motion;
+                    }
+                    break;
+                case 2:
+                    handled = dispatch_key(Key::Down, KeyAction::Press, 0);
+                    break;
+                default:
+                    handled = dispatch_key(Key::Up, KeyAction::Press, 0);
+                    break;
+            }
         } else {
             if (mode == "force-flush")
                 ::phenotype::detail::g_app.last_paint_hash = 0;
@@ -777,6 +864,10 @@ inline bool run_performance_probe_if_requested() {
             std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
         samples.push_back(
             static_cast<std::uint64_t>(elapsed.count()));
+        if (handled)
+            ++stats_handled_frames;
+        if (static_cast<std::uint64_t>(elapsed.count()) > 16'666'667ull)
+            ++stats_long_frames;
         if (pace_duration.count() > 0 && elapsed < pace_duration)
             std::this_thread::sleep_for(pace_duration - elapsed);
     }
@@ -788,6 +879,9 @@ inline bool run_performance_probe_if_requested() {
     auto stats = PerformanceProbeStats{
         .mode = mode,
         .frames = *frames,
+        .handled_frames = stats_handled_frames,
+        .long_frames = stats_long_frames,
+        .debug_panel = debug_panel,
         .min_ns = sorted.empty() ? 0 : sorted.front(),
         .max_ns = sorted.empty() ? 0 : sorted.back(),
         .p50_ns = percentile_from_sorted(sorted, 0.50),
@@ -797,6 +891,8 @@ inline bool run_performance_probe_if_requested() {
             env_flag_enabled("PHENOTYPE_PERF_REQUIRE_IDLE_240"),
         .active_60_required =
             env_flag_enabled("PHENOTYPE_PERF_REQUIRE_ACTIVE_60"),
+        .action_60_required =
+            env_flag_enabled("PHENOTYPE_PERF_REQUIRE_ACTION_60"),
     };
     for (auto ns : samples)
         stats.total_ns += ns;
@@ -811,10 +907,13 @@ inline bool run_performance_probe_if_requested() {
         !stats.idle_240_required || stats.p95_ns <= 4'166'667ull;
     stats.active_60_ok =
         !stats.active_60_required || stats.p95_ns <= 16'666'667ull;
+    stats.action_60_ok =
+        !stats.action_60_required || stats.p95_ns <= 16'666'667ull;
 
     auto const report = performance_probe_json(stats);
     auto const wrote = write_performance_probe_report(report);
-    return wrote && stats.idle_240_ok && stats.active_60_ok;
+    return wrote && stats.idle_240_ok && stats.active_60_ok
+        && stats.action_60_ok;
 }
 
 inline bool write_startup_artifact_bundle(platform_api const& platform,

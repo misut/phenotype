@@ -629,12 +629,18 @@ tools/phenotype_cli/.exon/debug/phenotype_cli run examples/file_explorer_desktop
 tools/phenotype_cli/.exon/debug/phenotype_cli run examples/file_explorer_desktop \
   --no-build --perf-frames 120 --perf-mode force-flush \
   --perf-require-active-60 --json
+
+tools/phenotype_cli/.exon/debug/phenotype_cli run examples/file_explorer_desktop \
+  --no-build --perf-frames 120 --perf-mode mixed-input \
+  --perf-debug-panel --perf-require-action-60 --json
 ```
 
 The idle gate checks p95 unchanged repaint work against the 240fps capacity
 budget. The active gate uses paced `force-flush` work and the framework's
 motion quality throttle to check the 60fps capacity budget without changing
-the example's layout or feature surface.
+the example's layout or feature surface. The action gate adds paced `hover`,
+`scroll`, and `mixed-input` probes, and can run with the debug side panel open
+so monitor overhead is included in the 60fps budget.
 
 The verifier milestone now consumes startup bundles and reports schema,
 semantic, runtime, frame-file, and optional pixel-region invariant failures.

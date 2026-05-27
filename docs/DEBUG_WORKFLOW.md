@@ -158,13 +158,27 @@ bounded in-process probe and exit deterministically:
   --perf-mode force-flush \
   --perf-require-active-60 \
   --json
+
+.exon/debug/phenotype_cli run examples/file_explorer_desktop \
+  --no-build \
+  --perf-frames 120 \
+  --perf-mode mixed-input \
+  --perf-debug-panel \
+  --perf-require-action-60 \
+  --json
 ```
 
 `idle` measures unchanged repaint work against a 240fps frame budget
 (4.17ms p95). `force-flush` simulates active animation work, defaults to 60Hz
 pacing, enables the runtime motion quality throttle, and checks the 60fps frame
-budget (16.67ms p95). The JSON receipt embeds the performance report under
-`performance_probe.report`, so CI and agents can consume the same command.
+budget (16.67ms p95). `hover`, `scroll`, and `mixed-input` exercise pointer
+hover, wheel scrolling, and combined hover/scroll/key traffic with the same
+60fps action budget. `--perf-debug-panel` opens the framework debug side panel
+while the probe runs, so CLI gates can catch monitor overhead as well as app
+work. The JSON receipt embeds the performance report under
+`performance_probe.report`, including `handled_frames`, `long_frames`,
+`debug_panel`, and the active budget flags, so CI and agents can consume the
+same command.
 
 The same envelope now preserves
 `verifier.material_resource_bound_coverage` and

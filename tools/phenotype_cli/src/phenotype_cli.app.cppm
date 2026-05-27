@@ -60,6 +60,8 @@ struct ExampleRunSummary {
     bool performance_probe_exit = false;
     bool performance_probe_idle_240_required = false;
     bool performance_probe_active_60_required = false;
+    bool performance_probe_action_60_required = false;
+    bool performance_probe_debug_panel = false;
     int performance_probe_frames = 0;
     int performance_probe_pace_hz = 0;
     std::string performance_probe_mode;
@@ -268,15 +270,19 @@ auto example_run_json(ExampleRunSummary const& summary) -> std::string {
         performance_probe = std::format(
             "{{\"requested\":true,\"frames\":{},\"mode\":{},"
             "\"pace_hz\":{},\"exit_after_probe\":{},\"report_path\":{},"
+            "\"debug_panel\":{},"
             "\"require_idle_240\":{},\"require_active_60\":{},"
+            "\"require_action_60\":{},"
             "\"report\":{}}}",
             summary.performance_probe_frames,
             json_string(summary.performance_probe_mode),
             summary.performance_probe_pace_hz,
             summary.performance_probe_exit ? "true" : "false",
             json_string(path_string(summary.performance_probe_out)),
+            summary.performance_probe_debug_panel ? "true" : "false",
             summary.performance_probe_idle_240_required ? "true" : "false",
             summary.performance_probe_active_60_required ? "true" : "false",
+            summary.performance_probe_action_60_required ? "true" : "false",
             json_value_or_string(summary.performance_probe_report_json));
     }
 
@@ -902,10 +908,11 @@ int run_example(cppx::cli::Invocation const& invocation) {
     }
     if (auto value = invocation.value("perf-mode")) {
         auto mode = std::string{*value};
-        if (mode != "idle" && mode != "rebuild" && mode != "force-flush") {
+        if (mode != "idle" && mode != "rebuild" && mode != "force-flush"
+            && mode != "hover" && mode != "scroll" && mode != "mixed-input") {
             return print_error(
                 "run",
-                "--perf-mode must be idle, rebuild, or force-flush",
+                "--perf-mode must be idle, rebuild, force-flush, hover, scroll, or mixed-input",
                 invocation.has("json"));
         }
         summary.performance_probe_mode = std::move(mode);
@@ -928,6 +935,10 @@ int run_example(cppx::cli::Invocation const& invocation) {
         invocation.has("perf-require-idle-240");
     summary.performance_probe_active_60_required =
         invocation.has("perf-require-active-60");
+    summary.performance_probe_action_60_required =
+        invocation.has("perf-require-action-60");
+    summary.performance_probe_debug_panel =
+        invocation.has("perf-debug-panel");
     if (summary.performance_probe_exit && !summary.performance_probe_requested) {
         return print_error(
             "run",
@@ -935,7 +946,8 @@ int run_example(cppx::cli::Invocation const& invocation) {
             invocation.has("json"));
     }
     if ((summary.performance_probe_idle_240_required
-         || summary.performance_probe_active_60_required)
+         || summary.performance_probe_active_60_required
+         || summary.performance_probe_action_60_required)
         && !summary.performance_probe_requested) {
         return print_error(
             "run",
@@ -952,7 +964,10 @@ int run_example(cppx::cli::Invocation const& invocation) {
                     invocation.has("json"));
             }
             summary.performance_probe_pace_hz = *parsed_pace;
-        } else if (summary.performance_probe_mode == "force-flush") {
+        } else if (summary.performance_probe_mode == "force-flush"
+                   || summary.performance_probe_mode == "hover"
+                   || summary.performance_probe_mode == "scroll"
+                   || summary.performance_probe_mode == "mixed-input") {
             summary.performance_probe_pace_hz = 60;
         }
         if (auto value = invocation.value("perf-out")) {
@@ -983,6 +998,10 @@ int run_example(cppx::cli::Invocation const& invocation) {
             (*env)["PHENOTYPE_PERF_REQUIRE_IDLE_240"] = "1";
         if (summary.performance_probe_active_60_required)
             (*env)["PHENOTYPE_PERF_REQUIRE_ACTIVE_60"] = "1";
+        if (summary.performance_probe_action_60_required)
+            (*env)["PHENOTYPE_PERF_REQUIRE_ACTION_60"] = "1";
+        if (summary.performance_probe_debug_panel)
+            (*env)["PHENOTYPE_PERF_DEBUG_PANEL"] = "1";
     }
 
     if (auto value = invocation.value("timeout-seconds")) {

@@ -3,6 +3,7 @@ module;
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <array>
 #include <functional>
 #include <map>
 #include <new>
@@ -171,6 +172,29 @@ struct KeyCommand {
     std::string debug_label;
 };
 
+struct ActionPerfStats {
+    static constexpr std::size_t RECENT_CAPACITY = 120;
+
+    std::uint64_t count = 0;
+    std::uint64_t total_ns = 0;
+    std::uint64_t last_ns = 0;
+    std::uint64_t min_ns = 0;
+    std::uint64_t max_ns = 0;
+    std::uint64_t over_60fps_budget = 0;
+    std::array<std::uint64_t, RECENT_CAPACITY> recent_ns{};
+    std::size_t recent_count = 0;
+    std::size_t recent_next = 0;
+};
+
+struct ActionPerfMonitor {
+    ActionPerfStats hover;
+    ActionPerfStats scroll;
+    ActionPerfStats click;
+    ActionPerfStats key;
+    ActionPerfStats gesture;
+    ActionPerfStats other;
+};
+
 enum class InputModality {
     None,
     Keyboard,
@@ -271,6 +295,7 @@ struct AppState {
     float debug_viewport_height = 0.0f;
     diag::InputDebugSnapshot input_debug;
     bool debug_panel_open = false;
+    ActionPerfMonitor action_perf;
 
     // Set during view by `animate_value` whenever an interpolation
     // hasn't reached its target yet, cleared at the start of every
@@ -280,6 +305,11 @@ struct AppState {
     // input events. The runner does not read it — it's purely a
     // "wake me up next frame" signal for the host loop.
     bool has_active_animations = false;
+    // Set temporarily while the shell is painting a pointer/scroll-driven input
+    // frame. Native material backends use it to prefer motion-safe quality
+    // during direct manipulation without turning paint-only scroll into a full
+    // view rebuild.
+    bool has_active_input_motion = false;
 
     // Subtree paint cache — snapshot of the previous frame's command
     // buffer, kept so paint_node can memcpy a clean subtree's byte range

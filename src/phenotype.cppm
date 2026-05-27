@@ -2096,6 +2096,55 @@ inline std::uint64_t paint_invalidation_bit(unsigned int id) noexcept {
     return id == 0xFFFFFFFFu ? 0ULL : (1ULL << (id & 63u));
 }
 
+inline ActionPerfStats& action_perf_stats(std::string_view action) noexcept {
+    if (action == "hover")
+        return g_app.action_perf.hover;
+    if (action == "scroll")
+        return g_app.action_perf.scroll;
+    if (action == "click")
+        return g_app.action_perf.click;
+    if (action == "key")
+        return g_app.action_perf.key;
+    if (action == "gesture")
+        return g_app.action_perf.gesture;
+    return g_app.action_perf.other;
+}
+
+inline std::uint64_t action_perf_recent_percentile(
+        ActionPerfStats const& stats,
+        double percentile) {
+    if (stats.recent_count == 0)
+        return 0;
+    std::array<std::uint64_t, ActionPerfStats::RECENT_CAPACITY> sorted{};
+    for (std::size_t i = 0; i < stats.recent_count; ++i)
+        sorted[i] = stats.recent_ns[i];
+    auto first = sorted.begin();
+    auto last = sorted.begin() + static_cast<std::ptrdiff_t>(stats.recent_count);
+    std::sort(first, last);
+    auto const index = static_cast<std::size_t>(
+        std::lround(percentile * static_cast<double>(stats.recent_count - 1)));
+    return sorted[std::min(index, stats.recent_count - 1)];
+}
+
+inline void record_action_duration(char const* action,
+                                   std::uint64_t duration_ns) noexcept {
+    auto& stats = action_perf_stats(action ? std::string_view{action} : "other");
+    ++stats.count;
+    stats.total_ns += duration_ns;
+    stats.last_ns = duration_ns;
+    if (stats.min_ns == 0 || duration_ns < stats.min_ns)
+        stats.min_ns = duration_ns;
+    if (duration_ns > stats.max_ns)
+        stats.max_ns = duration_ns;
+    if (duration_ns > 16'666'667ull)
+        ++stats.over_60fps_budget;
+    stats.recent_ns[stats.recent_next] = duration_ns;
+    stats.recent_next = (stats.recent_next + 1)
+        % ActionPerfStats::RECENT_CAPACITY;
+    if (stats.recent_count < ActionPerfStats::RECENT_CAPACITY)
+        ++stats.recent_count;
+}
+
 inline bool pointer_snapshot_changed(AppState const& app) noexcept {
     return app.pointer_valid != app.prev_pointer_valid
         || (app.pointer_valid
@@ -6885,6 +6934,40 @@ inline std::string performance_debug_block() {
     block += std::to_string(metrics::inst::native_texture_upload_bytes.total());
     block += "\nnative_buffer_reallocations: ";
     block += std::to_string(metrics::inst::native_buffer_reallocations.total());
+    auto append_action = [&](char const* label, ActionPerfStats const& stats) {
+        auto const p95 = action_perf_recent_percentile(stats, 0.95);
+        double const average_ms = stats.count == 0
+            ? 0.0
+            : (static_cast<double>(stats.total_ns)
+               / static_cast<double>(stats.count))
+                / 1'000'000.0;
+        block += "\n";
+        block += label;
+        block += "_action_count: ";
+        block += std::to_string(stats.count);
+        block += "\n";
+        block += label;
+        block += "_last_ms: ";
+        block += std::format("{:.3f}", static_cast<double>(stats.last_ns) / 1'000'000.0);
+        block += "\n";
+        block += label;
+        block += "_p95_ms: ";
+        block += std::format("{:.3f}", static_cast<double>(p95) / 1'000'000.0);
+        block += "\n";
+        block += label;
+        block += "_avg_ms: ";
+        block += std::format("{:.3f}", average_ms);
+        block += "\n";
+        block += label;
+        block += "_over_60fps_budget: ";
+        block += std::to_string(stats.over_60fps_budget);
+    };
+    block += "\naction_60fps_budget_ms: 16.667";
+    append_action("hover", g_app.action_perf.hover);
+    append_action("scroll", g_app.action_perf.scroll);
+    append_action("click", g_app.action_perf.click);
+    append_action("key", g_app.action_perf.key);
+    append_action("gesture", g_app.action_perf.gesture);
     return block;
 }
 

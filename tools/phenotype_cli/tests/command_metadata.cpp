@@ -96,4 +96,18 @@ int main() {
     auto const& json = find_option(debug_contract, "json");
     auto arity = json_string_at(json, {"arity"});
     assert(arity && *arity == "none");
+
+    auto const& run = find_command(tree, {"phenotype", "run"});
+    auto const& perf_mode = find_option(run, "perf-mode");
+    auto perf_mode_value = json_string_at(perf_mode, {"value_name"});
+    assert(perf_mode_value
+           && perf_mode_value->find("hover") != std::string::npos
+           && perf_mode_value->find("scroll") != std::string::npos
+           && perf_mode_value->find("mixed-input") != std::string::npos);
+    auto const& perf_action = find_option(run, "perf-require-action-60");
+    auto perf_action_arity = json_string_at(perf_action, {"arity"});
+    assert(perf_action_arity && *perf_action_arity == "none");
+    auto const& perf_debug_panel = find_option(run, "perf-debug-panel");
+    auto perf_debug_panel_arity = json_string_at(perf_debug_panel, {"arity"});
+    assert(perf_debug_panel_arity && *perf_debug_panel_arity == "none");
 }

@@ -259,6 +259,11 @@ struct AppState {
     bool caret_blink_armed = false;
     bool repaint_in_progress = false;
     bool repaint_requested = false;
+    std::chrono::steady_clock::time_point last_input_frame{};
+    std::chrono::steady_clock::time_point deferred_input_frame_deadline{};
+    bool deferred_input_paint = false;
+    bool deferred_input_rebuild = false;
+    char const* deferred_input_action = "input";
 };
 
 inline AppState g_app_state;
@@ -379,6 +384,81 @@ inline void repaint_current_after_surface_presented() {
     // Force one startup repaint once the platform confirms the surface is shown.
     ::phenotype::detail::g_app.last_paint_hash = 0;
     repaint_current();
+}
+
+inline constexpr auto input_frame_interval = std::chrono::milliseconds{16};
+
+inline bool input_frame_due(std::chrono::steady_clock::time_point now) {
+    return g_app_state.last_input_frame.time_since_epoch().count() == 0
+        || now - g_app_state.last_input_frame >= input_frame_interval;
+}
+
+inline void remember_input_frame(std::chrono::steady_clock::time_point start) {
+    g_app_state.last_input_frame = start;
+    g_app_state.deferred_input_paint = false;
+    g_app_state.deferred_input_rebuild = false;
+    g_app_state.deferred_input_action = "input";
+}
+
+inline void run_input_frame(char const* action,
+                            bool rebuild,
+                            std::chrono::steady_clock::time_point start) {
+    bool const previous_input_motion =
+        ::phenotype::detail::g_app.has_active_input_motion;
+    ::phenotype::detail::g_app.has_active_input_motion = true;
+    if (rebuild)
+        ::phenotype::detail::trigger_rebuild();
+    else
+        repaint_current();
+    ::phenotype::detail::g_app.has_active_input_motion =
+        previous_input_motion;
+    auto const end = std::chrono::steady_clock::now();
+    auto const elapsed =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    ::phenotype::detail::record_action_duration(
+        action,
+        static_cast<std::uint64_t>(elapsed.count()));
+    remember_input_frame(start);
+}
+
+inline void request_input_frame(char const* action, bool rebuild) {
+    auto const now = std::chrono::steady_clock::now();
+    if (input_frame_due(now)) {
+        run_input_frame(action, rebuild, now);
+        return;
+    }
+    g_app_state.deferred_input_paint = true;
+    g_app_state.deferred_input_rebuild =
+        g_app_state.deferred_input_rebuild || rebuild;
+    g_app_state.deferred_input_action = action ? action : "input";
+    g_app_state.deferred_input_frame_deadline =
+        g_app_state.last_input_frame + input_frame_interval;
+}
+
+inline bool service_deferred_input_frame(
+        std::chrono::steady_clock::time_point now) {
+    if (!g_app_state.deferred_input_paint
+        || now < g_app_state.deferred_input_frame_deadline) {
+        return false;
+    }
+    run_input_frame(
+        g_app_state.deferred_input_action,
+        g_app_state.deferred_input_rebuild,
+        now);
+    return true;
+}
+
+template<typename F>
+inline bool measure_input_action(char const* action, F&& fn) {
+    auto const start = std::chrono::steady_clock::now();
+    bool const handled = std::invoke(std::forward<F>(fn));
+    auto const end = std::chrono::steady_clock::now();
+    auto const elapsed =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    ::phenotype::detail::record_action_duration(
+        action,
+        static_cast<std::uint64_t>(elapsed.count()));
+    return handled;
 }
 
 inline void bind_host(native_host& host,
@@ -596,9 +676,9 @@ inline void schedule_post_scroll_paint() {
     ::phenotype::detail::set_scroll_x(g_app_state.scroll_x);
     ::phenotype::detail::set_scroll_y(g_app_state.scroll_y);
     if (::phenotype::detail::g_app.has_active_animations)
-        ::phenotype::detail::trigger_rebuild();
+        request_input_frame("scroll", true);
     else
-        repaint_current();
+        request_input_frame("scroll", false);
 }
 
 inline bool set_scroll_position(float next_scroll,
@@ -692,6 +772,7 @@ inline bool dismiss_platform_transient() {
 // active canvas's painted bounds. Returns true when the event was
 // consumed by a canvas.
 inline bool dispatch_gesture(::phenotype::GestureEvent ev) {
+    return measure_input_action("gesture", [&] {
     using ::phenotype::detail::g_app;
     auto id = g_app.gesture_target_id;
     if (id == 0xFFFFFFFFu) return false;
@@ -712,10 +793,12 @@ inline bool dispatch_gesture(::phenotype::GestureEvent ev) {
     fn(ev);
     repaint_current();
     return true;
+    });
 }
 
 inline bool dispatch_mouse_button(float mx, float my,
                                   MouseButton button, KeyAction action, int mods) {
+    return measure_input_action("click", [&] {
     bool const pointer_changed =
         ::phenotype::detail::set_pointer_position(mx, my);
     bool focus_visibility_cleared = false;
@@ -839,6 +922,7 @@ inline bool dispatch_mouse_button(float mx, float my,
         repaint_current();
     return focus_visibility_cleared || cleared || pressed_cleared
         || pointer_changed;
+    });
 }
 
 inline bool dispatch_mouse_button(float mx, float my,
@@ -861,7 +945,7 @@ inline bool dispatch_cursor_pos(float mx, float my) {
         && g_app_state.host->platform->input.handle_cursor_pos(mx, my)) {
         g_app_state.hovered_id = invalid_callback_id;
         ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
-        repaint_current();
+        request_input_frame("hover", false);
         update_hover_cursor(false);
         ::phenotype::detail::note_input_event(
             "hover", "shell", "pointer-move", "platform-consumed", invalid_callback_id);
@@ -877,9 +961,9 @@ inline bool dispatch_cursor_pos(float mx, float my) {
         ::phenotype::detail::set_hover_id_without_event(hovered_id);
         bool handled = move_focused_selection_from_pointer_x(mx, true);
         if (handled)
-            repaint_current();
+            request_input_frame("hover", false);
         else if (pointer_changed)
-            repaint_current();
+            request_input_frame("hover", false);
         update_hover_cursor(hit.has_value());
         ::phenotype::detail::note_input_event(
             "click",
@@ -900,9 +984,9 @@ inline bool dispatch_cursor_pos(float mx, float my) {
     // the next view rebuild — `repaint_current` alone leaves the arena
     // showing the previous frame's hover sample.
         if (handled)
-            ::phenotype::detail::trigger_rebuild();
+            request_input_frame("hover", true);
         else if (pointer_changed)
-            repaint_current();
+            request_input_frame("hover", false);
         update_hover_cursor(hit.has_value());
         return handled || pointer_changed;
     }
@@ -1088,6 +1172,7 @@ inline bool dispatch_debug_panel_shortcut(Key key,
 }
 
 inline bool dispatch_key(Key key, KeyAction action, int mods) {
+    return measure_input_action("key", [&] {
     bool shift = (mods & static_cast<int>(Modifier::Shift)) != 0;
     auto detail = key_detail_name(key, shift);
     auto repeat_allowed = key == Key::Backspace
@@ -1277,6 +1362,7 @@ inline bool dispatch_key(Key key, KeyAction action, int mods) {
                 "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
             return false;
     }
+    });
 }
 
 inline bool dispatch_key(int key, int action, int mods) {
@@ -1322,10 +1408,12 @@ inline void service_host_tick(std::chrono::steady_clock::time_point& last_animat
     tick_caret_blink();
     sync_platform_input();
 
+    auto now = std::chrono::steady_clock::now();
+    bool const serviced_input_frame = service_deferred_input_frame(now);
     if (::phenotype::detail::g_app.has_active_animations) {
-        auto now = std::chrono::steady_clock::now();
         if (now - last_animation_tick >= std::chrono::milliseconds(16)) {
-            ::phenotype::detail::trigger_rebuild();
+            if (!serviced_input_frame)
+                ::phenotype::detail::trigger_rebuild();
             last_animation_tick = now;
         }
     }

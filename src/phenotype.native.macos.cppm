@@ -918,7 +918,8 @@ inline MaterialQualityPolicy macos_material_quality_policy(
         policy.max_backdrop_pixels = capabilities.max_backdrop_pixels;
     if (capabilities.max_shader_sample_taps > 0)
         policy.max_sample_taps = capabilities.max_shader_sample_taps;
-    if (::phenotype::detail::g_app.has_active_animations
+    if ((::phenotype::detail::g_app.has_active_animations
+         || ::phenotype::detail::g_app.has_active_input_motion)
         && !macos_env_flag_enabled(
             "PHENOTYPE_MATERIAL_DISABLE_ACTIVE_QUALITY_THROTTLE")) {
         policy.allow_backdrop_sampling = false;
