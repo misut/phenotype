@@ -270,6 +270,7 @@ struct AppState {
     float debug_viewport_width = 0.0f;
     float debug_viewport_height = 0.0f;
     diag::InputDebugSnapshot input_debug;
+    bool debug_panel_open = false;
 
     // Set during view by `animate_value` whenever an interpolation
     // hasn't reached its target yet, cleared at the start of every

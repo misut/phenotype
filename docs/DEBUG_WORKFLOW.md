@@ -140,6 +140,32 @@ raw runtime key/path behind each numeric budget field and numerator/denominator
 detail for utilization ratios. The CLI mirrors those descriptors under
 `verifier.material_budget.sources`, so a compact budget or bound failure can be
 traced to the renderer summary path that produced the value.
+
+For native performance gates, `phenotype run` can ask the app to execute a
+bounded in-process probe and exit deterministically:
+
+```sh
+.exon/debug/phenotype_cli run examples/file_explorer_desktop \
+  --no-build \
+  --perf-frames 240 \
+  --perf-mode idle \
+  --perf-require-idle-240 \
+  --json
+
+.exon/debug/phenotype_cli run examples/file_explorer_desktop \
+  --no-build \
+  --perf-frames 120 \
+  --perf-mode force-flush \
+  --perf-require-active-60 \
+  --json
+```
+
+`idle` measures unchanged repaint work against a 240fps frame budget
+(4.17ms p95). `force-flush` simulates active animation work, defaults to 60Hz
+pacing, enables the runtime motion quality throttle, and checks the 60fps frame
+budget (16.67ms p95). The JSON receipt embeds the performance report under
+`performance_probe.report`, so CI and agents can consume the same command.
+
 The same envelope now preserves
 `verifier.material_resource_bound_coverage` and
 `verifier.material_quality_policy_coverage`, so JSON consumers can see whether
@@ -254,12 +280,13 @@ and trace replay. It should stay green before adding a new panel section,
 native event injector, layout highlighter, console sink, or performance
 monitor.
 
-Debug builds of `examples/native` register the side-panel shortcut directly in
-the native key-command registry. The panel is intentionally a protocol client:
-it reads the same input debug snapshot, semantic/layout capability flags,
-console ring, and performance counters that CLI agents must eventually observe
-or drive through the local endpoint. Release builds keep the shortcut disabled
-and should continue to rely on artifact and CLI observation surfaces.
+Debug builds of the native shell reserve the side-panel shortcut globally for
+every phenotype application. The panel is framework-owned rather than
+example-owned: it is injected after the app view, reads the same input debug
+snapshot, layout hover highlight state, console ring, and performance counters
+that CLI agents must eventually observe or drive through the local endpoint.
+Release builds keep the shortcut disabled and should continue to rely on
+artifact and CLI observation surfaces.
 
 The CLI also exposes the verifier through an edge wrapper:
 
@@ -2088,7 +2115,9 @@ The macOS adapter keeps the shared top-level schema and extends
 Frame capture uses the Metal renderer path:
 
 - `CAMetalLayer.framebufferOnly = false`
-- the rendered drawable is copied into a debug capture texture
+- the rendered drawable is copied into a debug capture texture on demand
+  (`PHENOTYPE_DEBUG_CAPTURE_EACH_FRAME=1` restores every-frame capture for
+  low-level tests)
 - `capture_frame_rgba()` blits that texture into a CPU-readable buffer and
   converts BGRA to RGBA
 

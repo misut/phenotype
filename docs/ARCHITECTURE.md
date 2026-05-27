@@ -920,6 +920,13 @@ keeps shader/runtime resource bounds reviewable from source, tests, and the
 serialized `resource_budget`. Non-finite blur limits sanitize to zero at the
 same edge, so NaN/Infinity quality input deterministically takes the bounded
 fallback path instead of leaking into shader constants.
+macOS applies one backend-local runtime quality throttle on top of that pure
+policy: while `g_app.has_active_animations` is true, sampled backdrop blur and
+noise are disabled unless
+`PHENOTYPE_MATERIAL_DISABLE_ACTIVE_QUALITY_THROTTLE=1` is set. Static frames
+keep the full Liquid Glass plan, while animated frames take the same
+deterministic low-cost material path as other quality fallbacks so 60fps motion
+budget gates do not depend on high-radius backdrop sampling.
 `geometry` preserves the raw decoded `MaterialRect` rectangle, while `shape`
 records the pure executable shape: validity, surface area, min/max extent,
 radius limit, effective radius, normalized radius, rounded flag, and radius
@@ -1050,8 +1057,11 @@ material and non-material frames skip the full-frame copy and report
 `backdrop_copy_skip_reason`.
 When a capture is required, macOS copies the backdrop source after
 non-foreground scene work, then draws text and overlays in a foreground pass,
-and finally captures the complete frame for artifacts. The executor summary
-publishes `backdrop_copy_policy`, `backdrop_copy_required`,
+and captures the complete frame only when the debug/artifact API requests a
+readback. `renderer.debug_capture_policy` reports `on-demand` by default;
+`PHENOTYPE_DEBUG_CAPTURE_EACH_FRAME=1` restores the old every-flush debug copy
+for low-level capture tests. The executor summary publishes
+`backdrop_copy_policy`, `backdrop_copy_required`,
 `backdrop_copy_excludes_foreground_text`, and
 `foreground_pass_after_backdrop_copy` so artifact gates can detect a future
 foreground-feedback regression. These fields let artifact gates prove the
@@ -1090,6 +1100,11 @@ deterministically, and embeds the parsed artifact observation in the same run
 receipt. That keeps input driving and output observation under one CLI command
 while preserving the renderer/backend artifact writer as the only side-effect
 edge.
+`phenotype run --perf-frames ...` uses the same edge to run bounded native
+performance probes. `--perf-mode idle --perf-require-idle-240` gates unchanged
+repaint work against a 4.17ms p95 budget; `--perf-mode force-flush` with
+`--perf-require-active-60` gates paced active-motion work against a 16.67ms p95
+budget and activates the same motion quality throttle used by real animations.
 
 Packaging and diagnostics stay at the CLI edge. Asset discovery, i18n resource
 validation, font packaging, Android process control, screenshots, filesystem

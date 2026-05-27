@@ -17,10 +17,13 @@
 //                     between frames. This is the scenario S2 (subtree
 //                     paint cache) must move.
 
+#include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -169,7 +172,58 @@ struct Report {
     int frames;
     int node_count;
     Snapshot measured;   // delta over measured frames (frame 0 discarded)
+    std::vector<std::uint64_t> frame_times_ns;
 };
+
+struct TimingStats {
+    int frames = 0;
+    std::uint64_t total_ns = 0;
+    std::uint64_t min_ns = 0;
+    std::uint64_t max_ns = 0;
+    std::uint64_t p50_ns = 0;
+    std::uint64_t p95_ns = 0;
+    double average_ns = 0.0;
+    double average_fps_capacity = 0.0;
+    double p50_fps_capacity = 0.0;
+    double p95_fps_capacity = 0.0;
+};
+
+std::uint64_t percentile_from_sorted(
+        std::vector<std::uint64_t> const& sorted,
+        double percentile) {
+    if (sorted.empty())
+        return 0;
+    auto const index = static_cast<std::size_t>(
+        percentile * static_cast<double>(sorted.size() - 1) + 0.5);
+    return sorted[std::min(index, sorted.size() - 1)];
+}
+
+double fps_capacity(std::uint64_t ns) {
+    if (ns == 0)
+        return 0.0;
+    return 1'000'000'000.0 / static_cast<double>(ns);
+}
+
+TimingStats summarize_timings(std::vector<std::uint64_t> const& samples) {
+    auto sorted = samples;
+    std::ranges::sort(sorted);
+    TimingStats stats;
+    stats.frames = static_cast<int>(samples.size());
+    stats.min_ns = sorted.empty() ? 0 : sorted.front();
+    stats.max_ns = sorted.empty() ? 0 : sorted.back();
+    stats.p50_ns = percentile_from_sorted(sorted, 0.50);
+    stats.p95_ns = percentile_from_sorted(sorted, 0.95);
+    for (auto ns : samples)
+        stats.total_ns += ns;
+    stats.average_ns = stats.frames > 0
+        ? static_cast<double>(stats.total_ns) / static_cast<double>(stats.frames)
+        : 0.0;
+    stats.average_fps_capacity =
+        stats.average_ns > 0.0 ? 1'000'000'000.0 / stats.average_ns : 0.0;
+    stats.p50_fps_capacity = fps_capacity(stats.p50_ns);
+    stats.p95_fps_capacity = fps_capacity(stats.p95_ns);
+    return stats;
+}
 
 Report run_scenario(char const* name, ScenarioConfig config) {
     using namespace phenotype;
@@ -182,6 +236,8 @@ Report run_scenario(char const* name, ScenarioConfig config) {
     phenotype::run<State, Msg>(host, view, update);
 
     Snapshot const before = capture();
+    auto frame_times = std::vector<std::uint64_t>{};
+    frame_times.reserve(static_cast<std::size_t>(config.frames - 1));
 
     for (int f = 1; f < config.frames; ++f) {
         if (config.kind == ScenarioKind::ScrollOnly) {
@@ -192,7 +248,13 @@ Report run_scenario(char const* name, ScenarioConfig config) {
             detail::g_app.scroll_y = static_cast<float>(f % 200);
         }
         detail::post<Msg>(Step{f});
+        auto const start = std::chrono::steady_clock::now();
         detail::trigger_rebuild();
+        auto const end = std::chrono::steady_clock::now();
+        frame_times.push_back(
+            static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    end - start).count()));
     }
 
     Snapshot const after = capture();
@@ -201,6 +263,7 @@ Report run_scenario(char const* name, ScenarioConfig config) {
         .frames = config.frames - 1,   // discard the warm-up frame
         .node_count = config.node_count,
         .measured = delta(before, after),
+        .frame_times_ns = std::move(frame_times),
     };
 }
 
@@ -249,6 +312,19 @@ void emit_snapshot(std::string& out, Snapshot const& s, char const* indent) {
     out += indent; out += "\"keyed_children_matched\": ";  out += std::to_string(s.keyed_children_matched);  out += "\n";
 }
 
+void emit_timing(std::string& out, TimingStats const& t, char const* indent) {
+    out += indent; out += "\"frames\": "; out += std::to_string(t.frames); out += ",\n";
+    out += indent; out += "\"total_ns\": "; out += std::to_string(t.total_ns); out += ",\n";
+    out += indent; out += "\"average_ns\": "; out += std::to_string(t.average_ns); out += ",\n";
+    out += indent; out += "\"min_ns\": "; out += std::to_string(t.min_ns); out += ",\n";
+    out += indent; out += "\"max_ns\": "; out += std::to_string(t.max_ns); out += ",\n";
+    out += indent; out += "\"p50_ns\": "; out += std::to_string(t.p50_ns); out += ",\n";
+    out += indent; out += "\"p95_ns\": "; out += std::to_string(t.p95_ns); out += ",\n";
+    out += indent; out += "\"average_fps_capacity\": "; out += std::to_string(t.average_fps_capacity); out += ",\n";
+    out += indent; out += "\"p50_fps_capacity\": "; out += std::to_string(t.p50_fps_capacity); out += ",\n";
+    out += indent; out += "\"p95_fps_capacity\": "; out += std::to_string(t.p95_fps_capacity); out += "\n";
+}
+
 std::string render_report(std::vector<Report> const& reports) {
     std::string out;
     out += "{\n  \"scenarios\": [\n";
@@ -258,6 +334,9 @@ std::string render_report(std::vector<Report> const& reports) {
         out += "      \"name\": \""; out += json_escape(r.name); out += "\",\n";
         out += "      \"frames\": "; out += std::to_string(r.frames); out += ",\n";
         out += "      \"node_count\": "; out += std::to_string(r.node_count); out += ",\n";
+        out += "      \"timing\": {\n";
+        emit_timing(out, summarize_timings(r.frame_times_ns), "        ");
+        out += "      },\n";
         out += "      \"metrics\": {\n";
         emit_snapshot(out, r.measured, "        ");
         out += "      }\n";

@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -812,7 +813,6 @@ struct SelectChoice { int value; };
 struct TextChanged { std::string text; };
 struct TriggerCommand {};
 struct TriggerInputCommand {};
-struct TriggerDebugCommand {};
 
 using Msg = std::variant<
     ActivateButton,
@@ -820,8 +820,7 @@ using Msg = std::variant<
     SelectChoice,
     TextChanged,
     TriggerCommand,
-    TriggerInputCommand,
-    TriggerDebugCommand>;
+    TriggerInputCommand>;
 
 struct State {
     int button_activations = 0;
@@ -830,7 +829,6 @@ struct State {
     std::string text;
     int command_activations = 0;
     int input_command_activations = 0;
-    int debug_command_activations = 0;
 };
 
 inline State g_observed_state{};
@@ -867,6 +865,7 @@ static void reset_core_state() {
     app.last_paint_hash = 0;
     app.debug_viewport_width = 0.0f;
     app.debug_viewport_height = 0.0f;
+    app.debug_panel_open = false;
     app.input_debug = {};
     app.arena.reset();
     app.prev_arena.reset();
@@ -897,8 +896,6 @@ static void update(State& state, Msg msg) {
         state.command_activations += 1;
     } else if (std::get_if<TriggerInputCommand>(&msg)) {
         state.input_command_activations += 1;
-    } else if (std::get_if<TriggerDebugCommand>(&msg)) {
-        state.debug_command_activations += 1;
     }
     g_observed_state = state;
 }
@@ -939,14 +936,6 @@ static void key_command_view(State const& state) {
         phenotype::KeyCommandOptions{
             .allow_when_input_focused = true,
             .debug_label = "find",
-        });
-    phenotype::app::key_command<Msg>(
-        static_cast<unsigned int>(Key::F12),
-        debug_panel_mods(),
-        TriggerDebugCommand{},
-        phenotype::KeyCommandOptions{
-            .allow_when_input_focused = true,
-            .debug_label = "toggle-debug-panel",
         });
     phenotype::layout::column([&] {
         phenotype::widget::text_field<Msg>("Type here", state.text, +map_text);
@@ -1029,8 +1018,8 @@ struct KeyCommandHarness {
         reset_core_state();
         host.platform = &platform;
         phenotype::native::run<State, Msg>(host, key_command_view, update);
-        assert(phenotype::detail::g_app.key_commands.size() == 3);
-        assert(phenotype::detail::g_app.callbacks.size() == 4);
+        assert(phenotype::detail::g_app.key_commands.size() == 2);
+        assert(phenotype::detail::g_app.callbacks.size() == 3);
     }
 
     ~KeyCommandHarness() {
@@ -1400,12 +1389,19 @@ static void test_shell_key_commands_respect_input_focus_policy() {
         LEGACY_KEY_F12,
         LEGACY_PRESS,
         debug_panel_mods()));
-    assert(g_observed_state.debug_command_activations == 1);
+    assert(phenotype::detail::g_app.debug_panel_open);
+    assert(!phenotype::detail::g_app.overlays.empty());
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.detail == "f12");
     assert(debug.result == "handled");
-    assert(debug.role == "command");
-    std::puts("PASS: shared shell key commands respect input focus policy");
+    assert(debug.focused_role == "text_field");
+    assert(phenotype::native::detail::dispatch_key(
+        LEGACY_KEY_F12,
+        LEGACY_PRESS,
+        debug_panel_mods()));
+    assert(!phenotype::detail::g_app.debug_panel_open);
+    assert(phenotype::detail::g_app.overlays.empty());
+    std::puts("PASS: shared shell key commands and global debug panel shortcut respect input focus policy");
 }
 
 static void test_shell_text_caret_navigation_and_delete() {
@@ -2073,7 +2069,21 @@ struct MacRendererFixture {
 
         text::init();
         surface = make_macos_surface(window);
+        auto const* previous_capture =
+            std::getenv("PHENOTYPE_DEBUG_CAPTURE_EACH_FRAME");
+        auto previous_capture_value =
+            previous_capture ? std::optional<std::string>{previous_capture}
+                             : std::nullopt;
+        setenv("PHENOTYPE_DEBUG_CAPTURE_EACH_FRAME", "1", 1);
         renderer::init(&surface);
+        if (previous_capture_value) {
+            setenv(
+                "PHENOTYPE_DEBUG_CAPTURE_EACH_FRAME",
+                previous_capture_value->c_str(),
+                1);
+        } else {
+            unsetenv("PHENOTYPE_DEBUG_CAPTURE_EACH_FRAME");
+        }
 
         host.window = &surface;
         host.platform = &current_platform();

@@ -536,10 +536,12 @@ Gaps:
 
 - Desktop native examples can write startup artifact bundles through
   `PHENOTYPE_ARTIFACT_DIR`.
-- `examples/native` now exposes a debug-build side panel that reads the shared
-  protocol contract, input snapshot, layout capabilities, console ring, and
-  performance counters. It is a local manual acceptance surface until the
-  protocol grows a real local endpoint for CLI and agent control.
+- Every desktop native example gets the framework-owned debug-build side panel
+  through the native shell. The panel reads the shared protocol contract, input
+  snapshot, layout hover highlight state, console ring, and performance
+  counters, so `examples/native`, `examples/file_explorer_desktop`, and future
+  apps share one local manual acceptance surface until the protocol grows a
+  real local endpoint for CLI and agent control.
 - `examples/glass_showcase` is the material-focused startup artifact target
   and includes exact labels plus all public material kinds for verifier gates.
 - `examples/file_explorer_desktop` and `examples/file_explorer_mobile` are
@@ -615,6 +617,24 @@ Current status by example:
 | `examples/file_explorer_mobile` | `phenotype run file_explorer_mobile --artifact-dir /tmp/phenotype-file-explorer-mobile --artifact-exit`, or `phenotype artifact verify-file-explorer` from the CLI | Verifies the compact mobile browse/preview/create startup scene with all material kinds, stable navigation labels including Trash, shared file-type SVG symbols in Browse rows through `entry_symbol_summary`, operation receipts for file open/create/read/duplicate/delete and folder open/create/delete scenarios, shared app-debug sort/search/view-mode receipts, duplicate/delete action metadata, semantic/runtime material parity, explicit toolbar/navigation/status material roles, material container identity, backdrop access/capture bounds, executable material shape validity, bounded material resource and executor utilization budgets including stage capacity/drop counters and sampled upload/draw status strings surfaced as per-case CLI material budgets, and foreground text execution counters; local gate only by default |
 | `examples/android` | `phenotype android contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | Verifies Android debug/runtime basics plus a real `MaterialRect` fallback plan, exact fallback material plan summary and contract version, semantic/runtime material role parity, material shape validity, inactive backdrop access, material quality policy, material resource bounds, and executor budget coverage that pins sampled material work, upload bytes, backdrop-copy pixels, shared capture pixels, and upload/draw status strings to the unsupported-backend fallback path; CI device/emulator wiring remains future work |
 | `docs` | WASI snapshot bundle is available when the host preopens a writable directory | Default `exon test --target wasm32-wasi` does not preopen one |
+
+`examples/file_explorer_desktop` is also the current native performance
+acceptance workload. From the repo root, use:
+
+```sh
+tools/phenotype_cli/.exon/debug/phenotype_cli run examples/file_explorer_desktop \
+  --no-build --perf-frames 240 --perf-mode idle \
+  --perf-require-idle-240 --json
+
+tools/phenotype_cli/.exon/debug/phenotype_cli run examples/file_explorer_desktop \
+  --no-build --perf-frames 120 --perf-mode force-flush \
+  --perf-require-active-60 --json
+```
+
+The idle gate checks p95 unchanged repaint work against the 240fps capacity
+budget. The active gate uses paced `force-flush` work and the framework's
+motion quality throttle to check the 60fps capacity budget without changing
+the example's layout or feature surface.
 
 The verifier milestone now consumes startup bundles and reports schema,
 semantic, runtime, frame-file, and optional pixel-region invariant failures.

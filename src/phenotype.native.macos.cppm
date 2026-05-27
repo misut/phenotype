@@ -357,6 +357,11 @@ inline MacOSAccessibilityDisplayOptions accessibility_display_options() {
     return options;
 }
 
+inline bool macos_env_flag_enabled(char const* name) {
+    auto const* value = std::getenv(name);
+    return value && value[0] != '\0' && value[0] != '0';
+}
+
 inline float bounded_system_setting(
         float value,
         float fallback,
@@ -707,6 +712,9 @@ struct RendererState {
     MacOSAccessibilityDisplayOptions accessibility_options{};
     MaterialExecutorSummary material_executor_summary{};
     bool last_frame_available = false;
+    bool debug_capture_next_frame = false;
+    bool debug_capture_always = false;
+    std::uint64_t debug_capture_copy_count = 0;
     bool last_material_backdrop_available = false;
     bool last_material_backdrop_excludes_foreground_text = false;
     bool last_material_backdrop_color_available = false;
@@ -847,6 +855,10 @@ inline bool ensure_debug_capture_texture(int width, int height) {
     return g_renderer.debug_capture_texture != nullptr;
 }
 
+inline void request_debug_capture_next_frame() {
+    g_renderer.debug_capture_next_frame = true;
+}
+
 inline void release_material_backdrop_luma_pending_command_buffer();
 
 inline constexpr std::int64_t k_macos_material_max_backdrop_pixels =
@@ -906,6 +918,14 @@ inline MaterialQualityPolicy macos_material_quality_policy(
         policy.max_backdrop_pixels = capabilities.max_backdrop_pixels;
     if (capabilities.max_shader_sample_taps > 0)
         policy.max_sample_taps = capabilities.max_shader_sample_taps;
+    if (::phenotype::detail::g_app.has_active_animations
+        && !macos_env_flag_enabled(
+            "PHENOTYPE_MATERIAL_DISABLE_ACTIVE_QUALITY_THROTTLE")) {
+        policy.allow_backdrop_sampling = false;
+        policy.allow_noise = false;
+        policy.max_blur_radius = 0.0f;
+        policy.max_sample_taps = 0;
+    }
     return policy;
 }
 
@@ -1805,6 +1825,8 @@ inline void renderer_init(native_surface_handle handle) {
 
     g_renderer.initialized = true;
     g_renderer.text_cache.active_scale_key = 0;
+    g_renderer.debug_capture_always =
+        macos_env_flag_enabled("PHENOTYPE_DEBUG_CAPTURE_EACH_FRAME");
 
     int winw = 0;
     int winh = 0;
@@ -1985,6 +2007,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             material_summary.material_max_shader_blur_step_pixels,
             step_pixels);
     }
+    bool const capture_frame_history =
+        material_executor_requires_frame_capture(material_summary);
 
     int winw = 0;
     int winh = 0;
@@ -2161,7 +2185,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     // finalize_batches; we use baseInstance to point at them.
     float const scissor_scale = frame_scale;
     bool const defer_foreground_pass =
-        text_uploaded || !scratch.overlay_color_instances.empty();
+        capture_frame_history
+        && (text_uploaded || !scratch.overlay_color_instances.empty());
     for (auto const& batch : scratch.batches) {
         auto const batch_tri_count =
             static_cast<std::uint32_t>(batch.tri_vertices.size());
@@ -2323,8 +2348,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     g_renderer.last_render_height = fbh;
     g_renderer.last_material_backdrop_available = false;
     g_renderer.last_material_backdrop_excludes_foreground_text = false;
-    bool const capture_frame_history =
-        material_executor_requires_frame_capture(material_summary);
     if (capture_frame_history && ensure_material_backdrop_texture(fbw, fbh)) {
         if (auto* blit = command_buffer->blitCommandEncoder()) {
             MTL::Origin origin{0, 0, 0};
@@ -2460,8 +2483,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         material_summary.foreground_pass_after_backdrop_copy = true;
     }
 
+    bool const capture_debug_frame =
+        g_renderer.debug_capture_always || g_renderer.debug_capture_next_frame;
     g_renderer.last_frame_available = false;
-    if (ensure_debug_capture_texture(fbw, fbh)) {
+    if (capture_debug_frame && ensure_debug_capture_texture(fbw, fbh)) {
         if (auto* blit = command_buffer->blitCommandEncoder()) {
             MTL::Origin origin{0, 0, 0};
             MTL::Size size{
@@ -2481,8 +2506,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 origin);
             blit->endEncoding();
             g_renderer.last_frame_available = true;
+            ++g_renderer.debug_capture_copy_count;
         }
     }
+    g_renderer.debug_capture_next_frame = false;
     command_buffer->presentDrawable(drawable);
     command_buffer->commit();
     material_summary.cpu_total_ns =
@@ -2500,6 +2527,8 @@ inline void renderer_shutdown() {
     if (g_renderer.material_backdrop_texture) { g_renderer.material_backdrop_texture->release(); g_renderer.material_backdrop_texture = nullptr; }
     if (g_renderer.material_backdrop_luma_sample_buf) { g_renderer.material_backdrop_luma_sample_buf->release(); g_renderer.material_backdrop_luma_sample_buf = nullptr; }
     g_renderer.last_frame_available = false;
+    g_renderer.debug_capture_next_frame = false;
+    g_renderer.debug_capture_always = false;
     g_renderer.last_material_backdrop_available = false;
     g_renderer.last_material_backdrop_excludes_foreground_text = false;
     g_renderer.last_material_backdrop_color_available = false;
@@ -2551,6 +2580,7 @@ inline void renderer_shutdown() {
     g_renderer.drawable_height = 0;
     g_renderer.debug_capture_width = 0;
     g_renderer.debug_capture_height = 0;
+    g_renderer.debug_capture_copy_count = 0;
     g_renderer.material_backdrop_width = 0;
     g_renderer.material_backdrop_height = 0;
     g_renderer.last_render_width = 0;
@@ -3280,6 +3310,19 @@ inline json::Object macos_renderer_runtime_json() {
     renderer.emplace(
         "last_frame_available",
         json::Value{g_renderer.last_frame_available});
+    renderer.emplace(
+        "debug_capture_policy",
+        json::Value{
+            g_renderer.debug_capture_always
+                ? "every-frame"
+                : "on-demand"});
+    renderer.emplace(
+        "debug_capture_pending",
+        json::Value{g_renderer.debug_capture_next_frame});
+    renderer.emplace(
+        "debug_capture_copy_count",
+        json::Value{static_cast<std::int64_t>(
+            g_renderer.debug_capture_copy_count)});
     renderer.emplace(
         "clear_alpha",
         json::Value{g_renderer.last_clear_alpha});
@@ -4423,6 +4466,13 @@ inline std::string macos_snapshot_json() {
 
 inline std::optional<DebugFrameCapture> macos_capture_frame_rgba() {
 #ifdef __APPLE__
+    if (g_renderer.initialized
+        && !g_renderer.last_frame_available
+        && ::phenotype::native::detail::active_host()) {
+        request_debug_capture_next_frame();
+        ::phenotype::detail::g_app.last_paint_hash = 0;
+        ::phenotype::native::detail::repaint_current();
+    }
     if (!g_renderer.initialized
         || !g_renderer.last_frame_available
         || !g_renderer.debug_capture_texture
@@ -4511,6 +4561,11 @@ inline std::optional<DebugFrameCapture> macos_capture_frame_rgba() {
 inline DebugArtifactBundleResult macos_write_artifact_bundle(
         char const* directory,
         char const* reason) {
+    if (g_renderer.initialized && ::phenotype::native::detail::active_host()) {
+        request_debug_capture_next_frame();
+        ::phenotype::detail::g_app.last_paint_hash = 0;
+        ::phenotype::native::detail::repaint_current();
+    }
     auto snapshot = macos_snapshot_json();
     auto runtime_json = json::emit(
         macos_platform_runtime_details_json_with_reason(
