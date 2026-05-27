@@ -2,6 +2,7 @@ module;
 #if !defined(__wasi__) && !defined(__ANDROID__) && defined(__APPLE__)
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <string>
 #include <utility>
 #include <vector>
@@ -280,7 +281,7 @@ struct FrameScratch {
 
     std::vector<ParsedTextRun> text_runs;
     std::vector<PendingImageCmd> images;
-    std::vector<std::string> overlay_text_storage;
+    std::deque<std::string> overlay_text_storage;
     std::vector<MaterialRuntimeRecord> material_records;
     std::vector<MaterialContainerExecutionDescriptor>
         material_container_execution_descriptors;

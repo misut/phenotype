@@ -921,12 +921,13 @@ serialized `resource_budget`. Non-finite blur limits sanitize to zero at the
 same edge, so NaN/Infinity quality input deterministically takes the bounded
 fallback path instead of leaking into shader constants.
 macOS applies one backend-local runtime quality throttle on top of that pure
-policy: while `g_app.has_active_animations` is true, sampled backdrop blur and
-noise are disabled unless
-`PHENOTYPE_MATERIAL_DISABLE_ACTIVE_QUALITY_THROTTLE=1` is set. Static frames
-keep the full Liquid Glass plan, while animated frames take the same
-deterministic low-cost material path as other quality fallbacks so 60fps motion
-budget gates do not depend on high-radius backdrop sampling.
+policy: while `g_app.has_active_animations` or
+`g_app.has_active_input_motion` is true, sampled backdrop blur and noise are
+disabled unless `PHENOTYPE_MATERIAL_DISABLE_ACTIVE_QUALITY_THROTTLE=1` is set.
+Static frames keep the full Liquid Glass plan, while animated, hover, and scroll
+frames take the same deterministic low-cost material path as other quality
+fallbacks so 60fps motion and direct-manipulation budget gates do not depend on
+high-radius backdrop sampling.
 `geometry` preserves the raw decoded `MaterialRect` rectangle, while `shape`
 records the pure executable shape: validity, surface area, min/max extent,
 radius limit, effective radius, normalized radius, rounded flag, and radius
@@ -1105,6 +1106,10 @@ performance probes. `--perf-mode idle --perf-require-idle-240` gates unchanged
 repaint work against a 4.17ms p95 budget; `--perf-mode force-flush` with
 `--perf-require-active-60` gates paced active-motion work against a 16.67ms p95
 budget and activates the same motion quality throttle used by real animations.
+`--perf-mode hover`, `scroll`, and `mixed-input` drive real shell input paths
+and `--perf-require-action-60` gates their p95 work against the same 16.67ms
+budget. `--perf-debug-panel` opens the framework debug side panel during the
+probe so monitor overhead remains part of the CLI acceptance signal.
 
 Packaging and diagnostics stay at the CLI edge. Asset discovery, i18n resource
 validation, font packaging, Android process control, screenshots, filesystem

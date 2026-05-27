@@ -1228,7 +1228,7 @@ auto spec() -> cppx::cli::CommandSpec {
                         "Run a native performance probe for count frames"},
                     {.name = "perf-mode",
                      .arity = cppx::cli::OptionArity::one,
-                     .value_name = "idle|rebuild|force-flush",
+                     .value_name = "idle|rebuild|force-flush|hover|scroll|mixed-input",
                      .description =
                         "Performance probe mode. Defaults to idle"},
                     {.name = "perf-out",
@@ -1240,11 +1240,15 @@ auto spec() -> cppx::cli::CommandSpec {
                      .arity = cppx::cli::OptionArity::one,
                      .value_name = "hz",
                      .description =
-                        "Pace native perf probe iterations. Defaults to 60 for force-flush"},
+                        "Pace native perf probe iterations. Defaults to 60 for force-flush and input modes"},
                     {.name = "perf-exit",
                      .arity = cppx::cli::OptionArity::none,
                      .description =
                         "Exit after the performance probe finishes"},
+                    {.name = "perf-debug-panel",
+                     .arity = cppx::cli::OptionArity::none,
+                     .description =
+                        "Open the framework debug panel while running the performance probe"},
                     {.name = "perf-require-idle-240",
                      .arity = cppx::cli::OptionArity::none,
                      .description =
@@ -1253,6 +1257,10 @@ auto spec() -> cppx::cli::CommandSpec {
                      .arity = cppx::cli::OptionArity::none,
                      .description =
                         "Fail when p95 active frame work exceeds the 60fps budget"},
+                    {.name = "perf-require-action-60",
+                     .arity = cppx::cli::OptionArity::none,
+                     .description =
+                        "Fail when p95 input action work exceeds the 60fps budget"},
                     {.name = "accessibility-display",
                      .arity = cppx::cli::OptionArity::one,
                      .value_name = "mode",
@@ -1285,6 +1293,7 @@ auto spec() -> cppx::cli::CommandSpec {
                     "phenotype run examples/file_explorer_desktop --artifact-exit --input select:README.txt",
                     "phenotype run examples/file_explorer_desktop --observe-output --input select:README.txt --json",
                     "phenotype run examples/file_explorer_desktop --no-build --perf-frames 240 --perf-mode idle --perf-require-idle-240 --json",
+                    "phenotype run examples/file_explorer_desktop --no-build --perf-frames 120 --perf-mode mixed-input --perf-require-action-60 --json",
                 },
             },
             android_command_spec(),
