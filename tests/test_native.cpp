@@ -1482,9 +1482,9 @@ static void test_shell_key_commands_respect_input_focus_policy() {
     assert(!*panel_interactive);
     auto panel_material = debug_panel_surface_material();
     assert(panel_material.has_value());
-    assert(panel_material->blur_radius >= 36.0f);
-    assert(panel_material->opacity < 0.8f);
-    assert(panel_material->tint.a < 200);
+    assert(panel_material->blur_radius >= 64.0f);
+    assert(panel_material->opacity >= 0.9f);
+    assert(panel_material->tint.a >= 220);
     auto panel_callback = debug_panel_surface_callback();
     assert(panel_callback.has_value());
     assert(*panel_callback != phenotype::native::invalid_callback_id);

@@ -4,8 +4,10 @@ module;
 #include <chrono>
 #include <concepts>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 #endif
@@ -70,6 +72,40 @@ enum class Key : int {
     F12       = 301,
     Other     = -1,
 };
+
+#ifndef NDEBUG
+inline bool debug_panel_env_enabled(char const* name) {
+    auto const* value = std::getenv(name);
+    if (!value || value[0] == '\0')
+        return false;
+    std::string_view text{value};
+    return text != "0" && text != "false" && text != "FALSE"
+        && text != "off" && text != "OFF";
+}
+
+inline void apply_debug_panel_env_tab() {
+    auto const* value = std::getenv("PHENOTYPE_DEBUG_PANEL_TAB");
+    if (!value || value[0] == '\0')
+        return;
+    std::string_view tab{value};
+    if (tab == "layout" || tab == "Layout") {
+        ::phenotype::detail::g_app.debug_panel_tab =
+            ::phenotype::DebugPanelTab::Layout;
+    } else if (tab == "console" || tab == "Console") {
+        ::phenotype::detail::g_app.debug_panel_tab =
+            ::phenotype::DebugPanelTab::Console;
+    } else if (tab == "input" || tab == "Input") {
+        ::phenotype::detail::g_app.debug_panel_tab =
+            ::phenotype::DebugPanelTab::Input;
+    } else if (tab == "protocol" || tab == "Protocol") {
+        ::phenotype::detail::g_app.debug_panel_tab =
+            ::phenotype::DebugPanelTab::Protocol;
+    } else {
+        ::phenotype::detail::g_app.debug_panel_tab =
+            ::phenotype::DebugPanelTab::Performance;
+    }
+}
+#endif
 
 inline Key key_from_legacy_code(int key) {
     switch (key) {
@@ -1414,6 +1450,16 @@ void run_host(native_host& host, View view, Update update) {
     if (host.platform && host.platform->renderer.init)
         host.platform->renderer.init(host.window);
     phenotype::run<State, Msg>(host, std::move(view), std::move(update));
+#ifndef NDEBUG
+    if (debug_panel_env_enabled("PHENOTYPE_DEBUG_PANEL")
+        || debug_panel_env_enabled("PHENOTYPE_PERF_DEBUG_PANEL")) {
+        ::phenotype::detail::g_app.debug_panel_open = true;
+        apply_debug_panel_env_tab();
+        ::phenotype::detail::g_app.debug_panel_warmup_frames = 4u;
+        ::phenotype::detail::g_app.last_paint_hash = 0;
+        ::phenotype::detail::trigger_rebuild();
+    }
+#endif
     sync_platform_input();
 }
 

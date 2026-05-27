@@ -1329,8 +1329,10 @@ inline bool upload_image_cache() {
 
 inline bool prepare_text_instances(float scale) {
     auto& scratch = g_renderer.scratch;
-    for (auto& batch : scratch.batches)
+    for (auto& batch : scratch.batches) {
         batch.texts.clear();
+        batch.text_command_indices.clear();
+    }
     scratch.overlay_text_instances.clear();
     if (scratch.text_runs.empty())
         return true;
@@ -1348,8 +1350,10 @@ inline bool prepare_text_instances(float scale) {
     bool retried_after_reset = false;
     while (true) {
         bool restart = false;
-        for (auto& batch : scratch.batches)
+        for (auto& batch : scratch.batches) {
             batch.texts.clear();
+            batch.text_command_indices.clear();
+        }
         scratch.overlay_text_instances.clear();
 
         for (auto const& run : scratch.text_runs) {
@@ -1431,9 +1435,14 @@ inline bool prepare_text_instances(float scale) {
             // Overlay runs (IME composition / generic caret) carry the
             // sentinel batch_idx == UINT32_MAX and render Z-above scene
             // content with full-viewport scissor.
-            auto& dst = (run.batch_idx == std::numeric_limits<std::uint32_t>::max())
+            bool const overlay_run =
+                run.batch_idx == std::numeric_limits<std::uint32_t>::max();
+            auto& dst = overlay_run
                 ? scratch.overlay_text_instances
                 : scratch.batches[run.batch_idx].texts;
+            auto* command_indices = overlay_run
+                ? nullptr
+                : &scratch.batches[run.batch_idx].text_command_indices;
             // Pivot for rigid rotation is the run's anchor; each
             // glyph instance carries it so the shader can rotate
             // every quad by the same angle around the same point.
@@ -1468,6 +1477,8 @@ inline bool prepare_text_instances(float scale) {
                 pivot_y,
                 cos_t,
                 sin_t);
+            if (command_indices)
+                command_indices->push_back(run.command_index);
         }
 
         if (!restart)
@@ -1513,6 +1524,63 @@ inline void prepare_image_instances(float scale) {
             edge, edge, edge, 1.0f,
             0.0f, 1.0f, 1.0f);
     }
+}
+
+inline bool rects_overlap(float ax,
+                          float ay,
+                          float aw,
+                          float ah,
+                          float bx,
+                          float by,
+                          float bw,
+                          float bh) noexcept {
+    return aw > 0.0f && ah > 0.0f && bw > 0.0f && bh > 0.0f
+        && ax < bx + bw && ax + aw > bx
+        && ay < by + bh && ay + ah > by;
+}
+
+inline bool foreground_text_occluded_by_later_material(
+        TextInstanceGPU const& text,
+        std::uint32_t text_command_index,
+        std::vector<MaterialRuntimeRecord> const& records) noexcept {
+    for (auto const& record : records) {
+        auto const& plan = record.plan;
+        if (record.command_index <= text_command_index)
+            continue;
+        if (plan.kind == MaterialKind::None)
+            continue;
+        auto const& geometry = plan.geometry;
+        if (rects_overlap(
+                text.rect[0],
+                text.rect[1],
+                text.rect[2],
+                text.rect[3],
+                geometry.x,
+                geometry.y,
+                geometry.w,
+                geometry.h)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline void draw_deferred_text_range(MTL::RenderCommandEncoder* encoder,
+                                     bool text_uploaded,
+                                     std::uint32_t base_instance,
+                                     std::uint32_t count) {
+    if (!text_uploaded || count == 0)
+        return;
+    encoder->setRenderPipelineState(g_renderer.text_pipeline);
+    encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+    encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
+    encoder->setFragmentTexture(g_renderer.text_atlas_texture, 0);
+    encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+    encoder->drawPrimitives(
+        MTL::PrimitiveTypeTriangle,
+        NS::UInteger(0), 6,
+        NS::UInteger(count),
+        NS::UInteger(base_instance));
 }
 
 inline bool is_visual_effect_view(id view) {
@@ -2426,16 +2494,43 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             if (sr.width == 0 || sr.height == 0)
                 continue;
             foreground_encoder->setScissorRect(sr);
-            foreground_encoder->setRenderPipelineState(g_renderer.text_pipeline);
-            foreground_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-            foreground_encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
-            foreground_encoder->setFragmentTexture(g_renderer.text_atlas_texture, 0);
-            foreground_encoder->setFragmentSamplerState(g_renderer.sampler, 0);
-            foreground_encoder->drawPrimitives(
-                MTL::PrimitiveTypeTriangle,
-                NS::UInteger(0), 6,
-                NS::UInteger(batch_text_count),
-                NS::UInteger(batch.text_first));
+            if (batch.text_command_indices.size() != batch.texts.size()) {
+                draw_deferred_text_range(
+                    foreground_encoder,
+                    text_uploaded,
+                    batch.text_first,
+                    batch_text_count);
+                continue;
+            }
+
+            std::uint32_t range_start = 0;
+            std::uint32_t range_count = 0;
+            auto flush_range = [&] {
+                if (range_count == 0)
+                    return;
+                draw_deferred_text_range(
+                    foreground_encoder,
+                    text_uploaded,
+                    batch.text_first + range_start,
+                    range_count);
+                range_start = 0;
+                range_count = 0;
+            };
+            for (std::uint32_t i = 0; i < batch_text_count; ++i) {
+                bool const occluded =
+                    foreground_text_occluded_by_later_material(
+                        batch.texts[i],
+                        batch.text_command_indices[i],
+                        scratch.material_records);
+                if (occluded) {
+                    flush_range();
+                    continue;
+                }
+                if (range_count == 0)
+                    range_start = i;
+                ++range_count;
+            }
+            flush_range();
         }
 
         foreground_encoder->setScissorRect(MTL::ScissorRect{

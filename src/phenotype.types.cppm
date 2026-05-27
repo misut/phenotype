@@ -1439,6 +1439,7 @@ struct ButtonStyleOptions {
     float min_hit_width = minimum_button_activation_size;
     float min_hit_height = minimum_button_activation_size;
     TextAlign text_align = TextAlign::Start;
+    bool focus_ring = true;
 };
 
 struct GlassControlStyleOptions {

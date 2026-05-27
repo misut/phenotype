@@ -704,6 +704,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 run.text = text;
                 run.len = text_len;
                 run.batch_idx = static_cast<std::uint32_t>(scratch.batches.size() - 1);
+                run.command_index = current_command_index;
                 if (family && family_len > 0)
                     run.font_key.family.assign(family, family_len);
                 run.font_key.weight = (flags & 2u)
