@@ -2149,6 +2149,10 @@ inline void reset_pointer_inputs(AppState& app) noexcept {
     app.prev_pointer_x = 0.0f;
     app.prev_pointer_y = 0.0f;
 }
+
+#ifndef NDEBUG
+inline void render_debug_panel_overlay();
+#endif
 }
 
 // ============================================================
@@ -2242,6 +2246,9 @@ void run(Host& host, View view, Update update) {
         Scope scope(root_h);
         Scope::set_current(&scope);
         saved_view(state);
+#ifndef NDEBUG
+        detail::render_debug_panel_overlay();
+#endif
         Scope::set_current(nullptr);
         detail::prune_local_store();
         auto t2 = metrics::detail::now_ns();
@@ -2358,6 +2365,9 @@ void run(View view, Update update) {
         Scope scope(root_h);
         Scope::set_current(&scope);
         saved_view(state);
+#ifndef NDEBUG
+        detail::render_debug_panel_overlay();
+#endif
         Scope::set_current(nullptr);
         detail::prune_local_store();
         auto t2 = metrics::detail::now_ns();
@@ -5842,6 +5852,20 @@ inline bool handle_key_command(unsigned int key,
     return false;
 }
 
+inline bool toggle_debug_panel(char const* source = "core",
+                               char const* detail = "f12") {
+#ifndef NDEBUG
+    g_app.debug_panel_open = !g_app.debug_panel_open;
+    note_input_event("key", source, detail, "handled", 0xFFFFFFFFu);
+    trigger_rebuild();
+    return true;
+#else
+    (void)source;
+    (void)detail;
+    return false;
+#endif
+}
+
 inline bool set_hover_id(unsigned int callback_id,
                          char const* source = "core",
                          char const* detail = "pointer-move") {
@@ -6596,6 +6620,339 @@ inline std::string serialize_diag_snapshot_with_debug(
 inline diag::InputDebugSnapshot current_input_debug_snapshot() {
     return materialize_input_debug_snapshot();
 }
+
+#ifndef NDEBUG
+struct DebugPanelRect {
+    bool valid = false;
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+};
+
+inline bool find_callback_rect(NodeHandle node_h,
+                               unsigned int callback_id,
+                               float ox,
+                               float oy,
+                               float scroll_x,
+                               float scroll_y,
+                               DebugPanelRect& out) {
+    if (!node_h.valid())
+        return false;
+    auto& node = node_at(node_h);
+    float ax = ox + node.x;
+    float ay = oy + node.y;
+    if (node.callback_id == callback_id) {
+        out = DebugPanelRect{
+            true,
+            ax - scroll_x,
+            ay - scroll_y,
+            node.width,
+            node.height,
+        };
+        return true;
+    }
+
+    float child_scroll_x = scroll_x;
+    float child_scroll_y = scroll_y;
+    if (node.is_scroll_container && node.scroll_state)
+        child_scroll_y = scroll_y + node.scroll_offset_y;
+    for (auto child_h : node.children) {
+        if (find_callback_rect(
+                child_h,
+                callback_id,
+                ax,
+                ay,
+                child_scroll_x,
+                child_scroll_y,
+                out)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline DebugPanelRect callback_rect(unsigned int callback_id) {
+    if (callback_id == 0xFFFFFFFFu)
+        return {};
+    DebugPanelRect out;
+    (void)find_callback_rect(
+        g_app.root,
+        callback_id,
+        0.0f,
+        0.0f,
+        g_app.scroll_x,
+        g_app.scroll_y,
+        out);
+    return out;
+}
+
+inline void paint_debug_hover_highlight(Painter& painter, unsigned int callback_id) {
+    auto rect = callback_rect(callback_id);
+    if (!rect.valid || rect.w <= 0.0f || rect.h <= 0.0f)
+        return;
+
+    PaintRect fill{
+        rect.x,
+        rect.y,
+        rect.w,
+        rect.h,
+        Color{59, 130, 246, 34},
+    };
+    painter.fill_rects(&fill, 1);
+
+    constexpr float t = 2.0f;
+    PaintRect border[] = {
+        {rect.x, rect.y, rect.w, t, Color{37, 99, 235, 210}},
+        {rect.x, rect.y + rect.h - t, rect.w, t, Color{37, 99, 235, 210}},
+        {rect.x, rect.y, t, rect.h, Color{37, 99, 235, 210}},
+        {rect.x + rect.w - t, rect.y, t, rect.h, Color{37, 99, 235, 210}},
+    };
+    painter.fill_rects(border, 4);
+}
+
+inline std::string debug_id_text(unsigned int id) {
+    if (id == 0xFFFFFFFFu)
+        return "none";
+    return std::to_string(id);
+}
+
+inline std::string debug_caret_text(unsigned int pos) {
+    if (pos == 0xFFFFFFFFu)
+        return "none";
+    return std::to_string(pos);
+}
+
+inline std::string debug_rect_text(diag::RectSnapshot const& rect) {
+    if (!rect.valid)
+        return "(invalid)";
+    return "(" + std::to_string(rect.x)
+        + ", " + std::to_string(rect.y)
+        + ", " + std::to_string(rect.w)
+        + ", " + std::to_string(rect.h) + ")";
+}
+
+inline std::string debug_panel_shortcut_text() {
+#ifdef __APPLE__
+    return "Cmd+F12";
+#else
+    return "Ctrl+F12";
+#endif
+}
+
+inline std::string debug_protocol_block() {
+    std::string block;
+    block += "protocol_version: ";
+    block += std::to_string(io::debug_protocol_contract_version);
+    block += "\ntransport: ";
+    block += std::string{io::debug_transport_policy()};
+    block += "\nsecurity: ";
+    block += std::string{io::debug_security_policy()};
+    block += "\npanel: ";
+    block += std::string{io::debug_side_panel_policy()};
+    block += "\nagent_control: ";
+    block += std::string{io::debug_agent_control_policy()};
+    block += "\ndomains: ";
+    block += std::to_string(io::debug_protocol_domains.size());
+    block += "\ncommands: ";
+    block += std::to_string(io::debug_protocol_commands.size());
+    block += "\nsections: ";
+    block += std::to_string(io::debug_panel_sections.size());
+    block += "\nagent_complete: ";
+    block += io::debug_protocol_is_agent_complete() ? "true" : "false";
+    return block;
+}
+
+inline std::string input_debug_block(diag::InputDebugSnapshot const& debug) {
+    std::string block;
+    block += "last_event: ";
+    block += debug.event.empty() ? "none" : debug.event;
+    block += "\nsource: ";
+    block += debug.source.empty() ? "none" : debug.source;
+    block += "\ndetail: ";
+    block += debug.detail.empty() ? "none" : debug.detail;
+    block += "\nresult: ";
+    block += debug.result.empty() ? "none" : debug.result;
+    block += "\ncallback_id: ";
+    block += debug_id_text(debug.callback_id);
+    block += "\nrole: ";
+    block += debug.role;
+    block += "\nfocused_id: ";
+    block += debug_id_text(debug.focused_id);
+    block += "\nfocused_role: ";
+    block += debug.focused_role;
+    block += "\nfocus_visible: ";
+    block += debug.focus_visible ? "true" : "false";
+    block += "\nhovered_id: ";
+    block += debug_id_text(debug.hovered_id);
+    block += "\npressed_id: ";
+    block += debug_id_text(debug.pressed_id);
+    block += "\nscroll_y: ";
+    block += std::to_string(debug.scroll_y);
+    block += "\ntext caret: ";
+    block += debug_caret_text(debug.caret_pos);
+    block += "\nselection active: ";
+    block += debug.selection_active ? "true" : "false";
+    block += "\nselection start: ";
+    block += debug_caret_text(debug.selection_start);
+    block += "\nselection end: ";
+    block += debug_caret_text(debug.selection_end);
+    block += "\ncaret visible: ";
+    block += debug.caret_visible ? "true" : "false";
+    block += "\ncaret renderer: ";
+    block += debug.caret_renderer.empty() ? "hidden" : debug.caret_renderer;
+    block += "\ncaret geometry source: ";
+    block += debug.caret_geometry_source.empty() ? "draw" : debug.caret_geometry_source;
+    block += "\ncaret rect: ";
+    block += debug_rect_text(debug.caret_rect);
+    block += "\ncaret draw rect: ";
+    block += debug_rect_text(debug.caret_draw_rect);
+    block += "\ncaret host rect: ";
+    block += debug_rect_text(debug.caret_host_rect);
+    block += "\ncaret screen rect: ";
+    block += debug_rect_text(debug.caret_screen_rect);
+    block += "\ncomposition active: ";
+    block += debug.composition_active ? "true" : "false";
+    block += "\ncomposition cursor: ";
+    block += std::to_string(debug.composition_cursor);
+    block += "\ncomposition text: ";
+    block += debug.composition_text.empty() ? "(empty)" : debug.composition_text;
+    return block;
+}
+
+inline std::string layout_debug_block(diag::InputDebugSnapshot const& debug) {
+    std::string block;
+    block += "viewport: ";
+    block += std::to_string(g_app.debug_viewport_width);
+    block += "x";
+    block += std::to_string(g_app.debug_viewport_height);
+    block += "\nhovered_id: ";
+    block += debug_id_text(debug.hovered_id);
+    block += "\nfocused_id: ";
+    block += debug_id_text(debug.focused_id);
+    block += "\npressed_id: ";
+    block += debug_id_text(debug.pressed_id);
+    block += "\nrole: ";
+    block += debug.role;
+    block += "\nfocused_role: ";
+    block += debug.focused_role;
+    block += "\nroot_overlays: ";
+    block += std::to_string(g_app.overlays.size());
+    block += "\nlayout_hover_highlight: ";
+    block += debug.hovered_id == 0xFFFFFFFFu ? "inactive" : "active";
+    return block;
+}
+
+inline std::string console_log_block() {
+    auto records = log::recent_records(6);
+    if (records.empty())
+        return "(no console records yet)";
+
+    std::string block;
+    for (auto const& record : records) {
+        if (!block.empty())
+            block += "\n";
+        block += log::severity_text(record.severity);
+        block += " ";
+        block += record.scope_name.empty() ? "phenotype" : record.scope_name;
+        block += ": ";
+        block += record.body.empty() ? "(empty)" : record.body;
+    }
+    return block;
+}
+
+inline std::string performance_debug_block() {
+    std::string block;
+    block += "rebuilds: ";
+    block += std::to_string(metrics::inst::rebuilds.total());
+    block += "\ninput_events: ";
+    block += std::to_string(metrics::inst::input_events.total());
+    block += "\nflush_calls: ";
+    block += std::to_string(metrics::inst::flush_calls.total());
+    block += "\nframes_skipped: ";
+    block += std::to_string(metrics::inst::frames_skipped.total());
+    block += "\nmeasure_text_calls: ";
+    block += std::to_string(metrics::inst::measure_text_calls.total());
+    block += "\nmeasure_text_cache_hits: ";
+    block += std::to_string(metrics::inst::measure_text_cache_hits.total());
+    block += "\nlayout_nodes_computed: ";
+    block += std::to_string(metrics::inst::layout_nodes_computed.total());
+    block += "\nlayout_nodes_skipped: ";
+    block += std::to_string(metrics::inst::layout_nodes_skipped.total());
+    block += "\npaint_subtrees_blitted: ";
+    block += std::to_string(metrics::inst::paint_subtrees_blitted.total());
+    block += "\nnative_texture_upload_bytes: ";
+    block += std::to_string(metrics::inst::native_texture_upload_bytes.total());
+    block += "\nnative_buffer_reallocations: ";
+    block += std::to_string(metrics::inst::native_buffer_reallocations.total());
+    return block;
+}
+
+inline void render_debug_panel_overlay() {
+    if (!g_app.debug_panel_open)
+        return;
+
+    auto input_debug = current_input_debug_snapshot();
+    float const viewport_width = g_app.debug_viewport_width > 1.0f
+        ? g_app.debug_viewport_width
+        : 1280.0f;
+    float const viewport_height = g_app.debug_viewport_height > 1.0f
+        ? g_app.debug_viewport_height
+        : 720.0f;
+    float const panel_height = viewport_height > 120.0f
+        ? viewport_height - 32.0f
+        : 620.0f;
+    unsigned int const hovered_id = input_debug.hovered_id;
+
+    if (hovered_id != 0xFFFFFFFFu) {
+        layout::overlay([&] {
+            widget::semantic_canvas(
+                viewport_width,
+                viewport_height,
+                "Debug Layout Hover Highlight",
+                [hovered_id](Painter& painter) {
+                    paint_debug_hover_highlight(painter, hovered_id);
+                },
+                {},
+                0x6465627567486f76ULL ^ static_cast<std::uint64_t>(hovered_id),
+                "debug_overlay");
+        });
+    }
+
+    layout::overlay([&] {
+        layout::row([&] {
+            layout::sized_box(380.0f, [&] {
+                layout::sidebar(380.0f, [&] {
+                    widget::text("Debug");
+                    widget::text(std::string{"Toggle: "} + debug_panel_shortcut_text());
+                    layout::spacer(8);
+                    layout::scroll_view(panel_height, [&] {
+                        widget::text("Protocol");
+                        layout::spacer(4);
+                        widget::code(debug_protocol_block());
+                        layout::spacer(10);
+                        widget::text("Input");
+                        layout::spacer(4);
+                        widget::code(input_debug_block(input_debug));
+                        layout::spacer(10);
+                        widget::text("Layout");
+                        layout::spacer(4);
+                        widget::code(layout_debug_block(input_debug));
+                        layout::spacer(10);
+                        widget::text("Console");
+                        layout::spacer(4);
+                        widget::code(console_log_block());
+                        layout::spacer(10);
+                        widget::text("Performance");
+                        layout::spacer(4);
+                        widget::code(performance_debug_block());
+                    });
+                });
+            });
+        }, SpaceToken::Md, CrossAxisAlignment::Start, MainAxisAlignment::End);
+    });
+}
+#endif
 
 inline InteractionRole focused_role() {
     return callback_role(g_app.focused_id);

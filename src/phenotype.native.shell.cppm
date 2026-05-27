@@ -1059,6 +1059,34 @@ inline bool dispatch_registered_key_command(Key key,
     return false;
 }
 
+inline int debug_panel_shortcut_modifiers() {
+#ifdef __APPLE__
+    return static_cast<int>(Modifier::Super);
+#else
+    return static_cast<int>(Modifier::Control);
+#endif
+}
+
+inline bool dispatch_debug_panel_shortcut(Key key,
+                                          KeyAction action,
+                                          int mods,
+                                          char const* detail) {
+#ifndef NDEBUG
+    if (action == KeyAction::Press
+        && key == Key::F12
+        && normalized_key_command_modifiers(mods)
+            == debug_panel_shortcut_modifiers()) {
+        return ::phenotype::detail::toggle_debug_panel("shell", detail);
+    }
+#else
+    (void)key;
+    (void)action;
+    (void)mods;
+    (void)detail;
+#endif
+    return false;
+}
+
 inline bool dispatch_key(Key key, KeyAction action, int mods) {
     bool shift = (mods & static_cast<int>(Modifier::Shift)) != 0;
     auto detail = key_detail_name(key, shift);
@@ -1083,6 +1111,8 @@ inline bool dispatch_key(Key key, KeyAction action, int mods) {
             "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
         return false;
     }
+    if (dispatch_debug_panel_shortcut(key, action, mods, detail))
+        return true;
     if (key == Key::A && action == KeyAction::Press && has_select_all_modifier(mods)) {
         if (!::phenotype::detail::focused_is_input()
             || !::phenotype::detail::select_all_focused_input()) {

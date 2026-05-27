@@ -4,16 +4,22 @@
 module;
 
 #if defined(__APPLE__) && !defined(__wasi__) && !defined(__ANDROID__)
+#include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <chrono>
 #include <concepts>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
+#include <format>
 #include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
+#include <vector>
 
 #include <CoreGraphics/CoreGraphics.h>
 #include <objc/message.h>
@@ -605,6 +611,212 @@ inline bool env_flag_enabled(char const* name) {
     return value && value[0] != '\0' && value[0] != '0';
 }
 
+inline std::optional<int> env_positive_int(char const* name, int max_value) {
+    auto const* value = std::getenv(name);
+    if (!value || value[0] == '\0')
+        return std::nullopt;
+    int parsed = 0;
+    auto const* first = value;
+    auto const* last = value + std::char_traits<char>::length(value);
+    auto [ptr, ec] = std::from_chars(first, last, parsed);
+    if (ec != std::errc{} || ptr != last || parsed <= 0
+        || parsed > max_value) {
+        std::fprintf(
+            stderr,
+            "[phenotype-native] ignoring invalid %s=%s\n",
+            name,
+            value);
+        return std::nullopt;
+    }
+    return parsed;
+}
+
+struct PerformanceProbeStats {
+    std::string mode;
+    int frames = 0;
+    std::uint64_t total_ns = 0;
+    std::uint64_t min_ns = 0;
+    std::uint64_t max_ns = 0;
+    std::uint64_t p50_ns = 0;
+    std::uint64_t p95_ns = 0;
+    int pace_hz = 0;
+    double average_ns = 0.0;
+    double average_fps_capacity = 0.0;
+    double p50_fps_capacity = 0.0;
+    double p95_fps_capacity = 0.0;
+    bool idle_240_required = false;
+    bool active_60_required = false;
+    bool idle_240_ok = true;
+    bool active_60_ok = true;
+};
+
+inline std::uint64_t percentile_from_sorted(
+        std::vector<std::uint64_t> const& sorted,
+        double percentile) {
+    if (sorted.empty())
+        return 0;
+    auto const index = static_cast<std::size_t>(
+        std::lround(percentile * static_cast<double>(sorted.size() - 1)));
+    return sorted[std::min(index, sorted.size() - 1)];
+}
+
+inline double fps_capacity(std::uint64_t ns) {
+    if (ns == 0)
+        return 0.0;
+    return 1'000'000'000.0 / static_cast<double>(ns);
+}
+
+inline std::string performance_probe_json(PerformanceProbeStats const& s) {
+    return std::format(
+        "{{\n"
+        "  \"schema_version\": 1,\n"
+        "  \"kind\": \"phenotype.performance_probe\",\n"
+        "  \"mode\": \"{}\",\n"
+        "  \"frames\": {},\n"
+        "  \"pace_hz\": {},\n"
+        "  \"timing\": {{\n"
+        "    \"total_ns\": {},\n"
+        "    \"average_ns\": {:.3f},\n"
+        "    \"min_ns\": {},\n"
+        "    \"max_ns\": {},\n"
+        "    \"p50_ns\": {},\n"
+        "    \"p95_ns\": {},\n"
+        "    \"average_fps_capacity\": {:.3f},\n"
+        "    \"p50_fps_capacity\": {:.3f},\n"
+        "    \"p95_fps_capacity\": {:.3f}\n"
+        "  }},\n"
+        "  \"budgets\": {{\n"
+        "    \"idle_240_frame_budget_ns\": 4166667,\n"
+        "    \"active_60_frame_budget_ns\": 16666667,\n"
+        "    \"idle_240_required\": {},\n"
+        "    \"active_60_required\": {},\n"
+        "    \"idle_240_ok\": {},\n"
+        "    \"active_60_ok\": {}\n"
+        "  }}\n"
+        "}}\n",
+        s.mode,
+        s.frames,
+        s.pace_hz,
+        s.total_ns,
+        s.average_ns,
+        s.min_ns,
+        s.max_ns,
+        s.p50_ns,
+        s.p95_ns,
+        s.average_fps_capacity,
+        s.p50_fps_capacity,
+        s.p95_fps_capacity,
+        s.idle_240_required ? "true" : "false",
+        s.active_60_required ? "true" : "false",
+        s.idle_240_ok ? "true" : "false",
+        s.active_60_ok ? "true" : "false");
+}
+
+inline bool write_performance_probe_report(std::string_view report) {
+    auto const* out_path = std::getenv("PHENOTYPE_PERF_OUT");
+    if (!out_path || out_path[0] == '\0') {
+        std::fprintf(stderr, "%.*s", static_cast<int>(report.size()), report.data());
+        return true;
+    }
+    auto file = std::ofstream{out_path, std::ios::binary};
+    if (!file) {
+        std::fprintf(
+            stderr,
+            "[phenotype-native] performance report failed: %s\n",
+            out_path);
+        return false;
+    }
+    file << report;
+    return static_cast<bool>(file);
+}
+
+inline bool run_performance_probe_if_requested() {
+    auto const frames = env_positive_int("PHENOTYPE_PERF_FRAMES", 1'000'000);
+    if (!frames)
+        return true;
+
+    auto const* mode_env = std::getenv("PHENOTYPE_PERF_MODE");
+    auto mode = std::string{
+        mode_env && mode_env[0] != '\0' ? mode_env : "idle"};
+    if (mode != "idle" && mode != "rebuild" && mode != "force-flush") {
+        std::fprintf(
+            stderr,
+            "[phenotype-native] unknown PHENOTYPE_PERF_MODE=%s\n",
+            mode.c_str());
+        return false;
+    }
+    int pace_hz = 0;
+    if (auto configured = env_positive_int("PHENOTYPE_PERF_PACE_HZ", 1000)) {
+        pace_hz = *configured;
+    } else if (mode == "force-flush") {
+        pace_hz = 60;
+    }
+    auto const pace_duration = pace_hz > 0
+        ? std::chrono::nanoseconds{
+            static_cast<long long>(1'000'000'000ll / pace_hz)}
+        : std::chrono::nanoseconds{0};
+
+    auto samples = std::vector<std::uint64_t>{};
+    samples.reserve(static_cast<std::size_t>(*frames));
+    bool const previous_active_animations =
+        ::phenotype::detail::g_app.has_active_animations;
+    if (mode == "force-flush")
+        ::phenotype::detail::g_app.has_active_animations = true;
+
+    for (int i = 0; i < *frames; ++i) {
+        auto const start = std::chrono::steady_clock::now();
+        if (mode == "rebuild") {
+            ::phenotype::detail::trigger_rebuild();
+        } else {
+            if (mode == "force-flush")
+                ::phenotype::detail::g_app.last_paint_hash = 0;
+            repaint_current();
+        }
+        auto const end = std::chrono::steady_clock::now();
+        auto const elapsed =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        samples.push_back(
+            static_cast<std::uint64_t>(elapsed.count()));
+        if (pace_duration.count() > 0 && elapsed < pace_duration)
+            std::this_thread::sleep_for(pace_duration - elapsed);
+    }
+    ::phenotype::detail::g_app.has_active_animations =
+        previous_active_animations;
+
+    auto sorted = samples;
+    std::ranges::sort(sorted);
+    auto stats = PerformanceProbeStats{
+        .mode = mode,
+        .frames = *frames,
+        .min_ns = sorted.empty() ? 0 : sorted.front(),
+        .max_ns = sorted.empty() ? 0 : sorted.back(),
+        .p50_ns = percentile_from_sorted(sorted, 0.50),
+        .p95_ns = percentile_from_sorted(sorted, 0.95),
+        .pace_hz = pace_hz,
+        .idle_240_required =
+            env_flag_enabled("PHENOTYPE_PERF_REQUIRE_IDLE_240"),
+        .active_60_required =
+            env_flag_enabled("PHENOTYPE_PERF_REQUIRE_ACTIVE_60"),
+    };
+    for (auto ns : samples)
+        stats.total_ns += ns;
+    stats.average_ns = stats.frames > 0
+        ? static_cast<double>(stats.total_ns) / static_cast<double>(stats.frames)
+        : 0.0;
+    stats.average_fps_capacity =
+        stats.average_ns > 0.0 ? 1'000'000'000.0 / stats.average_ns : 0.0;
+    stats.p50_fps_capacity = fps_capacity(stats.p50_ns);
+    stats.p95_fps_capacity = fps_capacity(stats.p95_ns);
+    stats.idle_240_ok =
+        !stats.idle_240_required || stats.p95_ns <= 4'166'667ull;
+    stats.active_60_ok =
+        !stats.active_60_required || stats.p95_ns <= 16'666'667ull;
+
+    auto const report = performance_probe_json(stats);
+    auto const wrote = write_performance_probe_report(report);
+    return wrote && stats.idle_240_ok && stats.active_60_ok;
+}
+
 inline bool write_startup_artifact_bundle(platform_api const& platform,
                                           char const* directory) {
     if (!directory || directory[0] == '\0')
@@ -729,6 +941,17 @@ int run_app_with_macos_platform(platform_api const& platform,
         g_active_appkit_window = nullptr;
         g_active_appkit_surface = nullptr;
         return artifact_ok ? 0 : 1;
+    }
+
+    bool const perf_ok = run_performance_probe_if_requested();
+    if (env_flag_enabled("PHENOTYPE_PERF_EXIT")) {
+        shutdown_host(host);
+        objc_send<void>(window, sel("close"));
+        if (pool)
+            objc_send<void>(pool, sel("drain"));
+        g_active_appkit_window = nullptr;
+        g_active_appkit_surface = nullptr;
+        return perf_ok ? 0 : 1;
     }
 
     auto last_animation_tick = std::chrono::steady_clock::now();

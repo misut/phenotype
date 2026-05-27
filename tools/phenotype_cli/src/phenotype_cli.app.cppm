@@ -56,6 +56,15 @@ struct ExampleRunSummary {
     bool artifact_requested = false;
     bool artifact_exit = false;
     bool output_observation_requested = false;
+    bool performance_probe_requested = false;
+    bool performance_probe_exit = false;
+    bool performance_probe_idle_240_required = false;
+    bool performance_probe_active_60_required = false;
+    int performance_probe_frames = 0;
+    int performance_probe_pace_hz = 0;
+    std::string performance_probe_mode;
+    fs::path performance_probe_out;
+    std::string performance_probe_report_json;
     std::size_t file_explorer_input_count = 0;
     std::size_t file_explorer_script_input_count = 0;
     fs::path file_explorer_script;
@@ -132,6 +141,41 @@ auto parse_env_overrides(cppx::cli::Invocation const& invocation)
         env[name] = raw.substr(pos + 1);
     }
     return env;
+}
+
+auto parse_positive_count(std::string_view text, std::string_view option_name)
+    -> std::expected<int, std::string> {
+    if (text.empty()) {
+        return std::unexpected{
+            std::format("{} requires a numeric value", option_name)};
+    }
+    int value = 0;
+    auto const* first = text.data();
+    auto const* last = text.data() + text.size();
+    auto [ptr, ec] = std::from_chars(first, last, value);
+    if (ec != std::errc{} || ptr != last || value <= 0 || value > 1'000'000) {
+        return std::unexpected{
+            std::format("{} must be an integer from 1 to 1000000", option_name)};
+    }
+    return value;
+}
+
+auto json_value_or_string(std::string const& text) -> std::string {
+    auto begin = std::ranges::find_if_not(text, [](unsigned char ch) {
+        return std::isspace(ch);
+    });
+    if (begin == text.end())
+        return "null";
+    auto rbegin = std::ranges::find_if_not(
+        text | std::views::reverse,
+        [](unsigned char ch) {
+            return std::isspace(ch);
+        });
+    auto const first = *begin;
+    auto const last = *rbegin;
+    if ((first == '{' && last == '}') || (first == '[' && last == ']'))
+        return text;
+    return json_string(text);
 }
 
 auto resolve_example_root(fs::path const& repo_root,
@@ -219,6 +263,22 @@ auto example_run_json(ExampleRunSummary const& summary) -> std::string {
     auto output_observation = summary.output_observation
         ? artifact_observation_json(*summary.output_observation)
         : std::string{"null"};
+    auto performance_probe = std::string{"null"};
+    if (summary.performance_probe_requested) {
+        performance_probe = std::format(
+            "{{\"requested\":true,\"frames\":{},\"mode\":{},"
+            "\"pace_hz\":{},\"exit_after_probe\":{},\"report_path\":{},"
+            "\"require_idle_240\":{},\"require_active_60\":{},"
+            "\"report\":{}}}",
+            summary.performance_probe_frames,
+            json_string(summary.performance_probe_mode),
+            summary.performance_probe_pace_hz,
+            summary.performance_probe_exit ? "true" : "false",
+            json_string(path_string(summary.performance_probe_out)),
+            summary.performance_probe_idle_240_required ? "true" : "false",
+            summary.performance_probe_active_60_required ? "true" : "false",
+            json_value_or_string(summary.performance_probe_report_json));
+    }
 
     return std::format(
         "{{\"schema_version\":1,\"command\":\"run\",\"ok\":{},"
@@ -227,7 +287,7 @@ auto example_run_json(ExampleRunSummary const& summary) -> std::string {
         "\"artifact_exit\":{},\"output_observation_requested\":{},"
         "\"file_explorer_input\":{},\"timeout_seconds\":{},"
         "\"build\":{},\"run_result\":{},\"artifact\":{},"
-        "\"output_observation\":{},\"error\":{}}}",
+        "\"output_observation\":{},\"performance_probe\":{},\"error\":{}}}",
         summary.ok ? "true" : "false",
         json_string(summary.example),
         json_string(path_string(summary.example_root)),
@@ -243,6 +303,7 @@ auto example_run_json(ExampleRunSummary const& summary) -> std::string {
         process_result_detail_json(summary.run_result),
         artifact,
         output_observation,
+        performance_probe,
         json_string(summary.error));
 }
 
@@ -353,6 +414,21 @@ void print_example_run(ExampleRunSummary const& summary) {
         }
         lines.push_back({
             .label = "output",
+            .value = std::move(value),
+            .status = status,
+        });
+    }
+    if (summary.performance_probe_requested) {
+        auto status = cppx::terminal::StatusKind::skip;
+        auto value = std::format(
+            "{} frames mode={} report={}",
+            summary.performance_probe_frames,
+            summary.performance_probe_mode,
+            path_string(summary.performance_probe_out));
+        if (!summary.performance_probe_report_json.empty())
+            status = cppx::terminal::StatusKind::ok;
+        lines.push_back({
+            .label = "perf",
             .value = std::move(value),
             .status = status,
         });
@@ -813,6 +889,101 @@ int run_example(cppx::cli::Invocation const& invocation) {
     if (auto value = invocation.value("accessibility-display")) {
         (*env)["PHENOTYPE_ACCESSIBILITY_DISPLAY"] = std::string{*value};
     }
+    if (auto value = invocation.value("perf-frames")) {
+        auto parsed_frames = parse_positive_count(*value, "--perf-frames");
+        if (!parsed_frames) {
+            return print_error(
+                "run",
+                parsed_frames.error(),
+                invocation.has("json"));
+        }
+        summary.performance_probe_requested = true;
+        summary.performance_probe_frames = *parsed_frames;
+    }
+    if (auto value = invocation.value("perf-mode")) {
+        auto mode = std::string{*value};
+        if (mode != "idle" && mode != "rebuild" && mode != "force-flush") {
+            return print_error(
+                "run",
+                "--perf-mode must be idle, rebuild, or force-flush",
+                invocation.has("json"));
+        }
+        summary.performance_probe_mode = std::move(mode);
+        summary.performance_probe_requested = true;
+    }
+    if (summary.performance_probe_mode.empty())
+        summary.performance_probe_mode = "idle";
+    if ((summary.performance_probe_requested
+         || invocation.value("perf-out").has_value()
+         || invocation.value("perf-pace-hz").has_value())
+        && summary.performance_probe_frames <= 0) {
+        return print_error(
+            "run",
+            "--perf-frames is required for performance probe options",
+            invocation.has("json"));
+    }
+    summary.performance_probe_exit =
+        invocation.has("perf-exit") || summary.performance_probe_requested;
+    summary.performance_probe_idle_240_required =
+        invocation.has("perf-require-idle-240");
+    summary.performance_probe_active_60_required =
+        invocation.has("perf-require-active-60");
+    if (summary.performance_probe_exit && !summary.performance_probe_requested) {
+        return print_error(
+            "run",
+            "--perf-exit requires --perf-frames",
+            invocation.has("json"));
+    }
+    if ((summary.performance_probe_idle_240_required
+         || summary.performance_probe_active_60_required)
+        && !summary.performance_probe_requested) {
+        return print_error(
+            "run",
+            "performance budget requirements require --perf-frames",
+            invocation.has("json"));
+    }
+    if (summary.performance_probe_requested) {
+        if (auto value = invocation.value("perf-pace-hz")) {
+            auto parsed_pace = parse_positive_count(*value, "--perf-pace-hz");
+            if (!parsed_pace) {
+                return print_error(
+                    "run",
+                    parsed_pace.error(),
+                    invocation.has("json"));
+            }
+            summary.performance_probe_pace_hz = *parsed_pace;
+        } else if (summary.performance_probe_mode == "force-flush") {
+            summary.performance_probe_pace_hz = 60;
+        }
+        if (auto value = invocation.value("perf-out")) {
+            summary.performance_probe_out =
+                fs::path{absolute_path_string(fs::path{std::string{*value}})};
+        } else {
+            auto perf_dir = make_temp_directory("phenotype-run-perf");
+            if (!perf_dir) {
+                return print_error(
+                    "run",
+                    perf_dir.error(),
+                    invocation.has("json"));
+            }
+            summary.performance_probe_out = *perf_dir / "perf.json";
+        }
+        (*env)["PHENOTYPE_PERF_FRAMES"] =
+            std::to_string(summary.performance_probe_frames);
+        (*env)["PHENOTYPE_PERF_MODE"] = summary.performance_probe_mode;
+        (*env)["PHENOTYPE_PERF_OUT"] =
+            path_string(summary.performance_probe_out);
+        if (summary.performance_probe_pace_hz > 0) {
+            (*env)["PHENOTYPE_PERF_PACE_HZ"] =
+                std::to_string(summary.performance_probe_pace_hz);
+        }
+        if (summary.performance_probe_exit)
+            (*env)["PHENOTYPE_PERF_EXIT"] = "1";
+        if (summary.performance_probe_idle_240_required)
+            (*env)["PHENOTYPE_PERF_REQUIRE_IDLE_240"] = "1";
+        if (summary.performance_probe_active_60_required)
+            (*env)["PHENOTYPE_PERF_REQUIRE_ACTIVE_60"] = "1";
+    }
 
     if (auto value = invocation.value("timeout-seconds")) {
         auto parsed_timeout = parse_seconds(*value, "--timeout-seconds");
@@ -823,7 +994,7 @@ int run_example(cppx::cli::Invocation const& invocation) {
                 invocation.has("json"));
         }
         summary.run_timeout = *parsed_timeout;
-    } else if (summary.artifact_exit) {
+    } else if (summary.artifact_exit || summary.performance_probe_exit) {
         summary.run_timeout = std::chrono::seconds{120};
     }
 
@@ -891,6 +1062,9 @@ int run_example(cppx::cli::Invocation const& invocation) {
     summary.run_result = std::move(*run);
     if (summary.artifact_requested)
         summary.artifact = artifact_summary(summary.artifact_dir);
+    if (summary.performance_probe_requested && path_exists(summary.performance_probe_out))
+        summary.performance_probe_report_json =
+            read_text_file(summary.performance_probe_out);
     if (summary.output_observation_requested && summary.artifact) {
         summary.output_observation =
             observe_artifact(summary.artifact_dir, invocation);
@@ -900,7 +1074,9 @@ int run_example(cppx::cli::Invocation const& invocation) {
         && (!summary.artifact_requested
             || (summary.artifact && summary.artifact->snapshot_json))
         && (!summary.output_observation_requested
-            || (summary.output_observation && summary.output_observation->ok));
+            || (summary.output_observation && summary.output_observation->ok))
+        && (!summary.performance_probe_requested
+            || !summary.performance_probe_report_json.empty());
     if (!summary.ok && summary.error.empty()) {
         if (summary.run_result->timed_out) {
             summary.error = "example timed out";
@@ -914,6 +1090,9 @@ int run_example(cppx::cli::Invocation const& invocation) {
             summary.error = "artifact bundle did not contain snapshot.json";
         } else if (summary.output_observation_requested) {
             summary.error = "output observation failed";
+        } else if (summary.performance_probe_requested
+                   && summary.performance_probe_report_json.empty()) {
+            summary.error = "performance probe report was not written";
         }
     }
 
