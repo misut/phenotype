@@ -7483,6 +7483,7 @@ inline void render_debug_panel_overlay() {
                     "Debug Panel");
                 panel_options.kind = MaterialKind::Thick;
                 panel_options.role = MaterialSurfaceRole::Sidebar;
+                panel_options.interactive = false;
                 panel_options.max_width = panel_width;
                 panel_options.border_width = 1.0f;
                 panel_options.has_material_override = true;
