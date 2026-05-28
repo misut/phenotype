@@ -1742,8 +1742,8 @@ struct Style {
     // unspecified child fills the rest" rule still applies. When any
     // sibling has flex_grow > 0, those children split the remaining
     // space in proportion to their values and the implicit fallback is
-    // suppressed. Currently honoured by row layout only; column flex
-    // distribution waits on a bounded-height story.
+    // suppressed. Row layout distributes width; column layout distributes
+    // height when the parent has a bounded fixed_height.
     float flex_grow = 0;
 };
 

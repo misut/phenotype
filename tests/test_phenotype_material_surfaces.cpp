@@ -1542,7 +1542,7 @@ void test_material_surface_resolves_live_input_interaction() {
     assert(!pointer.focused);
     assert(pointer.pointer_inside);
     assert(pointer.pointer_x > 0.20f && pointer.pointer_x < 0.30f);
-    assert(pointer.pointer_y > 0.20f && pointer.pointer_y < 0.35f);
+    assert(pointer.pointer_y > 0.16f && pointer.pointer_y < 0.24f);
 
     detail::persist_paint_inputs(detail::g_app);
     detail::g_app.focus_visible = true;
