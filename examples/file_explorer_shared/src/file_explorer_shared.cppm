@@ -177,6 +177,7 @@ struct ThemePreferenceSnapshot {
     float line_height_ratio = 0.0f;
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
+    std::string scroll_bar_visibility;
     bool prefer_system_font_family = false;
     bool prefer_system_color_scheme = false;
     bool apply_system_font_metrics = true;
@@ -257,6 +258,7 @@ struct ExplorerState {
     float effective_line_height_ratio = 1.6f;
     float effective_scroll_delta_multiplier = 1.0f;
     float effective_scroll_horizontal_delta_multiplier = 1.0f;
+    std::string effective_scroll_bar_visibility = "auto";
     float effective_motion_duration_multiplier = 1.0f;
     bool used_system_font_family = false;
     bool used_system_color_scheme = false;
@@ -268,6 +270,7 @@ struct ExplorerState {
     bool used_user_line_height = false;
     bool used_system_scroll_metrics = false;
     bool used_user_scroll_scale = false;
+    bool used_user_scroll_bar_visibility = false;
     bool used_system_accent_color = false;
     bool used_system_reduce_motion = false;
     bool used_user_motion_scale = false;
@@ -314,6 +317,7 @@ enum class ExplorerInputKind {
     SetSystemScrollMetrics,
     SetScrollSpeed,
     SetHorizontalScrollSpeed,
+    SetScrollBarVisibility,
     SetMotionScale,
     SetColorScheme,
 };
@@ -681,6 +685,7 @@ struct RuntimePreferenceState {
     float effective_line_height_ratio = 1.6f;
     float effective_scroll_delta_multiplier = 1.0f;
     float effective_scroll_horizontal_delta_multiplier = 1.0f;
+    std::string effective_scroll_bar_visibility = "auto";
     float effective_motion_duration_multiplier = 1.0f;
     bool used_system_font_family = false;
     bool used_system_color_scheme = false;
@@ -692,6 +697,7 @@ struct RuntimePreferenceState {
     bool used_user_line_height = false;
     bool used_system_scroll_metrics = false;
     bool used_user_scroll_scale = false;
+    bool used_user_scroll_bar_visibility = false;
     bool used_system_accent_color = false;
     bool used_system_reduce_motion = false;
     bool used_user_motion_scale = false;
@@ -907,6 +913,21 @@ inline bool mobile_profile(std::string_view profile) {
 
 inline std::string lower_copy(std::string text);
 inline std::string trim(std::string_view text);
+
+inline std::string normalized_scroll_bar_visibility(std::string_view value) {
+    auto normalized = lower_copy(trim(value));
+    if (normalized == "hidden" || normalized == "none"
+        || normalized == "off" || normalized == "false"
+        || normalized == "0") {
+        return "hidden";
+    }
+    if (normalized == "always" || normalized == "visible"
+        || normalized == "on" || normalized == "true"
+        || normalized == "1") {
+        return "always";
+    }
+    return "auto";
+}
 
 inline std::string input_modality_value_name(ExplorerInputModality modality) {
     switch (modality) {
@@ -3052,6 +3073,9 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
         json::Value{
             state.theme_preferences.scroll_horizontal_delta_multiplier});
     overrides.emplace(
+        "scroll_bar_visibility",
+        json::Value{state.theme_preferences.scroll_bar_visibility});
+    overrides.emplace(
         "prefer_system_font_family",
         json::Value{state.theme_preferences.prefer_system_font_family});
     overrides.emplace(
@@ -3102,6 +3126,9 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
         "scroll_horizontal_delta_multiplier",
         json::Value{state.effective_scroll_horizontal_delta_multiplier});
     effective.emplace(
+        "scroll_bar_visibility",
+        json::Value{state.effective_scroll_bar_visibility});
+    effective.emplace(
         "motion_duration_multiplier",
         json::Value{state.effective_motion_duration_multiplier});
 
@@ -3136,6 +3163,9 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
     resolution.emplace(
         "used_user_scroll_scale",
         json::Value{state.used_user_scroll_scale});
+    resolution.emplace(
+        "used_user_scroll_bar_visibility",
+        json::Value{state.used_user_scroll_bar_visibility});
     resolution.emplace(
         "used_system_accent_color",
         json::Value{state.used_system_accent_color});
@@ -4452,6 +4482,8 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::SetScrollSpeed: return "set_scroll_speed";
         case ExplorerInputKind::SetHorizontalScrollSpeed:
             return "set_horizontal_scroll_speed";
+        case ExplorerInputKind::SetScrollBarVisibility:
+            return "set_scroll_bar_visibility";
         case ExplorerInputKind::SetMotionScale: return "set_motion_scale";
         case ExplorerInputKind::SetColorScheme: return "set_color_scheme";
     }
@@ -5161,6 +5193,28 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
             .value = compact_preference_number(*parsed),
         });
     }
+    if (name == "scroll-bar-visibility"
+        || name == "scroll_bar_visibility"
+        || name == "scrollbar-visibility"
+        || name == "scrollbar") {
+        auto const raw_mode = lower_copy(trim(value));
+        bool const known =
+            raw_mode == "auto" || raw_mode == "hidden"
+            || raw_mode == "none" || raw_mode == "off"
+            || raw_mode == "false" || raw_mode == "0"
+            || raw_mode == "always" || raw_mode == "visible"
+            || raw_mode == "on" || raw_mode == "true"
+            || raw_mode == "1";
+        if (!known) {
+            return input_parse_error(
+                "input 'scroll-bar-visibility' requires auto, always, or hidden");
+        }
+        auto const mode = normalized_scroll_bar_visibility(value);
+        return parsed_input({
+            .kind = ExplorerInputKind::SetScrollBarVisibility,
+            .value = mode,
+        });
+    }
     if (name == "motion-scale" || name == "motion_scale"
         || name == "animation-scale" || name == "animation_scale") {
         auto parsed = parse_motion_preference_number(value);
@@ -5852,6 +5906,8 @@ inline void apply_runtime_preferences(
         preferences.effective_scroll_delta_multiplier;
     state.effective_scroll_horizontal_delta_multiplier =
         preferences.effective_scroll_horizontal_delta_multiplier;
+    state.effective_scroll_bar_visibility =
+        preferences.effective_scroll_bar_visibility;
     state.effective_motion_duration_multiplier =
         preferences.effective_motion_duration_multiplier;
     state.used_system_font_family = preferences.used_system_font_family;
@@ -5864,6 +5920,8 @@ inline void apply_runtime_preferences(
     state.used_user_line_height = preferences.used_user_line_height;
     state.used_system_scroll_metrics = preferences.used_system_scroll_metrics;
     state.used_user_scroll_scale = preferences.used_user_scroll_scale;
+    state.used_user_scroll_bar_visibility =
+        preferences.used_user_scroll_bar_visibility;
     state.used_system_accent_color = preferences.used_system_accent_color;
     state.used_system_reduce_motion = preferences.used_system_reduce_motion;
     state.used_user_motion_scale = preferences.used_user_motion_scale;
@@ -6548,6 +6606,7 @@ inline ExplorerInputModality default_input_modality(
         case ExplorerInputKind::SetSystemScrollMetrics:
         case ExplorerInputKind::SetScrollSpeed:
         case ExplorerInputKind::SetHorizontalScrollSpeed:
+        case ExplorerInputKind::SetScrollBarVisibility:
         case ExplorerInputKind::SetColorScheme:
         default:
             return ExplorerInputModality::Programmatic;
@@ -6690,6 +6749,7 @@ inline void apply_focus_policy_for_input(
         case ExplorerInputKind::SetSystemScrollMetrics:
         case ExplorerInputKind::SetScrollSpeed:
         case ExplorerInputKind::SetHorizontalScrollSpeed:
+        case ExplorerInputKind::SetScrollBarVisibility:
         case ExplorerInputKind::SetColorScheme:
         default:
             apply_modality_without_focus_change(state, modality);
@@ -7054,6 +7114,19 @@ inline void apply_explorer_input(
                 + compact_preference_number(*speed) + "x.";
             return;
         }
+        case ExplorerInputKind::SetScrollBarVisibility: {
+            auto const mode = normalized_scroll_bar_visibility(input.value);
+            state.preferences_source = "application-input";
+            state.theme_preferences.scroll_bar_visibility = mode;
+            if (mode == "always") {
+                state.status = "Scroll bars are always visible.";
+            } else if (mode == "hidden") {
+                state.status = "Scroll bars are hidden.";
+            } else {
+                state.status = "Scroll bars appear while scrolling.";
+            }
+            return;
+        }
         case ExplorerInputKind::SetMotionScale: {
             auto scale = parse_motion_preference_number(input.value);
             if (!scale) {
@@ -7345,6 +7418,9 @@ struct ExplorerLabels {
     std::string preferences_horizontal_scroll_slower = "H Scroll -";
     std::string preferences_system_scroll = "System Scroll";
     std::string preferences_app_scroll = "App Scroll";
+    std::string preferences_scrollbar_auto = "Bars Auto";
+    std::string preferences_scrollbar_always = "Bars Always";
+    std::string preferences_scrollbar_hidden = "Bars Hidden";
     std::string preferences_system_appearance = "System Look";
     std::string preferences_light_appearance = "Light";
     std::string preferences_dark_appearance = "Dark";
@@ -7473,6 +7549,9 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"preferences.horizontal_scroll_slower", "H Scroll -"},
         {"preferences.system_scroll", "System Scroll"},
         {"preferences.app_scroll", "App Scroll"},
+        {"preferences.scrollbar_auto", "Bars Auto"},
+        {"preferences.scrollbar_always", "Bars Always"},
+        {"preferences.scrollbar_hidden", "Bars Hidden"},
         {"preferences.system_appearance", "System Look"},
         {"preferences.light_appearance", "Light"},
         {"preferences.dark_appearance", "Dark"},
@@ -7550,6 +7629,9 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"preferences.horizontal_scroll_slower", "가로 스크롤 -"},
         {"preferences.system_scroll", "시스템 스크롤"},
         {"preferences.app_scroll", "앱 스크롤"},
+        {"preferences.scrollbar_auto", "스크롤바 자동"},
+        {"preferences.scrollbar_always", "스크롤바 항상"},
+        {"preferences.scrollbar_hidden", "스크롤바 숨김"},
         {"preferences.system_appearance", "시스템"},
         {"preferences.light_appearance", "라이트"},
         {"preferences.dark_appearance", "다크"},
@@ -7753,6 +7835,15 @@ inline ExplorerLabels file_explorer_labels(
     labels.preferences_app_scroll = get(
         "preferences.app_scroll",
         labels.preferences_app_scroll);
+    labels.preferences_scrollbar_auto = get(
+        "preferences.scrollbar_auto",
+        labels.preferences_scrollbar_auto);
+    labels.preferences_scrollbar_always = get(
+        "preferences.scrollbar_always",
+        labels.preferences_scrollbar_always);
+    labels.preferences_scrollbar_hidden = get(
+        "preferences.scrollbar_hidden",
+        labels.preferences_scrollbar_hidden);
     labels.preferences_system_appearance = get(
         "preferences.system_appearance",
         labels.preferences_system_appearance);

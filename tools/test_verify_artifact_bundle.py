@@ -2079,6 +2079,7 @@ def snapshot_with_file_explorer_chrome(
                     "line_height_ratio": 1.6,
                     "scroll_delta_multiplier": 1.0,
                     "scroll_horizontal_delta_multiplier": 1.0,
+                    "scroll_bar_visibility": "auto",
                     "motion_duration_multiplier": 1.0,
                 },
                 "resolution": {
@@ -2092,6 +2093,7 @@ def snapshot_with_file_explorer_chrome(
                     "used_user_line_height": False,
                     "used_system_scroll_metrics": True,
                     "used_user_scroll_scale": False,
+                    "used_user_scroll_bar_visibility": False,
                     "used_system_accent_color": True,
                     "used_system_reduce_motion": False,
                     "used_user_motion_scale": False,

@@ -58,7 +58,7 @@ int main() {
     assert(catalog.debug.verifier == "phenotype artifact verify-file-explorer");
     auto required_locale_keys =
         demo::resource_contract_locale_keys(catalog);
-    assert(required_locale_keys.size() == 70);
+    assert(required_locale_keys.size() == 73);
     auto contract = phenotype::resource_catalog_contract(
         catalog,
         std::span<std::string_view const>{required_locale_keys});
@@ -353,6 +353,17 @@ fallback = []
     assert(parsed_horizontal_scroll.input.kind
            == demo::ExplorerInputKind::SetHorizontalScrollSpeed);
     assert(parsed_horizontal_scroll.input.value == "2.25");
+    auto parsed_scrollbar =
+        demo::parse_explorer_input("scrollbar:always");
+    assert(parsed_scrollbar.ok);
+    assert(parsed_scrollbar.input.kind
+           == demo::ExplorerInputKind::SetScrollBarVisibility);
+    assert(parsed_scrollbar.input.value == "always");
+    auto parsed_bad_scrollbar =
+        demo::parse_explorer_input("scrollbar:maybe");
+    assert(!parsed_bad_scrollbar.ok);
+    assert(parsed_bad_scrollbar.error.find("scroll-bar-visibility")
+           != std::string::npos);
     auto parsed_bad_font_scale = demo::parse_explorer_input("font-scale:big");
     assert(!parsed_bad_font_scale.ok);
     assert(parsed_bad_font_scale.error.find("font-scale") != std::string::npos);
@@ -434,7 +445,8 @@ duplicate
         "font-family:system;font-scale:1.25;font-size:17;"
         "heading-font-size:22;small-font-size:13;line-height:1.45;"
         "system-font-metrics:false;system-scroll-metrics:app;scroll-speed:1.5;"
-        "horizontal-scroll-speed:2;motion-scale:0;color-scheme:system");
+        "horizontal-scroll-speed:2;scrollbar:always;motion-scale:0;"
+        "color-scheme:system");
     assert(preference_sequence.ok);
     demo::apply_explorer_inputs(
         preference_state,
@@ -454,6 +466,8 @@ duplicate
     assert(preference_state.theme_preferences.scroll_delta_multiplier == 1.5f);
     assert(preference_state.theme_preferences.scroll_horizontal_delta_multiplier
            == 2.0f);
+    assert(preference_state.theme_preferences.scroll_bar_visibility
+           == "always");
     assert(preference_state.theme_preferences.motion_duration_multiplier
            == 0.0f);
     assert(preference_state.theme_preferences.prefer_system_color_scheme);
@@ -484,6 +498,8 @@ duplicate
            != std::string::npos);
     assert(preference_debug_text.find("\"used_user_scroll_scale\"")
            != std::string::npos);
+    assert(preference_debug_text.find("\"used_user_scroll_bar_visibility\"")
+           != std::string::npos);
     assert(preference_debug_text.find("\"used_user_motion_scale\"")
            != std::string::npos);
     assert(preference_debug_text.find("\"scroll_delta_multiplier\":1.5")
@@ -496,6 +512,8 @@ duplicate
            != std::string::npos);
     assert(preference_debug_text.find(
                "\"scroll_horizontal_delta_multiplier\":2")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"scroll_bar_visibility\":\"always\"")
            != std::string::npos);
     assert(preference_debug_text.find("\"prefer_system_color_scheme\":true")
            != std::string::npos);

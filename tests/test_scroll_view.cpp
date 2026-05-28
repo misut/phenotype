@@ -56,6 +56,7 @@ NodeHandle run_frame(View&& view) {
 
     LAYOUT_NODE(root_h, 800.0f);
     CMD_LEN = 0;
+    detail::g_app.scrollbar_animation_active = false;
     PAINT_NODE(root_h);
     return root_h;
 }
@@ -252,6 +253,57 @@ void test_two_scroll_views_get_independent_state() {
     std::puts("PASS: two scroll_views keep independent state");
 }
 
+void test_scroll_view_always_paints_overlay_scrollbar() {
+    auto previous_visibility = detail::g_app.theme.scroll_bar_visibility;
+    detail::g_app.theme.scroll_bar_visibility = "always";
+    run_frame([&] {
+        layout::scroll_view(80.0f, [&] {
+            for (int i = 0; i < 6; ++i) widget::text("entry");
+        });
+    });
+    assert(cmd_buf_contains_opcode(Cmd::RoundRect));
+    detail::g_app.theme.scroll_bar_visibility = previous_visibility;
+    std::puts("PASS: always-visible scroll_view paints overlay scrollbar");
+}
+
+void test_scroll_view_hidden_suppresses_overlay_scrollbar() {
+    auto previous_visibility = detail::g_app.theme.scroll_bar_visibility;
+    detail::g_app.theme.scroll_bar_visibility = "hidden";
+    run_frame([&] {
+        layout::scroll_view(80.0f, [&] {
+            for (int i = 0; i < 6; ++i) widget::text("entry");
+        });
+    });
+    assert(!cmd_buf_contains_opcode(Cmd::RoundRect));
+    detail::g_app.theme.scroll_bar_visibility = previous_visibility;
+    std::puts("PASS: hidden scroll_view suppresses overlay scrollbar");
+}
+
+void test_scroll_view_auto_scrollbar_fades_after_offset_change() {
+    auto previous_visibility = detail::g_app.theme.scroll_bar_visibility;
+    detail::g_app.theme.scroll_bar_visibility = "auto";
+    auto sv = [&] {
+        layout::scroll_view(80.0f, [&] {
+            for (int i = 0; i < 6; ++i) widget::text("entry");
+        });
+    };
+
+    run_frame(sv);
+    auto* state = detail::g_app.scroll_targets[0].state;
+    state->offset_y = 0.0f;
+    state->scrollbar_last_offset_y = 0.0f;
+    state->scrollbar_active_since_ns = 0;
+    run_frame(sv);
+    assert(!detail::g_app.scrollbar_animation_active);
+    state = detail::g_app.scroll_targets[0].state;
+    state->offset_y = 24.0f;
+    run_frame(sv);
+    assert(cmd_buf_contains_opcode(Cmd::RoundRect));
+    assert(detail::g_app.scrollbar_animation_active);
+    detail::g_app.theme.scroll_bar_visibility = previous_visibility;
+    std::puts("PASS: auto scroll_view scrollbar fades in after scrolling");
+}
+
 int main() {
     test_scroll_view_clamps_height_to_viewport();
     test_scroll_view_registers_target_and_emits_scissor();
@@ -259,6 +311,9 @@ int main() {
     test_scroll_view_paint_clamps_offset();
     test_scroll_view_hit_region_offset_matches_scroll();
     test_two_scroll_views_get_independent_state();
+    test_scroll_view_always_paints_overlay_scrollbar();
+    test_scroll_view_hidden_suppresses_overlay_scrollbar();
+    test_scroll_view_auto_scrollbar_fades_after_offset_change();
     std::puts("\nAll scroll_view tests passed.");
     return 0;
 }

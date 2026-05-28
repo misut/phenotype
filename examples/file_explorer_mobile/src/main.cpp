@@ -240,6 +240,18 @@ phenotype::ThemePreferenceOverrides initial_theme_preference_overrides() {
             4.0f)) {
         overrides.scroll_horizontal_delta_multiplier = *speed;
     }
+    if (char const* raw =
+            std::getenv("PHENOTYPE_FILE_EXPLORER_SCROLL_BAR_VISIBILITY")) {
+        if (*raw)
+            overrides.scroll_bar_visibility =
+                phenotype::normalized_scroll_bar_visibility(raw);
+    }
+    if (char const* raw =
+            std::getenv("PHENOTYPE_FILE_EXPLORER_SCROLLBAR_VISIBILITY")) {
+        if (*raw)
+            overrides.scroll_bar_visibility =
+                phenotype::normalized_scroll_bar_visibility(raw);
+    }
     if (auto scale = env_float(
             std::getenv("PHENOTYPE_FILE_EXPLORER_MOTION_SCALE"),
             0.0f,
@@ -336,6 +348,10 @@ file_explorer_demo::ThemePreferenceSnapshot theme_preference_snapshot(
         .scroll_delta_multiplier = overrides.scroll_delta_multiplier,
         .scroll_horizontal_delta_multiplier =
             overrides.scroll_horizontal_delta_multiplier,
+        .scroll_bar_visibility = overrides.scroll_bar_visibility.empty()
+            ? std::string{}
+            : phenotype::normalized_scroll_bar_visibility(
+                overrides.scroll_bar_visibility),
         .prefer_system_font_family = overrides.prefer_system_font_family,
         .prefer_system_color_scheme = overrides.prefer_system_color_scheme,
         .apply_system_font_metrics = overrides.apply_system_font_metrics,
@@ -366,6 +382,8 @@ file_explorer_demo::RuntimePreferenceState runtime_preference_state(
         resolved.effective_scroll_delta_multiplier;
     state.effective_scroll_horizontal_delta_multiplier =
         resolved.effective_scroll_horizontal_delta_multiplier;
+    state.effective_scroll_bar_visibility =
+        resolved.effective_scroll_bar_visibility;
     state.effective_motion_duration_multiplier =
         resolved.effective_motion_duration_multiplier;
     state.used_system_font_family = resolved.used_system_font_family;
@@ -378,6 +396,8 @@ file_explorer_demo::RuntimePreferenceState runtime_preference_state(
     state.used_user_line_height = resolved.used_user_line_height;
     state.used_system_scroll_metrics = resolved.used_system_scroll_metrics;
     state.used_user_scroll_scale = resolved.used_user_scroll_scale;
+    state.used_user_scroll_bar_visibility =
+        resolved.used_user_scroll_bar_visibility;
     state.used_system_accent_color = resolved.used_system_accent_color;
     state.used_system_reduce_motion = resolved.used_system_reduce_motion;
     state.used_user_motion_scale = resolved.used_user_motion_scale;
@@ -459,6 +479,10 @@ phenotype::ThemePreferenceOverrides theme_preferences_from_state(
         .scroll_delta_multiplier = preferences.scroll_delta_multiplier,
         .scroll_horizontal_delta_multiplier =
             preferences.scroll_horizontal_delta_multiplier,
+        .scroll_bar_visibility = preferences.scroll_bar_visibility.empty()
+            ? std::string{}
+            : phenotype::normalized_scroll_bar_visibility(
+                preferences.scroll_bar_visibility),
         .prefer_system_font_family = preferences.prefer_system_font_family,
         .prefer_system_color_scheme = preferences.prefer_system_color_scheme,
         .apply_system_font_metrics = preferences.apply_system_font_metrics,
@@ -580,6 +604,12 @@ ExplorerInputMessage color_scheme_message(std::string value) {
 ExplorerInputMessage system_scroll_metrics_message(std::string value) {
     return preference_message(
         file_explorer_demo::ExplorerInputKind::SetSystemScrollMetrics,
+        std::move(value));
+}
+
+ExplorerInputMessage scroll_bar_visibility_message(std::string value) {
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetScrollBarVisibility,
         std::move(value));
 }
 
@@ -1222,6 +1252,17 @@ void create_tab(State const& state) {
             widget::button<Msg>(
                 state.labels.preferences_app_scroll,
                 system_scroll_metrics_message("app"));
+        }, SpaceToken::Xs);
+        layout::row([&] {
+            widget::button<Msg>(
+                state.labels.preferences_scrollbar_auto,
+                scroll_bar_visibility_message("auto"));
+            widget::button<Msg>(
+                state.labels.preferences_scrollbar_always,
+                scroll_bar_visibility_message("always"));
+            widget::button<Msg>(
+                state.labels.preferences_scrollbar_hidden,
+                scroll_bar_visibility_message("hidden"));
         }, SpaceToken::Xs);
         layout::row([&] {
             widget::button<Msg>(

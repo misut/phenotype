@@ -234,14 +234,16 @@ auto theme_preference_base_json(theme_contract::ThemePreferenceBase const& base)
         "{{\"default_font_family\":{},\"body_font_size\":{},"
         "\"heading_font_size\":{},\"small_font_size\":{},"
         "\"line_height_ratio\":{},\"scroll_delta_multiplier\":{},"
-        "\"scroll_horizontal_delta_multiplier\":{}}}",
+        "\"scroll_horizontal_delta_multiplier\":{},"
+        "\"scroll_bar_visibility\":{}}}",
         json_string(base.default_font_family),
         base.body_font_size,
         base.heading_font_size,
         base.small_font_size,
         base.line_height_ratio,
         base.scroll_delta_multiplier,
-        base.scroll_horizontal_delta_multiplier);
+        base.scroll_horizontal_delta_multiplier,
+        json_string(base.scroll_bar_visibility));
 }
 
 auto system_theme_preferences_json(
@@ -286,6 +288,7 @@ auto theme_preference_overrides_json(
         "\"small_font_size\":{},\"line_height_ratio\":{},"
         "\"scroll_delta_multiplier\":{},"
         "\"scroll_horizontal_delta_multiplier\":{},"
+        "\"scroll_bar_visibility\":{},"
         "\"prefer_system_font_family\":{},"
         "\"prefer_system_color_scheme\":{},"
         "\"apply_system_font_metrics\":{},"
@@ -301,6 +304,7 @@ auto theme_preference_overrides_json(
         overrides.line_height_ratio,
         overrides.scroll_delta_multiplier,
         overrides.scroll_horizontal_delta_multiplier,
+        json_string(overrides.scroll_bar_visibility),
         overrides.prefer_system_font_family ? "true" : "false",
         overrides.prefer_system_color_scheme ? "true" : "false",
         overrides.apply_system_font_metrics ? "true" : "false",
@@ -318,7 +322,8 @@ auto resolved_theme_preferences_json(
         "\"color_scheme\":{},\"body_font_size\":{},"
         "\"heading_font_size\":{},\"small_font_size\":{},"
         "\"line_height_ratio\":{},\"scroll_delta_multiplier\":{},"
-        "\"scroll_horizontal_delta_multiplier\":{}}},"
+        "\"scroll_horizontal_delta_multiplier\":{},"
+        "\"scroll_bar_visibility\":{}}},"
         "\"resolution\":{{\"used_user_font_family\":{},"
         "\"used_system_font_family\":{},"
         "\"used_user_color_scheme\":{},"
@@ -331,6 +336,7 @@ auto resolved_theme_preferences_json(
         "\"used_user_line_height\":{},"
         "\"used_system_scroll_metrics\":{},"
         "\"used_user_scroll_scale\":{},"
+        "\"used_user_scroll_bar_visibility\":{},"
         "\"used_system_accent_color\":{}}}}}",
         json_string(resolved.source),
         json_string(resolved.requested_color_scheme),
@@ -342,6 +348,7 @@ auto resolved_theme_preferences_json(
         resolved.effective_line_height_ratio,
         resolved.effective_scroll_delta_multiplier,
         resolved.effective_scroll_horizontal_delta_multiplier,
+        json_string(resolved.effective_scroll_bar_visibility),
         resolved.used_user_font_family ? "true" : "false",
         resolved.used_system_font_family ? "true" : "false",
         resolved.used_user_color_scheme ? "true" : "false",
@@ -354,6 +361,7 @@ auto resolved_theme_preferences_json(
         resolved.used_user_line_height ? "true" : "false",
         resolved.used_system_scroll_metrics ? "true" : "false",
         resolved.used_user_scroll_scale ? "true" : "false",
+        resolved.used_user_scroll_bar_visibility ? "true" : "false",
         resolved.used_system_accent_color ? "true" : "false");
 }
 
@@ -385,6 +393,9 @@ auto theme_resolve_inputs(cppx::cli::Invocation const& invocation)
         overrides.font_family = *value;
     if (auto value = invocation.value("color-scheme"))
         overrides.color_scheme = *value;
+    if (auto value = invocation.value("scroll-bar-visibility"))
+        overrides.scroll_bar_visibility =
+            theme_contract::normalized_scroll_bar_visibility(*value);
 
     for (auto [name, target] : {
              std::pair<std::string_view, float*>{
@@ -748,9 +759,10 @@ export int run_theme_resolve(cppx::cli::Invocation const& invocation) {
          .status = cppx::terminal::StatusKind::ok},
         {.label = "scroll",
          .value = std::format(
-             "vertical={} horizontal={}",
+             "vertical={} horizontal={} bars={}",
              resolved.effective_scroll_delta_multiplier,
-             resolved.effective_scroll_horizontal_delta_multiplier),
+             resolved.effective_scroll_horizontal_delta_multiplier,
+             resolved.effective_scroll_bar_visibility),
          .status = cppx::terminal::StatusKind::ok},
         {.label = "system",
          .value = std::format(
@@ -762,11 +774,12 @@ export int run_theme_resolve(cppx::cli::Invocation const& invocation) {
          .status = cppx::terminal::StatusKind::ok},
         {.label = "user",
          .value = std::format(
-             "font_family={} font_size={} font_scale={} scroll_scale={}",
+             "font_family={} font_size={} font_scale={} scroll_scale={} scroll_bars={}",
              resolved.used_user_font_family ? "true" : "false",
              resolved.used_user_font_size ? "true" : "false",
              resolved.used_user_font_scale ? "true" : "false",
-             resolved.used_user_scroll_scale ? "true" : "false"),
+             resolved.used_user_scroll_scale ? "true" : "false",
+             resolved.used_user_scroll_bar_visibility ? "true" : "false"),
          .status = cppx::terminal::StatusKind::ok},
     };
     std::println("phenotype theme resolve");
