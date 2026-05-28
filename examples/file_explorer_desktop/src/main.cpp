@@ -880,7 +880,6 @@ constexpr float k_column_location_row_height =
     file_explorer_demo::k_desktop_column_location_row_height;
 constexpr float k_column_location_icon_size =
     file_explorer_demo::k_desktop_column_location_icon_size;
-constexpr float k_content_radius = 0.0f;
 constexpr float k_window_radius = file_explorer_demo::k_desktop_window_radius;
 constexpr float k_toolbar_group_radius =
     file_explorer_demo::k_desktop_toolbar_group_radius;
@@ -918,11 +917,19 @@ phenotype::FontSpec finder_font(
     };
 }
 
-phenotype::layout::MaterialSurfaceOptions toolbar_shell_options() {
+phenotype::layout::MaterialSurfaceOptions main_content_shell_options() {
     using namespace phenotype;
-    return layout::glass_surface_options(
+    auto options = layout::glass_surface_options(
         layout::GlassSurfacePreset::Toolbar,
-        "Toolbar");
+        "Main Content Shell");
+    options.role = MaterialSurfaceRole::Content;
+    options.direction = FlexDirection::Column;
+    options.max_width = 0.0f;
+    options.padding = SpaceToken::Xs;
+    options.gap = SpaceToken::Xs;
+    options.border_radius = k_window_radius;
+    options.shape = MaterialSurfaceShape::RoundedRectangle;
+    return options;
 }
 
 phenotype::layout::MaterialSurfaceOptions toolbar_group_options(
@@ -952,14 +959,30 @@ phenotype::layout::MaterialSurfaceOptions segmented_toolbar_options(
     return options;
 }
 
-phenotype::layout::MaterialSurfaceOptions content_surface_options(
+phenotype::layout::MaterialSurfaceOptions content_section_options(
         phenotype::SpaceToken gap = phenotype::SpaceToken::Md) {
     using namespace phenotype;
     auto options = layout::glass_surface_options(
         layout::GlassSurfacePreset::Content,
         "Files");
+    options.kind = MaterialKind::None;
     options.gap = gap;
-    options.border_radius = k_content_radius;
+    options.border_radius = 0.0f;
+    options.border_width = 0.0f;
+    options.shape = MaterialSurfaceShape::Rectangle;
+    return options;
+}
+
+phenotype::layout::MaterialSurfaceOptions status_section_options() {
+    using namespace phenotype;
+    auto options = layout::glass_surface_options(
+        layout::GlassSurfacePreset::StatusBar,
+        "Status Bar");
+    options.kind = MaterialKind::None;
+    options.padding = SpaceToken::Xs;
+    options.border_radius = 0.0f;
+    options.border_width = 0.0f;
+    options.shape = MaterialSurfaceShape::Rectangle;
     return options;
 }
 
@@ -2160,7 +2183,7 @@ void navigation_button(char const* label,
 void finder_toolbar(State const& state,
                     file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
-    layout::toolbar(toolbar_shell_options(), [&] {
+    layout::row([&] {
         layout::toolbar(
             toolbar_group_options(
                 "Navigation Controls",
@@ -2235,7 +2258,10 @@ void finder_toolbar(State const& state,
                             }));
                 }
             });
-    });
+    },
+    SpaceToken::Xs,
+    CrossAxisAlignment::Center,
+    MainAxisAlignment::Start);
 }
 
 template<typename Paint>
@@ -2472,7 +2498,7 @@ void finder_grid(State const& state,
         "desktop");
     auto const& icon_cache = state.icon_cache;
     layout::material_surface(
-        content_surface_options(),
+        content_section_options(),
         [&] {
             if (entries.empty()) {
                 widget::text(state.labels.no_matching_files);
@@ -2527,7 +2553,7 @@ void finder_list(State const& state,
     float const scroll_height = file_explorer_demo::desktop_scroll_height(
         state.explorer, 164.0f, 552.0f, 676.0f);
     layout::material_surface(
-        content_surface_options(SpaceToken::Sm),
+        content_section_options(SpaceToken::Sm),
         [&] {
             layout::row([&] {
                 layout::sized_box(420.0f, [&] {
@@ -2619,7 +2645,7 @@ void finder_column_view(State const& state,
         state.explorer, 224.0f, 500.0f, 620.0f);
     auto const& icon_cache = state.icon_cache;
     layout::material_surface(
-        content_surface_options(),
+        content_section_options(),
         [&] {
             layout::row([&] {
                 layout::sized_box(210.0f, [&] {
@@ -2737,7 +2763,7 @@ void finder_gallery_view(State const& state,
         : std::string{};
     bool const has_hero = !hero.name.empty();
     layout::material_surface(
-        content_surface_options(),
+        content_section_options(),
         [&] {
             if (!has_hero) {
                 widget::text(state.labels.no_matching_files);
@@ -2836,11 +2862,7 @@ void finder_status_bar(State const& state,
     auto const chrome = file_explorer_demo::explorer_chrome_metrics(
         explorer,
         "desktop");
-    auto options = layout::glass_surface_options(
-        layout::GlassSurfacePreset::StatusBar,
-        "Status Bar");
-    options.padding = SpaceToken::Xs;
-    options.border_radius = 12.0f;
+    auto options = status_section_options();
     layout::status_bar(
         options,
         [&] {
@@ -3100,16 +3122,18 @@ void view(State const& state) {
                 [&] {
                     finder_sidebar(state);
                     layout::weighted(1.0f, [&] {
-                        layout::column([&] {
+                        layout::material_surface(main_content_shell_options(), [&] {
                             finder_toolbar(state, snap);
+                            layout::divider();
                             if (state.more_actions_open)
                                 finder_more_actions(state, snap);
                             finder_content(state, snap);
                             if (file_explorer_demo::desktop_status_bar_visible(
                                     state.explorer)) {
+                                layout::divider();
                                 finder_status_bar(state, snap);
                             }
-                        }, SpaceToken::Sm);
+                        });
                     });
                 });
         });
