@@ -356,7 +356,7 @@ mise exec -- exon build
 `icons check` combines the pure catalog, embedded source-provenance, and
 Finder-style file-type icon checks. It reports whether every toolbar, sidebar,
 action, and file-type symbol still uses audited permissive SVG sources, whether
-the Lucide source URLs are pinned to the catalog revision, and whether any
+the Google Material Symbols source URLs are pinned to the catalog revision, and whether any
 Apple-owned, platform-extracted, or runtime-fetched artwork has entered the
 contract. Use the narrower `icons catalog`, `icons sources`, or `icons
 file-types` commands only after the aggregate gate identifies which group
@@ -605,8 +605,9 @@ capabilities. `phenotype icons present <name-or-reference> --role ... --phase
 state, including visible RGBA, background chrome, effective size, hit target,
 source attribution, and likely layer/pass.
 `phenotype icons sources --json` is the compact license/provenance probe:
-it lists every pinned Lucide raw SVG source, the symbols that use it, the
-source revision, exact license URL, remaining phenotype-owned count, and
+it lists every pinned Google Material Symbols raw SVG source, the selectable
+Outlined/Rounded/Sharp style URLs for each icon name, the symbols that use it,
+the source revision, exact license URL, remaining phenotype-owned count, and
 checks that Apple/SF Symbols artwork was not embedded, platform-extracted, or
 runtime-fetched.
 `phenotype icons render <name-or-reference> --role ... --phase ... --json`
@@ -726,15 +727,16 @@ as a JSON contract mismatch. `svg_path_arc_symbol_count` proves that multiple
 built-in Finder sidebar and file-type symbols exercise the SVG path arc parser
 in normal example artifacts, while `round_stroke_symbol_count` proves outline
 glyphs stay on the macOS-like round stroke contract. The desktop payload also
-includes `source_attribution_policy`, `lucide_source_symbol_count`,
-`lucide_unique_source_icon_count`, and `apple_asset_symbol_count` so
+includes `source_attribution_policy`, `material_symbols_source_symbol_count`,
+`material_symbols_unique_source_icon_count`, and `apple_asset_symbol_count` so
 permissive-source adoption and Apple-asset exclusion are machine-checkable. A
-healthy Finder-style desktop artifact should show 39 Lucide-backed symbols, 38
-unique Lucide raw SVG source files, 0 phenotype-owned symbols, and 0 Apple/SF
+healthy Finder-style desktop artifact should show 39 Google Material
+Symbols-backed symbols, 39 unique Google Material Symbols raw SVG source files,
+0 phenotype-owned symbols, and 0 Apple/SF
 Symbols assets; mismatches point to `phenotype.icon_catalog` attribution or
-package-resource drift before a renderer bug. Each Lucide-backed symbol reports
-the exact ISC or Feather-derived MIT license and a direct raw SVG URL pinned to
-the catalog revision, plus `platform_extracted=false` and
+package-resource drift before a renderer bug. Each Google Material
+Symbols-backed symbol reports the exact Apache-2.0 license and a direct raw SVG
+URL pinned to the catalog revision, plus `platform_extracted=false` and
 `runtime_fetch_required=false`, so a future LLM can audit provenance without
 trusting `main` or assuming a local macOS icon service was used. The
 same payload should include
@@ -754,13 +756,12 @@ to be canonically source-equivalent to the audited catalog source. A
 package asset drifted from its pinned permissive source even if the rendered
 shape still looks similar. For a package-independent source audit, run
 `phenotype icons file-types --json`; it emits the same file-type token list,
-semantic references, package asset paths, pinned Lucide raw SVG URLs, license
+semantic references, package asset paths, pinned Google Material Symbols raw SVG URLs, style, license
 metadata, and Apple-artwork boundary without touching the filesystem. The
-`reference_sources` array names the exact Apple HIG/SF Symbols
-semantic references, W3C SVG path reference, Lucide embedded-source reference,
-Feather MIT license-lineage reference, Tabler MIT future-source candidate,
-Iconoir MIT future-source candidate, and Material Symbols Apache-2.0
-future-source candidate used by the policy. Each row includes the official
+`reference_sources` array names the exact Apple HIG/SF Symbols semantic
+references, W3C SVG path reference, Google Material Symbols embedded-source
+reference, Tabler MIT future-source candidate, and Iconoir MIT future-source
+candidate used by the policy. Each row includes the official
 license URL, acquisition mode, embedding permission, notice requirement,
 runtime-fetch flag, and platform-extraction flag, so a future LLM can reject an
 unsafe icon import from JSON alone.

@@ -157,7 +157,8 @@ The initial scope is intentionally narrow:
 - `phenotype icons check` runs the full built-in icon gate in one command.
   It combines the pure catalog checks, embedded source-provenance checks, and
   Finder-style file-type icon checks, then reports aggregate counts for all
-  symbols, Lucide-backed symbols, unique Lucide SVG sources, file-type symbols,
+  symbols, Google Material Symbols-backed symbols, unique Google Material Symbols source
+  names, selectable Outlined/Rounded/Sharp style variants, file-type symbols,
   reference sources, and Apple/platform/runtime-fetch boundaries. This is the
   fastest single command to run after changing toolbar, sidebar, or file-type
   glyphs.
@@ -165,11 +166,10 @@ The initial scope is intentionally narrow:
   pure `phenotype.icon_catalog` path package. JSON output reports the
   macOS/Finder/SF-Symbols-inspired reference policy, package-owned SVG asset
   rule, explicit reference-source URLs, pinned per-symbol source URLs, exact
-  ISC versus Feather-derived MIT attribution, supported SVG path subset and
-  arc-lowering policy, count invariants,
-  SF Symbols rendering-mode names, regular text-aligned weight policy,
-  explicit monochrome/hierarchical/palette/multicolor capability counts,
-  SVG arc-using built-in symbol count,
+  Google Material Symbols (new) Apache-2.0 attribution, supported SVG path subset,
+  count invariants, Material Symbols rendering-mode policy, regular Material
+  Symbols weight policy, explicit monochrome/palette/multicolor capability
+  counts, SVG arc-using built-in symbol count,
   all/sidebar/toolbar/file-type semantic reference sets,
   per-symbol role/variant/rendering/layer metadata, name/reference lookup
   invariants, presentation defaults, role hit-target metrics, and Finder-style
@@ -187,8 +187,9 @@ The initial scope is intentionally narrow:
   catalog. This gives tests, examples, and LLM debugging a small probe when a
   Finder-style sidebar or toolbar token maps to the wrong visual metaphor.
 - `phenotype icons sources` emits the compact provenance audit for the
-  embedded icon sources. JSON output reports the Lucide source revision, unique
-  pinned raw SVG records, symbols that use each source icon, license URL,
+  embedded icon sources. JSON output reports the Google Material Symbols source revision,
+  unique pinned raw SVG records, the Outlined/Rounded/Sharp source URLs for
+  each icon name, symbols that use each source icon, license URL,
   remaining phenotype-owned count, reference-source rows, and checks that Apple/SF
   Symbols artwork was not embedded, platform-extracted, or runtime-fetched.
   This is the fast command to run before adding file-type icons from web
@@ -196,14 +197,15 @@ The initial scope is intentionally narrow:
 - `phenotype icons file-types` emits the file-explorer package icon contract
   without reading package files. JSON output lists every Finder-style file-type
   token, semantic reference, package asset name/source, package asset policy,
-  direct pinned Lucide raw SVG URL, source revision, license metadata, and the
+  direct pinned Google Material Symbols raw SVG URL, style, source revision, license metadata, and the
   Apple artwork boundary. Use it before changing `assets/icons/file-types/*.svg`
   so package assets stay aligned with the audited permissive catalog source.
 - `phenotype icons svg <name-or-reference>` emits the exact audited SVG
   source for one built-in glyph. The default output is raw SVG for renderer or
   asset-pipeline probes; `--json` wraps the source with the matched symbol,
   semantic reference name, asset policy, exact source attribution, rendering
-  capabilities, and byte count.
+  capabilities, and byte count. Use `--style outlined|rounded|sharp` to select
+  a Material Symbols (new) style; `outlined` is the default.
   This keeps macOS-style icon debugging inside the pure catalog boundary
   without embedding Apple or
   SF Symbols vector artwork.
@@ -235,9 +237,9 @@ The initial scope is intentionally narrow:
   shell, and it annotates `file_type.*.icon` assets with the same pinned source
   URL/license/provenance contract used by the pure icon catalog. The file
   explorer desktop/mobile packages use this path for their runtime-visible
-  file-type icons, all sourced from pinned permissive Lucide raw SVG URLs and
+  file-type icons, all sourced from pinned permissive Google Material Symbols raw SVG URLs and
   checked without network access at runtime. The same packages declare a
-  non-runtime Lucide license text asset so `package bundle` copies the
+  non-runtime Google Material Symbols license text asset so `package bundle` copies the
   permissive-source notice with the SVG files.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.

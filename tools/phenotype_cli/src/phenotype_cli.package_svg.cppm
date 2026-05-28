@@ -71,6 +71,7 @@ auto package_icon_source_attribution(
     return PackageIconSourceAttribution{
         .family = std::string{source.family},
         .icon_name = std::string{source.icon_name},
+        .style = std::string{source.style},
         .license = std::string{source.license},
         .license_url = std::string{source.license_url},
         .source_url = std::string{source.source_url},
@@ -451,13 +452,15 @@ export auto icon_source_attribution_json(
         PackageIconSourceAttribution const& source) -> std::string {
     return std::format(
         "{{\"family\":{},\"icon_name\":{},\"license\":{},"
-        "\"license_url\":{},\"source_url\":{},\"source_revision\":{},"
+        "\"style\":{},\"license_url\":{},\"source_url\":{},"
+        "\"source_revision\":{},"
         "\"copyright\":{},\"embedded_source\":{},"
         "\"modified_for_phenotype\":{},\"apple_asset\":{},"
         "\"platform_extracted\":{},\"runtime_fetch_required\":{}}}",
         json_string(source.family),
         json_string(source.icon_name),
         json_string(source.license),
+        json_string(source.style),
         json_string(source.license_url),
         json_string(source.source_url),
         json_string(source.source_revision),

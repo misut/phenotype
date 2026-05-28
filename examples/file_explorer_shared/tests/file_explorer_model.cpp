@@ -659,17 +659,17 @@ duplicate
     assert(chrome.sidebar_symbol_count == 11);
     assert(chrome.toolbar_symbol_count == 15);
     assert(chrome.file_type_symbol_count == 11);
-    assert(chrome.icon_filled_symbol_count == 0);
+    assert(chrome.icon_filled_symbol_count == chrome.icon_total_symbol_count);
     assert(chrome.icon_outline_symbol_count == chrome.icon_total_symbol_count);
-    assert(chrome.icon_hierarchical_symbol_count == 14);
+    assert(chrome.icon_hierarchical_symbol_count == 0);
     assert(chrome.icon_reference_symbol_count == 39);
-    assert(chrome.icon_svg_path_arc_symbol_count == 16);
+    assert(chrome.icon_svg_path_arc_symbol_count == 0);
     assert(chrome.icon_phenotype_owned_symbol_count == 0);
     assert(chrome.icon_permissive_source_symbol_count
            == chrome.icon_total_symbol_count);
-    assert(chrome.icon_lucide_source_symbol_count
+    assert(chrome.icon_material_symbols_source_symbol_count
            == chrome.icon_total_symbol_count);
-    assert(chrome.icon_lucide_unique_source_icon_count == 38);
+    assert(chrome.icon_material_symbols_unique_source_icon_count == 39);
     assert(chrome.icon_apple_asset_symbol_count == 0);
     assert(chrome.icon_platform_extracted_symbol_count == 0);
     assert(chrome.icon_runtime_fetched_symbol_count == 0);
@@ -730,7 +730,7 @@ duplicate
     assert(demo::entry_symbol_name(svg_entry) == "image");
     assert(demo::entry_symbol_semantic_reference_name(svg_entry)
            == "photo");
-    assert(chrome.icon_default_stroke_width == 2.0f);
+    assert(chrome.icon_default_stroke_width == 0.0f);
     assert(chrome.icon_secondary_opacity == 1.0f);
     assert(chrome.icon_toolbar_activation_hit_target_size == 44.0f);
     assert(chrome.icon_sidebar_activation_hit_target_size == 44.0f);
@@ -745,19 +745,20 @@ duplicate
     assert(chrome.icon_pressed_symbol_opacity == 0.82f);
     assert(chrome.icon_pressed_scale == 0.985f);
     assert(chrome.icon_module == "phenotype.icons");
-    assert(chrome.icon_style == "macos_rounded_outline_svg");
+    assert(chrome.icon_style == "google_material_symbols_outlined_svg");
     assert(chrome.icon_source_format == "svg");
-    assert(chrome.icon_svg_subset_policy == "bounded_svg_icon_subset");
+    assert(chrome.icon_svg_subset_policy == "bounded_material_symbols_svg_subset");
     assert(chrome.icon_svg_supported_elements.find("circle")
            != std::string::npos);
-    assert(chrome.icon_svg_supported_path_commands.find("A Z")
+    assert(chrome.icon_svg_supported_path_commands.find("C S Z")
            != std::string::npos);
-    assert(chrome.icon_svg_arc_policy.find("bounded cubic Bezier")
+    assert(chrome.icon_svg_arc_policy.find("avoid SVG arc commands")
            != std::string::npos);
     assert(chrome.icon_design_reference.find("macOS Finder")
            != std::string::npos);
-    assert(chrome.icon_reference_family == "SF Symbols semantic reference");
-    assert(chrome.icon_reference_policy.find("audited permissive")
+    assert(chrome.icon_reference_family
+           == "SF Symbols semantic reference with Google Material Symbols artwork");
+    assert(chrome.icon_reference_policy.find("Google Material Symbols")
            != std::string::npos);
     assert(chrome.icon_asset_policy.find("no Apple") != std::string::npos);
     assert(chrome.icon_source_attribution_policy.find("direct raw SVG URL")
@@ -778,9 +779,9 @@ duplicate
     assert(chrome.icon_document_cache_policy.find("no_frame_parse_churn")
            != std::string::npos);
     assert(chrome.icon_alignment == "24x24 text-aligned symbol grid");
-    assert(chrome.icon_rendering_mode == "hierarchical");
-    assert(chrome.icon_variant_policy
-           == "outline-only with role-aware symbol chrome");
+    assert(chrome.icon_rendering_mode == "monochrome");
+    assert(chrome.icon_variant_policy.find("Outlined is the default")
+           != std::string::npos);
     assert(chrome.icon_interaction_tone_policy
            == "macos_finder_interaction_tones");
     assert(chrome.icon_symbol_control_chrome_policy
@@ -818,7 +819,7 @@ duplicate
     assert(!chrome.uses_sf_symbols_assets);
     assert(chrome.icon_round_stroke_contract);
     assert(chrome.icon_text_weight_aligned);
-    assert(chrome.icon_hierarchical_opacity);
+    assert(!chrome.icon_hierarchical_opacity);
     assert(chrome.finder_segmented_toolbar);
     assert(chrome.integrated_titlebar);
     assert(chrome.native_window_controls);
@@ -960,7 +961,7 @@ duplicate
     assert(mobile_chrome.window_control_duplication_guard
            == "not_applicable_mobile_shell");
     assert(mobile_chrome.icon_module == "phenotype.icons");
-    assert(mobile_chrome.icon_style == "macos_rounded_outline_svg");
+    assert(mobile_chrome.icon_style == "google_material_symbols_outlined_svg");
     assert(mobile_chrome.file_type_symbol_count == 11);
     assert(mobile_chrome.icon_reference_symbol_count == 39);
     assert(!mobile_chrome.owned_icon_assets);
@@ -1350,26 +1351,32 @@ duplicate
     assert(debug_text.find("\"sidebar_label_leading\"") != std::string::npos);
     assert(debug_text.find("\"icon_system\"") != std::string::npos);
     assert(debug_text.find("\"phenotype.icons\"") != std::string::npos);
-    assert(debug_text.find("\"macos_rounded_outline_svg\"") != std::string::npos);
-    assert(debug_text.find("\"svg_subset_policy\":\"bounded_svg_icon_subset\"")
+    assert(debug_text.find("\"google_material_symbols_outlined_svg\"") != std::string::npos);
+    assert(debug_text.find("\"default_material_symbols_style\":\"outlined\"")
+           != std::string::npos);
+    assert(debug_text.find("\"available_material_symbols_styles\"")
+           != std::string::npos);
+    assert(debug_text.find("\"name\":\"rounded\"") != std::string::npos);
+    assert(debug_text.find("\"name\":\"sharp\"") != std::string::npos);
+    assert(debug_text.find("\"svg_subset_policy\":\"bounded_material_symbols_svg_subset\"")
            != std::string::npos);
     assert(debug_text.find("\"svg_supported_elements\":\"svg, g, path, rect, circle")
            != std::string::npos);
-    assert(debug_text.find("\"svg_supported_path_commands\":\"M L H V Q T C S A Z")
+    assert(debug_text.find("\"svg_supported_path_commands\":\"M L H V Q T C S Z")
            != std::string::npos);
-    assert(debug_text.find("\"svg_arc_policy\":\"circle elements and isolated circular path A/a")
+    assert(debug_text.find("\"svg_arc_policy\":\"Google Material Symbols source paths avoid SVG arc commands")
            != std::string::npos);
-    assert(debug_text.find("\"svg_path_arc_symbol_count\":16")
+    assert(debug_text.find("\"svg_path_arc_symbol_count\":0")
            != std::string::npos);
-    assert(debug_text.find("\"lucide_source_symbol_count\":39")
+    assert(debug_text.find("\"material_symbols_source_symbol_count\":39")
            != std::string::npos);
-    assert(debug_text.find("\"lucide_unique_source_icon_count\":38")
+    assert(debug_text.find("\"material_symbols_unique_source_icon_count\":39")
            != std::string::npos);
     assert(debug_text.find("\"source_attribution_policy\"")
            != std::string::npos);
-    assert(debug_text.find("\"hierarchical_opacity\":true")
+    assert(debug_text.find("\"hierarchical_opacity\":false")
            != std::string::npos);
-    assert(debug_text.find("\"rendering_mode\":\"hierarchical\"")
+    assert(debug_text.find("\"rendering_mode\":\"monochrome\"")
            != std::string::npos);
     assert(debug_text.find("\"presentation_policy\":\"macos_role_aware_symbol_presentation\"")
            != std::string::npos);
@@ -1498,15 +1505,15 @@ duplicate
         != std::string::npos);
     assert(debug_text.find("\"file_type_icon_asset_count\":11")
         != std::string::npos);
-    assert(debug_text.find("\"file_type_icon_source_family\":\"Lucide\"")
+    assert(debug_text.find("\"file_type_icon_source_family\":\"Google Material Symbols\"")
         != std::string::npos);
     assert(debug_text.find(
                "\"file_type_icon_source_revision\":"
-               "\"5b40f2c5a76a27eeb81c8f1b1c311121dee45495\"")
+               "\"4d7678801370dc2fe9c35b437570f56f56e43801\"")
         != std::string::npos);
     assert(debug_text.find(
                "\"file_type_icon_license_asset\":"
-               "\"assets/icons/file-types/LUCIDE_LICENSE.txt\"")
+               "\"assets/icons/file-types/MATERIAL_SYMBOLS_LICENSE.txt\"")
         != std::string::npos);
     assert(debug_text.find("\"file_type.pdf.icon\"")
         != std::string::npos);
@@ -1516,9 +1523,10 @@ duplicate
         != std::string::npos);
     assert(debug_text.find(
                "\"source_url\":"
-               "\"https://raw.githubusercontent.com/lucide-icons/lucide/"
-               "5b40f2c5a76a27eeb81c8f1b1c311121dee45495/"
-               "icons/file-text.svg\"")
+               "\"https://raw.githubusercontent.com/google/material-design-icons/"
+               "4d7678801370dc2fe9c35b437570f56f56e43801/"
+               "symbols/web/picture_as_pdf/materialsymbolsoutlined/"
+               "picture_as_pdf_24px.svg\"")
         != std::string::npos);
     assert(debug_text.find("\"runtime_fetch_required\":false")
         != std::string::npos);

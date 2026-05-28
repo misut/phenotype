@@ -91,11 +91,11 @@ permissive SVG icon sources, zero Apple/SF Symbols embedded assets, zero
 platform-extracted icons, and local artifact verification rather than slow PR
 CI capture.
 The sidebar and toolbar glyphs come from `phenotype.icons`, not copied SF
-Symbols assets. They are audited permissive Lucide SVG symbols with a
+Symbols assets. They are audited permissive Google Material Symbols SVG symbols with a
 macOS-style rounded-outline contract and bounded secondary-layer opacity for
 detailed symbols. Each icon declares a semantic SF Symbols reference name
 as a role and proportion anchor while keeping Apple artwork out of the asset
-set. File-type glyphs and toolbar/sidebar buttons use the same pinned Lucide
+set. File-type glyphs and toolbar/sidebar buttons use the same pinned Google Material Symbols
 revision; artifacts record source family, icon name, exact license, license
 URL, pinned direct raw SVG URL, source revision, copyright, and Apple-asset
 boundary beside the rendered symbol metadata.
@@ -128,14 +128,14 @@ and folder entries resolve to audited SVG symbols and semantic reference names
 before any native renderer sees them.
 The package manifest now carries the same eleven file-type icons as
 runtime-visible SVG assets under `assets/icons/file-types/`, sourced from the
-pinned Lucide revision recorded by the icon catalog. That keeps desktop
+pinned Google Material Symbols revision recorded by the icon catalog. That keeps desktop
 packaging, CLI inspection, and the pure debug contract aligned with the
 fallback painters instead of relying on platform file icons. The package also
-bundles the pinned Lucide license notice as a non-runtime asset so copied
+bundles the pinned Google Material Symbols license notice as a non-runtime asset so copied
 resource bundles retain the permissive-source notice.
-When file-type or toolbar glyphs need more realism, prefer permissive SVG
-sources such as Lucide ISC, Feather-derived MIT glyphs, or other audited open
-icon sets and record the exact source/license in the package contract. Do not
+When file-type or toolbar glyphs need more realism, prefer pinned Google
+Material Symbols Apache-2.0 SVGs or other audited open icon sets and record the
+exact source/license in the package contract. Do not
 extract or embed Apple-owned SF Symbols, Finder icons, or system file icons
 unless the legal usage boundary is explicitly cleared.
 The icon-grid thumbnails follow the same boundary. The example references
@@ -227,7 +227,7 @@ home folder.
 The directory also includes an initial `phenotype.package.toml` plus `assets/`,
 `locales/`, and `fonts/` fixtures. These are consumed by the new
 `tools/phenotype_cli package inspect` command and describe the
-asset/i18n/Pretendard bundle contract. The package icon is a themed Lucide
+asset/i18n/Pretendard bundle contract. The package icon is a themed Google Material Symbols
 `folder-open` SVG asset; the CLI checks
 that `app.icon` is SVG/preloaded and that Pretendard has a CJK-capable fallback.
 Runtime labels are resolved through the shared pure `ResourceCatalog` helper in

@@ -77,6 +77,12 @@ enum class SymbolWeight {
     Regular,
 };
 
+enum class MaterialSymbolsStyle {
+    Outlined,
+    Rounded,
+    Sharp,
+};
+
 enum class SymbolStrokeCap {
     Round,
 };
@@ -143,6 +149,7 @@ struct SymbolRenderingCapabilities {
 struct SymbolSourceAttribution {
     std::string_view family;
     std::string_view icon_name;
+    std::string_view style;
     std::string_view license;
     std::string_view license_url;
     std::string_view source_url;
@@ -241,28 +248,31 @@ struct SymbolMetrics {
 inline constexpr unsigned int all_symbol_count = 39;
 inline constexpr unsigned int phenotype_owned_symbol_count = 0;
 inline constexpr unsigned int permissive_source_symbol_count = all_symbol_count;
-inline constexpr unsigned int lucide_source_symbol_count =
+inline constexpr unsigned int material_symbols_source_symbol_count =
     permissive_source_symbol_count;
-inline constexpr unsigned int lucide_unique_source_icon_count = 38;
+inline constexpr unsigned int material_symbols_unique_source_icon_count = 39;
+inline constexpr unsigned int material_symbols_style_count = 3;
+inline constexpr unsigned int material_symbols_source_variant_count =
+    material_symbols_unique_source_icon_count * material_symbols_style_count;
 inline constexpr unsigned int apple_asset_symbol_count = 0;
 inline constexpr unsigned int platform_extracted_symbol_count = 0;
 inline constexpr unsigned int runtime_fetched_symbol_count = 0;
 inline constexpr unsigned int audited_symbol_source_count = all_symbol_count;
-inline constexpr unsigned int reference_source_count = 8;
+inline constexpr unsigned int reference_source_count = 6;
 inline constexpr unsigned int sidebar_symbol_count = 11;
 inline constexpr unsigned int toolbar_symbol_count = 15;
 inline constexpr unsigned int file_type_symbol_count = 11;
 inline constexpr unsigned int file_type_extension_rule_count = 36;
 inline constexpr unsigned int outline_symbol_count = all_symbol_count;
-inline constexpr unsigned int filled_symbol_count = 0;
-inline constexpr unsigned int hierarchical_symbol_count = 14;
+inline constexpr unsigned int filled_symbol_count = all_symbol_count;
+inline constexpr unsigned int hierarchical_symbol_count = 0;
 inline constexpr unsigned int monochrome_symbol_count = all_symbol_count;
 inline constexpr unsigned int regular_weight_symbol_count = all_symbol_count;
 inline constexpr unsigned int palette_symbol_count = 0;
 inline constexpr unsigned int multicolor_symbol_count = 0;
 inline constexpr unsigned int reference_symbol_count = all_symbol_count;
-inline constexpr unsigned int svg_path_arc_symbol_count = 16;
-inline constexpr unsigned int round_stroke_symbol_count = outline_symbol_count;
+inline constexpr unsigned int svg_path_arc_symbol_count = 0;
+inline constexpr unsigned int round_stroke_symbol_count = 0;
 inline constexpr unsigned int symbol_interaction_phase_count = 3;
 
 inline auto name(Symbol symbol) noexcept -> std::string_view {
@@ -406,40 +416,136 @@ inline auto symbol_interaction_phase_name(
     return "normal";
 }
 
+inline auto material_symbols_style_at(unsigned int index) noexcept
+        -> MaterialSymbolsStyle {
+    switch (index) {
+    case 0: return MaterialSymbolsStyle::Outlined;
+    case 1: return MaterialSymbolsStyle::Rounded;
+    case 2: return MaterialSymbolsStyle::Sharp;
+    }
+    return MaterialSymbolsStyle::Outlined;
+}
+
+inline auto material_symbols_style_name(MaterialSymbolsStyle style) noexcept
+        -> std::string_view {
+    switch (style) {
+    case MaterialSymbolsStyle::Outlined: return "outlined";
+    case MaterialSymbolsStyle::Rounded:  return "rounded";
+    case MaterialSymbolsStyle::Sharp:    return "sharp";
+    }
+    return "outlined";
+}
+
+inline auto material_symbols_style_label(MaterialSymbolsStyle style) noexcept
+        -> std::string_view {
+    switch (style) {
+    case MaterialSymbolsStyle::Outlined: return "Outlined";
+    case MaterialSymbolsStyle::Rounded:  return "Rounded";
+    case MaterialSymbolsStyle::Sharp:    return "Sharp";
+    }
+    return "Outlined";
+}
+
+inline auto material_symbols_font_family(MaterialSymbolsStyle style) noexcept
+        -> std::string_view {
+    switch (style) {
+    case MaterialSymbolsStyle::Outlined: return "Material Symbols Outlined";
+    case MaterialSymbolsStyle::Rounded:  return "Material Symbols Rounded";
+    case MaterialSymbolsStyle::Sharp:    return "Material Symbols Sharp";
+    }
+    return "Material Symbols Outlined";
+}
+
+inline auto material_symbols_css_class(MaterialSymbolsStyle style) noexcept
+        -> std::string_view {
+    switch (style) {
+    case MaterialSymbolsStyle::Outlined: return "material-symbols-outlined";
+    case MaterialSymbolsStyle::Rounded:  return "material-symbols-rounded";
+    case MaterialSymbolsStyle::Sharp:    return "material-symbols-sharp";
+    }
+    return "material-symbols-outlined";
+}
+
+inline auto material_symbols_source_directory(
+        MaterialSymbolsStyle style) noexcept -> std::string_view {
+    switch (style) {
+    case MaterialSymbolsStyle::Outlined: return "materialsymbolsoutlined";
+    case MaterialSymbolsStyle::Rounded:  return "materialsymbolsrounded";
+    case MaterialSymbolsStyle::Sharp:    return "materialsymbolssharp";
+    }
+    return "materialsymbolsoutlined";
+}
+
+inline auto default_material_symbols_style() noexcept
+        -> MaterialSymbolsStyle {
+    return MaterialSymbolsStyle::Outlined;
+}
+
+inline bool is_default_material_symbols_style(
+        MaterialSymbolsStyle style) noexcept {
+    return style == default_material_symbols_style();
+}
+
+inline auto material_symbols_style_from_name(std::string_view name) noexcept
+        -> std::optional<MaterialSymbolsStyle> {
+    if (name == "outlined" || name == "outline"
+        || name == "Outlined" || name == "Outline")
+        return MaterialSymbolsStyle::Outlined;
+    if (name == "rounded" || name == "round"
+        || name == "Rounded" || name == "Round")
+        return MaterialSymbolsStyle::Rounded;
+    if (name == "sharp" || name == "Sharp")
+        return MaterialSymbolsStyle::Sharp;
+    return std::nullopt;
+}
+
+inline auto material_symbols_style_name_at(unsigned int index) noexcept
+        -> std::string_view {
+    return material_symbols_style_name(material_symbols_style_at(index));
+}
+
+inline auto style_name(MaterialSymbolsStyle style) noexcept -> std::string_view {
+    switch (style) {
+    case MaterialSymbolsStyle::Outlined:
+        return "google_material_symbols_outlined_svg";
+    case MaterialSymbolsStyle::Rounded:
+        return "google_material_symbols_rounded_svg";
+    case MaterialSymbolsStyle::Sharp:
+        return "google_material_symbols_sharp_svg";
+    }
+    return "google_material_symbols_outlined_svg";
+}
+
 inline auto style_name() noexcept -> std::string_view {
-    return "macos_rounded_outline_svg";
+    return style_name(default_material_symbols_style());
 }
 
 inline auto style_reference() noexcept -> std::string_view {
-    return "Apple HIG, macOS Finder, and SF Symbols inspired custom rounded-outline SVG glyphs";
+    return "Apple HIG, macOS Finder, and SF Symbols inspired Material Symbols (new) SVG glyphs with Outlined as the default selectable style";
 }
 
 inline auto asset_policy() noexcept -> std::string_view {
-    return "audited permissive vector assets; no Apple or SF Symbols artwork embedded";
+    return "audited Google Material Symbols (new) vector assets; default Outlined plus selectable Rounded and Sharp styles; no Apple or SF Symbols artwork embedded";
 }
 
 inline auto source_license_policy() noexcept -> std::string_view {
-    return "audited permissive SVG only; accepted external licenses include Lucide ISC, Feather-derived MIT, Tabler MIT, Iconoir MIT, and Apache-2.0 with per-symbol attribution";
+    return "audited permissive SVG only; embedded icons use Google Material Symbols (new) Apache-2.0 with bundled license text";
 }
 
 inline auto preferred_external_source_policy() noexcept -> std::string_view {
-    return "Prefer audited SVG from Lucide ISC or Feather-derived MIT, Tabler MIT, Iconoir MIT, or Material Symbols Apache-2.0 before phenotype adaptation";
+    return "Prefer pinned Google Material Symbols (new) Apache-2.0 SVGs from Google Fonts before phenotype adaptation; Outlined is the default style";
 }
 
 inline auto source_acquisition_policy() noexcept -> std::string_view {
-    return "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings, does not fetch remote resources, and keeps platform icon extraction disabled unless redistribution rights are explicit and audited";
+    return "development-time import from pinned Google Material Symbols (new) Outlined, Rounded, and Sharp raw SVG URLs only; runtime uses embedded SVG strings, does not fetch remote resources, and keeps platform icon extraction disabled unless redistribution rights are explicit and audited";
 }
 
 inline auto document_cache_policy() noexcept -> std::string_view {
     return "explicit_symbol_document_cache_keyed_by_symbol_descriptor_no_frame_parse_churn";
 }
 
-inline auto lucide_source_revision() noexcept -> std::string_view {
-    return "5b40f2c5a76a27eeb81c8f1b1c311121dee45495";
-}
-
 inline auto source_attribution_policy() noexcept -> std::string_view {
-    return "embedded permissive SVG sources must expose family, icon name, exact license, pinned direct raw SVG URL, source revision, copyright, Apple-asset boundary, platform extraction flag, and runtime fetch flag in debug output";
+    return "embedded Google Material Symbols SVG sources must expose family, icon name, style, exact license, pinned direct raw SVG URL, source revision, copyright, Apple-asset boundary, platform extraction flag, and runtime fetch flag in debug output";
 }
 
 inline auto apple_asset_boundary() noexcept -> std::string_view {
@@ -496,11 +602,11 @@ inline auto reference_source_at(unsigned int index) noexcept
         };
     case 3:
         return {
-            "Lucide",
-            "https://lucide.dev/",
+            "Google Material Symbols",
+            "https://developers.google.com/fonts/docs/material_symbols",
             "audited permissive SVG source for embedded glyphs",
-            "ISC plus Feather-derived MIT license with attribution",
-            "https://lucide.dev/license",
+            "Apache-2.0 license; bundled license text when embedded",
+            "https://github.com/google/material-design-icons/blob/4d7678801370dc2fe9c35b437570f56f56e43801/LICENSE",
             "pinned_raw_svg_development_time_import",
             true,
             false,
@@ -510,36 +616,6 @@ inline auto reference_source_at(unsigned int index) noexcept
             false,
         };
     case 4:
-        return {
-            "Feather Icons",
-            "https://github.com/feathericons/feather",
-            "MIT license provenance for Feather-derived Lucide symbols",
-            "MIT license; referenced for license lineage, not copied directly",
-            "https://github.com/feathericons/feather/blob/master/LICENSE",
-            "license_lineage_reference_only",
-            false,
-            false,
-            false,
-            true,
-            false,
-            false,
-        };
-    case 5:
-        return {
-            "Google Material Symbols",
-            "https://developers.google.com/fonts/docs/material_symbols",
-            "future permissive fallback source candidate",
-            "Apache-2.0 license with attribution when embedded",
-            "https://github.com/google/material-design-icons/blob/master/LICENSE",
-            "candidate_pinned_raw_svg_development_time_import",
-            false,
-            false,
-            true,
-            true,
-            false,
-            false,
-        };
-    case 6:
         return {
             "Tabler Icons",
             "https://github.com/tabler/tabler-icons",
@@ -554,7 +630,7 @@ inline auto reference_source_at(unsigned int index) noexcept
             false,
             false,
         };
-    case 7:
+    case 5:
         return {
             "Iconoir",
             "https://github.com/iconoir-icons/iconoir",
@@ -574,11 +650,11 @@ inline auto reference_source_at(unsigned int index) noexcept
 }
 
 inline auto reference_family() noexcept -> std::string_view {
-    return "SF Symbols semantic reference";
+    return "SF Symbols semantic reference with Google Material Symbols artwork";
 }
 
 inline auto reference_policy() noexcept -> std::string_view {
-    return "semantic reference only; no Apple or SF Symbols vector artwork; embedded sources are audited permissive SVG";
+    return "semantic reference only; no Apple or SF Symbols vector artwork; embedded sources are Google Material Symbols (new) SVG";
 }
 
 inline auto presentation_policy() noexcept -> std::string_view {
@@ -590,7 +666,7 @@ inline auto source_format() noexcept -> std::string_view {
 }
 
 inline auto svg_subset_policy() noexcept -> std::string_view {
-    return "bounded_svg_icon_subset";
+    return "bounded_material_symbols_svg_subset";
 }
 
 inline auto svg_supported_elements() noexcept -> std::string_view {
@@ -598,7 +674,7 @@ inline auto svg_supported_elements() noexcept -> std::string_view {
 }
 
 inline auto svg_supported_path_commands() noexcept -> std::string_view {
-    return "M L H V Q T C S A Z with absolute and relative variants";
+    return "M L H V Q T C S Z with absolute and relative variants";
 }
 
 inline auto svg_supported_style_attributes() noexcept -> std::string_view {
@@ -606,19 +682,19 @@ inline auto svg_supported_style_attributes() noexcept -> std::string_view {
 }
 
 inline auto svg_arc_policy() noexcept -> std::string_view {
-    return "circle elements and isolated circular path A/a preserve native ArcTo; chained or elliptical path A/a lowers to bounded cubic Bezier segments";
+    return "Google Material Symbols source paths avoid SVG arc commands in the pinned subset";
 }
 
 inline auto stroke_geometry_policy() noexcept -> std::string_view {
-    return "round_cap_round_join_svg_strokes";
+    return "material_symbols_filled_path_geometry";
 }
 
 inline auto stroke_cap_policy() noexcept -> std::string_view {
-    return "round";
+    return "not_applicable";
 }
 
 inline auto stroke_join_policy() noexcept -> std::string_view {
-    return "round";
+    return "not_applicable";
 }
 
 inline auto alignment_policy() noexcept -> std::string_view {
@@ -626,7 +702,7 @@ inline auto alignment_policy() noexcept -> std::string_view {
 }
 
 inline auto variant_policy() noexcept -> std::string_view {
-    return "outline-only with role-aware symbol chrome";
+    return "Material Symbols Outlined is the default; Rounded and Sharp are selectable with role-aware symbol chrome";
 }
 
 inline auto tone_policy() noexcept -> std::string_view {
@@ -646,7 +722,7 @@ inline auto interface_metaphor_policy() noexcept -> std::string_view {
 }
 
 inline auto visual_consistency_policy() noexcept -> std::string_view {
-    return "consistent_size_stroke_detail_and_perspective";
+    return "consistent_material_symbols_new_style_selectable_size_detail_and_perspective";
 }
 
 inline auto toolbar_symbol_chrome_policy() noexcept -> std::string_view {
@@ -670,11 +746,11 @@ inline auto default_scale_policy() noexcept -> std::string_view {
 }
 
 inline auto default_weight_policy() noexcept -> std::string_view {
-    return "regular_text_weight_aligned";
+    return "regular_material_symbols_weight_aligned";
 }
 
 inline auto rendering_capability_policy() noexcept -> std::string_view {
-    return "sf_symbols_mode_names_with_macos_monochrome_hierarchical_contract";
+    return "material_symbols_monochrome_filled_path_contract";
 }
 
 inline auto metrics_policy() noexcept -> std::string_view {
@@ -1072,7 +1148,7 @@ inline auto symbol_from_semantic_reference_name(
     return std::nullopt;
 }
 
-inline bool uses_lucide_source(Symbol symbol) noexcept {
+inline bool uses_material_symbols_source(Symbol symbol) noexcept {
     switch (symbol) {
     case Symbol::Back:
     case Symbol::Forward:
@@ -1119,220 +1195,388 @@ inline bool uses_lucide_source(Symbol symbol) noexcept {
     }
 }
 
-inline auto permissive_source_icon_name(Symbol symbol) noexcept
+inline auto material_symbols_source_icon_name(Symbol symbol) noexcept
         -> std::string_view {
     switch (symbol) {
-    case Symbol::Back:         return "chevron-left";
-    case Symbol::Forward:      return "chevron-right";
-    case Symbol::Search:       return "search";
-    case Symbol::Share:        return "share";
-    case Symbol::Tag:          return "tag";
-    case Symbol::More:         return "ellipsis";
-    case Symbol::Grid:         return "grid-2x2";
-    case Symbol::List:         return "list";
-    case Symbol::Columns:      return "columns-3";
-    case Symbol::Gallery:      return "gallery-horizontal";
-    case Symbol::Folder:       return "folder";
-    case Symbol::Trash:        return "trash-2";
-    case Symbol::Document:     return "file";
-    case Symbol::Image:        return "file-image";
-    case Symbol::Movie:        return "clapperboard";
-    case Symbol::Plus:         return "plus";
-    case Symbol::XMark:        return "x";
-    case Symbol::ChevronDown:  return "chevron-down";
-    case Symbol::ChevronUp:    return "chevron-up";
-    case Symbol::Home:         return "house";
-    case Symbol::Cloud:        return "cloud";
-    case Symbol::AirDrop:      return "radio";
-    case Symbol::Recents:      return "clock";
-    case Symbol::Shared:       return "folder-symlink";
-    case Symbol::Sidebar:      return "panel-left";
-    case Symbol::NewFolder:    return "folder-plus";
-    case Symbol::Applications: return "app-window";
-    case Symbol::Desktop:      return "monitor";
-    case Symbol::Download:     return "circle-arrow-down";
-    case Symbol::SortGroup:    return "arrow-up-down";
-    case Symbol::Duplicate:    return "copy";
-    case Symbol::NewDocument:  return "file-plus";
-    case Symbol::PdfDocument:  return "file-text";
-    case Symbol::TextDocument: return "file-text";
-    case Symbol::Archive:      return "file-archive";
-    case Symbol::AudioDocument: return "file-music";
-    case Symbol::CodeDocument: return "file-code";
-    case Symbol::SpreadsheetDocument: return "file-spreadsheet";
-    case Symbol::PresentationDocument: return "presentation";
-    default:                   return name(symbol);
+    case Symbol::Back: return "chevron_left";
+    case Symbol::Forward: return "chevron_right";
+    case Symbol::Search: return "search";
+    case Symbol::Share: return "ios_share";
+    case Symbol::Tag: return "sell";
+    case Symbol::More: return "more_horiz";
+    case Symbol::Grid: return "grid_view";
+    case Symbol::List: return "view_list";
+    case Symbol::Columns: return "view_column";
+    case Symbol::Gallery: return "view_carousel";
+    case Symbol::Folder: return "folder";
+    case Symbol::Trash: return "delete";
+    case Symbol::Document: return "draft";
+    case Symbol::Image: return "image";
+    case Symbol::Movie: return "movie";
+    case Symbol::Plus: return "add";
+    case Symbol::XMark: return "close";
+    case Symbol::ChevronDown: return "keyboard_arrow_down";
+    case Symbol::ChevronUp: return "keyboard_arrow_up";
+    case Symbol::Home: return "home";
+    case Symbol::Cloud: return "cloud";
+    case Symbol::AirDrop: return "nearby";
+    case Symbol::Recents: return "history";
+    case Symbol::Shared: return "folder_shared";
+    case Symbol::Sidebar: return "side_navigation";
+    case Symbol::NewFolder: return "create_new_folder";
+    case Symbol::Applications: return "apps";
+    case Symbol::Desktop: return "desktop_mac";
+    case Symbol::Download: return "download";
+    case Symbol::SortGroup: return "swap_vert";
+    case Symbol::Duplicate: return "content_copy";
+    case Symbol::NewDocument: return "note_add";
+    case Symbol::PdfDocument: return "picture_as_pdf";
+    case Symbol::TextDocument: return "article";
+    case Symbol::Archive: return "folder_zip";
+    case Symbol::AudioDocument: return "audio_file";
+    case Symbol::CodeDocument: return "code";
+    case Symbol::SpreadsheetDocument: return "table_chart";
+    case Symbol::PresentationDocument: return "slideshow";
+    default: return name(symbol);
     }
 }
 
-inline auto lucide_source_icon_name_at(unsigned int index) noexcept
+inline auto permissive_source_icon_name(Symbol symbol) noexcept
+        -> std::string_view {
+    return material_symbols_source_icon_name(symbol);
+}
+
+inline auto material_symbols_source_icon_name_at(unsigned int index) noexcept
         -> std::string_view {
     switch (index) {
-    case 0:  return "chevron-left";
-    case 1:  return "chevron-right";
-    case 2:  return "search";
-    case 3:  return "share";
-    case 4:  return "tag";
-    case 5:  return "grid-2x2";
-    case 6:  return "list";
-    case 7:  return "columns-3";
-    case 8:  return "gallery-horizontal";
-    case 9:  return "folder";
-    case 10: return "trash-2";
-    case 11: return "file";
-    case 12: return "file-image";
-    case 13: return "clapperboard";
-    case 14: return "plus";
-    case 15: return "x";
-    case 16: return "chevron-down";
-    case 17: return "chevron-up";
-    case 18: return "house";
-    case 19: return "cloud";
-    case 20: return "clock";
-    case 21: return "panel-left";
-    case 22: return "folder-plus";
-    case 23: return "app-window";
-    case 24: return "monitor";
-    case 25: return "circle-arrow-down";
-    case 26: return "copy";
-    case 27: return "file-plus";
-    case 28: return "file-text";
-    case 29: return "file-archive";
-    case 30: return "file-music";
-    case 31: return "file-code";
-    case 32: return "file-spreadsheet";
-    case 33: return "presentation";
-    case 34: return "ellipsis";
-    case 35: return "radio";
-    case 36: return "folder-symlink";
-    case 37: return "arrow-up-down";
+    case 0: return "chevron_left";
+    case 1: return "chevron_right";
+    case 2: return "search";
+    case 3: return "ios_share";
+    case 4: return "sell";
+    case 5: return "more_horiz";
+    case 6: return "grid_view";
+    case 7: return "view_list";
+    case 8: return "view_column";
+    case 9: return "view_carousel";
+    case 10: return "folder";
+    case 11: return "delete";
+    case 12: return "draft";
+    case 13: return "image";
+    case 14: return "movie";
+    case 15: return "add";
+    case 16: return "close";
+    case 17: return "keyboard_arrow_down";
+    case 18: return "keyboard_arrow_up";
+    case 19: return "home";
+    case 20: return "cloud";
+    case 21: return "nearby";
+    case 22: return "history";
+    case 23: return "folder_shared";
+    case 24: return "side_navigation";
+    case 25: return "create_new_folder";
+    case 26: return "apps";
+    case 27: return "desktop_mac";
+    case 28: return "download";
+    case 29: return "swap_vert";
+    case 30: return "content_copy";
+    case 31: return "note_add";
+    case 32: return "picture_as_pdf";
+    case 33: return "article";
+    case 34: return "folder_zip";
+    case 35: return "audio_file";
+    case 36: return "code";
+    case 37: return "table_chart";
+    case 38: return "slideshow";
     }
-    return "file";
+    return "draft";
 }
 
-inline auto lucide_source_url(std::string_view icon_name) noexcept
+inline auto material_symbols_source_revision() noexcept -> std::string_view {
+    return "4d7678801370dc2fe9c35b437570f56f56e43801";
+}
+
+inline auto material_symbols_source_url(std::string_view icon_name,
+                                        MaterialSymbolsStyle style) noexcept
         -> std::string_view {
-    if (icon_name == "chevron-left")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-left.svg";
-    if (icon_name == "chevron-right")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-right.svg";
-    if (icon_name == "search")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/search.svg";
-    if (icon_name == "share")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/share.svg";
-    if (icon_name == "tag")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/tag.svg";
-    if (icon_name == "grid-2x2")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/grid-2x2.svg";
-    if (icon_name == "list")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/list.svg";
-    if (icon_name == "columns-3")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/columns-3.svg";
-    if (icon_name == "gallery-horizontal")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/gallery-horizontal.svg";
-    if (icon_name == "folder")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/folder.svg";
-    if (icon_name == "trash-2")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/trash-2.svg";
-    if (icon_name == "file")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file.svg";
-    if (icon_name == "file-image")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-image.svg";
-    if (icon_name == "clapperboard")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/clapperboard.svg";
-    if (icon_name == "plus")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/plus.svg";
-    if (icon_name == "x")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/x.svg";
-    if (icon_name == "chevron-down")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-down.svg";
-    if (icon_name == "chevron-up")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-up.svg";
-    if (icon_name == "house")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/house.svg";
-    if (icon_name == "cloud")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/cloud.svg";
-    if (icon_name == "clock")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/clock.svg";
-    if (icon_name == "panel-left")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/panel-left.svg";
-    if (icon_name == "folder-plus")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/folder-plus.svg";
-    if (icon_name == "app-window")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/app-window.svg";
-    if (icon_name == "monitor")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/monitor.svg";
-    if (icon_name == "circle-arrow-down")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/circle-arrow-down.svg";
-    if (icon_name == "copy")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/copy.svg";
-    if (icon_name == "file-plus")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-plus.svg";
-    if (icon_name == "file-text")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-text.svg";
-    if (icon_name == "file-archive")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-archive.svg";
-    if (icon_name == "file-music")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-music.svg";
-    if (icon_name == "file-code")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-code.svg";
-    if (icon_name == "file-spreadsheet")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-spreadsheet.svg";
-    if (icon_name == "presentation")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/presentation.svg";
-    if (icon_name == "ellipsis")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/ellipsis.svg";
-    if (icon_name == "radio")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/radio.svg";
-    if (icon_name == "folder-symlink")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/folder-symlink.svg";
-    if (icon_name == "arrow-up-down")
-        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/arrow-up-down.svg";
-    return "https://github.com/lucide-icons/lucide/tree/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons";
+    switch (style) {
+    case MaterialSymbolsStyle::Outlined:
+        if (icon_name == "chevron_left")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/chevron_left/materialsymbolsoutlined/chevron_left_24px.svg";
+        if (icon_name == "chevron_right")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/chevron_right/materialsymbolsoutlined/chevron_right_24px.svg";
+        if (icon_name == "search")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/search/materialsymbolsoutlined/search_24px.svg";
+        if (icon_name == "ios_share")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/ios_share/materialsymbolsoutlined/ios_share_24px.svg";
+        if (icon_name == "sell")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/sell/materialsymbolsoutlined/sell_24px.svg";
+        if (icon_name == "more_horiz")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/more_horiz/materialsymbolsoutlined/more_horiz_24px.svg";
+        if (icon_name == "grid_view")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/grid_view/materialsymbolsoutlined/grid_view_24px.svg";
+        if (icon_name == "view_list")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/view_list/materialsymbolsoutlined/view_list_24px.svg";
+        if (icon_name == "view_column")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/view_column/materialsymbolsoutlined/view_column_24px.svg";
+        if (icon_name == "view_carousel")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/view_carousel/materialsymbolsoutlined/view_carousel_24px.svg";
+        if (icon_name == "folder")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/folder/materialsymbolsoutlined/folder_24px.svg";
+        if (icon_name == "delete")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/delete/materialsymbolsoutlined/delete_24px.svg";
+        if (icon_name == "draft")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/draft/materialsymbolsoutlined/draft_24px.svg";
+        if (icon_name == "image")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/image/materialsymbolsoutlined/image_24px.svg";
+        if (icon_name == "movie")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/movie/materialsymbolsoutlined/movie_24px.svg";
+        if (icon_name == "add")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/add/materialsymbolsoutlined/add_24px.svg";
+        if (icon_name == "close")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/close/materialsymbolsoutlined/close_24px.svg";
+        if (icon_name == "keyboard_arrow_down")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/keyboard_arrow_down/materialsymbolsoutlined/keyboard_arrow_down_24px.svg";
+        if (icon_name == "keyboard_arrow_up")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/keyboard_arrow_up/materialsymbolsoutlined/keyboard_arrow_up_24px.svg";
+        if (icon_name == "home")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/home/materialsymbolsoutlined/home_24px.svg";
+        if (icon_name == "cloud")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/cloud/materialsymbolsoutlined/cloud_24px.svg";
+        if (icon_name == "nearby")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/nearby/materialsymbolsoutlined/nearby_24px.svg";
+        if (icon_name == "history")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/history/materialsymbolsoutlined/history_24px.svg";
+        if (icon_name == "folder_shared")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/folder_shared/materialsymbolsoutlined/folder_shared_24px.svg";
+        if (icon_name == "side_navigation")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/side_navigation/materialsymbolsoutlined/side_navigation_24px.svg";
+        if (icon_name == "create_new_folder")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/create_new_folder/materialsymbolsoutlined/create_new_folder_24px.svg";
+        if (icon_name == "apps")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/apps/materialsymbolsoutlined/apps_24px.svg";
+        if (icon_name == "desktop_mac")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/desktop_mac/materialsymbolsoutlined/desktop_mac_24px.svg";
+        if (icon_name == "download")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/download/materialsymbolsoutlined/download_24px.svg";
+        if (icon_name == "swap_vert")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/swap_vert/materialsymbolsoutlined/swap_vert_24px.svg";
+        if (icon_name == "content_copy")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/content_copy/materialsymbolsoutlined/content_copy_24px.svg";
+        if (icon_name == "note_add")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/note_add/materialsymbolsoutlined/note_add_24px.svg";
+        if (icon_name == "picture_as_pdf")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/picture_as_pdf/materialsymbolsoutlined/picture_as_pdf_24px.svg";
+        if (icon_name == "article")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/article/materialsymbolsoutlined/article_24px.svg";
+        if (icon_name == "folder_zip")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/folder_zip/materialsymbolsoutlined/folder_zip_24px.svg";
+        if (icon_name == "audio_file")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/audio_file/materialsymbolsoutlined/audio_file_24px.svg";
+        if (icon_name == "code")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/code/materialsymbolsoutlined/code_24px.svg";
+        if (icon_name == "table_chart")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/table_chart/materialsymbolsoutlined/table_chart_24px.svg";
+        if (icon_name == "slideshow")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/slideshow/materialsymbolsoutlined/slideshow_24px.svg";
+        break;
+    case MaterialSymbolsStyle::Rounded:
+        if (icon_name == "chevron_left")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/chevron_left/materialsymbolsrounded/chevron_left_24px.svg";
+        if (icon_name == "chevron_right")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/chevron_right/materialsymbolsrounded/chevron_right_24px.svg";
+        if (icon_name == "search")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/search/materialsymbolsrounded/search_24px.svg";
+        if (icon_name == "ios_share")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/ios_share/materialsymbolsrounded/ios_share_24px.svg";
+        if (icon_name == "sell")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/sell/materialsymbolsrounded/sell_24px.svg";
+        if (icon_name == "more_horiz")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/more_horiz/materialsymbolsrounded/more_horiz_24px.svg";
+        if (icon_name == "grid_view")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/grid_view/materialsymbolsrounded/grid_view_24px.svg";
+        if (icon_name == "view_list")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/view_list/materialsymbolsrounded/view_list_24px.svg";
+        if (icon_name == "view_column")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/view_column/materialsymbolsrounded/view_column_24px.svg";
+        if (icon_name == "view_carousel")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/view_carousel/materialsymbolsrounded/view_carousel_24px.svg";
+        if (icon_name == "folder")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/folder/materialsymbolsrounded/folder_24px.svg";
+        if (icon_name == "delete")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/delete/materialsymbolsrounded/delete_24px.svg";
+        if (icon_name == "draft")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/draft/materialsymbolsrounded/draft_24px.svg";
+        if (icon_name == "image")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/image/materialsymbolsrounded/image_24px.svg";
+        if (icon_name == "movie")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/movie/materialsymbolsrounded/movie_24px.svg";
+        if (icon_name == "add")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/add/materialsymbolsrounded/add_24px.svg";
+        if (icon_name == "close")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/close/materialsymbolsrounded/close_24px.svg";
+        if (icon_name == "keyboard_arrow_down")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/keyboard_arrow_down/materialsymbolsrounded/keyboard_arrow_down_24px.svg";
+        if (icon_name == "keyboard_arrow_up")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/keyboard_arrow_up/materialsymbolsrounded/keyboard_arrow_up_24px.svg";
+        if (icon_name == "home")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/home/materialsymbolsrounded/home_24px.svg";
+        if (icon_name == "cloud")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/cloud/materialsymbolsrounded/cloud_24px.svg";
+        if (icon_name == "nearby")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/nearby/materialsymbolsrounded/nearby_24px.svg";
+        if (icon_name == "history")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/history/materialsymbolsrounded/history_24px.svg";
+        if (icon_name == "folder_shared")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/folder_shared/materialsymbolsrounded/folder_shared_24px.svg";
+        if (icon_name == "side_navigation")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/side_navigation/materialsymbolsrounded/side_navigation_24px.svg";
+        if (icon_name == "create_new_folder")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/create_new_folder/materialsymbolsrounded/create_new_folder_24px.svg";
+        if (icon_name == "apps")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/apps/materialsymbolsrounded/apps_24px.svg";
+        if (icon_name == "desktop_mac")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/desktop_mac/materialsymbolsrounded/desktop_mac_24px.svg";
+        if (icon_name == "download")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/download/materialsymbolsrounded/download_24px.svg";
+        if (icon_name == "swap_vert")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/swap_vert/materialsymbolsrounded/swap_vert_24px.svg";
+        if (icon_name == "content_copy")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/content_copy/materialsymbolsrounded/content_copy_24px.svg";
+        if (icon_name == "note_add")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/note_add/materialsymbolsrounded/note_add_24px.svg";
+        if (icon_name == "picture_as_pdf")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/picture_as_pdf/materialsymbolsrounded/picture_as_pdf_24px.svg";
+        if (icon_name == "article")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/article/materialsymbolsrounded/article_24px.svg";
+        if (icon_name == "folder_zip")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/folder_zip/materialsymbolsrounded/folder_zip_24px.svg";
+        if (icon_name == "audio_file")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/audio_file/materialsymbolsrounded/audio_file_24px.svg";
+        if (icon_name == "code")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/code/materialsymbolsrounded/code_24px.svg";
+        if (icon_name == "table_chart")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/table_chart/materialsymbolsrounded/table_chart_24px.svg";
+        if (icon_name == "slideshow")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/slideshow/materialsymbolsrounded/slideshow_24px.svg";
+        break;
+    case MaterialSymbolsStyle::Sharp:
+        if (icon_name == "chevron_left")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/chevron_left/materialsymbolssharp/chevron_left_24px.svg";
+        if (icon_name == "chevron_right")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/chevron_right/materialsymbolssharp/chevron_right_24px.svg";
+        if (icon_name == "search")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/search/materialsymbolssharp/search_24px.svg";
+        if (icon_name == "ios_share")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/ios_share/materialsymbolssharp/ios_share_24px.svg";
+        if (icon_name == "sell")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/sell/materialsymbolssharp/sell_24px.svg";
+        if (icon_name == "more_horiz")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/more_horiz/materialsymbolssharp/more_horiz_24px.svg";
+        if (icon_name == "grid_view")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/grid_view/materialsymbolssharp/grid_view_24px.svg";
+        if (icon_name == "view_list")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/view_list/materialsymbolssharp/view_list_24px.svg";
+        if (icon_name == "view_column")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/view_column/materialsymbolssharp/view_column_24px.svg";
+        if (icon_name == "view_carousel")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/view_carousel/materialsymbolssharp/view_carousel_24px.svg";
+        if (icon_name == "folder")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/folder/materialsymbolssharp/folder_24px.svg";
+        if (icon_name == "delete")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/delete/materialsymbolssharp/delete_24px.svg";
+        if (icon_name == "draft")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/draft/materialsymbolssharp/draft_24px.svg";
+        if (icon_name == "image")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/image/materialsymbolssharp/image_24px.svg";
+        if (icon_name == "movie")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/movie/materialsymbolssharp/movie_24px.svg";
+        if (icon_name == "add")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/add/materialsymbolssharp/add_24px.svg";
+        if (icon_name == "close")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/close/materialsymbolssharp/close_24px.svg";
+        if (icon_name == "keyboard_arrow_down")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/keyboard_arrow_down/materialsymbolssharp/keyboard_arrow_down_24px.svg";
+        if (icon_name == "keyboard_arrow_up")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/keyboard_arrow_up/materialsymbolssharp/keyboard_arrow_up_24px.svg";
+        if (icon_name == "home")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/home/materialsymbolssharp/home_24px.svg";
+        if (icon_name == "cloud")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/cloud/materialsymbolssharp/cloud_24px.svg";
+        if (icon_name == "nearby")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/nearby/materialsymbolssharp/nearby_24px.svg";
+        if (icon_name == "history")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/history/materialsymbolssharp/history_24px.svg";
+        if (icon_name == "folder_shared")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/folder_shared/materialsymbolssharp/folder_shared_24px.svg";
+        if (icon_name == "side_navigation")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/side_navigation/materialsymbolssharp/side_navigation_24px.svg";
+        if (icon_name == "create_new_folder")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/create_new_folder/materialsymbolssharp/create_new_folder_24px.svg";
+        if (icon_name == "apps")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/apps/materialsymbolssharp/apps_24px.svg";
+        if (icon_name == "desktop_mac")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/desktop_mac/materialsymbolssharp/desktop_mac_24px.svg";
+        if (icon_name == "download")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/download/materialsymbolssharp/download_24px.svg";
+        if (icon_name == "swap_vert")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/swap_vert/materialsymbolssharp/swap_vert_24px.svg";
+        if (icon_name == "content_copy")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/content_copy/materialsymbolssharp/content_copy_24px.svg";
+        if (icon_name == "note_add")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/note_add/materialsymbolssharp/note_add_24px.svg";
+        if (icon_name == "picture_as_pdf")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/picture_as_pdf/materialsymbolssharp/picture_as_pdf_24px.svg";
+        if (icon_name == "article")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/article/materialsymbolssharp/article_24px.svg";
+        if (icon_name == "folder_zip")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/folder_zip/materialsymbolssharp/folder_zip_24px.svg";
+        if (icon_name == "audio_file")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/audio_file/materialsymbolssharp/audio_file_24px.svg";
+        if (icon_name == "code")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/code/materialsymbolssharp/code_24px.svg";
+        if (icon_name == "table_chart")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/table_chart/materialsymbolssharp/table_chart_24px.svg";
+        if (icon_name == "slideshow")
+            return "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/slideshow/materialsymbolssharp/slideshow_24px.svg";
+        break;
+    }
+    return "https://github.com/google/material-design-icons/tree/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web";
 }
 
-inline auto lucide_license_url() noexcept -> std::string_view {
-    return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/LICENSE";
-}
-
-inline bool lucide_icon_uses_feather_mit(std::string_view icon_name) noexcept {
-    return icon_name == "chevron-left"
-        || icon_name == "chevron-right"
-        || icon_name == "chevron-down"
-        || icon_name == "chevron-up"
-        || icon_name == "clock"
-        || icon_name == "monitor"
-        || icon_name == "plus"
-        || icon_name == "search"
-        || icon_name == "share"
-        || icon_name == "trash-2"
-        || icon_name == "x";
-}
-
-inline auto lucide_icon_license(std::string_view icon_name) noexcept
+inline auto material_symbols_source_url(std::string_view icon_name) noexcept
         -> std::string_view {
-    return lucide_icon_uses_feather_mit(icon_name) ? "MIT" : "ISC";
+    return material_symbols_source_url(icon_name, default_material_symbols_style());
 }
 
-inline auto lucide_icon_copyright(std::string_view icon_name) noexcept
+inline auto material_symbols_license_url() noexcept -> std::string_view {
+    return "https://github.com/google/material-design-icons/blob/4d7678801370dc2fe9c35b437570f56f56e43801/LICENSE";
+}
+
+inline auto material_symbols_icon_license(std::string_view) noexcept
         -> std::string_view {
-    if (lucide_icon_uses_feather_mit(icon_name))
-        return "Copyright (c) 2013-present Cole Bemis; Lucide modifications copyright (c) 2026 Lucide Icons and Contributors";
-    return "Copyright (c) 2026 Lucide Icons and Contributors";
+    return "Apache-2.0";
 }
 
-inline auto source_attribution(Symbol symbol) noexcept
+inline auto material_symbols_icon_copyright(std::string_view) noexcept
+        -> std::string_view {
+    return "Material Symbols by Google; see Apache-2.0 license";
+}
+
+inline auto source_attribution(Symbol symbol,
+                               MaterialSymbolsStyle style) noexcept
         -> SymbolSourceAttribution {
-    if (uses_lucide_source(symbol)) {
-        auto const icon = permissive_source_icon_name(symbol);
+    if (uses_material_symbols_source(symbol)) {
+        auto const icon = material_symbols_source_icon_name(symbol);
         return SymbolSourceAttribution{
-            "Lucide",
+            "Google Material Symbols",
             icon,
-            lucide_icon_license(icon),
-            lucide_license_url(),
-            lucide_source_url(icon),
-            lucide_source_revision(),
-            lucide_icon_copyright(icon),
+            material_symbols_style_name(style),
+            material_symbols_icon_license(icon),
+            material_symbols_license_url(),
+            material_symbols_source_url(icon, style),
+            material_symbols_source_revision(),
+            material_symbols_icon_copyright(icon),
             true,
             true,
             false,
@@ -1343,6 +1587,7 @@ inline auto source_attribution(Symbol symbol) noexcept
     return SymbolSourceAttribution{
         "phenotype",
         name(symbol),
+        "default",
         "MIT",
         "https://github.com/misut/phenotype/blob/main/LICENSE",
         "built-in phenotype.icon_catalog",
@@ -1356,180 +1601,293 @@ inline auto source_attribution(Symbol symbol) noexcept
     };
 }
 
-inline auto lucide_svg_source(Symbol symbol) noexcept -> std::string_view {
-    switch (symbol) {
-    case Symbol::Back:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>)SVG";
-    case Symbol::Forward:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>)SVG";
-    case Symbol::Search:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>)SVG";
-    case Symbol::Share:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" stroke-opacity="0.66"/></svg>)SVG";
-    case Symbol::Tag:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor" fill-opacity="0.66"/></svg>)SVG";
-    case Symbol::More:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>)SVG";
-    case Symbol::Grid:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M3 12h18"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>)SVG";
-    case Symbol::List:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01" stroke-opacity="0.66"/><path d="M3 12h.01" stroke-opacity="0.66"/><path d="M3 19h.01" stroke-opacity="0.66"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg>)SVG";
-    case Symbol::Columns:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18" stroke-opacity="0.66"/><path d="M15 3v18" stroke-opacity="0.66"/></svg>)SVG";
-    case Symbol::Gallery:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3v18" stroke-opacity="0.66"/><rect width="12" height="18" x="6" y="3" rx="2"/><path d="M22 3v18" stroke-opacity="0.66"/></svg>)SVG";
-    case Symbol::Folder:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>)SVG";
-    case Symbol::Trash:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6" stroke-opacity="0.66"/><path d="M14 11v6" stroke-opacity="0.66"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke-opacity="0.66"/></svg>)SVG";
-    case Symbol::Document:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/></svg>)SVG";
-    case Symbol::Image:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><circle cx="10" cy="12" r="2"/><path d="m20 17-1.296-1.296a2.41 2.41 0 0 0-3.408 0L9 22"/></svg>)SVG";
-    case Symbol::Movie:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.296 3.464 3.02 3.956"/><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m6.18 5.276 3.1 3.899"/></svg>)SVG";
-    case Symbol::Plus:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>)SVG";
-    case Symbol::XMark:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>)SVG";
-    case Symbol::ChevronDown:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>)SVG";
-    case Symbol::ChevronUp:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>)SVG";
-    case Symbol::Home:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" stroke-opacity="0.66"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>)SVG";
-    case Symbol::Cloud:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>)SVG";
-    case Symbol::AirDrop:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.247 7.761a6 6 0 0 1 0 8.478"/><path d="M19.075 4.933a10 10 0 0 1 0 14.134"/><path d="M4.925 19.067a10 10 0 0 1 0-14.134"/><path d="M7.753 16.239a6 6 0 0 1 0-8.478"/><circle cx="12" cy="12" r="2"/></svg>)SVG";
-    case Symbol::Recents:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-opacity="0.66"/></svg>)SVG";
-    case Symbol::Shared:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11v-1a2 2 0 0 1 2-2h11"/><path d="m8 16 3-3-3-3"/><path d="M20 16v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2A2 2 0 0 0 12.07 6H18a2 2 0 0 1 2 2v1"/></svg>)SVG";
-    case Symbol::Sidebar:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18" stroke-opacity="0.66"/></svg>)SVG";
-    case Symbol::NewFolder:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10v6" stroke-opacity="0.66"/><path d="M9 13h6" stroke-opacity="0.66"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>)SVG";
-    case Symbol::Applications:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4" stroke-opacity="0.66"/><path d="M2 8h20" stroke-opacity="0.66"/><path d="M6 4v4" stroke-opacity="0.66"/></svg>)SVG";
-    case Symbol::Desktop:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21" stroke-opacity="0.66"/><line x1="12" x2="12" y1="17" y2="21" stroke-opacity="0.66"/></svg>)SVG";
-    case Symbol::Download:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="m8 12 4 4 4-4"/></svg>)SVG";
-    case Symbol::SortGroup:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>)SVG";
-    case Symbol::Duplicate:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" stroke-opacity="0.66"/></svg>)SVG";
-    case Symbol::NewDocument:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M9 15h6" stroke-opacity="0.66"/><path d="M12 18v-6" stroke-opacity="0.66"/></svg>)SVG";
-    case Symbol::PdfDocument:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>)SVG";
-    case Symbol::TextDocument:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>)SVG";
-    case Symbol::Archive:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v11.5"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 12v-1"/><path d="M8 18v-2"/><path d="M8 7V6"/><circle cx="8" cy="20" r="2"/></svg>)SVG";
-    case Symbol::AudioDocument:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.65 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v10.35"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 20v-7l3 1.474"/><circle cx="6" cy="20" r="2"/></svg>)SVG";
-    case Symbol::CodeDocument:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 12.5 8 15l2 2.5"/><path d="m14 12.5 2 2.5-2 2.5"/></svg>)SVG";
-    case Symbol::SpreadsheetDocument:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></svg>)SVG";
-    case Symbol::PresentationDocument:
-        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/></svg>)SVG";
-    default:
-        return {};
+inline auto source_attribution(Symbol symbol) noexcept
+        -> SymbolSourceAttribution {
+    return source_attribution(symbol, default_material_symbols_style());
+}
+
+inline auto material_symbols_svg_source(Symbol symbol,
+                                        MaterialSymbolsStyle style) noexcept
+        -> std::string_view {
+    switch (style) {
+    case MaterialSymbolsStyle::Outlined:
+        switch (symbol) {
+        case Symbol::Back:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M560-240 320-480l240-240 56 56-184 184 184 184-56 56Z"/></svg>)SVG";
+        case Symbol::Forward:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z"/></svg>)SVG";
+        case Symbol::Search:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/></svg>)SVG";
+        case Symbol::Share:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-40q-33 0-56.5-23.5T160-120v-440q0-33 23.5-56.5T240-640h120v80H240v440h480v-440H600v-80h120q33 0 56.5 23.5T800-560v440q0 33-23.5 56.5T720-40H240Zm200-280v-447l-64 64-56-57 160-160 160 160-56 57-64-64v447h-80Z"/></svg>)SVG";
+        case Symbol::Tag:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M856-390 570-104q-12 12-27 18t-30 6q-15 0-30-6t-27-18L103-457q-11-11-17-25.5T80-513v-287q0-33 23.5-56.5T160-880h287q16 0 31 6.5t26 17.5l352 353q12 12 17.5 27t5.5 30q0 15-5.5 29.5T856-390ZM513-160l286-286-353-354H160v286l353 354ZM260-640q25 0 42.5-17.5T320-700q0-25-17.5-42.5T260-760q-25 0-42.5 17.5T200-700q0 25 17.5 42.5T260-640Zm220 160Z"/></svg>)SVG";
+        case Symbol::More:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400Z"/></svg>)SVG";
+        case Symbol::Grid:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M120-520v-320h320v320H120Zm0 400v-320h320v320H120Zm400-400v-320h320v320H520Zm0 400v-320h320v320H520ZM200-600h160v-160H200v160Zm400 0h160v-160H600v160Zm0 400h160v-160H600v160Zm-400 0h160v-160H200v160Zm400-400Zm0 240Zm-240 0Zm0-240Z"/></svg>)SVG";
+        case Symbol::List:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M360-240h440v-107H360v107ZM160-613h120v-107H160v107Zm0 187h120v-107H160v107Zm0 186h120v-107H160v107Zm200-186h440v-107H360v107Zm0-187h440v-107H360v107ZM160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h640q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160Z"/></svg>)SVG";
+        case Symbol::Columns:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M121-280v-400q0-33 23.5-56.5T201-760h559q33 0 56.5 23.5T840-680v400q0 33-23.5 56.5T760-200H201q-33 0-56.5-23.5T121-280Zm79 0h133v-400H200v400Zm213 0h133v-400H413v400Zm213 0h133v-400H626v400Z"/></svg>)SVG";
+        case Symbol::Gallery:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M80-360v-240q0-33 23.5-56.5T160-680q33 0 56.5 23.5T240-600v240q0 33-23.5 56.5T160-280q-33 0-56.5-23.5T80-360Zm280 160q-33 0-56.5-23.5T280-280v-400q0-33 23.5-56.5T360-760h240q33 0 56.5 23.5T680-680v400q0 33-23.5 56.5T600-200H360Zm360-160v-240q0-33 23.5-56.5T800-680q33 0 56.5 23.5T880-600v240q0 33-23.5 56.5T800-280q-33 0-56.5-23.5T720-360Zm-360 80h240v-400H360v400Zm120-200Z"/></svg>)SVG";
+        case Symbol::Folder:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Z"/></svg>)SVG";
+        case Symbol::Trash:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/></svg>)SVG";
+        case Symbol::Document:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM240-800v200-200 640-640Z"/></svg>)SVG";
+        case Symbol::Image:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm40-80h480L570-480 450-320l-90-120-120 160Zm-40 80v-560 560Z"/></svg>)SVG";
+        case Symbol::Movie:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="m160-800 80 160h120l-80-160h80l80 160h120l-80-160h80l80 160h120l-80-160h120q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800Zm0 240v320h640v-320H160Zm0 0v320-320Z"/></svg>)SVG";
+        case Symbol::Plus:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z"/></svg>)SVG";
+        case Symbol::XMark:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg>)SVG";
+        case Symbol::ChevronDown:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-344 240-584l56-56 184 184 184-184 56 56-240 240Z"/></svg>)SVG";
+        case Symbol::ChevronUp:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-528 296-344l-56-56 240-240 240 240-56 56-184-184Z"/></svg>)SVG";
+        case Symbol::Home:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-200h120v-240h240v240h120v-360L480-740 240-560v360Zm-80 80v-480l320-240 320 240v480H520v-240h-80v240H160Zm320-350Z"/></svg>)SVG";
+        case Symbol::Cloud:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M260-160q-91 0-155.5-63T40-377q0-78 47-139t123-78q25-92 100-149t170-57q117 0 198.5 81.5T760-520q69 8 114.5 59.5T920-340q0 75-52.5 127.5T740-160H260Zm0-80h480q42 0 71-29t29-71q0-42-29-71t-71-29h-60v-80q0-83-58.5-141.5T480-720q-83 0-141.5 58.5T280-520h-20q-58 0-99 41t-41 99q0 58 41 99t99 41Zm220-240Z"/></svg>)SVG";
+        case Symbol::AirDrop:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-304 304-480l176-176 176 176-176 176Zm56 199q-11 11-26 17t-30 6q-15 0-30-6t-26-17L105-424q-11-11-17-26t-6-30q0-15 6-30t17-26l318-318q12-12 26.5-18t30.5-6q16 0 30.5 6t26.5 18l318 318q11 11 17 26t6 30q0 15-6 30t-17 26L536-105Zm-56-87 288-288-288-288-288 288 288 288Z"/></svg>)SVG";
+        case Symbol::Recents:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-120q-138 0-240.5-91.5T122-440h82q14 104 92.5 172T480-200q117 0 198.5-81.5T760-480q0-117-81.5-198.5T480-760q-69 0-129 32t-101 88h110v80H120v-240h80v94q51-64 124.5-99T480-840q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-480q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-120Zm112-192L440-464v-216h80v184l128 128-56 56Z"/></svg>)SVG";
+        case Symbol::Shared:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M440-280h320v-22q0-45-44-71.5T600-400q-72 0-116 26.5T440-302v22Zm160-160q33 0 56.5-23.5T680-520q0-33-23.5-56.5T600-600q-33 0-56.5 23.5T520-520q0 33 23.5 56.5T600-440ZM160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Z"/></svg>)SVG";
+        case Symbol::Sidebar:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm280-80h280v-560H480v560Z"/></svg>)SVG";
+        case Symbol::NewFolder:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M560-320h80v-80h80v-80h-80v-80h-80v80h-80v80h80v80ZM160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Z"/></svg>)SVG";
+        case Symbol::Applications:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-160q-33 0-56.5-23.5T160-240q0-33 23.5-56.5T240-320q33 0 56.5 23.5T320-240q0 33-23.5 56.5T240-160Zm240 0q-33 0-56.5-23.5T400-240q0-33 23.5-56.5T480-320q33 0 56.5 23.5T560-240q0 33-23.5 56.5T480-160Zm240 0q-33 0-56.5-23.5T640-240q0-33 23.5-56.5T720-320q33 0 56.5 23.5T800-240q0 33-23.5 56.5T720-160ZM240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400ZM240-640q-33 0-56.5-23.5T160-720q0-33 23.5-56.5T240-800q33 0 56.5 23.5T320-720q0 33-23.5 56.5T240-640Zm240 0q-33 0-56.5-23.5T400-720q0-33 23.5-56.5T480-800q33 0 56.5 23.5T560-720q0 33-23.5 56.5T480-640Zm240 0q-33 0-56.5-23.5T640-720q0-33 23.5-56.5T720-800q33 0 56.5 23.5T800-720q0 33-23.5 56.5T720-640Z"/></svg>)SVG";
+        case Symbol::Desktop:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M320-120v-40l80-80H160q-33 0-56.5-23.5T80-320v-440q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v440q0 33-23.5 56.5T800-240H560l80 80v40H320ZM160-440h640v-320H160v320Zm0 0v-320 320Z"/></svg>)SVG";
+        case Symbol::Download:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>)SVG";
+        case Symbol::SortGroup:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M320-440v-287L217-624l-57-56 200-200 200 200-57 56-103-103v287h-80ZM600-80 400-280l57-56 103 103v-287h80v287l103-103 57 56L600-80Z"/></svg>)SVG";
+        case Symbol::Duplicate:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z"/></svg>)SVG";
+        case Symbol::NewDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M440-240h80v-120h120v-80H520v-120h-80v120H320v80h120v120ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM240-800v200-200 640-640Z"/></svg>)SVG";
+        case Symbol::PdfDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M360-460h40v-80h40q17 0 28.5-11.5T480-580v-40q0-17-11.5-28.5T440-660h-80v200Zm40-120v-40h40v40h-40Zm120 120h80q17 0 28.5-11.5T640-500v-120q0-17-11.5-28.5T600-660h-80v200Zm40-40v-120h40v120h-40Zm120 40h40v-80h40v-40h-40v-40h40v-40h-80v200ZM320-240q-33 0-56.5-23.5T240-320v-480q0-33 23.5-56.5T320-880h480q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H320Zm0-80h480v-480H320v480ZM160-80q-33 0-56.5-23.5T80-160v-560h80v560h560v80H160Zm160-720v480-480Z"/></svg>)SVG";
+        case Symbol::TextDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M280-280h280v-80H280v80Zm0-160h400v-80H280v80Zm0-160h400v-80H280v80Zm-80 480q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0-560v560-560Z"/></svg>)SVG";
+        case Symbol::Archive:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M640-480v-80h80v80h-80Zm0 80h-80v-80h80v80Zm0 80v-80h80v80h-80ZM447-640l-80-80H160v480h400v-80h80v80h160v-400H640v80h-80v-80H447ZM160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80v-480 480Z"/></svg>)SVG";
+        case Symbol::AudioDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M430-200q38 0 64-26t26-64v-150h120v-80H480v155q-11-8-23.5-11.5T430-380q-38 0-64 26t-26 64q0 38 26 64t64 26ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM240-800v200-200 640-640Z"/></svg>)SVG";
+        case Symbol::CodeDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M320-240 80-480l240-240 57 57-184 184 183 183-56 56Zm320 0-57-57 184-184-183-183 56-56 240 240-240 240Z"/></svg>)SVG";
+        case Symbol::SpreadsheetDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M760-120H200q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120ZM200-640h560v-120H200v120Zm100 80H200v360h100v-360Zm360 0v360h100v-360H660Zm-80 0H380v360h200v-360Z"/></svg>)SVG";
+        case Symbol::PresentationDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="m380-300 280-180-280-180v360ZM200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0-560v560-560Z"/></svg>)SVG";
+        default:
+            return {};
+        }
+    case MaterialSymbolsStyle::Rounded:
+        switch (symbol) {
+        case Symbol::Back:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="m432-480 156 156q11 11 11 28t-11 28q-11 11-28 11t-28-11L348-452q-6-6-8.5-13t-2.5-15q0-8 2.5-15t8.5-13l184-184q11-11 28-11t28 11q11 11 11 28t-11 28L432-480Z"/></svg>)SVG";
+        case Symbol::Forward:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M504-480 348-636q-11-11-11-28t11-28q11-11 28-11t28 11l184 184q6 6 8.5 13t2.5 15q0 8-2.5 15t-8.5 13L404-268q-11 11-28 11t-28-11q-11-11-11-28t11-28l156-156Z"/></svg>)SVG";
+        case Symbol::Search:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M380-320q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l224 224q11 11 11 28t-11 28q-11 11-28 11t-28-11L532-372q-30 24-69 38t-83 14Zm0-80q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/></svg>)SVG";
+        case Symbol::Share:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-40q-33 0-56.5-23.5T160-120v-440q0-33 23.5-56.5T240-640h80q17 0 28.5 11.5T360-600q0 17-11.5 28.5T320-560h-80v440h480v-440h-80q-17 0-28.5-11.5T600-600q0-17 11.5-28.5T640-640h80q33 0 56.5 23.5T800-560v440q0 33-23.5 56.5T720-40H240Zm200-727-36 36q-12 12-28 11.5T348-732q-11-12-11.5-28t11.5-28l104-104q12-12 28-12t28 12l104 104q11 11 11 27.5T612-732q-12 12-28.5 12T555-732l-35-35v407q0 17-11.5 28.5T480-320q-17 0-28.5-11.5T440-360v-407Z"/></svg>)SVG";
+        case Symbol::Tag:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M856-390 570-104q-12 12-27 18t-30 6q-15 0-30-6t-27-18L103-457q-11-11-17-25.5T80-513v-287q0-33 23.5-56.5T160-880h287q16 0 31 6.5t26 17.5l352 353q12 12 17.5 27t5.5 30q0 15-5.5 29.5T856-390ZM513-160l286-286-353-354H160v286l353 354ZM260-640q25 0 42.5-17.5T320-700q0-25-17.5-42.5T260-760q-25 0-42.5 17.5T200-700q0 25 17.5 42.5T260-640Zm220 160Z"/></svg>)SVG";
+        case Symbol::More:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400Z"/></svg>)SVG";
+        case Symbol::Grid:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M200-520q-33 0-56.5-23.5T120-600v-160q0-33 23.5-56.5T200-840h160q33 0 56.5 23.5T440-760v160q0 33-23.5 56.5T360-520H200Zm0 400q-33 0-56.5-23.5T120-200v-160q0-33 23.5-56.5T200-440h160q33 0 56.5 23.5T440-360v160q0 33-23.5 56.5T360-120H200Zm400-400q-33 0-56.5-23.5T520-600v-160q0-33 23.5-56.5T600-840h160q33 0 56.5 23.5T840-760v160q0 33-23.5 56.5T760-520H600Zm0 400q-33 0-56.5-23.5T520-200v-160q0-33 23.5-56.5T600-440h160q33 0 56.5 23.5T840-360v160q0 33-23.5 56.5T760-120H600ZM200-600h160v-160H200v160Zm400 0h160v-160H600v160Zm0 400h160v-160H600v160Zm-400 0h160v-160H200v160Zm400-400Zm0 240Zm-240 0Zm0-240Z"/></svg>)SVG";
+        case Symbol::List:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M120-280v-400q0-33 23.5-56.5T200-760h560q33 0 56.5 23.5T840-680v400q0 33-23.5 56.5T760-200H200q-33 0-56.5-23.5T120-280Zm80-320h80v-80h-80v80Zm160 0h400v-80H360v80Zm0 160h400v-80H360v80Zm0 160h400v-80H360v80Zm-160 0h80v-80h-80v80Zm0-160h80v-80h-80v80Z"/></svg>)SVG";
+        case Symbol::Columns:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M121-280v-400q0-33 23.5-56.5T201-760h559q33 0 56.5 23.5T840-680v400q0 33-23.5 56.5T760-200H201q-33 0-56.5-23.5T121-280Zm79 0h133v-400H200v400Zm213 0h133v-400H413v400Zm213 0h133v-400H626v400Z"/></svg>)SVG";
+        case Symbol::Gallery:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M80-360v-240q0-33 23.5-56.5T160-680q33 0 56.5 23.5T240-600v240q0 33-23.5 56.5T160-280q-33 0-56.5-23.5T80-360Zm280 160q-33 0-56.5-23.5T280-280v-400q0-33 23.5-56.5T360-760h240q33 0 56.5 23.5T680-680v400q0 33-23.5 56.5T600-200H360Zm360-160v-240q0-33 23.5-56.5T800-680q33 0 56.5 23.5T880-600v240q0 33-23.5 56.5T800-280q-33 0-56.5-23.5T720-360Zm-360 80h240v-400H360v400Zm120-200Z"/></svg>)SVG";
+        case Symbol::Folder:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h207q16 0 30.5 6t25.5 17l57 57h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Z"/></svg>)SVG";
+        case Symbol::Trash:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M280-120q-33 0-56.5-23.5T200-200v-520q-17 0-28.5-11.5T160-760q0-17 11.5-28.5T200-800h160q0-17 11.5-28.5T400-840h160q17 0 28.5 11.5T600-800h160q17 0 28.5 11.5T800-760q0 17-11.5 28.5T760-720v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM400-280q17 0 28.5-11.5T440-320v-280q0-17-11.5-28.5T400-640q-17 0-28.5 11.5T360-600v280q0 17 11.5 28.5T400-280Zm160 0q17 0 28.5-11.5T600-320v-280q0-17-11.5-28.5T560-640q-17 0-28.5 11.5T520-600v280q0 17 11.5 28.5T560-280ZM280-720v520-520Z"/></svg>)SVG";
+        case Symbol::Document:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h287q16 0 30.5 6t25.5 17l194 194q11 11 17 25.5t6 30.5v447q0 33-23.5 56.5T720-80H240Zm280-560v-160H240v640h480v-440H560q-17 0-28.5-11.5T520-640ZM240-800v200-200 640-640Z"/></svg>)SVG";
+        case Symbol::Image:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0 0v-560 560Zm80-80h400q12 0 18-11t-2-21L586-459q-6-8-16-8t-16 8L450-320l-74-99q-6-8-16-8t-16 8l-80 107q-8 10-2 21t18 11Z"/></svg>)SVG";
+        case Symbol::Movie:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="m160-800 65 130q7 14 20 22t28 8q30 0 46-25.5t2-52.5l-41-82h80l65 130q7 14 20 22t28 8q30 0 46-25.5t2-52.5l-41-82h80l65 130q7 14 20 22t28 8q30 0 46-25.5t2-52.5l-41-82h120q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800Zm0 240v320h640v-320H160Zm0 0v320-320Z"/></svg>)SVG";
+        case Symbol::Plus:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M440-440H240q-17 0-28.5-11.5T200-480q0-17 11.5-28.5T240-520h200v-200q0-17 11.5-28.5T480-760q17 0 28.5 11.5T520-720v200h200q17 0 28.5 11.5T760-480q0 17-11.5 28.5T720-440H520v200q0 17-11.5 28.5T480-200q-17 0-28.5-11.5T440-240v-200Z"/></svg>)SVG";
+        case Symbol::XMark:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-424 284-228q-11 11-28 11t-28-11q-11-11-11-28t11-28l196-196-196-196q-11-11-11-28t11-28q11-11 28-11t28 11l196 196 196-196q11-11 28-11t28 11q11 11 11 28t-11 28L536-480l196 196q11 11 11 28t-11 28q-11 11-28 11t-28-11L480-424Z"/></svg>)SVG";
+        case Symbol::ChevronDown:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-361q-8 0-15-2.5t-13-8.5L268-556q-11-11-11-28t11-28q11-11 28-11t28 11l156 156 156-156q11-11 28-11t28 11q11 11 11 28t-11 28L508-372q-6 6-13 8.5t-15 2.5Z"/></svg>)SVG";
+        case Symbol::ChevronUp:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-528 324-372q-11 11-28 11t-28-11q-11-11-11-28t11-28l184-184q12-12 28-12t28 12l184 184q11 11 11 28t-11 28q-11 11-28 11t-28-11L480-528Z"/></svg>)SVG";
+        case Symbol::Home:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-200h120v-200q0-17 11.5-28.5T400-440h160q17 0 28.5 11.5T600-400v200h120v-360L480-740 240-560v360Zm-80 0v-360q0-19 8.5-36t23.5-28l240-180q21-16 48-16t48 16l240 180q15 11 23.5 28t8.5 36v360q0 33-23.5 56.5T720-120H560q-17 0-28.5-11.5T520-160v-200h-80v200q0 17-11.5 28.5T400-120H240q-33 0-56.5-23.5T160-200Zm320-270Z"/></svg>)SVG";
+        case Symbol::Cloud:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M260-160q-91 0-155.5-63T40-377q0-78 47-139t123-78q25-92 100-149t170-57q117 0 198.5 81.5T760-520q69 8 114.5 59.5T920-340q0 75-52.5 127.5T740-160H260Zm0-80h480q42 0 71-29t29-71q0-42-29-71t-71-29h-60v-80q0-83-58.5-141.5T480-720q-83 0-141.5 58.5T280-520h-20q-58 0-99 41t-41 99q0 58 41 99t99 41Zm220-240Z"/></svg>)SVG";
+        case Symbol::AirDrop:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M452-332 332-452q-12-12-12-28t12-28l120-120q12-12 28-12t28 12l120 120q12 12 12 28t-12 28L508-332q-12 12-28 12t-28-12Zm84 227q-11 11-26 17t-30 6q-15 0-30-6t-26-17L105-424q-11-11-17-26t-6-30q0-15 6-30t17-26l318-318q12-12 26.5-18t30.5-6q16 0 30.5 6t26.5 18l318 318q11 11 17 26t6 30q0 15-6 30t-17 26L536-105Zm-56-87 288-288-288-288-288 288 288 288Z"/></svg>)SVG";
+        case Symbol::Recents:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-120q-126 0-223-76.5T131-392q-4-15 6-27.5t27-14.5q16-2 29 6t18 24q24 90 99 147t170 57q117 0 198.5-81.5T760-480q0-117-81.5-198.5T480-760q-69 0-129 32t-101 88h70q17 0 28.5 11.5T360-600q0 17-11.5 28.5T320-560H160q-17 0-28.5-11.5T120-600v-160q0-17 11.5-28.5T160-800q17 0 28.5 11.5T200-760v54q51-64 124.5-99T480-840q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-480q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-120Zm40-376 100 100q11 11 11 28t-11 28q-11 11-28 11t-28-11L452-452q-6-6-9-13.5t-3-15.5v-159q0-17 11.5-28.5T480-680q17 0 28.5 11.5T520-640v144Z"/></svg>)SVG";
+        case Symbol::Shared:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h207q16 0 30.5 6t25.5 17l57 57h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Zm280-40h320v-22q0-45-44-71.5T600-400q-72 0-116 26.5T440-302v22Zm160-160q33 0 56.5-23.5T680-520q0-33-23.5-56.5T600-600q-33 0-56.5 23.5T520-520q0 33 23.5 56.5T600-440Z"/></svg>)SVG";
+        case Symbol::Sidebar:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm280-80h280v-560H480v560Z"/></svg>)SVG";
+        case Symbol::NewFolder:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h207q16 0 30.5 6t25.5 17l57 57h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Zm400-160v40q0 17 11.5 28.5T600-320q17 0 28.5-11.5T640-360v-40h40q17 0 28.5-11.5T720-440q0-17-11.5-28.5T680-480h-40v-40q0-17-11.5-28.5T600-560q-17 0-28.5 11.5T560-520v40h-40q-17 0-28.5 11.5T480-440q0 17 11.5 28.5T520-400h40Z"/></svg>)SVG";
+        case Symbol::Applications:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-160q-33 0-56.5-23.5T160-240q0-33 23.5-56.5T240-320q33 0 56.5 23.5T320-240q0 33-23.5 56.5T240-160Zm240 0q-33 0-56.5-23.5T400-240q0-33 23.5-56.5T480-320q33 0 56.5 23.5T560-240q0 33-23.5 56.5T480-160Zm240 0q-33 0-56.5-23.5T640-240q0-33 23.5-56.5T720-320q33 0 56.5 23.5T800-240q0 33-23.5 56.5T720-160ZM240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400ZM240-640q-33 0-56.5-23.5T160-720q0-33 23.5-56.5T240-800q33 0 56.5 23.5T320-720q0 33-23.5 56.5T240-640Zm240 0q-33 0-56.5-23.5T400-720q0-33 23.5-56.5T480-800q33 0 56.5 23.5T560-720q0 33-23.5 56.5T480-640Zm240 0q-33 0-56.5-23.5T640-720q0-33 23.5-56.5T720-800q33 0 56.5 23.5T800-720q0 33-23.5 56.5T720-640Z"/></svg>)SVG";
+        case Symbol::Desktop:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M400-240H160q-33 0-56.5-23.5T80-320v-440q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v440q0 33-23.5 56.5T800-240H560l74 74q2 2 6 14v12q0 8-6 14t-14 6H334q-6 0-10-4t-4-10v-20q0-2 4-10l76-76ZM160-440h640v-320H160v320Zm0 0v-320 320Z"/></svg>)SVG";
+        case Symbol::Download:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-337q-8 0-15-2.5t-13-8.5L308-492q-12-12-11.5-28t11.5-28q12-12 28.5-12.5T365-549l75 75v-286q0-17 11.5-28.5T480-800q17 0 28.5 11.5T520-760v286l75-75q12-12 28.5-11.5T652-548q11 12 11.5 28T652-492L508-348q-6 6-13 8.5t-15 2.5ZM240-160q-33 0-56.5-23.5T160-240v-80q0-17 11.5-28.5T200-360q17 0 28.5 11.5T240-320v80h480v-80q0-17 11.5-28.5T760-360q17 0 28.5 11.5T800-320v80q0 33-23.5 56.5T720-160H240Z"/></svg>)SVG";
+        case Symbol::SortGroup:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M360-440q-17 0-28.5-11.5T320-480v-247l-75 75q-11 11-27.5 11T189-652q-12-12-12-28.5t12-28.5l143-143q6-6 13-8.5t15-2.5q8 0 15 2.5t13 8.5l144 144q12 12 11.5 28T531-652q-12 11-28 11.5T475-652l-75-75v247q0 17-11.5 28.5T360-440ZM600-97q-8 0-15-2.5t-13-8.5L428-252q-12-12-11.5-28t12.5-28q12-11 28-11.5t28 11.5l75 75v-247q0-17 11.5-28.5T600-520q17 0 28.5 11.5T640-480v247l75-75q11-11 27.5-11t28.5 11q12 12 12 28.5T771-251L628-108q-6 6-13 8.5T600-97Z"/></svg>)SVG";
+        case Symbol::Duplicate:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-520q0-17 11.5-28.5T160-720q17 0 28.5 11.5T200-680v520h400q17 0 28.5 11.5T640-120q0 17-11.5 28.5T600-80H200Zm160-240v-480 480Z"/></svg>)SVG";
+        case Symbol::NewDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M440-360v80q0 17 11.5 28.5T480-240q17 0 28.5-11.5T520-280v-80h80q17 0 28.5-11.5T640-400q0-17-11.5-28.5T600-440h-80v-80q0-17-11.5-28.5T480-560q-17 0-28.5 11.5T440-520v80h-80q-17 0-28.5 11.5T320-400q0 17 11.5 28.5T360-360h80ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h287q16 0 30.5 6t25.5 17l194 194q11 11 17 25.5t6 30.5v447q0 33-23.5 56.5T720-80H240Zm280-560v-160H240v640h480v-440H560q-17 0-28.5-11.5T520-640ZM240-800v200-200 640-640Z"/></svg>)SVG";
+        case Symbol::PdfDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M400-540h40q17 0 28.5-11.5T480-580v-40q0-17-11.5-28.5T440-660h-60q-8 0-14 6t-6 14v160q0 8 6 14t14 6q8 0 14-6t6-14v-60Zm0-40v-40h40v40h-40Zm200 120q17 0 28.5-11.5T640-500v-120q0-17-11.5-28.5T600-660h-60q-8 0-14 6t-6 14v160q0 8 6 14t14 6h60Zm-40-40v-120h40v120h-40Zm160-40h20q8 0 14-6t6-14q0-8-6-14t-14-6h-20v-40h20q8 0 14-6t6-14q0-8-6-14t-14-6h-40q-8 0-14 6t-6 14v160q0 8 6 14t14 6q8 0 14-6t6-14v-60ZM320-240q-33 0-56.5-23.5T240-320v-480q0-33 23.5-56.5T320-880h480q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H320Zm0-80h480v-480H320v480ZM160-80q-33 0-56.5-23.5T80-160v-520q0-17 11.5-28.5T120-720q17 0 28.5 11.5T160-680v520h520q17 0 28.5 11.5T720-120q0 17-11.5 28.5T680-80H160Zm160-720v480-480Z"/></svg>)SVG";
+        case Symbol::TextDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0-560v560-560Zm120 480h200q17 0 28.5-11.5T560-320q0-17-11.5-28.5T520-360H320q-17 0-28.5 11.5T280-320q0 17 11.5 28.5T320-280Zm0-160h320q17 0 28.5-11.5T680-480q0-17-11.5-28.5T640-520H320q-17 0-28.5 11.5T280-480q0 17 11.5 28.5T320-440Zm0-160h320q17 0 28.5-11.5T680-640q0-17-11.5-28.5T640-680H320q-17 0-28.5 11.5T280-640q0 17 11.5 28.5T320-600Z"/></svg>)SVG";
+        case Symbol::Archive:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M640-480v-80h80v80h-80Zm0 80h-80v-80h80v80Zm0 80v-80h80v80h-80ZM447-640l-80-80H160v480h400v-80h80v80h160v-400H640v80h-80v-80H447ZM160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h207q16 0 30.5 6t25.5 17l57 57h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80v-480 480Z"/></svg>)SVG";
+        case Symbol::AudioDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M430-200q38 0 64-26t26-64v-150h80q17 0 28.5-11.5T640-480q0-17-11.5-28.5T600-520h-80q-17 0-28.5 11.5T480-480v115q-11-8-23.5-11.5T430-380q-38 0-64 26t-26 64q0 38 26 64t64 26ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h287q16 0 30.5 6t25.5 17l194 194q11 11 17 25.5t6 30.5v447q0 33-23.5 56.5T720-80H240Zm280-560v-160H240v640h480v-440H560q-17 0-28.5-11.5T520-640ZM240-800v200-200 640-640Z"/></svg>)SVG";
+        case Symbol::CodeDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="m193-479 155 155q11 11 11 28t-11 28q-11 11-28 11t-28-11L108-452q-6-6-8.5-13T97-480q0-8 2.5-15t8.5-13l184-184q12-12 28.5-12t28.5 12q12 12 12 28.5T349-635L193-479Zm574-2L612-636q-11-11-11-28t11-28q11-11 28-11t28 11l184 184q6 6 8.5 13t2.5 15q0 8-2.5 15t-8.5 13L668-268q-12 12-28 11.5T612-269q-12-12-12-28.5t12-28.5l155-155Z"/></svg>)SVG";
+        case Symbol::SpreadsheetDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M760-120H200q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120ZM200-640h560v-120H200v120Zm100 80H200v360h100v-360Zm360 0v360h100v-360H660Zm-80 0H380v360h200v-360Z"/></svg>)SVG";
+        case Symbol::PresentationDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M634-463q9-6 9-17t-9-17L411-640q-10-7-20.5-1T380-623v286q0 12 10.5 18t20.5-1l223-143ZM200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0-560v560-560Z"/></svg>)SVG";
+        default:
+            return {};
+        }
+    case MaterialSymbolsStyle::Sharp:
+        switch (symbol) {
+        case Symbol::Back:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M560-240 320-480l240-240 56 56-184 184 184 184-56 56Z"/></svg>)SVG";
+        case Symbol::Forward:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z"/></svg>)SVG";
+        case Symbol::Search:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/></svg>)SVG";
+        case Symbol::Share:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M160-40v-600h200v80H240v440h480v-440H600v-80h200v600H160Zm280-280v-447l-64 64-56-57 160-160 160 160-56 57-64-64v447h-80Z"/></svg>)SVG";
+        case Symbol::Tag:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M513-47 80-480v-400h400l432 434L513-47Zm0-113 286-286-353-354H160v286l353 354ZM260-640q25 0 42.5-17.5T320-700q0-25-17.5-42.5T260-760q-25 0-42.5 17.5T200-700q0 25 17.5 42.5T260-640Zm220 160Z"/></svg>)SVG";
+        case Symbol::More:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400Z"/></svg>)SVG";
+        case Symbol::Grid:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M120-520v-320h320v320H120Zm0 400v-320h320v320H120Zm400-400v-320h320v320H520Zm0 400v-320h320v320H520ZM200-600h160v-160H200v160Zm400 0h160v-160H600v160Zm0 400h160v-160H600v160Zm-400 0h160v-160H200v160Zm400-400Zm0 240Zm-240 0Zm0-240Z"/></svg>)SVG";
+        case Symbol::List:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M360-240h440v-107H360v107ZM160-613h120v-107H160v107Zm0 187h120v-107H160v107Zm0 186h120v-107H160v107Zm200-186h440v-107H360v107Zm0-187h440v-107H360v107ZM80-160v-640h800v640H80Z"/></svg>)SVG";
+        case Symbol::Columns:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M121-200v-560h719v560H121Zm79-80h133v-400H200v400Zm213 0h133v-400H413v400Zm213 0h133v-400H626v400Z"/></svg>)SVG";
+        case Symbol::Gallery:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M80-280v-400h160v400H80Zm200 80v-560h400v560H280Zm440-80v-400h160v400H720Zm-360 0h240v-400H360v400Zm120-200Z"/></svg>)SVG";
+        case Symbol::Folder:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M80-160v-640h320l80 80h400v560H80Zm80-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Z"/></svg>)SVG";
+        case Symbol::Trash:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M200-120v-600h-40v-80h200v-40h240v40h200v80h-40v600H200Zm80-80h400v-520H280v520Zm80-80h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/></svg>)SVG";
+        case Symbol::Document:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M160-80v-800h400l240 240v560H160Zm360-520v-200H240v640h480v-440H520ZM240-800v200-200 640-640Z"/></svg>)SVG";
+        case Symbol::Image:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-280h480L570-480 450-320l-90-120-120 160ZM120-120v-720h720v720H120Zm80-80h560v-560H200v560Zm0 0v-560 560Z"/></svg>)SVG";
+        case Symbol::Movie:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M80-160v-640h80l80 160h120l-80-160h80l80 160h120l-80-160h80l80 160h120l-80-160h200v640H80Zm80-400v320h640v-320H160Zm0 0v320-320Z"/></svg>)SVG";
+        case Symbol::Plus:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z"/></svg>)SVG";
+        case Symbol::XMark:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg>)SVG";
+        case Symbol::ChevronDown:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-344 240-584l56-56 184 184 184-184 56 56-240 240Z"/></svg>)SVG";
+        case Symbol::ChevronUp:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-528 296-344l-56-56 240-240 240 240-56 56-184-184Z"/></svg>)SVG";
+        case Symbol::Home:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-200h120v-240h240v240h120v-360L480-740 240-560v360Zm-80 80v-480l320-240 320 240v480H520v-240h-80v240H160Zm320-350Z"/></svg>)SVG";
+        case Symbol::Cloud:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M260-160q-91 0-155.5-63T40-377q0-78 47-139t123-78q25-92 100-149t170-57q117 0 198.5 81.5T760-520q69 8 114.5 59.5T920-340q0 75-52.5 127.5T740-160H260Zm0-80h480q42 0 71-29t29-71q0-42-29-71t-71-29h-60v-80q0-83-58.5-141.5T480-720q-83 0-141.5 58.5T280-520h-20q-58 0-99 41t-41 99q0 58 41 99t99 41Zm220-240Z"/></svg>)SVG";
+        case Symbol::AirDrop:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-304 304-480l176-176 176 176-176 176Zm0 255L49-480l431-431 431 431L480-49Zm0-143 288-288-288-288-288 288 288 288Z"/></svg>)SVG";
+        case Symbol::Recents:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-120q-138 0-240.5-91.5T122-440h82q14 104 92.5 172T480-200q117 0 198.5-81.5T760-480q0-117-81.5-198.5T480-760q-69 0-129 32t-101 88h110v80H120v-240h80v94q51-64 124.5-99T480-840q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-480q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-120Zm112-192L440-464v-216h80v184l128 128-56 56Z"/></svg>)SVG";
+        case Symbol::Shared:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M80-160v-640h320l80 80h400v560H80Zm80-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Zm280-40h320v-22q0-45-44-71.5T600-400q-72 0-116 26.5T440-302v22Zm160-160q33 0 56.5-23.5T680-520q0-33-23.5-56.5T600-600q-33 0-56.5 23.5T520-520q0 33 23.5 56.5T600-440Z"/></svg>)SVG";
+        case Symbol::Sidebar:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M120-120v-720h720v720H120Zm360-80h280v-560H480v560Z"/></svg>)SVG";
+        case Symbol::NewFolder:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M80-160v-640h320l80 80h400v560H80Zm80-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Zm400-80h80v-80h80v-80h-80v-80h-80v80h-80v80h80v80Z"/></svg>)SVG";
+        case Symbol::Applications:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-160q-33 0-56.5-23.5T160-240q0-33 23.5-56.5T240-320q33 0 56.5 23.5T320-240q0 33-23.5 56.5T240-160Zm240 0q-33 0-56.5-23.5T400-240q0-33 23.5-56.5T480-320q33 0 56.5 23.5T560-240q0 33-23.5 56.5T480-160Zm240 0q-33 0-56.5-23.5T640-240q0-33 23.5-56.5T720-320q33 0 56.5 23.5T800-240q0 33-23.5 56.5T720-160ZM240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400ZM240-640q-33 0-56.5-23.5T160-720q0-33 23.5-56.5T240-800q33 0 56.5 23.5T320-720q0 33-23.5 56.5T240-640Zm240 0q-33 0-56.5-23.5T400-720q0-33 23.5-56.5T480-800q33 0 56.5 23.5T560-720q0 33-23.5 56.5T480-640Zm240 0q-33 0-56.5-23.5T640-720q0-33 23.5-56.5T720-800q33 0 56.5 23.5T800-720q0 33-23.5 56.5T720-640Z"/></svg>)SVG";
+        case Symbol::Desktop:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M320-120v-40l80-80H80v-600h800v600H560l80 80v40H320ZM160-440h640v-320H160v320Zm0 0v-320 320Z"/></svg>)SVG";
+        case Symbol::Download:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM160-160v-200h80v120h480v-120h80v200H160Z"/></svg>)SVG";
+        case Symbol::SortGroup:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M320-440v-287L217-624l-57-56 200-200 200 200-57 56-103-103v287h-80ZM600-80 400-280l57-56 103 103v-287h80v287l103-103 57 56L600-80Z"/></svg>)SVG";
+        case Symbol::Duplicate:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M280-240v-640h520v640H280Zm80-80h360v-480H360v480ZM120-80v-640h80v560h440v80H120Zm240-240v-480 480Z"/></svg>)SVG";
+        case Symbol::NewDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M440-240h80v-120h120v-80H520v-120h-80v120H320v80h120v120ZM160-80v-800h400l240 240v560H160Zm360-520v-200H240v640h480v-440H520ZM240-800v200-200 640-640Z"/></svg>)SVG";
+        case Symbol::PdfDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M360-460h40v-80h60l20-20v-80l-20-20H360v200Zm40-120v-40h40v40h-40Zm120 120h100l20-20v-160l-20-20H520v200Zm40-40v-120h40v120h-40Zm120 40h40v-80h40v-40h-40v-40h40v-40h-80v200ZM240-240v-640h640v640H240Zm80-80h480v-480H320v480ZM80-80v-640h80v560h560v80H80Zm240-720v480-480Z"/></svg>)SVG";
+        case Symbol::TextDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M280-280h280v-80H280v80Zm0-160h400v-80H280v80Zm0-160h400v-80H280v80ZM120-120v-720h720v720H120Zm80-80h560v-560H200v560Zm0 0v-560 560Z"/></svg>)SVG";
+        case Symbol::Archive:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M640-480v-80h80v80h-80Zm0 80h-80v-80h80v80Zm0 80v-80h80v80h-80ZM447-640l-80-80H160v480h400v-80h80v80h160v-400H640v80h-80v-80H447ZM80-160v-640h320l80 80h400v560H80Zm80-80v-480 480Z"/></svg>)SVG";
+        case Symbol::AudioDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M430-200q38 0 64-26t26-64v-150h120v-80H480v155q-11-8-23.5-11.5T430-380q-38 0-64 26t-26 64q0 38 26 64t64 26ZM160-80v-800h400l240 240v560H160Zm360-520v-200H240v640h480v-440H520ZM240-800v200-200 640-640Z"/></svg>)SVG";
+        case Symbol::CodeDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M320-240 80-480l240-240 57 57-184 184 183 183-56 56Zm320 0-57-57 184-184-183-183 56-56 240 240-240 240Z"/></svg>)SVG";
+        case Symbol::SpreadsheetDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M120-120v-720h720v720H120Zm80-520h560v-120H200v120Zm0 440h100v-360H200v360Zm460 0h100v-360H660v360Zm-280 0h200v-360H380v360Z"/></svg>)SVG";
+        case Symbol::PresentationDocument:
+            return R"SVG(<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="m380-300 280-180-280-180v360ZM120-120v-720h720v720H120Zm80-80h560v-560H200v560Zm0 0v-560 560Z"/></svg>)SVG";
+        default:
+            return {};
+        }
     }
+    return {};
+}
+
+inline auto material_symbols_svg_source(Symbol symbol) noexcept
+        -> std::string_view {
+    return material_symbols_svg_source(symbol, default_material_symbols_style());
+}
+
+inline auto svg_source(Symbol symbol,
+                       MaterialSymbolsStyle style) noexcept
+        -> std::string_view {
+    return material_symbols_svg_source(symbol, style);
 }
 
 inline auto svg_source(Symbol symbol) noexcept -> std::string_view {
-    return lucide_svg_source(symbol);
+    return svg_source(symbol, default_material_symbols_style());
 }
 
-inline bool supports_hierarchical_opacity(Symbol symbol) noexcept {
-    switch (symbol) {
-    case Symbol::Share:
-    case Symbol::Tag:
-    case Symbol::List:
-    case Symbol::Columns:
-    case Symbol::Gallery:
-    case Symbol::Trash:
-    case Symbol::Home:
-    case Symbol::Recents:
-    case Symbol::Sidebar:
-    case Symbol::NewFolder:
-    case Symbol::Applications:
-    case Symbol::Desktop:
-    case Symbol::Duplicate:
-    case Symbol::NewDocument:
-        return true;
-    default:
-        return false;
-    }
+inline bool supports_hierarchical_opacity(Symbol) noexcept {
+    return false;
 }
 
-inline auto symbol_layer_count(Symbol symbol) noexcept -> unsigned int {
-    switch (symbol) {
-    case Symbol::More:        return 3;
-    case Symbol::Grid:        return 3;
-    case Symbol::List:        return 6;
-    case Symbol::Trash:       return 5;
-    case Symbol::Movie:       return 4;
-    case Symbol::PdfDocument: return 5;
-    case Symbol::TextDocument: return 5;
-    case Symbol::Archive:     return 6;
-    case Symbol::AudioDocument: return 4;
-    case Symbol::CodeDocument: return 4;
-    case Symbol::SpreadsheetDocument: return 6;
-    case Symbol::PresentationDocument: return 3;
-    case Symbol::Sidebar:     return 2;
-    case Symbol::SortGroup:   return 4;
-    case Symbol::AirDrop:     return 5;
-    case Symbol::Applications:
-    case Symbol::NewDocument:
-        return 4;
-    case Symbol::Document:
-        return 2;
-    case Symbol::Columns:
-    case Symbol::Gallery:
-    case Symbol::Share:
-    case Symbol::Shared:
-    case Symbol::NewFolder:
-    case Symbol::Desktop:
-    case Symbol::Download:
-        return 3;
-    case Symbol::Home:
-        return 2;
-    case Symbol::Image:
-        return 4;
-    case Symbol::Search:
-    case Symbol::Tag:
-    case Symbol::Plus:
-    case Symbol::XMark:
-    case Symbol::Recents:
-    case Symbol::Duplicate:
-        return 2;
-    default:
-        return 1;
-    }
+inline auto symbol_layer_count(Symbol) noexcept -> unsigned int {
+    return 1;
 }
 
-inline bool uses_svg_path_arcs(Symbol symbol) noexcept {
-    return symbol == Symbol::AirDrop
-        || symbol == Symbol::Tag
-        || symbol == Symbol::Folder
-        || symbol == Symbol::Trash
-        || symbol == Symbol::Document
-        || symbol == Symbol::Image
-        || symbol == Symbol::Home
-        || symbol == Symbol::Cloud
-        || symbol == Symbol::NewFolder
-        || symbol == Symbol::NewDocument
-        || symbol == Symbol::PdfDocument
-        || symbol == Symbol::TextDocument
-        || symbol == Symbol::Archive
-        || symbol == Symbol::AudioDocument
-        || symbol == Symbol::CodeDocument
-        || symbol == Symbol::SpreadsheetDocument;
+inline bool uses_svg_path_arcs(Symbol) noexcept {
+    return false;
 }
 
 inline auto rendering_capabilities(Symbol symbol) noexcept
@@ -1543,7 +1901,8 @@ inline auto rendering_capabilities(Symbol symbol) noexcept
     };
 }
 
-inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
+inline auto descriptor(Symbol symbol,
+                       MaterialSymbolsStyle style) noexcept -> SymbolDescriptor {
     SymbolRole role = SymbolRole::Toolbar;
     switch (symbol) {
     case Symbol::Back:
@@ -1597,22 +1956,20 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
         break;
     }
 
-    bool const filled = false;
+    bool const filled = true;
     bool const hierarchical = supports_hierarchical_opacity(symbol);
-    float const stroke_width = filled
-        ? 0.0f
-        : (uses_lucide_source(symbol) ? 2.0f : 1.8f);
+    float const stroke_width = 0.0f;
     return SymbolDescriptor{
         symbol,
         name(symbol),
         role,
-        filled ? SymbolVariant::Fill : SymbolVariant::Outline,
+        SymbolVariant::Outline,
         hierarchical
             ? SymbolRenderingMode::Hierarchical
             : SymbolRenderingMode::Monochrome,
         SymbolScale::Medium,
         SymbolWeight::Regular,
-        style_name(),
+        style_name(style),
         semantic_reference_name(symbol),
         reference_family(),
         reference_policy(),
@@ -1623,16 +1980,20 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
         hierarchical ? 0.66f : 1.0f,
         symbol_layer_count(symbol),
         true,
-        !filled,
+        false,
         filled,
         true,
         true,
         hierarchical,
         false,
         false,
-        !uses_lucide_source(symbol),
+        !uses_material_symbols_source(symbol),
         false,
     };
+}
+
+inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
+    return descriptor(symbol, default_material_symbols_style());
 }
 
 inline auto default_presentation_role(Symbol symbol) noexcept

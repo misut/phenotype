@@ -57,8 +57,10 @@ auto rendered_icon_svg_source(IconLookupResult const& result,
                               icon_catalog::SymbolPresentationRole role,
                               icon_catalog::SymbolInteractionPhase phase,
                               bool selected,
-                              bool enabled) -> std::string {
-    auto const desc = icon_catalog::descriptor(result.symbol);
+                              bool enabled,
+                              icon_catalog::MaterialSymbolsStyle style)
+        -> std::string {
+    auto const desc = icon_catalog::descriptor(result.symbol, style);
     auto const metrics = icon_catalog::metrics(role);
     auto const recipe = icon_catalog::macos_state_recipe(
         role,
@@ -71,10 +73,10 @@ auto rendered_icon_svg_source(IconLookupResult const& result,
         (recipe.hit_target_size - effective_point_size) / 2.0f;
     auto const scale = effective_point_size / 24.0f;
     auto const inner = icon_svg_inner_source(
-        icon_catalog::svg_source(result.symbol));
+        icon_catalog::svg_source(result.symbol, style));
 
     auto out = std::format(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\" role=\"img\" aria-label=\"{}\" data-phenotype-symbol=\"{}\" data-semantic-reference=\"{}\" data-role=\"{}\" data-phase=\"{}\" data-asset-policy=\"{}\">",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\" role=\"img\" aria-label=\"{}\" data-phenotype-symbol=\"{}\" data-semantic-reference=\"{}\" data-style=\"{}\" data-material-symbols-style=\"{}\" data-role=\"{}\" data-phase=\"{}\" data-asset-policy=\"{}\">",
         svg_number(recipe.hit_target_size),
         svg_number(recipe.hit_target_size),
         svg_number(recipe.hit_target_size),
@@ -82,6 +84,8 @@ auto rendered_icon_svg_source(IconLookupResult const& result,
         xml_attribute_escape(desc.semantic_reference_name),
         xml_attribute_escape(desc.name),
         xml_attribute_escape(desc.semantic_reference_name),
+        xml_attribute_escape(desc.style),
+        xml_attribute_escape(icon_catalog::material_symbols_style_name(style)),
         xml_attribute_escape(icon_catalog::symbol_presentation_role_name(role)),
         xml_attribute_escape(icon_catalog::symbol_interaction_phase_name(phase)),
         xml_attribute_escape(icon_catalog::asset_policy()));
@@ -112,9 +116,10 @@ auto icon_render_json(std::string_view query,
                       icon_catalog::SymbolInteractionPhase phase,
                       bool selected,
                       bool enabled,
+                      icon_catalog::MaterialSymbolsStyle style,
                       std::string_view source,
                       fs::path const& output_path) -> std::string {
-    auto const desc = icon_catalog::descriptor(result.symbol);
+    auto const desc = icon_catalog::descriptor(result.symbol, style);
     auto const metrics = icon_catalog::metrics(role);
     auto const recipe = icon_catalog::macos_state_recipe(
         role,
@@ -123,7 +128,7 @@ auto icon_render_json(std::string_view query,
     auto const visible_color =
         icon_color_with_opacity(recipe.symbol_color, recipe.symbol_opacity);
     auto const source_attribution =
-        icon_catalog::source_attribution(result.symbol);
+        icon_catalog::source_attribution(result.symbol, style);
     auto const output_json = output_path.empty()
         ? std::string{"null"}
         : std::format(
@@ -134,6 +139,7 @@ auto icon_render_json(std::string_view query,
         "{{\"schema_version\":1,\"command\":\"icons render\","
         "\"ok\":true,\"query\":{},\"match_kind\":{},"
         "\"symbol\":{},\"semantic_reference_name\":{},"
+        "\"style\":{},\"material_symbols_style\":{},"
         "\"asset_policy\":{},\"source_license_policy\":{},"
         "\"apple_asset_boundary\":{},\"source_attribution\":{},"
         "\"state\":{{\"role\":{},\"phase\":{},"
@@ -151,6 +157,8 @@ auto icon_render_json(std::string_view query,
         json_string(result.match_kind),
         json_string(desc.name),
         json_string(desc.semantic_reference_name),
+        json_string(desc.style),
+        json_string(icon_catalog::material_symbols_style_name(style)),
         json_string(icon_catalog::asset_policy()),
         json_string(icon_catalog::source_license_policy()),
         json_string(icon_catalog::apple_asset_boundary()),

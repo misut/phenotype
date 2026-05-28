@@ -135,14 +135,36 @@ auto icon_reference_sources_json() -> std::string {
     return out;
 }
 
-auto icon_lucide_source_icons_json() -> std::string {
+auto icon_material_symbols_source_icons_json() -> std::string {
     auto out = std::string{"["};
     for (unsigned int i = 0;
-         i < icon_catalog::lucide_unique_source_icon_count;
+         i < icon_catalog::material_symbols_unique_source_icon_count;
          ++i) {
         if (i > 0)
             out += ",";
-        out += json_string(icon_catalog::lucide_source_icon_name_at(i));
+        out += json_string(icon_catalog::material_symbols_source_icon_name_at(i));
+    }
+    out += "]";
+    return out;
+}
+
+auto icon_material_symbols_styles_json() -> std::string {
+    auto out = std::string{"["};
+    for (unsigned int i = 0; i < icon_catalog::material_symbols_style_count; ++i) {
+        if (i > 0)
+            out += ",";
+        auto const style = icon_catalog::material_symbols_style_at(i);
+        out += std::format(
+            "{{\"name\":{},\"label\":{},\"font_family\":{},"
+            "\"css_class\":{},\"source_directory\":{},\"default\":{}}}",
+            json_string(icon_catalog::material_symbols_style_name(style)),
+            json_string(icon_catalog::material_symbols_style_label(style)),
+            json_string(icon_catalog::material_symbols_font_family(style)),
+            json_string(icon_catalog::material_symbols_css_class(style)),
+            json_string(icon_catalog::material_symbols_source_directory(style)),
+            icon_catalog::is_default_material_symbols_style(style)
+                ? "true"
+                : "false");
     }
     out += "]";
     return out;
@@ -220,7 +242,7 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         "\"rendering_capabilities\":{},"
         "\"uses_svg_path_arcs\":{},"
         "\"phenotype_owned\":{},\"uses_sf_symbols_asset\":{},"
-        "\"uses_lucide_source\":{},"
+        "\"uses_material_symbols_source\":{},"
         "\"has_svg_source\":{},\"source_bytes\":{},"
         "\"source_attribution\":{},"
         "\"file_type_color\":{},"
@@ -262,7 +284,7 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         icon_catalog::uses_svg_path_arcs(symbol) ? "true" : "false",
         desc.phenotype_owned ? "true" : "false",
         desc.uses_sf_symbols_asset ? "true" : "false",
-        icon_catalog::uses_lucide_source(symbol) ? "true" : "false",
+        icon_catalog::uses_material_symbols_source(symbol) ? "true" : "false",
         source.empty() ? "false" : "true",
         source.size(),
         icon_source_attribution_json(source_attribution),
@@ -317,16 +339,18 @@ auto icon_lookup_not_found_json(std::string_view query) -> std::string {
 }
 
 auto icon_svg_json(std::string_view query,
-                   IconLookupResult const& result) -> std::string {
-    auto const desc = icon_catalog::descriptor(result.symbol);
-    auto const source = icon_catalog::svg_source(result.symbol);
+                   IconLookupResult const& result,
+                   icon_catalog::MaterialSymbolsStyle style) -> std::string {
+    auto const desc = icon_catalog::descriptor(result.symbol, style);
+    auto const source = icon_catalog::svg_source(result.symbol, style);
     auto const capabilities = icon_catalog::rendering_capabilities(result.symbol);
     auto const source_attribution =
-        icon_catalog::source_attribution(result.symbol);
+        icon_catalog::source_attribution(result.symbol, style);
     return std::format(
         "{{\"schema_version\":1,\"command\":\"icons svg\","
         "\"ok\":true,\"query\":{},\"match_kind\":{},"
         "\"symbol\":{},\"semantic_reference_name\":{},"
+        "\"style\":{},\"material_symbols_style\":{},"
         "\"source_format\":\"svg\",\"asset_policy\":{},"
         "\"source_license_policy\":{},\"apple_asset_boundary\":{},"
         "\"source_attribution\":{},"
@@ -336,6 +360,8 @@ auto icon_svg_json(std::string_view query,
         json_string(result.match_kind),
         json_string(desc.name),
         json_string(desc.semantic_reference_name),
+        json_string(desc.style),
+        json_string(icon_catalog::material_symbols_style_name(style)),
         json_string(icon_catalog::asset_policy()),
         json_string(icon_catalog::source_license_policy()),
         json_string(icon_catalog::apple_asset_boundary()),
@@ -484,6 +510,9 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
     return std::format(
         "{{\"schema_version\":1,\"command\":\"icons catalog\","
         "\"ok\":{},\"style\":{{\"name\":{},\"source_format\":{},"
+        "\"family\":\"Material Symbols (new)\","
+        "\"default_material_symbols_style\":{},"
+        "\"available_material_symbols_styles\":{},"
         "\"svg_subset_policy\":{},\"svg_supported_elements\":{},"
         "\"svg_supported_path_commands\":{},"
         "\"svg_supported_style_attributes\":{},"
@@ -513,8 +542,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"metrics_policy\":{},\"hit_target_policy\":{},"
         "\"reference_sources\":{}}},"
         "\"counts\":{{\"all\":{},\"phenotype_owned\":{},"
-        "\"permissive_source\":{},\"lucide_source\":{},"
-        "\"lucide_unique_source_icons\":{},"
+        "\"permissive_source\":{},\"material_symbols_source\":{},"
+        "\"material_symbols_unique_source_icons\":{},"
         "\"apple_asset\":{},\"platform_extracted\":{},"
         "\"runtime_fetched\":{},\"audited_source\":{},"
         "\"sidebar\":{},\"toolbar\":{},"
@@ -525,13 +554,20 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"reference\":{},\"reference_sources\":{},"
         "\"svg_path_arc\":{},\"round_stroke\":{},"
         "\"interaction_phases\":{}}},"
-        "\"source_icons\":{{\"lucide_revision\":{},"
-        "\"lucide_unique_count\":{},\"lucide_icon_names\":{}}},"
+        "\"source_icons\":{{\"material_symbols_revision\":{},"
+        "\"material_symbols_unique_count\":{},"
+        "\"material_symbols_style_count\":{},"
+        "\"material_symbols_source_variant_count\":{},"
+        "\"material_symbols_icon_names\":{},"
+        "\"material_symbols_styles\":{}}},"
         "\"symbols\":{},\"sidebar_symbols\":{},"
         "\"toolbar_symbols\":{},\"file_type_symbols\":{},\"checks\":{}}}",
         all_ok(checks) ? "true" : "false",
         json_string(icon_catalog::style_name()),
         json_string(icon_catalog::source_format()),
+        json_string(icon_catalog::material_symbols_style_name(
+            icon_catalog::default_material_symbols_style())),
+        icon_material_symbols_styles_json(),
         json_string(icon_catalog::svg_subset_policy()),
         json_string(icon_catalog::svg_supported_elements()),
         json_string(icon_catalog::svg_supported_path_commands()),
@@ -571,8 +607,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_catalog::all_symbol_count,
         icon_catalog::phenotype_owned_symbol_count,
         icon_catalog::permissive_source_symbol_count,
-        icon_catalog::lucide_source_symbol_count,
-        icon_catalog::lucide_unique_source_icon_count,
+        icon_catalog::material_symbols_source_symbol_count,
+        icon_catalog::material_symbols_unique_source_icon_count,
         icon_catalog::apple_asset_symbol_count,
         icon_catalog::platform_extracted_symbol_count,
         icon_catalog::runtime_fetched_symbol_count,
@@ -592,9 +628,12 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_catalog::svg_path_arc_symbol_count,
         icon_catalog::round_stroke_symbol_count,
         icon_catalog::symbol_interaction_phase_count,
-        json_string(icon_catalog::lucide_source_revision()),
-        icon_catalog::lucide_unique_source_icon_count,
-        icon_lucide_source_icons_json(),
+        json_string(icon_catalog::material_symbols_source_revision()),
+        icon_catalog::material_symbols_unique_source_icon_count,
+        icon_catalog::material_symbols_style_count,
+        icon_catalog::material_symbols_source_variant_count,
+        icon_material_symbols_source_icons_json(),
+        icon_material_symbols_styles_json(),
         icon_symbol_set_json(IconCatalogSet::All),
         icon_symbol_set_json(IconCatalogSet::Sidebar),
         icon_symbol_set_json(IconCatalogSet::Toolbar),
@@ -717,6 +756,9 @@ int run_icons_svg(cppx::cli::Invocation const& invocation) {
         "name-or-reference");
     if (!query)
         return print_error("icons svg", query.error(), invocation.has("json"));
+    auto style = icon_material_symbols_style_from_invocation(invocation);
+    if (!style)
+        return print_error("icons svg", style.error(), invocation.has("json"));
 
     auto result = lookup_icon_symbol(*query);
     if (!result) {
@@ -738,11 +780,11 @@ int run_icons_svg(cppx::cli::Invocation const& invocation) {
     }
 
     if (invocation.has("json")) {
-        std::println("{}", icon_svg_json(*query, *result));
+        std::println("{}", icon_svg_json(*query, *result, *style));
         return 0;
     }
 
-    std::println("{}", icon_catalog::svg_source(result->symbol));
+    std::println("{}", icon_catalog::svg_source(result->symbol, *style));
     return 0;
 }
 
@@ -878,6 +920,9 @@ int run_icons_render(cppx::cli::Invocation const& invocation) {
     auto phase = icon_interaction_phase_from_invocation(invocation);
     if (!phase)
         return print_error("icons render", phase.error(), invocation.has("json"));
+    auto style = icon_material_symbols_style_from_invocation(invocation);
+    if (!style)
+        return print_error("icons render", style.error(), invocation.has("json"));
 
     auto const selected = invocation.has("selected");
     auto const enabled = !invocation.has("disabled");
@@ -886,7 +931,8 @@ int run_icons_render(cppx::cli::Invocation const& invocation) {
         *role,
         *phase,
         selected,
-        enabled);
+        enabled,
+        *style);
     auto output_path = fs::path{};
     if (auto output = invocation.value("output")) {
         output_path =
@@ -912,6 +958,7 @@ int run_icons_render(cppx::cli::Invocation const& invocation) {
                 *phase,
                 selected,
                 enabled,
+                *style,
                 source,
                 output_path));
         return 0;

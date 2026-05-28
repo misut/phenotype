@@ -304,11 +304,11 @@
     },
     {
       "path": "application.file_explorer.entry_symbol_summary.package_asset_source_family",
-      "equals": "Lucide"
+      "equals": "Google Material Symbols"
     },
     {
       "path": "application.file_explorer.entry_symbol_summary.package_asset_source_revision",
-      "equals": "5b40f2c5a76a27eeb81c8f1b1c311121dee45495"
+      "equals": "4d7678801370dc2fe9c35b437570f56f56e43801"
     },
     {
       "path": "application.file_explorer.entry_symbol_summary.package_asset_count",
@@ -324,7 +324,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.style",
-      "equals": "macos_rounded_outline_svg"
+      "equals": "google_material_symbols_outlined_svg"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_format",
@@ -400,15 +400,15 @@
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_source_family",
-      "equals": "Lucide"
+      "equals": "Google Material Symbols"
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_source_revision",
-      "equals": "5b40f2c5a76a27eeb81c8f1b1c311121dee45495"
+      "equals": "4d7678801370dc2fe9c35b437570f56f56e43801"
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_license_asset",
-      "equals": "assets/icons/file-types/LUCIDE_LICENSE.txt"
+      "equals": "assets/icons/file-types/MATERIAL_SYMBOLS_LICENSE.txt"
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.package_asset_name",
@@ -432,11 +432,11 @@
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.source_attribution.license",
-      "equals": "ISC"
+      "equals": "Apache-2.0"
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.source_attribution.source_url",
-      "equals": "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-text.svg"
+      "equals": "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/picture_as_pdf/materialsymbolsoutlined/picture_as_pdf_24px.svg"
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.source_attribution.runtime_fetch_required",

@@ -389,11 +389,11 @@
     },
     {
       "path": "application.file_explorer.entry_symbol_summary.package_asset_source_family",
-      "equals": "Lucide"
+      "equals": "Google Material Symbols"
     },
     {
       "path": "application.file_explorer.entry_symbol_summary.package_asset_source_revision",
-      "equals": "5b40f2c5a76a27eeb81c8f1b1c311121dee45495"
+      "equals": "4d7678801370dc2fe9c35b437570f56f56e43801"
     },
     {
       "path": "application.file_explorer.entry_symbol_summary.package_asset_count",
@@ -501,15 +501,15 @@
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_source_family",
-      "equals": "Lucide"
+      "equals": "Google Material Symbols"
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_source_revision",
-      "equals": "5b40f2c5a76a27eeb81c8f1b1c311121dee45495"
+      "equals": "4d7678801370dc2fe9c35b437570f56f56e43801"
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_license_asset",
-      "equals": "assets/icons/file-types/LUCIDE_LICENSE.txt"
+      "equals": "assets/icons/file-types/MATERIAL_SYMBOLS_LICENSE.txt"
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.package_asset_name",
@@ -533,11 +533,11 @@
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.source_attribution.license",
-      "equals": "ISC"
+      "equals": "Apache-2.0"
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.source_attribution.source_url",
-      "equals": "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-text.svg"
+      "equals": "https://raw.githubusercontent.com/google/material-design-icons/4d7678801370dc2fe9c35b437570f56f56e43801/symbols/web/picture_as_pdf/materialsymbolsoutlined/picture_as_pdf_24px.svg"
     },
     {
       "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.source_attribution.runtime_fetch_required",
@@ -909,7 +909,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.style",
-      "equals": "macos_rounded_outline_svg"
+      "equals": "google_material_symbols_outlined_svg"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_format",
@@ -917,7 +917,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_subset_policy",
-      "equals": "bounded_svg_icon_subset"
+      "equals": "bounded_material_symbols_svg_subset"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_supported_elements",
@@ -925,7 +925,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_supported_path_commands",
-      "equals": "M L H V Q T C S A Z with absolute and relative variants"
+      "equals": "M L H V Q T C S Z with absolute and relative variants"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_supported_style_attributes",
@@ -933,19 +933,19 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_arc_policy",
-      "equals": "circle elements and isolated circular path A/a preserve native ArcTo; chained or elliptical path A/a lowers to bounded cubic Bezier segments"
+      "equals": "Google Material Symbols source paths avoid SVG arc commands in the pinned subset"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.stroke_geometry_policy",
-      "equals": "round_cap_round_join_svg_strokes"
+      "equals": "material_symbols_filled_path_geometry"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.stroke_cap_policy",
-      "equals": "round"
+      "equals": "not_applicable"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.stroke_join_policy",
-      "equals": "round"
+      "equals": "not_applicable"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.owned_assets",
@@ -980,11 +980,11 @@
       "equals": 39
     },
     {
-      "path": "application.file_explorer.chrome.icon_system.lucide_source_symbol_count",
+      "path": "application.file_explorer.chrome.icon_system.material_symbols_source_symbol_count",
       "equals": 39
     },
     {
-      "path": "application.file_explorer.chrome.icon_system.lucide_unique_source_icon_count",
+      "path": "application.file_explorer.chrome.icon_system.material_symbols_unique_source_icon_count",
       "equals": 38
     },
     {
@@ -1137,27 +1137,27 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_family",
-      "equals": "SF Symbols semantic reference"
+      "equals": "SF Symbols semantic reference with Google Material Symbols artwork"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_policy",
-      "equals": "semantic reference only; no Apple or SF Symbols vector artwork; embedded sources are audited permissive SVG"
+      "equals": "semantic reference only; no Apple or SF Symbols vector artwork; embedded sources are Google Material Symbols SVG"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.asset_policy",
-      "equals": "audited permissive vector assets; no Apple or SF Symbols artwork embedded"
+      "equals": "audited Google Material Symbols vector assets; no Apple or SF Symbols artwork embedded"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_license_policy",
-      "equals": "audited permissive SVG only; accepted external licenses include Lucide ISC, Feather-derived MIT, Tabler MIT, Iconoir MIT, and Apache-2.0 with per-symbol attribution"
+      "equals": "audited permissive SVG only; embedded icons use Google Material Symbols (new) Apache-2.0 with bundled license text"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.preferred_external_source_policy",
-      "equals": "Prefer audited SVG from Lucide ISC or Feather-derived MIT, Tabler MIT, Iconoir MIT, or Material Symbols Apache-2.0 before phenotype adaptation"
+      "equals": "Prefer pinned Google Material Symbols (new) Apache-2.0 SVGs from Google Fonts before phenotype adaptation; Outlined is the default style"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_acquisition_policy",
-      "equals": "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings, does not fetch remote resources, and keeps platform icon extraction disabled unless redistribution rights are explicit and audited"
+      "equals": "development-time import from pinned Google Material Symbols (new) Outlined, Rounded, and Sharp raw SVG URLs only; runtime uses embedded SVG strings, does not fetch remote resources, and keeps platform icon extraction disabled unless redistribution rights are explicit and audited"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.document_cache_policy",
@@ -1189,7 +1189,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.variant_policy",
-      "equals": "outline-only with role-aware symbol chrome"
+      "equals": "Material Symbols Outlined is the default; Rounded and Sharp are selectable with role-aware symbol chrome"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.presentation_policy",

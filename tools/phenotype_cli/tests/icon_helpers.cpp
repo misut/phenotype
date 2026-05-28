@@ -15,6 +15,7 @@ int main() {
     auto synthetic_source = icon_catalog::SymbolSourceAttribution{
         .family = "Synthetic",
         .icon_name = "probe",
+        .style = "outlined",
         .license = "MIT",
         .license_url = "https://example.invalid/license",
         .source_url = "https://example.invalid/probe.svg",
@@ -44,7 +45,8 @@ int main() {
         icon_catalog::SymbolPresentationRole::Toolbar,
         icon_catalog::SymbolInteractionPhase::Pressed,
         false,
-        true);
+        true,
+        icon_catalog::MaterialSymbolsStyle::Rounded);
     assert(rendered.find("data-phenotype-symbol=\"search\"")
         != std::string::npos);
     assert(rendered.find("data-role=\"toolbar\"") != std::string::npos);
@@ -57,8 +59,11 @@ int main() {
         icon_catalog::SymbolInteractionPhase::Pressed,
         false,
         true,
+        icon_catalog::MaterialSymbolsStyle::Rounded,
         rendered,
         std::filesystem::path{});
+    assert(json.find("\"material_symbols_style\":\"rounded\"")
+        != std::string::npos);
     assert(json.find("\"likely_pass\":\"standalone_svg_wrapper\"")
         != std::string::npos);
     assert(json.find("\"output\":null") != std::string::npos);
@@ -72,7 +77,7 @@ int main() {
     assert(audit_json.find("\"name\":\"catalog\"") != std::string::npos);
     assert(audit_json.find("\"name\":\"sources\"") != std::string::npos);
     assert(audit_json.find("\"name\":\"file_types\"") != std::string::npos);
-    assert(audit_json.find("\"lucide_source_symbols\":39")
+    assert(audit_json.find("\"material_symbols_source_symbols\":39")
         != std::string::npos);
     assert(audit_json.find("\"apple_asset_symbols\":0")
         != std::string::npos);
