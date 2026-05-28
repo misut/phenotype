@@ -538,7 +538,8 @@ int main() {
         icons::SymbolInteractionPhase::Hovered);
     assert(disabled_recipe.symbol_tone == icons::SymbolTone::Disabled);
     assert(disabled_recipe.background_color.a == 0);
-    assert(disabled_recipe.symbol_opacity < 0.5f);
+    assert(disabled_recipe.symbol_color.r == 142);
+    assert(disabled_recipe.symbol_opacity >= 0.75f);
     assert(icons::file_type_color_policy() == "macos_finder_file_type_tints");
     auto const folder_color = icons::macos_file_type_color(icons::Symbol::Folder);
     auto const image_color = icons::macos_file_type_color(icons::Symbol::Image);
