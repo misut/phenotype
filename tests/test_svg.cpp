@@ -776,7 +776,8 @@ void test_builtin_icons_parse() {
         icons::SymbolInteractionPhase::Hovered);
     assert(disabled_share.role == icons::SymbolPresentationRole::Toolbar);
     assert(disabled_share.tone == icons::SymbolTone::Disabled);
-    assert(disabled_share.color.a < 128);
+    assert(disabled_share.color.r == 142);
+    assert(disabled_share.color.a >= 190);
 
     CapturePainter centered_painter;
     icons::paint_symbol_centered(centered_painter,

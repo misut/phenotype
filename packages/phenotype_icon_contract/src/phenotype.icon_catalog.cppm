@@ -1730,7 +1730,7 @@ inline auto macos_light_tone_color(SymbolTone tone) noexcept -> SymbolColor {
     case SymbolTone::Secondary:   return {96, 96, 100, 255};
     case SymbolTone::Selected:    return {58, 58, 60, 255};
     case SymbolTone::Accent:      return {0, 122, 255, 255};
-    case SymbolTone::Disabled:    return {190, 193, 198, 255};
+    case SymbolTone::Disabled:    return {142, 142, 147, 255};
     case SymbolTone::Destructive: return {255, 59, 48, 255};
     }
     return {96, 96, 100, 255};
@@ -1864,7 +1864,7 @@ inline auto macos_phase_background_color(SymbolPresentationRole role,
 inline float macos_phase_symbol_opacity(SymbolInteractionState state,
                                         SymbolInteractionPhase phase) noexcept {
     if (!state.enabled)
-        return 0.35f;
+        return 0.78f;
     return phase == SymbolInteractionPhase::Pressed ? 0.82f : 1.0f;
 }
 

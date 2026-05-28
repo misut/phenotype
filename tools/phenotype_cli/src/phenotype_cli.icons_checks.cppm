@@ -459,7 +459,8 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && toolbar_pressed_recipe.symbol_opacity < 1.0f
             && toolbar_pressed_recipe.scale < 1.0f
             && selected_sidebar_pressed_recipe.background_color.a == 196
-            && disabled_recipe.symbol_opacity < 0.5f,
+            && disabled_recipe.symbol_color.r == 142
+            && disabled_recipe.symbol_opacity >= 0.75f,
          .detail = std::format(
              "{}; phases={}",
              icon_catalog::symbol_interaction_phase_policy(),
