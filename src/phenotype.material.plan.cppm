@@ -6347,6 +6347,16 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         resolve_material_quality_policy(
             environment.quality,
             capability_snapshot);
+    if (style.contrast_intent
+        && std::string_view{style.contrast_intent}.find(
+               "debug-panel-backdrop") != std::string_view::npos) {
+        resolved_quality.allow_backdrop_sampling = true;
+        resolved_quality.max_blur_radius = std::max(
+            resolved_quality.max_blur_radius,
+            material_max_blur_radius);
+        if (resolved_quality.max_sample_taps == 0)
+            resolved_quality.max_sample_taps = material_max_sample_taps;
+    }
     auto const max_blur_radius = std::max(
         0.0f,
         resolved_quality.max_blur_radius);

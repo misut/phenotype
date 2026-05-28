@@ -752,6 +752,8 @@ inline Theme apply_dark_color_scheme(Theme theme) {
     theme.hero_muted = theme.muted;
     theme.state_hover_bg = {58, 58, 60, 255};
     theme.state_hover_fg = theme.foreground;
+    theme.state_active_bg = theme.accent_strong;
+    theme.state_active_fg = {255, 255, 255, 255};
     theme.state_disabled_bg = {44, 44, 46, 255};
     theme.state_disabled_fg = {99, 99, 102, 255};
     theme.state_disabled_border = theme.border;

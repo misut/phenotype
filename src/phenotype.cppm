@@ -1372,10 +1372,16 @@ inline void symbol_button(str label,
                 options.role,
                 options.selected,
                 state);
+            auto themed = icons::with_material_symbol_axes(
+                presentation,
+                options.material_axes);
+            themed.color = icons::theme_tone_color(
+                detail::g_app.theme,
+                themed.tone);
             icons::paint_symbol_centered(
                 painter,
                 detail::icon_document_cache(),
-                presentation,
+                themed,
                 0.0f,
                 0.0f,
                 width,
@@ -2249,6 +2255,32 @@ inline void record_frame_trace(FrameTraceSample sample,
         % FrameTraceMonitor::RECENT_CAPACITY;
     if (stats.recent_count < FrameTraceMonitor::RECENT_CAPACITY)
         ++stats.recent_count;
+
+    g_app.frame_timeline.last = sample;
+}
+
+inline void sample_frame_timeline(std::uint64_t now_ns) noexcept {
+    auto& timeline = g_app.frame_timeline;
+    if (timeline.last_sample_ns == 0)
+        timeline.last_sample_ns = now_ns;
+    if (now_ns < timeline.last_sample_ns)
+        timeline.last_sample_ns = now_ns;
+
+    std::uint64_t emitted = 0;
+    while (now_ns - timeline.last_sample_ns
+           >= FrameTimelineMonitor::SAMPLE_INTERVAL_NS) {
+        timeline.recent[timeline.recent_next] = timeline.last;
+        timeline.recent_next = (timeline.recent_next + 1)
+            % FrameTimelineMonitor::RECENT_CAPACITY;
+        if (timeline.recent_count < FrameTimelineMonitor::RECENT_CAPACITY)
+            ++timeline.recent_count;
+        timeline.last_sample_ns += FrameTimelineMonitor::SAMPLE_INTERVAL_NS;
+        ++timeline.tick;
+        if (++emitted >= 8) {
+            timeline.last_sample_ns = now_ns;
+            break;
+        }
+    }
 }
 
 inline bool pointer_snapshot_changed(AppState const& app) noexcept {
@@ -2279,7 +2311,7 @@ inline std::uint64_t compute_paint_invalidation_mask(AppState const& app) noexce
     inv |= paint_invalidation_bit(app.focused_id);
     inv |= paint_invalidation_bit(app.pressed_id);
     if (app.has_active_animations || app.scrollbar_animation_active
-        || pointer_snapshot_changed(app)) {
+        || app.debug_panel_refresh_active || pointer_snapshot_changed(app)) {
         inv = ~static_cast<std::uint64_t>(0);
     }
     return inv;
@@ -2395,6 +2427,7 @@ void run(Host& host, View view, Update update) {
         // Reset the auto-tick flag — animate_value re-sets it during
         // view if any interpolation is still in flight.
         app.has_active_animations = false;
+        app.debug_panel_refresh_active = false;
         float cw = host.canvas_width();
         float vh = host.canvas_height();
         app.debug_viewport_width = cw;
@@ -7088,6 +7121,7 @@ inline ButtonStyleOptions debug_panel_button_options(bool selected,
     options.padding_right = 10.0f;
     options.fixed_height = fixed_height;
     options.text_align = TextAlign::Center;
+    options.focus_ring = false;
     return options;
 }
 
@@ -7784,6 +7818,50 @@ inline std::string virtual_input_debug_block() {
     return block.text;
 }
 
+inline void paint_debug_virtual_pointer_overlay(Painter& painter) {
+    if (!g_app.debug_virtual_pointer_valid)
+        return;
+    float const x = g_app.debug_virtual_pointer_x;
+    float const y = g_app.debug_virtual_pointer_y;
+    PathBuilder cursor;
+    cursor.move_to(x, y);
+    cursor.line_to(x, y + 24.0f);
+    cursor.line_to(x + 6.5f, y + 18.0f);
+    cursor.line_to(x + 11.0f, y + 28.0f);
+    cursor.line_to(x + 16.0f, y + 25.5f);
+    cursor.line_to(x + 11.5f, y + 16.0f);
+    cursor.line_to(x + 20.0f, y + 16.0f);
+    cursor.close();
+    painter.fill_path(cursor, Color{255, 255, 255, 245});
+    painter.stroke_path(cursor, 1.4f, Color{20, 20, 22, 235});
+    if (g_app.debug_virtual_hit_id != DEBUG_INVALID_ID) {
+        painter.arc(x + 8.0f,
+                    y + 8.0f,
+                    18.0f,
+                    0.0f,
+                    6.2831853f,
+                    2.0f,
+                    Color{37, 99, 235, 160});
+    }
+}
+
+inline void render_debug_virtual_pointer_overlay() {
+    if (!g_app.debug_virtual_pointer_valid)
+        return;
+    layout::overlay([&] {
+        widget::semantic_canvas(
+            std::max(1.0f, g_app.debug_viewport_width),
+            std::max(1.0f, g_app.debug_viewport_height),
+            "Debug Virtual Pointer Overlay",
+            [](Painter& painter) {
+                paint_debug_virtual_pointer_overlay(painter);
+            },
+            {},
+            debug_virtual_input_token(),
+            "debug_virtual_pointer_overlay");
+    });
+}
+
 inline std::string debug_console_time_text(std::uint64_t unix_ns) {
     if (unix_ns == 0)
         return "--:--:--.---";
@@ -7890,6 +7968,18 @@ inline FrameTraceSample debug_frame_recent_sample(
         (start + index) % FrameTraceMonitor::RECENT_CAPACITY];
 }
 
+inline FrameTraceSample debug_timeline_recent_sample(
+        FrameTimelineMonitor const& stats,
+        std::size_t index) noexcept {
+    if (index >= stats.recent_count)
+        return {};
+    auto const start = stats.recent_count == FrameTimelineMonitor::RECENT_CAPACITY
+        ? stats.recent_next
+        : 0u;
+    return stats.recent[
+        (start + index) % FrameTimelineMonitor::RECENT_CAPACITY];
+}
+
 struct DebugFrameSegment {
     char const* label;
     std::uint64_t ns;
@@ -7920,6 +8010,22 @@ inline std::uint64_t debug_frame_recent_percentile(
     std::array<std::uint64_t, FrameTraceMonitor::RECENT_CAPACITY> sorted{};
     for (std::size_t i = 0; i < stats.recent_count; ++i)
         sorted[i] = debug_frame_recent_sample(stats, i).total_ns;
+    auto first = sorted.begin();
+    auto last = sorted.begin() + static_cast<std::ptrdiff_t>(stats.recent_count);
+    std::sort(first, last);
+    auto const index = static_cast<std::size_t>(
+        std::lround(percentile * static_cast<double>(stats.recent_count - 1)));
+    return sorted[std::min(index, stats.recent_count - 1)];
+}
+
+inline std::uint64_t debug_timeline_recent_percentile(
+        FrameTimelineMonitor const& stats,
+        double percentile) {
+    if (stats.recent_count == 0)
+        return 0;
+    std::array<std::uint64_t, FrameTimelineMonitor::RECENT_CAPACITY> sorted{};
+    for (std::size_t i = 0; i < stats.recent_count; ++i)
+        sorted[i] = debug_timeline_recent_sample(stats, i).total_ns;
     auto first = sorted.begin();
     auto last = sorted.begin() + static_cast<std::ptrdiff_t>(stats.recent_count);
     std::sort(first, last);
@@ -7965,6 +8071,43 @@ inline DebugFrameChartScale debug_frame_chart_scale(
     };
 }
 
+inline DebugFrameChartScale debug_frame_chart_scale(
+        FrameTimelineMonitor const& stats,
+        std::size_t start,
+        std::size_t count) noexcept {
+    if (count == 0)
+        return {};
+
+    double min_ms = std::numeric_limits<double>::max();
+    double max_ms = 0.0;
+    for (std::size_t i = 0; i < count; ++i) {
+        auto const sample = debug_timeline_recent_sample(stats, start + i);
+        double const sample_ms =
+            static_cast<double>(sample.total_ns) / 1'000'000.0;
+        min_ms = std::min(min_ms, sample_ms);
+        max_ms = std::max(max_ms, sample_ms);
+    }
+
+    if (min_ms == std::numeric_limits<double>::max())
+        return {};
+
+    double const span = std::max(0.001, max_ms - min_ms);
+    double const padding = std::max(0.25, span * 0.14);
+    min_ms = min_ms > padding ? min_ms - padding : 0.0;
+    max_ms += padding;
+
+    if (max_ms - min_ms < 0.5) {
+        double const mid = (min_ms + max_ms) * 0.5;
+        min_ms = mid > 0.25 ? mid - 0.25 : 0.0;
+        max_ms = min_ms + 0.5;
+    }
+
+    return DebugFrameChartScale{
+        .min_ms = min_ms,
+        .max_ms = std::max(max_ms, min_ms + 0.5),
+    };
+}
+
 inline void debug_mix_frame_perf_token(std::uint64_t& token,
                                        FrameTraceMonitor const& stats) noexcept {
     token = static_cast<std::uint64_t>(hash_combine(token, stats.count));
@@ -7976,9 +8119,20 @@ inline void debug_mix_frame_perf_token(std::uint64_t& token,
     token = static_cast<std::uint64_t>(hash_combine(token, stats.recent_next));
 }
 
+inline void debug_mix_frame_timeline_token(
+        std::uint64_t& token,
+        FrameTimelineMonitor const& stats) noexcept {
+    token = static_cast<std::uint64_t>(hash_combine(token, stats.tick));
+    token = static_cast<std::uint64_t>(hash_combine(token, stats.last.total_ns));
+    token = static_cast<std::uint64_t>(
+        hash_combine(token, stats.recent_count));
+    token = static_cast<std::uint64_t>(hash_combine(token, stats.recent_next));
+}
+
 inline std::uint64_t debug_performance_chart_token() noexcept {
     std::uint64_t token = 0x6475626770657266ULL;
     debug_mix_frame_perf_token(token, g_app.frame_perf);
+    debug_mix_frame_timeline_token(token, g_app.frame_timeline);
     token = static_cast<std::uint64_t>(
         hash_combine(token, static_cast<unsigned int>(g_app.frame_perf.last.action)));
     token = static_cast<std::uint64_t>(
@@ -8004,12 +8158,15 @@ inline void paint_debug_performance_chart(Painter& painter) {
     float const graph_w = right - left;
     float const graph_h = bottom - top;
     auto const& stats = g_app.frame_perf;
-    auto const p95 = debug_frame_recent_percentile(stats, 0.95);
-    auto const count = std::min<std::size_t>(stats.recent_count, 96);
-    auto const start = stats.recent_count > count
-        ? stats.recent_count - count
+    auto const& timeline = g_app.frame_timeline;
+    auto const p95 = timeline.recent_count > 0
+        ? debug_timeline_recent_percentile(timeline, 0.95)
+        : debug_frame_recent_percentile(stats, 0.95);
+    auto const count = std::min<std::size_t>(timeline.recent_count, 96);
+    auto const start = timeline.recent_count > count
+        ? timeline.recent_count - count
         : 0u;
-    auto const scale = debug_frame_chart_scale(stats, start, count);
+    auto const scale = debug_frame_chart_scale(timeline, start, count);
     auto y_for_ms = [&](double ms) {
         double const ratio = std::clamp(
             (ms - scale.min_ms) / (scale.max_ms - scale.min_ms),
@@ -8066,7 +8223,7 @@ inline void paint_debug_performance_chart(Painter& painter) {
         PathBuilder line;
         area.move_to(left, bottom);
         for (std::size_t i = 0; i < count; ++i) {
-            auto const sample = debug_frame_recent_sample(stats, start + i);
+            auto const sample = debug_timeline_recent_sample(timeline, start + i);
             float const x = left + static_cast<float>(i) * step;
             float const y = y_for_ms(
                 static_cast<double>(sample.total_ns) / 1'000'000.0);
@@ -8186,7 +8343,7 @@ inline std::string performance_debug_block() {
 }
 
 inline void render_debug_performance_tab() {
-    g_app.has_active_animations = true;
+    g_app.debug_panel_refresh_active = true;
     widget::text("Frame Timeline", TextSize::Small, TextColor::Muted);
     widget::semantic_canvas(
         DEBUG_PANEL_BODY_WIDTH,
@@ -8383,6 +8540,10 @@ inline DebugPanelGeometry debug_panel_geometry() {
 inline void render_debug_hover_highlight(DebugPanelGeometry const& geometry,
                                          unsigned int hovered_id) {
     if (hovered_id != DEBUG_INVALID_ID) {
+        float const panel_left =
+            geometry.viewport_width - geometry.panel_width - 16.0f;
+        if (g_app.pointer_valid && g_app.pointer_x >= panel_left)
+            return;
         layout::overlay([&] {
             widget::semantic_canvas(
                 geometry.viewport_width,
@@ -8415,12 +8576,16 @@ inline layout::MaterialSurfaceOptions debug_panel_surface_options(
             MaterialKind::Thick,
             layout::glass_background_feathered(18.0f, 28.0f));
     panel_options.material_override.tint =
-        debug_with_alpha(g_app.theme.surface, 226);
+        debug_with_alpha(g_app.theme.surface, 190);
     panel_options.material_override.border =
         debug_with_alpha(g_app.theme.border, 236);
-    panel_options.material_override.blur_radius = 64.0f;
-    panel_options.material_override.opacity = 0.94f;
+    panel_options.material_override.blur_radius = 86.0f;
+    panel_options.material_override.opacity = 0.84f;
     panel_options.material_override.saturation = 1.08f;
+    panel_options.material_override.contrast_intent =
+        "debug-panel-backdrop-blur";
+    panel_options.material_override.verifier_profile =
+        "debug-panel-gaussian-backdrop";
     return panel_options;
 }
 
@@ -8439,13 +8604,14 @@ inline void render_debug_panel_overlay() {
     if (!g_app.debug_panel_open)
         return;
     if (g_app.debug_panel_warmup_frames > 0u) {
-        g_app.has_active_animations = true;
+        g_app.debug_panel_refresh_active = true;
         --g_app.debug_panel_warmup_frames;
     }
 
     auto input_debug = current_input_debug_snapshot();
     auto const geometry = debug_panel_geometry();
     render_debug_hover_highlight(geometry, input_debug.hovered_id);
+    render_debug_virtual_pointer_overlay();
 
     layout::overlay([&] {
         layout::row([&] {

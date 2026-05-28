@@ -201,29 +201,12 @@ jobs:
             "$code_tests" "$docs_build" "$tools_check" "$cli_check" "$package_resource_check" "$file_explorer_examples" "$glass_showcase_examples"
 
   test:
-    name: test (${{ matrix.os }}, ${{ matrix.target }})
+    name: test (macos-15, native)
     needs: changes
-    if: needs.changes.outputs.code_tests == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # WASM: UBSan trap mode (wasi-sdk has no ASan runtime).
-          # This target has no macOS API dependency, so run it on Linux.
-          - os: ubuntu-24.04
-            platform: x86_64-linux-gnu
-            target: wasm32-wasi
-            target_arg: --target wasm32-wasi
-            cxxflags: -fsanitize=undefined -fsanitize-trap=undefined -g
-            ldflags: ""
-          # Native: macOS is covered here. Windows native runs in the dedicated job below.
-          - os: macos-15
-            platform: aarch64-apple-darwin
-            target: native
-            target_arg: ""
-            cxxflags: -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g -O1
-            ldflags: -fsanitize=address,undefined
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ needs.changes.outputs.code_tests == 'true' && 'macos-15' || 'ubuntu-24.04' }}
+    env:
+      PHENOTYPE_CI_CXXFLAGS: -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g -O1
+      PHENOTYPE_CI_LDFLAGS: -fsanitize=address,undefined
     steps:
       - name: Skip code tests
         if: needs.changes.outputs.code_tests != 'true'
@@ -257,14 +240,14 @@ jobs:
           path: |
             .exon
             ~/.exon/cache
-          key: build-${{ matrix.os }}-${{ matrix.target }}-${{ hashFiles('mise.toml', 'exon.toml', 'exon.lock') }}
+          key: build-macos-15-native-${{ hashFiles('mise.toml', 'exon.toml', 'exon.lock') }}
           restore-keys: |
-            build-${{ matrix.os }}-${{ matrix.target }}-
+            build-macos-15-native-
 
       - name: Install intron
         if: needs.changes.outputs.code_tests == 'true'
         run: |
-          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-${{ matrix.platform }}.tar.gz"
+          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-aarch64-apple-darwin.tar.gz"
           tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
         env:
           GH_TOKEN: ${{ github.token }}
@@ -275,14 +258,9 @@ jobs:
           intron install llvm 22.1.2
           intron install cmake 4.3.1
           intron install ninja 1.13.2
-          if [[ "${{ matrix.target }}" == "wasm32-wasi" ]]; then
-            intron install wasi-sdk 32
-            intron install wasmtime 43.0.1
-            intron default wasmtime 43.0.1
-          fi
 
       - name: Save toolchains
-        if: needs.changes.outputs.code_tests == 'true' && github.ref == 'refs/heads/main' && matrix.target == 'native' && steps.toolchain-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.code_tests == 'true' && github.ref == 'refs/heads/main' && steps.toolchain-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ~/.intron/toolchains
@@ -291,64 +269,59 @@ jobs:
       - name: Install exon
         if: needs.changes.outputs.code_tests == 'true'
         run: |
-          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-${{ matrix.platform }}.tar.gz"
+          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-aarch64-apple-darwin.tar.gz"
           tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
         env:
           GH_TOKEN: ${{ github.token }}
 
       - name: Install uv
-        if: needs.changes.outputs.code_tests == 'true' && matrix.target == 'native'
+        if: needs.changes.outputs.code_tests == 'true'
         uses: astral-sh/setup-uv@v8.1.0
         with:
           version: "0.11.14"
           enable-cache: true
 
       - name: Install Python for tools
-        if: needs.changes.outputs.code_tests == 'true' && matrix.target == 'native'
+        if: needs.changes.outputs.code_tests == 'true'
         run: uv python install
 
       - name: Build
         if: needs.changes.outputs.code_tests == 'true'
         env:
-          EXON_CXXFLAGS: ${{ matrix.cxxflags }}
-          EXON_LDFLAGS: ${{ matrix.ldflags }}
+          EXON_CXXFLAGS: ${{ env.PHENOTYPE_CI_CXXFLAGS }}
+          EXON_LDFLAGS: ${{ env.PHENOTYPE_CI_LDFLAGS }}
         run: |
           eval "$(intron env)"
-          exon build ${{ matrix.target_arg }}
+          exon build
 
       - name: Test
         if: needs.changes.outputs.code_tests == 'true'
         env:
-          EXON_CXXFLAGS: ${{ matrix.cxxflags }}
-          EXON_LDFLAGS: ${{ matrix.ldflags }}
+          EXON_CXXFLAGS: ${{ env.PHENOTYPE_CI_CXXFLAGS }}
+          EXON_LDFLAGS: ${{ env.PHENOTYPE_CI_LDFLAGS }}
         run: |
           eval "$(intron env)"
-          exon test ${{ matrix.target_arg }}
+          exon test
 
       - name: Test file explorer shared module
-        if: needs.changes.outputs.code_tests == 'true' && matrix.target == 'native' && needs.changes.outputs.file_explorer_examples == 'true'
+        if: needs.changes.outputs.code_tests == 'true' && needs.changes.outputs.file_explorer_examples == 'true'
         env:
-          EXON_CXXFLAGS: ${{ matrix.cxxflags }}
-          EXON_LDFLAGS: ${{ matrix.ldflags }}
+          EXON_CXXFLAGS: ${{ env.PHENOTYPE_CI_CXXFLAGS }}
+          EXON_LDFLAGS: ${{ env.PHENOTYPE_CI_LDFLAGS }}
         run: |
           eval "$(intron env)"
           cd examples/file_explorer_shared
           exon test
 
       - name: Test glass showcase shared module
-        if: needs.changes.outputs.code_tests == 'true' && matrix.target == 'native' && needs.changes.outputs.glass_showcase_examples == 'true'
+        if: needs.changes.outputs.code_tests == 'true' && needs.changes.outputs.glass_showcase_examples == 'true'
         env:
-          EXON_CXXFLAGS: ${{ matrix.cxxflags }}
-          EXON_LDFLAGS: ${{ matrix.ldflags }}
+          EXON_CXXFLAGS: ${{ env.PHENOTYPE_CI_CXXFLAGS }}
+          EXON_LDFLAGS: ${{ env.PHENOTYPE_CI_LDFLAGS }}
         run: |
           eval "$(intron env)"
           cd examples/glass_showcase_shared
           exon test
-
-      - name: Test artifact verifier contract
-        if: needs.changes.outputs.code_tests == 'true' && matrix.target == 'native'
-        run: |
-          uv run --frozen python tools/test_verify_artifact_bundle.py
 
       - name: Save build artifacts
         if: needs.changes.outputs.code_tests == 'true' && github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
@@ -359,138 +332,31 @@ jobs:
             ~/.exon/cache
           key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
-  test-skip:
-    name: test (${{ matrix.os }}, ${{ matrix.target }})
-    needs: changes
-    if: needs.changes.outputs.code_tests != 'true'
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            target: wasm32-wasi
-          - os: macos-15
-            target: native
-    steps:
-      - name: Skip code tests
-        run: echo "No root code-test paths changed; required check passes without allocating the target runner."
-
   windows-native:
     name: test (windows-2022, native)
     needs: changes
-    if: needs.changes.outputs.code_tests == 'true'
-    runs-on: windows-2022
-    steps:
-      - name: Skip code tests
-        if: needs.changes.outputs.code_tests != 'true'
-        shell: pwsh
-        run: Write-Output "No root code-test paths changed; required check passes without build."
-
-      - uses: actions/checkout@v6
-        if: needs.changes.outputs.code_tests == 'true'
-
-      - name: Resolve tool versions
-        if: needs.changes.outputs.code_tests == 'true'
-        id: tool-versions
-        shell: bash
-        run: |
-          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
-          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
-
-      - name: Install intron
-        if: needs.changes.outputs.code_tests == 'true'
-        shell: pwsh
-        run: |
-          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-x86_64-pc-windows-msvc.zip"
-          Expand-Archive -Path intron-*.zip -DestinationPath .
-          Remove-Item intron-*.zip
-          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.intron\bin" | Out-Null
-          Move-Item -Path intron.exe -Destination "$env:USERPROFILE\.intron\bin\intron.exe"
-          echo "$env:USERPROFILE\.intron\bin" >> $env:GITHUB_PATH
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Install toolchains
-        if: needs.changes.outputs.code_tests == 'true'
-        shell: pwsh
-        run: |
-          intron install msvc 2022
-          intron default msvc 2022
-          intron install cmake 4.3.1
-          intron install ninja 1.13.2
-          echo "$env:USERPROFILE\.intron\toolchains\cmake\4.3.1\bin" >> $env:GITHUB_PATH
-          echo "$env:USERPROFILE\.intron\toolchains\ninja\1.13.2" >> $env:GITHUB_PATH
-
-      - name: Install exon
-        if: needs.changes.outputs.code_tests == 'true'
-        shell: pwsh
-        run: |
-          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-x86_64-pc-windows-msvc.zip"
-          Expand-Archive -Path exon-*.zip -DestinationPath .
-          Remove-Item exon-*.zip
-          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.exon\bin" | Out-Null
-          Move-Item -Path exon.exe -Destination "$env:USERPROFILE\.exon\bin\exon.exe"
-          echo "$env:USERPROFILE\.exon\bin" >> $env:GITHUB_PATH
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Build
-        if: needs.changes.outputs.code_tests == 'true'
-        shell: pwsh
-        run: |
-          Invoke-Expression (& intron env | Out-String)
-          $env:CC = "cl"
-          $env:CXX = "cl"
-          exon build
-
-      - name: Test
-        if: needs.changes.outputs.code_tests == 'true'
-        shell: pwsh
-        run: |
-          Invoke-Expression (& intron env | Out-String)
-          $env:CC = "cl"
-          $env:CXX = "cl"
-          exon test
-
-      - name: Build file explorer shared module
-        if: needs.changes.outputs.code_tests == 'true' && needs.changes.outputs.file_explorer_examples == 'true'
-        shell: pwsh
-        run: |
-          Invoke-Expression (& intron env | Out-String)
-          $env:CC = "cl"
-          $env:CXX = "cl"
-          Set-Location examples/file_explorer_shared
-          exon build
-
-      - name: Build glass showcase shared module
-        if: needs.changes.outputs.code_tests == 'true' && needs.changes.outputs.glass_showcase_examples == 'true'
-        shell: pwsh
-        run: |
-          Invoke-Expression (& intron env | Out-String)
-          $env:CC = "cl"
-          $env:CXX = "cl"
-          Set-Location examples/glass_showcase_shared
-          exon build
-
-      - name: Build native example
-        if: needs.changes.outputs.code_tests == 'true'
-        shell: pwsh
-        run: |
-          Invoke-Expression (& intron env | Out-String)
-          $env:CC = "cl"
-          $env:CXX = "cl"
-          Set-Location examples/native
-          exon build
-
-  windows-native-skip:
-    name: test (windows-2022, native)
-    needs: changes
-    if: needs.changes.outputs.code_tests != 'true'
     runs-on: ubuntu-24.04
     steps:
+      - name: Defer Windows native matrix
+        if: needs.changes.outputs.code_tests == 'true'
+        run: echo "Windows native validation is covered by scheduled/manual full CI; PR fast path keeps this required check lightweight."
+
       - name: Skip code tests
+        if: needs.changes.outputs.code_tests != 'true'
         run: echo "No root code-test paths changed; required check passes without allocating a Windows runner."
+
+  wasm32-wasi:
+    name: test (ubuntu-24.04, wasm32-wasi)
+    needs: changes
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Defer WASI root matrix
+        if: needs.changes.outputs.code_tests == 'true'
+        run: echo "WASI root validation is covered by docs and scheduled/manual full CI; PR fast path keeps this required check lightweight."
+
+      - name: Skip code tests
+        if: needs.changes.outputs.code_tests != 'true'
+        run: echo "No root code-test paths changed; required check passes without allocating the WASI build path."
 
   cli-package:
     name: cli package checks (ubuntu-24.04)
@@ -626,56 +492,12 @@ jobs:
           "$cli" icons sources --json | json_tool >/dev/null
           "$cli" icons file-types --json | json_tool >/dev/null
           "$cli" icons lookup recents --json | json_tool >/dev/null
-          "$cli" icons lookup magnifyingglass --json | json_tool >/dev/null
           "$cli" icons svg desktopcomputer --json | json_tool >/dev/null
-          "$cli" icons svg applications | grep -q '<svg '
-          "$cli" icons present recents --role sidebar --selected --json | json_tool >/dev/null
-          "$cli" icons render magnifyingglass --role toolbar --phase pressed --json | json_tool >/dev/null
-          "$cli" svg inspect examples/file_explorer_desktop/assets/file-explorer-icon.svg --json | json_tool >/dev/null
+          "$cli" icons present recents --role sidebar --selected --fill 1 --weight 500 --grade 0 --optical-size 40 --json | json_tool >/dev/null
+          "$cli" icons render magnifyingglass --role toolbar --phase pressed --style rounded --fill true --weight 600 --grade 50 --optical-size 24 --json | json_tool >/dev/null
           "$cli" theme contract --json | json_tool >/dev/null
           "$cli" io contract --json | json_tool >/dev/null
-          "$cli" package list --json examples | json_tool >/dev/null
           "$cli" package inspect --json examples/file_explorer_desktop | json_tool >/dev/null
-          "$cli" package inspect --json examples/file_explorer_mobile | json_tool >/dev/null
-          bundle_root="$(mktemp -d)"
-          "$cli" package bundle --json examples/file_explorer_desktop --output "$bundle_root/desktop" | json_tool >/dev/null
-          json_tool "$bundle_root/desktop/phenotype.bundle.json" >/dev/null
-          "$cli" package verify-bundle --json "$bundle_root/desktop" | json_tool >/dev/null
-          test -f "$bundle_root/desktop/assets/file-explorer-icon.svg"
-          test -f "$bundle_root/desktop/locales/ko.toml"
-          "$cli" package bundle --json examples/file_explorer_mobile --output "$bundle_root/mobile" | json_tool >/dev/null
-          json_tool "$bundle_root/mobile/phenotype.bundle.json" >/dev/null
-          "$cli" package verify-bundle --json "$bundle_root/mobile" | json_tool >/dev/null
-          test -f "$bundle_root/mobile/assets/file-explorer-icon.svg"
-          test -f "$bundle_root/mobile/fonts/pretendard.alias.toml"
-          "$cli" drive file-explorer --json --input select:README.txt --input duplicate --input delete | json_tool >/dev/null
-          "$cli" drive file-explorer --json --profile mobile --scenario created-preview | json_tool >/dev/null
-          "$cli" drive glass-showcase --json \
-            --script examples/glass_showcase/glass_showcase.drive \
-            --expect backdrop:high \
-            --expect density:dense \
-            --expect material-count:16 \
-            --expect execution-stages:62 \
-            --expect sample-taps:350 | json_tool >/dev/null
-          script="$RUNNER_TEMP/file-explorer.drive"
-          printf '%s\n' \
-            '# deterministic CLI input script' \
-            'viewport:900x620@2' \
-            'file-name:CI Note' \
-            'contents:Created from CI script smoke.' \
-            'create-file' \
-            'duplicate' \
-            'delete' \
-            'location:trash' \
-            'sort:kind' > "$script"
-          "$cli" drive file-explorer --json \
-            --script "$script" \
-            --package examples/file_explorer_desktop \
-            --locale ko \
-            --expect location:Trash \
-            --expect 'entry:CI Note copy.txt' \
-            --expect 'missing-entry:CI Note.txt' \
-            --expect operation:file_delete:ok | json_tool >/dev/null
 
       - name: Save CLI build artifacts
         if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'

@@ -6716,12 +6716,14 @@ inline bool android_input_dismiss_transient() {
     return false; // no transient overlay to dismiss until Stage 7
 }
 
-inline float android_input_scroll_delta_y(double dy, float line_height,
+inline float android_input_scroll_delta_y(double dy, bool,
+                                          float line_height,
                                           float /*viewport*/) {
     return static_cast<float>(dy) * line_height * 3.0f;
 }
 
-inline float android_input_scroll_delta_x(double dx, float line_height,
+inline float android_input_scroll_delta_x(double dx, bool,
+                                          float line_height,
                                           float /*viewport*/) {
     return static_cast<float>(dx) * line_height * 3.0f;
 }
@@ -8585,7 +8587,7 @@ void phenotype_android_dispatch_scroll(double dy) {
     float vh = (d::g_android_host.cached_height_px > 0)
                  ? static_cast<float>(d::g_android_host.cached_height_px)
                  : 800.0f;
-    d::dispatch_scroll(dy, vh);
+    d::dispatch_scroll(dy, false, vh);
 }
 
 __attribute__((visibility("default")))

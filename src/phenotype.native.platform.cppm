@@ -188,6 +188,12 @@ struct WindowOptions {
     NativeBackdropMaterial native_backdrop_material =
         NativeBackdropMaterial::UnderWindowBackground;
     float native_backdrop_opacity = 1.0f;
+    bool keep_running_after_last_window_closed = false;
+    bool install_standard_app_menu = false;
+    char const* application_name = nullptr;
+    char const* settings_menu_title = "Settings...";
+    char const* settings_menu_key_equivalent = ",";
+    void (*on_settings_menu)() = nullptr;
 };
 
 struct NativeSurfaceDescriptor {
@@ -349,9 +355,11 @@ struct input_api {
                                 int button, int action, int mods) = nullptr;
     bool (*dismiss_transient)() = nullptr;
     float (*scroll_delta_y)(double dy,
+                            bool has_precise_scrolling_deltas,
                             float line_height,
                             float viewport_height) = nullptr;
     float (*scroll_delta_x)(double dx,
+                            bool has_precise_scrolling_deltas,
                             float line_height,
                             float viewport_width) = nullptr;
 };

@@ -58,7 +58,8 @@ auto rendered_icon_svg_source(IconLookupResult const& result,
                               icon_catalog::SymbolInteractionPhase phase,
                               bool selected,
                               bool enabled,
-                              icon_catalog::MaterialSymbolsStyle style)
+                              icon_catalog::MaterialSymbolsStyle style,
+                              MaterialSymbolAxisOptions axes)
         -> std::string {
     auto const desc = icon_catalog::descriptor(result.symbol, style);
     auto const metrics = icon_catalog::metrics(role);
@@ -76,7 +77,7 @@ auto rendered_icon_svg_source(IconLookupResult const& result,
         icon_catalog::svg_source(result.symbol, style));
 
     auto out = std::format(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\" role=\"img\" aria-label=\"{}\" data-phenotype-symbol=\"{}\" data-semantic-reference=\"{}\" data-style=\"{}\" data-material-symbols-style=\"{}\" data-role=\"{}\" data-phase=\"{}\" data-asset-policy=\"{}\">",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\" role=\"img\" aria-label=\"{}\" data-phenotype-symbol=\"{}\" data-semantic-reference=\"{}\" data-style=\"{}\" data-material-symbols-style=\"{}\" data-material-fill=\"{}\" data-material-weight=\"{}\" data-material-grade=\"{}\" data-material-optical-size=\"{}\" data-role=\"{}\" data-phase=\"{}\" data-asset-policy=\"{}\">",
         svg_number(recipe.hit_target_size),
         svg_number(recipe.hit_target_size),
         svg_number(recipe.hit_target_size),
@@ -86,6 +87,10 @@ auto rendered_icon_svg_source(IconLookupResult const& result,
         xml_attribute_escape(desc.semantic_reference_name),
         xml_attribute_escape(desc.style),
         xml_attribute_escape(icon_catalog::material_symbols_style_name(style)),
+        axes.fill ? "1" : "0",
+        axes.weight,
+        axes.grade,
+        axes.optical_size,
         xml_attribute_escape(icon_catalog::symbol_presentation_role_name(role)),
         xml_attribute_escape(icon_catalog::symbol_interaction_phase_name(phase)),
         xml_attribute_escape(icon_catalog::asset_policy()));
@@ -117,6 +122,7 @@ auto icon_render_json(std::string_view query,
                       bool selected,
                       bool enabled,
                       icon_catalog::MaterialSymbolsStyle style,
+                      MaterialSymbolAxisOptions axes,
                       std::string_view source,
                       fs::path const& output_path) -> std::string {
     auto const desc = icon_catalog::descriptor(result.symbol, style);
@@ -142,6 +148,7 @@ auto icon_render_json(std::string_view query,
         "\"style\":{},\"material_symbols_style\":{},"
         "\"asset_policy\":{},\"source_license_policy\":{},"
         "\"apple_asset_boundary\":{},\"source_attribution\":{},"
+        "\"material_symbols_axes\":{},"
         "\"state\":{{\"role\":{},\"phase\":{},"
         "\"selected\":{},\"enabled\":{}}},"
         "\"presentation\":{{\"policy\":{},\"symbol_tone\":{},"
@@ -163,6 +170,7 @@ auto icon_render_json(std::string_view query,
         json_string(icon_catalog::source_license_policy()),
         json_string(icon_catalog::apple_asset_boundary()),
         icon_source_attribution_json(source_attribution),
+        icon_material_symbol_axes_json(axes, style),
         json_string(icon_catalog::symbol_presentation_role_name(role)),
         json_string(icon_catalog::symbol_interaction_phase_name(phase)),
         selected ? "true" : "false",

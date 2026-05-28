@@ -232,6 +232,18 @@ struct FrameTraceMonitor {
     std::size_t recent_next = 0;
 };
 
+struct FrameTimelineMonitor {
+    static constexpr std::size_t RECENT_CAPACITY = 240;
+    static constexpr std::uint64_t SAMPLE_INTERVAL_NS = 16'666'667ull;
+
+    std::uint64_t tick = 0;
+    std::uint64_t last_sample_ns = 0;
+    FrameTraceSample last{};
+    std::array<FrameTraceSample, RECENT_CAPACITY> recent{};
+    std::size_t recent_count = 0;
+    std::size_t recent_next = 0;
+};
+
 enum class DebugPanelTab {
     Performance,
     Layout,
@@ -344,6 +356,7 @@ struct AppState {
     unsigned int debug_panel_warmup_frames = 0;
     ActionPerfMonitor action_perf;
     FrameTraceMonitor frame_perf;
+    FrameTimelineMonitor frame_timeline;
     bool frame_trace_input_active = false;
     FrameTraceAction frame_trace_input_action = FrameTraceAction::None;
     std::uint64_t frame_trace_input_start_ns = 0;
@@ -370,6 +383,11 @@ struct AppState {
     // during direct manipulation without turning paint-only scroll into a full
     // view rebuild.
     bool has_active_input_motion = false;
+
+    // Debug panel charts need a steady repaint cadence even when the app is
+    // otherwise idle. Keep that separate from view-time animations so native
+    // material quality policy does not disable backdrop blur for the panel.
+    bool debug_panel_refresh_active = false;
 
     // Subtree paint cache — snapshot of the previous frame's command
     // buffer, kept so paint_node can memcpy a clean subtree's byte range
