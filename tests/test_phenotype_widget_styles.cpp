@@ -1325,8 +1325,9 @@ void test_glass_outline_row_button_style_material_contract() {
     assert(selected.material.role == MaterialSurfaceRole::Surface);
     assert(selected.material.fallback);
     assert(selected.material.container.interactive);
+    assert(selected.material.border.a == 0);
     assert(selected.background == detail::g_app.theme.accent);
-    assert(selected.border_width == 1.0f);
+    assert(selected.border_width == 0.0f);
     assert(selected.border_radius == 8.0f);
     assert(selected.font_size == 13.0f);
     assert(selected.max_width == 220.0f);

@@ -1738,12 +1738,11 @@ void finder_icon_label_button(std::string const& label,
     options.pressed_background = selected ? rgba(0, 96, 212, 250)
                                           : rgba(0, 0, 0, 34);
     options.has_border_color = true;
-    options.border_color = selected ? rgba(0, 88, 204, 120)
-                                    : rgba(0, 0, 0, 0);
+    options.border_color = rgba(0, 0, 0, 0);
     options.has_text_color = true;
     options.text_color = selected ? rgba(255, 255, 255)
                                   : rgba(28, 28, 30);
-    options.border_width = selected ? 1.0f : 0.0f;
+    options.border_width = 0.0f;
     options.border_radius = 8.0f;
     options.font_size = font_size;
     options.max_width = max_width;
@@ -1873,9 +1872,8 @@ void sidebar_row(std::string_view label,
     options.pressed_background = selected ? rgba(255, 255, 255, 250)
                                           : rgba(255, 255, 255, 92);
     options.has_border_color = true;
-    options.border_color = selected ? rgba(255, 255, 255, 245)
-                                    : rgba(255, 255, 255, 0);
-    options.border_width = selected ? 1.0f : 0.0f;
+    options.border_color = rgba(255, 255, 255, 0);
+    options.border_width = 0.0f;
     options.border_radius = k_sidebar_selected_row_radius;
     options.max_width = k_sidebar_row_width;
     options.fixed_height = k_sidebar_row_height;
