@@ -50,17 +50,17 @@ APIs from core code.
 `phenotype.icons` builds on that parser with audited permissive SVG symbols.
 The catalog keeps macOS/Finder/SF Symbols names only as
 semantic references: it does not embed Apple or SF Symbols artwork. Most
-toolbar, sidebar, action, and file-type glyphs currently use audited Lucide SVG
-sources pinned to a fixed source revision, with each symbol reporting either
-the Lucide ISC license or the Feather-derived MIT license when the upstream
-license file requires it. The policy also allows future Tabler MIT, Iconoir
-MIT, or Material Symbols Apache-2.0 sources. Every embedded external source
+toolbar, sidebar, action, and file-type glyphs currently use audited Google
+Material Symbols SVG sources pinned to a fixed source revision, with each
+symbol reporting the Apache-2.0 license and bundled license text. The policy
+also tracks future Tabler MIT and Iconoir MIT fallback candidates. Every
+embedded external source
 exposes family, icon name, exact license, license URL, pinned direct raw SVG
 URL, source revision, copyright, modification status, and Apple-asset boundary
 in debug metadata.
 The catalog also exposes structured reference-source rows for Apple HIG/SF
-Symbols, W3C SVG paths, Lucide, Feather Icons, Tabler Icons, Iconoir, and
-Material Symbols. Each row records the official license URL, acquisition mode,
+Symbols, W3C SVG paths, Google Material Symbols, Tabler Icons, and Iconoir.
+Each row records the official license URL, acquisition mode,
 embedding permission, notice requirement, runtime-fetch flag, and
 platform-extraction flag, so provenance checks can distinguish style
 references, license lineage, future source candidates, and embedded asset
@@ -406,9 +406,8 @@ without copying SF Symbols artwork as assets. Each symbol declares a semantic
 SF Symbols reference name, family, and policy, so the contract can say "this
 glyph is playing the same UI role as `magnifyingglass`" without embedding
 Apple's vector paths. In the current catalog, all 39 built-in symbols come
-from audited Lucide SVG sources pinned to the catalog revision, including More,
-AirDrop, Shared, and Sort Group. Feather Icons is tracked separately as MIT
-license-lineage metadata for Lucide symbols derived from Feather. Apps can call
+from audited Google Material Symbols SVG sources pinned to the catalog
+revision, including More, AirDrop, Shared, and Sort Group. Apps can call
 `icons::document`,
 `icons::paint_symbol`,
 or `widget::icon`; the widget helper paints through `widget::canvas` and uses a
@@ -445,7 +444,7 @@ audio, code, spreadsheet, and presentation files. Apps choose those
 symbols through pure filename and role metadata, then expose the resolved symbol
 and semantic reference in debug JSON so native backends remain simple
 executors. Each embedded symbol also carries source acquisition metadata: the
-URL is pinned to a permissive source revision when the glyph is Lucide-backed,
+URL is pinned to a permissive source revision when the glyph is Google Material Symbols-backed,
 and the attribution explicitly says that no platform icon extraction or runtime
 network fetch is required.
 The icon debug contract includes `document_cache_policy`, making this
@@ -507,10 +506,10 @@ spreadsheets, presentations, archives, PDFs, text, folders, and unknown
 documents resolve through one audited icon module.
 The desktop and mobile packages also declare those eleven file-type icons as
 runtime-visible SVG assets under `assets/icons/file-types/`, sourced from the
-same pinned Lucide revision as the pure catalog. This keeps package inspection,
+same pinned Google Material Symbols revision as the pure catalog. This keeps package inspection,
 resource bundling, and runtime fallback painters on one source-safe icon
 contract while still avoiding Apple-owned Finder or SF Symbols artwork. The
-packages also carry the Lucide license notice as a non-runtime text asset, so a
+packages also carry the Google Material Symbols license notice as a non-runtime text asset, so a
 resource bundle preserves the permissive-source notice alongside the copied SVG
 files. Entry debug JSON links each resolved file-type symbol back to the
 package asset name/source, which lets CI logs explain whether an icon mismatch
@@ -533,8 +532,8 @@ debugging before anyone inspects a screenshot. `phenotype icons svg
 catalog with the matched rendering capability envelope, so renderer and parser
 failures can be reproduced without launching a native window. `phenotype icons
 sources --json` is the compact provenance audit for web-sourced icons: it
-lists each pinned Lucide raw SVG source, the symbols using it, license URL,
-source revision, remaining phenotype-owned count, and the
+lists each pinned Google Material Symbols raw SVG source, the symbols using it,
+style, license URL, source revision, remaining phenotype-owned count, and the
 Apple/platform-extraction boundary checks without dumping every catalog
 presentation field. `phenotype icons
 present <name-or-reference>` resolves the same state recipe for a chosen role,

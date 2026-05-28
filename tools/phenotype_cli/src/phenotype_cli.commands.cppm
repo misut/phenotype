@@ -15,6 +15,14 @@ auto json_option() -> cppx::cli::OptionSpec {
             .description = "Emit machine-readable JSON"};
 }
 
+auto material_symbols_style_option() -> cppx::cli::OptionSpec {
+    return {.name = "style",
+            .arity = cppx::cli::OptionArity::one,
+            .value_name = "outlined|rounded|sharp",
+            .description =
+                "Material Symbols (new) style. Defaults to outlined."};
+}
+
 auto android_common_options(std::vector<cppx::cli::OptionSpec> extra = {})
     -> std::vector<cppx::cli::OptionSpec> {
     auto options = std::vector<cppx::cli::OptionSpec>{
@@ -836,13 +844,17 @@ auto spec() -> cppx::cli::CommandSpec {
                         .name = "svg",
                         .summary =
                             "Emit one audited built-in icon SVG source",
-                        .options = {help_option(), json_option()},
+                        .options = {
+                            help_option(),
+                            json_option(),
+                            material_symbols_style_option(),
+                        },
                         .positional_name = "name-or-reference",
                         .positional_description =
                             "Built-in symbol name such as applications or SF Symbols semantic reference such as desktopcomputer.",
                         .examples = {
                             "phenotype icons svg recents",
-                            "phenotype icons svg desktopcomputer --json",
+                            "phenotype icons svg desktopcomputer --style rounded --json",
                         },
                     },
                     {
@@ -902,6 +914,7 @@ auto spec() -> cppx::cli::CommandSpec {
                             {.name = "disabled",
                              .arity = cppx::cli::OptionArity::none,
                              .description = "Resolve the disabled-state recipe"},
+                            material_symbols_style_option(),
                             {.name = "output",
                              .arity = cppx::cli::OptionArity::one,
                              .value_name = "path",
@@ -913,7 +926,7 @@ auto spec() -> cppx::cli::CommandSpec {
                             "Built-in symbol name such as search or SF Symbols semantic reference such as magnifyingglass.",
                         .examples = {
                             "phenotype icons render magnifyingglass --role toolbar --phase pressed",
-                            "phenotype icons render recents --role sidebar --selected --output /tmp/recents.svg",
+                            "phenotype icons render recents --style sharp --role sidebar --selected --output /tmp/recents.svg",
                             "phenotype icons render doc.richtext --role file_type --json",
                         },
                     },

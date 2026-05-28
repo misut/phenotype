@@ -66,8 +66,8 @@ auto icon_check_json(std::span<IconCheckGroup const> groups)
         "\"ok\":{},\"policy\":{{\"asset_policy\":{},"
         "\"source_acquisition_policy\":{},\"source_attribution_policy\":{},"
         "\"apple_asset_boundary\":{},\"preferred_external_source_policy\":{}}},"
-        "\"counts\":{{\"all_symbols\":{},\"lucide_source_symbols\":{},"
-        "\"lucide_unique_source_icons\":{},\"file_type_symbols\":{},"
+        "\"counts\":{{\"all_symbols\":{},\"material_symbols_source_symbols\":{},"
+        "\"material_symbols_unique_source_icons\":{},\"file_type_symbols\":{},"
         "\"reference_sources\":{},\"apple_asset_symbols\":{},"
         "\"platform_extracted_symbols\":{},\"runtime_fetched_symbols\":{}}},"
         "\"source_revision\":{},\"groups\":{}}}",
@@ -78,14 +78,14 @@ auto icon_check_json(std::span<IconCheckGroup const> groups)
         json_string(icon_catalog::apple_asset_boundary()),
         json_string(icon_catalog::preferred_external_source_policy()),
         icon_catalog::all_symbol_count,
-        icon_catalog::lucide_source_symbol_count,
-        icon_catalog::lucide_unique_source_icon_count,
+        icon_catalog::material_symbols_source_symbol_count,
+        icon_catalog::material_symbols_unique_source_icon_count,
         icon_catalog::file_type_symbol_count,
         icon_catalog::reference_source_count,
         icon_catalog::apple_asset_symbol_count,
         icon_catalog::platform_extracted_symbol_count,
         icon_catalog::runtime_fetched_symbol_count,
-        json_string(icon_catalog::lucide_source_revision()),
+        json_string(icon_catalog::material_symbols_source_revision()),
         icon_check_groups_json(groups));
 }
 
@@ -99,15 +99,15 @@ int run_icons_check(cppx::cli::Invocation const& invocation) {
     auto lines = std::vector<cppx::terminal::StatusLine>{
         {.label = "symbols",
          .value = std::format(
-             "{} total, {} Lucide-backed, {} file-type",
+             "{} total, {} Google Material Symbols-backed, {} file-type",
              icon_catalog::all_symbol_count,
-             icon_catalog::lucide_source_symbol_count,
+             icon_catalog::material_symbols_source_symbol_count,
              icon_catalog::file_type_symbol_count),
          .status = cppx::terminal::StatusKind::ok},
         {.label = "source",
          .value = std::format(
-             "Lucide pinned at {}",
-             icon_catalog::lucide_source_revision()),
+             "Google Material Symbols pinned at {}",
+             icon_catalog::material_symbols_source_revision()),
          .status = cppx::terminal::StatusKind::ok},
         {.label = "Apple boundary",
          .value = std::string{icon_catalog::apple_asset_boundary()},

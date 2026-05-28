@@ -101,6 +101,12 @@ enum class SymbolWeight {
     Regular,
 };
 
+enum class MaterialSymbolsStyle {
+    Outlined,
+    Rounded,
+    Sharp,
+};
+
 enum class SymbolStrokeCap {
     Round,
 };
@@ -181,6 +187,18 @@ inline auto to_catalog_weight(SymbolWeight weight) noexcept
 inline auto from_catalog_weight(catalog::SymbolWeight weight) noexcept
         -> SymbolWeight {
     return static_cast<SymbolWeight>(static_cast<unsigned int>(weight));
+}
+
+inline auto to_catalog_material_symbols_style(
+        MaterialSymbolsStyle style) noexcept -> catalog::MaterialSymbolsStyle {
+    return static_cast<catalog::MaterialSymbolsStyle>(
+        static_cast<unsigned int>(style));
+}
+
+inline auto from_catalog_material_symbols_style(
+        catalog::MaterialSymbolsStyle style) noexcept -> MaterialSymbolsStyle {
+    return static_cast<MaterialSymbolsStyle>(
+        static_cast<unsigned int>(style));
 }
 
 inline auto to_catalog_stroke_cap(SymbolStrokeCap cap) noexcept
@@ -418,10 +436,14 @@ inline constexpr unsigned int phenotype_owned_symbol_count =
     catalog::phenotype_owned_symbol_count;
 inline constexpr unsigned int permissive_source_symbol_count =
     catalog::permissive_source_symbol_count;
-inline constexpr unsigned int lucide_source_symbol_count =
-    catalog::lucide_source_symbol_count;
-inline constexpr unsigned int lucide_unique_source_icon_count =
-    catalog::lucide_unique_source_icon_count;
+inline constexpr unsigned int material_symbols_source_symbol_count =
+    catalog::material_symbols_source_symbol_count;
+inline constexpr unsigned int material_symbols_unique_source_icon_count =
+    catalog::material_symbols_unique_source_icon_count;
+inline constexpr unsigned int material_symbols_style_count =
+    catalog::material_symbols_style_count;
+inline constexpr unsigned int material_symbols_source_variant_count =
+    catalog::material_symbols_source_variant_count;
 inline constexpr unsigned int apple_asset_symbol_count =
     catalog::apple_asset_symbol_count;
 inline constexpr unsigned int platform_extracted_symbol_count =
@@ -465,9 +487,59 @@ inline auto symbol_at(unsigned int index) noexcept -> Symbol {
     return from_catalog_symbol(catalog::symbol_at(index));
 }
 
-inline auto lucide_source_icon_name_at(unsigned int index) noexcept
+inline auto material_symbols_source_icon_name_at(unsigned int index) noexcept
         -> std::string_view {
-    return catalog::lucide_source_icon_name_at(index);
+    return catalog::material_symbols_source_icon_name_at(index);
+}
+
+inline auto material_symbols_style_at(unsigned int index) noexcept
+        -> MaterialSymbolsStyle {
+    return from_catalog_material_symbols_style(
+        catalog::material_symbols_style_at(index));
+}
+
+inline auto material_symbols_style_name(MaterialSymbolsStyle style) noexcept
+        -> std::string_view {
+    return catalog::material_symbols_style_name(
+        to_catalog_material_symbols_style(style));
+}
+
+inline auto material_symbols_style_label(MaterialSymbolsStyle style) noexcept
+        -> std::string_view {
+    return catalog::material_symbols_style_label(
+        to_catalog_material_symbols_style(style));
+}
+
+inline auto material_symbols_font_family(MaterialSymbolsStyle style) noexcept
+        -> std::string_view {
+    return catalog::material_symbols_font_family(
+        to_catalog_material_symbols_style(style));
+}
+
+inline auto material_symbols_css_class(MaterialSymbolsStyle style) noexcept
+        -> std::string_view {
+    return catalog::material_symbols_css_class(
+        to_catalog_material_symbols_style(style));
+}
+
+inline auto material_symbols_source_directory(
+        MaterialSymbolsStyle style) noexcept -> std::string_view {
+    return catalog::material_symbols_source_directory(
+        to_catalog_material_symbols_style(style));
+}
+
+inline auto default_material_symbols_style() noexcept
+        -> MaterialSymbolsStyle {
+    return from_catalog_material_symbols_style(
+        catalog::default_material_symbols_style());
+}
+
+inline auto material_symbols_style_from_name(std::string_view name) noexcept
+        -> std::optional<MaterialSymbolsStyle> {
+    auto const style = catalog::material_symbols_style_from_name(name);
+    if (!style.has_value())
+        return std::nullopt;
+    return from_catalog_material_symbols_style(*style);
 }
 
 inline auto sidebar_symbol_at(unsigned int index) noexcept -> Symbol {
@@ -601,6 +673,10 @@ inline auto style_name() noexcept -> std::string_view {
     return catalog::style_name();
 }
 
+inline auto style_name(MaterialSymbolsStyle style) noexcept -> std::string_view {
+    return catalog::style_name(to_catalog_material_symbols_style(style));
+}
+
 inline auto style_reference() noexcept -> std::string_view {
     return catalog::style_reference();
 }
@@ -625,17 +701,17 @@ inline auto document_cache_policy() noexcept -> std::string_view {
     return catalog::document_cache_policy();
 }
 
-inline auto lucide_source_revision() noexcept -> std::string_view {
-    return catalog::lucide_source_revision();
+inline auto material_symbols_source_revision() noexcept -> std::string_view {
+    return catalog::material_symbols_source_revision();
 }
 
-inline auto lucide_license_url() noexcept -> std::string_view {
-    return catalog::lucide_license_url();
+inline auto material_symbols_license_url() noexcept -> std::string_view {
+    return catalog::material_symbols_license_url();
 }
 
-inline auto lucide_icon_license(std::string_view icon_name) noexcept
+inline auto material_symbols_icon_license(std::string_view icon_name) noexcept
         -> std::string_view {
-    return catalog::lucide_icon_license(icon_name);
+    return catalog::material_symbols_icon_license(icon_name);
 }
 
 inline auto source_attribution_policy() noexcept -> std::string_view {
@@ -763,8 +839,8 @@ inline auto symbol_from_semantic_reference_name(
     return from_catalog_symbol(*found);
 }
 
-inline bool uses_lucide_source(Symbol symbol) noexcept {
-    return catalog::uses_lucide_source(to_catalog_symbol(symbol));
+inline bool uses_material_symbols_source(Symbol symbol) noexcept {
+    return catalog::uses_material_symbols_source(to_catalog_symbol(symbol));
 }
 
 inline auto permissive_source_icon_name(Symbol symbol) noexcept
@@ -775,6 +851,14 @@ inline auto permissive_source_icon_name(Symbol symbol) noexcept
 inline auto source_attribution(Symbol symbol) noexcept
         -> SymbolSourceAttribution {
     return catalog::source_attribution(to_catalog_symbol(symbol));
+}
+
+inline auto source_attribution(Symbol symbol,
+                               MaterialSymbolsStyle style) noexcept
+        -> SymbolSourceAttribution {
+    return catalog::source_attribution(
+        to_catalog_symbol(symbol),
+        to_catalog_material_symbols_style(style));
 }
 
 inline bool supports_hierarchical_opacity(Symbol symbol) noexcept {
@@ -803,6 +887,43 @@ inline auto rendering_capabilities(Symbol symbol) noexcept
 
 inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
     auto const base = catalog::descriptor(to_catalog_symbol(symbol));
+    return SymbolDescriptor{
+        symbol,
+        base.name,
+        from_catalog_role(base.role),
+        from_catalog_variant(base.variant),
+        from_catalog_rendering(base.preferred_rendering),
+        from_catalog_scale(base.default_scale),
+        from_catalog_weight(base.default_weight),
+        base.style,
+        base.semantic_reference_name,
+        base.reference_family,
+        base.reference_policy,
+        base.grid_size,
+        base.default_stroke_width,
+        from_catalog_stroke_cap(base.stroke_cap),
+        from_catalog_stroke_join(base.stroke_join),
+        base.secondary_opacity,
+        base.layer_count,
+        base.uses_current_color,
+        base.round_stroke,
+        base.filled,
+        base.text_weight_aligned,
+        base.supports_monochrome,
+        base.supports_hierarchical_opacity,
+        base.supports_palette,
+        base.supports_multicolor,
+        base.phenotype_owned,
+        base.uses_sf_symbols_asset,
+    };
+}
+
+inline auto descriptor(Symbol symbol,
+                       MaterialSymbolsStyle style) noexcept
+        -> SymbolDescriptor {
+    auto const base = catalog::descriptor(
+        to_catalog_symbol(symbol),
+        to_catalog_material_symbols_style(style));
     return SymbolDescriptor{
         symbol,
         base.name,
@@ -1151,6 +1272,13 @@ inline auto macos_symbol_button_style(SymbolButtonOptions options) noexcept
 
 inline auto source(Symbol symbol) noexcept -> std::string_view {
     return catalog::svg_source(to_catalog_symbol(symbol));
+}
+
+inline auto source(Symbol symbol,
+                   MaterialSymbolsStyle style) noexcept -> std::string_view {
+    return catalog::svg_source(
+        to_catalog_symbol(symbol),
+        to_catalog_material_symbols_style(style));
 }
 
 struct SymbolDocumentCache {

@@ -24,8 +24,8 @@ entry-symbol summary so a mobile row/icon mismatch is visible from JSON before
 pixel inspection.
 The mobile package manifest also includes the same runtime-visible
 `assets/icons/file-types/` SVG files as the desktop package. They are sourced
-from the pinned Lucide revision documented by the icon catalog, not extracted
-from Apple or platform-owned system icons. The package carries the Lucide
+from the pinned Google Material Symbols revision documented by the icon catalog, not extracted
+from Apple or platform-owned system icons. The package carries the Google Material Symbols
 license notice as a non-runtime text asset so resource bundles retain the
 permissive-source notice.
 The shared `finder_visual_contract` is still emitted for the mobile profile,
@@ -42,7 +42,7 @@ home folder.
 The directory also includes an initial `phenotype.package.toml` plus `assets/`,
 `locales/`, and `fonts/` fixtures. These are consumed by the new
 `tools/phenotype_cli package inspect` command and describe the
-asset/i18n/Pretendard bundle contract. The package icon is a themed Lucide
+asset/i18n/Pretendard bundle contract. The package icon is a themed Google Material Symbols
 `folder-open` SVG asset, and the runtime-visible file-type icons are audited
 permissive SVG assets; the CLI
 checks that every declared SVG is present/preloaded, traffic-light-palette safe,

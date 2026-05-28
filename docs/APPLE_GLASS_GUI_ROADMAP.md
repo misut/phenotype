@@ -515,29 +515,29 @@ path arcs still lower to bounded cubic Bezier segments for portable SVG icon
 compatibility.
 `phenotype.icon_catalog` now holds the pure metadata for the built-in
 macOS-style symbol contract, and `phenotype.icons` provides the painter-facing
-original 24x24 glyph SVGs for Finder-like chrome and common app actions. The
-catalog follows Apple-style proportions, text-aligned medium-scale metrics,
-macOS-like rounded stroke caps/joins, and bounded secondary-stroke opacity for
-symbols with detail layers without copying SF Symbols assets. Each built-in
-symbol carries a semantic SF Symbols reference name and explicit policy that
-the reference is only a role/style anchor; the vector artwork is an audited
-permissive SVG source such as Lucide ISC,
-Feather-derived Lucide MIT, Tabler MIT, Iconoir MIT, or Material Symbols
-Apache-2.0, with source family, icon name, exact license, license URL, pinned
-direct raw SVG URL, source revision, copyright, and Apple-asset boundary exposed
-in debug metadata. The catalog also exposes `reference_sources` with the Apple HIG
-and SF Symbols design-reference URLs, the W3C SVG path reference, the active
-Lucide embedded-source reference, the Feather MIT license-lineage reference,
-the Tabler MIT candidate reference, the Iconoir MIT candidate reference, and
-the Material Symbols Apache-2.0 candidate reference. Each reference row now
+Material Symbols (new) SVGs for Finder-like chrome and common app actions.
+Outlined is the default style, while Rounded and Sharp are available through
+the catalog for callers that need a different Google Fonts icon style. The
+catalog follows Apple-style proportions and text-aligned
+medium-scale metrics without copying SF Symbols assets. Each built-in symbol
+carries a semantic SF Symbols reference name and explicit policy that the
+reference is only a role/style anchor; the vector artwork is an audited Google
+Material Symbols (new) Apache-2.0 SVG source, with source family, icon name,
+style, exact license, license URL, pinned direct raw SVG URL, source revision, copyright,
+and Apple-asset boundary exposed in debug metadata. The catalog also exposes
+`reference_sources` with the Apple HIG and SF Symbols design-reference URLs,
+the W3C SVG path reference, the active Google Material Symbols embedded-source
+reference, the Tabler MIT candidate reference, and the Iconoir MIT candidate
+reference. Each reference row now
 also carries an official license URL, source acquisition mode, embedding
 permission, notice requirement, runtime-fetch flag, and platform-extraction
 flag. Apple references are explicitly marked as non-embedded Apple-owned
 artwork with runtime fetch and platform extraction disabled, so future file-icon
 work can be Finder-like without copying Finder or SF Symbols assets. The current
-built-in catalog uses audited Lucide SVGs pinned to a fixed source revision for
+built-in catalog uses audited Google Material Symbols SVGs pinned to a fixed source revision for
 all 39 symbols across toolbar, sidebar, action, and file-type roles, including
-AirDrop, Shared, Sort Group, and More.
+AirDrop, Shared, Sort Group, and More, with Outlined/Rounded/Sharp source
+variants kept under the same revision.
 Future icon imports must use permissive SVG sources found through web/reference
 research first; macOS system-icon or Finder-artwork extraction stays out of
 policy unless explicit redistribution clearance is recorded in the catalog.
@@ -554,7 +554,7 @@ list and column rows without querying native platform icon services. The CLI com
 `phenotype icons catalog --json` exposes the same contract for CI and LLM
 debugging on Linux without importing native GUI code. `phenotype icons sources
 --json` provides the shorter source-review view for adding icons from web
-references: pinned Lucide raw SVG URLs, source revision, license URL, official
+references: pinned Google Material Symbols raw SVG URLs, style, source revision, license URL, official
 reference-source license URLs, source acquisition modes, symbol usage, remaining
 phenotype-owned count, and explicit zero Apple/platform extraction
 counts. `phenotype icons svg <name-or-reference>` exposes the exact

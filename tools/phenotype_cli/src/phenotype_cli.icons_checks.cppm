@@ -22,7 +22,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
     unsigned int round_stroke_count = 0;
     unsigned int phenotype_owned_count = 0;
     unsigned int permissive_source_count = 0;
-    unsigned int lucide_source_count = 0;
+    unsigned int material_symbols_source_count = 0;
     unsigned int apple_asset_count = 0;
     unsigned int platform_extracted_count = 0;
     unsigned int runtime_fetch_count = 0;
@@ -35,6 +35,25 @@ auto icon_catalog_checks() -> std::vector<Check> {
     bool reference_lookup_roundtrips = true;
     bool metric_contract = true;
     bool svg_source_contract = true;
+    bool material_symbols_style_contract =
+        icon_catalog::material_symbols_style_count == 3
+        && icon_catalog::default_material_symbols_style()
+            == icon_catalog::MaterialSymbolsStyle::Outlined
+        && icon_catalog::material_symbols_style_from_name("outlined").has_value()
+        && *icon_catalog::material_symbols_style_from_name("outlined")
+            == icon_catalog::MaterialSymbolsStyle::Outlined
+        && icon_catalog::material_symbols_style_from_name("rounded").has_value()
+        && *icon_catalog::material_symbols_style_from_name("rounded")
+            == icon_catalog::MaterialSymbolsStyle::Rounded
+        && icon_catalog::material_symbols_style_from_name("sharp").has_value()
+        && *icon_catalog::material_symbols_style_from_name("sharp")
+            == icon_catalog::MaterialSymbolsStyle::Sharp
+        && icon_catalog::style_name(icon_catalog::MaterialSymbolsStyle::Rounded)
+            == std::string_view{"google_material_symbols_rounded_svg"}
+        && icon_catalog::material_symbols_font_family(
+               icon_catalog::MaterialSymbolsStyle::Sharp)
+            == std::string_view{"Material Symbols Sharp"};
+    bool material_symbols_style_svg_contract = true;
     bool file_type_symbol_set_contract =
         icon_catalog::file_type_symbol_count == 11
         && icon_catalog::file_type_symbol_at(0) == icon_catalog::Symbol::Folder
@@ -71,10 +90,10 @@ auto icon_catalog_checks() -> std::vector<Check> {
         auto const reference_lookup =
             icon_catalog::symbol_from_semantic_reference_name(
                 desc.semantic_reference_name);
+        if (desc.variant == icon_catalog::SymbolVariant::Outline)
+            ++outline_count;
         if (desc.filled)
             ++filled_count;
-        else
-            ++outline_count;
         if (desc.supports_hierarchical_opacity)
             ++hierarchical_count;
         if (desc.supports_monochrome)
@@ -91,9 +110,9 @@ auto icon_catalog_checks() -> std::vector<Check> {
             ++round_stroke_count;
         if (desc.phenotype_owned)
             ++phenotype_owned_count;
-        if (icon_catalog::uses_lucide_source(symbol)) {
+        if (icon_catalog::uses_material_symbols_source(symbol)) {
             ++permissive_source_count;
-            ++lucide_source_count;
+            ++material_symbols_source_count;
         }
         auto const attribution = icon_catalog::source_attribution(symbol);
         if (desc.uses_sf_symbols_asset || attribution.apple_asset)
@@ -120,7 +139,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
         svg_source_contract =
             svg_source_contract
             && source.find("<svg") == 0
-            && source.find("viewBox=\"0 0 24 24\"")
+            && source.find("viewBox=\"0 -960 960 960\"")
                 != std::string_view::npos
             && source.find("currentColor") != std::string_view::npos;
         round_stroke_contract =
@@ -144,6 +163,26 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && capabilities.palette == desc.supports_palette
             && capabilities.multicolor == desc.supports_multicolor;
     }
+    for (unsigned int style_index = 0;
+         style_index < icon_catalog::material_symbols_style_count;
+         ++style_index) {
+        auto const style = icon_catalog::material_symbols_style_at(style_index);
+        for (unsigned int i = 0; i < icon_catalog::all_symbol_count; ++i) {
+            auto const symbol = icon_catalog::symbol_at(i);
+            auto const source = icon_catalog::svg_source(symbol, style);
+            auto const attribution = icon_catalog::source_attribution(symbol, style);
+            auto const desc = icon_catalog::descriptor(symbol, style);
+            material_symbols_style_svg_contract =
+                material_symbols_style_svg_contract
+                && source.find("<svg") == 0
+                && source.find("currentColor") != std::string_view::npos
+                && attribution.style == icon_catalog::material_symbols_style_name(style)
+                && attribution.source_url.find(
+                       icon_catalog::material_symbols_source_directory(style))
+                    != std::string_view::npos
+                && desc.style == icon_catalog::style_name(style);
+        }
+    }
 
     return {
         {.name = "symbol_counts",
@@ -162,40 +201,52 @@ auto icon_catalog_checks() -> std::vector<Check> {
          .ok = icon_catalog::style_reference().find("macOS Finder")
             != std::string_view::npos
             && icon_catalog::reference_family()
-                == std::string_view{"SF Symbols semantic reference"}
+                == std::string_view{
+                    "SF Symbols semantic reference with Google Material Symbols artwork"}
             && icon_catalog::interface_metaphor_policy()
                 == std::string_view{
                     "familiar_simplified_macos_symbol_metaphors"}
             && icon_catalog::visual_consistency_policy()
                 == std::string_view{
-                    "consistent_size_stroke_detail_and_perspective"},
+                    "consistent_material_symbols_new_style_selectable_size_detail_and_perspective"},
          .detail = std::string{icon_catalog::style_reference()},
          .hint =
              "Keep the icon catalog anchored to Apple HIG, macOS Finder, and SF Symbols semantic names."},
+        {.name = "material_symbols_styles",
+         .ok = material_symbols_style_contract
+            && material_symbols_style_svg_contract,
+         .detail = std::format(
+             "default={} styles={} variants={}",
+             icon_catalog::material_symbols_style_name(
+                 icon_catalog::default_material_symbols_style()),
+             icon_catalog::material_symbols_style_count,
+             icon_catalog::material_symbols_source_variant_count),
+         .hint =
+             "Expose Google Material Symbols (new) Outlined, Rounded, and Sharp styles while keeping Outlined as the default."},
         {.name = "asset_ownership",
          .ok = phenotype_owned_count
                 == icon_catalog::phenotype_owned_symbol_count
             && permissive_source_count
                 == icon_catalog::permissive_source_symbol_count
-            && lucide_source_count == icon_catalog::lucide_source_symbol_count
-            && icon_catalog::lucide_unique_source_icon_count == 38
-            && icon_catalog::lucide_source_icon_name_at(28)
-                == std::string_view{"file-text"}
+            && material_symbols_source_count == icon_catalog::material_symbols_source_symbol_count
+            && icon_catalog::material_symbols_unique_source_icon_count == 39
+            && icon_catalog::material_symbols_source_icon_name_at(32)
+                == std::string_view{"picture_as_pdf"}
             && apple_asset_count == icon_catalog::apple_asset_symbol_count
             && platform_extracted_count
                 == icon_catalog::platform_extracted_symbol_count
             && runtime_fetch_count
                 == icon_catalog::runtime_fetched_symbol_count
-            && icon_catalog::source_license_policy().find("ISC")
+            && icon_catalog::source_license_policy().find("Apache-2.0")
                 != std::string_view::npos
             && icon_catalog::apple_asset_boundary().find("do not extract")
                 != std::string_view::npos,
          .detail = std::format(
-             "phenotype_owned={} permissive={} lucide={} lucide_unique={} apple_asset={} platform_extracted={} runtime_fetch={}",
+             "phenotype_owned={} permissive={} material_symbols={} material_symbols_unique={} apple_asset={} platform_extracted={} runtime_fetch={}",
              phenotype_owned_count,
              permissive_source_count,
-             lucide_source_count,
-             icon_catalog::lucide_unique_source_icon_count,
+             material_symbols_source_count,
+             icon_catalog::material_symbols_unique_source_icon_count,
              apple_asset_count,
              platform_extracted_count,
              runtime_fetch_count),
@@ -219,26 +270,26 @@ auto icon_catalog_checks() -> std::vector<Check> {
                 != std::string_view::npos
             && icon_catalog::source_attribution(icon_catalog::Symbol::Folder)
                    .family
-                == std::string_view{"Lucide"}
+                == std::string_view{"Google Material Symbols"}
             && icon_catalog::source_attribution(icon_catalog::Symbol::Document)
                    .license
-                == std::string_view{"ISC"}
+                == std::string_view{"Apache-2.0"}
             && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
                    .license
-                == std::string_view{"MIT"}
+                == std::string_view{"Apache-2.0"}
             && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
                    .family
-                == std::string_view{"Lucide"}
+                == std::string_view{"Google Material Symbols"}
             && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
                    .icon_name
                 == std::string_view{"search"}
             && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
                    .source_url
-                   .find("raw.githubusercontent.com")
+                   .find("google/material-design-icons")
                 != std::string_view::npos
             && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
                    .source_url
-                   .find(icon_catalog::lucide_source_revision())
+                   .find(icon_catalog::material_symbols_source_revision())
                 != std::string_view::npos
             && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
                    .source_url
@@ -250,10 +301,10 @@ auto icon_catalog_checks() -> std::vector<Check> {
                 == std::string_view::npos
             && icon_catalog::source_attribution(icon_catalog::Symbol::Shared)
                    .family
-                == std::string_view{"Lucide"}
+                == std::string_view{"Google Material Symbols"}
             && icon_catalog::source_attribution(icon_catalog::Symbol::Shared)
                    .icon_name
-                == std::string_view{"folder-symlink"}
+                == std::string_view{"folder_shared"}
             && !icon_catalog::source_attribution(icon_catalog::Symbol::Search)
                     .platform_extracted
             && !icon_catalog::source_attribution(icon_catalog::Symbol::Search)
@@ -262,7 +313,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
          .hint =
              "Every embedded icon source must carry machine-readable family, icon name, exact license, pinned direct raw SVG URL, and source revision metadata."},
         {.name = "reference_sources",
-         .ok = icon_catalog::reference_source_count == 8
+         .ok = icon_catalog::reference_source_count == 6
             && icon_catalog::reference_source_at(0).apple_owned_artwork
             && !icon_catalog::reference_source_at(0)
                     .used_as_embedded_asset_source
@@ -279,10 +330,10 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && icon_catalog::reference_source_at(3)
                    .source_acquisition.find("pinned_raw_svg")
                 != std::string_view::npos
-            && icon_catalog::reference_source_at(3).license_policy.find("ISC")
+            && icon_catalog::reference_source_at(3).license_policy.find("Apache-2.0")
                 != std::string_view::npos
             && icon_catalog::reference_source_at(3)
-                   .license_url.find("lucide.dev/license")
+                   .license_url.find("google/material-design-icons")
                 != std::string_view::npos
             && icon_catalog::reference_source_at(4)
                     .license_policy.find("MIT")
@@ -290,21 +341,16 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && !icon_catalog::reference_source_at(4)
                     .used_as_embedded_asset_source
             && icon_catalog::reference_source_at(4).requires_notice
+            && icon_catalog::reference_source_at(4)
+                    .license_policy.find("MIT")
+                != std::string_view::npos
+            && icon_catalog::reference_source_at(4).may_embed_svg_source
+            && icon_catalog::reference_source_at(4).requires_notice
             && icon_catalog::reference_source_at(5)
-                    .license_policy.find("Apache-2.0")
+                    .license_policy.find("MIT")
                 != std::string_view::npos
             && icon_catalog::reference_source_at(5).may_embed_svg_source
-            && icon_catalog::reference_source_at(5).requires_notice
-            && icon_catalog::reference_source_at(6)
-                    .license_policy.find("MIT")
-                != std::string_view::npos
-            && icon_catalog::reference_source_at(6).may_embed_svg_source
-            && icon_catalog::reference_source_at(6).requires_notice
-            && icon_catalog::reference_source_at(7)
-                    .license_policy.find("MIT")
-                != std::string_view::npos
-            && icon_catalog::reference_source_at(7).may_embed_svg_source
-            && icon_catalog::reference_source_at(7).requires_notice,
+            && icon_catalog::reference_source_at(5).requires_notice,
          .detail = std::format(
              "references={} embedded_source={} license_url={} apple_reference={}",
              icon_catalog::reference_source_count,
@@ -316,7 +362,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
         {.name = "svg_source_contract",
          .ok = svg_source_contract
             && icon_catalog::svg_source(icon_catalog::Symbol::Applications)
-                   .find("stroke-linecap=\"round\"")
+                   .find("fill=\"currentColor\"")
                 != std::string_view::npos,
          .detail = "all built-in symbols expose audited SVG source",
          .hint =
@@ -369,9 +415,9 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && regular_weight_count == icon_catalog::regular_weight_symbol_count
             && round_stroke_count == icon_catalog::round_stroke_symbol_count
             && icon_catalog::stroke_geometry_policy()
-                == std::string_view{"round_cap_round_join_svg_strokes"}
+                == std::string_view{"material_symbols_filled_path_geometry"}
             && icon_catalog::default_weight_policy()
-                == std::string_view{"regular_text_weight_aligned"},
+                == std::string_view{"regular_material_symbols_weight_aligned"},
          .detail = std::format(
              "round_stroke={} round_cap_join={} text_weight_aligned={} regular_weight={} count={}",
                                round_stroke_contract ? "true" : "false",
@@ -380,7 +426,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
                                regular_weight_count,
                                round_stroke_count),
         .hint =
-            "Mac-like icons should stay round-cap, round-join, and text-weight aligned."},
+            "Material Symbols icons should stay filled-path and text-weight aligned."},
         {.name = "rendering_capabilities",
          .ok = rendering_capability_contract
             && monochrome_count == icon_catalog::monochrome_symbol_count
@@ -388,7 +434,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && palette_count == icon_catalog::palette_symbol_count
             && multicolor_count == icon_catalog::multicolor_symbol_count
             && icon_catalog::rendering_capability_policy().find(
-                   "sf_symbols_mode_names")
+                   "material_symbols_monochrome")
                 != std::string_view::npos,
          .detail = std::format(
              "monochrome={} hierarchical={} palette={} multicolor={}",
@@ -397,21 +443,16 @@ auto icon_catalog_checks() -> std::vector<Check> {
              palette_count,
              multicolor_count),
          .hint =
-             "Expose SF Symbols rendering-mode names explicitly while keeping unsupported palette/multicolor output deterministic."},
+             "Expose Material Symbols rendering capabilities while keeping unsupported palette/multicolor output deterministic."},
         {.name = "svg_path_subset",
          .ok = icon_catalog::svg_subset_policy()
-                == std::string_view{"bounded_svg_icon_subset"}
-            && icon_catalog::svg_supported_path_commands().find("A Z")
+                == std::string_view{"bounded_material_symbols_svg_subset"}
+            && icon_catalog::svg_supported_path_commands().find("C S Z")
                 != std::string_view::npos
             && icon_catalog::svg_supported_style_attributes()
-                   .find("stroke-linecap")
+                   .find("fill")
                 != std::string_view::npos
-            && icon_catalog::svg_supported_style_attributes()
-                   .find("stroke-linejoin")
-                != std::string_view::npos
-            && icon_catalog::svg_arc_policy().find("isolated circular path A/a")
-                != std::string_view::npos
-            && icon_catalog::svg_arc_policy().find("bounded cubic Bezier")
+            && icon_catalog::svg_arc_policy().find("avoid SVG arc commands")
                 != std::string_view::npos
             && arc_path_count == icon_catalog::svg_path_arc_symbol_count,
          .detail = std::format(
@@ -419,7 +460,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
              icon_catalog::svg_supported_path_commands(),
              arc_path_count),
          .hint =
-             "Keep the built-in icon SVG subset broad enough for macOS-style rounded glyph geometry."},
+             "Keep the built-in icon SVG subset broad enough for Google Material Symbols path geometry."},
         {.name = "interaction_tone_policy",
          .ok = icon_catalog::interaction_tone_policy()
                 == std::string_view{"macos_finder_interaction_tones"}

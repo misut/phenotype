@@ -95,8 +95,8 @@ preload = true
 runtime_visible = true
 
 [[assets]]
-name = "license.lucide.icons"
-source = "assets/icons/file-types/LUCIDE_LICENSE.txt"
+name = "license.material_symbols.icons"
+source = "assets/icons/file-types/MATERIAL_SYMBOLS_LICENSE.txt"
 content_type = "text/plain"
 preload = false
 runtime_visible = false

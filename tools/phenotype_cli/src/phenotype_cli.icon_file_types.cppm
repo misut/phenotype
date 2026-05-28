@@ -16,7 +16,7 @@ using namespace phenotype_cli::common;
 auto direct_pinned_raw_source(std::string_view source_url) -> bool {
     return source_url.find("raw.githubusercontent.com")
                != std::string_view::npos
-        && source_url.find(icon_catalog::lucide_source_revision())
+        && source_url.find(icon_catalog::material_symbols_source_revision())
                != std::string_view::npos
         && source_url.find("/blob/") == std::string_view::npos
         && source_url.find("/main/") == std::string_view::npos;
@@ -26,7 +26,8 @@ auto file_type_icon_source_json(
         icon_catalog::SymbolSourceAttribution const& source) -> std::string {
     return std::format(
         "{{\"family\":{},\"icon_name\":{},\"license\":{},"
-        "\"license_url\":{},\"source_url\":{},\"source_revision\":{},"
+        "\"style\":{},\"license_url\":{},\"source_url\":{},"
+        "\"source_revision\":{},"
         "\"copyright\":{},\"direct_pinned_raw_url\":{},"
         "\"embedded_source\":{},\"modified_for_phenotype\":{},"
         "\"apple_asset\":{},\"platform_extracted\":{},"
@@ -34,6 +35,7 @@ auto file_type_icon_source_json(
         json_string(source.family),
         json_string(source.icon_name),
         json_string(source.license),
+        json_string(source.style),
         json_string(source.license_url),
         json_string(source.source_url),
         json_string(source.source_revision),
@@ -82,7 +84,7 @@ auto file_type_icon_records_json() -> std::string {
 auto file_type_icon_checks() -> std::vector<Check> {
     auto const symbols = file_explorer_demo::file_type_symbol_contract();
     auto direct_source_count = 0u;
-    auto lucide_source_count = 0u;
+    auto material_symbols_source_count = 0u;
     auto apple_asset_count = 0u;
     auto platform_extracted_count = 0u;
     auto runtime_fetch_count = 0u;
@@ -91,8 +93,8 @@ auto file_type_icon_checks() -> std::vector<Check> {
 
     for (auto const& item : symbols) {
         auto const source = icon_catalog::source_attribution(item.symbol);
-        if (source.family == std::string_view{"Lucide"})
-            ++lucide_source_count;
+        if (source.family == std::string_view{"Google Material Symbols"})
+            ++material_symbols_source_count;
         if (direct_pinned_raw_source(source.source_url))
             ++direct_source_count;
         if (source.apple_asset)
@@ -156,26 +158,26 @@ auto file_type_icon_checks() -> std::vector<Check> {
          .hint =
              "Keep extension-to-symbol and file-type token mapping in phenotype.icon_catalog so examples do not fork Finder-like file semantics."},
         {.name = "file_type_icon_sources",
-         .ok = lucide_source_count == symbols.size()
+         .ok = material_symbols_source_count == symbols.size()
             && direct_source_count == symbols.size(),
          .detail = std::format(
-             "lucide={} direct_raw={} revision={}",
-             lucide_source_count,
+             "material_symbols={} direct_raw={} revision={}",
+             material_symbols_source_count,
              direct_source_count,
-             icon_catalog::lucide_source_revision()),
+             icon_catalog::material_symbols_source_revision()),
          .hint =
-             "File-type icons should map to pinned direct raw Lucide SVG sources before phenotype adaptation."},
+             "File-type icons should map to pinned direct raw Google Material Symbols SVG sources before phenotype adaptation."},
         {.name = "file_type_icon_package_mapping",
          .ok = declared_package_source_count == symbols.size()
             && file_explorer_demo::file_type_icon_license_asset_source()
                 == std::string_view{
-                    "assets/icons/file-types/LUCIDE_LICENSE.txt"},
+                    "assets/icons/file-types/MATERIAL_SYMBOLS_LICENSE.txt"},
          .detail = std::format(
              "package_sources={} license_asset={}",
              declared_package_source_count,
              file_explorer_demo::file_type_icon_license_asset_source()),
          .hint =
-             "Each file-type token should map to assets/icons/file-types/<token>.svg plus the Lucide license notice."},
+             "Each file-type token should map to assets/icons/file-types/<token>.svg plus the Google Material Symbols license notice."},
         {.name = "apple_artwork_boundary",
          .ok = apple_asset_count == 0
             && platform_extracted_count == 0
@@ -192,14 +194,14 @@ auto file_type_icon_checks() -> std::vector<Check> {
 
 auto file_type_icons_json(std::span<Check const> checks) -> std::string {
     auto const symbols = file_explorer_demo::file_type_symbol_contract();
-    auto lucide_count = 0u;
+    auto material_symbols_count = 0u;
     auto apple_asset_count = 0u;
     auto platform_extracted_count = 0u;
     auto runtime_fetch_count = 0u;
     for (auto const& item : symbols) {
         auto const source = icon_catalog::source_attribution(item.symbol);
-        if (source.family == std::string_view{"Lucide"})
-            ++lucide_count;
+        if (source.family == std::string_view{"Google Material Symbols"})
+            ++material_symbols_count;
         if (source.apple_asset)
             ++apple_asset_count;
         if (source.platform_extracted)
@@ -213,7 +215,7 @@ auto file_type_icons_json(std::span<Check const> checks) -> std::string {
         "\"source_acquisition_policy\":{},\"apple_asset_boundary\":{},"
         "\"package_asset_policy\":{},\"license_asset\":{}}},"
         "\"counts\":{{\"file_type_symbols\":{},"
-        "\"extension_rules\":{},\"lucide_file_type_symbols\":{},"
+        "\"extension_rules\":{},\"material_symbols_file_type_symbols\":{},"
         "\"apple_asset_symbols\":{},"
         "\"platform_extracted_symbols\":{},\"runtime_fetched_symbols\":{}}},"
         "\"source_revision\":{},\"records\":{},\"checks\":{}}}",
@@ -225,11 +227,11 @@ auto file_type_icons_json(std::span<Check const> checks) -> std::string {
         json_string(file_explorer_demo::file_type_icon_license_asset_source()),
         symbols.size(),
         icon_catalog::file_type_extension_rule_count,
-        lucide_count,
+        material_symbols_count,
         apple_asset_count,
         platform_extracted_count,
         runtime_fetch_count,
-        json_string(icon_catalog::lucide_source_revision()),
+        json_string(icon_catalog::material_symbols_source_revision()),
         file_type_icon_records_json(),
         checks_json(checks));
 }
@@ -249,8 +251,8 @@ int run_icons_file_types(cppx::cli::Invocation const& invocation) {
          .status = cppx::terminal::StatusKind::ok},
         {.label = "source",
          .value = std::format(
-             "Lucide pinned at {}",
-             icon_catalog::lucide_source_revision()),
+             "Google Material Symbols pinned at {}",
+             icon_catalog::material_symbols_source_revision()),
          .status = cppx::terminal::StatusKind::ok},
         {.label = "license",
          .value = std::string{

@@ -379,6 +379,9 @@ export auto explorer_chrome_json(
         "\"sidebar_surface_y\":{},\"sidebar_first_row_y\":{},"
         "\"finder_density_policy\":{},\"icon_grid_top_inset\":{}}},"
         "\"icon_system\":{{\"module\":{},\"style\":{},"
+        "\"family\":\"Material Symbols (new)\","
+        "\"default_material_symbols_style\":{},"
+        "\"available_material_symbols_styles\":{},"
         "\"source_format\":{},"
         "\"svg_subset_policy\":{},\"svg_supported_elements\":{},"
         "\"svg_supported_path_commands\":{},"
@@ -393,8 +396,8 @@ export auto explorer_chrome_json(
         "\"total_symbol_count\":{},"
         "\"phenotype_owned_symbol_count\":{},"
         "\"permissive_source_symbol_count\":{},"
-        "\"lucide_source_symbol_count\":{},"
-        "\"lucide_unique_source_icon_count\":{},"
+        "\"material_symbols_source_symbol_count\":{},"
+        "\"material_symbols_unique_source_icon_count\":{},"
         "\"apple_asset_symbol_count\":{},"
         "\"platform_extracted_symbol_count\":{},"
         "\"runtime_fetched_symbol_count\":{},"
@@ -550,6 +553,9 @@ export auto explorer_chrome_json(
         chrome.icon_grid_top_inset,
         json_string(chrome.icon_module),
         json_string(chrome.icon_style),
+        json_string(icon_catalog::material_symbols_style_name(
+            icon_catalog::default_material_symbols_style())),
+        icon_material_symbols_styles_json(),
         json_string(chrome.icon_source_format),
         json_string(chrome.icon_svg_subset_policy),
         json_string(chrome.icon_svg_supported_elements),
@@ -567,8 +573,8 @@ export auto explorer_chrome_json(
         chrome.icon_total_symbol_count,
         chrome.icon_phenotype_owned_symbol_count,
         chrome.icon_permissive_source_symbol_count,
-        chrome.icon_lucide_source_symbol_count,
-        chrome.icon_lucide_unique_source_icon_count,
+        chrome.icon_material_symbols_source_symbol_count,
+        chrome.icon_material_symbols_unique_source_icon_count,
         chrome.icon_apple_asset_symbol_count,
         chrome.icon_platform_extracted_symbol_count,
         chrome.icon_runtime_fetched_symbol_count,

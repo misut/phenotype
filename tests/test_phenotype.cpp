@@ -2181,19 +2181,19 @@ void test_resource_catalog_theme_defaults() {
 }
 
 void test_icon_catalog_umbrella_export() {
-    assert(phenotype::icon_catalog::style_name() == "macos_rounded_outline_svg");
+    assert(phenotype::icon_catalog::style_name() == "google_material_symbols_outlined_svg");
     assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
     assert(phenotype::icon_catalog::file_type_symbol_count
            == icons::file_type_symbol_count);
     assert(phenotype::icon_catalog::svg_subset_policy()
-           == "bounded_svg_icon_subset");
-    assert(phenotype::icon_catalog::svg_supported_path_commands().find("A Z")
+           == "bounded_material_symbols_svg_subset");
+    assert(phenotype::icon_catalog::svg_supported_path_commands().find("C S Z")
            != std::string_view::npos);
     assert(phenotype::icon_catalog::svg_supported_style_attributes()
                .find("stroke-linecap")
            != std::string_view::npos);
     assert(phenotype::icon_catalog::stroke_geometry_policy()
-           == "round_cap_round_join_svg_strokes");
+           == "material_symbols_filled_path_geometry");
     assert(phenotype::icon_catalog::interface_metaphor_policy()
            == "familiar_simplified_macos_symbol_metaphors");
     assert(phenotype::icon_catalog::toolbar_symbol_chrome_policy()
@@ -2201,9 +2201,9 @@ void test_icon_catalog_umbrella_export() {
     assert(phenotype::icon_catalog::symbol_control_chrome_policy()
            == "macos_finder_symbol_state_chrome");
     assert(phenotype::icon_catalog::default_weight_policy()
-           == "regular_text_weight_aligned");
+           == "regular_material_symbols_weight_aligned");
     assert(phenotype::icon_catalog::rendering_capability_policy().find(
-               "sf_symbols_mode_names")
+               "material_symbols_monochrome")
            != std::string_view::npos);
     assert(phenotype::icon_catalog::monochrome_symbol_count
            == phenotype::icon_catalog::all_symbol_count);
@@ -2214,37 +2214,47 @@ void test_icon_catalog_umbrella_export() {
     assert(phenotype::icon_catalog::phenotype_owned_symbol_count == 0);
     assert(phenotype::icon_catalog::permissive_source_symbol_count
            == phenotype::icon_catalog::all_symbol_count);
-    assert(phenotype::icon_catalog::lucide_source_symbol_count
+    assert(phenotype::icon_catalog::material_symbols_source_symbol_count
            == phenotype::icon_catalog::all_symbol_count);
-    assert(phenotype::icon_catalog::lucide_unique_source_icon_count == 38);
+    assert(phenotype::icon_catalog::material_symbols_unique_source_icon_count == 39);
+    assert(phenotype::icon_catalog::material_symbols_style_count == 3);
+    assert(phenotype::icon_catalog::default_material_symbols_style()
+           == phenotype::icon_catalog::MaterialSymbolsStyle::Outlined);
+    assert(phenotype::icon_catalog::style_name(
+               phenotype::icon_catalog::MaterialSymbolsStyle::Rounded)
+           == "google_material_symbols_rounded_svg");
     assert(phenotype::icon_catalog::apple_asset_symbol_count == 0);
-    assert(phenotype::icon_catalog::svg_path_arc_symbol_count == 16);
-    assert(phenotype::icon_catalog::round_stroke_symbol_count
-           == phenotype::icon_catalog::outline_symbol_count);
+    assert(phenotype::icon_catalog::svg_path_arc_symbol_count == 0);
+    assert(phenotype::icon_catalog::round_stroke_symbol_count == 0);
     assert(phenotype::icon_catalog::semantic_reference_name(
                phenotype::icon_catalog::Symbol::AirDrop)
            == "airdrop");
-    assert(phenotype::icon_catalog::uses_svg_path_arcs(
+    assert(!phenotype::icon_catalog::uses_svg_path_arcs(
                phenotype::icon_catalog::Symbol::AirDrop));
-    assert(phenotype::icon_catalog::uses_lucide_source(
+    assert(phenotype::icon_catalog::uses_material_symbols_source(
                phenotype::icon_catalog::Symbol::Folder));
     assert(phenotype::icon_catalog::source_attribution(
                phenotype::icon_catalog::Symbol::Folder)
                .license
-           == "ISC");
+           == "Apache-2.0");
     assert(phenotype::icon_catalog::source_attribution(
                phenotype::icon_catalog::Symbol::Search)
                .license
-           == "MIT");
+           == "Apache-2.0");
+    assert(phenotype::icon_catalog::source_attribution(
+               phenotype::icon_catalog::Symbol::Search,
+               phenotype::icon_catalog::MaterialSymbolsStyle::Sharp)
+               .style
+           == "sharp");
     assert(phenotype::icon_catalog::source_attribution(
                phenotype::icon_catalog::Symbol::Search)
                .source_url
-               .find(phenotype::icon_catalog::lucide_source_revision())
+               .find(phenotype::icon_catalog::material_symbols_source_revision())
            != std::string_view::npos);
     auto const capabilities = phenotype::icon_catalog::rendering_capabilities(
         phenotype::icon_catalog::Symbol::Recents);
     assert(capabilities.monochrome);
-    assert(capabilities.hierarchical);
+    assert(!capabilities.hierarchical);
     assert(!capabilities.palette);
     assert(!capabilities.multicolor);
     assert(capabilities.policy

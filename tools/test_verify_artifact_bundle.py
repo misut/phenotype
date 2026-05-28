@@ -2038,12 +2038,12 @@ def snapshot_with_file_explorer_chrome(
                 "focus_ring_policy": (
                     "keyboard_tab_navigation_only_pointer_click_hides_focus_ring"),
                 "icon_source_policy": (
-                    "audited permissive SVG only; accepted "
-                    "external licenses include Lucide ISC"),
+                    "audited permissive SVG only; embedded icons use "
+                    "Google Material Symbols (new) Apache-2.0"),
                 "embedded_svg_policy": (
                     "Every embedded icon source must carry a pinned direct "
-                    "raw SVG URL, source revision, platform extraction flag, "
-                    "and runtime fetch flag."),
+                    "raw SVG URL, style, source revision, platform extraction "
+                    "flag, and runtime fetch flag."),
                 "apple_asset_symbol_count": 0,
                 "platform_extracted_symbol_count": 0,
                 "runtime_fetched_symbol_count": 0,

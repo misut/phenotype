@@ -14,6 +14,7 @@ using phenotype_cli::common::Check;
 export struct PackageIconSourceAttribution {
     std::string family;
     std::string icon_name;
+    std::string style;
     std::string license;
     std::string license_url;
     std::string source_url;

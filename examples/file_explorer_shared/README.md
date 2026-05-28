@@ -87,7 +87,7 @@ label, and package asset path before the model emits `entry_symbol_summary`.
 This keeps desktop, mobile, CLI, and package inspection on one audited SVG icon
 contract instead of maintaining separate extension tables. The file explorer
 examples intentionally source sidebar, toolbar, file-type, and package app
-icons from the pinned Lucide revision rather than embedding hand-drawn Finder
+icons from the pinned Google Material Symbols revision rather than embedding hand-drawn Finder
 lookalikes or platform-extracted artwork.
 
 ## Run

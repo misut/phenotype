@@ -444,8 +444,8 @@ struct ExplorerChromeMetrics {
     int icon_total_symbol_count = 0;
     int icon_phenotype_owned_symbol_count = 0;
     int icon_permissive_source_symbol_count = 0;
-    int icon_lucide_source_symbol_count = 0;
-    int icon_lucide_unique_source_icon_count = 0;
+    int icon_material_symbols_source_symbol_count = 0;
+    int icon_material_symbols_unique_source_icon_count = 0;
     int icon_apple_asset_symbol_count = 0;
     int icon_platform_extracted_symbol_count = 0;
     int icon_runtime_fetched_symbol_count = 0;
@@ -852,16 +852,16 @@ inline auto file_type_symbol_contract() noexcept
 }
 
 inline auto file_type_icon_source_family() noexcept -> std::string_view {
-    return "Lucide";
+    return "Google Material Symbols";
 }
 
 inline auto file_type_icon_source_revision() noexcept -> std::string_view {
-    return icon_catalog::lucide_source_revision();
+    return icon_catalog::material_symbols_source_revision();
 }
 
 inline auto file_type_icon_license_asset_source() noexcept
         -> std::string_view {
-    return "assets/icons/file-types/LUCIDE_LICENSE.txt";
+    return "assets/icons/file-types/MATERIAL_SYMBOLS_LICENSE.txt";
 }
 
 inline auto file_type_icon_asset_policy() noexcept -> std::string_view {
@@ -1301,11 +1301,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
                 static_cast<int>(icon_catalog::phenotype_owned_symbol_count),
             .icon_permissive_source_symbol_count =
                 static_cast<int>(icon_catalog::permissive_source_symbol_count),
-            .icon_lucide_source_symbol_count =
-                static_cast<int>(icon_catalog::lucide_source_symbol_count),
-            .icon_lucide_unique_source_icon_count =
+            .icon_material_symbols_source_symbol_count =
+                static_cast<int>(icon_catalog::material_symbols_source_symbol_count),
+            .icon_material_symbols_unique_source_icon_count =
                 static_cast<int>(
-                    icon_catalog::lucide_unique_source_icon_count),
+                    icon_catalog::material_symbols_unique_source_icon_count),
             .icon_apple_asset_symbol_count =
                 static_cast<int>(icon_catalog::apple_asset_symbol_count),
             .icon_platform_extracted_symbol_count =
@@ -1415,7 +1415,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_round_stroke_contract = true,
             .icon_text_weight_aligned = true,
             .icon_monochrome_rendering = true,
-            .icon_hierarchical_opacity = true,
+            .icon_hierarchical_opacity = false,
             .icon_palette_rendering = false,
             .icon_multicolor_rendering = false,
             .thumbnail_uses_external_previews = false,
@@ -1465,7 +1465,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_visual_consistency_policy =
                 std::string{icon_catalog::visual_consistency_policy()},
             .icon_alignment = std::string{icon_catalog::alignment_policy()},
-            .icon_rendering_mode = "hierarchical",
+            .icon_rendering_mode = "monochrome",
             .icon_default_weight =
                 std::string{icon_catalog::default_weight_policy()},
             .icon_rendering_capability_policy =
@@ -1662,10 +1662,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             static_cast<int>(icon_catalog::phenotype_owned_symbol_count),
         .icon_permissive_source_symbol_count =
             static_cast<int>(icon_catalog::permissive_source_symbol_count),
-        .icon_lucide_source_symbol_count =
-            static_cast<int>(icon_catalog::lucide_source_symbol_count),
-        .icon_lucide_unique_source_icon_count =
-            static_cast<int>(icon_catalog::lucide_unique_source_icon_count),
+        .icon_material_symbols_source_symbol_count =
+            static_cast<int>(icon_catalog::material_symbols_source_symbol_count),
+        .icon_material_symbols_unique_source_icon_count =
+            static_cast<int>(icon_catalog::material_symbols_unique_source_icon_count),
         .icon_apple_asset_symbol_count =
             static_cast<int>(icon_catalog::apple_asset_symbol_count),
         .icon_platform_extracted_symbol_count =
@@ -1772,7 +1772,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_round_stroke_contract = true,
         .icon_text_weight_aligned = true,
         .icon_monochrome_rendering = true,
-        .icon_hierarchical_opacity = true,
+        .icon_hierarchical_opacity = false,
         .icon_palette_rendering = false,
         .icon_multicolor_rendering = false,
         .thumbnail_uses_external_previews = false,
@@ -1822,7 +1822,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_visual_consistency_policy =
             std::string{icon_catalog::visual_consistency_policy()},
         .icon_alignment = std::string{icon_catalog::alignment_policy()},
-        .icon_rendering_mode = "hierarchical",
+        .icon_rendering_mode = "monochrome",
         .icon_default_weight =
             std::string{icon_catalog::default_weight_policy()},
         .icon_rendering_capability_policy =
@@ -2432,6 +2432,7 @@ inline json::Value icon_source_attribution_debug_json(
     json::Object out;
     out.emplace("family", json::Value{std::string{source.family}});
     out.emplace("icon_name", json::Value{std::string{source.icon_name}});
+    out.emplace("style", json::Value{std::string{source.style}});
     out.emplace("license", json::Value{std::string{source.license}});
     out.emplace("license_url", json::Value{std::string{source.license_url}});
     out.emplace("source_url", json::Value{std::string{source.source_url}});
@@ -2448,6 +2449,34 @@ inline json::Value icon_source_attribution_debug_json(
     out.emplace(
         "runtime_fetch_required",
         json::Value{source.runtime_fetch_required});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value material_symbols_styles_debug_json() {
+    json::Array out;
+    for (unsigned int i = 0; i < icon_catalog::material_symbols_style_count; ++i) {
+        auto const style = icon_catalog::material_symbols_style_at(i);
+        json::Object item;
+        item.emplace(
+            "name",
+            json::Value{std::string{icon_catalog::material_symbols_style_name(style)}});
+        item.emplace(
+            "label",
+            json::Value{std::string{icon_catalog::material_symbols_style_label(style)}});
+        item.emplace(
+            "font_family",
+            json::Value{std::string{icon_catalog::material_symbols_font_family(style)}});
+        item.emplace(
+            "css_class",
+            json::Value{std::string{icon_catalog::material_symbols_css_class(style)}});
+        item.emplace(
+            "source_directory",
+            json::Value{std::string{icon_catalog::material_symbols_source_directory(style)}});
+        item.emplace(
+            "default",
+            json::Value{icon_catalog::is_default_material_symbols_style(style)});
+        out.push_back(json::Value{std::move(item)});
+    }
     return json::Value{std::move(out)};
 }
 
@@ -3517,6 +3546,14 @@ inline json::Value explorer_chrome_debug_json(
     json::Object icon_system;
     icon_system.emplace("module", json::Value{chrome.icon_module});
     icon_system.emplace("style", json::Value{chrome.icon_style});
+    icon_system.emplace("family", json::Value{"Material Symbols (new)"});
+    icon_system.emplace(
+        "default_material_symbols_style",
+        json::Value{std::string{icon_catalog::material_symbols_style_name(
+            icon_catalog::default_material_symbols_style())}});
+    icon_system.emplace(
+        "available_material_symbols_styles",
+        material_symbols_styles_debug_json());
     icon_system.emplace("source_format", json::Value{chrome.icon_source_format});
     icon_system.emplace("svg_subset_policy", json::Value{chrome.icon_svg_subset_policy});
     icon_system.emplace(
@@ -3559,13 +3596,13 @@ inline json::Value explorer_chrome_debug_json(
         json::Value{static_cast<std::int64_t>(
             chrome.icon_permissive_source_symbol_count)});
     icon_system.emplace(
-        "lucide_source_symbol_count",
+        "material_symbols_source_symbol_count",
         json::Value{static_cast<std::int64_t>(
-            chrome.icon_lucide_source_symbol_count)});
+            chrome.icon_material_symbols_source_symbol_count)});
     icon_system.emplace(
-        "lucide_unique_source_icon_count",
+        "material_symbols_unique_source_icon_count",
         json::Value{static_cast<std::int64_t>(
-            chrome.icon_lucide_unique_source_icon_count)});
+            chrome.icon_material_symbols_unique_source_icon_count)});
     icon_system.emplace(
         "apple_asset_symbol_count",
         json::Value{static_cast<std::int64_t>(
@@ -7358,7 +7395,7 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         });
     }
     catalog.assets.push_back({
-        .name = "license.lucide.icons",
+        .name = "license.material_symbols.icons",
         .source = std::string{file_type_icon_license_asset_source()},
         .content_type = "text/plain",
         .preload = false,

@@ -75,7 +75,8 @@ auto icon_source_attribution_json(
         icon_catalog::SymbolSourceAttribution const& source) -> std::string {
     return std::format(
         "{{\"family\":{},\"icon_name\":{},\"license\":{},"
-        "\"license_url\":{},\"source_url\":{},\"source_revision\":{},"
+        "\"style\":{},\"license_url\":{},\"source_url\":{},"
+        "\"source_revision\":{},"
         "\"copyright\":{},"
         "\"embedded_source\":{},\"modified_for_phenotype\":{},"
         "\"apple_asset\":{},\"platform_extracted\":{},"
@@ -83,6 +84,7 @@ auto icon_source_attribution_json(
         json_string(source.family),
         json_string(source.icon_name),
         json_string(source.license),
+        json_string(source.style),
         json_string(source.license_url),
         json_string(source.source_url),
         json_string(source.source_revision),
@@ -115,6 +117,24 @@ auto lookup_icon_symbol(std::string_view query)
         };
     }
     return std::nullopt;
+}
+
+auto parse_material_symbols_style(std::string_view value)
+        -> std::optional<icon_catalog::MaterialSymbolsStyle> {
+    return icon_catalog::material_symbols_style_from_name(value);
+}
+
+auto icon_material_symbols_style_from_invocation(
+        cppx::cli::Invocation const& invocation)
+        -> std::expected<icon_catalog::MaterialSymbolsStyle, std::string> {
+    if (auto value = invocation.value("style")) {
+        if (auto style = parse_material_symbols_style(*value))
+            return *style;
+        return std::unexpected{std::format(
+            "invalid Material Symbols style '{}'; expected outlined, rounded, or sharp",
+            *value)};
+    }
+    return icon_catalog::default_material_symbols_style();
 }
 
 auto parse_icon_presentation_role(std::string_view value)

@@ -338,10 +338,10 @@ void test_svg_support_contract_summary() {
 }
 
 void test_builtin_icons_parse() {
-    assert(icons::style_name() == "macos_rounded_outline_svg");
+    assert(icons::style_name() == "google_material_symbols_outlined_svg");
     assert(icons::style_reference().find("Apple HIG") != std::string_view::npos);
     assert(icons::asset_policy().find("no Apple") != std::string_view::npos);
-    assert(icons::asset_policy().find("audited permissive")
+    assert(icons::asset_policy().find("Google Material Symbols")
            != std::string_view::npos);
     assert(icons::source_attribution_policy().find("pinned direct raw SVG URL")
            != std::string_view::npos);
@@ -349,37 +349,39 @@ void test_builtin_icons_parse() {
                "keyed_by_symbol_descriptor")
            != std::string_view::npos);
     assert(icons::source_format() == "svg");
-    assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");
+    assert(icons::svg_subset_policy() == "bounded_material_symbols_svg_subset");
     assert(icons::svg_supported_elements().find("path")
            != std::string_view::npos);
-    assert(icons::svg_supported_path_commands().find("A Z")
+    assert(icons::svg_supported_path_commands().find("C S Z")
            != std::string_view::npos);
     assert(icons::svg_supported_style_attributes().find("stroke-linecap")
            != std::string_view::npos);
     assert(icons::svg_supported_style_attributes().find("stroke-linejoin")
            != std::string_view::npos);
-    assert(icons::svg_arc_policy().find("circle elements")
+    assert(icons::svg_arc_policy().find("avoid SVG arc commands")
            != std::string_view::npos);
-    assert(icons::svg_arc_policy().find("native ArcTo")
-           != std::string_view::npos);
-    assert(icons::svg_arc_policy().find("isolated circular path A/a")
-           != std::string_view::npos);
-    assert(icons::stroke_geometry_policy() == "round_cap_round_join_svg_strokes");
-    assert(icons::stroke_cap_policy() == "round");
-    assert(icons::stroke_join_policy() == "round");
+    assert(icons::stroke_geometry_policy() == "material_symbols_filled_path_geometry");
+    assert(icons::stroke_cap_policy() == "not_applicable");
+    assert(icons::stroke_join_policy() == "not_applicable");
     assert(icons::alignment_policy() == "24x24 text-aligned symbol grid");
-    assert(icons::variant_policy() == "outline-only with role-aware symbol chrome");
+    assert(icons::variant_policy().find("Outlined is the default")
+           != std::string_view::npos);
     assert(icons::tone_policy()
            == "primary, secondary, selected, accent, disabled, destructive");
     assert(icons::default_scale_policy() == "medium");
-    assert(icons::default_weight_policy() == "regular_text_weight_aligned");
-    assert(icons::rendering_capability_policy().find("sf_symbols_mode_names")
+    assert(icons::default_weight_policy() == "regular_material_symbols_weight_aligned");
+    assert(icons::rendering_capability_policy().find("material_symbols_monochrome")
            != std::string_view::npos);
     assert(icons::all_symbol_count == 39);
     assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
     assert(icons::phenotype_owned_symbol_count == 0);
     assert(icons::permissive_source_symbol_count == icons::all_symbol_count);
-    assert(icons::lucide_source_symbol_count == icons::all_symbol_count);
+    assert(icons::material_symbols_source_symbol_count == icons::all_symbol_count);
+    assert(icons::material_symbols_style_count == 3);
+    assert(icons::default_material_symbols_style()
+           == icons::MaterialSymbolsStyle::Outlined);
+    assert(icons::style_name(icons::MaterialSymbolsStyle::Rounded)
+           == "google_material_symbols_rounded_svg");
     assert(icons::apple_asset_symbol_count == 0);
     assert(icons::audited_symbol_source_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
@@ -389,22 +391,23 @@ void test_builtin_icons_parse() {
     assert(icons::file_type_symbol_count == 11);
     assert(phenotype::icon_catalog::file_type_symbol_count == icons::file_type_symbol_count);
     assert(icons::outline_symbol_count == icons::all_symbol_count);
-    assert(icons::filled_symbol_count == 0);
-    assert(icons::hierarchical_symbol_count == 14);
+    assert(icons::filled_symbol_count == icons::all_symbol_count);
+    assert(icons::hierarchical_symbol_count == 0);
     assert(icons::monochrome_symbol_count == icons::all_symbol_count);
     assert(icons::regular_weight_symbol_count == icons::all_symbol_count);
     assert(icons::palette_symbol_count == 0);
     assert(icons::multicolor_symbol_count == 0);
     assert(icons::reference_symbol_count == icons::all_symbol_count);
-    assert(icons::svg_path_arc_symbol_count == 16);
-    assert(icons::round_stroke_symbol_count == icons::outline_symbol_count);
-    assert(icons::reference_family() == "SF Symbols semantic reference");
-    assert(icons::reference_policy().find("audited permissive")
+    assert(icons::svg_path_arc_symbol_count == 0);
+    assert(icons::round_stroke_symbol_count == 0);
+    assert(icons::reference_family()
+           == "SF Symbols semantic reference with Google Material Symbols artwork");
+    assert(icons::reference_policy().find("Google Material Symbols")
            != std::string_view::npos);
     assert(icons::interface_metaphor_policy()
            == "familiar_simplified_macos_symbol_metaphors");
     assert(icons::visual_consistency_policy()
-           == "consistent_size_stroke_detail_and_perspective");
+           == "consistent_material_symbols_new_style_selectable_size_detail_and_perspective");
     assert(icons::toolbar_symbol_chrome_policy()
            == "borderless_toolbar_symbols_inside_grouped_controls");
     assert(icons::sidebar_symbol_color_policy()
@@ -500,7 +503,7 @@ void test_builtin_icons_parse() {
     unsigned int arc_path_count = 0;
     unsigned int round_stroke_count = 0;
     unsigned int phenotype_owned_count = 0;
-    unsigned int lucide_source_count = 0;
+    unsigned int material_symbols_source_count = 0;
     unsigned int apple_asset_count = 0;
     for (unsigned int i = 0; i < icons::all_symbol_count; ++i) {
         auto symbol = icons::symbol_at(i);
@@ -554,20 +557,21 @@ void test_builtin_icons_parse() {
                == "regular");
         if (descriptor.phenotype_owned)
             ++phenotype_owned_count;
-        if (icons::uses_lucide_source(symbol)) {
-            ++lucide_source_count;
+        if (icons::uses_material_symbols_source(symbol)) {
+            ++material_symbols_source_count;
             assert(!descriptor.phenotype_owned);
-            assert(source_attribution.family == "Lucide");
-            assert(source_attribution.license == icons::lucide_icon_license(
+            assert(source_attribution.family == "Google Material Symbols");
+            assert(source_attribution.style == "outlined");
+            assert(source_attribution.license == icons::material_symbols_icon_license(
                        source_attribution.icon_name));
-            assert(source_attribution.source_url.find("lucide-icons/lucide")
+            assert(source_attribution.source_url.find("google/material-design-icons")
                    != std::string_view::npos);
             assert(source_attribution.source_url.find(
-                       icons::lucide_source_revision())
+                       icons::material_symbols_source_revision())
                    != std::string_view::npos);
             assert(source_attribution.source_url.find("/main/")
                    == std::string_view::npos);
-            assert(source_attribution.license_url == icons::lucide_license_url());
+            assert(source_attribution.license_url == icons::material_symbols_license_url());
             assert(source_attribution.modified_for_phenotype);
         } else {
             assert(descriptor.phenotype_owned);
@@ -597,19 +601,20 @@ void test_builtin_icons_parse() {
             ++palette_count;
         if (descriptor.supports_multicolor)
             ++multicolor_count;
-        ++outline_count;
+        if (descriptor.variant == icons::SymbolVariant::Outline)
+            ++outline_count;
         assert(descriptor.variant == icons::SymbolVariant::Outline);
         assert(icons::symbol_variant_name(descriptor.variant) == "outline");
-        assert(src.find(R"(stroke-linecap="round")") != std::string_view::npos);
-        assert(src.find(R"(stroke-linejoin="round")") != std::string_view::npos);
-        assert(descriptor.round_stroke);
+        assert(!descriptor.round_stroke);
         assert(descriptor.stroke_cap == icons::SymbolStrokeCap::Round);
         assert(descriptor.stroke_join == icons::SymbolStrokeJoin::Round);
         assert(icons::symbol_stroke_cap_name(descriptor.stroke_cap)
                == std::string_view{"round"});
         assert(icons::symbol_stroke_join_name(descriptor.stroke_join)
                == std::string_view{"round"});
-        assert(!descriptor.filled);
+        assert(descriptor.filled);
+        ++filled_count;
+        assert(descriptor.default_stroke_width == 0.0f);
         if (descriptor.supports_hierarchical_opacity) {
             ++hierarchical_count;
             assert(descriptor.preferred_rendering
@@ -627,13 +632,8 @@ void test_builtin_icons_parse() {
         }
         assert(!doc.empty());
         assert(!doc.has_diagnostics());
-        if (symbol == icons::Symbol::AirDrop) {
-            assert(icons::uses_svg_path_arcs(symbol));
-            assert(src.find("a6 6") != std::string_view::npos);
-            assert(count_path_verb(doc.shapes[0].path, PathVerb::ArcTo) > 0);
-        }
-        if (icons::uses_lucide_source(symbol)) {
-            assert(src.find("lucide") == std::string_view::npos);
+        if (icons::uses_material_symbols_source(symbol)) {
+            assert(src.find("material_symbols") == std::string_view::npos);
             assert(src.find(R"(xmlns="http://www.w3.org/2000/svg")")
                    != std::string_view::npos);
         }
@@ -654,43 +654,56 @@ void test_builtin_icons_parse() {
     assert(arc_path_count == icons::svg_path_arc_symbol_count);
     assert(round_stroke_count == icons::round_stroke_symbol_count);
     assert(phenotype_owned_count == icons::phenotype_owned_symbol_count);
-    assert(lucide_source_count == icons::lucide_source_symbol_count);
-    assert(icons::lucide_unique_source_icon_count == 38);
-    assert(icons::lucide_source_icon_name_at(28) == "file-text");
-    assert(icons::lucide_source_icon_name_at(
-               icons::lucide_unique_source_icon_count - 1)
-           == "arrow-up-down");
+    assert(material_symbols_source_count == icons::material_symbols_source_symbol_count);
+    assert(icons::material_symbols_unique_source_icon_count == 39);
+    auto const rounded_search = icons::source(
+        icons::Symbol::Search,
+        icons::MaterialSymbolsStyle::Rounded);
+    auto const sharp_search = icons::source(
+        icons::Symbol::Search,
+        icons::MaterialSymbolsStyle::Sharp);
+    assert(rounded_search.find("currentColor") != std::string_view::npos);
+    assert(sharp_search.find("currentColor") != std::string_view::npos);
+    assert(icons::descriptor(
+               icons::Symbol::Search,
+               icons::MaterialSymbolsStyle::Rounded)
+               .style
+           == "google_material_symbols_rounded_svg");
+    assert(icons::material_symbols_source_icon_name_at(32) == "picture_as_pdf");
+    assert(icons::material_symbols_source_icon_name_at(
+               icons::material_symbols_unique_source_icon_count - 1)
+           == "slideshow");
     assert(apple_asset_count == icons::apple_asset_symbol_count);
     assert(icons::source_attribution(icons::Symbol::Folder).icon_name
            == "folder");
     assert(icons::source_attribution(icons::Symbol::Movie).icon_name
-           == "clapperboard");
+           == "movie");
     assert(icons::source_attribution(icons::Symbol::AudioDocument).icon_name
-           == "file-music");
+           == "audio_file");
     assert(icons::source_attribution(icons::Symbol::CodeDocument).icon_name
-           == "file-code");
+           == "code");
     assert(icons::source_attribution(
                icons::Symbol::SpreadsheetDocument).icon_name
-           == "file-spreadsheet");
+           == "table_chart");
     assert(icons::source_attribution(
                icons::Symbol::PresentationDocument).icon_name
-           == "presentation");
+           == "slideshow");
     assert(icons::source_attribution(icons::Symbol::More).icon_name
-           == "ellipsis");
+           == "more_horiz");
     assert(icons::source_attribution(icons::Symbol::AirDrop).icon_name
-           == "radio");
+           == "nearby");
     assert(icons::source_attribution(icons::Symbol::Shared).icon_name
-           == "folder-symlink");
+           == "folder_shared");
     assert(icons::source_attribution(icons::Symbol::SortGroup).icon_name
-           == "arrow-up-down");
+           == "swap_vert");
     assert(icons::source_attribution(icons::Symbol::Search).family
-           == "Lucide");
+           == "Google Material Symbols");
     assert(icons::source_attribution(icons::Symbol::Search).icon_name
            == "search");
     assert(icons::source_attribution(icons::Symbol::Search).license
-           == "MIT");
+           == "Apache-2.0");
     assert(icons::source_attribution(icons::Symbol::Folder).license
-           == "ISC");
+           == "Apache-2.0");
 
     auto shared = icons::descriptor(icons::Symbol::Shared);
     assert(shared.role == icons::SymbolRole::Sidebar);
