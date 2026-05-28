@@ -225,6 +225,8 @@ inline float appkit_y(NativeSurfaceDescriptor const& surface, double y) {
     return static_cast<float>(surface.logical_height) - static_cast<float>(y);
 }
 
+inline bool appkit_handle_standard_key_equivalent(id event);
+
 inline void dispatch_appkit_event(id event, NativeSurfaceDescriptor const& surface) {
     if (!event)
         return;
@@ -280,6 +282,8 @@ inline void dispatch_appkit_event(id event, NativeSurfaceDescriptor const& surfa
             break;
         }
         case 10: {
+            if (appkit_handle_standard_key_equivalent(event))
+                break;
             auto const flags = objc_send<unsigned long>(event, sel("modifierFlags"));
             auto action = objc_send<signed char>(event, sel("isARepeat"))
                 ? KeyAction::Repeat
@@ -306,6 +310,9 @@ inline void dispatch_appkit_event(id event, NativeSurfaceDescriptor const& surfa
             dispatch_scroll_xy(
                 objc_send<double>(event, sel("scrollingDeltaX")),
                 objc_send<double>(event, sel("scrollingDeltaY")),
+                objc_send<signed char>(
+                    event,
+                    sel("hasPreciseScrollingDeltas")) != 0,
                 static_cast<float>(surface.logical_width),
                 static_cast<float>(surface.logical_height));
             break;
@@ -351,6 +358,10 @@ inline id create_appkit_window(int width,
 
 inline id g_active_appkit_window = nullptr;
 inline NativeSurfaceDescriptor* g_active_appkit_surface = nullptr;
+inline bool g_appkit_keep_running_after_last_window_closed = false;
+inline bool g_appkit_should_terminate = false;
+inline void (*g_appkit_settings_menu_handler)() = nullptr;
+inline std::string g_appkit_application_name = "Phenotype";
 
 inline bool appkit_app_is_active(id app) {
     return app && objc_send<signed char>(app, sel("isActive")) != 0;
@@ -402,6 +413,19 @@ inline void request_appkit_window_front(id app, id window) {
     objc_send<void>(window, sel("orderFrontRegardless"));
 }
 
+inline signed char appkit_should_terminate_after_last_window_closed(
+        id,
+        SEL,
+        id) {
+    return static_cast<signed char>(
+        g_appkit_keep_running_after_last_window_closed ? 0 : 1);
+}
+
+inline long appkit_should_terminate(id, SEL, id) {
+    g_appkit_should_terminate = true;
+    return 1; // NSTerminateNow
+}
+
 inline signed char appkit_should_handle_reopen(id, SEL, id app, signed char) {
     request_appkit_window_front(app, g_active_appkit_window);
     return static_cast<signed char>(1);
@@ -410,6 +434,28 @@ inline signed char appkit_should_handle_reopen(id, SEL, id app, signed char) {
 inline void appkit_did_become_active(id, SEL, id) {
     id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
     request_appkit_window_front(app, g_active_appkit_window);
+}
+
+inline void appkit_open_settings(id, SEL, id) {
+    id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
+    request_appkit_window_front(app, g_active_appkit_window);
+    if (g_appkit_settings_menu_handler) {
+        g_appkit_settings_menu_handler();
+        ::phenotype::detail::trigger_rebuild();
+    }
+}
+
+inline bool appkit_handle_standard_key_equivalent(id event) {
+    if (!event || !g_appkit_settings_menu_handler)
+        return false;
+    auto const flags = objc_send<unsigned long>(event, sel("modifierFlags"));
+    constexpr unsigned long command_modifier = 1ul << 20;
+    if ((flags & command_modifier) == 0)
+        return false;
+    if (objc_send<unsigned short>(event, sel("keyCode")) != 43)
+        return false;
+    appkit_open_settings(nullptr, nullptr, nullptr);
+    return true;
 }
 
 inline id create_appkit_shell_delegate() {
@@ -424,6 +470,16 @@ inline id create_appkit_shell_delegate() {
             return nullptr;
         class_addMethod(
             delegate_class,
+            sel("applicationShouldTerminateAfterLastWindowClosed:"),
+            reinterpret_cast<IMP>(appkit_should_terminate_after_last_window_closed),
+            "c@:@");
+        class_addMethod(
+            delegate_class,
+            sel("applicationShouldTerminate:"),
+            reinterpret_cast<IMP>(appkit_should_terminate),
+            "q@:@");
+        class_addMethod(
+            delegate_class,
             sel("applicationShouldHandleReopen:hasVisibleWindows:"),
             reinterpret_cast<IMP>(appkit_should_handle_reopen),
             "c@:@@c");
@@ -431,6 +487,11 @@ inline id create_appkit_shell_delegate() {
             delegate_class,
             sel("applicationDidBecomeActive:"),
             reinterpret_cast<IMP>(appkit_did_become_active),
+            "v@:@");
+        class_addMethod(
+            delegate_class,
+            sel("phenotypeOpenSettings:"),
+            reinterpret_cast<IMP>(appkit_open_settings),
             "v@:@");
         objc_registerClassPair(delegate_class);
     }
@@ -440,6 +501,80 @@ inline id create_appkit_shell_delegate() {
 }
 
 inline id g_appkit_shell_delegate = nullptr;
+
+inline id appkit_menu_item(char const* title,
+                           SEL action,
+                           char const* key_equivalent,
+                           id target = nullptr) {
+    id item = objc_send<id>(
+        objc_send<id>(class_id("NSMenuItem"), sel("alloc")),
+        sel("initWithTitle:action:keyEquivalent:"),
+        ns_string(title),
+        action,
+        ns_string(key_equivalent ? key_equivalent : ""));
+    if (item && target)
+        objc_send<void>(item, sel("setTarget:"), target);
+    if (item && key_equivalent && key_equivalent[0] != '\0') {
+        constexpr unsigned long command_modifier = 1ul << 20;
+        objc_send<void>(
+            item,
+            sel("setKeyEquivalentModifierMask:"),
+            command_modifier);
+    }
+    return item;
+}
+
+inline void install_standard_appkit_menu(id app,
+                                         WindowOptions const& options) {
+    if (!app || !options.install_standard_app_menu)
+        return;
+
+    char const* app_name = options.application_name;
+    if (!app_name || app_name[0] == '\0')
+        app_name = g_appkit_application_name.c_str();
+
+    id menubar = objc_send<id>(
+        objc_send<id>(class_id("NSMenu"), sel("alloc")),
+        sel("initWithTitle:"),
+        ns_string(""));
+    id app_item = appkit_menu_item("", nullptr, "");
+    if (!menubar || !app_item)
+        return;
+    objc_send<void>(menubar, sel("addItem:"), app_item);
+    objc_send<void>(app, sel("setMainMenu:"), menubar);
+
+    id app_menu = objc_send<id>(
+        objc_send<id>(class_id("NSMenu"), sel("alloc")),
+        sel("initWithTitle:"),
+        ns_string(app_name));
+    if (!app_menu)
+        return;
+    objc_send<void>(menubar, sel("setSubmenu:forItem:"), app_menu, app_item);
+
+    if (options.on_settings_menu) {
+        id settings = appkit_menu_item(
+            options.settings_menu_title ? options.settings_menu_title : "Settings...",
+            sel("phenotypeOpenSettings:"),
+            options.settings_menu_key_equivalent
+                ? options.settings_menu_key_equivalent
+                : ",",
+            g_appkit_shell_delegate);
+        if (settings)
+            objc_send<void>(app_menu, sel("addItem:"), settings);
+        id separator = objc_send<id>(class_id("NSMenuItem"), sel("separatorItem"));
+        if (separator)
+            objc_send<void>(app_menu, sel("addItem:"), separator);
+    }
+
+    auto quit_title = std::string{"Quit "} + app_name;
+    id quit = appkit_menu_item(
+        quit_title.c_str(),
+        sel("terminate:"),
+        "q",
+        app);
+    if (quit)
+        objc_send<void>(app_menu, sel("addItem:"), quit);
+}
 
 inline void prime_appkit_window_ordering(id app) {
     if (!app)
@@ -814,7 +949,7 @@ inline bool run_performance_probe_if_requested() {
             float const h = g_app_state.host ? g_app_state.host->canvas_height() : 600.0f;
             g_app_state.last_mouse_x = w * 0.55f;
             g_app_state.last_mouse_y = h * 0.55f;
-            handled = dispatch_scroll_xy(0.0, dy, w, h);
+            handled = dispatch_scroll_xy(0.0, dy, false, w, h);
             if (!handled) {
                 bool const previous_input_motion =
                     ::phenotype::detail::g_app.has_active_input_motion;
@@ -836,7 +971,12 @@ inline bool run_performance_probe_if_requested() {
                 case 1:
                     g_app_state.last_mouse_x = w * 0.55f;
                     g_app_state.last_mouse_y = h * 0.55f;
-                    handled = dispatch_scroll_xy(0.0, ((i / 16) % 2 == 0) ? -12.0 : 12.0, w, h);
+                    handled = dispatch_scroll_xy(
+                        0.0,
+                        ((i / 16) % 2 == 0) ? -12.0 : 12.0,
+                        false,
+                        w,
+                        h);
                     if (!handled) {
                         bool const previous_input_motion =
                             ::phenotype::detail::g_app.has_active_input_motion;
@@ -967,10 +1107,19 @@ int run_app_with_macos_platform(platform_api const& platform,
     id pool = objc_send<id>(objc_send<id>(class_id("NSAutoreleasePool"), sel("alloc")), sel("init"));
     id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
     objc_send<void>(app, sel("setActivationPolicy:"), static_cast<long>(0));
+    g_appkit_keep_running_after_last_window_closed =
+        options.keep_running_after_last_window_closed;
+    g_appkit_should_terminate = false;
+    g_appkit_settings_menu_handler = options.on_settings_menu;
+    g_appkit_application_name = options.application_name
+        && options.application_name[0] != '\0'
+            ? options.application_name
+            : title;
     if (!g_appkit_shell_delegate)
         g_appkit_shell_delegate = create_appkit_shell_delegate();
     if (g_appkit_shell_delegate)
         objc_send<void>(app, sel("setDelegate:"), g_appkit_shell_delegate);
+    install_standard_appkit_menu(app, options);
     objc_send<void>(app, sel("finishLaunching"));
 
     id window = create_appkit_window(width, height, title, options);
@@ -1054,8 +1203,14 @@ int run_app_with_macos_platform(platform_api const& platform,
     }
 
     auto last_animation_tick = std::chrono::steady_clock::now();
-    while (objc_send<signed char>(window, sel("isVisible"))) {
-        sync_appkit_surface(host, surface, window, true);
+    while (!g_appkit_should_terminate
+           && (!g_appkit_keep_running_after_last_window_closed
+               || window)) {
+        bool const visible = appkit_window_is_visible(window);
+        if (!g_appkit_keep_running_after_last_window_closed && !visible)
+            break;
+        if (visible)
+            sync_appkit_surface(host, surface, window, true);
         id event = objc_send<id>(
             app,
             sel("nextEventMatchingMask:untilDate:inMode:dequeue:"),
@@ -1064,7 +1219,8 @@ int run_app_with_macos_platform(platform_api const& platform,
             ns_string("NSDefaultRunLoopMode"),
             static_cast<signed char>(1));
         if (event) {
-            dispatch_appkit_event(event, surface);
+            if (visible)
+                dispatch_appkit_event(event, surface);
             objc_send<void>(app, sel("sendEvent:"), event);
         }
         objc_send<void>(app, sel("updateWindows"));
@@ -1074,6 +1230,8 @@ int run_app_with_macos_platform(platform_api const& platform,
     shutdown_host(host);
     g_active_appkit_window = nullptr;
     g_active_appkit_surface = nullptr;
+    g_appkit_settings_menu_handler = nullptr;
+    g_appkit_keep_running_after_last_window_closed = false;
     if (pool)
         objc_send<void>(pool, sel("drain"));
     return 0;

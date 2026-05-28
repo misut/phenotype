@@ -46,7 +46,8 @@ int main() {
         icon_catalog::SymbolInteractionPhase::Pressed,
         false,
         true,
-        icon_catalog::MaterialSymbolsStyle::Rounded);
+        icon_catalog::MaterialSymbolsStyle::Rounded,
+        {});
     assert(rendered.find("data-phenotype-symbol=\"search\"")
         != std::string::npos);
     assert(rendered.find("data-role=\"toolbar\"") != std::string::npos);
@@ -60,6 +61,7 @@ int main() {
         false,
         true,
         icon_catalog::MaterialSymbolsStyle::Rounded,
+        {},
         rendered,
         std::filesystem::path{});
     assert(json.find("\"material_symbols_style\":\"rounded\"")

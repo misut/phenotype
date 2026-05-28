@@ -383,9 +383,11 @@ auto icon_presentation_json(std::string_view query,
                             IconLookupResult const& result,
                             icon_catalog::SymbolPresentationRole role,
                             icon_catalog::SymbolInteractionPhase phase,
+                            icon_catalog::MaterialSymbolsStyle style,
+                            MaterialSymbolAxisOptions axes,
                             bool selected,
                             bool enabled) -> std::string {
-    auto const desc = icon_catalog::descriptor(result.symbol);
+    auto const desc = icon_catalog::descriptor(result.symbol, style);
     auto const metrics = icon_catalog::metrics(role);
     auto const recipe = icon_catalog::macos_state_recipe(
         role,
@@ -393,7 +395,7 @@ auto icon_presentation_json(std::string_view query,
         phase);
     auto const capabilities = icon_catalog::rendering_capabilities(result.symbol);
     auto const source_attribution =
-        icon_catalog::source_attribution(result.symbol);
+        icon_catalog::source_attribution(result.symbol, style);
     auto const visible_color =
         icon_color_with_opacity(recipe.symbol_color, recipe.symbol_opacity);
     auto const content_inset =
@@ -405,6 +407,7 @@ auto icon_presentation_json(std::string_view query,
         "\"reference_policy\":{},\"asset_policy\":{},"
         "\"source_license_policy\":{},\"apple_asset_boundary\":{},"
         "\"source_attribution\":{},"
+        "\"material_symbols_axes\":{},"
         "\"state\":{{\"role\":{},\"phase\":{},\"selected\":{},"
         "\"enabled\":{}}},"
         "\"presentation\":{{\"policy\":{},\"metrics_policy\":{},"
@@ -428,6 +431,7 @@ auto icon_presentation_json(std::string_view query,
         json_string(icon_catalog::source_license_policy()),
         json_string(icon_catalog::apple_asset_boundary()),
         icon_source_attribution_json(source_attribution),
+        icon_material_symbol_axes_json(axes, style),
         json_string(icon_catalog::symbol_presentation_role_name(role)),
         json_string(icon_catalog::symbol_interaction_phase_name(phase)),
         selected ? "true" : "false",
@@ -821,6 +825,12 @@ int run_icons_present(cppx::cli::Invocation const& invocation) {
     auto phase = icon_interaction_phase_from_invocation(invocation);
     if (!phase)
         return print_error("icons present", phase.error(), invocation.has("json"));
+    auto style = icon_material_symbols_style_from_invocation(invocation);
+    if (!style)
+        return print_error("icons present", style.error(), invocation.has("json"));
+    auto axes = icon_material_symbol_axes_from_invocation(invocation);
+    if (!axes)
+        return print_error("icons present", axes.error(), invocation.has("json"));
 
     auto const selected = invocation.has("selected");
     auto const enabled = !invocation.has("disabled");
@@ -832,6 +842,8 @@ int run_icons_present(cppx::cli::Invocation const& invocation) {
                 *result,
                 *role,
                 *phase,
+                *style,
+                *axes,
                 selected,
                 enabled));
         return 0;
@@ -854,11 +866,16 @@ int run_icons_present(cppx::cli::Invocation const& invocation) {
          .status = cppx::terminal::StatusKind::ok},
         {.label = "state",
          .value = std::format(
-             "{} {} selected={} enabled={}",
+             "{} {} selected={} enabled={} style={} fill={} wght={} GRAD={} opsz={}",
              icon_catalog::symbol_presentation_role_name(*role),
              icon_catalog::symbol_interaction_phase_name(*phase),
              selected ? "true" : "false",
-             enabled ? "true" : "false"),
+             enabled ? "true" : "false",
+             icon_catalog::material_symbols_style_name(*style),
+             axes->fill ? "true" : "false",
+             axes->weight,
+             axes->grade,
+             axes->optical_size),
          .status = cppx::terminal::StatusKind::ok},
         {.label = "tone",
          .value = std::string{icon_catalog::symbol_tone_name(recipe.symbol_tone)},
@@ -923,6 +940,9 @@ int run_icons_render(cppx::cli::Invocation const& invocation) {
     auto style = icon_material_symbols_style_from_invocation(invocation);
     if (!style)
         return print_error("icons render", style.error(), invocation.has("json"));
+    auto axes = icon_material_symbol_axes_from_invocation(invocation);
+    if (!axes)
+        return print_error("icons render", axes.error(), invocation.has("json"));
 
     auto const selected = invocation.has("selected");
     auto const enabled = !invocation.has("disabled");
@@ -932,7 +952,8 @@ int run_icons_render(cppx::cli::Invocation const& invocation) {
         *phase,
         selected,
         enabled,
-        *style);
+        *style,
+        *axes);
     auto output_path = fs::path{};
     if (auto output = invocation.value("output")) {
         output_path =
@@ -959,6 +980,7 @@ int run_icons_render(cppx::cli::Invocation const& invocation) {
                 selected,
                 enabled,
                 *style,
+                *axes,
                 source,
                 output_path));
         return 0;

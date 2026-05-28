@@ -39,6 +39,10 @@ struct DeleteSelected {};
 struct DuplicateSelected {};
 struct ActivateSelected {};
 struct ToggleMoreActions {};
+struct OpenSettings {};
+struct CloseSettings {};
+struct SetSidebarPosition { bool right; };
+struct ToggleSidebarSection { std::string id; };
 struct GoBack {};
 struct GoForward {};
 struct GoUp {};
@@ -66,6 +70,10 @@ using Msg = std::variant<
     DuplicateSelected,
     ActivateSelected,
     ToggleMoreActions,
+    OpenSettings,
+    CloseSettings,
+    SetSidebarPosition,
+    ToggleSidebarSection,
     GoBack,
     GoForward,
     GoUp,
@@ -75,6 +83,10 @@ using Msg = std::variant<
     ResetDemo,
     Resized,
     Noop>;
+
+void open_settings_from_app_menu() {
+    phenotype::detail::post<Msg>(OpenSettings{});
+}
 
 fs::path g_initial_filesystem_root;
 std::string g_initial_filesystem_root_label;
@@ -573,6 +585,7 @@ phenotype::ThemePreferenceOverrides initial_theme_preference_overrides() {
                    || std::string_view{raw} == "light"
                    || std::string_view{raw} == "high-contrast-dark"
                    || std::string_view{raw} == "high-contrast-light") {
+            overrides.prefer_system_color_scheme = false;
             overrides.color_scheme = raw;
         }
     }
@@ -832,6 +845,10 @@ struct State {
     file_explorer_demo::ExplorerLabels labels;
     bool search_visible = false;
     bool more_actions_open = false;
+    bool settings_open = false;
+    bool sidebar_right = false;
+    bool favorites_expanded = true;
+    bool locations_expanded = true;
 
     State()
         : explorer(initial_explorer_state()),
@@ -947,13 +964,43 @@ phenotype::FontSpec finder_font(
     };
 }
 
+phenotype::Color with_alpha(phenotype::Color color, int alpha) {
+    color.a = static_cast<unsigned char>(std::clamp(alpha, 0, 255));
+    return color;
+}
+
+bool finder_dark_palette() {
+    auto const& t = phenotype::current_theme();
+    auto luma = [](phenotype::Color c) {
+        return static_cast<int>(c.r) * 299
+             + static_cast<int>(c.g) * 587
+             + static_cast<int>(c.b) * 114;
+    };
+    return luma(t.background) < luma(t.foreground);
+}
+
+phenotype::Color finder_primary_ink() {
+    return phenotype::current_theme().foreground;
+}
+
+phenotype::Color finder_secondary_ink() {
+    return phenotype::current_theme().muted;
+}
+
+phenotype::Color finder_tertiary_ink() {
+    return finder_dark_palette() ? rgba(142, 142, 147)
+                                 : rgba(130, 130, 136);
+}
+
 phenotype::MaterialStyle main_content_shell_material_style() {
     using namespace phenotype;
+    auto const& t = current_theme();
+    bool const dark = finder_dark_palette();
     auto material = layout::material_style(MaterialKind::Regular);
     material.opacity = 1.0f;
     material.blur_radius = 0.0f;
-    material.tint = rgba(255, 255, 255);
-    material.border = rgba(222, 222, 226);
+    material.tint = dark ? rgba(30, 30, 32) : rgba(255, 255, 255);
+    material.border = dark ? t.border : rgba(222, 222, 226);
     material.saturation = 1.0f;
     material.luminance_floor = 0.0f;
     material.luminance_gain = 1.0f;
@@ -961,8 +1008,12 @@ phenotype::MaterialStyle main_content_shell_material_style() {
     material.noise_opacity = 0.0f;
     material.shadow_alpha = 0.08f;
     material.shadow_radius = 12.0f;
-    material.contrast_intent = "solid-white-main-content-shell";
-    material.verifier_profile = "solid-white-content-shell";
+    material.contrast_intent = dark
+        ? "solid-dark-main-content-shell"
+        : "solid-white-main-content-shell";
+    material.verifier_profile = dark
+        ? "solid-dark-content-shell"
+        : "solid-white-content-shell";
     return material;
 }
 
@@ -1222,8 +1273,8 @@ void paint_sidebar_icon(phenotype::Painter& painter,
                         float origin_x,
                         float origin_y) {
     auto const ink = selected
-        ? rgba(0, 122, 255)
-        : (state.hovered ? rgba(18, 18, 20) : rgba(32, 32, 34));
+        ? phenotype::current_theme().accent
+        : (state.hovered ? finder_primary_ink() : finder_secondary_ink());
     paint_finder_symbol_centered(
         painter,
         cache,
@@ -1280,9 +1331,9 @@ void paint_item_thumbnail(phenotype::Painter& painter,
     auto const icon_size = entry.folder ? 58.0f : 54.0f;
     auto color = entry_symbol_color(entry, selected);
     if (!selected) {
-        color = entry.folder
-            ? rgba(92, 92, 96)
-            : rgba(72, 72, 76);
+        color = finder_dark_palette()
+            ? (entry.folder ? finder_primary_ink() : finder_secondary_ink())
+            : (entry.folder ? rgba(92, 92, 96) : rgba(72, 72, 76));
     }
     if (selected) {
         fill_round(painter, 20.0f, 3.0f, box_w - 40.0f, box_h - 6.0f,
@@ -1297,6 +1348,15 @@ void paint_item_thumbnail(phenotype::Painter& painter,
     presentation.point_size = icon_size;
     presentation.color = color;
     presentation.stroke_scale = k_file_thumbnail_symbol_stroke_scale;
+    presentation = phenotype::icons::with_material_symbol_axes(
+        presentation,
+        phenotype::icons::MaterialSymbolAxes{
+            .fill = true,
+            .weight = 500,
+            .grade = 0,
+            .optical_size = 40,
+            .style = phenotype::icons::MaterialSymbolsStyle::Outlined,
+        });
     paint_finder_symbol_centered(
         painter,
         cache,
@@ -1316,6 +1376,7 @@ std::uint64_t thumbnail_paint_token(file_explorer_demo::Entry const& entry,
         token ^= stable_token(preview_source) << 1u;
     if (selected)
         token ^= 0x100000u;
+    token ^= 0x200000u;
     return token;
 }
 
@@ -1324,8 +1385,8 @@ phenotype::Color entry_symbol_color(
         bool selected) {
     if (selected) {
         return entry.folder
-            ? rgba(0, 122, 255)
-            : rgba(28, 68, 132);
+            ? phenotype::current_theme().accent
+            : phenotype::current_theme().accent_strong;
     }
     return phenotype::icons::macos_file_type_color(
         phenotype::icons::from_catalog_symbol(
@@ -1622,6 +1683,9 @@ void update(State& state, Msg msg) {
             if (state.more_actions_open) {
                 state.more_actions_open = false;
                 explorer.status = "More actions closed.";
+            } else if (state.settings_open) {
+                state.settings_open = false;
+                explorer.status = "Settings closed.";
             } else if (state.search_visible) {
                 state.search_visible = false;
                 auto input = keyboard_input(
@@ -1661,9 +1725,34 @@ void update(State& state, Msg msg) {
         } else if constexpr (std::same_as<T, ToggleMoreActions>) {
             apply_desktop_pointer_focus(explorer, "more_actions");
             state.more_actions_open = !state.more_actions_open;
+            state.settings_open = false;
             explorer.status = state.more_actions_open
                 ? "More actions ready."
                 : "Ready";
+        } else if constexpr (std::same_as<T, OpenSettings>) {
+            state.more_actions_open = false;
+            state.settings_open = true;
+            explorer.status = "Settings ready.";
+        } else if constexpr (std::same_as<T, CloseSettings>) {
+            state.settings_open = false;
+            explorer.status = "Ready";
+        } else if constexpr (std::same_as<T, SetSidebarPosition>) {
+            state.sidebar_right = m.right;
+            explorer.status = state.sidebar_right
+                ? "Sidebar moved to the right."
+                : "Sidebar moved to the left.";
+        } else if constexpr (std::same_as<T, ToggleSidebarSection>) {
+            if (m.id == "favorites") {
+                state.favorites_expanded = !state.favorites_expanded;
+                explorer.status = state.favorites_expanded
+                    ? "Favorites expanded."
+                    : "Favorites collapsed.";
+            } else if (m.id == "locations") {
+                state.locations_expanded = !state.locations_expanded;
+                explorer.status = state.locations_expanded
+                    ? "Locations expanded."
+                    : "Locations collapsed.";
+            }
         } else if constexpr (std::same_as<T, GoBack>) {
             state.more_actions_open = false;
             apply_desktop_input(
@@ -1720,11 +1809,15 @@ void finder_button(std::string label,
     options.has_background = true;
     options.background = selected
         ? t.accent
-        : (subtle_chrome ? rgba(255, 255, 255, 92) : t.transparent);
+        : (subtle_chrome
+              ? (finder_dark_palette() ? rgba(255, 255, 255, 28)
+                                       : rgba(255, 255, 255, 92))
+              : t.transparent);
     options.has_hover_background = true;
     options.hover_background = selected
         ? t.accent_strong
-        : rgba(255, 255, 255, 110);
+        : (finder_dark_palette() ? rgba(255, 255, 255, 44)
+                                 : rgba(255, 255, 255, 110));
     options.has_border_color = true;
     options.border_color = t.transparent;
     options.has_text_color = true;
@@ -1784,8 +1877,8 @@ void finder_column_location_button(std::string label,
                 icon_box,
                 icon_box);
 
-            auto const ink = selected ? rgba(0, 122, 255)
-                                      : rgba(28, 28, 30);
+            auto const ink = selected ? phenotype::current_theme().accent
+                                      : finder_primary_ink();
             float const text_y =
                 std::max(0.0f, (k_column_location_row_height - 18.0f) * 0.5f);
             painter.text(34.0f,
@@ -1804,8 +1897,8 @@ void finder_column_location_button(std::string label,
                 18.0f,
                 18.0f,
                 14.0f,
-                selected ? rgba(0, 122, 255, 210)
-                         : rgba(130, 130, 136, 210));
+                selected ? with_alpha(phenotype::current_theme().accent, 210)
+                         : with_alpha(finder_tertiary_ink(), 210));
         },
         std::move(msg),
         options,
@@ -1824,15 +1917,19 @@ void finder_icon_label_button(std::string const& label,
                                   : rgba(0, 0, 0, 0);
     options.has_hover_background = true;
     options.hover_background = selected ? rgba(0, 122, 255, 242)
-                                        : rgba(0, 0, 0, 20);
+                                        : (finder_dark_palette()
+                                              ? rgba(255, 255, 255, 24)
+                                              : rgba(0, 0, 0, 20));
     options.has_pressed_background = true;
     options.pressed_background = selected ? rgba(0, 96, 212, 250)
-                                          : rgba(0, 0, 0, 34);
+                                          : (finder_dark_palette()
+                                                ? rgba(255, 255, 255, 36)
+                                                : rgba(0, 0, 0, 34));
     options.has_border_color = true;
     options.border_color = rgba(0, 0, 0, 0);
     options.has_text_color = true;
     options.text_color = selected ? rgba(255, 255, 255)
-                                  : rgba(28, 28, 30);
+                                  : finder_primary_ink();
     options.border_width = 0.0f;
     options.border_radius = 8.0f;
     options.font_size = font_size;
@@ -1849,7 +1946,7 @@ void finder_icon_label_button(std::string const& label,
         [label, selected, max_width, font_size, fixed_height](
                 phenotype::Painter& painter) {
             auto const ink = selected ? rgba(255, 255, 255)
-                                      : rgba(28, 28, 30);
+                                      : finder_primary_ink();
             auto const lines = finder_icon_label_lines(
                 painter,
                 label,
@@ -1919,7 +2016,7 @@ void finder_entry_row_button(file_explorer_demo::Entry const& entry,
                 icon_size);
 
             auto const ink = selected ? rgba(255, 255, 255)
-                                      : rgba(28, 28, 30);
+                                      : finder_primary_ink();
             float const text_x = 36.0f;
             float const text_y = std::max(0.0f, (fixed_height - 18.0f) * 0.5f);
             painter.text(text_x,
@@ -1937,7 +2034,7 @@ void finder_entry_row_button(file_explorer_demo::Entry const& entry,
                              1,
                              font_size,
                              selected ? rgba(255, 255, 255, 220)
-                                      : rgba(110, 110, 116),
+                                      : finder_tertiary_ink(),
                              finder_font());
             }
         },
@@ -1952,16 +2049,20 @@ void sidebar_row(std::string_view label,
                  bool selected,
                  phenotype::icons::SymbolDocumentCache const& cache) {
     using namespace phenotype;
+    bool const dark = finder_dark_palette();
     ButtonStyleOptions options;
     options.has_background = true;
-    options.background = selected ? rgba(255, 255, 255, 232)
-                                  : rgba(0, 0, 0, 0);
+    options.background = selected
+        ? (dark ? rgba(255, 255, 255, 34) : rgba(255, 255, 255, 232))
+        : rgba(0, 0, 0, 0);
     options.has_hover_background = true;
-    options.hover_background = selected ? rgba(255, 255, 255, 242)
-                                        : rgba(255, 255, 255, 64);
+    options.hover_background = selected
+        ? (dark ? rgba(255, 255, 255, 48) : rgba(255, 255, 255, 242))
+        : (dark ? rgba(255, 255, 255, 22) : rgba(255, 255, 255, 64));
     options.has_pressed_background = true;
-    options.pressed_background = selected ? rgba(255, 255, 255, 250)
-                                          : rgba(255, 255, 255, 92);
+    options.pressed_background = selected
+        ? (dark ? rgba(255, 255, 255, 62) : rgba(255, 255, 255, 250))
+        : (dark ? rgba(255, 255, 255, 36) : rgba(255, 255, 255, 92));
     options.has_border_color = true;
     options.border_color = rgba(255, 255, 255, 0);
     options.border_width = 0.0f;
@@ -1991,7 +2092,8 @@ void sidebar_row(std::string_view label,
                 state,
                 k_sidebar_icon_leading,
                 icon_top);
-            auto ink = selected ? rgba(0, 122, 255) : rgba(30, 30, 30);
+            auto ink = selected ? phenotype::current_theme().accent
+                                : finder_primary_ink();
             painter.text(k_sidebar_label_leading,
                          k_sidebar_label_top,
                          label_text.c_str(),
@@ -2006,7 +2108,9 @@ void sidebar_row(std::string_view label,
             ^ (selected ? 0x511f00u : 0x510000u));
 }
 
-void sidebar_heading(std::string_view label) {
+void sidebar_heading(std::string_view label,
+                     bool expanded,
+                     std::string section_id) {
     using namespace phenotype;
     ButtonStyleOptions options;
     options.has_background = true;
@@ -2019,24 +2123,34 @@ void sidebar_heading(std::string_view label) {
     options.border_radius = 0.0f;
     options.max_width = k_sidebar_row_width;
     options.fixed_height = k_sidebar_heading_height;
+    options.focus_ring = false;
 
     std::string label_text(label);
+    std::string id_text(std::move(section_id));
     widget::canvas_button<Msg>(
         str{label_text},
         k_sidebar_row_width,
         k_sidebar_heading_height,
-        [label_text](Painter& painter) {
+        [label_text, expanded](Painter& painter) {
             painter.text(k_sidebar_heading_label_leading,
                          k_sidebar_heading_label_top,
                          label_text.c_str(),
                          static_cast<unsigned int>(label_text.size()),
                          13.0f,
-                         rgba(82, 82, 86),
+                         finder_secondary_ink(),
+                         finder_font(phenotype::FontWeight::Bold));
+            char const* chevron = expanded ? "v" : ">";
+            painter.text(k_sidebar_row_width - 20.0f,
+                         k_sidebar_heading_label_top,
+                         chevron,
+                         1,
+                         13.0f,
+                         finder_secondary_ink(),
                          finder_font(phenotype::FontWeight::Bold));
         },
-        Noop{},
+        ToggleSidebarSection{id_text},
         options,
-        stable_token(label_text) ^ 0x520000u);
+        stable_token(label_text) ^ stable_token(id_text) ^ 0x520000u);
 }
 
 void native_window_control_reserve_slot() {
@@ -2061,18 +2175,26 @@ void finder_sidebar(State const& state) {
         sidebar_row(labels.sidebar_shared, "shared", "shared",
                     relative == explorer.root_label + "/Shared", icon_cache);
         layout::spacer(k_sidebar_section_gap);
-        sidebar_heading(labels.favorites);
-        sidebar_row(labels.applications, "app", "root", false, icon_cache);
-        sidebar_row(labels.desktop, "desktop", "root", false, icon_cache);
-        sidebar_row(labels.documents, "doc", "documents",
-                    relative == explorer.root_label + "/Documents", icon_cache);
-        sidebar_row(labels.downloads, "download", "root", false, icon_cache);
-        layout::spacer(k_sidebar_section_gap);
-        sidebar_heading(labels.locations);
-        sidebar_row(labels.icloud_drive, "cloud", "root", false, icon_cache);
-        sidebar_row(labels.home, "home", "root", false, icon_cache);
-        sidebar_row(labels.airdrop, "airdrop", "shared", false, icon_cache);
-        sidebar_row(labels.trash, "trash", "trash", relative == "Trash", icon_cache);
+        sidebar_heading(labels.favorites, state.favorites_expanded, "favorites");
+        float const favorite_progress =
+            phenotype::animate_float(state.favorites_expanded ? 1.0f : 0.0f, 180);
+        if (favorite_progress > 0.05f) {
+            sidebar_row(labels.applications, "app", "root", false, icon_cache);
+            sidebar_row(labels.desktop, "desktop", "root", false, icon_cache);
+            sidebar_row(labels.documents, "doc", "documents",
+                        relative == explorer.root_label + "/Documents", icon_cache);
+            sidebar_row(labels.downloads, "download", "root", false, icon_cache);
+        }
+        layout::spacer(k_sidebar_section_gap * std::max(favorite_progress, 0.35f));
+        sidebar_heading(labels.locations, state.locations_expanded, "locations");
+        float const locations_progress =
+            phenotype::animate_float(state.locations_expanded ? 1.0f : 0.0f, 180);
+        if (locations_progress > 0.05f) {
+            sidebar_row(labels.icloud_drive, "cloud", "root", false, icon_cache);
+            sidebar_row(labels.home, "home", "root", false, icon_cache);
+            sidebar_row(labels.airdrop, "airdrop", "shared", false, icon_cache);
+            sidebar_row(labels.trash, "trash", "trash", relative == "Trash", icon_cache);
+        }
     });
 }
 
@@ -2080,7 +2202,7 @@ void toolbar_separator() {
     phenotype::widget::canvas(1.0f, 28.0f,
         [](phenotype::Painter& painter) {
             fill_round(painter, 0.0f, 2.0f, 1.0f, 24.0f, 0.5f,
-                       rgba(205, 205, 210, 130));
+                       with_alpha(phenotype::current_theme().border, 130));
         },
         {},
         0x6901u);
@@ -2632,6 +2754,108 @@ void finder_grid(State const& state,
                 }, chrome.icon_grid_gap);
             }, SpaceToken::Sm);
         });
+}
+
+void settings_choice_button(std::string_view label,
+                            Msg msg,
+                            bool selected,
+                            std::uint64_t token) {
+    using namespace phenotype;
+    auto const& t = current_theme();
+    bool const dark = finder_dark_palette();
+    ButtonStyleOptions options;
+    options.has_background = true;
+    options.background = selected ? with_alpha(t.accent, 230)
+                                  : (dark ? rgba(255, 255, 255, 24)
+                                          : rgba(255, 255, 255, 210));
+    options.has_hover_background = true;
+    options.hover_background = selected ? with_alpha(t.accent_strong, 240)
+                                        : (dark ? rgba(255, 255, 255, 38)
+                                                : rgba(235, 235, 240, 240));
+    options.has_pressed_background = true;
+    options.pressed_background = selected ? with_alpha(t.accent_strong, 250)
+                                          : (dark ? rgba(255, 255, 255, 52)
+                                                  : rgba(220, 220, 226, 245));
+    options.has_text_color = true;
+    options.text_color = selected ? rgba(255, 255, 255)
+                                  : t.foreground;
+    options.has_border_color = true;
+    options.border_color = selected ? with_alpha(t.accent, 0)
+                                    : with_alpha(t.border, 190);
+    options.border_width = selected ? 0.0f : 1.0f;
+    options.border_radius = 10.0f;
+    options.max_width = 132.0f;
+    options.fixed_height = 34.0f;
+    options.min_hit_width = 132.0f;
+    options.min_hit_height = 34.0f;
+    options.focus_ring = false;
+    phenotype::keyed(static_cast<std::uint32_t>(token), [&] {
+        widget::button<Msg>(str{std::string(label)}, std::move(msg), options);
+    });
+}
+
+void finder_settings_window(State const& state) {
+    using namespace phenotype;
+    layout::dialog([&] {
+        layout::column([&] {
+            widget::text("Settings", TextSize::Heading);
+            widget::text("Appearance", TextSize::Small, TextColor::Muted);
+            layout::row([&] {
+                settings_choice_button(
+                    state.labels.preferences_system_appearance,
+                    color_scheme_message("system"),
+                    state.explorer.theme_preferences.prefer_system_color_scheme,
+                    0x7101u);
+                settings_choice_button(
+                    state.labels.preferences_light_appearance,
+                    color_scheme_message("light"),
+                    !state.explorer.theme_preferences.prefer_system_color_scheme
+                        && state.explorer.theme_preferences.color_scheme == "light",
+                    0x7102u);
+                settings_choice_button(
+                    state.labels.preferences_dark_appearance,
+                    color_scheme_message("dark"),
+                    !state.explorer.theme_preferences.prefer_system_color_scheme
+                        && state.explorer.theme_preferences.color_scheme == "dark",
+                    0x7103u);
+            }, SpaceToken::Xs);
+            widget::text("Sidebar", TextSize::Small, TextColor::Muted);
+            layout::row([&] {
+                settings_choice_button(
+                    "Left",
+                    SetSidebarPosition{false},
+                    !state.sidebar_right,
+                    0x7111u);
+                settings_choice_button(
+                    "Right",
+                    SetSidebarPosition{true},
+                    state.sidebar_right,
+                    0x7112u);
+            }, SpaceToken::Xs);
+            widget::text("Scroll Bars", TextSize::Small, TextColor::Muted);
+            layout::row([&] {
+                settings_choice_button(
+                    state.labels.preferences_scrollbar_auto,
+                    scroll_bar_visibility_message("auto"),
+                    state.explorer.theme_preferences.scroll_bar_visibility == "auto",
+                    0x7121u);
+                settings_choice_button(
+                    state.labels.preferences_scrollbar_always,
+                    scroll_bar_visibility_message("always"),
+                    state.explorer.theme_preferences.scroll_bar_visibility == "always",
+                    0x7122u);
+                settings_choice_button(
+                    state.labels.preferences_scrollbar_hidden,
+                    scroll_bar_visibility_message("hidden"),
+                    state.explorer.theme_preferences.scroll_bar_visibility == "hidden",
+                    0x7123u);
+            }, SpaceToken::Xs);
+            layout::row([&] {
+                layout::weighted(1.0f, [] {});
+                settings_choice_button("Done", CloseSettings{}, true, 0x7131u);
+            }, SpaceToken::Xs);
+        }, SpaceToken::Md);
+    }, 460.0f, 72);
 }
 
 void finder_list(State const& state,
@@ -3208,8 +3432,7 @@ void view(State const& state) {
             layout::material_surface(
                 window_options,
                 [&] {
-                    finder_sidebar(state);
-                    layout::weighted(1.0f, [&] {
+                    auto main_content = [&] {
                         layout::material_surface(
                             main_content_shell_options(state.explorer),
                             [&] {
@@ -3226,9 +3449,16 @@ void view(State const& state) {
                                     finder_status_bar(state, snap);
                                 }
                             });
-                    });
+                    };
+                    if (!state.sidebar_right)
+                        finder_sidebar(state);
+                    layout::weighted(1.0f, main_content);
+                    if (state.sidebar_right)
+                        finder_sidebar(state);
                 });
         });
+    if (state.settings_open)
+        finder_settings_window(state);
 }
 
 } // namespace
@@ -3281,6 +3511,12 @@ int main(int argc, char** argv) {
         .native_backdrop_material =
             phenotype::native::NativeBackdropMaterial::Sidebar,
         .native_backdrop_opacity = 1.0f,
+        .keep_running_after_last_window_closed = true,
+        .install_standard_app_menu = true,
+        .application_name = "phenotype file explorer desktop",
+        .settings_menu_title = "Settings...",
+        .settings_menu_key_equivalent = ",",
+        .on_settings_menu = open_settings_from_app_menu,
     };
 
     return phenotype::native::run_app<State, Msg>(

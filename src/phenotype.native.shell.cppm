@@ -364,13 +364,18 @@ inline float scroll_line_height() {
 
 inline float normalize_scroll_delta(platform_api const* platform,
                                     double dy,
+                                    bool has_precise_scrolling_deltas,
                                     float line_height,
                                     float viewport_height) {
     if (dy == 0.0) return 0.0f;
     if (line_height <= 0.0f)
         line_height = 1.0f;
     float delta = platform && platform->input.scroll_delta_y
-        ? platform->input.scroll_delta_y(dy, line_height, viewport_height)
+        ? platform->input.scroll_delta_y(
+            dy,
+            has_precise_scrolling_deltas,
+            line_height,
+            viewport_height)
         : static_cast<float>(dy) * line_height * 3.0f;
     auto const& theme = ::phenotype::current_theme();
     float multiplier = theme.scroll_delta_multiplier;
@@ -381,13 +386,18 @@ inline float normalize_scroll_delta(platform_api const* platform,
 
 inline float normalize_scroll_delta_x(platform_api const* platform,
                                       double dx,
+                                      bool has_precise_scrolling_deltas,
                                       float line_height,
                                       float viewport_width) {
     if (dx == 0.0) return 0.0f;
     if (line_height <= 0.0f)
         line_height = 1.0f;
     float delta = platform && platform->input.scroll_delta_x
-        ? platform->input.scroll_delta_x(dx, line_height, viewport_width)
+        ? platform->input.scroll_delta_x(
+            dx,
+            has_precise_scrolling_deltas,
+            line_height,
+            viewport_width)
         : static_cast<float>(dx) * line_height * 3.0f;
     auto const& theme = ::phenotype::current_theme();
     float multiplier = theme.scroll_horizontal_delta_multiplier;
@@ -1079,11 +1089,14 @@ inline bool dispatch_scroll_in_view(float mx, float my, float delta_pixels) {
     return false;
 }
 
-inline bool dispatch_scroll(double dy, float viewport_height_value) {
+inline bool dispatch_scroll(double dy,
+                            bool has_precise_scrolling_deltas,
+                            float viewport_height_value) {
     auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
     float scroll_delta = normalize_scroll_delta(
         platform,
         dy,
+        has_precise_scrolling_deltas,
         scroll_line_height(),
         viewport_height_value);
     if (scroll_delta == 0.0f) {
@@ -1105,16 +1118,21 @@ inline bool dispatch_scroll(double dy, float viewport_height_value) {
 // viewport moves left), dy > 0 scrolls content down (viewport moves up)
 // — matching the existing scroll_y sign convention.
 inline bool dispatch_scroll_xy(double dx, double dy,
+                               bool has_precise_scrolling_deltas,
                                float viewport_width_value,
                                float viewport_height_value) {
     bool changed = false;
     if (dy != 0.0)
-        changed |= dispatch_scroll(dy, viewport_height_value);
+        changed |= dispatch_scroll(
+            dy,
+            has_precise_scrolling_deltas,
+            viewport_height_value);
     if (dx != 0.0) {
         float line_h = scroll_line_height();
         float dxp = normalize_scroll_delta_x(
             g_app_state.host ? g_app_state.host->platform : nullptr,
             dx,
+            has_precise_scrolling_deltas,
             line_h,
             viewport_width_value);
         if (dxp != 0.0f)
@@ -1468,14 +1486,27 @@ inline void service_host_tick(std::chrono::steady_clock::time_point& last_animat
     sync_platform_input();
 
     auto now = std::chrono::steady_clock::now();
+    auto now_ns = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            now.time_since_epoch()).count());
+    ::phenotype::detail::sample_frame_timeline(now_ns);
     bool const serviced_input_frame = service_deferred_input_frame(now);
     bool const needs_tick =
         ::phenotype::detail::g_app.has_active_animations
-        || ::phenotype::detail::g_app.scrollbar_animation_active;
+        || ::phenotype::detail::g_app.scrollbar_animation_active
+        || ::phenotype::detail::g_app.debug_panel_refresh_active;
     if (needs_tick) {
-        if (now - last_animation_tick >= std::chrono::milliseconds(16)) {
+        bool const debug_panel_only_refresh =
+            ::phenotype::detail::g_app.debug_panel_refresh_active
+            && !::phenotype::detail::g_app.has_active_animations
+            && !::phenotype::detail::g_app.scrollbar_animation_active;
+        auto const refresh_interval = debug_panel_only_refresh
+            ? std::chrono::milliseconds(100)
+            : std::chrono::milliseconds(16);
+        if (now - last_animation_tick >= refresh_interval) {
             if (!serviced_input_frame) {
-                if (::phenotype::detail::g_app.has_active_animations)
+                if (::phenotype::detail::g_app.has_active_animations
+                    || ::phenotype::detail::g_app.debug_panel_refresh_active)
                     ::phenotype::detail::trigger_rebuild();
                 else
                     repaint_current();

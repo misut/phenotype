@@ -6090,6 +6090,7 @@ inline std::optional<unsigned int> renderer_hit_test(float x, float y,
 }
 
 inline float windows_scroll_delta_y(double dy,
+                                    bool,
                                     float line_height,
                                     float viewport_height) {
     if (dy == 0.0) return 0.0f;
@@ -6170,6 +6171,7 @@ inline float windows_keyboard_repeat_interval_ms() {
 }
 
 inline float windows_scroll_delta_x(double dx,
+                                    bool,
                                     float line_height,
                                     float viewport_width) {
     if (dx == 0.0) return 0.0f;

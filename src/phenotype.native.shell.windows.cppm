@@ -581,6 +581,7 @@ inline LRESULT CALLBACK win32_shell_wndproc(HWND hwnd,
                 dispatch_scroll_xy(
                     dx,
                     dy,
+                    false,
                     static_cast<float>(state->surface->logical_width),
                     static_cast<float>(state->surface->logical_height));
                 return 0;

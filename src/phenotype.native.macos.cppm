@@ -918,7 +918,10 @@ inline MaterialQualityPolicy macos_material_quality_policy(
         policy.max_backdrop_pixels = capabilities.max_backdrop_pixels;
     if (capabilities.max_shader_sample_taps > 0)
         policy.max_sample_taps = capabilities.max_shader_sample_taps;
-    if ((::phenotype::detail::g_app.has_active_animations
+    bool const debug_panel_needs_backdrop =
+        ::phenotype::detail::g_app.debug_panel_open;
+    if (!debug_panel_needs_backdrop
+        && (::phenotype::detail::g_app.has_active_animations
          || ::phenotype::detail::g_app.has_active_input_motion)
         && !macos_env_flag_enabled(
             "PHENOTYPE_MATERIAL_DISABLE_ACTIVE_QUALITY_THROTTLE")) {
@@ -4828,6 +4831,32 @@ inline void macos_dialog_open_file(char const* filter_extensions,
 
 export namespace phenotype::native {
 
+namespace detail {
+
+inline float macos_shell_scroll_delta_y(
+        double scrolling_delta_y,
+        bool has_precise_scrolling_deltas,
+        float line_height,
+        float) {
+    return macos_normalize_scroll_delta(
+        scrolling_delta_y,
+        has_precise_scrolling_deltas,
+        line_height);
+}
+
+inline float macos_shell_scroll_delta_x(
+        double scrolling_delta_x,
+        bool has_precise_scrolling_deltas,
+        float line_height,
+        float) {
+    return macos_normalize_scroll_delta(
+        scrolling_delta_x,
+        has_precise_scrolling_deltas,
+        line_height);
+}
+
+} // namespace detail
+
 inline platform_api const& macos_platform() {
 #ifdef __APPLE__
     detail::install_macos_debug_providers();
@@ -4857,8 +4886,8 @@ inline platform_api const& macos_platform() {
             nullptr,
             nullptr,
             detail::input_dismiss_transient,
-            nullptr,
-            nullptr,
+            detail::macos_shell_scroll_delta_y,
+            detail::macos_shell_scroll_delta_x,
         },
         {
             detail::macos_debug_capabilities,

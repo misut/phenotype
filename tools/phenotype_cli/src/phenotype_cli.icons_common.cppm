@@ -137,6 +137,78 @@ auto icon_material_symbols_style_from_invocation(
     return icon_catalog::default_material_symbols_style();
 }
 
+struct MaterialSymbolAxisOptions {
+    bool fill = false;
+    int weight = 400;
+    int grade = 0;
+    int optical_size = 24;
+};
+
+auto parse_bool_axis(std::string_view value) -> std::optional<bool> {
+    if (value == "1" || value == "true" || value == "yes" || value == "on")
+        return true;
+    if (value == "0" || value == "false" || value == "no" || value == "off")
+        return false;
+    return std::nullopt;
+}
+
+auto parse_int_axis(std::string_view value, int min, int max)
+        -> std::optional<int> {
+    int out = 0;
+    auto const* first = value.data();
+    auto const* last = value.data() + value.size();
+    auto [ptr, ec] = std::from_chars(first, last, out);
+    if (ec != std::errc{} || ptr != last)
+        return std::nullopt;
+    if (out < min || out > max)
+        return std::nullopt;
+    return out;
+}
+
+auto icon_material_symbol_axes_from_invocation(
+        cppx::cli::Invocation const& invocation)
+        -> std::expected<MaterialSymbolAxisOptions, std::string> {
+    MaterialSymbolAxisOptions axes{};
+    if (auto value = invocation.value("fill")) {
+        auto fill = parse_bool_axis(*value);
+        if (!fill)
+            return std::unexpected{"invalid Material Symbols fill axis; expected 0, 1, false, or true"};
+        axes.fill = *fill;
+    }
+    if (auto value = invocation.value("weight")) {
+        auto parsed = parse_int_axis(*value, 100, 700);
+        if (!parsed)
+            return std::unexpected{"invalid Material Symbols weight axis; expected 100..700"};
+        axes.weight = *parsed;
+    }
+    if (auto value = invocation.value("grade")) {
+        auto parsed = parse_int_axis(*value, -25, 200);
+        if (!parsed)
+            return std::unexpected{"invalid Material Symbols grade axis; expected -25..200"};
+        axes.grade = *parsed;
+    }
+    if (auto value = invocation.value("optical-size")) {
+        auto parsed = parse_int_axis(*value, 20, 48);
+        if (!parsed)
+            return std::unexpected{"invalid Material Symbols optical size axis; expected 20..48"};
+        axes.optical_size = *parsed;
+    }
+    return axes;
+}
+
+auto icon_material_symbol_axes_json(MaterialSymbolAxisOptions axes,
+                                    icon_catalog::MaterialSymbolsStyle style)
+        -> std::string {
+    return std::format(
+        "{{\"style\":{},\"fill\":{},\"weight\":{},\"grade\":{},"
+        "\"optical_size\":{},\"rendering_backend\":\"svg_axis_mapping\"}}",
+        json_string(icon_catalog::material_symbols_style_name(style)),
+        axes.fill ? "true" : "false",
+        axes.weight,
+        axes.grade,
+        axes.optical_size);
+}
+
 auto parse_icon_presentation_role(std::string_view value)
         -> std::optional<icon_catalog::SymbolPresentationRole> {
     if (value == "toolbar")

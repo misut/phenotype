@@ -1,4 +1,5 @@
 module;
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <optional>
@@ -105,6 +106,14 @@ enum class MaterialSymbolsStyle {
     Outlined,
     Rounded,
     Sharp,
+};
+
+struct MaterialSymbolAxes {
+    bool fill = false;
+    int weight = 400;
+    int grade = 0;
+    int optical_size = 24;
+    MaterialSymbolsStyle style = MaterialSymbolsStyle::Outlined;
 };
 
 enum class SymbolStrokeCap {
@@ -365,6 +374,7 @@ struct SymbolPresentation {
     float hit_target_size = 36.0f;
     float optical_y_offset = 0.0f;
     float stroke_scale = 1.0f;
+    MaterialSymbolAxes material_axes{};
 };
 
 struct SymbolInteractionState {
@@ -379,6 +389,7 @@ struct SymbolButtonOptions {
     float width = 0.0f;
     float height = 0.0f;
     std::uint64_t token_salt = 0;
+    MaterialSymbolAxes material_axes{};
 };
 
 struct ControlButtonStyleOptions {
@@ -540,6 +551,30 @@ inline auto material_symbols_style_from_name(std::string_view name) noexcept
     if (!style.has_value())
         return std::nullopt;
     return from_catalog_material_symbols_style(*style);
+}
+
+inline MaterialSymbolAxes normalized_material_symbol_axes(
+        MaterialSymbolAxes axes) noexcept {
+    axes.weight = std::clamp(axes.weight, 100, 700);
+    axes.grade = std::clamp(axes.grade, -25, 200);
+    axes.optical_size = std::clamp(axes.optical_size, 20, 48);
+    return axes;
+}
+
+inline float material_symbol_axis_stroke_scale(
+        MaterialSymbolAxes axes) noexcept {
+    axes = normalized_material_symbol_axes(axes);
+    float scale = 1.0f;
+    scale += (static_cast<float>(axes.weight) - 400.0f) / 900.0f;
+    scale += static_cast<float>(axes.grade) / 500.0f;
+    scale += (static_cast<float>(axes.optical_size) - 24.0f) / 320.0f;
+    if (axes.fill)
+        scale += 0.22f;
+    return std::clamp(scale, 0.62f, 1.72f);
+}
+
+inline auto material_symbol_fill_name(bool fill) noexcept -> std::string_view {
+    return fill ? "filled" : "outline";
 }
 
 inline auto sidebar_symbol_at(unsigned int index) noexcept -> Symbol {
@@ -1017,6 +1052,24 @@ inline auto macos_light_tone_color(SymbolTone tone) noexcept -> Color {
     return {color.r, color.g, color.b, color.a};
 }
 
+inline auto theme_tone_color(Theme const& theme, SymbolTone tone) noexcept
+        -> Color {
+    switch (tone) {
+    case SymbolTone::Primary:
+    case SymbolTone::Selected:
+        return theme.foreground;
+    case SymbolTone::Secondary:
+        return theme.muted;
+    case SymbolTone::Accent:
+        return theme.accent;
+    case SymbolTone::Disabled:
+        return theme.state_disabled_fg;
+    case SymbolTone::Destructive:
+        return theme.semantic_error_border;
+    }
+    return theme.muted;
+}
+
 inline auto to_color(catalog::SymbolColor color) noexcept -> Color {
     return {color.r, color.g, color.b, color.a};
 }
@@ -1136,6 +1189,7 @@ inline auto presentation(Symbol symbol,
         hit_target_size(role),
         optical_y_offset(role),
         1.0f,
+        {},
     };
 }
 
@@ -1188,6 +1242,15 @@ inline auto macos_presentation(Symbol symbol,
         role,
         symbol_interaction_state(selected, state),
         symbol_interaction_phase(state));
+}
+
+inline auto with_material_symbol_axes(SymbolPresentation presentation,
+                                      MaterialSymbolAxes axes) noexcept
+        -> SymbolPresentation {
+    axes = normalized_material_symbol_axes(axes);
+    presentation.material_axes = axes;
+    presentation.stroke_scale *= material_symbol_axis_stroke_scale(axes);
+    return presentation;
 }
 
 inline auto macos_presentation(Symbol symbol,
@@ -1256,6 +1319,7 @@ inline auto macos_control_button_style(
     style.min_hit_width = activation_hit_target_size(options.role);
     style.min_hit_height = activation_hit_target_size(options.role);
     style.disabled = options.disabled;
+    style.focus_ring = false;
     return style;
 }
 
@@ -1328,6 +1392,25 @@ inline auto document(SymbolDocumentCache const& cache,
 
 void paint_symbol(Painter& painter,
                   Symbol symbol,
+                  MaterialSymbolsStyle style,
+                  float x,
+                  float y,
+                  float size,
+                  Color color,
+                  float stroke_scale) {
+    auto doc = svg::parse(source(symbol, style));
+    svg::paint(
+        painter,
+        doc,
+        x,
+        y,
+        size,
+        size,
+        svg::RenderOptions{color, true, stroke_scale});
+}
+
+void paint_symbol(Painter& painter,
+                  Symbol symbol,
                   float x,
                   float y,
                   float size,
@@ -1392,6 +1475,7 @@ void paint_symbol(Painter& painter,
     paint_symbol(
         painter,
         style.symbol,
+        style.material_axes.style,
         x,
         y + style.optical_y_offset,
         style.point_size,
@@ -1404,6 +1488,10 @@ void paint_symbol(Painter& painter,
                   SymbolPresentation const& style,
                   float x,
                   float y) {
+    if (style.material_axes.style != MaterialSymbolsStyle::Outlined) {
+        paint_symbol(painter, style, x, y);
+        return;
+    }
     paint_symbol(
         painter,
         cache,
@@ -1493,17 +1581,23 @@ inline auto paint_token(SymbolPresentation const& style) noexcept
     h ^= static_cast<std::uint64_t>(style.tone) << 16;
     h ^= static_cast<std::uint64_t>(style.scale) << 24;
     h ^= static_cast<std::uint64_t>(style.rendering) << 32;
+    h ^= static_cast<std::uint64_t>(style.material_axes.fill ? 1u : 0u) << 40;
+    h ^= static_cast<std::uint64_t>(style.material_axes.weight & 0x3ff) << 41;
+    h ^= static_cast<std::uint64_t>((style.material_axes.grade + 256) & 0x1ff) << 51;
+    h ^= static_cast<std::uint64_t>(style.material_axes.optical_size & 0x3f) << 56;
+    h ^= static_cast<std::uint64_t>(style.material_axes.style) << 62;
     return h == 0 ? 1 : h;
 }
 
 inline auto symbol_button_paint_token(Symbol symbol,
                                       SymbolButtonOptions options) noexcept
         -> std::uint64_t {
-    auto const presentation = macos_presentation(
+    auto const presentation = with_material_symbol_axes(macos_presentation(
         symbol,
         options.role,
         SymbolInteractionState{options.selected, !options.disabled},
-        SymbolInteractionPhase::Normal);
+        SymbolInteractionPhase::Normal),
+        options.material_axes);
     std::uint64_t h = paint_token(presentation);
     auto mix = [&](std::uint64_t v) {
         h ^= v;

@@ -23,6 +23,34 @@ auto material_symbols_style_option() -> cppx::cli::OptionSpec {
                 "Material Symbols (new) style. Defaults to outlined."};
 }
 
+auto material_symbols_fill_option() -> cppx::cli::OptionSpec {
+    return {.name = "fill",
+            .arity = cppx::cli::OptionArity::one,
+            .value_name = "0|1|false|true",
+            .description = "Material Symbols FILL axis. Defaults to 0."};
+}
+
+auto material_symbols_weight_option() -> cppx::cli::OptionSpec {
+    return {.name = "weight",
+            .arity = cppx::cli::OptionArity::one,
+            .value_name = "100..700",
+            .description = "Material Symbols wght axis. Defaults to 400."};
+}
+
+auto material_symbols_grade_option() -> cppx::cli::OptionSpec {
+    return {.name = "grade",
+            .arity = cppx::cli::OptionArity::one,
+            .value_name = "-25..200",
+            .description = "Material Symbols GRAD axis. Defaults to 0."};
+}
+
+auto material_symbols_optical_size_option() -> cppx::cli::OptionSpec {
+    return {.name = "optical-size",
+            .arity = cppx::cli::OptionArity::one,
+            .value_name = "20..48",
+            .description = "Material Symbols opsz axis. Defaults to 24."};
+}
+
 auto android_common_options(std::vector<cppx::cli::OptionSpec> extra = {})
     -> std::vector<cppx::cli::OptionSpec> {
     auto options = std::vector<cppx::cli::OptionSpec>{
@@ -881,6 +909,11 @@ auto spec() -> cppx::cli::CommandSpec {
                             {.name = "disabled",
                              .arity = cppx::cli::OptionArity::none,
                              .description = "Resolve the disabled-state recipe"},
+                            material_symbols_style_option(),
+                            material_symbols_fill_option(),
+                            material_symbols_weight_option(),
+                            material_symbols_grade_option(),
+                            material_symbols_optical_size_option(),
                         },
                         .positional_name = "name-or-reference",
                         .positional_description =
@@ -915,6 +948,10 @@ auto spec() -> cppx::cli::CommandSpec {
                              .arity = cppx::cli::OptionArity::none,
                              .description = "Resolve the disabled-state recipe"},
                             material_symbols_style_option(),
+                            material_symbols_fill_option(),
+                            material_symbols_weight_option(),
+                            material_symbols_grade_option(),
+                            material_symbols_optical_size_option(),
                             {.name = "output",
                              .arity = cppx::cli::OptionArity::one,
                              .value_name = "path",

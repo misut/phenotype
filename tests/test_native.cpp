@@ -780,9 +780,9 @@ static void test_default_scroll_delta_fallback() {
     constexpr float viewport_height = 320.0f;
 
     float full = phenotype::native::detail::normalize_scroll_delta(
-        nullptr, 1.0, line_height, viewport_height);
+        nullptr, 1.0, false, line_height, viewport_height);
     float half = phenotype::native::detail::normalize_scroll_delta(
-        nullptr, 0.5, line_height, viewport_height);
+        nullptr, 0.5, false, line_height, viewport_height);
 
     assert(std::fabs(full - line_height * 3.0f) < 0.001f);
     assert(std::fabs(half - line_height * 1.5f) < 0.001f);
@@ -1483,8 +1483,9 @@ static void test_shell_key_commands_respect_input_focus_policy() {
     auto panel_material = debug_panel_surface_material();
     assert(panel_material.has_value());
     assert(panel_material->blur_radius >= 64.0f);
-    assert(panel_material->opacity >= 0.9f);
-    assert(panel_material->tint.a >= 220);
+    assert(panel_material->opacity >= 0.75f);
+    assert(panel_material->opacity <= 0.9f);
+    assert(panel_material->tint.a >= 160);
     auto panel_callback = debug_panel_surface_callback();
     assert(panel_callback.has_value());
     assert(*panel_callback != phenotype::native::invalid_callback_id);
@@ -1933,7 +1934,10 @@ static void test_shell_scroll_and_escape_observability() {
 
     assert(phenotype::detail::get_total_height() > harness.host.canvas_height());
 
-    assert(phenotype::native::detail::dispatch_scroll(-1.0, harness.host.canvas_height()));
+    assert(phenotype::native::detail::dispatch_scroll(
+        -1.0,
+        false,
+        harness.host.canvas_height()));
     float after_wheel = phenotype::detail::get_scroll_y();
     assert(after_wheel > 0.0f);
     assert(has_metric("scroll", "wheel", "handled"));
