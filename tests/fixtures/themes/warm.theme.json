@@ -234,5 +234,6 @@
   "line_height_ratio": 1.6,
   "scroll_delta_multiplier": 1,
   "scroll_horizontal_delta_multiplier": 1,
+  "scroll_bar_visibility": "auto",
   "motion_duration_multiplier": 1
 }

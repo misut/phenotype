@@ -54,7 +54,11 @@ int main() {
     assert(theme::glass_surface_roles().size() == 7);
 
     auto base = theme::theme_preference_base(contract);
+    assert(base.scroll_bar_visibility == "auto");
+    assert(theme::normalized_scroll_bar_visibility("visible") == "always");
+    assert(theme::normalized_scroll_bar_visibility("off") == "hidden");
     auto default_resolved = theme::resolve_theme_preferences(base, {});
+    assert(default_resolved.effective_scroll_bar_visibility == "auto");
     assert(!default_resolved.used_system_font_scale);
     assert(!default_resolved.used_system_line_height);
     assert(!default_resolved.used_system_scroll_metrics);
@@ -108,6 +112,7 @@ int main() {
     overrides.font_scale = 1.2f;
     overrides.scroll_delta_multiplier = 1.5f;
     overrides.scroll_horizontal_delta_multiplier = 2.0f;
+    overrides.scroll_bar_visibility = "hidden";
 
     auto resolved = theme::resolve_theme_preferences(
         base,
@@ -125,6 +130,7 @@ int main() {
     assert(resolved.used_system_line_height);
     assert(resolved.used_system_scroll_metrics);
     assert(resolved.used_user_scroll_scale);
+    assert(resolved.used_user_scroll_bar_visibility);
     assert(resolved.used_system_accent_color);
     assert(resolved.used_system_reduce_motion);
     assert(!resolved.used_user_motion_scale);
@@ -137,6 +143,7 @@ int main() {
     assert(std::fabs(resolved.effective_scroll_horizontal_delta_multiplier
                      - 1.5f)
            < 0.001f);
+    assert(resolved.effective_scroll_bar_visibility == "hidden");
     assert(std::fabs(resolved.effective_motion_duration_multiplier - 0.0f)
            < 0.001f);
 

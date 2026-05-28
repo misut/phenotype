@@ -504,6 +504,10 @@ struct Theme {
     float line_height_ratio  = 1.6f;
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
+    // Overlay scrollbar visibility: "auto" fades in during scroll,
+    // "always" keeps the thumb visible for overflowing viewports, and
+    // "hidden" suppresses framework-drawn indicators.
+    std::string scroll_bar_visibility = "auto";
     float motion_duration_multiplier = 1.0f;
 
     // Layout
@@ -668,6 +672,7 @@ inline auto theme_contract_preference_base(Theme const& theme)
         .scroll_delta_multiplier = theme.scroll_delta_multiplier,
         .scroll_horizontal_delta_multiplier =
             theme.scroll_horizontal_delta_multiplier,
+        .scroll_bar_visibility = theme.scroll_bar_visibility,
         .motion_duration_multiplier = theme.motion_duration_multiplier,
     };
 }
@@ -684,6 +689,7 @@ struct ResolvedThemePreferences {
     float effective_line_height_ratio = 1.6f;
     float effective_scroll_delta_multiplier = 1.0f;
     float effective_scroll_horizontal_delta_multiplier = 1.0f;
+    std::string effective_scroll_bar_visibility = "auto";
     float effective_motion_duration_multiplier = 1.0f;
     bool used_user_font_family = false;
     bool used_system_font_family = false;
@@ -697,6 +703,7 @@ struct ResolvedThemePreferences {
     bool used_user_line_height = false;
     bool used_system_scroll_metrics = false;
     bool used_user_scroll_scale = false;
+    bool used_user_scroll_bar_visibility = false;
     bool used_system_accent_color = false;
     bool used_system_reduce_motion = false;
     bool used_user_motion_scale = false;
@@ -726,6 +733,11 @@ inline bool theme_color_scheme_is_dark(std::string_view scheme) noexcept {
 
 inline bool theme_color_scheme_is_light(std::string_view scheme) noexcept {
     return theme_contract::theme_color_scheme_is_light(scheme);
+}
+
+inline std::string normalized_scroll_bar_visibility(
+        std::string_view visibility) {
+    return theme_contract::normalized_scroll_bar_visibility(visibility);
 }
 
 inline Theme apply_dark_color_scheme(Theme theme) {
@@ -960,6 +972,9 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
         1.0f,
         0.25f,
         4.0f);
+    theme.scroll_bar_visibility =
+        normalized_scroll_bar_visibility(
+            contract_resolution.effective_scroll_bar_visibility);
     if (overrides.apply_system_accent_color
         && system.accent_color_available
         && system.accent_color.a > 0) {
@@ -989,6 +1004,8 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
         theme.scroll_delta_multiplier;
     resolved.effective_scroll_horizontal_delta_multiplier =
         theme.scroll_horizontal_delta_multiplier;
+    resolved.effective_scroll_bar_visibility =
+        theme.scroll_bar_visibility;
     resolved.effective_motion_duration_multiplier =
         theme.motion_duration_multiplier;
     resolved.used_user_font_family =
@@ -1015,6 +1032,8 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
         contract_resolution.used_system_scroll_metrics;
     resolved.used_user_scroll_scale =
         contract_resolution.used_user_scroll_scale;
+    resolved.used_user_scroll_bar_visibility =
+        contract_resolution.used_user_scroll_bar_visibility;
     resolved.used_system_accent_color =
         contract_resolution.used_system_accent_color;
     resolved.used_system_reduce_motion =
@@ -1102,6 +1121,7 @@ inline bool theme_matches_default_glass_contract(Theme const& theme) {
         && theme.line_height_ratio == contract.typography.line_height_ratio
         && theme.scroll_delta_multiplier == 1.0f
         && theme.scroll_horizontal_delta_multiplier == 1.0f
+        && theme.scroll_bar_visibility == "auto"
         && theme.motion_duration_multiplier == 1.0f
         && theme.state_focus_ring == theme.accent;
 }
@@ -2014,6 +2034,8 @@ public:
 struct ScrollState {
     float offset_x = 0;
     float offset_y = 0;
+    float scrollbar_last_offset_y = -1.0f;
+    std::uint64_t scrollbar_active_since_ns = 0;
 };
 
 struct LayoutNode {

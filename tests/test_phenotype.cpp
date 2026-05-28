@@ -371,6 +371,7 @@ void test_system_theme_preferences_are_pure_overlays() {
     overrides.font_scale = 1.2f;
     overrides.scroll_delta_multiplier = 1.5f;
     overrides.scroll_horizontal_delta_multiplier = 2.0f;
+    overrides.scroll_bar_visibility = "always";
 
     auto applied = apply_system_theme_preferences(theme, system, overrides);
     auto resolved = resolve_system_theme_preferences(
@@ -400,12 +401,15 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert(resolved.used_system_line_height);
     assert(resolved.used_system_scroll_metrics);
     assert(resolved.used_user_scroll_scale);
+    assert(resolved.used_user_scroll_bar_visibility);
     assert(resolved.used_system_reduce_motion);
     assert(!resolved.used_user_motion_scale);
     assert(pure_resolved.used_system_scroll_metrics
            == resolved.used_system_scroll_metrics);
     assert(pure_resolved.used_user_scroll_scale
            == resolved.used_user_scroll_scale);
+    assert(pure_resolved.used_user_scroll_bar_visibility
+           == resolved.used_user_scroll_bar_visibility);
     assert(pure_resolved.used_system_reduce_motion
            == resolved.used_system_reduce_motion);
     assert(std::fabs(pure_resolved.effective_body_font_size
@@ -421,6 +425,7 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert(std::fabs(applied.scroll_delta_multiplier - 1.875f) < 0.001f);
     assert(std::fabs(applied.scroll_horizontal_delta_multiplier - 1.5f)
            < 0.001f);
+    assert(applied.scroll_bar_visibility == "always");
     assert(std::fabs(applied.motion_duration_multiplier - 0.0f) < 0.001f);
     assert(applied.accent == theme.accent);
 
@@ -447,6 +452,7 @@ void test_system_theme_preferences_are_pure_overlays() {
            < 0.001f);
     assert(std::fabs(fallback_resolved.theme.scroll_delta_multiplier - 1.0f)
            < 0.001f);
+    assert(fallback_resolved.theme.scroll_bar_visibility == "auto");
     assert(std::fabs(fallback_resolved.theme.motion_duration_multiplier - 1.0f)
            < 0.001f);
 
@@ -468,6 +474,7 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert(std::fabs(applied.scroll_delta_multiplier - 1.5f) < 0.001f);
     assert(std::fabs(applied.scroll_horizontal_delta_multiplier - 3.0f)
            < 0.001f);
+    assert(applied.scroll_bar_visibility == "always");
     overrides.apply_system_scroll_metrics = true;
 
     system.body_font_size = 13.0f;
@@ -1618,6 +1625,7 @@ void test_row_cross_align_center_default() {
 void test_theme_json_roundtrip() {
     Theme original{};
     original.accent = {255, 0, 0, 255};
+    original.scroll_bar_visibility = "always";
 
     auto json_str = theme_to_json(original);
     auto parsed = theme_from_json(json_str);
@@ -1632,6 +1640,7 @@ void test_theme_json_roundtrip() {
     assert(parsed->default_font_family == original.default_font_family);
     assert(parsed->body_font_size == original.body_font_size);
     assert(parsed->line_height_ratio == original.line_height_ratio);
+    assert(parsed->scroll_bar_visibility == "always");
     assert(parsed->max_content_width == original.max_content_width);
 
     std::puts("PASS: theme JSON roundtrip");
@@ -1659,6 +1668,7 @@ void test_theme_json_partial_keeps_defaults() {
     assert(parsed->body_font_size    == defaults.body_font_size);
     assert(parsed->heading_font_size == defaults.heading_font_size);
     assert(parsed->line_height_ratio == defaults.line_height_ratio);
+    assert(parsed->scroll_bar_visibility == defaults.scroll_bar_visibility);
     assert(parsed->max_content_width == defaults.max_content_width);
 
     // An empty overlay yields the unmodified Theme defaults.

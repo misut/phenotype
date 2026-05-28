@@ -362,6 +362,9 @@ struct AppState {
     // input events. The runner does not read it — it's purely a
     // "wake me up next frame" signal for the host loop.
     bool has_active_animations = false;
+    bool scrollbar_animation_active = false;
+    float root_scrollbar_last_scroll_y = -1.0f;
+    std::uint64_t root_scrollbar_active_since_ns = 0;
     // Set temporarily while the shell is painting a pointer/scroll-driven input
     // frame. Native material backends use it to prefer motion-safe quality
     // during direct manipulation without turning paint-only scroll into a full

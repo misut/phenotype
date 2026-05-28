@@ -1469,10 +1469,17 @@ inline void service_host_tick(std::chrono::steady_clock::time_point& last_animat
 
     auto now = std::chrono::steady_clock::now();
     bool const serviced_input_frame = service_deferred_input_frame(now);
-    if (::phenotype::detail::g_app.has_active_animations) {
+    bool const needs_tick =
+        ::phenotype::detail::g_app.has_active_animations
+        || ::phenotype::detail::g_app.scrollbar_animation_active;
+    if (needs_tick) {
         if (now - last_animation_tick >= std::chrono::milliseconds(16)) {
-            if (!serviced_input_frame)
-                ::phenotype::detail::trigger_rebuild();
+            if (!serviced_input_frame) {
+                if (::phenotype::detail::g_app.has_active_animations)
+                    ::phenotype::detail::trigger_rebuild();
+                else
+                    repaint_current();
+            }
             last_animation_tick = now;
         }
     }

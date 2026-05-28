@@ -1866,6 +1866,15 @@ def check_file_explorer_preferences_contract(
             f"{path}.effective_theme",
             likely_layer="file-explorer-preferences",
             hint="The effective theme must name the resolved appearance scheme.")
+        check_string_field(
+            report,
+            effective,
+            "scroll_bar_visibility",
+            f"{path}.effective_theme",
+            likely_layer="file-explorer-preferences",
+            hint=(
+                "The effective theme must expose whether overlay scrollbars "
+                "are auto, always visible, or hidden."))
         for key in (
             "body_font_size",
             "heading_font_size",
@@ -1933,6 +1942,7 @@ def check_file_explorer_preferences_contract(
             "used_user_line_height",
             "used_system_scroll_metrics",
             "used_user_scroll_scale",
+            "used_user_scroll_bar_visibility",
             "used_system_accent_color",
             "used_system_reduce_motion",
             "used_user_motion_scale",

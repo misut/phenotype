@@ -836,6 +836,195 @@ inline float normalized_pointer_axis(float pointer,
     return std::clamp((pointer - origin) / extent, 0.0f, 1.0f);
 }
 
+inline constexpr float scroll_bar_fade_in_ms = 120.0f;
+inline constexpr float scroll_bar_hold_ms = 620.0f;
+inline constexpr float scroll_bar_fade_out_ms = 520.0f;
+
+inline float clamp_unit(float value) noexcept {
+    if (value < 0.0f) return 0.0f;
+    if (value > 1.0f) return 1.0f;
+    return value;
+}
+
+inline unsigned char scaled_alpha(float max_alpha, float factor) noexcept {
+    auto value = max_alpha * clamp_unit(factor);
+    if (value < 0.0f) value = 0.0f;
+    if (value > 255.0f) value = 255.0f;
+    return static_cast<unsigned char>(value + 0.5f);
+}
+
+inline float scroll_bar_auto_alpha(std::uint64_t now_ns,
+                                   std::uint64_t active_since_ns) noexcept {
+    if (active_since_ns == 0 || now_ns < active_since_ns)
+        return 0.0f;
+
+    float const elapsed_ms =
+        static_cast<float>(now_ns - active_since_ns) / 1'000'000.0f;
+    if (elapsed_ms < scroll_bar_fade_in_ms)
+        return std::max(0.18f, elapsed_ms / scroll_bar_fade_in_ms);
+    if (elapsed_ms < scroll_bar_fade_in_ms + scroll_bar_hold_ms)
+        return 1.0f;
+
+    float const fade_elapsed =
+        elapsed_ms - scroll_bar_fade_in_ms - scroll_bar_hold_ms;
+    if (fade_elapsed < scroll_bar_fade_out_ms)
+        return 1.0f - fade_elapsed / scroll_bar_fade_out_ms;
+    return 0.0f;
+}
+
+inline bool scroll_bar_auto_animating(std::uint64_t now_ns,
+                                      std::uint64_t active_since_ns) noexcept {
+    if (active_since_ns == 0 || now_ns < active_since_ns)
+        return false;
+    float const elapsed_ms =
+        static_cast<float>(now_ns - active_since_ns) / 1'000'000.0f;
+    return elapsed_ms < scroll_bar_fade_in_ms
+        + scroll_bar_hold_ms
+        + scroll_bar_fade_out_ms;
+}
+
+inline void update_scroll_bar_activity(float offset,
+                                       float& last_offset,
+                                       std::uint64_t& active_since_ns,
+                                       std::uint64_t now_ns) noexcept {
+    if (last_offset >= 0.0f && offset != last_offset)
+        active_since_ns = now_ns;
+    last_offset = offset;
+}
+
+inline float scroll_bar_alpha_factor(std::string const& visibility,
+                                     std::uint64_t now_ns,
+                                     std::uint64_t active_since_ns) {
+    auto mode = normalized_scroll_bar_visibility(visibility);
+    if (mode == "hidden")
+        return 0.0f;
+    if (mode == "always")
+        return 1.0f;
+    if (scroll_bar_auto_animating(now_ns, active_since_ns))
+        g_app.scrollbar_animation_active = true;
+    return scroll_bar_auto_alpha(now_ns, active_since_ns);
+}
+
+template <render_backend R>
+void emit_vertical_overlay_scroll_bar(R& r,
+                                      float viewport_x,
+                                      float viewport_y,
+                                      float viewport_w,
+                                      float viewport_h,
+                                      float content_h,
+                                      float offset_y,
+                                      float alpha_factor,
+                                      bool persistent) {
+    if (alpha_factor <= 0.01f || viewport_w <= 0.0f || viewport_h <= 0.0f)
+        return;
+    if (content_h <= viewport_h + 0.5f)
+        return;
+
+    float const margin = 4.0f;
+    float const thickness = persistent ? 7.0f : 6.0f;
+    float const track_h = std::max(0.0f, viewport_h - margin * 2.0f);
+    if (track_h <= 0.0f || viewport_w <= thickness + margin * 2.0f)
+        return;
+
+    float const max_offset = std::max(0.0f, content_h - viewport_h);
+    if (offset_y < 0.0f) offset_y = 0.0f;
+    if (offset_y > max_offset) offset_y = max_offset;
+
+    float thumb_h = track_h * (viewport_h / content_h);
+    thumb_h = std::max(36.0f, thumb_h);
+    if (thumb_h > track_h)
+        thumb_h = track_h;
+
+    float const travel = std::max(0.0f, track_h - thumb_h);
+    float const progress = max_offset > 0.0f ? offset_y / max_offset : 0.0f;
+    float const thumb_x = viewport_x + viewport_w - margin - thickness;
+    float const thumb_y = viewport_y + margin + travel * progress;
+    float const radius = thickness * 0.5f;
+
+    if (persistent) {
+        Color track = g_app.theme.foreground;
+        track.a = scaled_alpha(18.0f, alpha_factor);
+        emit_round_rect(
+            r,
+            thumb_x,
+            viewport_y + margin,
+            thickness,
+            track_h,
+            radius,
+            track);
+    }
+
+    Color thumb = g_app.theme.foreground;
+    thumb.a = scaled_alpha(124.0f, alpha_factor);
+    emit_round_rect(r, thumb_x, thumb_y, thickness, thumb_h, radius, thumb);
+}
+
+template <render_backend R>
+void paint_scroll_view_scroll_bar(R& r,
+                                  LayoutNode& node,
+                                  float viewport_x,
+                                  float viewport_y,
+                                  float offset_y) {
+    if (!node.scroll_state)
+        return;
+    auto& state = *node.scroll_state;
+    auto const now = metrics::detail::now_ns();
+    update_scroll_bar_activity(
+        offset_y,
+        state.scrollbar_last_offset_y,
+        state.scrollbar_active_since_ns,
+        now);
+
+    auto const mode = normalized_scroll_bar_visibility(
+        g_app.theme.scroll_bar_visibility);
+    float const alpha = scroll_bar_alpha_factor(
+        g_app.theme.scroll_bar_visibility,
+        now,
+        state.scrollbar_active_since_ns);
+    emit_vertical_overlay_scroll_bar(
+        r,
+        viewport_x,
+        viewport_y,
+        node.width,
+        node.height,
+        node.content_height,
+        offset_y,
+        alpha,
+        mode == "always");
+}
+
+template <render_backend R>
+void paint_root_vertical_scroll_bar(R& r,
+                                    float viewport_width,
+                                    float viewport_height) {
+    auto* root = g_app.arena.get(g_app.root);
+    if (!root)
+        return;
+    auto const now = metrics::detail::now_ns();
+    update_scroll_bar_activity(
+        g_app.scroll_y,
+        g_app.root_scrollbar_last_scroll_y,
+        g_app.root_scrollbar_active_since_ns,
+        now);
+
+    auto const mode = normalized_scroll_bar_visibility(
+        g_app.theme.scroll_bar_visibility);
+    float const alpha = scroll_bar_alpha_factor(
+        g_app.theme.scroll_bar_visibility,
+        now,
+        g_app.root_scrollbar_active_since_ns);
+    emit_vertical_overlay_scroll_bar(
+        r,
+        0.0f,
+        0.0f,
+        viewport_width,
+        viewport_height,
+        root->height,
+        g_app.scroll_y,
+        alpha,
+        mode == "always");
+}
+
 inline MaterialInteractionDescriptor resolve_material_interaction(
         NodeHandle node_h,
         LayoutNode const& node,
@@ -1626,6 +1815,15 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         }
     }
 
+    if (node.is_scroll_container && node.scroll_state) {
+        paint_scroll_view_scroll_bar(
+            r,
+            node,
+            ax - scroll_x,
+            ay - scroll_y,
+            node.scroll_offset_y);
+    }
+
     if (emit_scroll_scissor) {
         emit_scissor_reset(r);
         --g_app.paint_scissor_depth;
@@ -1672,6 +1870,9 @@ inline void wasi_reset_paint_scissor_boundary() {
 inline void wasi_paint_node(NodeHandle h, float ox, float oy,
                             float sx, float sy, float vw, float vh) {
     paint_node(g_wasi, g_wasi, h, ox, oy, sx, sy, vw, vh);
+}
+inline void wasi_paint_root_vertical_scroll_bar(float vw, float vh) {
+    paint_root_vertical_scroll_bar(g_wasi, vw, vh);
 }
 }
 #endif

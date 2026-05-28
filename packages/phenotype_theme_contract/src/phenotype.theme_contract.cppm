@@ -1,5 +1,6 @@
 module;
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <string>
 #include <string_view>
@@ -72,6 +73,7 @@ struct ThemePreferenceBase {
     float line_height_ratio = 1.6f;
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
+    std::string scroll_bar_visibility = "auto";
     float motion_duration_multiplier = 1.0f;
 };
 
@@ -107,6 +109,7 @@ struct ThemePreferenceOverrides {
     float line_height_ratio = 0.0f;
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
+    std::string scroll_bar_visibility;
     bool prefer_system_font_family = false;
     bool prefer_system_color_scheme = false;
     bool apply_system_font_metrics = true;
@@ -128,6 +131,7 @@ struct ResolvedThemePreferences {
     float effective_line_height_ratio = 1.6f;
     float effective_scroll_delta_multiplier = 1.0f;
     float effective_scroll_horizontal_delta_multiplier = 1.0f;
+    std::string effective_scroll_bar_visibility = "auto";
     float effective_motion_duration_multiplier = 1.0f;
     bool used_user_font_family = false;
     bool used_system_font_family = false;
@@ -141,6 +145,7 @@ struct ResolvedThemePreferences {
     bool used_user_line_height = false;
     bool used_system_scroll_metrics = false;
     bool used_user_scroll_scale = false;
+    bool used_user_scroll_bar_visibility = false;
     bool used_system_accent_color = false;
     bool used_system_reduce_motion = false;
     bool used_user_motion_scale = false;
@@ -199,6 +204,7 @@ inline auto theme_preference_base(DefaultGlassThemeContract const& contract)
         .line_height_ratio = contract.typography.line_height_ratio,
         .scroll_delta_multiplier = 1.0f,
         .scroll_horizontal_delta_multiplier = 1.0f,
+        .scroll_bar_visibility = "auto",
         .motion_duration_multiplier = 1.0f,
     };
 }
@@ -235,6 +241,22 @@ inline bool theme_color_scheme_is_light(std::string_view scheme) noexcept {
     return scheme == "light" || scheme == "high-contrast-light";
 }
 
+inline std::string normalized_scroll_bar_visibility(
+        std::string_view visibility) {
+    std::string value{visibility};
+    for (auto& ch : value)
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    if (value == "hidden" || value == "none" || value == "off"
+        || value == "false" || value == "0") {
+        return "hidden";
+    }
+    if (value == "always" || value == "visible" || value == "on"
+        || value == "true" || value == "1") {
+        return "always";
+    }
+    return "auto";
+}
+
 inline auto resolve_theme_preferences(
         ThemePreferenceBase base,
         SystemThemePreferenceSnapshot const& system,
@@ -251,6 +273,8 @@ inline auto resolve_theme_preferences(
         base.scroll_delta_multiplier;
     resolved.effective_scroll_horizontal_delta_multiplier =
         base.scroll_horizontal_delta_multiplier;
+    resolved.effective_scroll_bar_visibility =
+        normalized_scroll_bar_visibility(base.scroll_bar_visibility);
     resolved.effective_motion_duration_multiplier =
         base.motion_duration_multiplier;
 
@@ -438,6 +462,11 @@ inline auto resolve_theme_preferences(
             base.scroll_horizontal_delta_multiplier,
             0.25f,
             4.0f);
+    if (!overrides.scroll_bar_visibility.empty()) {
+        resolved.effective_scroll_bar_visibility =
+            normalized_scroll_bar_visibility(overrides.scroll_bar_visibility);
+        resolved.used_user_scroll_bar_visibility = true;
+    }
     resolved.used_system_accent_color =
         overrides.apply_system_accent_color
         && system.accent_color_available

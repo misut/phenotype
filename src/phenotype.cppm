@@ -2278,7 +2278,8 @@ inline std::uint64_t compute_paint_invalidation_mask(AppState const& app) noexce
     }
     inv |= paint_invalidation_bit(app.focused_id);
     inv |= paint_invalidation_bit(app.pressed_id);
-    if (app.has_active_animations || pointer_snapshot_changed(app)) {
+    if (app.has_active_animations || app.scrollbar_animation_active
+        || pointer_snapshot_changed(app)) {
         inv = ~static_cast<std::uint64_t>(0);
     }
     return inv;
@@ -2428,10 +2429,12 @@ void run(Host& host, View view, Update update) {
         for (auto overlay_h : app.overlays)
             detail::collect_focusable_ids(overlay_h);
         app.paint_scissor_depth = 0;
+        app.scrollbar_animation_active = false;
         emit_clear(host, app.theme.background);
         detail::paint_node(host, host, root_h, 0, 0,
                            app.scroll_x, app.scroll_y, cw, vh);
         detail::reset_paint_scissor_boundary(host);
+        detail::paint_root_vertical_scroll_bar(host, cw, vh);
         // Overlays paint after the main tree with no ambient scroll
         // applied — they sit on top of everything and stay fixed when
         // the document scrolls underneath.
@@ -2560,10 +2563,12 @@ void run(View view, Update update) {
         for (auto overlay_h : app.overlays)
             detail::collect_focusable_ids(overlay_h);
         app.paint_scissor_depth = 0;
+        app.scrollbar_animation_active = false;
         detail::wasi_emit_clear(app.theme.background);
         detail::wasi_paint_node(root_h, 0, 0,
                                 app.scroll_x, app.scroll_y, cw, vh);
         detail::wasi_reset_paint_scissor_boundary();
+        detail::wasi_paint_root_vertical_scroll_bar(cw, vh);
         // Overlays paint on top of the main tree with no ambient
         // scroll — see native runner for the same logic.
         for (auto overlay_h : app.overlays) {
@@ -6458,12 +6463,14 @@ void repaint(Host& host, float scroll_x, float scroll_y) {
         collect_focusable_ids(overlay_h);
     app.paint_invalidation_mask = compute_paint_invalidation_mask(app);
     app.paint_scissor_depth = 0;
+    app.scrollbar_animation_active = false;
     emit_clear(host, app.theme.background);
     float vh = host.canvas_height();
     app.debug_viewport_width = cw;
     app.debug_viewport_height = vh;
     paint_node(host, host, app.root, 0, 0, scroll_x, scroll_y, cw, vh);
     reset_paint_scissor_boundary(host);
+    paint_root_vertical_scroll_bar(host, cw, vh);
     for (auto overlay_h : app.overlays)
         paint_node(host, host, overlay_h, 0, 0, 0.0f, 0.0f, cw, vh);
     auto const t2 = metrics::detail::now_ns();
@@ -6503,12 +6510,14 @@ inline void repaint(float scroll_x, float scroll_y) {
         collect_focusable_ids(overlay_h);
     app.paint_invalidation_mask = compute_paint_invalidation_mask(app);
     app.paint_scissor_depth = 0;
+    app.scrollbar_animation_active = false;
     wasi_emit_clear(app.theme.background);
     float vh = phenotype_get_canvas_height();
     app.debug_viewport_width = cw;
     app.debug_viewport_height = vh;
     wasi_paint_node(app.root, 0, 0, scroll_x, scroll_y, cw, vh);
     wasi_reset_paint_scissor_boundary();
+    wasi_paint_root_vertical_scroll_bar(cw, vh);
     for (auto overlay_h : app.overlays)
         wasi_paint_node(overlay_h, 0, 0, 0.0f, 0.0f, cw, vh);
     auto const t2 = metrics::detail::now_ns();

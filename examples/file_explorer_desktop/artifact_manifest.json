@@ -652,6 +652,10 @@
       "equals": false
     },
     {
+      "path": "application.file_explorer.preferences.resolution.used_user_scroll_bar_visibility",
+      "equals": false
+    },
+    {
       "path": "application.file_explorer.preferences.app_overrides.apply_system_font_metrics",
       "equals": true
     },
@@ -676,12 +680,20 @@
       "equals": 1
     },
     {
+      "path": "application.file_explorer.preferences.app_overrides.scroll_bar_visibility",
+      "equals": ""
+    },
+    {
       "path": "application.file_explorer.preferences.effective_theme.scroll_horizontal_delta_multiplier",
       "equals": 1
     },
     {
+      "path": "application.file_explorer.preferences.effective_theme.scroll_bar_visibility",
+      "equals": "auto"
+    },
+    {
       "path": "application.file_explorer.resource_system.locales.required_key_count",
-      "equals": 70
+      "equals": 73
     },
     {
       "path": "application.file_explorer.resource_system.debug.verifier_declared",
