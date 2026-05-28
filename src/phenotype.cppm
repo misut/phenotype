@@ -5,6 +5,7 @@ module;
 #include <concepts>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <source_location>
 #include <string>
@@ -7900,6 +7901,11 @@ inline std::array<DebugFrameSegment, 5> debug_frame_segments(
     }};
 }
 
+struct DebugFrameChartScale {
+    double min_ms = 0.0;
+    double max_ms = 16.666667;
+};
+
 inline std::uint64_t debug_frame_recent_percentile(
         FrameTraceMonitor const& stats,
         double percentile) {
@@ -7914,6 +7920,43 @@ inline std::uint64_t debug_frame_recent_percentile(
     auto const index = static_cast<std::size_t>(
         std::lround(percentile * static_cast<double>(stats.recent_count - 1)));
     return sorted[std::min(index, stats.recent_count - 1)];
+}
+
+inline DebugFrameChartScale debug_frame_chart_scale(
+        FrameTraceMonitor const& stats,
+        std::size_t start,
+        std::size_t count) noexcept {
+    if (count == 0)
+        return {};
+
+    double min_ms = std::numeric_limits<double>::max();
+    double max_ms = 0.0;
+    for (std::size_t i = 0; i < count; ++i) {
+        auto const sample = debug_frame_recent_sample(stats, start + i);
+        double const sample_ms =
+            static_cast<double>(sample.total_ns) / 1'000'000.0;
+        min_ms = std::min(min_ms, sample_ms);
+        max_ms = std::max(max_ms, sample_ms);
+    }
+
+    if (min_ms == std::numeric_limits<double>::max())
+        return {};
+
+    double const span = std::max(0.001, max_ms - min_ms);
+    double const padding = std::max(0.25, span * 0.14);
+    min_ms = min_ms > padding ? min_ms - padding : 0.0;
+    max_ms += padding;
+
+    if (max_ms - min_ms < 0.5) {
+        double const mid = (min_ms + max_ms) * 0.5;
+        min_ms = mid > 0.25 ? mid - 0.25 : 0.0;
+        max_ms = min_ms + 0.5;
+    }
+
+    return DebugFrameChartScale{
+        .min_ms = min_ms,
+        .max_ms = std::max(max_ms, min_ms + 0.5),
+    };
 }
 
 inline void debug_mix_frame_perf_token(std::uint64_t& token,
@@ -7948,7 +7991,7 @@ inline void paint_debug_performance_chart(Painter& painter) {
     PaintRect bg{0.0f, 0.0f, width, height, debug_with_alpha(t.code_bg, 178)};
     painter.fill_rects(&bg, 1);
 
-    float const left = 42.0f;
+    float const left = 54.0f;
     float const top = 22.0f;
     float const right = width - 12.0f;
     float const bottom = 128.0f;
@@ -7956,31 +7999,62 @@ inline void paint_debug_performance_chart(Painter& painter) {
     float const graph_h = bottom - top;
     auto const& stats = g_app.frame_perf;
     auto const p95 = debug_frame_recent_percentile(stats, 0.95);
-    double const max_ms = std::max(
-        16.666667,
-        std::max(
-            static_cast<double>(p95) / 1'000'000.0,
-            static_cast<double>(stats.max_ns) / 1'000'000.0));
+    auto const count = std::min<std::size_t>(stats.recent_count, 96);
+    auto const start = stats.recent_count > count
+        ? stats.recent_count - count
+        : 0u;
+    auto const scale = debug_frame_chart_scale(stats, start, count);
     auto y_for_ms = [&](double ms) {
-        double const ratio = std::clamp(ms / max_ms, 0.0, 1.0);
+        double const ratio = std::clamp(
+            (ms - scale.min_ms) / (scale.max_ms - scale.min_ms),
+            0.0,
+            1.0);
         return bottom - static_cast<float>(ratio) * graph_h;
     };
+    auto draw_ms_tick = [&](double ms, Color color) {
+        float const y = y_for_ms(ms);
+        painter.line(left, y, right, y, 1.0f, color);
+        auto label = std::format("{:.2f}ms", ms);
+        painter.text(
+            6.0f,
+            y - 6.0f,
+            label.c_str(),
+            static_cast<unsigned int>(label.size()),
+            10.0f,
+            t.muted);
+    };
+    auto draw_budget_line = [&](double ms, Color color, char const* label) {
+        if (ms < scale.min_ms || ms > scale.max_ms)
+            return;
+        float const y = y_for_ms(ms);
+        painter.line(left, y, right, y, 1.0f, color);
+        painter.text(
+            right - 58.0f,
+            y - 11.0f,
+            label,
+            static_cast<unsigned int>(std::strlen(label)),
+            10.0f,
+            t.muted);
+    };
 
-    painter.text(8.0f, 6.0f, "frame render time", 17, 11.0f, t.muted);
+    painter.text(8.0f, 6.0f, "frame render time (ms)", 22, 11.0f, t.muted);
     painter.line(left, bottom, right, bottom, 1.0f, debug_with_alpha(t.border, 160));
-    painter.line(left, y_for_ms(budget_240_ms), right, y_for_ms(budget_240_ms),
-                 1.0f, debug_with_alpha(t.semantic_success_border, 145));
-    painter.line(left, y_for_ms(budget_60_ms), right, y_for_ms(budget_60_ms),
-                 1.0f, debug_with_alpha(t.semantic_warning_border, 170));
-    painter.text(6.0f, y_for_ms(budget_240_ms) - 6.0f,
-                 "240", 3, 10.0f, t.muted);
-    painter.text(12.0f, y_for_ms(budget_60_ms) - 6.0f,
-                 "60", 2, 10.0f, t.muted);
+    painter.line(left, top, left, bottom, 1.0f, debug_with_alpha(t.border, 120));
+    draw_ms_tick(scale.max_ms, debug_with_alpha(t.border, 120));
+    draw_ms_tick((scale.min_ms + scale.max_ms) * 0.5,
+                 debug_with_alpha(t.border, 85));
+    draw_ms_tick(scale.min_ms, debug_with_alpha(t.border, 120));
+    draw_budget_line(
+        budget_240_ms,
+        debug_with_alpha(t.semantic_success_border, 145),
+        "240fps");
+    draw_budget_line(
+        budget_60_ms,
+        debug_with_alpha(t.semantic_warning_border, 170),
+        "60fps");
 
-    auto const count = std::min<std::size_t>(stats.recent_count, 96);
     Color const line_color = Color{37, 99, 235, 230};
     if (count > 1) {
-        auto const start = stats.recent_count - count;
         float const step = graph_w / static_cast<float>(count - 1);
         PathBuilder area;
         PathBuilder line;
