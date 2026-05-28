@@ -4,7 +4,7 @@
   "expect_platform": "macos",
   "require_frame": true,
   "require_labels": [
-    "Toolbar",
+    "Main Content Shell",
     "Navigation Controls",
     "Back",
     "Forward",
@@ -853,7 +853,7 @@
     },
     {
       "path": "application.file_explorer.chrome.geometry.toolbar_title_x",
-      "equals": 336.0
+      "equals": 340.0
     },
     {
       "path": "application.file_explorer.chrome.geometry.toolbar_view_group_x",

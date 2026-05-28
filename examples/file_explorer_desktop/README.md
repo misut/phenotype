@@ -35,7 +35,8 @@ DWM custom frame, using `WM_NCHITTEST` to preserve
 resize edges, caption-button behavior, blank-toolbar dragging, phenotype toolbar
 hit regions, and native size/aspect-ratio constraints. The example does not use
 a toolkit window shim.
-The toolbar itself is a borderless material shell with rounded material control
+The toolbar, file view, and status row live inside one rounded right-hand
+material shell with divider lines between sections and rounded material control
 groups, so the artifact keeps Finder-like chrome without duplicating native
 window controls. File create, read, duplicate, and delete behavior is still
 covered through the shared model, CLI inputs, startup scenarios, and the

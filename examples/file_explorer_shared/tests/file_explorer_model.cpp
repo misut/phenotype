@@ -524,7 +524,13 @@ duplicate
            == demo::k_desktop_toolbar_shell_height);
     assert(chrome.toolbar_group_y == 8.0f);
     assert(chrome.toolbar_navigation_group_x == 240.0f);
-    assert(chrome.toolbar_title_x == 336.0f);
+    constexpr float navigation_min_width =
+        demo::k_desktop_toolbar_icon_button_width * 2.0f
+        + demo::k_desktop_toolbar_shell_padding * 4.0f
+        + 1.0f;
+    assert(demo::k_desktop_toolbar_navigation_group_width
+           >= navigation_min_width);
+    assert(chrome.toolbar_title_x == 340.0f);
     assert(chrome.toolbar_view_group_x == 840.0f);
     assert(chrome.toolbar_sort_group_x == 1060.0f);
     assert(chrome.toolbar_action_group_x == 1112.0f);
