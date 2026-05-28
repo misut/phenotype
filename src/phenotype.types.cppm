@@ -1936,7 +1936,20 @@ public:
         (void)quads; (void)count;
     }
     virtual void fill_rects(PaintRect const* rects, unsigned int count) {
-        (void)rects; (void)count;
+        if (!rects)
+            return;
+        for (unsigned int i = 0; i < count; ++i) {
+            auto const& r = rects[i];
+            if (r.w == 0.0f || r.h == 0.0f)
+                continue;
+            PathBuilder path;
+            path.move_to(r.x, r.y);
+            path.line_to(r.x + r.w, r.y);
+            path.line_to(r.x + r.w, r.y + r.h);
+            path.line_to(r.x, r.y + r.h);
+            path.close();
+            fill_path(path, r.color);
+        }
     }
     // Bounded linear-gradient helper. External Painter derivations get
     // a deterministic `fill_rects` fallback; phenotype's own canvas

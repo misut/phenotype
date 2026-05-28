@@ -985,7 +985,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.material_symbols_unique_source_icon_count",
-      "equals": 38
+      "equals": 39
     },
     {
       "path": "application.file_explorer.chrome.icon_system.apple_asset_symbol_count",
@@ -1017,7 +1017,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.filled_symbol_count",
-      "equals": 0
+      "equals": 39
     },
     {
       "path": "application.file_explorer.chrome.icon_system.outline_symbol_count",
@@ -1025,7 +1025,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.hierarchical_symbol_count",
-      "equals": 14
+      "equals": 0
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_symbol_count",
@@ -1033,15 +1033,15 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_source_count",
-      "equals": 8
+      "equals": 6
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_path_arc_symbol_count",
-      "equals": 16
+      "equals": 0
     },
     {
       "path": "application.file_explorer.chrome.icon_system.round_stroke_symbol_count",
-      "equals": 39
+      "equals": 0
     },
     {
       "path": "application.file_explorer.chrome.icon_system.interaction_phase_count",
@@ -1053,7 +1053,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.default_stroke_width",
-      "equals": 2.0
+      "equals": 0.0
     },
     {
       "path": "application.file_explorer.chrome.icon_system.secondary_opacity",
@@ -1129,11 +1129,11 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.hierarchical_opacity",
-      "equals": true
+      "equals": false
     },
     {
       "path": "application.file_explorer.chrome.icon_system.design_reference",
-      "equals": "Apple HIG, macOS Finder, and SF Symbols inspired custom rounded-outline SVG glyphs"
+      "equals": "Apple HIG, macOS Finder, and SF Symbols inspired Material Symbols (new) SVG glyphs with Outlined as the default selectable style"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_family",
@@ -1141,11 +1141,11 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_policy",
-      "equals": "semantic reference only; no Apple or SF Symbols vector artwork; embedded sources are Google Material Symbols SVG"
+      "equals": "semantic reference only; no Apple or SF Symbols vector artwork; embedded sources are Google Material Symbols (new) SVG"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.asset_policy",
-      "equals": "audited Google Material Symbols vector assets; no Apple or SF Symbols artwork embedded"
+      "equals": "audited Google Material Symbols (new) vector assets; default Outlined plus selectable Rounded and Sharp styles; no Apple or SF Symbols artwork embedded"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_license_policy",
@@ -1165,7 +1165,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_attribution_policy",
-      "equals": "embedded permissive SVG sources must expose family, icon name, exact license, pinned direct raw SVG URL, source revision, copyright, Apple-asset boundary, platform extraction flag, and runtime fetch flag in debug output"
+      "equals": "embedded Google Material Symbols SVG sources must expose family, icon name, style, exact license, pinned direct raw SVG URL, source revision, copyright, Apple-asset boundary, platform extraction flag, and runtime fetch flag in debug output"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.apple_asset_boundary",
@@ -1177,7 +1177,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.visual_consistency_policy",
-      "equals": "consistent_size_stroke_detail_and_perspective"
+      "equals": "consistent_material_symbols_new_style_selectable_size_detail_and_perspective"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.alignment",
@@ -1185,7 +1185,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.rendering_mode",
-      "equals": "hierarchical"
+      "equals": "monochrome"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.variant_policy",
@@ -1277,7 +1277,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.presentation_samples.toolbar_disabled_forward.symbol_opacity",
-      "equals": 0.35
+      "equals": 0.78
     },
     {
       "path": "application.file_explorer.chrome.icon_system.presentation_samples.file_type_pdf.hit_target_size",

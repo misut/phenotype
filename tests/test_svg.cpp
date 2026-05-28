@@ -17,6 +17,10 @@ namespace {
 struct CapturePainter final : Painter {
     unsigned int fills = 0;
     unsigned int strokes = 0;
+    unsigned int rect_batches = 0;
+    unsigned int rects = 0;
+    unsigned int rects_covering_corner = 0;
+    unsigned int rects_covering_center = 0;
     unsigned int last_verb_count = 0;
     float last_thickness = 0.0f;
     Color last_color = {};
@@ -47,6 +51,22 @@ struct CapturePainter final : Painter {
         last_verb_count = path.verb_count;
         capture_first_segment(path);
         last_color = color;
+    }
+    void fill_rects(PaintRect const* values, unsigned int count) override {
+        ++rect_batches;
+        rects += count;
+        for (unsigned int i = 0; values && i < count; ++i) {
+            auto const& r = values[i];
+            if (r.x <= 2.0f && 2.0f < r.x + r.w
+                && r.y <= 2.0f && 2.0f < r.y + r.h) {
+                ++rects_covering_corner;
+            }
+            if (r.x <= 12.0f && 12.0f < r.x + r.w
+                && r.y <= 12.0f && 12.0f < r.y + r.h) {
+                ++rects_covering_center;
+            }
+            last_color = r.color;
+        }
     }
 
 private:
@@ -335,6 +355,28 @@ void test_svg_support_contract_summary() {
     assert(!summary.has_diagnostics);
 
     std::puts("PASS: SVG support contract summary is pure and explicit");
+}
+
+void test_svg_compound_filled_path_preserves_hole() {
+    auto doc = svg::parse(R"SVG(
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M2 2 H22 V22 H2 Z M8 8 V16 H16 V8 Z"/>
+        </svg>
+    )SVG");
+    assert(doc.shapes.size() == 1);
+    assert(!doc.has_diagnostics());
+    assert(count_path_verb(doc.shapes[0].path, PathVerb::MoveTo) == 2);
+
+    CapturePainter painter;
+    svg::paint(painter, doc, 0.0f, 0.0f, 24.0f, 24.0f,
+               svg::RenderOptions{{0, 122, 255, 255}, true});
+    assert(painter.fills == 0);
+    assert(painter.rect_batches == 1);
+    assert(painter.rects > 0);
+    assert(painter.rects_covering_corner > 0);
+    assert(painter.rects_covering_center == 0);
+
+    std::puts("PASS: SVG compound filled paths preserve nonzero holes");
 }
 
 void test_builtin_icons_parse() {
@@ -641,7 +683,7 @@ void test_builtin_icons_parse() {
         CapturePainter painter;
         icons::paint_symbol(painter, cache, symbol, 0.0f, 0.0f, 24.0f,
                             Color{28, 28, 30, 255});
-        assert(painter.fills + painter.strokes > 0);
+        assert(painter.fills + painter.strokes + painter.rects > 0);
     }
     assert(outline_count == icons::outline_symbol_count);
     assert(filled_count == icons::filled_symbol_count);
@@ -800,14 +842,23 @@ void test_builtin_icons_parse() {
                                  0.0f,
                                  36.0f,
                                  36.0f);
-    assert(centered_painter.fills + centered_painter.strokes > 0);
+    assert(centered_painter.fills + centered_painter.strokes
+           + centered_painter.rects > 0);
     assert(!icons::symbol_from_name("not_a_symbol").has_value());
     assert(*icons::symbol_from_semantic_reference_name("magnifyingglass")
            == icons::Symbol::Search);
 
     CapturePainter presentation_painter;
     icons::paint_symbol(presentation_painter, cache, sidebar, 0.0f, 0.0f);
-    assert(presentation_painter.fills + presentation_painter.strokes > 0);
+    assert(presentation_painter.fills + presentation_painter.strokes
+           + presentation_painter.rects > 0);
+
+    auto folder_doc = svg::parse(icons::source(icons::Symbol::Folder));
+    CapturePainter folder_painter;
+    svg::paint(folder_painter, folder_doc, 0.0f, 0.0f, 72.0f, 72.0f,
+               svg::RenderOptions{{80, 80, 84, 255}, true});
+    assert(folder_painter.fills == 0);
+    assert(folder_painter.rects > 0);
 
     auto line_doc = svg::parse(R"SVG(
         <svg viewBox="0 0 24 24">
@@ -853,6 +904,7 @@ int main() {
     test_svg_unsupported_path_diagnostic();
     test_svg_paint_tokens_are_stable();
     test_svg_support_contract_summary();
+    test_svg_compound_filled_path_preserves_hole();
     test_builtin_icons_parse();
     std::puts("\nAll SVG/icon tests passed.");
     return 0;

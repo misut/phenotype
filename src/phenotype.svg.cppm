@@ -704,6 +704,334 @@ inline auto resolve_paint(Paint paint,
     return color;
 }
 
+inline bool path_has_multiple_subpaths(PathBuilder const& path) noexcept {
+    unsigned int moves = 0;
+    unsigned int i = 0;
+    while (i < path.verbs.size()) {
+        auto const tag = static_cast<PathVerb>(path.verbs[i++]);
+        if (tag == PathVerb::MoveTo)
+            ++moves;
+        switch (tag) {
+        case PathVerb::MoveTo:
+        case PathVerb::LineTo:
+            i += 2;
+            break;
+        case PathVerb::QuadTo:
+            i += 4;
+            break;
+        case PathVerb::CubicTo:
+            i += 6;
+            break;
+        case PathVerb::ArcTo:
+            i += 5;
+            break;
+        case PathVerb::Close:
+            break;
+        default:
+            return moves > 1;
+        }
+    }
+    return moves > 1;
+}
+
+inline bool paint_compound_fill_as_scanline_rects(Painter& painter,
+                                                  PathBuilder const& path,
+                                                  Color color) {
+    if (!path_has_multiple_subpaths(path))
+        return false;
+
+    std::vector<float> points;
+    std::vector<std::size_t> contours;
+    points.reserve(path.verbs.size());
+    contours.reserve(8);
+
+    float pen_x = 0.0f;
+    float pen_y = 0.0f;
+    float sub_x = 0.0f;
+    float sub_y = 0.0f;
+    bool has_pen = false;
+
+    auto contour_vertex_count = [&](std::size_t start) {
+        return points.size() / 2 - start;
+    };
+
+    auto close_degenerate_contour = [&] {
+        if (contours.empty())
+            return;
+        auto const start = contours.back();
+        if (contour_vertex_count(start) >= 3)
+            return;
+        points.resize(start * 2);
+        contours.pop_back();
+    };
+
+    auto append_point = [&](float x, float y) {
+        if (contours.empty()) {
+            contours.push_back(points.size() / 2);
+            sub_x = x;
+            sub_y = y;
+        }
+        if (points.size() >= 2) {
+            auto const last_x = points[points.size() - 2];
+            auto const last_y = points[points.size() - 1];
+            if (std::fabs(last_x - x) <= 0.0001f
+                && std::fabs(last_y - y) <= 0.0001f) {
+                pen_x = x;
+                pen_y = y;
+                has_pen = true;
+                return;
+            }
+        }
+        points.push_back(x);
+        points.push_back(y);
+        pen_x = x;
+        pen_y = y;
+        has_pen = true;
+    };
+
+    auto move_to = [&](float x, float y) {
+        close_degenerate_contour();
+        contours.push_back(points.size() / 2);
+        points.push_back(x);
+        points.push_back(y);
+        pen_x = x;
+        pen_y = y;
+        sub_x = x;
+        sub_y = y;
+        has_pen = true;
+    };
+
+    constexpr float flatness2 = 0.25f;
+    constexpr int max_depth = 16;
+    auto flatten_quad = [&](auto& self,
+                            float p0x, float p0y,
+                            float p1x, float p1y,
+                            float p2x, float p2y,
+                            int depth) -> void {
+        float const lx = p2x - p0x;
+        float const ly = p2y - p0y;
+        float const llen2 = lx * lx + ly * ly;
+        bool flat = depth == 0;
+        if (!flat && llen2 > 1e-6f) {
+            float const d = (p1x - p0x) * ly - (p1y - p0y) * lx;
+            if (d * d < flatness2 * llen2)
+                flat = true;
+        }
+        if (flat || llen2 < 1e-6f) {
+            append_point(p2x, p2y);
+            return;
+        }
+        float const a0x = (p0x + p1x) * 0.5f;
+        float const a0y = (p0y + p1y) * 0.5f;
+        float const a1x = (p1x + p2x) * 0.5f;
+        float const a1y = (p1y + p2y) * 0.5f;
+        float const mx = (a0x + a1x) * 0.5f;
+        float const my = (a0y + a1y) * 0.5f;
+        self(self, p0x, p0y, a0x, a0y, mx, my, depth - 1);
+        self(self, mx, my, a1x, a1y, p2x, p2y, depth - 1);
+    };
+
+    auto flatten_cubic = [&](auto& self,
+                             float p0x, float p0y,
+                             float p1x, float p1y,
+                             float p2x, float p2y,
+                             float p3x, float p3y,
+                             int depth) -> void {
+        float const lx = p3x - p0x;
+        float const ly = p3y - p0y;
+        float const llen2 = lx * lx + ly * ly;
+        bool flat = depth == 0;
+        if (!flat && llen2 > 1e-6f) {
+            float const d1 = (p1x - p0x) * ly - (p1y - p0y) * lx;
+            float const d2 = (p2x - p0x) * ly - (p2y - p0y) * lx;
+            if (d1 * d1 < flatness2 * llen2
+                && d2 * d2 < flatness2 * llen2) {
+                flat = true;
+            }
+        }
+        if (flat || llen2 < 1e-6f) {
+            append_point(p3x, p3y);
+            return;
+        }
+        float const a01x = (p0x + p1x) * 0.5f;
+        float const a01y = (p0y + p1y) * 0.5f;
+        float const a12x = (p1x + p2x) * 0.5f;
+        float const a12y = (p1y + p2y) * 0.5f;
+        float const a23x = (p2x + p3x) * 0.5f;
+        float const a23y = (p2y + p3y) * 0.5f;
+        float const b01x = (a01x + a12x) * 0.5f;
+        float const b01y = (a01y + a12y) * 0.5f;
+        float const b12x = (a12x + a23x) * 0.5f;
+        float const b12y = (a12y + a23y) * 0.5f;
+        float const mx = (b01x + b12x) * 0.5f;
+        float const my = (b01y + b12y) * 0.5f;
+        self(self, p0x, p0y, a01x, a01y, b01x, b01y, mx, my, depth - 1);
+        self(self, mx, my, b12x, b12y, a23x, a23y, p3x, p3y, depth - 1);
+    };
+
+    unsigned int i = 0;
+    auto next_f32 = [&]() {
+        auto const value = read_f32(path.verbs[i]);
+        ++i;
+        return value;
+    };
+
+    while (i < path.verbs.size()) {
+        auto const tag = static_cast<PathVerb>(path.verbs[i++]);
+        switch (tag) {
+        case PathVerb::MoveTo: {
+            auto const x = next_f32();
+            auto const y = next_f32();
+            move_to(x, y);
+            break;
+        }
+        case PathVerb::LineTo: {
+            auto const x = next_f32();
+            auto const y = next_f32();
+            append_point(x, y);
+            break;
+        }
+        case PathVerb::QuadTo: {
+            auto const cx = next_f32();
+            auto const cy = next_f32();
+            auto const x = next_f32();
+            auto const y = next_f32();
+            if (has_pen)
+                flatten_quad(flatten_quad, pen_x, pen_y, cx, cy, x, y, max_depth);
+            break;
+        }
+        case PathVerb::CubicTo: {
+            auto const c1x = next_f32();
+            auto const c1y = next_f32();
+            auto const c2x = next_f32();
+            auto const c2y = next_f32();
+            auto const x = next_f32();
+            auto const y = next_f32();
+            if (has_pen) {
+                flatten_cubic(flatten_cubic, pen_x, pen_y, c1x, c1y,
+                              c2x, c2y, x, y, max_depth);
+            }
+            break;
+        }
+        case PathVerb::ArcTo: {
+            auto const cx = next_f32();
+            auto const cy = next_f32();
+            auto const radius = next_f32();
+            auto const start = next_f32();
+            auto const end = next_f32();
+            if (radius > 0.0f) {
+                constexpr int segments = 32;
+                auto sweep = end - start;
+                if (sweep <= 0.0f)
+                    sweep += 6.28318530717958647692f;
+                if (sweep > 6.28318530717958647692f)
+                    sweep = 6.28318530717958647692f;
+                for (int segment = 1; segment <= segments; ++segment) {
+                    auto const t = start + sweep * static_cast<float>(segment)
+                                           / static_cast<float>(segments);
+                    append_point(cx + radius * std::cos(t),
+                                 cy + radius * std::sin(t));
+                }
+            }
+            break;
+        }
+        case PathVerb::Close:
+            pen_x = sub_x;
+            pen_y = sub_y;
+            has_pen = true;
+            break;
+        default:
+            return false;
+        }
+    }
+    close_degenerate_contour();
+    if (contours.size() < 2 || points.size() < 6)
+        return false;
+
+    float min_y = points[1];
+    float max_y = points[1];
+    for (std::size_t p = 1; p < points.size() / 2; ++p) {
+        auto const y = points[p * 2 + 1];
+        min_y = std::min(min_y, y);
+        max_y = std::max(max_y, y);
+    }
+    auto const height = max_y - min_y;
+    if (height <= 0.0f)
+        return false;
+
+    auto const row_step = std::max(0.5f, height / 512.0f);
+    std::vector<std::pair<float, int>> intersections;
+    std::vector<PaintRect> rects;
+    intersections.reserve(contours.size() * 4);
+    rects.reserve(static_cast<std::size_t>(height / row_step + 1.0f) * 2);
+
+    auto contour_end = [&](std::size_t contour_index) {
+        return contour_index + 1 < contours.size()
+            ? contours[contour_index + 1]
+            : points.size() / 2;
+    };
+
+    for (float row_y = min_y; row_y < max_y; row_y += row_step) {
+        auto const sample_y = row_y + row_step * 0.5f;
+        intersections.clear();
+        for (std::size_t c = 0; c < contours.size(); ++c) {
+            auto const start = contours[c];
+            auto const end = contour_end(c);
+            if (end <= start + 2)
+                continue;
+            for (std::size_t p = start; p < end; ++p) {
+                auto const q = p + 1 < end ? p + 1 : start;
+                auto const x0 = points[p * 2];
+                auto const y0 = points[p * 2 + 1];
+                auto const x1 = points[q * 2];
+                auto const y1 = points[q * 2 + 1];
+                if (std::fabs(y1 - y0) <= 0.0001f)
+                    continue;
+                bool const crosses =
+                    (y0 <= sample_y && sample_y < y1)
+                    || (y1 <= sample_y && sample_y < y0);
+                if (!crosses)
+                    continue;
+                auto const t = (sample_y - y0) / (y1 - y0);
+                auto const x = x0 + (x1 - x0) * t;
+                intersections.emplace_back(x, y1 > y0 ? 1 : -1);
+            }
+        }
+        if (intersections.size() < 2)
+            continue;
+        std::sort(intersections.begin(), intersections.end(),
+                  [](auto const& a, auto const& b) {
+                      return a.first < b.first;
+                  });
+        int winding = 0;
+        float span_start = 0.0f;
+        for (auto const& intersection : intersections) {
+            auto const before = winding;
+            winding += intersection.second;
+            if (before == 0 && winding != 0) {
+                span_start = intersection.first;
+            } else if (before != 0 && winding == 0) {
+                auto const span_end = intersection.first;
+                if (span_end - span_start > 0.01f) {
+                    rects.push_back(PaintRect{
+                        span_start,
+                        row_y,
+                        span_end - span_start,
+                        std::min(row_step, max_y - row_y) + 0.01f,
+                        color});
+                }
+            }
+        }
+    }
+
+    if (rects.empty())
+        return false;
+    painter.fill_rects(
+        rects.data(),
+        static_cast<unsigned int>(rects.size()));
+    return true;
+}
+
 inline void add_diagnostic(Document& doc, std::string message) {
     doc.diagnostics.push_back(std::move(message));
 }
@@ -1539,8 +1867,12 @@ void paint(Painter& painter,
     auto render_transform = detail::Transform{sx, 0.0f, 0.0f, sy, tx, ty};
     for (auto const& shape : doc.shapes) {
         auto transformed = detail::transformed_path(shape.path, render_transform);
-        if (auto fill = detail::resolve_paint(shape.style.fill, shape.style, options))
-            painter.fill_path(transformed, *fill);
+        if (auto fill = detail::resolve_paint(shape.style.fill, shape.style, options)) {
+            if (!detail::paint_compound_fill_as_scanline_rects(
+                    painter, transformed, *fill)) {
+                painter.fill_path(transformed, *fill);
+            }
+        }
         if (auto stroke = detail::resolve_paint(shape.style.stroke, shape.style, options)) {
             auto const option_stroke_scale =
                 options.stroke_scale < 0.0f ? 0.0f : options.stroke_scale;
