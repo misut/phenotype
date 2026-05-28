@@ -1130,18 +1130,19 @@ void paint_sidebar_icon(phenotype::Painter& painter,
                         phenotype::ButtonVisualState state,
                         float origin_x,
                         float origin_y) {
+    auto const ink = selected
+        ? rgba(0, 122, 255)
+        : (state.hovered ? rgba(18, 18, 20) : rgba(32, 32, 34));
     paint_finder_symbol_centered(
         painter,
         cache,
-        icon_presentation_for_state(
-            sidebar_symbol(id),
-            phenotype::icons::SymbolPresentationRole::Sidebar,
-            selected,
-            state),
+        sidebar_symbol(id),
         origin_x,
         origin_y,
         k_sidebar_icon_size,
-        k_sidebar_icon_size);
+        k_sidebar_icon_size,
+        k_sidebar_icon_size - 2.0f,
+        ink);
 }
 
 std::string extension_lower(std::string const& name) {
@@ -1842,15 +1843,26 @@ void sidebar_row(std::string_view label,
                  bool selected,
                  phenotype::icons::SymbolDocumentCache const& cache) {
     using namespace phenotype;
-    auto options = widget::glass_outline_row_button_style(
-        GlassOutlineRowStyleOptions{
-            .chrome = GlassOutlineRowChrome::SidebarPill,
-            .role = MaterialSurfaceRole::Sidebar,
-            .selected = selected,
-            .width = k_sidebar_row_width,
-            .height = k_sidebar_row_height,
-            .border_radius = k_sidebar_selected_row_radius,
-        });
+    ButtonStyleOptions options;
+    options.has_background = true;
+    options.background = selected ? rgba(255, 255, 255, 232)
+                                  : rgba(0, 0, 0, 0);
+    options.has_hover_background = true;
+    options.hover_background = selected ? rgba(255, 255, 255, 242)
+                                        : rgba(255, 255, 255, 64);
+    options.has_pressed_background = true;
+    options.pressed_background = selected ? rgba(255, 255, 255, 250)
+                                          : rgba(255, 255, 255, 92);
+    options.has_border_color = true;
+    options.border_color = selected ? rgba(255, 255, 255, 245)
+                                    : rgba(255, 255, 255, 0);
+    options.border_width = selected ? 1.0f : 0.0f;
+    options.border_radius = k_sidebar_selected_row_radius;
+    options.max_width = k_sidebar_row_width;
+    options.fixed_height = k_sidebar_row_height;
+    options.min_hit_width = k_sidebar_row_width;
+    options.min_hit_height = k_sidebar_row_height;
+    options.focus_ring = false;
 
     std::string label_text(label);
     std::string icon_name(icon);
@@ -2103,6 +2115,17 @@ void navigation_button(char const* label,
                        phenotype::icons::Symbol symbol,
                        std::uint64_t token) {
     std::string semantic_label(label);
+    auto style = phenotype::widget::glass_menu_item_button_style(
+        phenotype::GlassMenuItemStyleOptions{
+            .role = phenotype::MaterialSurfaceRole::Navigation,
+            .disabled = !enabled,
+            .width = k_toolbar_icon_button_width,
+            .height = k_toolbar_icon_button_height,
+            .border_radius = k_toolbar_group_radius,
+        });
+    style.min_hit_width = k_toolbar_icon_button_width;
+    style.min_hit_height = k_toolbar_icon_button_height;
+    style.focus_ring = false;
     phenotype::widget::symbol_button<Msg>(
         phenotype::str{semantic_label},
         symbol,
@@ -2113,7 +2136,8 @@ void navigation_button(char const* label,
             .width = k_toolbar_icon_button_width,
             .height = k_toolbar_icon_button_height,
             .token_salt = token,
-        });
+        },
+        style);
 }
 
 void finder_toolbar(State const& state,

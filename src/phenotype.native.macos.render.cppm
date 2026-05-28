@@ -143,6 +143,7 @@ struct ParsedTextRun {
     // for overlay runs (IME composition / generic caret) that always
     // render full-viewport above scissored scene content.
     std::uint32_t batch_idx = 0;
+    std::uint32_t command_index = 0;
     // Resolved FontCacheKey (family / weight / style / mono); driven
     // by the wire-format flags + family bytes at decode time.
     FontCacheKey font_key{};
@@ -239,6 +240,7 @@ struct ScissorBatch {
     std::vector<ArcInstanceGPU>   arcs;
     std::vector<ImageInstanceGPU> images;
     std::vector<TextInstanceGPU>  texts;
+    std::vector<std::uint32_t>    text_command_indices;
     // DrawText commands are decoded into text_runs first and materialized into
     // texts after atlas preparation. Track them here so text-only scissored
     // canvases still keep their own batch instead of being treated as empty.

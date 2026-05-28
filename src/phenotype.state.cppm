@@ -341,6 +341,7 @@ struct AppState {
     diag::InputDebugSnapshot input_debug;
     bool debug_panel_open = false;
     DebugPanelTab debug_panel_tab = DebugPanelTab::Performance;
+    unsigned int debug_panel_warmup_frames = 0;
     ActionPerfMonitor action_perf;
     FrameTraceMonitor frame_perf;
     bool frame_trace_input_active = false;
