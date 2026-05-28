@@ -1231,8 +1231,11 @@ std::uint64_t thumbnail_paint_token(file_explorer_demo::Entry const& entry,
 phenotype::Color entry_symbol_color(
         file_explorer_demo::Entry const& entry,
         bool selected) {
-    if (selected)
-        return rgba(255, 255, 255);
+    if (selected) {
+        return entry.folder
+            ? rgba(0, 122, 255)
+            : rgba(28, 68, 132);
+    }
     return phenotype::icons::macos_file_type_color(
         phenotype::icons::from_catalog_symbol(
             file_explorer_demo::entry_symbol(entry)));
@@ -1724,23 +1727,39 @@ void finder_icon_label_button(std::string const& label,
                               float max_width,
                               float font_size,
                               float fixed_height) {
-    auto options = phenotype::widget::glass_outline_row_button_style(
-        phenotype::GlassOutlineRowStyleOptions{
-            .role = phenotype::MaterialSurfaceRole::Surface,
-            .selected = selected,
-            .width = max_width,
-            .height = fixed_height,
-            .border_radius = 10.0f,
-            .font_size = font_size,
-            .text_align = phenotype::TextAlign::Center,
-        });
+    phenotype::ButtonStyleOptions options;
+    options.has_background = true;
+    options.background = selected ? rgba(0, 122, 255, 232)
+                                  : rgba(0, 0, 0, 0);
+    options.has_hover_background = true;
+    options.hover_background = selected ? rgba(0, 122, 255, 242)
+                                        : rgba(0, 0, 0, 20);
+    options.has_pressed_background = true;
+    options.pressed_background = selected ? rgba(0, 96, 212, 250)
+                                          : rgba(0, 0, 0, 34);
+    options.has_border_color = true;
+    options.border_color = selected ? rgba(0, 88, 204, 120)
+                                    : rgba(0, 0, 0, 0);
+    options.has_text_color = true;
+    options.text_color = selected ? rgba(255, 255, 255)
+                                  : rgba(28, 28, 30);
+    options.border_width = selected ? 1.0f : 0.0f;
+    options.border_radius = 8.0f;
+    options.font_size = font_size;
+    options.max_width = max_width;
+    options.fixed_height = fixed_height;
+    options.min_hit_width = max_width;
+    options.min_hit_height = fixed_height;
+    options.text_align = phenotype::TextAlign::Center;
+    options.focus_ring = false;
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{label},
         max_width,
         fixed_height,
         [label, selected, max_width, font_size, fixed_height](
                 phenotype::Painter& painter) {
-            auto const ink = selected ? rgba(255, 255, 255) : rgba(28, 28, 30);
+            auto const ink = selected ? rgba(255, 255, 255)
+                                      : rgba(28, 28, 30);
             auto const lines = finder_icon_label_lines(
                 painter,
                 label,
