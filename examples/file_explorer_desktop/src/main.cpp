@@ -917,18 +917,56 @@ phenotype::FontSpec finder_font(
     };
 }
 
-phenotype::layout::MaterialSurfaceOptions main_content_shell_options() {
+phenotype::MaterialStyle main_content_shell_material_style() {
+    using namespace phenotype;
+    auto material = layout::material_style(MaterialKind::Regular);
+    material.opacity = 1.0f;
+    material.blur_radius = 0.0f;
+    material.tint = rgba(255, 255, 255);
+    material.border = rgba(222, 222, 226);
+    material.saturation = 1.0f;
+    material.luminance_floor = 0.0f;
+    material.luminance_gain = 1.0f;
+    material.edge_highlight = 0.0f;
+    material.noise_opacity = 0.0f;
+    material.shadow_alpha = 0.08f;
+    material.shadow_radius = 12.0f;
+    material.contrast_intent = "solid-white-main-content-shell";
+    material.verifier_profile = "solid-white-content-shell";
+    return material;
+}
+
+float main_content_shell_inner_height(
+        file_explorer_demo::ExplorerState const& explorer) {
+    auto const viewport =
+        file_explorer_demo::effective_viewport(explorer, "desktop");
+    float const outer_height = std::max(
+        0.0f,
+        static_cast<float>(viewport.height)
+            - file_explorer_demo::k_desktop_window_content_inset * 2.0f);
+    float const padding =
+        phenotype::layout::space_value(phenotype::SpaceToken::Xs);
+    return std::max(0.0f, outer_height - padding * 2.0f);
+}
+
+phenotype::layout::MaterialSurfaceOptions main_content_shell_options(
+        file_explorer_demo::ExplorerState const& explorer) {
     using namespace phenotype;
     auto options = layout::glass_surface_options(
-        layout::GlassSurfacePreset::Toolbar,
+        layout::GlassSurfacePreset::Content,
         "Main Content Shell");
     options.role = MaterialSurfaceRole::Content;
     options.direction = FlexDirection::Column;
+    options.kind = MaterialKind::Regular;
     options.max_width = 0.0f;
+    options.fixed_height = main_content_shell_inner_height(explorer);
     options.padding = SpaceToken::Xs;
     options.gap = SpaceToken::Xs;
     options.border_radius = k_window_radius;
     options.shape = MaterialSurfaceShape::RoundedRectangle;
+    options.border_width = 1.0f;
+    options.has_material_override = true;
+    options.material_override = main_content_shell_material_style();
     return options;
 }
 
@@ -3122,18 +3160,22 @@ void view(State const& state) {
                 [&] {
                     finder_sidebar(state);
                     layout::weighted(1.0f, [&] {
-                        layout::material_surface(main_content_shell_options(), [&] {
-                            finder_toolbar(state, snap);
-                            layout::divider();
-                            if (state.more_actions_open)
-                                finder_more_actions(state, snap);
-                            finder_content(state, snap);
-                            if (file_explorer_demo::desktop_status_bar_visible(
-                                    state.explorer)) {
+                        layout::material_surface(
+                            main_content_shell_options(state.explorer),
+                            [&] {
+                                finder_toolbar(state, snap);
                                 layout::divider();
-                                finder_status_bar(state, snap);
-                            }
-                        });
+                                if (state.more_actions_open)
+                                    finder_more_actions(state, snap);
+                                layout::weighted(1.0f, [&] {
+                                    finder_content(state, snap);
+                                });
+                                if (file_explorer_demo::desktop_status_bar_visible(
+                                        state.explorer)) {
+                                    layout::divider();
+                                    finder_status_bar(state, snap);
+                                }
+                            });
                     });
                 });
         });

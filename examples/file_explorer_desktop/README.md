@@ -37,7 +37,9 @@ hit regions, and native size/aspect-ratio constraints. The example does not use
 a toolkit window shim.
 The toolbar, file view, and status row live inside one rounded right-hand
 material shell with divider lines between sections and rounded material control
-groups, so the artifact keeps Finder-like chrome without duplicating native
+groups. That shell uses a solid white, non-blurred fill and is bounded to the
+parent window height, so sparse folders do not collapse the main surface around
+their contents. The artifact keeps Finder-like chrome without duplicating native
 window controls. File create, read, duplicate, and delete behavior is still
 covered through the shared model, CLI inputs, startup scenarios, and the
 Finder-style `More` overflow instead of an always-visible extra action group.

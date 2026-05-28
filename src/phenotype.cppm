@@ -3255,17 +3255,14 @@ void padded(SpaceToken padding, F&& builder) {
 }
 
 // weighted — wrap a builder in a container that claims a proportional
-// share of the row's leftover space. `grow` is the weight; sibling
-// weighted children split the remainder of the row's main axis in
+// share of the parent's leftover space. `grow` is the weight; sibling
+// weighted children split the remainder of the parent's main axis in
 // proportion to their values (e.g. `weighted(2, ...)` next to
-// `weighted(1, ...)` gets twice the width). Children without a
-// weighted wrapper keep their intrinsic / max_width sizing and are
-// laid out before the split runs, so weights apply only to whatever
-// remains after fixed siblings have taken their share.
-//
-// Currently honoured by row layout only — column flex distribution
-// waits on a bounded-height story (the parent's height is usually
-// content-derived, so there's no remainder to split).
+// `weighted(1, ...)` gets twice the available remainder). Children
+// without a weighted wrapper keep their intrinsic / max_width sizing and
+// are laid out before the split runs, so weights apply only to whatever
+// remains after fixed siblings have taken their share. Columns distribute
+// height only when the parent has a bounded `fixed_height`.
 template<typename F>
     requires std::is_invocable_v<F>
 void weighted(float grow, F&& builder) {

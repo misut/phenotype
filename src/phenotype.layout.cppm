@@ -546,21 +546,39 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
     // Container layout
     if (s.flex_direction == FlexDirection::Column) {
         float total_children_h = 0;
+        float total_explicit_grow = 0;
         unsigned int nc = static_cast<unsigned int>(node.children.size());
         for (unsigned int i = 0; i < nc; ++i) {
             auto child_h = node.children[i];
             layout_node(measurer, child_h, inner_width);
             auto& child = node_at(child_h);
+            if (child.style.flex_grow > 0.0f)
+                total_explicit_grow += child.style.flex_grow;
             total_children_h += child.height;
             if (i + 1 < nc) total_children_h += s.gap;
+        }
+
+        float target_inner_h = total_children_h;
+        if (s.fixed_height >= 0.0f && s.fixed_height > target_inner_h)
+            target_inner_h = s.fixed_height;
+        if (!node.is_scroll_container
+            && total_explicit_grow > 0.0f
+            && target_inner_h > total_children_h) {
+            float remaining = target_inner_h - total_children_h;
+            for (auto child_h : node.children) {
+                auto& child = node_at(child_h);
+                if (child.style.flex_grow <= 0.0f)
+                    continue;
+                child.height += remaining
+                    * (child.style.flex_grow / total_explicit_grow);
+            }
+            total_children_h = target_inner_h;
         }
 
         float y = s.padding[0];
         float effective_gap = s.gap;
         if (s.main_align == MainAxisAlignment::SpaceBetween && nc > 1) {
-            float avail_h = node.height > 0
-                ? node.height - s.padding[0] - s.padding[2]
-                : total_children_h;
+            float avail_h = target_inner_h;
             float children_only = total_children_h - s.gap * static_cast<float>(nc - 1);
             effective_gap = (avail_h - children_only) / static_cast<float>(nc - 1);
         }
@@ -591,7 +609,8 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
             node.content_height = y + s.padding[2];
             node.height = s.fixed_height + s.padding[0] + s.padding[2];
         } else {
-            node.height = y + s.padding[2];
+            node.height = std::max(y - s.padding[0], target_inner_h)
+                + s.padding[0] + s.padding[2];
         }
     } else {
         // Row

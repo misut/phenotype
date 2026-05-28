@@ -144,11 +144,53 @@ void test_explicit_weight_suppresses_implicit_fill() {
     std::puts("PASS: explicit weight suppresses implicit fill on siblings");
 }
 
+// A bounded column uses weighted children to absorb vertical remainder.
+// This lets shell-like surfaces fill their parent while keeping fixed
+// toolbar/status siblings pinned to the top/bottom edges.
+void test_bounded_column_weight_splits_height() {
+    auto root_h = build([&] {
+        layout::material_surface(
+            layout::MaterialSurfaceOptions{
+                .kind = MaterialKind::None,
+                .direction = FlexDirection::Column,
+                .padding = SpaceToken::Xs,
+                .gap = SpaceToken::Xs,
+                .fixed_height = 300.0f,
+            },
+            [&] {
+                widget::image("header", 100.0f, 40.0f);
+                layout::weighted(1.0f, [&] { layout::box([&]{}); });
+                widget::image("footer", 100.0f, 30.0f);
+            });
+    });
+
+    LAYOUT_NODE(root_h, 400.0f);
+    auto& root = detail::node_at(root_h);
+    auto& column = detail::node_at(root.children[0]);
+    auto& header = detail::node_at(column.children[0]);
+    auto& weighted = detail::node_at(column.children[1]);
+    auto& footer = detail::node_at(column.children[2]);
+
+    float const pad_y = column.style.padding[0] + column.style.padding[2];
+    float const expected_weighted =
+        300.0f - header.height - footer.height - column.style.gap * 2.0f;
+    assert(nearly(column.height, 300.0f + pad_y));
+    assert(nearly(weighted.height, expected_weighted));
+    assert(nearly(footer.y,
+                  column.style.padding[0]
+                      + header.height
+                      + column.style.gap
+                      + weighted.height
+                      + column.style.gap));
+    std::puts("PASS: bounded column weights split remaining height");
+}
+
 int main() {
     test_two_equal_weights_split_evenly();
     test_unequal_weights_split_proportionally();
     test_legacy_single_flex_unaffected();
     test_explicit_weight_suppresses_implicit_fill();
+    test_bounded_column_weight_splits_height();
     std::puts("\nAll flex_weight tests passed.");
     return 0;
 }
