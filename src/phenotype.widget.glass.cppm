@@ -299,10 +299,7 @@ inline ButtonStyleOptions glass_outline_row_button_style(
 
     if (kind != MaterialKind::None) {
         material.tint = options.selected ? selected_bg : expanded_bg;
-        material.border = material_with_alpha(
-            t.border,
-            static_cast<unsigned char>(
-                options.selected && !sidebar ? 92 : 0));
+        material.border = t.transparent;
         material.foreground = options.selected ? selected_text : t.foreground;
         material.accent_foreground = t.accent;
         material.strong_accent_foreground = t.accent_strong;
@@ -330,10 +327,7 @@ inline ButtonStyleOptions glass_outline_row_button_style(
     style.has_text_color = true;
     style.text_color = options.disabled ? t.state_disabled_fg
         : (options.selected ? selected_text : t.foreground);
-    style.border_width =
-        options.selected && kind != MaterialKind::None && !sidebar
-            ? 1.0f
-            : 0.0f;
+    style.border_width = 0.0f;
     style.border_radius = options.border_radius >= 0.0f
         ? options.border_radius
         : t.radius_md;
