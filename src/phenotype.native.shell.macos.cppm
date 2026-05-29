@@ -22,6 +22,7 @@ module;
 #include <vector>
 
 #include <CoreGraphics/CoreGraphics.h>
+#include <Carbon/Carbon.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
 #endif
@@ -577,6 +578,135 @@ inline bool appkit_window_is_key(id window) {
 inline bool appkit_window_is_main(id window) {
     return window && objc_send<signed char>(window, sel("isMainWindow")) != 0;
 }
+
+#ifndef NDEBUG
+inline EventHotKeyRef g_appkit_debug_hot_key_ref = nullptr;
+inline EventHandlerRef g_appkit_debug_hot_key_handler_ref = nullptr;
+inline EventHandlerUPP g_appkit_debug_hot_key_handler_upp = nullptr;
+
+inline constexpr unsigned int appkit_fourcc(char a,
+                                            char b,
+                                            char c,
+                                            char d) noexcept {
+    return (static_cast<unsigned int>(static_cast<unsigned char>(a)) << 24u)
+        | (static_cast<unsigned int>(static_cast<unsigned char>(b)) << 16u)
+        | (static_cast<unsigned int>(static_cast<unsigned char>(c)) << 8u)
+        | static_cast<unsigned int>(static_cast<unsigned char>(d));
+}
+
+inline constexpr unsigned int appkit_debug_hot_key_signature() noexcept {
+    return appkit_fourcc('p', 'h', 'd', 'b');
+}
+
+inline constexpr unsigned int appkit_debug_hot_key_identifier() noexcept {
+    return 12u;
+}
+
+inline bool appkit_debug_hot_key_matches(unsigned int signature,
+                                         unsigned int identifier) noexcept {
+    return signature == appkit_debug_hot_key_signature()
+        && identifier == appkit_debug_hot_key_identifier();
+}
+
+inline OSStatus appkit_debug_hot_key_handler(EventHandlerCallRef,
+                                             EventRef event,
+                                             void*) {
+    EventHotKeyID hot_key{};
+    auto status = GetEventParameter(
+        event,
+        kEventParamDirectObject,
+        typeEventHotKeyID,
+        nullptr,
+        sizeof(hot_key),
+        nullptr,
+        &hot_key);
+    if (status != noErr
+        || !appkit_debug_hot_key_matches(hot_key.signature, hot_key.id))
+        return eventNotHandledErr;
+
+    id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
+    if (!appkit_app_is_active(app))
+        return eventNotHandledErr;
+
+    return dispatch_debug_panel_shortcut(
+        Key::F12,
+        KeyAction::Press,
+        debug_panel_shortcut_modifiers(),
+        "carbon-hotkey-f12")
+        ? noErr
+        : eventNotHandledErr;
+}
+
+inline void install_appkit_debug_hot_key() {
+    if (g_appkit_debug_hot_key_ref)
+        return;
+
+    auto target = GetApplicationEventTarget();
+    if (!target)
+        return;
+
+    if (!g_appkit_debug_hot_key_handler_ref) {
+        EventTypeSpec spec{kEventClassKeyboard, kEventHotKeyPressed};
+        g_appkit_debug_hot_key_handler_upp =
+            NewEventHandlerUPP(appkit_debug_hot_key_handler);
+        auto const status = InstallEventHandler(
+            target,
+            g_appkit_debug_hot_key_handler_upp,
+            1,
+            &spec,
+            nullptr,
+            &g_appkit_debug_hot_key_handler_ref);
+        if (status != noErr) {
+            std::fprintf(
+                stderr,
+                "[phenotype-native] debug hot key handler install failed: %d\n",
+                static_cast<int>(status));
+            if (g_appkit_debug_hot_key_handler_upp) {
+                DisposeEventHandlerUPP(g_appkit_debug_hot_key_handler_upp);
+                g_appkit_debug_hot_key_handler_upp = nullptr;
+            }
+            return;
+        }
+    }
+
+    EventHotKeyID hot_key{
+        static_cast<OSType>(appkit_debug_hot_key_signature()),
+        appkit_debug_hot_key_identifier(),
+    };
+    auto const status = RegisterEventHotKey(
+        kVK_F12,
+        cmdKey,
+        hot_key,
+        target,
+        kEventHotKeyNoOptions,
+        &g_appkit_debug_hot_key_ref);
+    if (status != noErr) {
+        std::fprintf(
+            stderr,
+            "[phenotype-native] debug hot key registration failed: %d\n",
+            static_cast<int>(status));
+        g_appkit_debug_hot_key_ref = nullptr;
+    }
+}
+
+inline void uninstall_appkit_debug_hot_key() {
+    if (g_appkit_debug_hot_key_ref) {
+        UnregisterEventHotKey(g_appkit_debug_hot_key_ref);
+        g_appkit_debug_hot_key_ref = nullptr;
+    }
+    if (g_appkit_debug_hot_key_handler_ref) {
+        RemoveEventHandler(g_appkit_debug_hot_key_handler_ref);
+        g_appkit_debug_hot_key_handler_ref = nullptr;
+    }
+    if (g_appkit_debug_hot_key_handler_upp) {
+        DisposeEventHandlerUPP(g_appkit_debug_hot_key_handler_upp);
+        g_appkit_debug_hot_key_handler_upp = nullptr;
+    }
+}
+#else
+inline void install_appkit_debug_hot_key() {}
+inline void uninstall_appkit_debug_hot_key() {}
+#endif
 
 inline bool activate_current_running_application() {
     id running_app = objc_send<id>(
@@ -1531,11 +1661,13 @@ int run_app_with_macos_platform(platform_api const& platform,
     if (g_appkit_shell_delegate)
         objc_send<void>(app, sel("setDelegate:"), g_appkit_shell_delegate);
     install_standard_appkit_menu(app, options);
+    install_appkit_debug_hot_key();
     objc_send<void>(app, sel("finishLaunching"));
 
     id window = create_appkit_window(width, height, title, options);
     if (!window) {
         std::fprintf(stderr, "[appkit] failed to create NSWindow\n");
+        uninstall_appkit_debug_hot_key();
         if (pool)
             objc_send<void>(pool, sel("drain"));
         return 1;
@@ -1666,6 +1798,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     g_appkit_window_user_closed = false;
     g_appkit_close_button_candidate = false;
     g_appkit_front_request_attempts = 0;
+    uninstall_appkit_debug_hot_key();
     if (pool)
         objc_send<void>(pool, sel("drain"));
     return 0;

@@ -15,6 +15,7 @@ cmake-in-root = false
 [target.'cfg(os = "macos")'.build]
 ldflags = [
     "-Wl,-framework,AppKit",
+    "-Wl,-framework,Carbon",
     "-Wl,-framework,CoreGraphics",
     "-Wl,-framework,CoreText",
     "-Wl,-framework,Foundation",
