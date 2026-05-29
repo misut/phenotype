@@ -384,6 +384,9 @@ static void test_macos_appkit_function_key_resolution() {
     using phenotype::native::detail::appkit_key_from_code_or_function_codepoint;
     using phenotype::native::detail::appkit_event_matches_debug_panel_shortcut;
     using phenotype::native::detail::appkit_event_matches_system_debug_panel_shortcut;
+    using phenotype::native::detail::appkit_debug_hot_key_identifier;
+    using phenotype::native::detail::appkit_debug_hot_key_matches;
+    using phenotype::native::detail::appkit_debug_hot_key_signature;
     using phenotype::native::detail::appkit_system_defined_aux_key_matches_debug_panel_shortcut;
     constexpr unsigned long command = 1ul << 20;
     constexpr unsigned long control = 1ul << 18;
@@ -490,7 +493,17 @@ static void test_macos_appkit_function_key_resolution() {
     assert(plain_system_sound_up != nullptr);
     assert(!appkit_event_matches_system_debug_panel_shortcut(plain_system_sound_up));
 
-    std::puts("PASS: macOS AppKit function-key events accept Fn+Cmd F12 only");
+    assert(appkit_debug_hot_key_matches(
+        appkit_debug_hot_key_signature(),
+        appkit_debug_hot_key_identifier()));
+    assert(!appkit_debug_hot_key_matches(
+        appkit_debug_hot_key_signature(),
+        appkit_debug_hot_key_identifier() + 1u));
+    assert(!appkit_debug_hot_key_matches(
+        appkit_debug_hot_key_signature() + 1u,
+        appkit_debug_hot_key_identifier()));
+
+    std::puts("PASS: macOS AppKit and Carbon function-key events accept Fn+Cmd F12 only");
 }
 
 static NativeSurfaceDescriptor make_macos_surface(id window) {
