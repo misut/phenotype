@@ -1567,6 +1567,65 @@ void test_material_surface_resolves_live_input_interaction() {
     std::puts("PASS: material surface resolves live input interaction");
 }
 
+void test_capture_only_surface_ignores_live_hover_material_interaction() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.callback_roles.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+    detail::g_app.hovered_id = 0u;
+    detail::g_app.focused_id = 0u;
+    detail::g_app.focus_visible = true;
+    detail::g_app.pressed_id = 0u;
+    detail::g_app.prev_hovered_id = 0xFFFFFFFFu;
+    detail::g_app.prev_focused_id = 0xFFFFFFFFu;
+    detail::g_app.prev_focus_visible = false;
+    detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
+    detail::g_app.prev_pointer_valid = false;
+    detail::set_pointer_position(40.0f, 20.0f);
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::Regular,
+            .role = MaterialSurfaceRole::Sidebar,
+            .fixed_height = 80.0f,
+            .border_width = 0.0f,
+            .semantic_label = "Capture Surface",
+            .capture_pointer = true,
+        },
+        [] {});
+    Scope::set_current(nullptr);
+
+    assert(detail::g_app.callbacks.size() == 1u);
+    LAYOUT_NODE(root_h, 320.0f);
+    detail::g_app.paint_invalidation_mask =
+        detail::compute_paint_invalidation_mask(detail::g_app);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto commands = parse_commands(CMD_BUF, CMD_LEN);
+    auto const& cmd = first_material_command(commands);
+    auto const& interaction = cmd.material.interaction;
+    assert(!cmd.material.container.interactive);
+    assert(!interaction.hovered);
+    assert(!interaction.pressed);
+    assert(!interaction.focused);
+    assert(!interaction.pointer_inside);
+
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = false;
+    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::clear_pointer_position();
+    std::puts("PASS: capture-only surface ignores live hover material interaction");
+}
+
 void test_material_surface_interactive_option_enables_plan_response() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -3474,6 +3533,7 @@ int main() {
     test_material_surface_glass_effect_shape_options();
     test_material_surface_style_override_emits_explicit_material_contract();
     test_material_surface_resolves_live_input_interaction();
+    test_capture_only_surface_ignores_live_hover_material_interaction();
     test_material_surface_interactive_option_enables_plan_response();
     test_glass_effect_surface_api_emits_capsule_tint_contract();
     test_glass_effect_shape_argument_anchors_material_contract();
