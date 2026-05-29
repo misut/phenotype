@@ -836,6 +836,20 @@ inline float normalized_pointer_axis(float pointer,
     return std::clamp((pointer - origin) / extent, 0.0f, 1.0f);
 }
 
+inline bool material_interaction_active(
+        MaterialInteractionDescriptor const& interaction) noexcept {
+    return interaction.hovered
+        || interaction.focused
+        || interaction.pressed
+        || interaction.pointer_inside;
+}
+
+inline bool material_should_resolve_live_interaction(
+        LayoutNode const& node) noexcept {
+    return node.material.container.interactive
+        || material_interaction_active(node.material.interaction);
+}
+
 inline constexpr float scroll_bar_fade_in_ms = 120.0f;
 inline constexpr float scroll_bar_hold_ms = 620.0f;
 inline constexpr float scroll_bar_fade_out_ms = 520.0f;
@@ -1031,6 +1045,9 @@ inline MaterialInteractionDescriptor resolve_material_interaction(
         float draw_x,
         float draw_y) {
     auto resolved = node.material.interaction;
+    if (!material_should_resolve_live_interaction(node))
+        return resolved;
+
     SubtreeInteractionState subtree{};
     collect_subtree_interaction_state(node_h, subtree);
     resolved.hovered = resolved.hovered || subtree.hovered;
