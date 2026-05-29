@@ -225,6 +225,44 @@ inline float appkit_y(NativeSurfaceDescriptor const& surface, double y) {
     return static_cast<float>(surface.logical_height) - static_cast<float>(y);
 }
 
+inline bool appkit_event_hits_native_titlebar_control_reserve(
+        id event,
+        NativeSurfaceDescriptor const& surface) {
+    if (!event || surface.window_chrome != WindowChromeStyle::IntegratedTitlebar)
+        return false;
+    auto const type = objc_send<unsigned long>(event, sel("type"));
+    if (type != 1 && type != 2 && type != 5 && type != 6 && type != 7)
+        return false;
+    auto const point = appkit_location(event);
+    float const top_y = appkit_y(surface, point.y);
+    float const titlebar_height = std::max(
+        36.0f,
+        surface.integrated_titlebar.height);
+    float const leading_controls = std::max(
+        80.0f,
+        surface.integrated_titlebar.leading_control_reserved_width);
+    return point.x >= 0.0
+        && point.x <= leading_controls
+        && top_y >= 0.0f
+        && top_y <= titlebar_height;
+}
+
+inline bool appkit_event_hits_close_button_fallback(
+        id event,
+        NativeSurfaceDescriptor const& surface) {
+    if (!event || surface.window_chrome != WindowChromeStyle::IntegratedTitlebar)
+        return false;
+    auto const point = appkit_location(event);
+    float const top_y = appkit_y(surface, point.y);
+    float const titlebar_height = std::max(
+        36.0f,
+        surface.integrated_titlebar.height);
+    return point.x >= 0.0
+        && point.x <= 52.0
+        && top_y >= 0.0f
+        && top_y <= std::min(44.0f, titlebar_height);
+}
+
 inline bool appkit_handle_standard_key_equivalent(id event);
 
 inline void dispatch_appkit_event(id event, NativeSurfaceDescriptor const& surface) {
@@ -360,6 +398,9 @@ inline id g_active_appkit_window = nullptr;
 inline NativeSurfaceDescriptor* g_active_appkit_surface = nullptr;
 inline bool g_appkit_keep_running_after_last_window_closed = false;
 inline bool g_appkit_should_terminate = false;
+inline bool g_appkit_mouse_tracking_mode = false;
+inline bool g_appkit_window_user_closed = false;
+inline bool g_appkit_close_button_candidate = false;
 inline void (*g_appkit_settings_menu_handler)() = nullptr;
 inline std::string g_appkit_application_name = "Phenotype";
 
@@ -398,6 +439,7 @@ inline void request_appkit_window_front(id app, id window) {
     if (!window)
         return;
 
+    g_appkit_window_user_closed = false;
     // Activation is asynchronous for command-line AppKit apps. Request app
     // focus and window key/main status as a single idempotent publish step so
     // the startup path and retry loop cannot drift apart.
@@ -426,18 +468,33 @@ inline long appkit_should_terminate(id, SEL, id) {
     return 1; // NSTerminateNow
 }
 
+inline signed char appkit_window_should_close(id, SEL, id) {
+    g_appkit_window_user_closed = true;
+    return static_cast<signed char>(1);
+}
+
+inline void appkit_window_will_close(id, SEL, id) {
+    g_appkit_window_user_closed = true;
+}
+
 inline signed char appkit_should_handle_reopen(id, SEL, id app, signed char) {
+    g_appkit_window_user_closed = false;
     request_appkit_window_front(app, g_active_appkit_window);
+    if (app)
+        objc_send<void>(app, sel("stop:"), nullptr);
     return static_cast<signed char>(1);
 }
 
 inline void appkit_did_become_active(id, SEL, id) {
+    if (g_appkit_window_user_closed)
+        return;
     id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
     request_appkit_window_front(app, g_active_appkit_window);
 }
 
 inline void appkit_open_settings(id, SEL, id) {
     id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
+    g_appkit_window_user_closed = false;
     request_appkit_window_front(app, g_active_appkit_window);
     if (g_appkit_settings_menu_handler) {
         g_appkit_settings_menu_handler();
@@ -478,6 +535,16 @@ inline id create_appkit_shell_delegate() {
             sel("applicationShouldTerminate:"),
             reinterpret_cast<IMP>(appkit_should_terminate),
             "q@:@");
+        class_addMethod(
+            delegate_class,
+            sel("windowShouldClose:"),
+            reinterpret_cast<IMP>(appkit_window_should_close),
+            "c@:@");
+        class_addMethod(
+            delegate_class,
+            sel("windowWillClose:"),
+            reinterpret_cast<IMP>(appkit_window_will_close),
+            "v@:@");
         class_addMethod(
             delegate_class,
             sel("applicationShouldHandleReopen:hasVisibleWindows:"),
@@ -588,6 +655,81 @@ inline void prime_appkit_window_ordering(id app) {
         nullptr,
         0.10);
     objc_send<void>(app, sel("run"));
+}
+
+inline id next_appkit_event(id app, double default_timeout_seconds) {
+    if (!app)
+        return nullptr;
+
+    return objc_send<id>(
+        app,
+        sel("nextEventMatchingMask:untilDate:inMode:dequeue:"),
+        ~0ul,
+        ns_date_after(default_timeout_seconds),
+        ns_string(g_appkit_mouse_tracking_mode
+            ? "NSEventTrackingRunLoopMode"
+            : "NSDefaultRunLoopMode"),
+        static_cast<signed char>(1));
+}
+
+inline void update_appkit_mouse_tracking_mode_before_send(id event) {
+    if (!event)
+        return;
+    auto const type = objc_send<unsigned long>(event, sel("type"));
+    if (type == 1 || type == 3)
+        g_appkit_mouse_tracking_mode = true;
+}
+
+inline void update_appkit_mouse_tracking_mode_after_send(id event) {
+    if (!event)
+        return;
+    auto const type = objc_send<unsigned long>(event, sel("type"));
+    if (type == 2 || type == 4)
+        g_appkit_mouse_tracking_mode = false;
+}
+
+inline void update_appkit_close_button_candidate_before_send(
+        id event,
+        NativeSurfaceDescriptor const& surface) {
+    if (!event)
+        return;
+    auto const type = objc_send<unsigned long>(event, sel("type"));
+    if (type == 1)
+        g_appkit_close_button_candidate =
+            appkit_event_hits_close_button_fallback(event, surface);
+    else if (type == 3)
+        g_appkit_close_button_candidate = false;
+}
+
+inline void complete_appkit_close_button_after_event(
+        id event,
+        NativeSurfaceDescriptor const& surface,
+        id window) {
+    if (!event || !window)
+        return;
+    auto const type = objc_send<unsigned long>(event, sel("type"));
+    if (type != 2)
+        return;
+
+    bool const should_close = g_appkit_close_button_candidate
+        && appkit_event_hits_close_button_fallback(event, surface);
+    g_appkit_close_button_candidate = false;
+    if (!should_close)
+        return;
+
+    g_appkit_window_user_closed = true;
+    if (g_appkit_keep_running_after_last_window_closed) {
+        objc_send<void>(window, sel("orderOut:"), nullptr);
+        id app = objc_send<id>(
+            class_id("NSApplication"),
+            sel("sharedApplication"));
+        if (app)
+            objc_send<void>(app, sel("hide:"), nullptr);
+    } else {
+        objc_send<void>(window, sel("close"));
+    }
+    if (!g_appkit_keep_running_after_last_window_closed)
+        g_appkit_should_terminate = true;
 }
 
 struct AppKitWindowServerSurface {
@@ -1110,6 +1252,9 @@ int run_app_with_macos_platform(platform_api const& platform,
     g_appkit_keep_running_after_last_window_closed =
         options.keep_running_after_last_window_closed;
     g_appkit_should_terminate = false;
+    g_appkit_mouse_tracking_mode = false;
+    g_appkit_window_user_closed = false;
+    g_appkit_close_button_candidate = false;
     g_appkit_settings_menu_handler = options.on_settings_menu;
     g_appkit_application_name = options.application_name
         && options.application_name[0] != '\0'
@@ -1129,6 +1274,8 @@ int run_app_with_macos_platform(platform_api const& platform,
             objc_send<void>(pool, sel("drain"));
         return 1;
     }
+    if (g_appkit_shell_delegate)
+        objc_send<void>(window, sel("setDelegate:"), g_appkit_shell_delegate);
     id view_obj = objc_send<id>(window, sel("contentView"));
 
     native_host host;
@@ -1209,19 +1356,35 @@ int run_app_with_macos_platform(platform_api const& platform,
         bool const visible = appkit_window_is_visible(window);
         if (!g_appkit_keep_running_after_last_window_closed && !visible)
             break;
+        if (g_appkit_window_user_closed && !visible) {
+            objc_send<void>(app, sel("run"));
+            last_animation_tick = std::chrono::steady_clock::now();
+            continue;
+        }
         if (visible)
             sync_appkit_surface(host, surface, window, true);
-        id event = objc_send<id>(
-            app,
-            sel("nextEventMatchingMask:untilDate:inMode:dequeue:"),
-            ~0ul,
-            ns_date_after(0.016),
-            ns_string("NSDefaultRunLoopMode"),
-            static_cast<signed char>(1));
+        id event = next_appkit_event(app, 0.016);
         if (event) {
-            if (visible)
+            update_appkit_mouse_tracking_mode_before_send(event);
+            update_appkit_close_button_candidate_before_send(event, surface);
+            bool const close_button_fallback_event =
+                visible
+                && (g_appkit_close_button_candidate
+                    || appkit_event_hits_close_button_fallback(event, surface));
+            if (close_button_fallback_event)
+                g_appkit_mouse_tracking_mode = false;
+            bool const native_titlebar_control_event =
+                visible && appkit_event_hits_native_titlebar_control_reserve(
+                    event,
+                    surface);
+            if (visible
+                && !close_button_fallback_event
+                && !native_titlebar_control_event)
                 dispatch_appkit_event(event, surface);
-            objc_send<void>(app, sel("sendEvent:"), event);
+            if (!close_button_fallback_event)
+                objc_send<void>(app, sel("sendEvent:"), event);
+            update_appkit_mouse_tracking_mode_after_send(event);
+            complete_appkit_close_button_after_event(event, surface, window);
         }
         objc_send<void>(app, sel("updateWindows"));
         service_host_tick(last_animation_tick);
@@ -1232,6 +1395,9 @@ int run_app_with_macos_platform(platform_api const& platform,
     g_active_appkit_surface = nullptr;
     g_appkit_settings_menu_handler = nullptr;
     g_appkit_keep_running_after_last_window_closed = false;
+    g_appkit_mouse_tracking_mode = false;
+    g_appkit_window_user_closed = false;
+    g_appkit_close_button_candidate = false;
     if (pool)
         objc_send<void>(pool, sel("drain"));
     return 0;
