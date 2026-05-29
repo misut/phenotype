@@ -383,7 +383,11 @@ static void test_macos_appkit_activation_slice_gate() {
 static void test_macos_appkit_function_key_resolution() {
     using phenotype::native::detail::appkit_key_from_code_or_function_codepoint;
     using phenotype::native::detail::appkit_event_matches_debug_panel_shortcut;
+    using phenotype::native::detail::appkit_event_matches_system_debug_panel_shortcut;
     using phenotype::native::detail::appkit_system_defined_aux_key_matches_debug_panel_shortcut;
+    constexpr unsigned long command = 1ul << 20;
+    constexpr unsigned long control = 1ul << 18;
+    constexpr unsigned long function = 1ul << 23;
 
     assert(appkit_key_from_code_or_function_codepoint(111)
            == phenotype::native::Key::F12);
@@ -397,37 +401,96 @@ static void test_macos_appkit_function_key_resolution() {
     assert(appkit_event_matches_debug_panel_shortcut(
         111,
         std::nullopt,
-        1ul << 20));
+        command));
     assert(appkit_event_matches_debug_panel_shortcut(
         255,
         0xF70Fu,
-        1ul << 20));
+        command));
+    assert(appkit_event_matches_debug_panel_shortcut(
+        111,
+        std::nullopt,
+        command | function));
+    assert(appkit_event_matches_debug_panel_shortcut(
+        255,
+        0xF70Fu,
+        command | function));
     assert(!appkit_event_matches_debug_panel_shortcut(
         255,
         0xF704u,
-        1ul << 20));
+        command));
     assert(!appkit_event_matches_debug_panel_shortcut(
         111,
         std::nullopt,
-        1ul << 18));
+        control));
 
     auto const sound_up_down = static_cast<long>((0 << 16) | (0x0A << 8));
     auto const sound_up_up = static_cast<long>((0 << 16) | (0x0B << 8));
     auto const sound_down_down = static_cast<long>((1 << 16) | (0x0A << 8));
     assert(!appkit_system_defined_aux_key_matches_debug_panel_shortcut(
         sound_up_down,
-        1ul << 20));
+        command));
+    assert(appkit_system_defined_aux_key_matches_debug_panel_shortcut(
+        sound_up_down,
+        command | function));
     assert(!appkit_system_defined_aux_key_matches_debug_panel_shortcut(
         sound_up_up,
-        1ul << 20));
+        command | function));
     assert(!appkit_system_defined_aux_key_matches_debug_panel_shortcut(
         sound_down_down,
-        1ul << 20));
+        command | function));
     assert(!appkit_system_defined_aux_key_matches_debug_panel_shortcut(
         sound_up_down,
-        1ul << 18));
+        control | function));
 
-    std::puts("PASS: macOS AppKit function-key resolution requires real F12");
+    CGPoint point{};
+    id f12_chars = test_ns_string("\xEF\x9C\x8F");
+    id key_down_f12 = test_objc_send<id>(
+        test_class_id("NSEvent"),
+        test_sel("keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:"),
+        static_cast<unsigned long>(10),
+        point,
+        command | function,
+        0.0,
+        0l,
+        nullptr,
+        f12_chars,
+        f12_chars,
+        static_cast<signed char>(0),
+        static_cast<unsigned short>(111));
+    assert(key_down_f12 != nullptr);
+    assert(appkit_event_matches_debug_panel_shortcut(key_down_f12));
+
+    id fn_system_f12 = test_objc_send<id>(
+        test_class_id("NSEvent"),
+        test_sel("otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:"),
+        static_cast<unsigned long>(14),
+        point,
+        command | function,
+        0.0,
+        0l,
+        nullptr,
+        static_cast<short>(8),
+        sound_up_down,
+        0l);
+    assert(fn_system_f12 != nullptr);
+    assert(appkit_event_matches_system_debug_panel_shortcut(fn_system_f12));
+
+    id plain_system_sound_up = test_objc_send<id>(
+        test_class_id("NSEvent"),
+        test_sel("otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:"),
+        static_cast<unsigned long>(14),
+        point,
+        command,
+        0.0,
+        0l,
+        nullptr,
+        static_cast<short>(8),
+        sound_up_down,
+        0l);
+    assert(plain_system_sound_up != nullptr);
+    assert(!appkit_event_matches_system_debug_panel_shortcut(plain_system_sound_up));
+
+    std::puts("PASS: macOS AppKit function-key events accept Fn+Cmd F12 only");
 }
 
 static NativeSurfaceDescriptor make_macos_surface(id window) {

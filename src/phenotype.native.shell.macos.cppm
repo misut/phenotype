@@ -155,6 +155,11 @@ inline int appkit_modifiers(unsigned long flags) {
     return mods;
 }
 
+inline bool appkit_function_modifier(unsigned long flags) noexcept {
+    constexpr unsigned long function = 1ul << 23;
+    return (flags & function) != 0;
+}
+
 inline Key appkit_key(unsigned short key_code) {
     switch (key_code) {
         case 0: return Key::A;
@@ -279,11 +284,18 @@ inline bool appkit_system_defined_aux_key_matches_debug_panel_shortcut(
         unsigned long flags) {
 #ifndef NDEBUG
     // When macOS maps the top row to media keys, the physical F12 key
-    // arrives as Sound Up unless Fn is held. The debug shortcut should
-    // follow AppKit's real F12 key event, not the media-key fallback.
-    (void)data1;
-    (void)flags;
-    return false;
+    // can still arrive as Sound Up with the Function modifier set.
+    // Accept that Fn+Cmd path, but reject plain Cmd+SoundUp so the
+    // volume key alone does not toggle the debug panel.
+    constexpr int nx_keytype_sound_up = 0;
+    constexpr int aux_key_down_state = 0x0A;
+    auto const key_type = static_cast<int>((data1 >> 16) & 0xFFFF);
+    auto const key_state = static_cast<int>((data1 >> 8) & 0xFF);
+    return key_type == nx_keytype_sound_up
+        && key_state == aux_key_down_state
+        && appkit_function_modifier(flags)
+        && normalized_key_command_modifiers(appkit_modifiers(flags))
+            == debug_panel_shortcut_modifiers();
 #else
     (void)data1;
     (void)flags;
