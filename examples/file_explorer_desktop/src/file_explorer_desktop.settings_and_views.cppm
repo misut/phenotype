@@ -112,43 +112,55 @@ void finder_list(State const& state,
                     widget::button<Msg>(
                         phenotype::str{state.labels.name},
                         SortBy{file_explorer_demo::SortMode::Name},
-                        widget::glass_table_header_button_style(
-                            GlassTableHeaderStyleOptions{
-                                .sorted = snap.sort_mode
-                                    == file_explorer_demo::SortMode::Name,
-                                .width = 410.0f,
-                                .height = 28.0f,
-                                .border_radius = 8.0f,
-                                .font_size = 12.0f,
-                            }));
+                        widget::interaction_glass_button_style(
+                            widget::glass_table_header_button_style(
+                                GlassTableHeaderStyleOptions{
+                                    .sorted = snap.sort_mode
+                                        == file_explorer_demo::SortMode::Name,
+                                    .width = 410.0f,
+                                    .height = 28.0f,
+                                    .border_radius = 8.0f,
+                                    .font_size = 12.0f,
+                                }),
+                            MaterialSurfaceRole::Control,
+                            MaterialKind::Clear,
+                            MaterialKind::Regular));
                 });
                 layout::sized_box(160.0f, [&] {
                     widget::button<Msg>(
                         phenotype::str{state.labels.kind},
                         SortBy{file_explorer_demo::SortMode::Kind},
-                        widget::glass_table_header_button_style(
-                            GlassTableHeaderStyleOptions{
-                                .sorted = snap.sort_mode
-                                    == file_explorer_demo::SortMode::Kind,
-                                .width = 150.0f,
-                                .height = 28.0f,
-                                .border_radius = 8.0f,
-                                .font_size = 12.0f,
-                            }));
+                        widget::interaction_glass_button_style(
+                            widget::glass_table_header_button_style(
+                                GlassTableHeaderStyleOptions{
+                                    .sorted = snap.sort_mode
+                                        == file_explorer_demo::SortMode::Kind,
+                                    .width = 150.0f,
+                                    .height = 28.0f,
+                                    .border_radius = 8.0f,
+                                    .font_size = 12.0f,
+                                }),
+                            MaterialSurfaceRole::Control,
+                            MaterialKind::Clear,
+                            MaterialKind::Regular));
                 });
                 layout::sized_box(120.0f, [&] {
                     widget::button<Msg>(
                         phenotype::str{state.labels.size},
                         SortBy{file_explorer_demo::SortMode::Size},
-                        widget::glass_table_header_button_style(
-                            GlassTableHeaderStyleOptions{
-                                .sorted = snap.sort_mode
-                                    == file_explorer_demo::SortMode::Size,
-                                .width = 110.0f,
-                                .height = 28.0f,
-                                .border_radius = 8.0f,
-                                .font_size = 12.0f,
-                            }));
+                        widget::interaction_glass_button_style(
+                            widget::glass_table_header_button_style(
+                                GlassTableHeaderStyleOptions{
+                                    .sorted = snap.sort_mode
+                                        == file_explorer_demo::SortMode::Size,
+                                    .width = 110.0f,
+                                    .height = 28.0f,
+                                    .border_radius = 8.0f,
+                                    .font_size = 12.0f,
+                                }),
+                            MaterialSurfaceRole::Control,
+                            MaterialKind::Clear,
+                            MaterialKind::Regular));
                 });
             }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Start);
             if (entries.empty()) {

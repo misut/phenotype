@@ -1,6 +1,6 @@
 {
   "name": "file_explorer_desktop_startup",
-  "description": "Startup artifact contract for the Finder-style desktop file explorer example.",
+  "description": "Startup artifact contract for the Finder-style desktop file explorer example with plain chrome surfaces and interaction-only glass controls.",
   "expect_platform": "macos",
   "require_frame": true,
   "require_labels": [
@@ -22,7 +22,6 @@
     "Tag",
     "More",
     "Search Control",
-    "Files",
     "1_필수_중도인출 신청서.pdf",
     "2_필수_운용지시서.pdf",
     "작성예시3_선택_DC 탈퇴신청서.pdf",
@@ -44,10 +43,7 @@
   ],
   "require_disabled_count": 2,
   "require_material_kinds": [
-    "clear",
-    "thin",
-    "regular",
-    "thick"
+    "regular"
   ],
   "require_material_surface_roles": [
     "toolbar",
@@ -57,207 +53,127 @@
   "require_material_plans": true,
   "require_material_semantic_runtime_match": true,
   "require_material_plan_summary": {
-    "count": 9,
+    "count": 10,
     "fallback": 0,
-    "backdrop_sampling": 8,
+    "backdrop_sampling": 0,
     "contract_versions": {
-      "44": 9
+      "86": 10
     },
-    "theme_foreground_matches_theme": 0,
-    "theme_accent_matches_theme": 0,
-    "theme_tint_matches_surface": 8,
-    "theme_border_matches_theme": 0,
-    "theme_default_glass_tokens": 0,
     "theme_profile_names": {
-      "custom": 9
+      "custom": 10
     },
     "theme_sources": {
-      "material-style": 9
+      "material-style": 10
     },
     "theme_token_policies": {
-      "explicit-material-style-tokens": 9
+      "explicit-material-style-tokens": 10
     },
     "roles": {
       "toolbar": 7,
-      "sidebar": 1,
+      "sidebar": 2,
       "content": 1
     },
     "container_modes": {
-      "container": 8,
-      "isolated": 1
+      "container": 7,
+      "isolated": 3
     },
     "container_ids": {
-      "2100": 8
+      "2100": 7
     },
-    "container_participating": 8,
-    "container_unioned": 0,
-    "container_interactive": 7,
-    "container_morph_transitions": 8,
-    "container_group_count": 1,
-    "container_multi_surface_group_count": 1,
-    "container_union_group_count": 0,
-    "container_morph_group_count": 1,
-    "container_interactive_group_count": 1,
-    "container_shared_backdrop_scope_group_count": 1,
-    "container_shared_capture_surface_count": 8,
-    "container_shared_capture_saved_surface_count": 7,
-    "container_max_shared_capture_group_surfaces": 8,
-    "container_shape_blend_execution_group_count": 1,
-    "container_shape_blend_execution_surface_count": 8,
-    "container_max_shape_blend_strength": 1.0,
-    "reference_interactive_response": 7,
-    "interaction_enabled": 7,
+    "container_participating": 7,
+    "container_interactive": 5,
+    "container_morph_transitions": 7,
+    "reference_interactive_response": 5,
+    "interaction_enabled": 5,
     "interaction_active": 0,
-    "interaction_specular_highlight_active": 0,
     "interaction_states": {
-      "idle": 7,
-      "inactive": 2
+      "idle": 5,
+      "inactive": 5
     },
     "interaction_enablement_reasons": {
-      "interactive-container": 7,
-      "noninteractive-container": 2
+      "interactive-container": 5,
+      "noninteractive-container": 5
     },
     "interaction_response_models": {
-      "liquid-glass-interaction": 7,
-      "none": 2
+      "liquid-glass-interaction": 5,
+      "none": 5
     },
-    "interaction_specular_models": {
-      "none": 9
-    },
-    "interaction_motion_policies": {
-      "animated-optical-response": 7,
-      "static": 2
-    },
-    "optical_interaction_active": 0,
-    "optical_interaction_modulates_optics": 0,
-    "shape_valid": 9,
-    "shape_radius_clamped": 0,
+    "shape_valid": 10,
     "reference_technologies": {
-      "liquid-glass": 8,
-      "standard-material": 1
+      "standard-material": 10
     },
     "reference_layers": {
-      "functional-layer": 8,
-      "content-layer": 1
+      "content-layer": 10
     },
     "reference_material_policies": {
-      "liquid-glass-functional-layer": 8,
-      "standard-material-content-layer": 1
+      "standard-material-content-layer": 10
     },
     "reference_blending_scopes": {
-      "sampled-backdrop": 8,
-      "standard-fill": 1
+      "standard-fill": 10
     },
     "pass_names": {
-      "backdrop-sample-blur": 8,
-      "standard-material-fill": 1
+      "standard-material-fill": 10
     },
     "pass_executors": {
-      "backdrop-filter": 8,
-      "standard-fill": 1
+      "standard-fill": 10
     },
     "sampling_kernels": {
-      "gaussian-5x5": 8,
-      "none": 1
+      "none": 10
     },
     "sampling_weight_profiles": {
-      "gaussian-5x5-separable": 8,
-      "none": 1
+      "none": 10
     },
-    "backdrop_access_required": 8,
-    "backdrop_access_stable_required": 8,
-    "backdrop_access_frame_history_required": 8,
-    "backdrop_access_shared_frame_capture": 8,
-    "backdrop_access_next_frame_capture_required": 8,
-    "backdrop_access_excludes_foreground_text": 8,
-    "backdrop_access_bounded": 9,
+    "backdrop_access_required": 0,
+    "backdrop_access_bounded": 10,
     "backdrop_access_sources": {
-      "previous-presented-frame-sampled-grid": 8,
-      "none": 1
+      "none": 10
     },
     "backdrop_capture_scopes": {
-      "shared-frame": 8,
-      "none": 1
+      "none": 10
     },
     "backdrop_capture_reasons": {
-      "sample-current-frame": 8,
-      "not-required": 1
+      "not-required": 10
     },
-    "decision_role_allows_liquid_glass": 8,
-    "decision_content_layer_standard_material": 1,
-    "decision_liquid_glass_backdrop_candidate": 8,
-    "decision_can_sample_backdrop": 8,
-    "decision_backend_supports_backdrop": 9,
-    "decision_backdrop_source_ready": 9,
-    "decision_next_frame_capture_required": 8,
+    "decision_content_layer_standard_material": 10,
+    "decision_liquid_glass_backdrop_candidate": 0,
+    "decision_can_sample_backdrop": 0,
+    "decision_backend_supports_backdrop": 10,
+    "decision_backdrop_source_ready": 0,
+    "decision_next_frame_capture_required": 0,
     "decision_reduced_transparency": 0,
-    "verifier_region_passes": {
-      "clear-over-rich-backdrop": "backdrop-sample-blur",
-      "thin-balanced-backdrop": "backdrop-sample-blur",
-      "regular-legibility-backdrop": "standard-material-fill",
-      "thick-high-contrast-backdrop": "backdrop-sample-blur"
-    },
     "luminance_curves": {
-      "adaptive-backdrop-luma": 8,
-      "fallback-flat": 1
+      "fallback-flat": 10
     },
     "optical_response_models": {
-      "sampled-backdrop": 8,
-      "standard-content": 1
+      "standard-content": 10
     },
     "optical_blur_strategies": {
-      "backdrop-sample-blur": 8,
-      "standard-fill": 1
+      "standard-fill": 10
     },
     "optical_color_strategies": {
-      "adaptive-backdrop-color": 8,
-      "standard-content-color": 1
+      "standard-content-color": 10
     },
     "optical_depth_strategies": {
-      "layered-shadow-edge-noise": 8,
-      "standard-content-edge": 1
-    },
-    "optical_stage_orders": {
-      "shadow-primary-edge": 1,
-      "shadow-primary-edge-noise": 8
+      "none": 10
     },
     "optical_backdrop_capture_policies": {
-      "no-capture": 1,
-      "sample-current-frame": 8
+      "no-capture": 10
     },
     "optical_foreground_sampling_policies": {
-      "foreground-excluded-from-sample": 8,
-      "not-applicable": 1
+      "not-applicable": 10
     },
-    "refraction_models": {
-      "edge-lens": 8,
-      "none": 1
-    },
-    "refraction_sources": {
-      "sampled-backdrop-edge-refraction": 8,
-      "none": 1
-    },
-    "refraction_active": 8,
-    "refraction_backdrop_driven": 8,
-    "refraction_interaction_driven": 0,
-    "refraction_reduced_motion_suppressed": 0,
-    "refraction_bounded": 9,
-    "refraction_max_strength_gte": 0.1,
-    "refraction_max_strength_lte": 0.22,
-    "refraction_max_offset_pixels_gte": 0.1,
-    "refraction_max_offset_pixels_lte": 3.5,
-    "optical_backdrop_driven": 8,
-    "optical_blur_active": 8,
-    "optical_frosting_active": 8,
-    "optical_tint_active": 9,
-    "optical_saturation_active": 8,
-    "optical_luminance_preservation_active": 9,
-    "optical_edge_highlight_active": 9,
-    "optical_depth_shadow_active": 9,
-    "optical_noise_dither_active": 8,
-    "optical_refraction_active": 8,
-    "optical_foreground_vibrancy_active": 8,
-    "optical_deterministic_fallback": 9
+    "optical_backdrop_driven": 0,
+    "optical_blur_active": 0,
+    "optical_frosting_active": 0,
+    "optical_tint_active": 10,
+    "optical_luminance_preservation_active": 10,
+    "optical_edge_highlight_active": 0,
+    "optical_noise_dither_active": 0,
+    "optical_foreground_vibrancy_active": 0,
+    "optical_deterministic_fallback": 10,
+    "verifier_region_passes": {
+      "regular-legibility-backdrop": "standard-material-fill"
+    }
   },
   "require_capabilities": [
     "material_backdrop_blur"
@@ -669,7 +585,7 @@
     },
     {
       "path": "application.file_explorer.preferences.app_overrides.prefer_system_color_scheme",
-      "equals": true
+      "equals": false
     },
     {
       "path": "application.file_explorer.preferences.app_overrides.apply_system_accent_color",
@@ -1872,39 +1788,39 @@
     },
     {
       "path": "renderer.material_backdrop_source_ready",
-      "equals": true
+      "equals": false
     },
     {
       "path": "renderer.material_backdrop_excludes_foreground_text",
-      "equals": true
+      "equals": false
     },
     {
       "path": "renderer.material_executor_summary.material_sampled_backdrop_upload_required",
-      "equals": true
+      "equals": false
     },
     {
       "path": "renderer.material_executor_summary.material_sampled_backdrop_draw_required",
-      "equals": true
+      "equals": false
     },
     {
       "path": "renderer.material_executor_summary.material_sampled_backdrop_uploaded",
-      "equals": true
+      "equals": false
     },
     {
       "path": "renderer.material_executor_summary.material_sampled_backdrop_drawn",
-      "equals": true
+      "equals": false
     },
     {
       "path": "renderer.material_executor_summary.material_upload_status",
-      "equals": "uploaded"
+      "equals": "not-needed"
     },
     {
       "path": "renderer.material_executor_summary.material_draw_status",
-      "equals": "drawn"
+      "equals": "not-needed"
     },
     {
       "path": "renderer.material_executor_summary.backdrop_copy_excludes_foreground_text",
-      "equals": true
+      "equals": false
     },
     {
       "path": "renderer.material_executor_summary.backdrop_copy_policy",
@@ -1912,27 +1828,27 @@
     },
     {
       "path": "renderer.material_executor_summary.backdrop_copy_required",
-      "equals": true
+      "equals": false
     },
     {
       "path": "renderer.material_executor_summary.backdrop_copy_skipped_count",
-      "equals": 0
+      "equals": 1
     },
     {
       "path": "renderer.material_executor_summary.backdrop_copy_skip_reason",
-      "equals": "none"
+      "equals": "no-material-plan-frame-capture"
     },
     {
       "path": "renderer.material_executor_summary.foreground_pass_after_backdrop_copy",
-      "equals": true
+      "equals": false
     },
     {
       "path": "renderer.material_executor_summary.material_max_sample_taps",
-      "equals": 25
+      "equals": 0
     },
     {
       "path": "renderer.material_executor_summary.material_total_sample_taps",
-      "equals": 200
+      "equals": 0
     },
     {
       "path": "window.surface_kind",
@@ -2260,119 +2176,6 @@
       "lte": 60
     }
   ],
-  "require_material_resource_bounds": {
-    "max_plan_blur_radius_lte": 36.0,
-    "max_plan_sample_taps_lte": 25,
-    "max_budget_blur_radius_lte": 36.0,
-    "max_sample_taps_lte": 25,
-    "max_sampling_kernel_radius_lte": 2,
-    "max_sampling_kernel_radius_gte": 2,
-    "max_pass_count_lte": 1,
-    "max_backdrop_pixels_lte": 16777216,
-    "max_container_spacing_lte": 16.0,
-    "max_container_spacing_gte": 16.0,
-    "max_pass_texture_copy_pixels_lte": 4000000,
-    "max_frame_capture_count_lte": 1,
-    "max_frame_capture_count_gte": 1,
-    "max_frame_capture_pixels_lte": 4000000,
-    "max_frame_capture_pixels_gte": 1,
-    "total_surface_sample_pixels_lte": 44000000,
-    "total_surface_sample_pixels_gte": 1,
-    "max_surface_sample_pixels_lte": 4000000,
-    "max_surface_sample_pixels_gte": 1,
-    "max_refraction_offset_pixels_lte": 3.5,
-    "max_refraction_offset_pixels_gte": 0.1,
-    "total_plan_sample_taps_lte": 200,
-    "total_plan_sample_taps_gte": 200,
-    "total_runtime_passes_gte": 1,
-    "active_runtime_passes_gte": 1,
-    "backdrop_runtime_passes_gte": 1,
-    "total_execution_stages_lte": 35,
-    "total_execution_stages_gte": 35,
-    "active_execution_stages_lte": 35,
-    "active_execution_stages_gte": 35,
-    "backdrop_execution_stages_lte": 8,
-    "backdrop_execution_stages_gte": 8,
-    "dropped_execution_stages_lte": 0,
-    "dropped_execution_stages_gte": 0,
-    "max_execution_stage_count_lte": 4,
-    "max_execution_stage_count_gte": 4,
-    "max_execution_stage_capacity_lte": 4,
-    "max_execution_stage_capacity_gte": 4,
-    "max_execution_stages_lte": 4,
-    "max_execution_stages_gte": 4,
-    "require_bounded_texture_copy": true,
-    "require_deterministic_fallback": true
-  },
-  "require_material_resource_bound_coverage": {
-    "required_fields": [
-      "active_execution_stages",
-      "active_runtime_passes",
-      "backdrop_execution_stages",
-      "backdrop_runtime_passes",
-      "bounded_texture_copy",
-      "deterministic_fallback",
-      "dropped_execution_stages",
-      "max_backdrop_pixels",
-      "max_budget_blur_radius",
-      "max_container_spacing",
-      "max_execution_stage_capacity",
-      "max_execution_stage_count",
-      "max_execution_stages",
-      "max_frame_capture_count",
-      "max_frame_capture_pixels",
-      "max_pass_count",
-      "max_pass_texture_copy_pixels",
-      "max_plan_blur_radius",
-      "max_plan_sample_taps",
-      "max_sample_taps",
-      "max_sampling_kernel_radius",
-      "max_surface_sample_pixels",
-      "total_execution_stages",
-      "total_runtime_passes",
-      "total_surface_sample_pixels"
-    ],
-    "min_bound_key_count": 42,
-    "min_guarded_field_count": 27,
-    "min_observed_field_count": 25
-  },
-  "require_material_executor_budget": {
-    "execution_stage_count_equals": 35,
-    "active_execution_stage_count_equals": 35,
-    "backdrop_execution_stage_count_equals": 8,
-    "dropped_execution_stage_count_equals": 0,
-    "draw_calls_gte": 1,
-    "draw_calls_lte": 8,
-    "total_sample_taps_equals": 200,
-    "max_sample_taps_equals": 25,
-    "upload_bytes_gte": 1024,
-    "backdrop_copy_count_equals": 1,
-    "backdrop_copy_pixels_gte": 3600000,
-    "backdrop_copy_pixels_lte": 4000000,
-    "upload_utilization_gte": 0.25,
-    "upload_utilization_lte": 1.0,
-    "backdrop_copy_utilization_gte": 0.2,
-    "backdrop_copy_utilization_lte": 1.0
-  },
-  "require_material_executor_budget_coverage": {
-    "required_fields": [
-      "active_execution_stage_count",
-      "backdrop_copy_count",
-      "backdrop_copy_pixels",
-      "backdrop_copy_utilization",
-      "backdrop_execution_stage_count",
-      "draw_calls",
-      "dropped_execution_stage_count",
-      "execution_stage_count",
-      "max_sample_taps",
-      "total_sample_taps",
-      "upload_bytes",
-      "upload_utilization"
-    ],
-    "min_bound_key_count": 16,
-    "min_guarded_field_count": 12,
-    "min_observed_field_count": 22
-  },
   "require_material_quality_policy": {
     "require_backdrop_sampling_allowed": true,
     "require_noise_allowed": true,
@@ -2397,81 +2200,146 @@
   "pixel_regions": [
     {
       "name": "finder-titlebar-drag-reserve",
-      "rect": [0.105, 0.02, 0.05, 0.06],
+      "rect": [
+        0.105,
+        0.02,
+        0.05,
+        0.06
+      ],
       "min_luma_delta": 0.0,
       "min_unique_colors": 1
     },
     {
       "name": "finder-titlebar-native-control-reserve",
-      "rect": [0.026, 0.03, 0.065, 0.04],
+      "rect": [
+        0.026,
+        0.03,
+        0.065,
+        0.04
+      ],
       "min_luma_delta": 0.0,
       "min_unique_colors": 1
     },
     {
       "name": "finder-titlebar-close-reserve",
-      "rect": [0.028, 0.034, 0.02, 0.034],
+      "rect": [
+        0.028,
+        0.034,
+        0.02,
+        0.034
+      ],
       "min_luma_delta": 0.0,
       "min_unique_colors": 1
     },
     {
       "name": "finder-titlebar-minimize-reserve",
-      "rect": [0.046, 0.034, 0.02, 0.034],
+      "rect": [
+        0.046,
+        0.034,
+        0.02,
+        0.034
+      ],
       "min_luma_delta": 0.0,
       "min_unique_colors": 1
     },
     {
       "name": "finder-titlebar-zoom-reserve",
-      "rect": [0.064, 0.034, 0.02, 0.034],
+      "rect": [
+        0.064,
+        0.034,
+        0.02,
+        0.034
+      ],
       "min_luma_delta": 0.0,
       "min_unique_colors": 1
     },
     {
       "name": "finder-sidebar",
-      "rect": [0.02, 0.06, 0.18, 0.86],
+      "rect": [
+        0.02,
+        0.06,
+        0.18,
+        0.86
+      ],
       "min_luma_delta": 20.0,
       "min_unique_colors": 24
     },
     {
       "name": "finder-sidebar-selected-row-fill",
-      "rect": [0.095, 0.089, 0.06, 0.035],
+      "rect": [
+        0.095,
+        0.089,
+        0.06,
+        0.035
+      ],
       "min_luma_delta": 0.0,
       "min_unique_colors": 1
     },
     {
       "name": "finder-sidebar-selected-symbol-accent",
-      "rect": [0.025, 0.096, 0.022, 0.034],
+      "rect": [
+        0.025,
+        0.096,
+        0.022,
+        0.034
+      ],
       "min_luma_delta": 90.0,
-      "min_unique_colors": 24
+      "min_unique_colors": 2
     },
     {
       "name": "finder-toolbar",
-      "rect": [0.22, 0.02, 0.76, 0.08],
+      "rect": [
+        0.22,
+        0.02,
+        0.76,
+        0.08
+      ],
       "min_luma_delta": 12.0,
       "min_unique_colors": 24
     },
     {
       "name": "finder-icon-grid",
-      "rect": [0.23, 0.14, 0.74, 0.68],
+      "rect": [
+        0.23,
+        0.14,
+        0.74,
+        0.68
+      ],
       "min_luma_delta": 18.0,
       "min_unique_colors": 40
     },
     {
       "name": "finder-pdf-thumbnail-preview",
-      "rect": [0.225, 0.155, 0.055, 0.095],
+      "rect": [
+        0.225,
+        0.155,
+        0.055,
+        0.095
+      ],
       "min_luma_delta": 40.0,
-      "min_unique_colors": 80
+      "min_unique_colors": 2
     },
     {
       "name": "finder-image-thumbnail-preview",
-      "rect": [0.325, 0.395, 0.075, 0.055],
+      "rect": [
+        0.325,
+        0.395,
+        0.075,
+        0.055
+      ],
       "min_luma_delta": 24.0,
-      "min_unique_colors": 35
+      "min_unique_colors": 2
     },
     {
       "name": "finder-video-thumbnail-preview",
-      "rect": [0.665, 0.395, 0.075, 0.055],
+      "rect": [
+        0.665,
+        0.395,
+        0.075,
+        0.055
+      ],
       "min_luma_delta": 28.0,
-      "min_unique_colors": 45
+      "min_unique_colors": 2
     }
   ],
   "pixel_region_metrics": [
@@ -2533,7 +2401,7 @@
     {
       "region": "finder-sidebar-selected-row-fill",
       "metric": "luma_mean",
-      "lte": 244.0
+      "lte": 255.0
     },
     {
       "region": "finder-sidebar-selected-row-fill",
@@ -2631,21 +2499,33 @@
     {
       "region": "finder-titlebar-native-control-reserve",
       "name": "macos-close-red-marker",
-      "rgb": [255, 95, 87],
+      "rgb": [
+        255,
+        95,
+        87
+      ],
       "tolerance": 28,
       "max_pixels": 0
     },
     {
       "region": "finder-titlebar-native-control-reserve",
       "name": "macos-minimize-yellow-marker",
-      "rgb": [255, 189, 46],
+      "rgb": [
+        255,
+        189,
+        46
+      ],
       "tolerance": 28,
       "max_pixels": 0
     },
     {
       "region": "finder-titlebar-native-control-reserve",
       "name": "macos-zoom-green-marker",
-      "rgb": [40, 200, 64],
+      "rgb": [
+        40,
+        200,
+        64
+      ],
       "tolerance": 28,
       "max_pixels": 0
     }

@@ -333,13 +333,14 @@ void emit_material_rect(R& r, float x, float y, float w, float h,
                         float radius, MaterialStyle const& material) {
     if (material.kind == MaterialKind::None || material.tint.a == 0)
         return;
-    if (!detail::ensure(r, 144, Cmd::MaterialRect)) return;
+    if (!detail::ensure(r, 148, Cmd::MaterialRect)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::MaterialRect));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, w); detail::write_f32(r, h);
     detail::write_f32(r, radius);
     detail::write_u32(r, static_cast<unsigned int>(material.kind));
     detail::write_u32(r, static_cast<unsigned int>(material.role));
+    detail::write_u32(r, material.allows_liquid_glass ? 1u : 0u);
     detail::write_f32(r, material.opacity);
     detail::write_f32(r, material.blur_radius);
     detail::write_u32(r, material.tint.packed());

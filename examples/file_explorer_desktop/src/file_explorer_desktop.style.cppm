@@ -77,24 +77,16 @@ phenotype::MaterialStyle main_content_shell_material_style() {
     using namespace phenotype;
     auto const& t = current_theme();
     bool const dark = finder_dark_palette();
-    auto material = layout::material_style(MaterialKind::Regular);
-    material.opacity = 1.0f;
-    material.blur_radius = 0.0f;
-    material.tint = dark ? rgba(30, 30, 32) : rgba(255, 255, 255);
-    material.border = dark ? t.border : rgba(222, 222, 226);
-    material.saturation = 1.0f;
-    material.luminance_floor = 0.0f;
-    material.luminance_gain = 1.0f;
-    material.edge_highlight = 0.0f;
-    material.noise_opacity = 0.0f;
+    auto material = layout::plain_material_style(
+        dark ? rgba(30, 30, 32) : rgba(255, 255, 255),
+        dark ? t.border : rgba(222, 222, 226),
+        MaterialSurfaceRole::Content,
+        dark ? "plain-dark-main-content-shell"
+             : "plain-white-main-content-shell",
+        dark ? "plain-dark-content-shell"
+             : "plain-white-content-shell");
     material.shadow_alpha = 0.08f;
     material.shadow_radius = 12.0f;
-    material.contrast_intent = dark
-        ? "solid-dark-main-content-shell"
-        : "solid-white-main-content-shell";
-    material.verifier_profile = dark
-        ? "solid-dark-content-shell"
-        : "solid-white-content-shell";
     return material;
 }
 
@@ -142,6 +134,15 @@ phenotype::layout::MaterialSurfaceOptions toolbar_group_options(
     options.max_width = max_width;
     options.fixed_height = k_toolbar_group_height;
     options.border_radius = k_toolbar_group_radius;
+    options.has_material_override = true;
+    options.material_override = layout::plain_material_style(
+        finder_dark_palette() ? rgba(255, 255, 255, 32)
+                              : rgba(255, 255, 255, 160),
+        finder_dark_palette() ? rgba(255, 255, 255, 20)
+                              : rgba(0, 0, 0, 18),
+        MaterialSurfaceRole::Toolbar,
+        "plain-toolbar-group",
+        "plain-toolbar-group");
     return options;
 }
 
@@ -156,6 +157,15 @@ phenotype::layout::MaterialSurfaceOptions segmented_toolbar_options(
     options.max_width = max_width;
     options.fixed_height = k_toolbar_group_height;
     options.border_radius = k_toolbar_group_radius;
+    options.has_material_override = true;
+    options.material_override = layout::plain_material_style(
+        finder_dark_palette() ? rgba(255, 255, 255, 32)
+                              : rgba(255, 255, 255, 160),
+        finder_dark_palette() ? rgba(255, 255, 255, 20)
+                              : rgba(0, 0, 0, 18),
+        MaterialSurfaceRole::Toolbar,
+        "plain-segmented-toolbar",
+        "plain-segmented-toolbar");
     return options;
 }
 
@@ -189,21 +199,14 @@ phenotype::layout::MaterialSurfaceOptions status_section_options() {
 phenotype::MaterialStyle finder_sidebar_material_style() {
     using namespace phenotype;
     bool const dark = finder_dark_palette();
-    auto material = layout::material_style(MaterialKind::Thin);
-    material.kind = MaterialKind::None;
-    material.role = MaterialSurfaceRole::Sidebar;
-    material.opacity = 1.0f;
-    material.blur_radius = 0.0f;
-    material.tint = dark ? rgba(46, 46, 49) : rgba(222, 222, 222);
-    material.border = rgba(255, 255, 255, 0);
-    material.saturation = 1.0f;
+    auto material = layout::plain_material_style(
+        dark ? rgba(46, 46, 49) : rgba(222, 222, 222),
+        rgba(255, 255, 255, 0),
+        MaterialSurfaceRole::Sidebar,
+        "plain-sidebar-surface",
+        "plain-sidebar-surface");
     material.luminance_floor = 0.01f;
     material.luminance_gain = 1.01f;
-    material.edge_highlight = 0.0f;
-    material.noise_opacity = 0.0f;
-    material.shadow_alpha = 0.0f;
-    material.shadow_radius = 0.0f;
-    material.contrast_intent = "native-sidebar-blur-translucency";
     return material;
 }
 

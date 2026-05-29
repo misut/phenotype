@@ -174,6 +174,7 @@ def material_plan(
     command_descriptor: dict[str, object] = {
         "kind": "regular",
         "role": "surface",
+        "allows_liquid_glass": True,
         "container": container,
         "interaction": interaction_descriptor,
         "opacity": 0.58,
@@ -272,6 +273,7 @@ def material_plan(
         "decision_trace": {
             "has_geometry": True,
             "has_material": True,
+            "style_allows_liquid_glass": True,
             "role_allows_liquid_glass": True,
             "content_layer_standard_material": False,
             "liquid_glass_backdrop_candidate": True,
@@ -733,10 +735,8 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
     noise = backdrop_sampling and float(plan["noise_opacity"]) > 0.0
     if not bool(primary["active"]):
         depth_strategy = "none"
-    elif backdrop_sampling and shadow and edge and noise:
-        depth_strategy = "layered-shadow-edge-noise"
-    elif backdrop_sampling and (shadow or edge):
-        depth_strategy = "layered-shadow-edge"
+    elif backdrop_sampling:
+        depth_strategy = "adaptive-glass-depth"
     elif role == "content" and edge:
         depth_strategy = "standard-content-edge"
     elif (fallback or not backdrop_sampling) and shadow and edge:

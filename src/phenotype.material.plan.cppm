@@ -354,7 +354,7 @@ inline MaterialStageOptics material_noise_stage_optics(
 inline bool material_plan_uses_standard_content_layer(
         MaterialPlan const& plan) noexcept {
     return plan.kind != MaterialKind::None
-        && material_role_uses_standard_content_layer(plan.role);
+        && plan.decision_trace.content_layer_standard_material;
 }
 
 inline void append_material_execution_stage(
@@ -1167,6 +1167,7 @@ inline MaterialCommandDescriptor material_command_descriptor(
     return MaterialCommandDescriptor{
         style.kind,
         style.role,
+        style.allows_liquid_glass,
         style.container,
         style.opacity,
         style.blur_radius,
@@ -1250,6 +1251,7 @@ inline MaterialStyle material_style_for_command(
         descriptor.shadow_radius,
         theme);
     style.role = descriptor.role;
+    style.allows_liquid_glass = descriptor.allows_liquid_glass;
     style.container = descriptor.container;
     style.interaction = descriptor.interaction;
     style.transition = descriptor.transition;
@@ -1299,6 +1301,7 @@ inline MaterialRequest material_request_for_command(MaterialKind kind,
         MaterialCommandDescriptor{
             kind,
             MaterialSurfaceRole::Surface,
+            true,
             {},
             opacity,
             blur_radius,
@@ -5407,9 +5410,9 @@ inline MaterialLuminanceCurve material_resolve_luminance_curve(
 }
 
 inline char const* material_plan_id(MaterialKind kind,
-                                    MaterialSurfaceRole role,
+                                    bool standard_content_layer,
                                     bool backdrop_sampling) noexcept {
-    if (material_role_uses_standard_content_layer(role)) {
+    if (standard_content_layer) {
         switch (kind) {
             case MaterialKind::Clear:
                 return "material.clear.standard-material";
@@ -6429,12 +6432,15 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         && style.tint.a > 0
         && plan.opacity > 0.0f
         && has_geometry;
+    bool const style_allows_liquid_glass = style.allows_liquid_glass;
     bool const role_allows_liquid_glass =
         material_role_allows_liquid_glass(style.role);
+    bool const allows_liquid_glass =
+        style_allows_liquid_glass && role_allows_liquid_glass;
     bool const content_layer_standard_material =
-        has_material && !role_allows_liquid_glass;
+        has_material && !allows_liquid_glass;
     bool const liquid_glass_backdrop_candidate =
-        has_material && role_allows_liquid_glass;
+        has_material && allows_liquid_glass;
     bool const target_ready = plan.render_target.ready;
     bool const backdrop_pixels_within_budget =
         plan.render_target.within_backdrop_budget
@@ -6470,6 +6476,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         && !environment.capabilities.reduce_transparency;
     plan.decision_trace.has_geometry = has_geometry;
     plan.decision_trace.has_material = has_material;
+    plan.decision_trace.style_allows_liquid_glass =
+        style_allows_liquid_glass;
     plan.decision_trace.role_allows_liquid_glass =
         role_allows_liquid_glass;
     plan.decision_trace.content_layer_standard_material =
@@ -6645,7 +6653,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
 
     plan.plan_id = material_plan_id(
         style.kind,
-        style.role,
+        content_layer_standard_material,
         plan.backdrop_sampling);
     char const* const non_backdrop_material_layer =
         material_plan_uses_standard_content_layer(plan)

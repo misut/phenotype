@@ -124,6 +124,11 @@ void settings_choice_button(std::string_view label,
     options.min_hit_width = 132.0f;
     options.min_hit_height = 34.0f;
     options.focus_ring = false;
+    options = widget::interaction_glass_button_style(
+        options,
+        MaterialSurfaceRole::Control,
+        MaterialKind::Clear,
+        MaterialKind::Regular);
     phenotype::keyed(static_cast<std::uint32_t>(token), [&] {
         widget::button<Msg>(str{std::string(label)}, std::move(msg), options);
     });

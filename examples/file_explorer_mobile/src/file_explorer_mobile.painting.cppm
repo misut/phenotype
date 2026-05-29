@@ -26,6 +26,46 @@ import :state_and_debug;
 import :input_messages;
 
 export namespace file_explorer_mobile {
+phenotype::ButtonStyleOptions mobile_control_button_style(
+        bool enabled = true,
+        bool selected = false,
+        float width = 0.0f,
+        float height = -1.0f,
+        float border_radius = 14.0f,
+        phenotype::MaterialSurfaceRole role =
+            phenotype::MaterialSurfaceRole::Control) {
+    using namespace phenotype;
+    auto const& t = current_theme();
+    ButtonStyleOptions options;
+    options.disabled = !enabled;
+    options.has_background = true;
+    options.background = selected ? t.accent : Color{255, 255, 255, 0};
+    options.has_hover_background = true;
+    options.hover_background = selected
+        ? t.accent_strong
+        : Color{255, 255, 255, 118};
+    options.has_pressed_background = true;
+    options.pressed_background = selected
+        ? t.accent_strong
+        : Color{229, 229, 234, 178};
+    options.has_border_color = true;
+    options.border_color = Color{255, 255, 255, 0};
+    options.has_text_color = true;
+    options.text_color = selected ? t.state_active_fg : t.foreground;
+    options.border_width = 0.0f;
+    options.border_radius = border_radius;
+    options.max_width = width;
+    options.fixed_height = height;
+    options.min_hit_width = width > 0.0f ? width : minimum_button_activation_size;
+    options.min_hit_height = height > 0.0f ? height : minimum_button_activation_size;
+    options.focus_ring = false;
+    return widget::interaction_glass_button_style(
+        options,
+        role,
+        MaterialKind::Clear,
+        MaterialKind::Regular);
+}
+
 void mobile_symbol_button(std::string const& label,
                           phenotype::icons::Symbol symbol,
                           Msg msg,
@@ -45,7 +85,14 @@ void mobile_symbol_button(std::string const& label,
             .width = 38.0f,
             .height = 38.0f,
             .token_salt = token,
-        });
+        },
+        mobile_control_button_style(
+            enabled,
+            selected,
+            38.0f,
+            38.0f,
+            14.0f,
+            phenotype::MaterialSurfaceRole::Control));
 }
 
 std::uint64_t mobile_stable_token(std::string_view value,
@@ -141,14 +188,18 @@ void mobile_entry_row(file_explorer_demo::Entry const& entry,
                       phenotype::icons::SymbolDocumentCache const& cache) {
     using namespace phenotype;
     auto const& theme = current_theme();
-    auto options = widget::glass_selection_button_style(
-        GlassSelectionStyleOptions{
-            .role = MaterialSurfaceRole::Surface,
-            .selected = selected,
-            .width = row_width,
-            .height = 60.0f,
-            .border_radius = 14.0f,
-        });
+    auto options = widget::interaction_glass_button_style(
+        widget::glass_selection_button_style(
+            GlassSelectionStyleOptions{
+                .role = MaterialSurfaceRole::Surface,
+                .selected = selected,
+                .width = row_width,
+                .height = 60.0f,
+                .border_radius = 14.0f,
+            }),
+        MaterialSurfaceRole::Surface,
+        MaterialKind::Clear,
+        MaterialKind::Regular);
     if (!selected) {
         options.background = Color{
             255,

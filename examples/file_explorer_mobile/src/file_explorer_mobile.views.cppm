@@ -28,15 +28,95 @@ import :painting;
 import :update;
 
 export namespace file_explorer_mobile {
+phenotype::layout::MaterialSurfaceOptions mobile_plain_surface_options(
+        char const* semantic_label,
+        phenotype::FlexDirection direction = phenotype::FlexDirection::Column,
+        phenotype::SpaceToken padding = phenotype::SpaceToken::Md,
+        phenotype::SpaceToken gap = phenotype::SpaceToken::Sm) {
+    using namespace phenotype;
+    auto const& t = current_theme();
+    layout::MaterialSurfaceOptions options{};
+    options.kind = MaterialKind::Regular;
+    options.role = MaterialSurfaceRole::Surface;
+    options.direction = direction;
+    options.padding = padding;
+    options.gap = gap;
+    options.cross_align = direction == FlexDirection::Row
+        ? CrossAxisAlignment::Center
+        : CrossAxisAlignment::Start;
+    options.semantic_label = semantic_label;
+    options.border_radius = t.radius_md;
+    options.border_width = 1.0f;
+    options.has_material_override = true;
+    options.material_override = layout::plain_material_style(
+        with_alpha(t.surface, 255),
+        with_alpha(t.border, 180),
+        MaterialSurfaceRole::Surface,
+        "mobile-plain-surface",
+        "mobile-plain-surface");
+    return options;
+}
+
+phenotype::ButtonStyleOptions mobile_text_button_style(
+        phenotype::ButtonVariant variant = phenotype::ButtonVariant::Default,
+        bool disabled = false) {
+    using namespace phenotype;
+    auto const& t = current_theme();
+    ButtonStyleOptions options;
+    options.variant = variant;
+    options.disabled = disabled;
+    options.has_background = true;
+    options.background = variant == ButtonVariant::Primary
+        ? t.accent
+        : with_alpha(t.surface, 255);
+    options.has_hover_background = true;
+    options.hover_background = variant == ButtonVariant::Primary
+        ? t.accent_strong
+        : Color{255, 255, 255, 178};
+    options.has_pressed_background = true;
+    options.pressed_background = variant == ButtonVariant::Primary
+        ? t.accent_strong
+        : Color{229, 229, 234, 210};
+    options.has_border_color = true;
+    options.border_color = variant == ButtonVariant::Primary
+        ? t.accent
+        : with_alpha(t.border, 160);
+    options.has_text_color = true;
+    options.text_color = variant == ButtonVariant::Primary
+        ? t.state_active_fg
+        : t.foreground;
+    options.border_width = variant == ButtonVariant::Primary ? 0.0f : 0.5f;
+    options.border_radius = 12.0f;
+    options.focus_ring = false;
+    return widget::interaction_glass_button_style(
+        options,
+        MaterialSurfaceRole::Control,
+        MaterialKind::Clear,
+        MaterialKind::Regular);
+}
+
+void mobile_button(std::string const& label,
+                   Msg msg,
+                   phenotype::ButtonVariant variant =
+                       phenotype::ButtonVariant::Default,
+                   bool disabled = false) {
+    phenotype::widget::button<Msg>(
+        label,
+        std::move(msg),
+        mobile_text_button_style(variant, disabled));
+}
+
 void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
-    layout::toolbar(layout::MaterialSurfaceOptions{
-        .kind = MaterialKind::Clear,
-        .padding = SpaceToken::Md,
-        .gap = SpaceToken::Sm,
-        .semantic_label = "Toolbar",
-    }, [&] {
+    auto const& t = current_theme();
+    layout::material_surface(
+        mobile_plain_surface_options(
+            "Toolbar",
+            FlexDirection::Row,
+            SpaceToken::Md,
+            SpaceToken::Sm),
+        [&] {
         widget::text(state.labels.mobile_title);
         widget::text(snap.relative_location, TextSize::Small, TextColor::Muted);
         layout::spacer(8);
@@ -66,6 +146,12 @@ void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
         TabsStyleOptions{
             .kind = MaterialKind::Regular,
             .role = MaterialSurfaceRole::Navigation,
+            .allows_liquid_glass = false,
+            .has_tint = true,
+            .tint = with_alpha(t.surface, 255),
+            .has_border = true,
+            .border = with_alpha(t.border, 160),
+            .border_width = 1.0f,
             .semantic_label = "Mobile Mode Segmented Control",
         });
     });
@@ -73,20 +159,19 @@ void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
 
 void location_strip(file_explorer_demo::ExplorerLabels const& labels) {
     using namespace phenotype;
-    layout::navigation(layout::MaterialSurfaceOptions{
-        .kind = MaterialKind::Thin,
-        .direction = FlexDirection::Row,
-        .padding = SpaceToken::Sm,
-        .gap = SpaceToken::Xs,
-        .cross_align = CrossAxisAlignment::Center,
-        .semantic_label = "Locations",
-    }, [&] {
+    layout::material_surface(
+        mobile_plain_surface_options(
+            "Locations",
+            FlexDirection::Row,
+            SpaceToken::Sm,
+            SpaceToken::Xs),
+        [&] {
         layout::row([&] {
-            widget::button<Msg>(labels.root, SelectLocation{"root"});
-            widget::button<Msg>(labels.docs, SelectLocation{"documents"});
-            widget::button<Msg>(labels.pics, SelectLocation{"pictures"});
-            widget::button<Msg>(labels.sidebar_shared, SelectLocation{"shared"});
-            widget::button<Msg>(labels.trash, SelectLocation{"trash"});
+            mobile_button(labels.root, SelectLocation{"root"});
+            mobile_button(labels.docs, SelectLocation{"documents"});
+            mobile_button(labels.pics, SelectLocation{"pictures"});
+            mobile_button(labels.sidebar_shared, SelectLocation{"shared"});
+            mobile_button(labels.trash, SelectLocation{"trash"});
         }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
     });
 }
@@ -99,7 +184,9 @@ void browse_tab(
     float const row_width = std::max(
         280.0f,
         static_cast<float>(state.explorer.viewport_width) - 48.0f);
-    layout::material_surface(MaterialKind::Regular, [&] {
+    layout::material_surface(
+        mobile_plain_surface_options("Browse"),
+        [&] {
         layout::row([&] {
             layout::weighted(1.0f, [&] {
                 std::string summary = std::to_string(snap.entries.size()) + " items";
@@ -148,19 +235,21 @@ void browse_tab(
             }
             for (auto const& entry : snap.entries) {
                 layout::material_surface(
-                    entry.folder ? MaterialKind::Clear : MaterialKind::Thin,
+                    mobile_plain_surface_options(
+                        "Entry Row",
+                        FlexDirection::Column,
+                        SpaceToken::Sm,
+                        SpaceToken::Xs),
                     [&] {
                         mobile_entry_row(
                             entry,
                             entry.name == state.explorer.selected_name,
                             row_width,
                             state.icon_cache);
-                    },
-                    SpaceToken::Sm,
-                    SpaceToken::Xs);
+                    });
             }
         }, SpaceToken::Sm);
-    }, SpaceToken::Md, SpaceToken::Sm);
+    });
 }
 
 void preview_tab(
@@ -168,7 +257,9 @@ void preview_tab(
         file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
-    layout::material_surface(MaterialKind::Thick, [&] {
+    layout::material_surface(
+        mobile_plain_surface_options("Preview"),
+        [&] {
         widget::text(state.labels.preview);
         layout::spacer(4);
         if (snap.has_selection) {
@@ -183,24 +274,26 @@ void preview_tab(
         layout::spacer(8);
         widget::code(snap.preview);
         layout::spacer(12);
-        widget::button<Msg>(state.labels.duplicate_file,
-                            DuplicateSelected{},
-                            ButtonVariant::Default,
-                            !snap.can_duplicate_selected);
+        mobile_button(state.labels.duplicate_file,
+                      DuplicateSelected{},
+                      ButtonVariant::Default,
+                      !snap.can_duplicate_selected);
         layout::spacer(8);
-        widget::button<Msg>(state.labels.delete_selected,
-                            DeleteSelected{},
-                            ButtonVariant::Default,
-                            !snap.can_delete_selected);
+        mobile_button(state.labels.delete_selected,
+                      DeleteSelected{},
+                      ButtonVariant::Default,
+                      !snap.can_delete_selected);
         layout::spacer(8);
         widget::text(explorer.status, TextSize::Small, TextColor::Muted);
-    }, SpaceToken::Md, SpaceToken::Sm);
+    });
 }
 
 void create_tab(State const& state) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
-    layout::material_surface(MaterialKind::Regular, [&] {
+    layout::material_surface(
+        mobile_plain_surface_options("Create"),
+        [&] {
         widget::text(state.labels.tab_create);
         widget::text(state.labels.create_hint,
                      TextSize::Small,
@@ -216,7 +309,7 @@ void create_tab(State const& state) {
             explorer.draft_body,
             on_draft_body_changed);
         layout::spacer(10);
-        widget::button<Msg>(
+        mobile_button(
             state.labels.create_file,
             CreateFile{},
             ButtonVariant::Primary);
@@ -226,114 +319,114 @@ void create_tab(State const& state) {
             explorer.draft_folder_name,
             on_draft_folder_name_changed);
         layout::spacer(8);
-        widget::button<Msg>(
+        mobile_button(
             state.labels.create_folder,
             CreateFolder{},
             ButtonVariant::Default);
         layout::spacer(6);
-        widget::button<Msg>(state.labels.reset_demo_files, ResetDemo{});
+        mobile_button(state.labels.reset_demo_files, ResetDemo{});
         layout::spacer(12);
         widget::text(state.labels.preferences);
         layout::row([&] {
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_system_font,
                 font_family_message("system"));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_package_font,
                 font_family_message("pretendard"));
         }, SpaceToken::Xs);
         layout::row([&] {
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_system_text_size,
                 system_font_metrics_message("system"));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_package_text_size,
                 system_font_metrics_message("package"));
         }, SpaceToken::Xs);
         layout::row([&] {
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_text_larger,
                 font_scale_step_message(explorer, 0.1f));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_text_smaller,
                 font_scale_step_message(explorer, -0.1f));
         }, SpaceToken::Xs);
         layout::row([&] {
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_body_larger,
                 body_font_size_step_message(explorer, 1.0f));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_body_smaller,
                 body_font_size_step_message(explorer, -1.0f));
         }, SpaceToken::Xs);
         layout::row([&] {
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_heading_larger,
                 heading_font_size_step_message(explorer, 1.0f));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_heading_smaller,
                 heading_font_size_step_message(explorer, -1.0f));
         }, SpaceToken::Xs);
         layout::row([&] {
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_small_larger,
                 small_font_size_step_message(explorer, 1.0f));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_small_smaller,
                 small_font_size_step_message(explorer, -1.0f));
         }, SpaceToken::Xs);
         layout::row([&] {
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_line_height_taller,
                 line_height_step_message(explorer, 0.1f));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_line_height_tighter,
                 line_height_step_message(explorer, -0.1f));
         }, SpaceToken::Xs);
         layout::row([&] {
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_scroll_faster,
                 scroll_speed_step_message(explorer, 0.25f));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_scroll_slower,
                 scroll_speed_step_message(explorer, -0.25f));
         }, SpaceToken::Xs);
         layout::row([&] {
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_horizontal_scroll_faster,
                 horizontal_scroll_speed_step_message(explorer, 0.25f));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_horizontal_scroll_slower,
                 horizontal_scroll_speed_step_message(explorer, -0.25f));
         }, SpaceToken::Xs);
         layout::row([&] {
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_system_scroll,
                 system_scroll_metrics_message("system"));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_app_scroll,
                 system_scroll_metrics_message("app"));
         }, SpaceToken::Xs);
         layout::row([&] {
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_scrollbar_auto,
                 scroll_bar_visibility_message("auto"));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_scrollbar_always,
                 scroll_bar_visibility_message("always"));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_scrollbar_hidden,
                 scroll_bar_visibility_message("hidden"));
         }, SpaceToken::Xs);
         layout::row([&] {
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_system_appearance,
                 color_scheme_message("system"));
-            widget::button<Msg>(
+            mobile_button(
                 state.labels.preferences_dark_appearance,
                 color_scheme_message("dark"));
         }, SpaceToken::Xs);
-    }, SpaceToken::Md, SpaceToken::Sm);
+    });
 }
 
 void view(State const& state) {
@@ -358,7 +451,13 @@ void view(State const& state) {
                     } else {
                         create_tab(state);
                     }
-                    layout::status_bar([&] {
+                    layout::material_surface(
+                        mobile_plain_surface_options(
+                            "Status Bar",
+                            FlexDirection::Column,
+                            SpaceToken::Sm,
+                            SpaceToken::Xs),
+                        [&] {
                         widget::text(state.labels.status);
                         std::string detail = "Status: " + state.explorer.status;
                         if (!snap.operation_label.empty()) {
@@ -370,7 +469,7 @@ void view(State const& state) {
                         detail += " x ";
                         detail += std::to_string(state.explorer.viewport_height);
                         widget::code(detail);
-                    }, MaterialKind::Thick);
+                    });
                 }, SpaceToken::Sm);
             });
     });

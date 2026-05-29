@@ -514,6 +514,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 float radius = 0.0f;
                 unsigned int kind = 0;
                 unsigned int role = 0;
+                unsigned int allows_liquid_glass = 1u;
                 float opacity = 0.0f;
                 float blur_radius = 0.0f;
                 unsigned int packed = 0;
@@ -547,6 +548,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     || !reader.read_f32(radius)
                     || !reader.read_u32(kind)
                     || !reader.read_u32(role)
+                    || !reader.read_u32(allows_liquid_glass)
                     || !reader.read_f32(opacity)
                     || !reader.read_f32(blur_radius)
                     || !reader.read_u32(packed)
@@ -582,6 +584,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 MaterialCommandDescriptor descriptor{
                     material_kind_from_wire(kind),
                     material_surface_role_from_wire(role),
+                    allows_liquid_glass != 0u,
                     material_container_descriptor_from_wire(
                         container_id,
                         union_id,

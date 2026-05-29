@@ -15,6 +15,112 @@ inline Color glass_control_state_color(Color base,
     return base;
 }
 
+inline MaterialStyle plain_control_material(Color tint,
+                                            Color border,
+                                            Color foreground,
+                                            MaterialSurfaceRole role) noexcept {
+    auto material = material_style_for_kind(
+        MaterialKind::Regular,
+        detail::g_app.theme);
+    material.role = role;
+    material.allows_liquid_glass = false;
+    material.opacity = 1.0f;
+    material.blur_radius = 0.0f;
+    material.tint = tint;
+    material.border = border;
+    material.foreground = foreground;
+    material.saturation = 1.0f;
+    material.luminance_floor = 0.0f;
+    material.luminance_gain = 1.0f;
+    material.edge_highlight = 0.0f;
+    material.noise_opacity = 0.0f;
+    material.shadow_alpha = 0.0f;
+    material.shadow_radius = 0.0f;
+    material.fallback = false;
+    material.fallback_reason = "";
+    material.contrast_intent = "plain-control";
+    material.plan_id = "material.plain.control";
+    material.verifier_profile = "regular-legibility-backdrop";
+    return material;
+}
+
+inline MaterialStyle interaction_glass_material(
+        MaterialKind kind,
+        MaterialSurfaceRole role,
+        Color tint,
+        Color border,
+        Color foreground) noexcept {
+    auto material = material_style_for_kind(kind, detail::g_app.theme);
+    material.role = role;
+    material.fallback = kind != MaterialKind::None;
+    material.tint = tint;
+    material.border = border;
+    material.foreground = foreground;
+    material.container = MaterialContainerDescriptor{
+        0u,
+        0u,
+        8.0f,
+        kind != MaterialKind::None,
+        true};
+    material.contrast_intent = "interaction-glass-control";
+    material.plan_id = "material.glass.control.interaction";
+    material.verifier_profile = "interaction-control-glass";
+    return material;
+}
+
+inline ButtonStyleOptions interaction_glass_button_style(
+        ButtonStyleOptions style,
+        MaterialSurfaceRole role = MaterialSurfaceRole::Control,
+        MaterialKind hover_kind = MaterialKind::Clear,
+        MaterialKind pressed_kind = MaterialKind::Regular) {
+    auto const& t = detail::g_app.theme;
+    auto const base_bg = style.has_background
+        ? style.background
+        : (style.variant == ButtonVariant::Primary ? t.accent : t.surface);
+    auto const hover_bg = style.has_hover_background
+        ? style.hover_background
+        : (style.variant == ButtonVariant::Primary
+            ? t.accent_strong
+            : t.state_hover_bg);
+    auto const pressed_bg = style.has_pressed_background
+        ? style.pressed_background
+        : (style.variant == ButtonVariant::Primary
+            ? t.accent_strong
+            : t.state_hover_bg);
+    auto const border = style.has_border_color
+        ? style.border_color
+        : (style.variant == ButtonVariant::Primary ? t.accent : t.border);
+    auto const text = style.has_text_color
+        ? style.text_color
+        : (style.variant == ButtonVariant::Primary
+            ? t.state_active_fg
+            : t.foreground);
+
+    style.has_material = !style.disabled && base_bg.a > 0;
+    if (style.has_material)
+        style.material = plain_control_material(base_bg, border, text, role);
+
+    style.has_hover_material =
+        !style.disabled && hover_kind != MaterialKind::None && hover_bg.a > 0;
+    if (style.has_hover_material) {
+        style.hover_material =
+            interaction_glass_material(hover_kind, role, hover_bg, border, text);
+    }
+
+    style.has_pressed_material =
+        !style.disabled && pressed_kind != MaterialKind::None
+        && pressed_bg.a > 0;
+    if (style.has_pressed_material) {
+        style.pressed_material = interaction_glass_material(
+            pressed_kind,
+            role,
+            pressed_bg,
+            border,
+            text);
+    }
+    return style;
+}
+
 inline ButtonStyleOptions glass_control_button_style(
         GlassControlStyleOptions options = {}) {
     auto const& t = detail::g_app.theme;
@@ -110,6 +216,21 @@ inline ButtonStyleOptions glass_control_button_style(
     style.min_hit_height = minimum_button_activation_size;
     style.text_align = options.text_align;
     return style;
+}
+
+inline ButtonStyleOptions interaction_glass_control_button_style(
+        GlassControlStyleOptions options = {}) {
+    auto const hover_kind = options.kind == MaterialKind::None
+        ? MaterialKind::Clear
+        : options.kind;
+    auto const pressed_kind = options.prominent ? MaterialKind::Regular
+        : (hover_kind == MaterialKind::None ? MaterialKind::Clear
+                                           : MaterialKind::Regular);
+    return interaction_glass_button_style(
+        glass_control_button_style(options),
+        options.role,
+        hover_kind,
+        pressed_kind);
 }
 
 inline ButtonStyleOptions glass_prominent_button_style(
