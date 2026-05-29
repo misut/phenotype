@@ -1572,6 +1572,17 @@ void test_interaction_glass_button_uses_plain_idle_material() {
     assert(hover.interaction.hovered);
     assert(hover.interaction.pointer_inside);
 
+    detail::g_app.theme = apply_dark_color_scheme(Theme{});
+    auto dark_hover_commands = paint_button(0u);
+    auto const& dark_hover = first_material_command(dark_hover_commands).material;
+    auto const dark_hover_tint =
+        material_with_alpha(detail::g_app.theme.surface, 150);
+    assert(dark_hover.tint == dark_hover_tint);
+    assert(dark_hover.tint.r < 80);
+    assert(dark_hover.tint.g < 80);
+    assert(dark_hover.tint.b < 80);
+    detail::g_app.theme = Theme{};
+
     std::puts("PASS: interaction glass button uses plain idle material");
 }
 

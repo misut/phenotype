@@ -278,16 +278,12 @@ inline bool appkit_system_defined_aux_key_matches_debug_panel_shortcut(
         long data1,
         unsigned long flags) {
 #ifndef NDEBUG
-    // macOS can surface the top-row F12 key as an auxiliary sound-up event
-    // when standard function keys are disabled in System Settings.
-    constexpr int nx_keytype_sound_up = 0;
-    constexpr int aux_key_down_state = 0x0A;
-    auto const key_type = static_cast<int>((data1 >> 16) & 0xFFFF);
-    auto const key_state = static_cast<int>((data1 >> 8) & 0xFF);
-    return key_type == nx_keytype_sound_up
-        && key_state == aux_key_down_state
-        && normalized_key_command_modifiers(appkit_modifiers(flags))
-            == debug_panel_shortcut_modifiers();
+    // When macOS maps the top row to media keys, the physical F12 key
+    // arrives as Sound Up unless Fn is held. The debug shortcut should
+    // follow AppKit's real F12 key event, not the media-key fallback.
+    (void)data1;
+    (void)flags;
+    return false;
 #else
     (void)data1;
     (void)flags;
@@ -550,6 +546,7 @@ inline bool g_appkit_should_terminate = false;
 inline bool g_appkit_mouse_tracking_mode = false;
 inline bool g_appkit_window_user_closed = false;
 inline bool g_appkit_close_button_candidate = false;
+inline int g_appkit_front_request_attempts = 0;
 inline void (*g_appkit_settings_menu_handler)() = nullptr;
 inline std::string g_appkit_application_name = "Phenotype";
 
@@ -605,6 +602,16 @@ inline void request_appkit_window_front(id app, id window) {
     objc_send<void>(window, sel("orderFrontRegardless"));
 }
 
+inline void schedule_appkit_window_front_request(id app,
+                                                 id window,
+                                                 int attempts = 18) {
+    if (!window)
+        return;
+    if (attempts > g_appkit_front_request_attempts)
+        g_appkit_front_request_attempts = attempts;
+    request_appkit_window_front(app, window);
+}
+
 inline signed char appkit_should_terminate_after_last_window_closed(
         id,
         SEL,
@@ -629,7 +636,7 @@ inline void appkit_window_will_close(id, SEL, id) {
 
 inline signed char appkit_should_handle_reopen(id, SEL, id app, signed char) {
     g_appkit_window_user_closed = false;
-    request_appkit_window_front(app, g_active_appkit_window);
+    schedule_appkit_window_front_request(app, g_active_appkit_window);
     if (app)
         objc_send<void>(app, sel("stop:"), nullptr);
     return static_cast<signed char>(1);
@@ -639,13 +646,13 @@ inline void appkit_did_become_active(id, SEL, id) {
     if (g_appkit_window_user_closed)
         return;
     id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
-    request_appkit_window_front(app, g_active_appkit_window);
+    schedule_appkit_window_front_request(app, g_active_appkit_window, 8);
 }
 
 inline void appkit_open_settings(id, SEL, id) {
     id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
     g_appkit_window_user_closed = false;
-    request_appkit_window_front(app, g_active_appkit_window);
+    schedule_appkit_window_front_request(app, g_active_appkit_window);
     if (g_appkit_settings_menu_handler) {
         g_appkit_settings_menu_handler();
         ::phenotype::detail::trigger_rebuild();
@@ -863,7 +870,20 @@ inline bool should_request_appkit_window_front(bool visible,
         && (!key_window || !main_window);
 }
 
+inline bool appkit_window_front_ready(id app, id window);
+
 inline void service_appkit_activation_reopen(id app, id window, bool visible) {
+    if (g_appkit_front_request_attempts > 0 && visible
+        && !g_appkit_window_user_closed) {
+        request_appkit_window_front(app, window);
+        run_appkit_slice(app, 0.016);
+        if (appkit_window_front_ready(app, window))
+            g_appkit_front_request_attempts = 0;
+        else
+            --g_appkit_front_request_attempts;
+        return;
+    }
+
     if (!should_run_appkit_activation_slice(
             visible,
             g_appkit_window_user_closed,
@@ -1488,6 +1508,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     g_appkit_mouse_tracking_mode = false;
     g_appkit_window_user_closed = false;
     g_appkit_close_button_candidate = false;
+    g_appkit_front_request_attempts = 0;
     g_appkit_settings_menu_handler = options.on_settings_menu;
     g_appkit_application_name = options.application_name
         && options.application_name[0] != '\0'
@@ -1632,6 +1653,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     g_appkit_mouse_tracking_mode = false;
     g_appkit_window_user_closed = false;
     g_appkit_close_button_candidate = false;
+    g_appkit_front_request_attempts = 0;
     if (pool)
         objc_send<void>(pool, sel("drain"));
     return 0;
