@@ -136,9 +136,9 @@ phenotype::layout::MaterialSurfaceOptions toolbar_group_options(
     options.border_radius = k_toolbar_group_radius;
     options.has_material_override = true;
     options.material_override = layout::plain_material_style(
-        finder_dark_palette() ? rgba(255, 255, 255, 32)
+        finder_dark_palette() ? rgba(46, 46, 48, 230)
                               : rgba(255, 255, 255, 160),
-        finder_dark_palette() ? rgba(255, 255, 255, 20)
+        finder_dark_palette() ? rgba(255, 255, 255, 28)
                               : rgba(0, 0, 0, 18),
         MaterialSurfaceRole::Toolbar,
         "plain-toolbar-group",
@@ -159,9 +159,9 @@ phenotype::layout::MaterialSurfaceOptions segmented_toolbar_options(
     options.border_radius = k_toolbar_group_radius;
     options.has_material_override = true;
     options.material_override = layout::plain_material_style(
-        finder_dark_palette() ? rgba(255, 255, 255, 32)
+        finder_dark_palette() ? rgba(46, 46, 48, 230)
                               : rgba(255, 255, 255, 160),
-        finder_dark_palette() ? rgba(255, 255, 255, 20)
+        finder_dark_palette() ? rgba(255, 255, 255, 28)
                               : rgba(0, 0, 0, 18),
         MaterialSurfaceRole::Toolbar,
         "plain-segmented-toolbar",

@@ -2,6 +2,7 @@ module;
 #include <algorithm>
 #include <cctype>
 #include <concepts>
+#include <cmath>
 #include <cstdlib>
 #include <cstddef>
 #include <cstdint>
@@ -66,11 +67,6 @@ void finder_button(std::string label,
     options.max_width = max_width;
     if (centered)
         options.text_align = phenotype::TextAlign::Center;
-    options = phenotype::widget::interaction_glass_button_style(
-        options,
-        phenotype::MaterialSurfaceRole::Control,
-        phenotype::MaterialKind::Clear,
-        phenotype::MaterialKind::Regular);
 
     phenotype::widget::button<Msg>(label, std::move(msg), options);
 }
@@ -182,11 +178,6 @@ void finder_icon_label_button(std::string const& label,
     options.min_hit_height = fixed_height;
     options.text_align = phenotype::TextAlign::Center;
     options.focus_ring = false;
-    options = phenotype::widget::interaction_glass_button_style(
-        options,
-        phenotype::MaterialSurfaceRole::Control,
-        phenotype::MaterialKind::Clear,
-        phenotype::MaterialKind::Regular);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{label},
         max_width,
@@ -231,21 +222,32 @@ void finder_entry_row_button(file_explorer_demo::Entry const& entry,
                              float font_size,
                              float fixed_height,
                              phenotype::icons::SymbolDocumentCache const& cache) {
-    auto options = phenotype::widget::interaction_glass_button_style(
-        phenotype::widget::glass_outline_row_button_style(
-            phenotype::GlassOutlineRowStyleOptions{
-                .chrome = phenotype::GlassOutlineRowChrome::ListRow,
-                .role = phenotype::MaterialSurfaceRole::Surface,
-                .selected = selected,
-                .expanded = entry.folder,
-                .width = max_width,
-                .height = fixed_height,
-                .border_radius = 8.0f,
-                .font_size = font_size,
-            }),
-        phenotype::MaterialSurfaceRole::Surface,
-        phenotype::MaterialKind::Clear,
-        phenotype::MaterialKind::Regular);
+    phenotype::ButtonStyleOptions options;
+    bool const dark = finder_dark_palette();
+    options.has_background = true;
+    options.background = selected ? rgba(0, 122, 255, 232)
+                                  : rgba(0, 0, 0, 0);
+    options.has_hover_background = true;
+    options.hover_background = selected ? rgba(0, 122, 255, 242)
+                                        : (dark ? rgba(255, 255, 255, 24)
+                                                : rgba(0, 0, 0, 18));
+    options.has_pressed_background = true;
+    options.pressed_background = selected ? rgba(0, 96, 212, 250)
+                                          : (dark ? rgba(255, 255, 255, 36)
+                                                  : rgba(0, 0, 0, 30));
+    options.has_border_color = true;
+    options.border_color = rgba(0, 0, 0, 0);
+    options.has_text_color = true;
+    options.text_color = selected ? rgba(255, 255, 255)
+                                  : finder_primary_ink();
+    options.border_width = 0.0f;
+    options.border_radius = 8.0f;
+    options.font_size = font_size;
+    options.max_width = max_width;
+    options.fixed_height = fixed_height;
+    options.min_hit_width = max_width;
+    options.min_hit_height = fixed_height;
+    options.focus_ring = false;
 
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{entry.name},
@@ -382,25 +384,23 @@ void sidebar_heading(std::string_view label,
     options.fixed_height = k_sidebar_heading_height;
     options.focus_ring = false;
     options.hover_background = finder_dark_palette()
-        ? rgba(255, 255, 255, 24)
-        : rgba(255, 255, 255, 70);
+        ? rgba(255, 255, 255, 18)
+        : rgba(0, 0, 0, 20);
     options.has_pressed_background = true;
     options.pressed_background = finder_dark_palette()
-        ? rgba(255, 255, 255, 36)
-        : rgba(255, 255, 255, 96);
-    options = widget::interaction_glass_button_style(
-        options,
-        MaterialSurfaceRole::Sidebar,
-        MaterialKind::Clear,
-        MaterialKind::Regular);
+        ? rgba(255, 255, 255, 28)
+        : rgba(0, 0, 0, 32);
 
     std::string label_text(label);
     std::string id_text(std::move(section_id));
+    float const chevron_progress =
+        phenotype::animate_float(expanded ? 1.0f : 0.0f, 180);
     widget::canvas_button<Msg>(
         str{label_text},
         k_sidebar_row_width,
         k_sidebar_heading_height,
-        [label_text, expanded](Painter& painter) {
+        [label_text, chevron_progress](Painter& painter,
+                                       phenotype::ButtonVisualState state) {
             painter.text(k_sidebar_heading_label_leading,
                          k_sidebar_heading_label_top,
                          label_text.c_str(),
@@ -408,14 +408,26 @@ void sidebar_heading(std::string_view label,
                          13.0f,
                          finder_secondary_ink(),
                          finder_font(phenotype::FontWeight::Bold));
-            char const* chevron = expanded ? "v" : ">";
-            painter.text(k_sidebar_row_width - 20.0f,
-                         k_sidebar_heading_label_top,
-                         chevron,
-                         1,
-                         13.0f,
-                         finder_secondary_ink(),
-                         finder_font(phenotype::FontWeight::Bold));
+            if (!state.hovered && !state.pressed)
+                return;
+            auto color = finder_secondary_ink();
+            color.a = state.pressed ? 240 : 205;
+            float const cx = k_sidebar_row_width - 18.0f;
+            float const cy = k_sidebar_heading_label_top + 7.0f;
+            float const angle = chevron_progress * 1.57079632679f;
+            float const c = std::cos(angle);
+            float const s = std::sin(angle);
+            auto point = [&](float x, float y) {
+                return std::pair<float, float>{
+                    cx + x * c - y * s,
+                    cy + x * s + y * c,
+                };
+            };
+            auto a = point(-3.5f, -5.0f);
+            auto b = point(3.5f, 0.0f);
+            auto cpt = point(-3.5f, 5.0f);
+            painter.line(a.first, a.second, b.first, b.second, 2.0f, color);
+            painter.line(b.first, b.second, cpt.first, cpt.second, 2.0f, color);
         },
         ToggleSidebarSection{id_text},
         options,

@@ -51,23 +51,24 @@ phenotype::ButtonStyleOptions toolbar_icon_button_style(
     auto const& t = current_theme();
     ButtonStyleOptions options;
     options.disabled = !enabled;
+    bool const dark = finder_dark_palette();
     options.has_background = true;
     options.background = selected
-        ? (finder_dark_palette() ? rgba(255, 255, 255, 48)
-                                 : rgba(255, 255, 255, 176))
+        ? (dark ? with_alpha(t.code_bg, 230)
+                : rgba(255, 255, 255, 176))
         : rgba(0, 0, 0, 0);
     options.has_hover_background = true;
     options.hover_background = selected
-        ? (finder_dark_palette() ? rgba(255, 255, 255, 70)
-                                 : rgba(255, 255, 255, 214))
-        : (finder_dark_palette() ? rgba(255, 255, 255, 38)
-                                 : rgba(255, 255, 255, 128));
+        ? (dark ? with_alpha(t.code_bg, 245)
+                : rgba(255, 255, 255, 214))
+        : (dark ? with_alpha(t.surface, 150)
+                : rgba(255, 255, 255, 128));
     options.has_pressed_background = true;
     options.pressed_background = selected
-        ? (finder_dark_palette() ? rgba(255, 255, 255, 92)
-                                 : rgba(255, 255, 255, 236))
-        : (finder_dark_palette() ? rgba(255, 255, 255, 56)
-                                 : rgba(255, 255, 255, 166));
+        ? (dark ? with_alpha(t.code_bg, 255)
+                : rgba(255, 255, 255, 236))
+        : (dark ? with_alpha(t.surface, 190)
+                : rgba(255, 255, 255, 166));
     options.has_border_color = true;
     options.border_color = rgba(0, 0, 0, 0);
     options.has_text_color = true;

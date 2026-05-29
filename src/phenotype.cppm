@@ -394,11 +394,16 @@ inline void apply_button_material(LayoutNode& node,
         pressed);
     if (!material)
         return;
+    bool const state_material =
+        material == &options.pressed_material
+        || material == &options.hover_material;
     node.material_shape = options.shape;
     node.material = *material;
-    node.material.tint = node.background;
-    node.material.border = node.border_color;
-    node.material.foreground = node.text_color;
+    if (!state_material) {
+        node.material.tint = node.background;
+        node.material.border = node.border_color;
+        node.material.foreground = node.text_color;
+    }
 }
 
 inline void apply_text_field_material(LayoutNode& node,
@@ -7154,7 +7159,7 @@ inline std::string debug_rect_text(diag::RectSnapshot const& rect) {
 
 inline std::string debug_panel_shortcut_text() {
 #ifdef __APPLE__
-    return "Cmd+F12";
+    return "Fn+Cmd+F12";
 #else
     return "Ctrl+F12";
 #endif
