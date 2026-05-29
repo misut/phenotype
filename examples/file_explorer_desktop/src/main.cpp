@@ -1275,16 +1275,20 @@ void paint_sidebar_icon(phenotype::Painter& painter,
     auto const ink = selected
         ? phenotype::current_theme().accent
         : (state.hovered ? finder_primary_ink() : finder_secondary_ink());
+    auto presentation = icon_presentation_for_state(
+        sidebar_symbol(id),
+        phenotype::icons::SymbolPresentationRole::Sidebar,
+        selected,
+        state);
+    presentation.color = ink;
     paint_finder_symbol_centered(
         painter,
         cache,
-        sidebar_symbol(id),
+        presentation,
         origin_x,
         origin_y,
         k_sidebar_icon_size,
-        k_sidebar_icon_size,
-        k_sidebar_icon_size - 2.0f,
-        ink);
+        k_sidebar_icon_size);
 }
 
 std::string extension_lower(std::string const& name) {

@@ -526,6 +526,13 @@ fragment float4 fs_material(
         edge_alpha = min(edge_alpha, feather);
     }
 
+    float tint_strength = clamp(in.tint.a, 0.0, 1.0);
+    float opacity = clamp(in.params.z, 0.0, 1.0);
+    if (in.params.y <= 0.001 && in.params.w <= 0.5) {
+        float alpha = max(opacity, tint_strength) * edge_alpha;
+        return float4(in.tint.rgb, alpha);
+    }
+
     float2 texel = 1.0 / float2(float(backdrop.get_width()),
                                 float(backdrop.get_height()));
     float blur_points = clamp(in.params.y, 0.0, 36.0);
@@ -1560,8 +1567,6 @@ fragment float4 fs_material(
             * 0.055;
         backdrop_rgb = clamp(backdrop_rgb, 0.0, 1.0);
     }
-    float tint_strength = clamp(in.tint.a, 0.0, 1.0);
-    float opacity = clamp(in.params.z, 0.0, 1.0);
     float tint_chroma = max(
         max(abs(in.tint.r - in.tint.g), abs(in.tint.g - in.tint.b)),
         abs(in.tint.b - in.tint.r));

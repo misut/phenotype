@@ -181,6 +181,17 @@ inline Key appkit_key(unsigned short key_code) {
     }
 }
 
+inline Key appkit_key_from_code_or_function_codepoint(
+        unsigned short key_code,
+        std::optional<unsigned int> function_codepoint = std::nullopt) {
+    auto key = appkit_key(key_code);
+    if (key != Key::Other)
+        return key;
+    if (function_codepoint.has_value() && *function_codepoint == 0xF70Fu)
+        return Key::F12;
+    return Key::Other;
+}
+
 inline std::optional<unsigned int> first_utf8_codepoint(char const* text) {
     if (!text || text[0] == '\0')
         return std::nullopt;
@@ -215,6 +226,107 @@ inline std::optional<unsigned int> first_utf8_codepoint(char const* text) {
         }
     }
     return std::nullopt;
+}
+
+inline std::optional<unsigned int> appkit_characters_ignoring_modifiers_codepoint(
+        id event) {
+    if (!event || !objc_responds_to(event, sel("charactersIgnoringModifiers")))
+        return std::nullopt;
+    id chars = objc_send<id>(event, sel("charactersIgnoringModifiers"));
+    char const* utf8 = chars
+        ? objc_send<char const*>(chars, sel("UTF8String"))
+        : nullptr;
+    return first_utf8_codepoint(utf8);
+}
+
+inline Key appkit_event_key(id event) {
+    if (!event)
+        return Key::Other;
+    return appkit_key_from_code_or_function_codepoint(
+        objc_send<unsigned short>(event, sel("keyCode")),
+        appkit_characters_ignoring_modifiers_codepoint(event));
+}
+
+inline bool appkit_event_matches_debug_panel_shortcut(
+        unsigned short key_code,
+        std::optional<unsigned int> function_codepoint,
+        unsigned long flags) {
+#ifndef NDEBUG
+    return appkit_key_from_code_or_function_codepoint(
+            key_code,
+            function_codepoint) == Key::F12
+        && normalized_key_command_modifiers(appkit_modifiers(flags))
+            == debug_panel_shortcut_modifiers();
+#else
+    (void)key_code;
+    (void)function_codepoint;
+    (void)flags;
+    return false;
+#endif
+}
+
+inline bool appkit_event_matches_debug_panel_shortcut(id event) {
+    if (!event)
+        return false;
+    return appkit_event_matches_debug_panel_shortcut(
+        objc_send<unsigned short>(event, sel("keyCode")),
+        appkit_characters_ignoring_modifiers_codepoint(event),
+        objc_send<unsigned long>(event, sel("modifierFlags")));
+}
+
+inline bool appkit_system_defined_aux_key_matches_debug_panel_shortcut(
+        long data1,
+        unsigned long flags) {
+#ifndef NDEBUG
+    // macOS can surface the top-row F12 key as an auxiliary sound-up event
+    // when standard function keys are disabled in System Settings.
+    constexpr int nx_keytype_sound_up = 0;
+    constexpr int aux_key_down_state = 0x0A;
+    auto const key_type = static_cast<int>((data1 >> 16) & 0xFFFF);
+    auto const key_state = static_cast<int>((data1 >> 8) & 0xFF);
+    return key_type == nx_keytype_sound_up
+        && key_state == aux_key_down_state
+        && normalized_key_command_modifiers(appkit_modifiers(flags))
+            == debug_panel_shortcut_modifiers();
+#else
+    (void)data1;
+    (void)flags;
+    return false;
+#endif
+}
+
+inline bool appkit_event_matches_system_debug_panel_shortcut(id event) {
+    if (!event || !objc_responds_to(event, sel("subtype"))
+        || !objc_responds_to(event, sel("data1")))
+        return false;
+    constexpr long nx_subtype_aux_control_buttons = 8;
+    if (objc_send<long>(event, sel("subtype"))
+        != nx_subtype_aux_control_buttons)
+        return false;
+    return appkit_system_defined_aux_key_matches_debug_panel_shortcut(
+        objc_send<long>(event, sel("data1")),
+        objc_send<unsigned long>(event, sel("modifierFlags")));
+}
+
+inline bool appkit_dispatch_debug_panel_shortcut_from_event(id event) {
+    if (!event)
+        return false;
+    auto const type = objc_send<unsigned long>(event, sel("type"));
+    if (type == 10 && appkit_event_matches_debug_panel_shortcut(event)) {
+        return dispatch_debug_panel_shortcut(
+            Key::F12,
+            KeyAction::Press,
+            appkit_modifiers(objc_send<unsigned long>(event, sel("modifierFlags"))),
+            "f12");
+    }
+    if (type == 14 && appkit_event_matches_system_debug_panel_shortcut(event)) {
+        return dispatch_debug_panel_shortcut(
+            Key::F12,
+            KeyAction::Press,
+            appkit_modifiers(objc_send<unsigned long>(event, sel("modifierFlags"))),
+            "f12");
+    }
+    return false;
 }
 
 inline CGPoint appkit_location(id event) {
@@ -264,6 +376,40 @@ inline bool appkit_event_hits_close_button_fallback(
 }
 
 inline bool appkit_handle_standard_key_equivalent(id event);
+
+inline signed char appkit_window_perform_key_equivalent(id self, SEL, id event) {
+    if (appkit_handle_standard_key_equivalent(event))
+        return static_cast<signed char>(1);
+
+    objc_super super_info{};
+    super_info.receiver = self;
+    super_info.super_class = class_getSuperclass(object_getClass(self));
+    using SuperSend = signed char (*)(objc_super*, SEL, id);
+    return reinterpret_cast<SuperSend>(objc_msgSendSuper)(
+        &super_info,
+        sel("performKeyEquivalent:"),
+        event);
+}
+
+inline Class appkit_window_class() {
+    static Class window_class = nullptr;
+    if (!window_class) {
+        Class base = reinterpret_cast<Class>(class_id("NSWindow"));
+        window_class = objc_allocateClassPair(
+            base,
+            "PhenotypeAppKitWindow",
+            0);
+        if (window_class) {
+            class_addMethod(
+                window_class,
+                sel("performKeyEquivalent:"),
+                reinterpret_cast<IMP>(appkit_window_perform_key_equivalent),
+                "c@:@");
+            objc_registerClassPair(window_class);
+        }
+    }
+    return window_class ? window_class : reinterpret_cast<Class>(class_id("NSWindow"));
+}
 
 inline void dispatch_appkit_event(id event, NativeSurfaceDescriptor const& surface) {
     if (!event)
@@ -326,7 +472,7 @@ inline void dispatch_appkit_event(id event, NativeSurfaceDescriptor const& surfa
             auto action = objc_send<signed char>(event, sel("isARepeat"))
                 ? KeyAction::Repeat
                 : KeyAction::Press;
-            auto key = appkit_key(objc_send<unsigned short>(event, sel("keyCode")));
+            auto key = appkit_event_key(event);
             dispatch_key(key, action, appkit_modifiers(flags));
             if ((flags & ((1ul << 18) | (1ul << 20))) == 0) {
                 id chars = objc_send<id>(event, sel("characters"));
@@ -340,9 +486,12 @@ inline void dispatch_appkit_event(id event, NativeSurfaceDescriptor const& surfa
         }
         case 11:
             dispatch_key(
-                appkit_key(objc_send<unsigned short>(event, sel("keyCode"))),
+                appkit_event_key(event),
                 KeyAction::Release,
                 appkit_modifiers(objc_send<unsigned long>(event, sel("modifierFlags"))));
+            break;
+        case 14:
+            (void)appkit_dispatch_debug_panel_shortcut_from_event(event);
             break;
         case 22:
             dispatch_scroll_xy(
@@ -376,7 +525,7 @@ inline id create_appkit_window(int width,
     unsigned long style = titled | closable | miniaturizable | resizable;
 
     id window = objc_send<id>(
-        objc_send<id>(class_id("NSWindow"), sel("alloc")),
+        objc_send<id>(reinterpret_cast<id>(appkit_window_class()), sel("alloc")),
         sel("initWithContentRect:styleMask:backing:defer:"),
         frame,
         style,
@@ -503,10 +652,22 @@ inline void appkit_open_settings(id, SEL, id) {
     }
 }
 
+inline void appkit_toggle_debug_panel(id, SEL, id) {
+    (void)dispatch_debug_panel_shortcut(
+        Key::F12,
+        KeyAction::Press,
+        debug_panel_shortcut_modifiers(),
+        "f12");
+}
+
 inline bool appkit_handle_standard_key_equivalent(id event) {
-    if (!event || !g_appkit_settings_menu_handler)
+    if (!event)
         return false;
     auto const flags = objc_send<unsigned long>(event, sel("modifierFlags"));
+    if (appkit_dispatch_debug_panel_shortcut_from_event(event))
+        return true;
+    if (!g_appkit_settings_menu_handler)
+        return false;
     constexpr unsigned long command_modifier = 1ul << 20;
     if ((flags & command_modifier) == 0)
         return false;
@@ -560,6 +721,11 @@ inline id create_appkit_shell_delegate() {
             delegate_class,
             sel("phenotypeOpenSettings:"),
             reinterpret_cast<IMP>(appkit_open_settings),
+            "v@:@");
+        class_addMethod(
+            delegate_class,
+            sel("phenotypeToggleDebugPanel:"),
+            reinterpret_cast<IMP>(appkit_toggle_debug_panel),
             "v@:@");
         objc_registerClassPair(delegate_class);
     }
@@ -618,6 +784,16 @@ inline void install_standard_appkit_menu(id app,
     if (!app_menu)
         return;
     objc_send<void>(menubar, sel("setSubmenu:forItem:"), app_menu, app_item);
+
+#ifndef NDEBUG
+    id debug = appkit_menu_item(
+        "Toggle Debug Panel",
+        sel("phenotypeToggleDebugPanel:"),
+        "\xEF\x9C\x8F",
+        g_appkit_shell_delegate);
+    if (debug)
+        objc_send<void>(app_menu, sel("addItem:"), debug);
+#endif
 
     if (options.on_settings_menu) {
         id settings = appkit_menu_item(

@@ -380,6 +380,56 @@ static void test_macos_appkit_activation_slice_gate() {
     std::puts("PASS: macOS AppKit activation slice gate");
 }
 
+static void test_macos_appkit_function_key_resolution() {
+    using phenotype::native::detail::appkit_key_from_code_or_function_codepoint;
+    using phenotype::native::detail::appkit_event_matches_debug_panel_shortcut;
+    using phenotype::native::detail::appkit_system_defined_aux_key_matches_debug_panel_shortcut;
+
+    assert(appkit_key_from_code_or_function_codepoint(111)
+           == phenotype::native::Key::F12);
+    assert(appkit_key_from_code_or_function_codepoint(255, 0xF70Fu)
+           == phenotype::native::Key::F12);
+    assert(appkit_key_from_code_or_function_codepoint(255, 0xF704u)
+           == phenotype::native::Key::Other);
+    assert(appkit_key_from_code_or_function_codepoint(255, std::nullopt)
+           == phenotype::native::Key::Other);
+
+    assert(appkit_event_matches_debug_panel_shortcut(
+        111,
+        std::nullopt,
+        1ul << 20));
+    assert(appkit_event_matches_debug_panel_shortcut(
+        255,
+        0xF70Fu,
+        1ul << 20));
+    assert(!appkit_event_matches_debug_panel_shortcut(
+        255,
+        0xF704u,
+        1ul << 20));
+    assert(!appkit_event_matches_debug_panel_shortcut(
+        111,
+        std::nullopt,
+        1ul << 18));
+
+    auto const sound_up_down = static_cast<long>((0 << 16) | (0x0A << 8));
+    auto const sound_up_up = static_cast<long>((0 << 16) | (0x0B << 8));
+    auto const sound_down_down = static_cast<long>((1 << 16) | (0x0A << 8));
+    assert(appkit_system_defined_aux_key_matches_debug_panel_shortcut(
+        sound_up_down,
+        1ul << 20));
+    assert(!appkit_system_defined_aux_key_matches_debug_panel_shortcut(
+        sound_up_up,
+        1ul << 20));
+    assert(!appkit_system_defined_aux_key_matches_debug_panel_shortcut(
+        sound_down_down,
+        1ul << 20));
+    assert(!appkit_system_defined_aux_key_matches_debug_panel_shortcut(
+        sound_up_down,
+        1ul << 18));
+
+    std::puts("PASS: macOS AppKit function-key resolution includes F12");
+}
+
 static NativeSurfaceDescriptor make_macos_surface(id window) {
     assert(window != nullptr);
     id view = test_objc_send<id>(window, test_sel("contentView"));
@@ -4242,6 +4292,7 @@ int main() {
     test_shell_scroll_and_escape_observability();
 #ifdef __APPLE__
     test_macos_appkit_activation_slice_gate();
+    test_macos_appkit_function_key_resolution();
     test_macos_utf16_utf8_range_helpers();
     test_macos_scroll_delta_normalization();
     test_macos_scroll_paths_record_precise_and_line_details();
