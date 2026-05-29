@@ -39,6 +39,7 @@ import phenotype.native.stub;
 import json;
 #ifdef __APPLE__
 import phenotype.native.macos;
+import phenotype.native.shell.macos;
 #endif
 #if defined(__APPLE__) || defined(_WIN32)
 import cppx.http;
@@ -358,6 +359,25 @@ static id create_hidden_macos_window(int width, int height, char const* title) {
     test_objc_send<void>(window, test_sel("setReleasedWhenClosed:"), static_cast<signed char>(0));
     test_objc_send<void>(window, test_sel("setTitle:"), test_ns_string(title));
     return window;
+}
+
+static void test_macos_appkit_activation_slice_gate() {
+    using phenotype::native::detail::should_run_appkit_activation_slice;
+    using phenotype::native::detail::should_request_appkit_window_front;
+
+    assert(should_run_appkit_activation_slice(true, false, false));
+    assert(!should_run_appkit_activation_slice(false, false, false));
+    assert(!should_run_appkit_activation_slice(true, true, false));
+    assert(!should_run_appkit_activation_slice(true, false, true));
+
+    assert(should_request_appkit_window_front(true, false, true, false, true));
+    assert(should_request_appkit_window_front(true, false, true, true, false));
+    assert(!should_request_appkit_window_front(true, false, true, true, true));
+    assert(!should_request_appkit_window_front(false, false, true, false, false));
+    assert(!should_request_appkit_window_front(true, true, true, false, false));
+    assert(!should_request_appkit_window_front(true, false, false, false, false));
+
+    std::puts("PASS: macOS AppKit activation slice gate");
 }
 
 static NativeSurfaceDescriptor make_macos_surface(id window) {
@@ -4221,6 +4241,7 @@ int main() {
     test_shell_repaint_coalesces_nested_requests();
     test_shell_scroll_and_escape_observability();
 #ifdef __APPLE__
+    test_macos_appkit_activation_slice_gate();
     test_macos_utf16_utf8_range_helpers();
     test_macos_scroll_delta_normalization();
     test_macos_scroll_paths_record_precise_and_line_details();
