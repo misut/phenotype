@@ -1107,12 +1107,13 @@ phenotype::layout::MaterialSurfaceOptions status_section_options() {
 
 phenotype::MaterialStyle finder_sidebar_material_style() {
     using namespace phenotype;
+    bool const dark = finder_dark_palette();
     auto material = layout::material_style(MaterialKind::Thin);
     material.kind = MaterialKind::None;
     material.role = MaterialSurfaceRole::Sidebar;
-    material.opacity = 0.0f;
-    material.blur_radius = 28.0f;
-    material.tint = rgba(248, 248, 250, 0);
+    material.opacity = 1.0f;
+    material.blur_radius = 0.0f;
+    material.tint = dark ? rgba(46, 46, 49) : rgba(222, 222, 222);
     material.border = rgba(255, 255, 255, 0);
     material.saturation = 1.0f;
     material.luminance_floor = 0.01f;
