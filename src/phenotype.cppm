@@ -7159,7 +7159,7 @@ inline std::string debug_rect_text(diag::RectSnapshot const& rect) {
 
 inline std::string debug_panel_shortcut_text() {
 #ifdef __APPLE__
-    return "Fn+Cmd+F12";
+    return "Cmd+F12";
 #else
     return "Ctrl+F12";
 #endif
