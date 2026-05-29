@@ -445,6 +445,7 @@ inline void request_appkit_window_front(id app, id window) {
     // the startup path and retry loop cannot drift apart.
     activate_current_running_application();
     if (app) {
+        objc_send<void>(app, sel("unhide:"), nullptr);
         objc_send<void>(app, sel("activate"));
         objc_send<void>(
             app,
@@ -549,7 +550,7 @@ inline id create_appkit_shell_delegate() {
             delegate_class,
             sel("applicationShouldHandleReopen:hasVisibleWindows:"),
             reinterpret_cast<IMP>(appkit_should_handle_reopen),
-            "c@:@@c");
+            "c@:@c");
         class_addMethod(
             delegate_class,
             sel("applicationDidBecomeActive:"),
@@ -655,6 +656,62 @@ inline void prime_appkit_window_ordering(id app) {
         nullptr,
         0.10);
     objc_send<void>(app, sel("run"));
+}
+
+inline void run_appkit_slice(id app, double timeout_seconds) {
+    if (!app)
+        return;
+    objc_send<void>(
+        app,
+        sel("performSelector:withObject:afterDelay:"),
+        sel("stop:"),
+        nullptr,
+        timeout_seconds);
+    objc_send<void>(app, sel("run"));
+}
+
+inline bool should_run_appkit_activation_slice(bool visible,
+                                               bool user_closed,
+                                               bool app_active) noexcept {
+    return visible && !user_closed && !app_active;
+}
+
+inline bool should_request_appkit_window_front(bool visible,
+                                               bool user_closed,
+                                               bool app_active,
+                                               bool key_window,
+                                               bool main_window) noexcept {
+    return visible
+        && !user_closed
+        && app_active
+        && (!key_window || !main_window);
+}
+
+inline void service_appkit_activation_reopen(id app, id window, bool visible) {
+    if (!should_run_appkit_activation_slice(
+            visible,
+            g_appkit_window_user_closed,
+            appkit_app_is_active(app))) {
+        if (should_request_appkit_window_front(
+                visible,
+                g_appkit_window_user_closed,
+                appkit_app_is_active(app),
+                appkit_window_is_key(window),
+                appkit_window_is_main(window))) {
+            request_appkit_window_front(app, window);
+        }
+        return;
+    }
+
+    run_appkit_slice(app, 0.016);
+    if (should_request_appkit_window_front(
+            appkit_window_is_visible(window),
+            g_appkit_window_user_closed,
+            appkit_app_is_active(app),
+            appkit_window_is_key(window),
+            appkit_window_is_main(window))) {
+        request_appkit_window_front(app, window);
+    }
 }
 
 inline id next_appkit_event(id app, double default_timeout_seconds) {
@@ -1363,6 +1420,7 @@ int run_app_with_macos_platform(platform_api const& platform,
         }
         if (visible)
             sync_appkit_surface(host, surface, window, true);
+        service_appkit_activation_reopen(app, window, visible);
         id event = next_appkit_event(app, 0.016);
         if (event) {
             update_appkit_mouse_tracking_mode_before_send(event);
