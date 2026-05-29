@@ -1,8 +1,7 @@
 module;
-
-#include <concepts>
 #include <algorithm>
 #include <cctype>
+#include <concepts>
 #include <cstdlib>
 #include <cstddef>
 #include <cstdint>
@@ -23,18 +22,18 @@ import file_explorer_shared;
 import phenotype;
 import phenotype.native;
 
+import :messages_and_runtime;
+import :state_and_debug;
+import :input_messages;
+import :painting;
+import :update;
+import :views;
 
 export namespace file_explorer_mobile {
 int run();
 }
 
 namespace file_explorer_mobile {
-#include "file_explorer_mobile/messages_and_runtime.inc"
-#include "file_explorer_mobile/state_and_debug.inc"
-#include "file_explorer_mobile/input_messages.inc"
-#include "file_explorer_mobile/painting.inc"
-#include "file_explorer_mobile/update.inc"
-#include "file_explorer_mobile/views.inc"
 int run() {
     phenotype::Theme theme = phenotype::current_theme();
     theme = phenotype::theme_with_resource_defaults(
@@ -67,5 +66,4 @@ int run() {
             return Resized{width, height, scale};
         });
 }
-
 } // namespace file_explorer_mobile

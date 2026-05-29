@@ -1,5 +1,4 @@
 module;
-
 #include <algorithm>
 #include <cctype>
 #include <concepts>
@@ -23,26 +22,26 @@ import file_explorer_shared;
 import phenotype;
 import phenotype.native;
 
+import :messages_and_startup;
+import :input_messages;
+import :runtime_preferences;
+import :state_and_debug;
+import :style;
+import :painting_icons;
+import :text_and_status;
+import :update;
+import :buttons_and_sidebar;
+import :toolbar;
+import :overflow_and_grid;
+import :settings_and_views;
+import :keyboard;
+import :view;
 
 export namespace file_explorer_desktop {
 int run(int argc, char** argv);
 }
 
 namespace file_explorer_desktop {
-#include "file_explorer_desktop/messages_and_startup.inc"
-#include "file_explorer_desktop/input_messages.inc"
-#include "file_explorer_desktop/runtime_preferences.inc"
-#include "file_explorer_desktop/state_and_debug.inc"
-#include "file_explorer_desktop/style.inc"
-#include "file_explorer_desktop/painting_icons.inc"
-#include "file_explorer_desktop/text_and_status.inc"
-#include "file_explorer_desktop/update.inc"
-#include "file_explorer_desktop/buttons_and_sidebar.inc"
-#include "file_explorer_desktop/toolbar.inc"
-#include "file_explorer_desktop/overflow_and_grid.inc"
-#include "file_explorer_desktop/settings_and_views.inc"
-#include "file_explorer_desktop/keyboard.inc"
-#include "file_explorer_desktop/view.inc"
 int run(int argc, char** argv) {
     configure_initial_filesystem_root(argc, argv);
     phenotype::Theme theme = phenotype::current_theme();
@@ -110,5 +109,4 @@ int run(int argc, char** argv) {
             return Resized{width, height, scale};
         });
 }
-
 } // namespace file_explorer_desktop
