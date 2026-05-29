@@ -1046,6 +1046,11 @@ inline MaterialInteractionDescriptor resolve_material_interaction(
         float draw_x,
         float draw_y) {
     auto resolved = node.material.interaction;
+    bool const has_explicit_anchor =
+        resolved.hovered
+        || resolved.pressed
+        || resolved.focused
+        || resolved.pointer_inside;
     if (!material_should_resolve_live_interaction(node))
         return resolved;
 
@@ -1064,7 +1069,7 @@ inline MaterialInteractionDescriptor resolve_material_interaction(
             node.width,
             node.height);
     resolved.pointer_inside = resolved.pointer_inside || pointer_inside;
-    if (pointer_inside) {
+    if (pointer_inside && !has_explicit_anchor) {
         resolved.pointer_x = normalized_pointer_axis(
             g_app.pointer_x,
             draw_x,

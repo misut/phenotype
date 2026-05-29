@@ -124,6 +124,17 @@ phenotype::layout::MaterialSurfaceOptions main_content_shell_options(
     return options;
 }
 
+phenotype::MaterialStyle toolbar_plain_layer_material_style() {
+    bool const dark = finder_dark_palette();
+    auto material = phenotype::MaterialStyle{};
+    material.kind = phenotype::MaterialKind::None;
+    material.tint = dark ? rgba(46, 46, 48)
+                         : rgba(255, 255, 255);
+    material.border = dark ? rgba(255, 255, 255, 28)
+                           : rgba(0, 0, 0, 18);
+    return material;
+}
+
 phenotype::layout::MaterialSurfaceOptions toolbar_group_options(
         char const* label,
         float max_width) {
@@ -131,18 +142,14 @@ phenotype::layout::MaterialSurfaceOptions toolbar_group_options(
     auto options = layout::glass_surface_options(
         layout::GlassSurfacePreset::ToolbarGroup,
         label);
+    options.kind = MaterialKind::None;
     options.max_width = max_width;
     options.fixed_height = k_toolbar_group_height;
     options.border_radius = k_toolbar_group_radius;
+    options.border_width = 0.0f;
+    options.interactive = false;
     options.has_material_override = true;
-    options.material_override = layout::plain_material_style(
-        finder_dark_palette() ? rgba(46, 46, 48, 230)
-                              : rgba(255, 255, 255, 160),
-        finder_dark_palette() ? rgba(255, 255, 255, 28)
-                              : rgba(0, 0, 0, 18),
-        MaterialSurfaceRole::Toolbar,
-        "plain-toolbar-group",
-        "plain-toolbar-group");
+    options.material_override = toolbar_plain_layer_material_style();
     return options;
 }
 
@@ -153,19 +160,15 @@ phenotype::layout::MaterialSurfaceOptions segmented_toolbar_options(
     auto options = layout::glass_surface_options(
         layout::GlassSurfacePreset::SegmentedControl,
         label);
+    options.kind = MaterialKind::None;
     options.role = MaterialSurfaceRole::Toolbar;
     options.max_width = max_width;
     options.fixed_height = k_toolbar_group_height;
     options.border_radius = k_toolbar_group_radius;
+    options.border_width = 0.0f;
+    options.interactive = false;
     options.has_material_override = true;
-    options.material_override = layout::plain_material_style(
-        finder_dark_palette() ? rgba(46, 46, 48, 230)
-                              : rgba(255, 255, 255, 160),
-        finder_dark_palette() ? rgba(255, 255, 255, 28)
-                              : rgba(0, 0, 0, 18),
-        MaterialSurfaceRole::Toolbar,
-        "plain-segmented-toolbar",
-        "plain-segmented-toolbar");
+    options.material_override = toolbar_plain_layer_material_style();
     return options;
 }
 

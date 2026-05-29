@@ -6,8 +6,10 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 import phenotype;
@@ -1525,7 +1527,8 @@ void test_plain_material_style_disables_liquid_glass_for_chrome_roles() {
 }
 
 void test_interaction_glass_button_uses_plain_idle_material() {
-    auto paint_button = [](unsigned int hovered_id) {
+    auto paint_button = [](unsigned int hovered_id,
+                           std::optional<std::pair<float, float>> pointer = {}) {
         detail::g_app.arena.reset();
         detail::g_app.prev_arena.reset();
         detail::g_app.callbacks.clear();
@@ -1534,6 +1537,10 @@ void test_interaction_glass_button_uses_plain_idle_material() {
         detail::g_app.pressed_id = 0xFFFFFFFFu;
         detail::g_app.focused_id = 0xFFFFFFFFu;
         detail::g_app.focus_visible = false;
+        if (pointer.has_value())
+            detail::set_pointer_position(pointer->first, pointer->second);
+        else
+            detail::clear_pointer_position();
         CMD_LEN = 0;
 
         auto root_h = detail::alloc_node();
@@ -1571,6 +1578,26 @@ void test_interaction_glass_button_uses_plain_idle_material() {
     assert(hover.blur_radius >= 10.0f);
     assert(hover.interaction.hovered);
     assert(hover.interaction.pointer_inside);
+    assert(std::fabs(hover.interaction.pointer_x - 0.5f) < 0.0001f);
+    assert(std::fabs(hover.interaction.pointer_y - 0.5f) < 0.0001f);
+
+    auto left_pointer_commands =
+        paint_button(0u, std::pair<float, float>{4.0f, 16.0f});
+    auto const& left_pointer =
+        first_material_command(left_pointer_commands).material.interaction;
+    assert(left_pointer.hovered);
+    assert(left_pointer.pointer_inside);
+    assert(std::fabs(left_pointer.pointer_x - 0.5f) < 0.0001f);
+    assert(std::fabs(left_pointer.pointer_y - 0.5f) < 0.0001f);
+
+    auto right_pointer_commands =
+        paint_button(0u, std::pair<float, float>{116.0f, 16.0f});
+    auto const& right_pointer =
+        first_material_command(right_pointer_commands).material.interaction;
+    assert(right_pointer.hovered);
+    assert(right_pointer.pointer_inside);
+    assert(std::fabs(right_pointer.pointer_x - 0.5f) < 0.0001f);
+    assert(std::fabs(right_pointer.pointer_y - 0.5f) < 0.0001f);
 
     detail::g_app.theme = apply_dark_color_scheme(Theme{});
     auto dark_hover_commands = paint_button(0u);
