@@ -42,6 +42,50 @@ void toolbar_separator() {
         0x6901u);
 }
 
+phenotype::ButtonStyleOptions toolbar_icon_button_style(
+        bool selected = false,
+        bool enabled = true,
+        phenotype::MaterialSurfaceRole role =
+            phenotype::MaterialSurfaceRole::Toolbar) {
+    using namespace phenotype;
+    auto const& t = current_theme();
+    ButtonStyleOptions options;
+    options.disabled = !enabled;
+    options.has_background = true;
+    options.background = selected
+        ? (finder_dark_palette() ? rgba(255, 255, 255, 48)
+                                 : rgba(255, 255, 255, 176))
+        : rgba(0, 0, 0, 0);
+    options.has_hover_background = true;
+    options.hover_background = selected
+        ? (finder_dark_palette() ? rgba(255, 255, 255, 70)
+                                 : rgba(255, 255, 255, 214))
+        : (finder_dark_palette() ? rgba(255, 255, 255, 38)
+                                 : rgba(255, 255, 255, 128));
+    options.has_pressed_background = true;
+    options.pressed_background = selected
+        ? (finder_dark_palette() ? rgba(255, 255, 255, 92)
+                                 : rgba(255, 255, 255, 236))
+        : (finder_dark_palette() ? rgba(255, 255, 255, 56)
+                                 : rgba(255, 255, 255, 166));
+    options.has_border_color = true;
+    options.border_color = rgba(0, 0, 0, 0);
+    options.has_text_color = true;
+    options.text_color = selected ? t.foreground : t.muted;
+    options.border_width = 0.0f;
+    options.border_radius = k_toolbar_group_radius;
+    options.max_width = k_toolbar_icon_button_width;
+    options.fixed_height = k_toolbar_icon_button_height;
+    options.min_hit_width = k_toolbar_icon_button_width;
+    options.min_hit_height = k_toolbar_icon_button_height;
+    options.focus_ring = false;
+    return widget::interaction_glass_button_style(
+        options,
+        role,
+        MaterialKind::Clear,
+        MaterialKind::Regular);
+}
+
 void view_mode_button(char const* label,
                       file_explorer_demo::ExplorerViewMode mode,
                       file_explorer_demo::ExplorerViewMode current,
@@ -59,7 +103,8 @@ void view_mode_button(char const* label,
             .width = k_toolbar_icon_button_width,
             .height = k_toolbar_icon_button_height,
             .token_salt = token,
-        });
+        },
+        toolbar_icon_button_style(selected));
 }
 
 void toolbar_action_button(char const* label,
@@ -75,7 +120,8 @@ void toolbar_action_button(char const* label,
             .width = k_toolbar_icon_button_width,
             .height = k_toolbar_icon_button_height,
             .token_salt = token,
-        });
+        },
+        toolbar_icon_button_style());
 }
 
 void toolbar_message_button(char const* label,
@@ -94,7 +140,8 @@ void toolbar_message_button(char const* label,
             .width = k_toolbar_icon_button_width,
             .height = k_toolbar_icon_button_height,
             .token_salt = token,
-        });
+        },
+        toolbar_icon_button_style(selected));
 }
 
 Msg on_search_changed(std::string text) {
@@ -113,26 +160,31 @@ void search_toggle_button(bool selected) {
             .width = k_toolbar_icon_button_width,
             .height = k_toolbar_icon_button_height,
             .token_salt = 0x6401u,
-        });
+        },
+        toolbar_icon_button_style(selected));
 }
 
 void sort_action_button(file_explorer_demo::Snapshot const& snap) {
     std::string semantic_label = "Group Sort";
     if (!snap.sort_label.empty())
         semantic_label += " (" + snap.sort_label + ")";
-    auto style = phenotype::widget::glass_split_button_style(
-        phenotype::GlassSplitButtonStyleOptions{
-            .kind = phenotype::MaterialKind::Clear,
-            .role = phenotype::MaterialSurfaceRole::Toolbar,
-            .segment = phenotype::GlassSplitButtonSegment::Single,
-            .selected = false,
-            .disabled = false,
-            .container_id = 2100u,
-            .spacing = 16.0f,
-            .width = k_toolbar_icon_button_width,
-            .height = k_toolbar_icon_button_height,
-            .border_radius = 18.0f,
-        });
+    auto style = phenotype::widget::interaction_glass_button_style(
+        phenotype::widget::glass_split_button_style(
+            phenotype::GlassSplitButtonStyleOptions{
+                .kind = phenotype::MaterialKind::Clear,
+                .role = phenotype::MaterialSurfaceRole::Toolbar,
+                .segment = phenotype::GlassSplitButtonSegment::Single,
+                .selected = false,
+                .disabled = false,
+                .container_id = 2100u,
+                .spacing = 16.0f,
+                .width = k_toolbar_icon_button_width,
+                .height = k_toolbar_icon_button_height,
+                .border_radius = 18.0f,
+            }),
+        phenotype::MaterialSurfaceRole::Toolbar,
+        phenotype::MaterialKind::Clear,
+        phenotype::MaterialKind::Regular);
     phenotype::widget::symbol_button<Msg>(
         phenotype::str{semantic_label},
         phenotype::icons::Symbol::SortGroup,
@@ -164,13 +216,17 @@ void file_action_button(char const* label,
         symbol,
         std::move(msg),
         symbol_options,
-        phenotype::widget::glass_menu_item_button_style(
-            phenotype::GlassMenuItemStyleOptions{
-                .disabled = !enabled,
-                .width = k_toolbar_icon_button_width,
-                .height = k_toolbar_icon_button_height,
-                .border_radius = k_toolbar_group_radius,
-            }));
+        phenotype::widget::interaction_glass_button_style(
+            phenotype::widget::glass_menu_item_button_style(
+                phenotype::GlassMenuItemStyleOptions{
+                    .disabled = !enabled,
+                    .width = k_toolbar_icon_button_width,
+                    .height = k_toolbar_icon_button_height,
+                    .border_radius = k_toolbar_group_radius,
+                }),
+            phenotype::MaterialSurfaceRole::Control,
+            phenotype::MaterialKind::Clear,
+            phenotype::MaterialKind::Regular));
 }
 
 void navigation_button(char const* label,
@@ -179,14 +235,18 @@ void navigation_button(char const* label,
                        phenotype::icons::Symbol symbol,
                        std::uint64_t token) {
     std::string semantic_label(label);
-    auto style = phenotype::widget::glass_menu_item_button_style(
-        phenotype::GlassMenuItemStyleOptions{
-            .role = phenotype::MaterialSurfaceRole::Navigation,
-            .disabled = !enabled,
-            .width = k_toolbar_icon_button_width,
-            .height = k_toolbar_icon_button_height,
-            .border_radius = k_toolbar_group_radius,
-        });
+    auto style = phenotype::widget::interaction_glass_button_style(
+        phenotype::widget::glass_menu_item_button_style(
+            phenotype::GlassMenuItemStyleOptions{
+                .role = phenotype::MaterialSurfaceRole::Navigation,
+                .disabled = !enabled,
+                .width = k_toolbar_icon_button_width,
+                .height = k_toolbar_icon_button_height,
+                .border_radius = k_toolbar_group_radius,
+            }),
+        phenotype::MaterialSurfaceRole::Navigation,
+        phenotype::MaterialKind::Clear,
+        phenotype::MaterialKind::Regular);
     style.min_hit_width = k_toolbar_icon_button_width;
     style.min_hit_height = k_toolbar_icon_button_height;
     style.focus_ring = false;

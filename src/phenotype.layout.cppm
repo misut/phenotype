@@ -227,6 +227,7 @@ inline bool material_equal(MaterialStyle const& a, MaterialStyle const& b) noexc
     return a.kind == b.kind
         && a.role == b.role
         && a.container == b.container
+        && a.allows_liquid_glass == b.allows_liquid_glass
         && a.opacity == b.opacity
         && a.blur_radius == b.blur_radius
         && color_equal(a.tint, b.tint)

@@ -299,9 +299,10 @@ cd examples/file_explorer_desktop
 exon run
 ```
 
-`examples/file_explorer_desktop` is a Finder-style desktop workflow with glass
-toolbar/sidebar/icon-grid/status surfaces, document thumbnails, and sandboxed
-temp-root file view, read, create, and delete actions.
+`examples/file_explorer_desktop` is a Finder-style desktop workflow with plain
+toolbar/sidebar/content/status surfaces, interaction-only glass controls,
+document thumbnails, and sandboxed temp-root file view, read, create, and
+delete actions.
 
 ```bash
 cd examples/file_explorer_mobile

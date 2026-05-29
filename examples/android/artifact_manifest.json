@@ -4,7 +4,7 @@
   "expect_platform": "android",
   "require_frame": true,
   "require_labels": [
-    "phenotype \u00b7 stage 7",
+    "phenotype · stage 7",
     "Core Widgets",
     "Android Material Fallback",
     "Stage 7: debug plane + resume + scroll."
@@ -32,7 +32,7 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "44": 1
+      "86": 1
     },
     "theme_foreground_matches_theme": 1,
     "theme_accent_matches_theme": 1,

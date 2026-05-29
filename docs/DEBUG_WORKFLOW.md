@@ -74,9 +74,8 @@ The common snapshot schema remains the source of truth for all platforms:
 ## Debug side panel
 
 Debug builds expose the side panel with `Cmd+F12` on macOS and `Ctrl+F12` on
-Windows. The panel is rendered as a blurred inspector surface so it stays
-legible over glass-heavy applications while still preserving the app context
-behind it.
+Windows. The panel is rendered as a plain inspector surface so it stays legible
+over material-heavy applications without adding its own idle glass cost.
 
 The side panel is organized into focused tabs:
 

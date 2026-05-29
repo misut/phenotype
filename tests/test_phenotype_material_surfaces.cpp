@@ -1477,6 +1477,104 @@ MaterialRectCmd const& first_material_command(
     return fallback;
 }
 
+void test_plain_material_style_disables_liquid_glass_for_chrome_roles() {
+    detail::g_app.theme = Theme{};
+    auto style = layout::plain_material_style(
+        Color{255, 255, 255, 255},
+        Color{209, 209, 214, 255},
+        MaterialSurfaceRole::Sidebar,
+        "test-plain-sidebar",
+        "test-plain-sidebar");
+    assert(!style.allows_liquid_glass);
+    assert(style.kind == MaterialKind::Regular);
+    assert(style.role == MaterialSurfaceRole::Sidebar);
+    assert(style.blur_radius == 0.0f);
+    assert(style.opacity == 1.0f);
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.render_target.width = 640;
+    env.render_target.height = 420;
+    env.render_target.scale = 2.0f;
+    auto plan_owner = make_test_material_plan(
+        MaterialRequest{
+            style,
+            MaterialGeometry{0.0f, 0.0f, 320.0f, 240.0f, 18.0f},
+        },
+        env);
+    auto& plan = *plan_owner;
+    assert(plan.role == MaterialSurfaceRole::Sidebar);
+    assert(!plan.decision_trace.style_allows_liquid_glass);
+    assert(plan.decision_trace.role_allows_liquid_glass);
+    assert(plan.decision_trace.content_layer_standard_material);
+    assert(!plan.decision_trace.liquid_glass_backdrop_candidate);
+    assert(!plan.backdrop_sampling);
+    assert(plan.blur_radius == 0.0f);
+    assert(plan.opacity == 1.0f);
+    assert(std::string(plan.plan_id)
+           == "material.regular.standard-material");
+    assert(std::string(plan.reference_model.technology)
+           == "standard-material");
+
+    std::puts("PASS: plain material disables liquid glass for chrome roles");
+}
+
+void test_interaction_glass_button_uses_plain_idle_material() {
+    auto paint_button = [](unsigned int hovered_id) {
+        detail::g_app.arena.reset();
+        detail::g_app.prev_arena.reset();
+        detail::g_app.callbacks.clear();
+        detail::g_app.callback_roles.clear();
+        detail::g_app.hovered_id = hovered_id;
+        detail::g_app.pressed_id = 0xFFFFFFFFu;
+        detail::g_app.focused_id = 0xFFFFFFFFu;
+        detail::g_app.focus_visible = false;
+        CMD_LEN = 0;
+
+        auto root_h = detail::alloc_node();
+        detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+        Scope scope(root_h);
+        Scope::set_current(&scope);
+        widget::button<MaterialInteractionMsg>(
+            "State",
+            MaterialInteractionClick{},
+            widget::interaction_glass_control_button_style(
+                GlassControlStyleOptions{
+                    .kind = MaterialKind::Clear,
+                    .role = MaterialSurfaceRole::Control,
+                    .width = 120.0f,
+                    .height = 32.0f,
+                    .border_radius = 10.0f,
+                }));
+        Scope::set_current(nullptr);
+
+        LAYOUT_NODE(root_h, 240.0f);
+        PAINT_NODE(root_h, 0, 0, 0, 120.0f);
+        return parse_commands(CMD_BUF, CMD_LEN);
+    };
+
+    auto idle_commands = paint_button(0xFFFFFFFFu);
+    auto const& idle = first_material_command(idle_commands).material;
+    assert(!idle.allows_liquid_glass);
+    assert(idle.role == MaterialSurfaceRole::Control);
+    assert(idle.blur_radius == 0.0f);
+
+    auto hover_commands = paint_button(0u);
+    auto const& hover = first_material_command(hover_commands).material;
+    assert(hover.allows_liquid_glass);
+    assert(hover.role == MaterialSurfaceRole::Control);
+    assert(hover.blur_radius >= 10.0f);
+    assert(hover.interaction.hovered);
+    assert(hover.interaction.pointer_inside);
+
+    std::puts("PASS: interaction glass button uses plain idle material");
+}
+
 void test_material_surface_resolves_live_input_interaction() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -3543,6 +3641,8 @@ int main() {
     test_glass_effect_style_carries_transition_and_identity();
     test_glass_effect_style_carries_union_context();
     test_glass_surface_presets_emit_material_contract();
+    test_plain_material_style_disables_liquid_glass_for_chrome_roles();
+    test_interaction_glass_button_uses_plain_idle_material();
     test_material_container_scope_emits_command_context();
     test_glass_effect_container_scope_emits_morph_context();
     test_glass_effect_union_scope_emits_view_union_context();

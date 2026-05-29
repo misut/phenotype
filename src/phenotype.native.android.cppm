@@ -4452,6 +4452,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
             float r = read_f32();
             auto const kind = read_u32();
             auto const role = read_u32();
+            auto const allows_liquid_glass = read_u32() != 0u;
             auto const opacity = read_f32();
             auto const blur_radius = read_f32();
             auto const tint = unpack(read_u32());
@@ -4485,6 +4486,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
             ::phenotype::MaterialCommandDescriptor descriptor{
                 ::phenotype::material_kind_from_wire(kind),
                 ::phenotype::material_surface_role_from_wire(role),
+                allows_liquid_glass,
                 ::phenotype::material_container_descriptor_from_wire(
                     container_id,
                     union_id,

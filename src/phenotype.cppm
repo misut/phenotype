@@ -365,12 +365,37 @@ inline void cell(str content,
 // reads the same pattern as `widget::switch_`. Paint's hover_background
 // fallback stays available for widgets (tabs, link) that haven't been
 // migrated yet.
+inline MaterialStyle const* button_material_for_state(
+        ButtonStyleOptions const& options,
+        bool hovered,
+        bool pressed) {
+    if (pressed
+        && options.has_pressed_material
+        && options.pressed_material.kind != MaterialKind::None) {
+        return &options.pressed_material;
+    }
+    if (hovered
+        && options.has_hover_material
+        && options.hover_material.kind != MaterialKind::None) {
+        return &options.hover_material;
+    }
+    if (options.has_material && options.material.kind != MaterialKind::None)
+        return &options.material;
+    return nullptr;
+}
+
 inline void apply_button_material(LayoutNode& node,
-                                  ButtonStyleOptions const& options) {
-    if (!options.has_material || options.material.kind == MaterialKind::None)
+                                  ButtonStyleOptions const& options,
+                                  bool hovered = false,
+                                  bool pressed = false) {
+    auto const* material = button_material_for_state(
+        options,
+        hovered,
+        pressed);
+    if (!material)
         return;
     node.material_shape = options.shape;
-    node.material = options.material;
+    node.material = *material;
     node.material.tint = node.background;
     node.material.border = node.border_color;
     node.material.foreground = node.text_color;
@@ -523,7 +548,7 @@ inline void action_button(str label,
         is_focused ? t.state_focus_ring_width : base_border_width, focus_ms);
     node.border_color = animate_color(
         is_focused ? t.state_focus_ring : base_border, focus_ms);
-    apply_button_material(node, options);
+    apply_button_material(node, options, is_hovered, is_pressed);
     apply_material_interaction_state(
         node,
         is_hovered,
@@ -1309,7 +1334,7 @@ inline void canvas_button(str label,
             is_focused ? t.state_focus_ring_width : base_border_width, focus_ms);
         node.border_color = animate_color(
             is_focused ? t.state_focus_ring : base_border, focus_ms);
-        apply_button_material(node, options);
+        apply_button_material(node, options, is_hovered, is_pressed);
         apply_material_interaction_state(
             node,
             is_hovered,
@@ -1717,6 +1742,7 @@ inline void tabs(std::vector<str> const& items,
         auto& pill = detail::node_at(pill_h);
         auto material = material_style_for_kind(options.kind, t);
         material.role = options.role;
+        material.allows_liquid_glass = options.allows_liquid_glass;
         material.fallback = options.kind != MaterialKind::None;
         material.container = MaterialContainerDescriptor{
             0u,
@@ -1732,6 +1758,24 @@ inline void tabs(std::vector<str> const& items,
             material,
             options,
             options.glass_identity);
+        if (!options.allows_liquid_glass) {
+            material.opacity = 1.0f;
+            material.blur_radius = 0.0f;
+            material.tint = options.has_tint
+                ? options.tint
+                : material_with_alpha(t.surface, 255);
+            material.border = options.has_border
+                ? options.border
+                : material_with_alpha(t.border, 160);
+            material.saturation = 1.0f;
+            material.luminance_floor = 0.0f;
+            material.luminance_gain = 1.0f;
+            material.edge_highlight = 0.0f;
+            material.noise_opacity = 0.0f;
+            material.shadow_alpha = 0.0f;
+            material.shadow_radius = 0.0f;
+            material.verifier_profile = "regular-legibility-backdrop";
+        }
         pill.material = material;
         pill.style.flex_direction = FlexDirection::Column;
         pill.style.gap = 0;
@@ -1808,6 +1852,8 @@ inline void tabs(std::vector<str> const& items,
                 auto selected_material =
                     material_style_for_kind(MaterialKind::Clear, t);
                 selected_material.role = options.role;
+                selected_material.allows_liquid_glass =
+                    options.allows_liquid_glass;
                 selected_material.fallback = true;
                 selected_material.tint = material_with_alpha(t.surface, 186);
                 selected_material.border = options.has_border
@@ -1826,6 +1872,23 @@ inline void tabs(std::vector<str> const& items,
                     selected_material,
                     options,
                     _impl::glass_tabs_indicator_identity(options));
+                if (!options.allows_liquid_glass) {
+                    selected_material.kind = MaterialKind::Regular;
+                    selected_material.opacity = 1.0f;
+                    selected_material.blur_radius = 0.0f;
+                    selected_material.tint = material_with_alpha(
+                        t.surface,
+                        255);
+                    selected_material.saturation = 1.0f;
+                    selected_material.luminance_floor = 0.0f;
+                    selected_material.luminance_gain = 1.0f;
+                    selected_material.edge_highlight = 0.0f;
+                    selected_material.noise_opacity = 0.0f;
+                    selected_material.shadow_alpha = 0.0f;
+                    selected_material.shadow_radius = 0.0f;
+                    selected_material.verifier_profile =
+                        "regular-legibility-backdrop";
+                }
                 btn.material = selected_material;
                 apply_material_interaction_state(
                     btn,
@@ -2697,6 +2760,35 @@ inline float space_value(SpaceToken token) noexcept {
 
 inline MaterialStyle material_style(MaterialKind kind) noexcept {
     return material_style_for_kind(kind, detail::g_app.theme);
+}
+
+inline MaterialStyle plain_material_style(
+        Color tint,
+        Color border = {},
+        MaterialSurfaceRole role = MaterialSurfaceRole::Surface,
+        char const* contrast_intent = "plain-material",
+        char const* verifier_profile = "plain-material") noexcept {
+    (void)verifier_profile;
+    auto material = material_style(MaterialKind::Regular);
+    material.role = role;
+    material.allows_liquid_glass = false;
+    material.opacity = 1.0f;
+    material.blur_radius = 0.0f;
+    material.tint = tint;
+    material.border = border;
+    material.saturation = 1.0f;
+    material.luminance_floor = 0.0f;
+    material.luminance_gain = 1.0f;
+    material.edge_highlight = 0.0f;
+    material.noise_opacity = 0.0f;
+    material.shadow_alpha = 0.0f;
+    material.shadow_radius = 0.0f;
+    material.fallback = false;
+    material.fallback_reason = "";
+    material.contrast_intent = contrast_intent;
+    material.plan_id = "material.plain.standard";
+    material.verifier_profile = "regular-legibility-backdrop";
+    return material;
 }
 
 struct MaterialContainerOptions {
@@ -5193,6 +5285,16 @@ inline void apply_glass_effect_style_material(
         style.has_material,
         style.disabled,
         glass);
+    apply_glass_effect_style_material(
+        style.hover_material,
+        style.has_hover_material,
+        style.disabled,
+        glass);
+    apply_glass_effect_style_material(
+        style.pressed_material,
+        style.has_pressed_material,
+        style.disabled,
+        glass);
 }
 
 inline void apply_glass_effect_style_material(
@@ -6684,6 +6786,7 @@ inline void collect_semantic_nodes_from(
         semantic.material = diag::SemanticNodeSnapshot::MaterialSnapshot{
             .kind = material_kind_name(node.material.kind),
             .role = material_surface_role_name(node.material.role),
+            .allows_liquid_glass = node.material.allows_liquid_glass,
             .opacity = node.material.opacity,
             .blur_radius = node.material.blur_radius,
             .tint = node.material.tint,
@@ -7122,7 +7225,11 @@ inline ButtonStyleOptions debug_panel_button_options(bool selected,
     options.fixed_height = fixed_height;
     options.text_align = TextAlign::Center;
     options.focus_ring = false;
-    return options;
+    return widget::interaction_glass_button_style(
+        options,
+        MaterialSurfaceRole::Control,
+        MaterialKind::Clear,
+        MaterialKind::Regular);
 }
 
 inline void debug_panel_tab_button(DebugPanelTab tab) {
@@ -8571,21 +8678,14 @@ inline layout::MaterialSurfaceOptions debug_panel_surface_options(
     panel_options.max_width = panel_width;
     panel_options.border_width = 1.0f;
     panel_options.has_material_override = true;
-    panel_options.material_override =
-        layout::glass_background_effect_material_style(
-            MaterialKind::Thick,
-            layout::glass_background_feathered(18.0f, 28.0f));
-    panel_options.material_override.tint =
-        debug_with_alpha(g_app.theme.surface, 190);
-    panel_options.material_override.border =
-        debug_with_alpha(g_app.theme.border, 236);
-    panel_options.material_override.blur_radius = 86.0f;
-    panel_options.material_override.opacity = 0.84f;
-    panel_options.material_override.saturation = 1.08f;
-    panel_options.material_override.contrast_intent =
-        "debug-panel-backdrop-blur";
-    panel_options.material_override.verifier_profile =
-        "debug-panel-gaussian-backdrop";
+    panel_options.material_override = layout::plain_material_style(
+        debug_with_alpha(g_app.theme.surface, 255),
+        debug_with_alpha(g_app.theme.border, 236),
+        MaterialSurfaceRole::Sidebar,
+        "debug-panel-plain-surface",
+        "debug-panel-plain-surface");
+    panel_options.material_override.shadow_alpha = 0.16f;
+    panel_options.material_override.shadow_radius = 22.0f;
     return panel_options;
 }
 

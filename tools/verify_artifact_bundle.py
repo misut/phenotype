@@ -353,6 +353,7 @@ ALLOWED_MATERIAL_OPTICAL_COLOR_STRATEGIES = {
 }
 
 ALLOWED_MATERIAL_OPTICAL_DEPTH_STRATEGIES = {
+    "adaptive-glass-depth",
     "fallback-edge",
     "fallback-shadow-edge",
     "layered-shadow-edge",
@@ -448,6 +449,7 @@ ALLOWED_MATERIAL_INTERACTION_MOTION_POLICIES = {
 }
 
 ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS = {
+    "adaptive-liquid-glass-glint",
     "none",
     "pointer-specular",
 }
@@ -463,7 +465,7 @@ ALLOWED_MATERIAL_REFRACTION_SOURCES = {
     "sampled-backdrop-edge-refraction",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 44
+MATERIAL_PLAN_CONTRACT_VERSION = 86
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 MATERIAL_MAX_REFRACTION_OFFSET_PIXELS = 3.5
@@ -4949,6 +4951,7 @@ MATERIAL_CAPABILITY_SNAPSHOT_STRING_FIELDS = ("profile", "source")
 MATERIAL_DECISION_TRACE_BOOL_FIELDS = (
     "has_geometry",
     "has_material",
+    "style_allows_liquid_glass",
     "role_allows_liquid_glass",
     "content_layer_standard_material",
     "liquid_glass_backdrop_candidate",
@@ -6148,14 +6151,15 @@ def expected_reference_performance_response(
 def expected_optical_response_model(
         kind: str | None,
         role: str | None,
-        backdrop_sampling: bool | None) -> str | None:
+        backdrop_sampling: bool | None,
+        content_standard: bool | None = None) -> str | None:
     if kind is None or role is None or backdrop_sampling is None:
         return None
     if kind == "none":
         return "inactive"
     if backdrop_sampling:
         return "sampled-backdrop"
-    if role == "content":
+    if content_standard is True or role == "content":
         return "standard-content"
     return "deterministic-fallback"
 
@@ -6179,7 +6183,8 @@ def expected_optical_color_strategy(
         kind: str | None,
         role: str | None,
         backdrop_sampling: bool | None,
-        tint: JsonObject | None) -> str | None:
+        tint: JsonObject | None,
+        content_standard: bool | None = None) -> str | None:
     if kind is None or role is None or backdrop_sampling is None:
         return None
     tint_alpha = None
@@ -6189,7 +6194,7 @@ def expected_optical_color_strategy(
         return "none"
     if backdrop_sampling:
         return "adaptive-backdrop-color"
-    if role == "content":
+    if content_standard is True or role == "content":
         return "standard-content-color"
     return "fallback-solid-color"
 
@@ -6201,7 +6206,8 @@ def expected_optical_depth_strategy(
         primary_pass: JsonObject | None,
         edge_highlight: int | float | None,
         shadow_alpha: int | float | None,
-        noise_opacity: int | float | None) -> str | None:
+        noise_opacity: int | float | None,
+        content_standard: bool | None = None) -> str | None:
     if not isinstance(primary_pass, dict) or primary_pass.get("active") is not True:
         return "none"
     if fallback is None or role is None or backdrop_sampling is None:
@@ -6212,17 +6218,31 @@ def expected_optical_depth_strategy(
         backdrop_sampling
         and isinstance(noise_opacity, (int, float))
         and float(noise_opacity) > 0.0)
-    if backdrop_sampling and shadow and edge and noise:
-        return "layered-shadow-edge-noise"
-    if backdrop_sampling and (shadow or edge):
-        return "layered-shadow-edge"
-    if role == "content" and edge:
+    if backdrop_sampling:
+        return "adaptive-glass-depth"
+    if (content_standard is True or role == "content") and edge:
         return "standard-content-edge"
     if (fallback or not backdrop_sampling) and shadow and edge:
         return "fallback-shadow-edge"
     if (fallback or not backdrop_sampling) and edge:
         return "fallback-edge"
     return "none"
+
+
+def material_plan_content_standard(
+        plan: JsonObject,
+        kind: str | None,
+        role: str | None) -> bool | None:
+    if kind is None or role is None:
+        return None
+    if kind == "none":
+        return False
+    decision_trace = plan.get("decision_trace")
+    if isinstance(decision_trace, dict):
+        value = bool_at(decision_trace, "content_layer_standard_material")
+        if value is not None:
+            return value
+    return role == "content"
 
 
 def expected_optical_stage_order(
@@ -6449,6 +6469,7 @@ def summarize_material_plans(
             "max_blur_step_pixels": 0.0,
         },
         "decision_trace": {
+            "style_allows_liquid_glass": 0,
             "role_allows_liquid_glass": 0,
             "content_layer_standard_material": 0,
             "liquid_glass_backdrop_candidate": 0,
@@ -6790,6 +6811,10 @@ def summarize_material_plans(
                     "Update MaterialSurfaceRole serialization and verifier "
                     "vocabulary together."),
                 record_success=False)
+        content_standard_for_plan = material_plan_content_standard(
+            plan,
+            kind if isinstance(kind, str) else None,
+            role if isinstance(role, str) else None)
 
         plan_container = check_object_field(
             report,
@@ -7331,7 +7356,7 @@ def summarize_material_plans(
             fallback = bool_at(plan, "fallback")
             backdrop_sampling = bool_at(plan, "backdrop_sampling")
             if isinstance(kind, str) and isinstance(role, str):
-                content_standard = kind != "none" and role == "content"
+                content_standard = content_standard_for_plan is True
                 expected_technology = (
                     "standard-material" if content_standard else "liquid-glass")
                 expected_layer = "inactive"
@@ -7380,7 +7405,7 @@ def summarize_material_plans(
                     expected_scope = "sampled-backdrop"
                 elif kind != "none" and fallback:
                     expected_scope = "deterministic-fallback"
-                elif kind != "none" and role == "content":
+                elif kind != "none" and content_standard_for_plan is True:
                     expected_scope = "standard-fill"
                 if "blending_scope" in reference_values:
                     report.check(
@@ -9306,6 +9331,7 @@ def summarize_material_plans(
                     trace_values[key] = value
                     if key in (
                             "role_allows_liquid_glass",
+                            "style_allows_liquid_glass",
                             "content_layer_standard_material",
                             "liquid_glass_backdrop_candidate",
                             "can_sample_backdrop",
@@ -9359,11 +9385,16 @@ def summarize_material_plans(
                     hint=(
                         "Content surfaces must resolve to standard material; "
                         "functional chrome/navigation roles may use Liquid Glass."),
-                    record_success=False)
+                        record_success=False)
                 if "has_material" in trace_values:
+                    style_allows = trace_values.get("style_allows_liquid_glass")
+                    expected_allows_liquid_glass = expected_role_allows
+                    if isinstance(style_allows, bool):
+                        expected_allows_liquid_glass = (
+                            expected_role_allows and style_allows)
                     expected_content_standard = (
                         trace_values["has_material"]
-                        and not expected_role_allows)
+                        and not expected_allows_liquid_glass)
                     report.check(
                         "material decision content standard policy is derived",
                         trace_values.get("content_layer_standard_material")
@@ -9381,7 +9412,7 @@ def summarize_material_plans(
                         record_success=False)
                     expected_backdrop_candidate = (
                         trace_values["has_material"]
-                        and expected_role_allows)
+                        and expected_allows_liquid_glass)
                     report.check(
                         "material decision liquid glass candidate is derived",
                         trace_values.get("liquid_glass_backdrop_candidate")
@@ -11333,7 +11364,8 @@ def summarize_material_plans(
             expected_model = expected_optical_response_model(
                 kind if isinstance(kind, str) else None,
                 role if isinstance(role, str) else None,
-                backdrop_sampling if isinstance(backdrop_sampling, bool) else None)
+                backdrop_sampling if isinstance(backdrop_sampling, bool) else None,
+                content_standard_for_plan)
             expected_blur = expected_optical_blur_strategy(primary_pass)
             expected_depth = expected_optical_depth_strategy(
                 fallback if isinstance(fallback, bool) else None,
@@ -11342,7 +11374,8 @@ def summarize_material_plans(
                 primary_pass,
                 plan_edge_highlight,
                 plan_shadow_alpha,
-                plan_noise_opacity)
+                plan_noise_opacity,
+                content_standard_for_plan)
             expected_frosting: str | None = None
             if isinstance(kind, str) and kind == "none":
                 expected_frosting = "none"
@@ -11350,7 +11383,7 @@ def summarize_material_plans(
                 expected_frosting = "sampled-backdrop-frosting"
             elif fallback is True:
                 expected_frosting = "solid-fallback-frosting"
-            elif isinstance(role, str) and role == "content":
+            elif content_standard_for_plan is True:
                 expected_frosting = "standard-material-fill"
             elif isinstance(kind, str):
                 expected_frosting = "none"
@@ -11696,7 +11729,8 @@ def summarize_material_plans(
             expected_model = expected_optical_response_model(
                 kind if isinstance(kind, str) else None,
                 role if isinstance(role, str) else None,
-                backdrop_sampling if isinstance(backdrop_sampling, bool) else None)
+                backdrop_sampling if isinstance(backdrop_sampling, bool) else None,
+                content_standard_for_plan)
             if expected_model is not None:
                 report.check(
                     "material optical response model matches role and sampling",
@@ -11725,7 +11759,8 @@ def summarize_material_plans(
                 kind if isinstance(kind, str) else None,
                 role if isinstance(role, str) else None,
                 backdrop_sampling if isinstance(backdrop_sampling, bool) else None,
-                tint)
+                tint,
+                content_standard_for_plan)
             if expected_color is not None:
                 report.check(
                     "material optical color strategy matches tint and role",
@@ -11743,7 +11778,8 @@ def summarize_material_plans(
                 primary_pass,
                 plan_edge_highlight,
                 plan_shadow_alpha,
-                plan_noise_opacity)
+                plan_noise_opacity,
+                content_standard_for_plan)
             if expected_depth is not None:
                 report.check(
                     "material optical depth strategy matches stages",
@@ -12312,11 +12348,14 @@ def summarize_material_plans(
                         expected_numbers = {
                             "edge_highlight": plan_edge_highlight,
                             "edge_width": plan_edge_width,
-                            "specular_anchor_x": plan_specular_anchor_x,
-                            "specular_anchor_y": plan_specular_anchor_y,
-                            "specular_radius": plan_specular_radius,
-                            "specular_intensity": plan_specular_intensity,
                         }
+                        if stage_specular_model != "adaptive-liquid-glass-glint":
+                            expected_numbers.update({
+                                "specular_anchor_x": plan_specular_anchor_x,
+                                "specular_anchor_y": plan_specular_anchor_y,
+                                "specular_radius": plan_specular_radius,
+                                "specular_intensity": plan_specular_intensity,
+                            })
                     elif stage_name_for_hint == "noise-dither":
                         expected_channel = "noise-dither"
                         expected_numbers = {
@@ -12352,11 +12391,20 @@ def summarize_material_plans(
                                 record_success=False)
                     if (stage_name_for_hint == "edge-highlight"
                             and isinstance(plan_specular_model, str)):
+                        expected_stage_specular_model = plan_specular_model
+                        if (isinstance(plan_specular_intensity, (int, float))
+                                and float(plan_specular_intensity) > 0.0
+                                and plan_specular_model == "none"):
+                            expected_stage_specular_model = (
+                                "adaptive-liquid-glass-glint")
+                        if stage_specular_model == "adaptive-liquid-glass-glint":
+                            expected_stage_specular_model = (
+                                "adaptive-liquid-glass-glint")
                         report.check(
                             "material execution stage optics specular_model matches plan",
-                            stage_specular_model == plan_specular_model,
+                            stage_specular_model == expected_stage_specular_model,
                             path=f"{stage_path}.optics.specular_model",
-                            expected=plan_specular_model,
+                            expected=expected_stage_specular_model,
                             actual=stage_specular_model,
                             likely_layer="material-stage-optics",
                             likely_pass=stage_name_for_hint,

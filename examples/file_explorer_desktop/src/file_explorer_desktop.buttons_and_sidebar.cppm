@@ -66,6 +66,11 @@ void finder_button(std::string label,
     options.max_width = max_width;
     if (centered)
         options.text_align = phenotype::TextAlign::Center;
+    options = phenotype::widget::interaction_glass_button_style(
+        options,
+        phenotype::MaterialSurfaceRole::Control,
+        phenotype::MaterialKind::Clear,
+        phenotype::MaterialKind::Regular);
 
     phenotype::widget::button<Msg>(label, std::move(msg), options);
 }
@@ -77,15 +82,19 @@ void finder_column_location_button(std::string label,
                                    float max_width,
                                    float font_size,
                                    phenotype::icons::SymbolDocumentCache const& cache) {
-    auto options = phenotype::widget::glass_outline_row_button_style(
-        phenotype::GlassOutlineRowStyleOptions{
-            .chrome = phenotype::GlassOutlineRowChrome::ColumnRow,
-            .role = phenotype::MaterialSurfaceRole::Sidebar,
-            .selected = selected,
-            .width = max_width,
-            .height = k_column_location_row_height,
-            .border_radius = 8.0f,
-        });
+    auto options = phenotype::widget::interaction_glass_button_style(
+        phenotype::widget::glass_outline_row_button_style(
+            phenotype::GlassOutlineRowStyleOptions{
+                .chrome = phenotype::GlassOutlineRowChrome::ColumnRow,
+                .role = phenotype::MaterialSurfaceRole::Sidebar,
+                .selected = selected,
+                .width = max_width,
+                .height = k_column_location_row_height,
+                .border_radius = 8.0f,
+            }),
+        phenotype::MaterialSurfaceRole::Sidebar,
+        phenotype::MaterialKind::Clear,
+        phenotype::MaterialKind::Regular);
 
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{label},
@@ -173,6 +182,11 @@ void finder_icon_label_button(std::string const& label,
     options.min_hit_height = fixed_height;
     options.text_align = phenotype::TextAlign::Center;
     options.focus_ring = false;
+    options = phenotype::widget::interaction_glass_button_style(
+        options,
+        phenotype::MaterialSurfaceRole::Control,
+        phenotype::MaterialKind::Clear,
+        phenotype::MaterialKind::Regular);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{label},
         max_width,
@@ -217,17 +231,21 @@ void finder_entry_row_button(file_explorer_demo::Entry const& entry,
                              float font_size,
                              float fixed_height,
                              phenotype::icons::SymbolDocumentCache const& cache) {
-    auto options = phenotype::widget::glass_outline_row_button_style(
-        phenotype::GlassOutlineRowStyleOptions{
-            .chrome = phenotype::GlassOutlineRowChrome::ListRow,
-            .role = phenotype::MaterialSurfaceRole::Surface,
-            .selected = selected,
-            .expanded = entry.folder,
-            .width = max_width,
-            .height = fixed_height,
-            .border_radius = 8.0f,
-            .font_size = font_size,
-        });
+    auto options = phenotype::widget::interaction_glass_button_style(
+        phenotype::widget::glass_outline_row_button_style(
+            phenotype::GlassOutlineRowStyleOptions{
+                .chrome = phenotype::GlassOutlineRowChrome::ListRow,
+                .role = phenotype::MaterialSurfaceRole::Surface,
+                .selected = selected,
+                .expanded = entry.folder,
+                .width = max_width,
+                .height = fixed_height,
+                .border_radius = 8.0f,
+                .font_size = font_size,
+            }),
+        phenotype::MaterialSurfaceRole::Surface,
+        phenotype::MaterialKind::Clear,
+        phenotype::MaterialKind::Regular);
 
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{entry.name},
@@ -306,6 +324,11 @@ void sidebar_row(std::string_view label,
     options.min_hit_width = k_sidebar_row_width;
     options.min_hit_height = k_sidebar_row_height;
     options.focus_ring = false;
+    options = widget::interaction_glass_button_style(
+        options,
+        MaterialSurfaceRole::Sidebar,
+        MaterialKind::Clear,
+        MaterialKind::Regular);
 
     std::string label_text(label);
     std::string icon_name(icon);
@@ -358,6 +381,18 @@ void sidebar_heading(std::string_view label,
     options.max_width = k_sidebar_row_width;
     options.fixed_height = k_sidebar_heading_height;
     options.focus_ring = false;
+    options.hover_background = finder_dark_palette()
+        ? rgba(255, 255, 255, 24)
+        : rgba(255, 255, 255, 70);
+    options.has_pressed_background = true;
+    options.pressed_background = finder_dark_palette()
+        ? rgba(255, 255, 255, 36)
+        : rgba(255, 255, 255, 96);
+    options = widget::interaction_glass_button_style(
+        options,
+        MaterialSurfaceRole::Sidebar,
+        MaterialKind::Clear,
+        MaterialKind::Regular);
 
     std::string label_text(label);
     std::string id_text(std::move(section_id));

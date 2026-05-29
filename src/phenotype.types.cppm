@@ -365,6 +365,7 @@ struct MaterialStyle {
     MaterialKind kind = MaterialKind::None;
     MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
     MaterialContainerDescriptor container{};
+    bool allows_liquid_glass = true;
     float opacity = 0.0f;
     float blur_radius = 0.0f;
     Color tint = {0, 0, 0, 0};
@@ -396,6 +397,7 @@ struct MaterialStyle {
 struct MaterialCommandDescriptor {
     MaterialKind kind = MaterialKind::None;
     MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
+    bool allows_liquid_glass = true;
     MaterialContainerDescriptor container{};
     float opacity = 0.0f;
     float blur_radius = 0.0f;
@@ -1182,8 +1184,8 @@ enum class Cmd : unsigned int {
     // that is needed to preserve fill ordering.
     FillRects  = 14,
     // Material surface. Layout: opcode + x/y/w/h/radius f32 +
-    // kind u32 + role u32 + opacity f32 + blur_radius f32 + packed
-    // RGBA tint + saturation/luminance_floor/luminance_gain/
+    // kind u32 + role u32 + allows_liquid_glass u32 + opacity f32 +
+    // blur_radius f32 + packed RGBA tint + saturation/luminance_floor/luminance_gain/
     // edge_highlight/edge_width/noise_opacity/shadow_alpha/
     // shadow_radius f32 + container_id/union_id u32 +
     // container_spacing f32 + container_flags u32 +
@@ -1438,6 +1440,10 @@ struct ButtonStyleOptions {
     bool disabled = false;
     bool has_material = false;
     MaterialStyle material = {};
+    bool has_hover_material = false;
+    MaterialStyle hover_material = {};
+    bool has_pressed_material = false;
+    MaterialStyle pressed_material = {};
     bool has_background = false;
     Color background = {};
     bool has_hover_background = false;
@@ -1630,6 +1636,7 @@ struct GlassDisclosureStyleOptions {
 struct TabsStyleOptions {
     MaterialKind kind = MaterialKind::Regular;
     MaterialSurfaceRole role = MaterialSurfaceRole::Navigation;
+    bool allows_liquid_glass = true;
     bool interactive = true;
     bool has_tint = false;
     Color tint = {};

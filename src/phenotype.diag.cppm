@@ -618,6 +618,7 @@ struct SemanticNodeSnapshot {
     struct MaterialSnapshot {
         std::string kind;
         std::string role;
+        bool allows_liquid_glass = true;
         float opacity = 0.0f;
         float blur_radius = 0.0f;
         Color tint = {0, 0, 0, 0};
@@ -1135,6 +1136,10 @@ namespace detail {
             "has_material",
             json::Value{plan.decision_trace.has_material});
         decision_trace.emplace(
+            "style_allows_liquid_glass",
+            json::Value{
+                plan.decision_trace.style_allows_liquid_glass});
+        decision_trace.emplace(
             "role_allows_liquid_glass",
             json::Value{plan.decision_trace.role_allows_liquid_glass});
         decision_trace.emplace(
@@ -1252,6 +1257,9 @@ namespace detail {
             "role",
             json::Value{
                 material_surface_role_name(plan.command_descriptor.role)});
+        command_descriptor.emplace(
+            "allows_liquid_glass",
+            json::Value{plan.command_descriptor.allows_liquid_glass});
         command_descriptor.emplace(
             "container",
             material_container_descriptor_json(
@@ -5241,6 +5249,9 @@ inline json::Value semantic_node_to_json(SemanticNodeSnapshot const& node) {
         json::Object material;
         material.emplace("kind", json::Value{node.material->kind});
         material.emplace("role", json::Value{node.material->role});
+        material.emplace(
+            "allows_liquid_glass",
+            json::Value{node.material->allows_liquid_glass});
         material.emplace("opacity", json::Value{node.material->opacity});
         material.emplace("blur_radius", json::Value{node.material->blur_radius});
         json::Object tint;

@@ -167,6 +167,7 @@ inline std::vector<DrawCommand> parse_commands(
             float r = read_f32();
             auto kind = static_cast<MaterialKind>(read_u32());
             auto role = material_surface_role_from_wire(read_u32());
+            bool const allows_liquid_glass = read_u32() != 0u;
             float opacity = read_f32();
             float blur_radius = read_f32();
             auto tint = unpack(read_u32());
@@ -204,6 +205,7 @@ inline std::vector<DrawCommand> parse_commands(
                 MaterialCommandDescriptor{
                     kind,
                     role,
+                    allows_liquid_glass,
                     material_container_descriptor_from_wire(
                         container_id,
                         union_id,

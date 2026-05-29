@@ -1358,6 +1358,7 @@ struct MaterialReferenceModel {
 struct MaterialDecisionTrace {
     bool has_geometry = false;
     bool has_material = false;
+    bool style_allows_liquid_glass = true;
     bool role_allows_liquid_glass = true;
     bool content_layer_standard_material = false;
     bool liquid_glass_backdrop_candidate = false;

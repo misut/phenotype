@@ -1,6 +1,6 @@
 {
   "name": "file_explorer_mobile_startup",
-  "description": "Startup artifact contract for the mobile file explorer layout example.",
+  "description": "Startup artifact contract for the mobile file explorer layout example with plain content surfaces and interaction-only glass controls.",
   "expect_platform": "macos",
   "require_frame": true,
   "require_labels": [
@@ -24,167 +24,151 @@
     "text_field"
   ],
   "require_material_kinds": [
-    "clear",
-    "thin",
-    "regular",
-    "thick"
+    "regular"
   ],
   "require_material_surface_roles": [
     "surface",
-    "toolbar",
     "navigation",
-    "status_bar"
+    "control"
   ],
   "require_material_plans": true,
   "require_material_semantic_runtime_match": true,
   "require_material_plan_summary": {
-    "count": 30,
+    "count": 36,
     "fallback": 0,
-    "backdrop_sampling": 30,
+    "backdrop_sampling": 1,
     "contract_versions": {
-      "44": 30
+      "86": 36
     },
-    "theme_foreground_matches_theme": 30,
-    "theme_accent_matches_theme": 0,
-    "theme_tint_matches_surface": 30,
-    "theme_border_matches_theme": 30,
-    "theme_default_glass_tokens": 0,
+    "theme_profile_names": {
+      "custom": 36
+    },
     "theme_sources": {
-      "material-style": 30
+      "material-style": 36
     },
     "theme_token_policies": {
-      "explicit-material-style-tokens": 30
+      "explicit-material-style-tokens": 36
     },
     "roles": {
+      "control": 5,
       "navigation": 3,
-      "status_bar": 1,
-      "surface": 25,
-      "toolbar": 1
+      "surface": 28
     },
     "container_modes": {
       "container": 28,
-      "isolated": 2
+      "isolated": 8
     },
     "container_ids": {
       "3100": 28
     },
     "container_participating": 28,
-    "container_unioned": 0,
     "container_interactive": 3,
     "container_morph_transitions": 28,
-    "container_group_count": 1,
-    "container_multi_surface_group_count": 1,
-    "container_union_group_count": 0,
-    "container_morph_group_count": 1,
-    "container_interactive_group_count": 1,
-    "container_shared_backdrop_scope_group_count": 1,
-    "container_shared_capture_surface_count": 28,
-    "container_shared_capture_saved_surface_count": 27,
-    "container_max_shared_capture_group_surfaces": 28,
-    "container_shape_blend_execution_group_count": 1,
-    "container_shape_blend_execution_surface_count": 28,
-    "container_max_shape_blend_strength": 1.0,
     "reference_interactive_response": 3,
     "interaction_enabled": 3,
     "interaction_active": 0,
-    "interaction_specular_highlight_active": 0,
     "interaction_states": {
       "idle": 3,
-      "inactive": 27
+      "inactive": 33
     },
     "interaction_enablement_reasons": {
       "interactive-container": 3,
-      "noninteractive-container": 27
+      "noninteractive-container": 33
     },
     "interaction_response_models": {
       "liquid-glass-interaction": 3,
-      "none": 27
+      "none": 33
     },
-    "interaction_specular_models": {
-      "none": 30
+    "shape_valid": 36,
+    "reference_technologies": {
+      "liquid-glass": 1,
+      "standard-material": 35
     },
-    "interaction_motion_policies": {
-      "animated-optical-response": 3,
-      "static": 27
+    "reference_layers": {
+      "content-layer": 35,
+      "functional-layer": 1
     },
-    "optical_interaction_active": 0,
-    "optical_interaction_modulates_optics": 0,
-    "shape_valid": 30,
-    "shape_radius_clamped": 1,
+    "reference_material_policies": {
+      "liquid-glass-functional-layer": 1,
+      "standard-material-content-layer": 35
+    },
+    "reference_blending_scopes": {
+      "sampled-backdrop": 1,
+      "standard-fill": 35
+    },
     "pass_names": {
-      "backdrop-sample-blur": 30
+      "backdrop-sample-blur": 1,
+      "standard-material-fill": 35
     },
     "pass_executors": {
-      "backdrop-filter": 30
+      "backdrop-filter": 1,
+      "standard-fill": 35
     },
     "sampling_kernels": {
-      "gaussian-5x5": 30
+      "gaussian-5x5": 1,
+      "none": 35
     },
     "sampling_weight_profiles": {
-      "gaussian-5x5-separable": 30
+      "gaussian-5x5-separable": 1,
+      "none": 35
     },
-    "backdrop_access_required": 30,
-    "backdrop_access_stable_required": 30,
-    "backdrop_access_frame_history_required": 30,
-    "backdrop_access_shared_frame_capture": 30,
-    "backdrop_access_next_frame_capture_required": 30,
-    "backdrop_access_excludes_foreground_text": 30,
-    "backdrop_access_bounded": 30,
+    "backdrop_access_required": 1,
+    "backdrop_access_bounded": 36,
     "backdrop_access_sources": {
-      "previous-presented-frame-sampled-grid": 30
+      "none": 35,
+      "previous-presented-frame-sampled-grid": 1
     },
     "backdrop_capture_scopes": {
-      "shared-frame": 30
+      "none": 35,
+      "shared-frame": 1
     },
     "backdrop_capture_reasons": {
-      "sample-current-frame": 30
+      "not-required": 35,
+      "sample-current-frame": 1
     },
-    "decision_can_sample_backdrop": 30,
-    "decision_backend_supports_backdrop": 30,
-    "decision_backdrop_source_ready": 30,
-    "decision_next_frame_capture_required": 30,
+    "decision_content_layer_standard_material": 35,
+    "decision_liquid_glass_backdrop_candidate": 1,
+    "decision_can_sample_backdrop": 1,
+    "decision_backend_supports_backdrop": 36,
+    "decision_backdrop_source_ready": 36,
+    "decision_next_frame_capture_required": 1,
     "decision_reduced_transparency": 0,
-    "verifier_region_passes": {
-      "clear-over-rich-backdrop": "backdrop-sample-blur",
-      "regular-legibility-backdrop": "backdrop-sample-blur",
-      "thick-high-contrast-backdrop": "backdrop-sample-blur",
-      "thin-balanced-backdrop": "backdrop-sample-blur"
-    },
     "luminance_curves": {
-      "adaptive-backdrop-luma": 30
+      "adaptive-backdrop-luma": 1,
+      "fallback-flat": 35
     },
     "optical_response_models": {
-      "sampled-backdrop": 30
+      "sampled-backdrop": 1,
+      "standard-content": 35
     },
     "optical_blur_strategies": {
-      "backdrop-sample-blur": 30
+      "backdrop-sample-blur": 1,
+      "standard-fill": 35
     },
     "optical_color_strategies": {
-      "adaptive-backdrop-color": 30
-    },
-    "optical_depth_strategies": {
-      "layered-shadow-edge-noise": 30
-    },
-    "optical_stage_orders": {
-      "shadow-primary-edge-noise": 30
+      "adaptive-backdrop-color": 1,
+      "standard-content-color": 35
     },
     "optical_backdrop_capture_policies": {
-      "sample-current-frame": 30
+      "no-capture": 35,
+      "sample-current-frame": 1
     },
     "optical_foreground_sampling_policies": {
-      "foreground-excluded-from-sample": 30
+      "foreground-excluded-from-sample": 1,
+      "not-applicable": 35
     },
-    "optical_backdrop_driven": 30,
-    "optical_blur_active": 30,
-    "optical_frosting_active": 30,
-    "optical_tint_active": 30,
-    "optical_saturation_active": 29,
-    "optical_luminance_preservation_active": 30,
-    "optical_edge_highlight_active": 30,
-    "optical_depth_shadow_active": 30,
-    "optical_noise_dither_active": 30,
-    "optical_foreground_vibrancy_active": 30,
-    "optical_deterministic_fallback": 30
+    "optical_backdrop_driven": 1,
+    "optical_blur_active": 1,
+    "optical_frosting_active": 1,
+    "optical_tint_active": 36,
+    "optical_luminance_preservation_active": 36,
+    "optical_edge_highlight_active": 1,
+    "optical_noise_dither_active": 1,
+    "optical_foreground_vibrancy_active": 1,
+    "optical_deterministic_fallback": 36,
+    "verifier_region_passes": {
+      "regular-legibility-backdrop": "standard-material-fill"
+    }
   },
   "require_capabilities": [
     "material_backdrop_blur"
@@ -674,7 +658,7 @@
     },
     {
       "path": "renderer.material_executor_summary.material_total_sample_taps",
-      "equals": 750
+      "equals": 25
     }
   ],
   "require_runtime_numeric_bounds": [
@@ -689,117 +673,6 @@
       "lte": 40
     }
   ],
-  "require_material_resource_bounds": {
-    "max_plan_blur_radius_lte": 36.0,
-    "max_plan_sample_taps_lte": 25,
-    "max_budget_blur_radius_lte": 36.0,
-    "max_sample_taps_lte": 25,
-    "max_sampling_kernel_radius_lte": 2,
-    "max_sampling_kernel_radius_gte": 2,
-    "max_pass_count_lte": 1,
-    "max_backdrop_pixels_lte": 16777216,
-    "max_container_spacing_lte": 20.0,
-    "max_container_spacing_gte": 20.0,
-    "max_pass_texture_copy_pixels_lte": 4000000,
-    "max_frame_capture_count_lte": 1,
-    "max_frame_capture_count_gte": 1,
-    "max_frame_capture_pixels_lte": 4000000,
-    "max_frame_capture_pixels_gte": 1216800,
-    "total_surface_sample_pixels_lte": 88000000,
-    "total_surface_sample_pixels_gte": 3876787,
-    "max_surface_sample_pixels_lte": 4000000,
-    "max_surface_sample_pixels_gte": 755424,
-    "total_plan_sample_taps_lte": 750,
-    "total_plan_sample_taps_gte": 750,
-    "total_runtime_passes_gte": 30,
-    "active_runtime_passes_gte": 30,
-    "backdrop_runtime_passes_gte": 30,
-    "total_execution_stages_lte": 120,
-    "total_execution_stages_gte": 120,
-    "active_execution_stages_lte": 120,
-    "active_execution_stages_gte": 120,
-    "backdrop_execution_stages_lte": 30,
-    "backdrop_execution_stages_gte": 30,
-    "dropped_execution_stages_lte": 0,
-    "dropped_execution_stages_gte": 0,
-    "max_execution_stage_count_lte": 4,
-    "max_execution_stage_count_gte": 4,
-    "max_execution_stage_capacity_lte": 4,
-    "max_execution_stage_capacity_gte": 4,
-    "max_execution_stages_lte": 4,
-    "max_execution_stages_gte": 4,
-    "require_bounded_texture_copy": true,
-    "require_deterministic_fallback": true
-  },
-  "require_material_resource_bound_coverage": {
-    "required_fields": [
-      "active_execution_stages",
-      "active_runtime_passes",
-      "backdrop_execution_stages",
-      "backdrop_runtime_passes",
-      "bounded_texture_copy",
-      "deterministic_fallback",
-      "dropped_execution_stages",
-      "max_backdrop_pixels",
-      "max_budget_blur_radius",
-      "max_container_spacing",
-      "max_execution_stage_capacity",
-      "max_execution_stage_count",
-      "max_execution_stages",
-      "max_frame_capture_count",
-      "max_frame_capture_pixels",
-      "max_pass_count",
-      "max_pass_texture_copy_pixels",
-      "max_plan_blur_radius",
-      "max_plan_sample_taps",
-      "max_sample_taps",
-      "max_sampling_kernel_radius",
-      "max_surface_sample_pixels",
-      "total_execution_stages",
-      "total_runtime_passes",
-      "total_surface_sample_pixels"
-    ],
-    "min_bound_key_count": 40,
-    "min_guarded_field_count": 26,
-    "min_observed_field_count": 25
-  },
-  "require_material_executor_budget": {
-    "execution_stage_count_equals": 120,
-    "active_execution_stage_count_equals": 120,
-    "backdrop_execution_stage_count_equals": 30,
-    "dropped_execution_stage_count_equals": 0,
-    "draw_calls_gte": 1,
-    "draw_calls_lte": 30,
-    "total_sample_taps_equals": 750,
-    "max_sample_taps_equals": 25,
-    "upload_bytes_gte": 4096,
-    "backdrop_copy_count_equals": 1,
-    "backdrop_copy_pixels_gte": 1000000,
-    "backdrop_copy_pixels_lte": 4000000,
-    "upload_utilization_gte": 0.5,
-    "upload_utilization_lte": 1.0,
-    "backdrop_copy_utilization_gte": 0.06,
-    "backdrop_copy_utilization_lte": 1.0
-  },
-  "require_material_executor_budget_coverage": {
-    "required_fields": [
-      "active_execution_stage_count",
-      "backdrop_copy_count",
-      "backdrop_copy_pixels",
-      "backdrop_copy_utilization",
-      "backdrop_execution_stage_count",
-      "draw_calls",
-      "dropped_execution_stage_count",
-      "execution_stage_count",
-      "max_sample_taps",
-      "total_sample_taps",
-      "upload_bytes",
-      "upload_utilization"
-    ],
-    "min_bound_key_count": 16,
-    "min_guarded_field_count": 12,
-    "min_observed_field_count": 22
-  },
   "require_material_quality_policy": {
     "require_backdrop_sampling_allowed": true,
     "require_noise_allowed": true,

@@ -1,8 +1,9 @@
 # Desktop File Explorer Example
 
 This example is a Finder-style desktop workflow for phenotype's material
-system. It uses a glass toolbar with Finder-like semantic navigation, view,
-group/sort, share/tag/more, and search controls, translucent sidebar locations,
+system. It uses plain toolbar, sidebar, content, and status surfaces with
+Finder-like semantic navigation, view, group/sort, share/tag/more, and search
+controls that materialize glass only during hover or press states,
 icon/list/column/gallery file views,
 document, image, video, and folder thumbnails, separate select/open semantics
 for files and folders, read/create/duplicate/delete file actions, folder
