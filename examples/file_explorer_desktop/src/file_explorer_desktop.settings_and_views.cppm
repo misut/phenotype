@@ -36,7 +36,7 @@ import :overflow_and_grid;
 export namespace file_explorer_desktop {
 void finder_settings_window(State const& state) {
     using namespace phenotype;
-    layout::dialog([&] {
+    layout::dialog(finder_settings_dialog_options(), [&] {
         layout::column([&] {
             widget::text("Settings", TextSize::Heading);
             widget::text("Appearance", TextSize::Small, TextColor::Muted);

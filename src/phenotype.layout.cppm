@@ -232,6 +232,10 @@ inline bool material_equal(MaterialStyle const& a, MaterialStyle const& b) noexc
         && a.blur_radius == b.blur_radius
         && color_equal(a.tint, b.tint)
         && color_equal(a.border, b.border)
+        && color_equal(a.foreground, b.foreground)
+        && color_equal(a.secondary_foreground, b.secondary_foreground)
+        && color_equal(a.accent_foreground, b.accent_foreground)
+        && color_equal(a.strong_accent_foreground, b.strong_accent_foreground)
         && a.saturation == b.saturation
         && a.luminance_floor == b.luminance_floor
         && a.luminance_gain == b.luminance_gain
@@ -245,6 +249,7 @@ inline bool material_equal(MaterialStyle const& a, MaterialStyle const& b) noexc
         && a.transition == b.transition
         && a.glass_identity == b.glass_identity
         && a.glass_background == b.glass_background
+        && a.prominence == b.prominence
         && cstr_equal(a.fallback_reason, b.fallback_reason)
         && cstr_equal(a.contrast_intent, b.contrast_intent)
         && cstr_equal(a.plan_id, b.plan_id)
@@ -266,6 +271,7 @@ inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
         && a.decoration == b.decoration
         && a.cursor_type == b.cursor_type
         && a.focusable == b.focusable
+        && a.hit_region_before_children == b.hit_region_before_children
         && a.interaction_role == b.interaction_role
         && color_equal(a.hover_background, b.hover_background)
         && color_equal(a.hover_text_color, b.hover_text_color)
@@ -401,6 +407,9 @@ inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
     new_n->paint_ay = old_n->paint_ay;
     new_n->self_paint_ax = old_n->self_paint_ax;
     new_n->self_paint_ay = old_n->self_paint_ay;
+    new_n->paint_theme_generation = old_n->paint_theme_generation;
+    new_n->self_paint_theme_generation =
+        old_n->self_paint_theme_generation;
     new_n->paint_callback_mask = old_n->paint_callback_mask;
     // paint_token_prev carries last frame's recorded token forward so
     // paint_node's blit guard can compare it against the

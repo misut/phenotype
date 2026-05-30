@@ -95,6 +95,30 @@ void test_theme_motion_multiplier_skips_interpolation() {
     std::puts("PASS: theme motion multiplier skips interpolation");
 }
 
+void test_theme_generation_rebases_color_animation() {
+    reset();
+    detail::bump_local_gen();
+    Color light_hover{255, 255, 255, 255};
+    Color dark_hover{58, 58, 60, 255};
+    anim_color_helper(light_hover, 2000);
+    detail::prune_local_store();
+
+    detail::bump_local_gen();
+    auto fading = anim_color_helper(dark_hover, 2000);
+    detail::prune_local_store();
+    assert(fading.r > dark_hover.r);
+    assert(detail::g_app.has_active_animations);
+
+    set_theme(apply_dark_color_scheme(Theme{}));
+    detail::g_app.has_active_animations = false;
+    detail::bump_local_gen();
+    auto rebased = anim_color_helper(dark_hover, 2000);
+    detail::prune_local_store();
+    assert(rebased == dark_hover);
+    assert(!detail::g_app.has_active_animations);
+    std::puts("PASS: theme generation rebases color animation");
+}
+
 // Mid-flight target reads return a value strictly between start and
 // target — confirming the time-based lerp actually progresses. The
 // duration is generous so a slow CI runner that takes much longer
@@ -176,6 +200,7 @@ int main() {
     test_first_call_snaps_to_target();
     test_zero_duration_skips_interpolation();
     test_theme_motion_multiplier_skips_interpolation();
+    test_theme_generation_rebases_color_animation();
     test_color_interpolates_mid_flight();
     test_animation_completes_after_duration();
     test_independent_call_sites();

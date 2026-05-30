@@ -333,7 +333,7 @@ void emit_material_rect(R& r, float x, float y, float w, float h,
                         float radius, MaterialStyle const& material) {
     if (material.kind == MaterialKind::None || material.tint.a == 0)
         return;
-    if (!detail::ensure(r, 148, Cmd::MaterialRect)) return;
+    if (!detail::ensure(r, 168, Cmd::MaterialRect)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::MaterialRect));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, w); detail::write_f32(r, h);
@@ -373,6 +373,11 @@ void emit_material_rect(R& r, float x, float y, float w, float h,
     detail::write_f32(r, material.glass_background.soft_edge_radius);
     detail::write_u32(r, material_prominence_flags(material.prominence));
     detail::write_f32(r, material.prominence.intensity);
+    detail::write_u32(r, 1u);
+    detail::write_u32(r, material.foreground.packed());
+    detail::write_u32(r, material.secondary_foreground.packed());
+    detail::write_u32(r, material.accent_foreground.packed());
+    detail::write_u32(r, material.strong_accent_foreground.packed());
 }
 
 template <render_backend R>
@@ -1216,6 +1221,38 @@ inline void register_cached_paint_side_effects(NodeHandle node_h,
     }
 }
 
+template <render_backend R>
+void emit_node_hit_region(R& r,
+                          LayoutNode const& node,
+                          float ax,
+                          float ay,
+                          float scroll_x,
+                          float scroll_y) {
+    if (node.callback_id == 0xFFFFFFFF)
+        return;
+    // hit_test compares the cursor against HitRegion rects after
+    // adding the *global* scroll back, so a child of a scroll_view
+    // whose region was emitted at raw layout coords would miss
+    // when its container is scrolled. Subtract just the *inner*
+    // scroll (ambient minus global) so the rect lines up with the
+    // visual position once hit_test re-applies global. Root children
+    // always have inner == 0 and so emit at the unchanged (ax, ay).
+    float inner_scroll_x = scroll_x - g_app.scroll_x;
+    float inner_scroll_y = scroll_y - g_app.scroll_y;
+    float const hit_slop_x = std::max(
+        0.0f,
+        (node.min_hit_width - node.width) * 0.5f);
+    float const hit_slop_y = std::max(
+        0.0f,
+        (node.min_hit_height - node.height) * 0.5f);
+    emit_hit_region(r,
+                    ax - inner_scroll_x - hit_slop_x,
+                    ay - inner_scroll_y - hit_slop_y,
+                    node.width + hit_slop_x * 2.0f,
+                    node.height + hit_slop_y * 2.0f,
+                    node.callback_id, node.cursor_type);
+}
+
 template <render_backend R, text_measurer M>
 void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 float ox, float oy,
@@ -1271,6 +1308,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         && ay == node.paint_ay
         && scroll_x == g_app.prev_scroll_x
         && scroll_y == g_app.prev_scroll_y
+        && node.paint_theme_generation == g_app.theme_generation
         && (node.paint_callback_mask & g_app.paint_invalidation_mask) == 0
         && node.paint_offset + node.paint_length <= g_app.prev_cmd_len
         && node.paint_length > 0)
@@ -1339,6 +1377,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         && ay == node.self_paint_ay
         && scroll_x == g_app.prev_scroll_x
         && scroll_y == g_app.prev_scroll_y
+        && node.self_paint_theme_generation == g_app.theme_generation
         && node.self_paint_offset + node.self_paint_length <= g_app.prev_cmd_len
         && node.self_paint_length > 0)
     {
@@ -1821,30 +1860,8 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         }
     }
 
-    if (node.callback_id != 0xFFFFFFFF) {
-        // hit_test compares the cursor against HitRegion rects after
-        // adding the *global* scroll back, so a child of a scroll_view
-        // whose region was emitted at raw layout coords would miss
-        // when its container is scrolled. Subtract just the *inner*
-        // scroll (ambient minus global) so the rect lines up with the
-        // visual position once hit_test re-applies global. Root
-        // children always have inner == 0 and so emit at the
-        // unchanged (ax, ay).
-        float inner_scroll_x = scroll_x - g_app.scroll_x;
-        float inner_scroll_y = scroll_y - g_app.scroll_y;
-        float const hit_slop_x = std::max(
-            0.0f,
-            (node.min_hit_width - node.width) * 0.5f);
-        float const hit_slop_y = std::max(
-            0.0f,
-            (node.min_hit_height - node.height) * 0.5f);
-        emit_hit_region(r,
-                        ax - inner_scroll_x - hit_slop_x,
-                        ay - inner_scroll_y - hit_slop_y,
-                        node.width + hit_slop_x * 2.0f,
-                        node.height + hit_slop_y * 2.0f,
-                        node.callback_id, node.cursor_type);
-    }
+    if (node.hit_region_before_children)
+        emit_node_hit_region(r, node, ax, ay, scroll_x, scroll_y);
 
     // Register this canvas as the active gesture target — the shell
     // looks at `g_app.gesture_target_*` to route platform pinch / pan
@@ -1953,6 +1970,9 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         --g_app.paint_scissor_depth;
     }
 
+    if (!node.hit_region_before_children)
+        emit_node_hit_region(r, node, ax, ay, scroll_x, scroll_y);
+
     if (node.is_scroll_container && node.scroll_state) {
         float const viewport_x = ax - scroll_x;
         float const viewport_y = ay - scroll_y;
@@ -1992,6 +2012,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         node.self_paint_length = self_after - before;
         node.self_paint_ax = ax;
         node.self_paint_ay = ay;
+        node.self_paint_theme_generation = g_app.theme_generation;
         node.self_paint_valid = true;
     } else {
         node.self_paint_valid = false;
@@ -2003,6 +2024,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         node.paint_length = after - before;
         node.paint_ax = ax;
         node.paint_ay = ay;
+        node.paint_theme_generation = g_app.theme_generation;
         node.paint_callback_mask = subtree_mask;
         node.paint_valid = true;
     } else {

@@ -717,6 +717,7 @@ struct RendererState {
     bool debug_capture_always = false;
     std::uint64_t debug_capture_copy_count = 0;
     bool last_material_backdrop_available = false;
+    std::uint64_t material_backdrop_theme_generation = 0;
     bool last_material_backdrop_excludes_foreground_text = false;
     bool last_material_backdrop_color_available = false;
     Color last_material_backdrop_color_mean = {255, 255, 255, 255};
@@ -1992,10 +1993,21 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
 
     sync_layer_backing_geometry(fbw, fbh, frame_scale);
+    auto const current_theme_generation =
+        ::phenotype::detail::g_app.theme_generation;
+    if (g_renderer.material_backdrop_theme_generation
+        != current_theme_generation) {
+        g_renderer.last_material_backdrop_available = false;
+        g_renderer.last_material_backdrop_excludes_foreground_text = false;
+        g_renderer.last_material_backdrop_color_available = false;
+        g_renderer.last_material_backdrop_luma_available = false;
+    }
     bool const backdrop_ready =
         g_renderer.material_pipeline
         && g_renderer.material_backdrop_texture
         && g_renderer.last_material_backdrop_available
+        && g_renderer.material_backdrop_theme_generation
+            == current_theme_generation
         && g_renderer.material_backdrop_width == fbw
         && g_renderer.material_backdrop_height == fbh;
     MaterialEnvironment material_env{};
@@ -2166,20 +2178,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         metrics::detail::now_ns() - upload_started,
         native_attrs("text_upload"));
 
-    auto* drawable = g_renderer.layer->nextDrawable();
-    if (!drawable) {
+    auto* command_buffer = g_renderer.queue->commandBuffer();
+    if (!command_buffer) {
         pool->release();
         return;
     }
-
-    auto* pass = MTL::RenderPassDescriptor::renderPassDescriptor();
-    pass->colorAttachments()->object(0)->setTexture(drawable->texture());
-    pass->colorAttachments()->object(0)->setLoadAction(MTL::LoadActionClear);
-    pass->colorAttachments()->object(0)->setClearColor(MTL::ClearColor::Make(cr, cg, cb, ca));
-    pass->colorAttachments()->object(0)->setStoreAction(MTL::StoreActionStore);
-
-    auto* command_buffer = g_renderer.queue->commandBuffer();
-    auto* encoder = command_buffer->renderCommandEncoder(pass);
 
     auto& scratch = g_renderer.scratch;
     auto const tri_bytes = scratch.tri_vertices.size() * sizeof(TriVertexGPU);
@@ -2190,7 +2193,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 g_renderer.tri_vertices_capacity,
                 tri_bytes,
                 "tri_vertices")) {
-            encoder->endEncoding();
             pool->release();
             return;
         }
@@ -2209,7 +2211,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 g_renderer.color_instances_capacity,
                 color_bytes,
                 "color_instances")) {
-            encoder->endEncoding();
             pool->release();
             return;
         }
@@ -2231,7 +2232,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 g_renderer.material_instances_capacity,
                 material_bytes,
                 "material_instances")) {
-            encoder->endEncoding();
             pool->release();
             return;
         }
@@ -2258,7 +2258,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 g_renderer.arc_instances_capacity,
                 arc_bytes,
                 "arc_instances")) {
-            encoder->endEncoding();
             pool->release();
             return;
         }
@@ -2277,7 +2276,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 g_renderer.image_instances_capacity,
                 image_bytes,
                 "image_instances")) {
-            encoder->endEncoding();
             pool->release();
             return;
         }
@@ -2296,7 +2294,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 g_renderer.text_instances_capacity,
                 text_bytes,
                 "text_instances")) {
-            encoder->endEncoding();
             pool->release();
             return;
         }
@@ -2311,9 +2308,242 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     // contiguously in the flat *_instances vectors thanks to
     // finalize_batches; we use baseInstance to point at them.
     float const scissor_scale = frame_scale;
-    bool const defer_foreground_pass =
-        capture_frame_history
-        && (text_uploaded || !scratch.overlay_color_instances.empty());
+    // The backdrop source is now rendered into a separate underlay texture
+    // before the main drawable pass, with foreground text intentionally
+    // omitted from that underlay. Text therefore no longer needs to be
+    // deferred until after all materials draw. Keeping text in its original
+    // scissor batch preserves command-order z semantics: main content text is
+    // covered by later modal surfaces, while overlay text still draws above
+    // its own surface.
+    bool constexpr defer_foreground_pass = false;
+
+    auto first_overlay_material_command =
+        std::optional<std::uint32_t>{};
+    for (auto const& record : scratch.material_records) {
+        if (record.plan.role != MaterialSurfaceRole::Overlay)
+            continue;
+        if (!first_overlay_material_command
+            || record.command_index < *first_overlay_material_command) {
+            first_overlay_material_command = record.command_index;
+        }
+    }
+    auto material_paint_layer_excluded_from_backdrop =
+        [&](MaterialPaintLayerRange const& range) noexcept {
+            return first_overlay_material_command
+                && range.command_index >= *first_overlay_material_command;
+        };
+    auto draw_color_segment =
+        [&](MTL::RenderCommandEncoder* target_encoder,
+            std::size_t first,
+            std::size_t count) {
+            if (!color_uploaded || count == 0)
+                return;
+            target_encoder->drawPrimitives(
+                MTL::PrimitiveTypeTriangle,
+                NS::UInteger(0), 6,
+                NS::UInteger(count),
+                NS::UInteger(first));
+        };
+    auto draw_backdrop_underlay_colors =
+        [&](MTL::RenderCommandEncoder* target_encoder,
+            std::size_t batch_index,
+            ScissorBatch const& batch) {
+            auto const batch_color_count = batch.colors.size();
+            if (!color_uploaded || batch_color_count == 0)
+                return;
+            std::vector<std::pair<std::size_t, std::size_t>> excluded;
+            for (auto const& range : scratch.material_paint_layer_ranges) {
+                if (range.batch_index != batch_index
+                    || !material_paint_layer_excluded_from_backdrop(range)) {
+                    continue;
+                }
+                auto const first = std::min(range.first, batch_color_count);
+                auto const last = std::min(
+                    first + range.count,
+                    batch_color_count);
+                if (first < last)
+                    excluded.emplace_back(first, last);
+            }
+            if (excluded.empty()) {
+                draw_color_segment(
+                    target_encoder,
+                    batch.color_first,
+                    batch_color_count);
+                return;
+            }
+            std::sort(excluded.begin(), excluded.end());
+            auto cursor = std::size_t{0};
+            for (auto const& [first, last] : excluded) {
+                if (first > cursor) {
+                    draw_color_segment(
+                        target_encoder,
+                        batch.color_first + cursor,
+                        first - cursor);
+                }
+                cursor = std::max(cursor, last);
+            }
+            if (cursor < batch_color_count) {
+                draw_color_segment(
+                    target_encoder,
+                    batch.color_first + cursor,
+                    batch_color_count - cursor);
+            }
+        };
+
+    auto draw_backdrop_underlay_batch =
+        [&](MTL::RenderCommandEncoder* target_encoder,
+            std::size_t batch_index,
+            ScissorBatch const& batch) {
+            auto const batch_tri_count =
+                static_cast<std::uint32_t>(batch.tri_vertices.size());
+            auto const batch_color_count =
+                static_cast<std::uint32_t>(batch.colors.size());
+            auto const batch_arc_count =
+                static_cast<std::uint32_t>(batch.arcs.size());
+            auto const batch_image_count =
+                static_cast<std::uint32_t>(batch.images.size());
+            if (batch_tri_count + batch_color_count + batch_arc_count
+                    + batch_image_count == 0) {
+                return;
+            }
+            auto const sr = compute_metal_scissor(
+                batch, scissor_scale,
+                static_cast<std::uint32_t>(g_renderer.drawable_width),
+                static_cast<std::uint32_t>(g_renderer.drawable_height));
+            if (sr.width == 0 || sr.height == 0)
+                return;
+            target_encoder->setScissorRect(sr);
+
+            if (tri_uploaded && batch_tri_count > 0) {
+                target_encoder->setRenderPipelineState(g_renderer.tri_pipeline);
+                target_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+                target_encoder->setVertexBuffer(
+                    g_renderer.tri_vertices_buf,
+                    NS::UInteger(batch.tri_first * sizeof(TriVertexGPU)),
+                    1);
+                target_encoder->drawPrimitives(
+                    MTL::PrimitiveTypeTriangle,
+                    NS::UInteger(0),
+                    NS::UInteger(batch_tri_count));
+            }
+
+            if (color_uploaded && batch_color_count > 0) {
+                target_encoder->setRenderPipelineState(g_renderer.color_pipeline);
+                target_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+                target_encoder->setVertexBuffer(
+                    g_renderer.color_instances_buf, 0, 1);
+                draw_backdrop_underlay_colors(
+                    target_encoder,
+                    batch_index,
+                    batch);
+            }
+
+            if (arc_uploaded && batch_arc_count > 0) {
+                target_encoder->setRenderPipelineState(g_renderer.arc_pipeline);
+                target_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+                target_encoder->setVertexBuffer(g_renderer.arc_instances_buf, 0, 1);
+                target_encoder->drawPrimitives(
+                    MTL::PrimitiveTypeTriangle,
+                    NS::UInteger(0), 6,
+                    NS::UInteger(batch_arc_count),
+                    NS::UInteger(batch.arc_first));
+            }
+
+            if (image_uploaded && batch_image_count > 0) {
+                target_encoder->setRenderPipelineState(g_renderer.image_pipeline);
+                target_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+                target_encoder->setVertexBuffer(
+                    g_renderer.image_instances_buf, 0, 1);
+                target_encoder->setFragmentTexture(
+                    g_renderer.image_atlas_texture, 0);
+                target_encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+                target_encoder->drawPrimitives(
+                    MTL::PrimitiveTypeTriangle,
+                    NS::UInteger(0), 6,
+                    NS::UInteger(batch_image_count),
+                    NS::UInteger(batch.image_first));
+            }
+        };
+
+    g_renderer.last_material_backdrop_available = false;
+    g_renderer.last_material_backdrop_excludes_foreground_text = false;
+    if (capture_frame_history && ensure_material_backdrop_texture(fbw, fbh)) {
+        auto* backdrop_pass = MTL::RenderPassDescriptor::renderPassDescriptor();
+        backdrop_pass->colorAttachments()->object(0)->setTexture(
+            g_renderer.material_backdrop_texture);
+        backdrop_pass->colorAttachments()->object(0)->setLoadAction(
+            MTL::LoadActionClear);
+        backdrop_pass->colorAttachments()->object(0)->setClearColor(
+            MTL::ClearColor::Make(cr, cg, cb, ca));
+        backdrop_pass->colorAttachments()->object(0)->setStoreAction(
+            MTL::StoreActionStore);
+        if (auto* backdrop_encoder =
+                command_buffer->renderCommandEncoder(backdrop_pass)) {
+            for (std::size_t batch_index = 0;
+                 batch_index < scratch.batches.size();
+                 ++batch_index) {
+                draw_backdrop_underlay_batch(
+                    backdrop_encoder,
+                    batch_index,
+                    scratch.batches[batch_index]);
+            }
+            backdrop_encoder->endEncoding();
+            if (auto* blit = command_buffer->blitCommandEncoder()) {
+                (void)schedule_material_backdrop_luma_sample(
+                    blit,
+                    command_buffer,
+                    g_renderer.material_backdrop_texture,
+                    fbw,
+                    fbh,
+                    material_env.debug_seed.frame,
+                    material_summary);
+                blit->endEncoding();
+            }
+            g_renderer.last_material_backdrop_available = true;
+            g_renderer.material_backdrop_theme_generation =
+                current_theme_generation;
+            g_renderer.last_material_backdrop_excludes_foreground_text = true;
+            material_summary.backdrop_copy_excludes_foreground_text = true;
+            material_summary.backdrop_copy_count = 1;
+            material_summary.backdrop_copy_pixels =
+                static_cast<std::int64_t>(fbw)
+                * static_cast<std::int64_t>(fbh);
+        } else {
+            material_summary.backdrop_copy_skipped_count = 1;
+            material_summary.backdrop_copy_skip_reason =
+                "metal-backdrop-render-encoder-unavailable";
+        }
+    } else if (capture_frame_history) {
+        material_summary.backdrop_copy_skipped_count = 1;
+        material_summary.backdrop_copy_skip_reason =
+            "material-backdrop-texture-unavailable";
+    } else {
+        material_summary.backdrop_copy_skipped_count = 1;
+        material_summary.backdrop_copy_skip_reason =
+            "no-material-plan-frame-capture";
+    }
+
+    auto* drawable = g_renderer.layer->nextDrawable();
+    if (!drawable) {
+        release_material_backdrop_luma_pending_command_buffer();
+        pool->release();
+        return;
+    }
+
+    auto* pass = MTL::RenderPassDescriptor::renderPassDescriptor();
+    pass->colorAttachments()->object(0)->setTexture(drawable->texture());
+    pass->colorAttachments()->object(0)->setLoadAction(MTL::LoadActionClear);
+    pass->colorAttachments()->object(0)->setClearColor(
+        MTL::ClearColor::Make(cr, cg, cb, ca));
+    pass->colorAttachments()->object(0)->setStoreAction(MTL::StoreActionStore);
+
+    auto* encoder = command_buffer->renderCommandEncoder(pass);
+    if (!encoder) {
+        release_material_backdrop_luma_pending_command_buffer();
+        pool->release();
+        return;
+    }
+
     for (auto const& batch : scratch.batches) {
         auto const batch_tri_count =
             static_cast<std::uint32_t>(batch.tri_vertices.size());
@@ -2473,56 +2703,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     encoder->endEncoding();
     g_renderer.last_render_width = fbw;
     g_renderer.last_render_height = fbh;
-    g_renderer.last_material_backdrop_available = false;
-    g_renderer.last_material_backdrop_excludes_foreground_text = false;
-    if (capture_frame_history && ensure_material_backdrop_texture(fbw, fbh)) {
-        if (auto* blit = command_buffer->blitCommandEncoder()) {
-            MTL::Origin origin{0, 0, 0};
-            MTL::Size size{
-                NS::UInteger(fbw),
-                NS::UInteger(fbh),
-                NS::UInteger(1),
-            };
-            blit->copyFromTexture(
-                drawable->texture(),
-                NS::UInteger(0),
-                NS::UInteger(0),
-                origin,
-                size,
-                g_renderer.material_backdrop_texture,
-                NS::UInteger(0),
-                NS::UInteger(0),
-                origin);
-            (void)schedule_material_backdrop_luma_sample(
-                blit,
-                command_buffer,
-                drawable->texture(),
-                fbw,
-                fbh,
-                material_env.debug_seed.frame,
-                material_summary);
-            blit->endEncoding();
-            g_renderer.last_material_backdrop_available = true;
-            g_renderer.last_material_backdrop_excludes_foreground_text = true;
-            material_summary.backdrop_copy_excludes_foreground_text = true;
-            material_summary.backdrop_copy_count = 1;
-            material_summary.backdrop_copy_pixels =
-                static_cast<std::int64_t>(fbw)
-                * static_cast<std::int64_t>(fbh);
-        } else {
-            material_summary.backdrop_copy_skipped_count = 1;
-            material_summary.backdrop_copy_skip_reason =
-                "metal-blit-encoder-unavailable";
-        }
-    } else if (capture_frame_history) {
-        material_summary.backdrop_copy_skipped_count = 1;
-        material_summary.backdrop_copy_skip_reason =
-            "material-backdrop-texture-unavailable";
-    } else {
-        material_summary.backdrop_copy_skipped_count = 1;
-        material_summary.backdrop_copy_skip_reason =
-            "no-material-plan-frame-capture";
-    }
 
     if (defer_foreground_pass) {
         auto* foreground_pass = MTL::RenderPassDescriptor::renderPassDescriptor();
@@ -2684,6 +2864,7 @@ inline void renderer_shutdown() {
     g_renderer.debug_capture_next_frame = false;
     g_renderer.debug_capture_always = false;
     g_renderer.last_material_backdrop_available = false;
+    g_renderer.material_backdrop_theme_generation = 0;
     g_renderer.last_material_backdrop_excludes_foreground_text = false;
     g_renderer.last_material_backdrop_color_available = false;
     g_renderer.last_material_backdrop_color_mean = {255, 255, 255, 255};

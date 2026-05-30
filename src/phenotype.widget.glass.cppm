@@ -24,7 +24,7 @@ inline MaterialStyle plain_control_material(Color tint,
         detail::g_app.theme);
     material.role = role;
     material.allows_liquid_glass = false;
-    material.opacity = 1.0f;
+    material.opacity = material_alpha_fraction(tint);
     material.blur_radius = 0.0f;
     material.tint = tint;
     material.border = border;

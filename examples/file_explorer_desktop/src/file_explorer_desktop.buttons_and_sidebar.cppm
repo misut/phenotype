@@ -326,11 +326,6 @@ void sidebar_row(std::string_view label,
     options.min_hit_width = k_sidebar_row_width;
     options.min_hit_height = k_sidebar_row_height;
     options.focus_ring = false;
-    options = widget::interaction_glass_button_style(
-        options,
-        MaterialSurfaceRole::Sidebar,
-        MaterialKind::Clear,
-        MaterialKind::Regular);
 
     std::string label_text(label);
     std::string icon_name(icon);
@@ -450,7 +445,7 @@ void finder_sidebar(State const& state) {
     bool const in_root = relative == explorer.root_label;
     auto const& labels = state.labels;
     auto const& icon_cache = state.icon_cache;
-    layout::sidebar(finder_sidebar_options(), [&] {
+    layout::sidebar(finder_sidebar_options(explorer), [&] {
         native_window_control_reserve_slot();
         sidebar_row(labels.sidebar_recents, "recents", "root", in_root, icon_cache);
         sidebar_row(labels.sidebar_shared, "shared", "shared",

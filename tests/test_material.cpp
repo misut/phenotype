@@ -1427,6 +1427,38 @@ void test_content_layer_stays_standard_material_contract() {
     std::puts("PASS: content layer stays standard material contract");
 }
 
+void test_standard_control_foreground_uses_theme_underlay_contract() {
+    auto dark_theme = apply_dark_color_scheme(Theme{});
+    auto style = material_style_for_kind(MaterialKind::Regular, dark_theme);
+    style.role = MaterialSurfaceRole::Control;
+    style.allows_liquid_glass = false;
+    style.tint = Color{255, 255, 255, 24};
+    style.opacity = material_alpha_fraction(style.tint);
+    style.foreground = dark_theme.foreground;
+    style.secondary_foreground = dark_theme.muted;
+
+    auto env = sampled_environment();
+    env.backdrop.luma_min = 0.90f;
+    env.backdrop.luma_max = 0.98f;
+    env.backdrop.luma_mean = 0.95f;
+
+    auto plan = plan_material_surface(
+        MaterialRequest{
+            style,
+            MaterialGeometry{0.0f, 0.0f, 132.0f, 34.0f, 10.0f},
+            dark_theme,
+        },
+        env);
+
+    assert(!plan.backdrop_sampling);
+    assert(plan.foreground.background_luma < 0.20f);
+    assert(material_color_luma(plan.foreground.primary) > 0.80f);
+    assert(plan.foreground.primary_contrast_ratio
+           >= plan.foreground.minimum_contrast_ratio);
+    std::puts(
+        "PASS: standard control foreground uses semantic theme underlay");
+}
+
 void test_fallback_backdrop_access_contract() {
     auto env = sampled_environment();
     env.capabilities.material_backdrop_blur = false;
@@ -3343,6 +3375,54 @@ void test_glass_effect_matched_geometry_prefers_effect_id_source() {
         "PASS: glass effect matched geometry prefers effect id source");
 }
 
+void test_completed_matched_geometry_skips_appearance_source() {
+    auto source = regular_request();
+    source.geometry = MaterialGeometry{0.0f, 0.0f, 40.0f, 40.0f, 12.0f};
+    source.style.container = MaterialContainerDescriptor{
+        .container_id = 96u,
+        .union_id = 0u,
+        .spacing = 128.0f,
+        .interactive = false,
+        .morph_transitions = true,
+    };
+    source.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 55u,
+        .effect_id = 960u,
+    };
+    source.style.tint = Color{255, 255, 255, 148};
+
+    auto target = regular_request();
+    target.geometry = MaterialGeometry{120.0f, 0.0f, 40.0f, 40.0f, 20.0f};
+    target.style.container = source.style.container;
+    target.style.transition = MaterialTransitionDescriptor{
+        .kind = MaterialGlassTransitionKind::MatchedGeometry,
+        .progress = 1.0f,
+        .appearing = true,
+    };
+    target.style.glass_identity = MaterialGlassIdentityDescriptor{
+        .namespace_id = 55u,
+        .effect_id = 961u,
+    };
+    target.style.tint = Color{44, 44, 46, 148};
+
+    auto env = sampled_environment();
+    std::vector<MaterialRuntimeRecord> records{
+        {plan_material_surface(source, env), 1u},
+        {plan_material_surface(target, env), 2u},
+    };
+
+    auto const target_execution =
+        material_container_execution_descriptor(records[1], records);
+    assert(target_execution.glass_effect_match_execution);
+    assert(target_execution.glass_effect_match_source_valid);
+    assert(!target_execution.glass_effect_match_appearance_active);
+    assert(std::fabs(target_execution.glass_effect_match_appearance_blend
+                     - 1.0f)
+           < 0.0001f);
+    std::puts(
+        "PASS: completed matched geometry skips stale appearance source");
+}
+
 void test_warmup_backdrop_access_contract() {
     auto env = sampled_environment();
     env.capabilities.frame_history = false;
@@ -3404,6 +3484,7 @@ int main() {
     test_glass_thickness_scales_lensing_contract();
     test_large_glass_surface_adapts_legibility_contract();
     test_content_layer_stays_standard_material_contract();
+    test_standard_control_foreground_uses_theme_underlay_contract();
     test_fallback_backdrop_access_contract();
     test_glass_background_variants_shape_fallback_paint_policy();
     test_glass_background_sample_bounds_follow_execution_geometry();
@@ -3422,6 +3503,7 @@ int main() {
     test_glass_effect_matched_geometry_respects_container_spacing();
     test_glass_effect_matched_geometry_uses_nearby_namespace_source();
     test_glass_effect_matched_geometry_prefers_effect_id_source();
+    test_completed_matched_geometry_skips_appearance_source();
     test_warmup_backdrop_access_contract();
     std::puts("\nAll material tests passed.");
     return 0;

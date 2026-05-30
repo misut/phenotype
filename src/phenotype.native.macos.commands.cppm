@@ -543,6 +543,11 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 float glass_background_soft_edge_radius = 0.0f;
                 unsigned int prominence_flags = 0;
                 float prominence_intensity = 1.0f;
+                unsigned int foreground_flags = 0;
+                unsigned int foreground = 0;
+                unsigned int secondary_foreground = 0;
+                unsigned int accent_foreground = 0;
+                unsigned int strong_accent_foreground = 0;
                 if (!reader.read_f32(x) || !reader.read_f32(y)
                     || !reader.read_f32(w) || !reader.read_f32(h)
                     || !reader.read_f32(radius)
@@ -576,7 +581,12 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     || !reader.read_f32(glass_background_feather_padding)
                     || !reader.read_f32(glass_background_soft_edge_radius)
                     || !reader.read_u32(prominence_flags)
-                    || !reader.read_f32(prominence_intensity))
+                    || !reader.read_f32(prominence_intensity)
+                    || !reader.read_u32(foreground_flags)
+                    || !reader.read_u32(foreground)
+                    || !reader.read_u32(secondary_foreground)
+                    || !reader.read_u32(accent_foreground)
+                    || !reader.read_u32(strong_accent_foreground))
                     return false;
                 auto material_env_for_command = material_env;
                 material_env_for_command.debug_seed.node =
@@ -618,7 +628,12 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                         glass_background_soft_edge_radius),
                     material_prominence_from_wire(
                         prominence_flags,
-                        prominence_intensity)};
+                        prominence_intensity),
+                    foreground_flags != 0u,
+                    unpack_color(foreground),
+                    unpack_color(secondary_foreground),
+                    unpack_color(accent_foreground),
+                    unpack_color(strong_accent_foreground)};
                 auto plan = plan_material_surface(
                     material_request_for_command(
                         descriptor,

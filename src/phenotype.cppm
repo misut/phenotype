@@ -2064,6 +2064,7 @@ struct AnimationState {
     T start_value{};
     T target{};
     std::int64_t start_time_ms = 0;
+    std::uint64_t theme_generation = 0;
     bool initialized = false;
 };
 
@@ -2108,14 +2109,21 @@ T animate_value(T target, int duration_ms,
     auto const effective_duration_ms =
         detail::scaled_animation_duration_ms(duration_ms);
 
-    if (!s.initialized || effective_duration_ms <= 0) {
+    auto const current_theme_generation = detail::g_app.theme_generation;
+    if (!s.initialized
+        || s.theme_generation != current_theme_generation
+        || effective_duration_ms <= 0) {
         // First call, or "instant" mode — snap to target without
-        // interpolating. `duration_ms <= 0` is also the way callers
-        // turn animation off entirely for a given site, so we keep
-        // the bookkeeping consistent with start_value == target.
+        // interpolating. A theme generation change also snaps: color
+        // animation state is keyed by call site, and carrying a light-mode
+        // hover or pressed value into a dark-mode frame creates a stale
+        // flash. `duration_ms <= 0` is also the way callers turn animation
+        // off entirely for a given site, so we keep the bookkeeping
+        // consistent with start_value == target.
         s.start_value = target;
         s.target = target;
         s.start_time_ms = now_ms;
+        s.theme_generation = current_theme_generation;
         s.initialized = true;
         return target;
     }
@@ -2142,6 +2150,7 @@ T animate_value(T target, int duration_ms,
         s.start_value = current;
         s.target = target;
         s.start_time_ms = now_ms;
+        s.theme_generation = current_theme_generation;
         // A new fade has just started, so it's definitionally
         // unfinished and we want another tick.
         detail::g_app.has_active_animations = true;
@@ -2417,7 +2426,12 @@ inline bool set_pointer_position(float x, float y) noexcept;
 // ============================================================
 
 inline void set_theme(Theme const& theme) {
+    if (detail::g_app.theme == theme)
+        return;
     detail::g_app.theme = theme;
+    ++detail::g_app.theme_generation;
+    if (detail::g_app.theme_generation == 0)
+        detail::g_app.theme_generation = 1;
     detail::clear_measure_cache();
 }
 
@@ -2777,7 +2791,7 @@ inline MaterialStyle plain_material_style(
     auto material = material_style(MaterialKind::Regular);
     material.role = role;
     material.allows_liquid_glass = false;
-    material.opacity = 1.0f;
+    material.opacity = material_alpha_fraction(tint);
     material.blur_radius = 0.0f;
     material.tint = tint;
     material.border = border;
@@ -3818,22 +3832,26 @@ inline void configure_material_surface(LayoutNode& node,
         node.debug_semantic_label = options.semantic_label;
 }
 
+inline void configure_pointer_capture_node(LayoutNode& node) {
+    auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
+    detail::g_app.callbacks.push_back([] {});
+    detail::g_app.callback_roles.push_back(InteractionRole::None);
+    node.callback_id = id;
+    node.focusable = false;
+    node.hit_region_before_children = true;
+    node.cursor_type = 0;
+    node.debug_semantic_hidden = true;
+    node.debug_semantic_enabled = false;
+}
+
 template<typename F>
     requires std::is_invocable_v<F>
 void material_surface(MaterialSurfaceOptions options, F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     configure_material_surface(node, options);
-    if (options.capture_pointer) {
-        auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
-        detail::g_app.callbacks.push_back([] {});
-        detail::g_app.callback_roles.push_back(InteractionRole::None);
-        node.callback_id = id;
-        node.focusable = false;
-        node.cursor_type = 0;
-        node.debug_semantic_hidden = true;
-        node.debug_semantic_enabled = false;
-    }
+    if (options.capture_pointer)
+        configure_pointer_capture_node(node);
     auto& surface_depth = material_surface_scope_depth();
     auto const pushes_surface_scope = options.kind != MaterialKind::None;
     if (pushes_surface_scope)
@@ -4588,6 +4606,22 @@ void overlay(F&& builder) {
     Scope::set_current(prev);
 }
 
+template<typename F>
+    requires std::is_invocable_v<F>
+void modal_overlay(F&& builder) {
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    node.style.flex_direction = FlexDirection::Column;
+    node.style.fixed_height = std::max(1.0f, detail::g_app.debug_viewport_height);
+    configure_pointer_capture_node(node);
+    detail::g_app.overlays.push_back(h);
+    auto* prev = Scope::current();
+    Scope scope(h, detail::derived_scope_seed(h));
+    Scope::set_current(&scope);
+    builder();
+    Scope::set_current(prev);
+}
+
 namespace _impl {
 
 inline void fixed_overlay_spacer(unsigned int top_padding) {
@@ -4742,16 +4776,17 @@ void toast_overlay(F&& builder,
 // shell handler — wiring "Esc closes the dialog" still belongs in
 // the user's `update`, but it's a one-line `Msg::Close` post.
 //
-// Backdrop / dismiss-on-backdrop-click waits on the animation
-// auto-tick and per-overlay click handlers — a follow-up PR will
-// layer those features under the same `dialog` name without
-// breaking this signature.
+// The overlay root captures pointer input across the viewport so a
+// modal dialog cannot leak hover/press/click state to the covered
+// application. Dismiss-on-backdrop-click still belongs in the caller's
+// state/update logic.
 template<typename F>
     requires std::is_invocable_v<F>
-void dialog(F&& builder,
+void dialog(MaterialSurfaceOptions options,
+            F&& builder,
             float max_width = 360.0f,
             unsigned int top_padding = 96) {
-    overlay([&] {
+    modal_overlay([&] {
         // Inline spacer — `layout::spacer` is defined later in the
         // file and unqualified lookup at template-parse time can't
         // see it from here.
@@ -4764,11 +4799,23 @@ void dialog(F&& builder,
         row([&] {
             sized_box(max_width, [&] {
                 sheet(
-                    std::forward<F>(builder),
-                    "Dialog Sheet");
+                    options,
+                    std::forward<F>(builder));
             });
         }, SpaceToken::Md, CrossAxisAlignment::Start, MainAxisAlignment::Center);
     });
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void dialog(F&& builder,
+            float max_width = 360.0f,
+            unsigned int top_padding = 96) {
+    dialog(
+        glass_surface_options(GlassSurfacePreset::Sheet, "Dialog Sheet"),
+        std::forward<F>(builder),
+        max_width,
+        top_padding);
 }
 
 // accordion — collapsible section with a clickable header. Persists

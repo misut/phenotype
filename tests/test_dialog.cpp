@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstring>
 #include <cstdio>
 import phenotype;
 
@@ -7,8 +8,13 @@ using namespace phenotype;
 #if !defined(__wasi__) && !defined(__ANDROID__)
 static null_host host;
 #define LAYOUT_NODE(h, w)              detail::layout_node(host, h, w)
+#define PAINT_NODE(h)                  detail::paint_node(host, host, h, 0, 0, 0.0f, 0.0f, 800.0f, 600.0f)
+#define CMD_BUF                        host.buf()
+#define CMD_LEN                        host.buf_len()
 #else
 extern "C" {
+    extern unsigned char phenotype_cmd_buf[];
+    extern unsigned int phenotype_cmd_len;
     void phenotype_flush() {}
     float phenotype_measure_text(float fs, unsigned int /*flags*/,
                                   char const* /*family*/,
@@ -21,6 +27,9 @@ extern "C" {
     void phenotype_open_url(char const*, unsigned int) {}
 }
 #define LAYOUT_NODE(h, w)              detail::layout_node(h, w)
+#define PAINT_NODE(h)                  detail::wasi_paint_node(h, 0, 0, 0.0f, 0.0f, 800.0f, 600.0f)
+#define CMD_BUF                        phenotype_cmd_buf
+#define CMD_LEN                        phenotype_cmd_len
 #endif
 
 namespace {
@@ -32,6 +41,8 @@ NodeHandle build(View&& view) {
     detail::g_app.overlays.clear();
     detail::g_app.callbacks.clear();
     detail::g_app.callback_roles.clear();
+    detail::g_app.debug_viewport_width = 800.0f;
+    detail::g_app.debug_viewport_height = 600.0f;
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
@@ -61,6 +72,10 @@ void test_dialog_registers_overlay_with_centered_card() {
     auto overlay_h = app.overlays[0];
     auto& overlay = detail::node_at(overlay_h);
     assert(overlay.children.size() == 2);              // spacer + row
+    assert(overlay.callback_id != 0xFFFFFFFFu);
+    assert(!overlay.focusable);
+    assert(overlay.debug_semantic_hidden);
+    assert(overlay.style.fixed_height == 600.0f);
 
     auto& row = detail::node_at(overlay.children[1]);
     assert(row.style.flex_direction == FlexDirection::Row);
@@ -84,6 +99,62 @@ void test_dialog_registers_overlay_with_centered_card() {
     assert(card.style.padding[3] == theme.space_lg);
     assert(card.children.size() == 1);                  // user content
     std::puts("PASS: dialog registers overlay + centered card chrome");
+}
+
+void test_dialog_modal_capture_paints_after_main_hit_regions() {
+    enum Msg { MainHit, DialogHit };
+    auto root_h = build([&] {
+        widget::button<Msg>("under", MainHit);
+        layout::dialog([&] {
+            widget::button<Msg>("modal action", DialogHit);
+        }, 360.0f, 0);
+    });
+
+    auto& app = detail::g_app;
+    assert(app.overlays.size() == 1);
+    auto overlay_h = app.overlays[0];
+    auto& overlay = detail::node_at(overlay_h);
+    unsigned int const main_callback = 0u;
+    unsigned int const capture_callback = overlay.callback_id;
+    unsigned int const dialog_callback = 2u;
+    assert(capture_callback != 0xFFFFFFFFu);
+    assert(capture_callback != main_callback);
+    assert(dialog_callback != capture_callback);
+
+    LAYOUT_NODE(root_h, 800.0f);
+    LAYOUT_NODE(overlay_h, 800.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(root_h);
+    auto const main_end = CMD_LEN;
+    PAINT_NODE(overlay_h);
+
+    bool found_main = false;
+    bool found_capture_after_main = false;
+    bool found_dialog_after_capture = false;
+    for (unsigned int i = 0; i + 28 <= CMD_LEN; i += 4) {
+        unsigned int op = 0;
+        std::memcpy(&op, &CMD_BUF[i], 4);
+        if (op != static_cast<unsigned int>(Cmd::HitRegion))
+            continue;
+        unsigned int callback_id = 0;
+        std::memcpy(&callback_id, &CMD_BUF[i + 20], 4);
+        if (callback_id == main_callback) {
+            found_main = true;
+            assert(i < main_end);
+        } else if (callback_id == capture_callback) {
+            assert(found_main);
+            assert(i >= main_end);
+            found_capture_after_main = true;
+        } else if (callback_id == dialog_callback) {
+            assert(found_capture_after_main);
+            assert(i >= main_end);
+            found_dialog_after_capture = true;
+            break;
+        }
+    }
+    assert(found_capture_after_main);
+    assert(found_dialog_after_capture);
+    std::puts("PASS: dialog modal capture paints below modal hit regions");
 }
 
 // Dialog laid out at viewport width 800 with max_width 360 places
@@ -187,6 +258,7 @@ void test_glass_overlay_helpers_register_preset_chrome() {
 
 int main() {
     test_dialog_registers_overlay_with_centered_card();
+    test_dialog_modal_capture_paints_after_main_hit_regions();
     test_dialog_horizontal_centering();
     test_dialog_two_invocations_are_independent();
     test_glass_overlay_helpers_register_preset_chrome();
