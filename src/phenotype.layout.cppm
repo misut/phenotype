@@ -294,6 +294,8 @@ inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
         // for scroll-container subtrees anyway.
         && a.is_scroll_container == b.is_scroll_container
         && a.scroll_edge_fade_extent == b.scroll_edge_fade_extent
+        && a.scroll_edge_fade_top_outset == b.scroll_edge_fade_top_outset
+        && a.scroll_edge_fade_bottom_outset == b.scroll_edge_fade_bottom_outset
         && color_equal(a.scroll_edge_fade_color, b.scroll_edge_fade_color)
         && a.scroll_edge_fade_top == b.scroll_edge_fade_top
         && a.scroll_edge_fade_bottom == b.scroll_edge_fade_bottom;

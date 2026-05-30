@@ -530,7 +530,7 @@ duplicate
     assert(chrome.viewport.width == demo::k_desktop_default_viewport_width);
     assert(chrome.viewport.height == demo::k_desktop_default_viewport_height);
     assert(chrome.icon_grid_columns == 6);
-    assert(chrome.icon_grid_scroll_height == 621.0f);
+    assert(chrome.icon_grid_scroll_height == 645.0f);
     assert(chrome.icon_grid_visible_rows == 4);
     assert(chrome.icon_grid_visible_capacity == 24);
     assert(chrome.window_content_inset
@@ -552,9 +552,9 @@ duplicate
     state.selected_name = "README.txt";
     auto chrome_with_status = demo::explorer_chrome_metrics(state, profile);
     assert(chrome_with_status.status_bar_visible);
-    assert(chrome_with_status.icon_grid_scroll_height == 584.0f);
-    assert(chrome_with_status.icon_grid_visible_rows == 3);
-    assert(chrome_with_status.icon_grid_visible_capacity == 18);
+    assert(chrome_with_status.icon_grid_scroll_height == 616.0f);
+    assert(chrome_with_status.icon_grid_visible_rows == 4);
+    assert(chrome_with_status.icon_grid_visible_capacity == 24);
     state.selected_name.clear();
     assert(chrome.toolbar_title_x == 340.0f);
     assert(chrome.toolbar_view_group_x == 840.0f);

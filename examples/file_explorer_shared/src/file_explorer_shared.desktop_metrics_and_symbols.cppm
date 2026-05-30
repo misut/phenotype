@@ -136,6 +136,7 @@ inline constexpr float k_desktop_icon_grid_label_font_size = 14.0f;
 inline constexpr char k_desktop_icon_grid_label_policy[] =
     "finder_two_line_middle_ellipsis_preserve_suffix";
 inline constexpr float k_desktop_content_section_padding = 24.0f;
+inline constexpr float k_desktop_content_section_bottom_padding = 0.0f;
 inline constexpr float k_desktop_content_section_gap = 12.0f;
 inline constexpr float k_desktop_status_bar_height = 28.0f;
 inline constexpr float k_desktop_icon_grid_top_inset = 8.0f;

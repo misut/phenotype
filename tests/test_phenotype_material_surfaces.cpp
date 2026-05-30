@@ -1235,6 +1235,45 @@ void test_material_surface_emits_material_rect_command() {
     std::puts("PASS: material surface emits MaterialRect command");
 }
 
+void test_material_surface_per_edge_padding_overrides() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::None,
+            .padding = SpaceToken::Lg,
+            .padding_top = 3.0f,
+            .padding_right = 5.0f,
+            .padding_bottom = 0.0f,
+            .padding_left = 7.0f,
+            .gap_px = 0.0f,
+        },
+        [] {
+            widget::text("Per edge padding");
+            widget::text("No implicit gap");
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    auto& surface = detail::node_at(root.children[0]);
+    assert(surface.style.padding[0] == 3.0f);
+    assert(surface.style.padding[1] == 5.0f);
+    assert(surface.style.padding[2] == 0.0f);
+    assert(surface.style.padding[3] == 7.0f);
+    assert(surface.style.gap == 0.0f);
+
+    std::puts("PASS: material surface supports per-edge padding and gap overrides");
+}
+
 void test_material_surface_shape_overrides() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -3665,6 +3704,7 @@ int main() {
     test_material_planner_backdrop_and_fallback_paths();
     test_material_text_foreground_resolution();
     test_material_surface_emits_material_rect_command();
+    test_material_surface_per_edge_padding_overrides();
     test_material_surface_shape_overrides();
     test_material_surface_glass_effect_shape_options();
     test_material_surface_style_override_emits_explicit_material_contract();

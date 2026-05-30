@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include <variant>
+#include <vector>
 import phenotype;
 
 using namespace phenotype;
@@ -72,14 +73,20 @@ bool cmd_buf_contains_opcode(Cmd opcode) {
     return false;
 }
 
-std::size_t linear_gradient_rect_count() {
+std::vector<LinearGradientRectCmd> linear_gradient_rects() {
     auto cmds = parse_commands(CMD_BUF, CMD_LEN);
-    std::size_t count = 0;
+    std::vector<LinearGradientRectCmd> gradients;
     for (std::size_t i = 0; i < cmds.size(); ++i) {
-        if (std::holds_alternative<LinearGradientRectCmd>(cmds[i]))
-            ++count;
+        if (auto const* gradient =
+                std::get_if<LinearGradientRectCmd>(&cmds[i])) {
+            gradients.push_back(*gradient);
+        }
     }
-    return count;
+    return gradients;
+}
+
+std::size_t linear_gradient_rect_count() {
+    return linear_gradient_rects().size();
 }
 
 }  // namespace
@@ -152,6 +159,29 @@ void test_scroll_view_edge_fade_emits_gradients() {
     run_frame(sv);
     assert(linear_gradient_rect_count() == 2);
     std::puts("PASS: scroll_view edge fade emits top/bottom gradients");
+}
+
+void test_scroll_view_edge_fade_bottom_outset_moves_gradient_edge() {
+    layout::ScrollViewOptions options;
+    options.edge_fade.extent = 18.0f;
+    options.edge_fade.bottom_outset = 18.0f;
+    options.edge_fade.color = Color{255, 255, 255, 255};
+    run_frame([&] {
+        layout::scroll_view(80.0f, [&] {
+            for (int i = 0; i < 6; ++i) widget::text("entry");
+        }, options);
+    });
+
+    auto gradients = linear_gradient_rects();
+    bool found_bottom_gradient = false;
+    for (auto const& gradient : gradients) {
+        if (gradient.y == 80.0f && gradient.h == 18.0f) {
+            found_bottom_gradient = true;
+            break;
+        }
+    }
+    assert(found_bottom_gradient);
+    std::puts("PASS: scroll_view bottom fade can be out-set past viewport");
 }
 
 // Scroll position persists across rebuilds — framework_local lives
@@ -349,6 +379,7 @@ int main() {
     test_scroll_view_registers_target_and_emits_scissor();
     test_scroll_view_defaults_to_hard_clip();
     test_scroll_view_edge_fade_emits_gradients();
+    test_scroll_view_edge_fade_bottom_outset_moves_gradient_edge();
     test_scroll_view_state_persists_across_frames();
     test_scroll_view_paint_clamps_offset();
     test_scroll_view_hit_region_offset_matches_scroll();
