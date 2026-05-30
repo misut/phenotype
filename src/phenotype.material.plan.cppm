@@ -6363,9 +6363,18 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     auto const max_blur_radius = std::max(
         0.0f,
         resolved_quality.max_blur_radius);
+    bool const style_allows_liquid_glass = style.allows_liquid_glass;
+    bool const role_allows_liquid_glass =
+        material_role_allows_liquid_glass(style.role);
+    bool const allows_liquid_glass =
+        style_allows_liquid_glass && role_allows_liquid_glass;
+    auto const effective_container =
+        allows_liquid_glass ? style.container : MaterialContainerDescriptor{};
+    auto command_descriptor = material_command_descriptor(style);
+    command_descriptor.container = effective_container;
     plan.kind = style.kind;
     plan.role = style.role;
-    plan.command_descriptor = material_command_descriptor(style);
+    plan.command_descriptor = command_descriptor;
     plan.geometry = request.geometry;
     plan.shape = analyze_material_shape(request.geometry);
     plan.capability_snapshot = capability_snapshot;
@@ -6374,7 +6383,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         environment.render_target,
         resolved_quality.max_backdrop_pixels);
     plan.container = analyze_material_container(
-        style.container,
+        effective_container,
         environment.capabilities.reduce_motion);
     plan.transition = analyze_material_transition(
         style.transition,
@@ -6432,11 +6441,6 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         && style.tint.a > 0
         && plan.opacity > 0.0f
         && has_geometry;
-    bool const style_allows_liquid_glass = style.allows_liquid_glass;
-    bool const role_allows_liquid_glass =
-        material_role_allows_liquid_glass(style.role);
-    bool const allows_liquid_glass =
-        style_allows_liquid_glass && role_allows_liquid_glass;
     bool const content_layer_standard_material =
         has_material && !allows_liquid_glass;
     bool const liquid_glass_backdrop_candidate =
