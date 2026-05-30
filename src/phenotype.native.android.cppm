@@ -4022,9 +4022,9 @@ inline void renderer_init(native_surface_handle handle) {
 // Normalises the 0..255 Color channels into the 0..1 RGBA linear
 // vec4 the GLSL shader expects.
 inline void normalize_color(::phenotype::Color const& c, float out[4]) {
-    out[0] = static_cast<float>(c.r) / 255.0f;
-    out[1] = static_cast<float>(c.g) / 255.0f;
-    out[2] = static_cast<float>(c.b) / 255.0f;
+    out[0] = c.a == 0 ? 0.0f : static_cast<float>(c.r) / 255.0f;
+    out[1] = c.a == 0 ? 0.0f : static_cast<float>(c.g) / 255.0f;
+    out[2] = c.a == 0 ? 0.0f : static_cast<float>(c.b) / 255.0f;
     out[3] = static_cast<float>(c.a) / 255.0f;
 }
 
@@ -4057,7 +4057,13 @@ inline bool configure_material_paint_layer_instance(
     inst.rect[2] = geometry.w;
     inst.rect[3] = geometry.h;
     normalize_color(layer.color, inst.color);
-    inst.color[3] = material_paint_layer_alpha(layer);
+    auto const alpha = material_paint_layer_alpha(layer);
+    if (alpha <= 0.0f) {
+        inst.color[0] = 0.0f;
+        inst.color[1] = 0.0f;
+        inst.color[2] = 0.0f;
+    }
+    inst.color[3] = alpha;
     inst.params[0] = geometry.radius;
     inst.params[1] =
         ::phenotype::material_paint_layer_matches(

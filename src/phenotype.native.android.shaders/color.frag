@@ -24,7 +24,7 @@ void main() {
         float d = length(max(p, vec2(0.0))) - radius;
         if (d > 0.5) discard;
         float alpha = v_color.a * clamp(0.5 - d, 0.0, 1.0);
-        frag_color = vec4(v_color.rgb * alpha, alpha);
+        frag_color = vec4(v_color.rgb, alpha);
         return;
     }
 
@@ -40,7 +40,7 @@ void main() {
         float outer = clamp(0.5 - d, 0.0, 1.0);
         float feather = clamp((-d) / soft_edge, 0.0, 1.0);
         float alpha = v_color.a * min(outer, feather);
-        frag_color = vec4(v_color.rgb * alpha, alpha);
+        frag_color = vec4(v_color.rgb, alpha);
         return;
     }
 
@@ -54,7 +54,7 @@ void main() {
         float outer = clamp(0.5 - d, 0.0, 1.0);
         float inner = clamp(d + border_w + 0.5, 0.0, 1.0);
         float alpha = v_color.a * min(outer, inner);
-        frag_color = vec4(v_color.rgb * alpha, alpha);
+        frag_color = vec4(v_color.rgb, alpha);
         return;
     }
 
@@ -74,7 +74,7 @@ void main() {
         if (lp.x > border_w && lp.x < sz.x - border_w &&
             lp.y > border_w && lp.y < sz.y - border_w) discard;
         float alpha = v_color.a;
-        frag_color = vec4(v_color.rgb * alpha, alpha);
+        frag_color = vec4(v_color.rgb, alpha);
         return;
     }
 

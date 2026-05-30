@@ -353,6 +353,14 @@ inline Counter& paint_bytes_blitted = *new Counter{
     "phenotype.runner.paint_bytes_blitted",
     "Command-buffer bytes copied from prev_cmd_buf by the subtree paint cache",
     "By"};
+inline Counter& paint_self_prefixes_blitted = *new Counter{
+    "phenotype.runner.paint_self_prefixes_blitted",
+    "Static node self-paint prefixes copied while dirty descendants are re-walked",
+    "{prefix}"};
+inline Counter& paint_self_bytes_blitted = *new Counter{
+    "phenotype.runner.paint_self_bytes_blitted",
+    "Command-buffer bytes copied for static node self-paint prefixes",
+    "By"};
 inline Counter& scissor_emitted = *new Counter{
     "phenotype.runner.scissor_emitted",
     "Scissor command pairs emitted around dirty-root subtrees (excludes resets)",
@@ -543,6 +551,8 @@ inline void reset_all() noexcept {
     inst::layout_nodes_computed.reset();
     inst::paint_subtrees_blitted.reset();
     inst::paint_bytes_blitted.reset();
+    inst::paint_self_prefixes_blitted.reset();
+    inst::paint_self_bytes_blitted.reset();
     inst::scissor_emitted.reset();
     inst::paint_buffer_flushes.reset();
     inst::paint_buffer_overflow.reset();
@@ -5666,6 +5676,8 @@ inline json::Value build_snapshot() {
     counters.push_back(counter_to_json(inst::layout_nodes_computed, now));
     counters.push_back(counter_to_json(inst::paint_subtrees_blitted, now));
     counters.push_back(counter_to_json(inst::paint_bytes_blitted, now));
+    counters.push_back(counter_to_json(inst::paint_self_prefixes_blitted, now));
+    counters.push_back(counter_to_json(inst::paint_self_bytes_blitted, now));
     counters.push_back(counter_to_json(inst::scissor_emitted, now));
     counters.push_back(counter_to_json(inst::keyed_lists_matched, now));
     counters.push_back(counter_to_json(inst::keyed_children_matched, now));

@@ -1381,7 +1381,7 @@ float4 fs_color(ColorVsOut input) : SV_TARGET {
         float d = length(max(p, float2(0.0f, 0.0f))) - radius;
         clip(0.5f - d);
         float alpha = input.color.a * saturate(0.5f - d);
-        return float4(input.color.rgb * alpha, alpha);
+        return float4(input.color.rgb, alpha);
     }
     if (draw_type == 5u && radius > 0.0f) {
         float soft_edge = max(input.params.w, 0.5f);
@@ -1392,7 +1392,7 @@ float4 fs_color(ColorVsOut input) : SV_TARGET {
         float outer = saturate(0.5f - d);
         float feather = saturate((-d) / soft_edge);
         float alpha = input.color.a * min(outer, feather);
-        return float4(input.color.rgb * alpha, alpha);
+        return float4(input.color.rgb, alpha);
     }
     if (draw_type == 4u && radius > 0.0f) {
         float2 half_size = input.rect_size * 0.5f;
@@ -1403,7 +1403,7 @@ float4 fs_color(ColorVsOut input) : SV_TARGET {
         float outer = saturate(0.5f - d);
         float inner = saturate(d + border_w + 0.5f);
         float alpha = input.color.a * min(outer, inner);
-        return float4(input.color.rgb * alpha, alpha);
+        return float4(input.color.rgb, alpha);
     }
     if (draw_type == 1u) {
         float2 lp = input.local_pos;
@@ -2507,7 +2507,10 @@ inline void append_color_instance(std::vector<float>& color_data,
                                   float kind = 0.0f, float p3 = 0.0f) {
     color_data.insert(color_data.end(), {
         x, y, w, h,
-        r, g, b, a,
+        a <= 0.0f ? 0.0f : r,
+        a <= 0.0f ? 0.0f : g,
+        a <= 0.0f ? 0.0f : b,
+        a,
         p0, p1, kind, p3,
     });
 }
@@ -2529,16 +2532,17 @@ inline void append_material_paint_layer_instance(
         return;
     auto const rounded_edge =
         material_paint_layer_matches(layer.executor, "rounded-edge");
+    auto const alpha = material_paint_layer_alpha(layer);
     append_color_instance(
         color_data,
         geometry.x,
         geometry.y,
         geometry.w,
         geometry.h,
-        layer.color.r / 255.0f,
-        layer.color.g / 255.0f,
-        layer.color.b / 255.0f,
-        material_paint_layer_alpha(layer),
+        alpha <= 0.0f ? 0.0f : layer.color.r / 255.0f,
+        alpha <= 0.0f ? 0.0f : layer.color.g / 255.0f,
+        alpha <= 0.0f ? 0.0f : layer.color.b / 255.0f,
+        alpha,
         geometry.radius,
         rounded_edge ? (std::max)(layer.stroke_width, 0.5f) : 0.0f,
         rounded_edge ? 4.0f : (layer.soft_edge_radius > 0.0f ? 5.0f : 2.0f),
@@ -5912,9 +5916,9 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     g_renderer.command_list->RSSetScissorRects(1, &scissor);
     g_renderer.command_list->OMSetRenderTargets(1, &frame.rtv_handle, FALSE, nullptr);
     float clear_color[4]{
-        static_cast<float>(decoded.clear_r),
-        static_cast<float>(decoded.clear_g),
-        static_cast<float>(decoded.clear_b),
+        decoded.clear_a <= 0.0 ? 0.0f : static_cast<float>(decoded.clear_r),
+        decoded.clear_a <= 0.0 ? 0.0f : static_cast<float>(decoded.clear_g),
+        decoded.clear_a <= 0.0 ? 0.0f : static_cast<float>(decoded.clear_b),
         static_cast<float>(decoded.clear_a),
     };
     g_renderer.command_list->ClearRenderTargetView(frame.rtv_handle, clear_color, 0, nullptr);

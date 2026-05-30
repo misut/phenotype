@@ -1613,10 +1613,11 @@ inline bool configure_material_paint_layer_instance(
     inst.rect[1] = geometry.y;
     inst.rect[2] = geometry.w;
     inst.rect[3] = geometry.h;
-    inst.color[0] = layer.color.r / 255.0f;
-    inst.color[1] = layer.color.g / 255.0f;
-    inst.color[2] = layer.color.b / 255.0f;
-    inst.color[3] = material_paint_layer_alpha(layer);
+    auto const alpha = material_paint_layer_alpha(layer);
+    inst.color[0] = alpha <= 0.0f ? 0.0f : layer.color.r / 255.0f;
+    inst.color[1] = alpha <= 0.0f ? 0.0f : layer.color.g / 255.0f;
+    inst.color[2] = alpha <= 0.0f ? 0.0f : layer.color.b / 255.0f;
+    inst.color[3] = alpha;
     inst.params[0] = geometry.radius;
     inst.params[1] = rounded_edge ? std::max(layer.stroke_width, 0.5f) : 0.0f;
     inst.params[2] =

@@ -2140,6 +2140,12 @@ struct LayoutNode {
     // paint_node blits [paint_offset..paint_offset+paint_length) from
     // g_app.prev_cmd_buf instead of re-walking this subtree.
     //
+    // self_paint_* stores the stable prefix emitted by this node before
+    // children are painted. It lets a static container reuse its own
+    // rounded material/background bytes while still walking a dirty child,
+    // so a file-label hover cannot force the parent surface edge/shadow to
+    // be regenerated.
+    //
     // paint_callback_mask is a 64-bit bloom over the subtree's
     // callback_ids (1ULL << (callback_id & 63)) so the blit guard can
     // ask "does this subtree contain the hovered/focused id?" in O(1)
@@ -2152,11 +2158,16 @@ struct LayoutNode {
     // token matches the value recorded last frame.
     std::uint32_t paint_offset = 0;
     std::uint32_t paint_length = 0;
+    std::uint32_t self_paint_offset = 0;
+    std::uint32_t self_paint_length = 0;
     float         paint_ax = 0.0f;
     float         paint_ay = 0.0f;
+    float         self_paint_ax = 0.0f;
+    float         self_paint_ay = 0.0f;
     std::uint64_t paint_callback_mask = 0;
     bool          paint_dynamic = false;
     bool          paint_valid = false;
+    bool          self_paint_valid = false;
 
     // Optional dirty-token cache for widget::canvas paint_fn nodes.
     // Caller-supplied uint64; sentinel 0 = always-dirty (preserves the

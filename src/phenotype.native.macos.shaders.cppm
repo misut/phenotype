@@ -105,7 +105,7 @@ fragment float4 fs_color(ColorVsOut in [[stage_in]]) {
         float d = length(max(p, float2(0.0))) - radius;
         if (d > 0.5) discard_fragment();
         float alpha = in.color.a * clamp(0.5 - d, 0.0, 1.0);
-        return float4(in.color.rgb * alpha, alpha);
+        return float4(in.color.rgb, alpha);
     }
     if (draw_type == 5u && radius > 0.0) {
         float soft_edge = max(in.params.w, 0.5);
@@ -116,7 +116,7 @@ fragment float4 fs_color(ColorVsOut in [[stage_in]]) {
         float outer = clamp(0.5 - d, 0.0, 1.0);
         float feather = clamp((-d) / soft_edge, 0.0, 1.0);
         float alpha = in.color.a * min(outer, feather);
-        return float4(in.color.rgb * alpha, alpha);
+        return float4(in.color.rgb, alpha);
     }
     if (draw_type == 3u && radius > 0.0) {
         float2 half_size = in.rect_size * 0.5;
@@ -126,7 +126,7 @@ fragment float4 fs_color(ColorVsOut in [[stage_in]]) {
         float outer = clamp(0.5 - d, 0.0, 1.0);
         float inner = clamp(d + border_w + 0.5, 0.0, 1.0);
         float alpha = in.color.a * min(outer, inner);
-        return float4(in.color.rgb * alpha, alpha);
+        return float4(in.color.rgb, alpha);
     }
     if (draw_type == 1u) {
         float2 lp = in.local_pos;
@@ -141,7 +141,7 @@ fragment float4 fs_color(ColorVsOut in [[stage_in]]) {
         if (lp.x > border_w && lp.x < sz.x - border_w &&
             lp.y > border_w && lp.y < sz.y - border_w) discard_fragment();
         float alpha = in.color.a;
-        return float4(in.color.rgb * alpha, alpha);
+        return float4(in.color.rgb, alpha);
     }
     return in.color;
 }

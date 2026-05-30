@@ -8499,6 +8499,7 @@ inline std::string performance_debug_block() {
     block.line("layout_nodes_computed", metrics::inst::layout_nodes_computed.total());
     block.line("layout_nodes_skipped", metrics::inst::layout_nodes_skipped.total());
     block.line("paint_subtrees_blitted", metrics::inst::paint_subtrees_blitted.total());
+    block.line("paint_self_prefixes_blitted", metrics::inst::paint_self_prefixes_blitted.total());
     block.line("native_texture_upload_bytes", metrics::inst::native_texture_upload_bytes.total());
     block.line("native_buffer_reallocations", metrics::inst::native_buffer_reallocations.total());
     block.line("frame_60fps_budget_ms", "16.667");

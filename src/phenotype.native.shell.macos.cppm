@@ -1713,6 +1713,10 @@ int run_app_with_macos_platform(platform_api const& platform,
     prime_appkit_window_ordering(app);
     wait_for_appkit_window_front(app, window);
     warn_if_appkit_window_not_front(app, window);
+    // AppKit can finalize the full-size content view and backing scale while
+    // the window is first ordered. Synchronize after that native commit so the
+    // first frame uses the same surface geometry that later mouse events see.
+    sync_appkit_surface(host, surface, window, true);
     repaint_current_after_surface_presented();
 
     auto const* artifact_dir = std::getenv("PHENOTYPE_ARTIFACT_DIR");

@@ -1201,6 +1201,123 @@ void test_canvas_paint_token_lets_ancestor_blit() {
     std::puts("PASS: token-stable canvas lets ancestors take the blit path");
 }
 
+void test_static_parent_self_paint_survives_child_hover_walk() {
+    constexpr unsigned int kChildCallback = 17u;
+
+    auto build_tree = []() {
+        auto root_h = detail::alloc_node();
+        detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+        auto parent_h = detail::alloc_node();
+        auto& parent = detail::node_at(parent_h);
+        parent.style.flex_direction = FlexDirection::Column;
+        parent.style.padding[0] = 20.0f;
+        parent.style.padding[1] = 20.0f;
+        parent.style.padding[2] = 20.0f;
+        parent.style.padding[3] = 20.0f;
+        parent.style.max_width = 360.0f;
+        parent.style.fixed_height = 160.0f;
+        parent.border_radius = 18.0f;
+        parent.material = layout::plain_material_style(
+            Color{255, 255, 255, 255},
+            Color{210, 210, 216, 255},
+            MaterialSurfaceRole::Content,
+            "test-static-parent",
+            "test-static-parent");
+
+        auto child_h = detail::alloc_node();
+        auto& child = detail::node_at(child_h);
+        child.callback_id = kChildCallback;
+        child.cursor_type = 1;
+        child.text = "Applications";
+        child.font_size = 16.0f;
+        child.text_color = Color{28, 28, 30, 255};
+        child.hover_background = Color{224, 224, 228, 255};
+        child.style.fixed_height = 36.0f;
+        child.style.padding[0] = 6.0f;
+        child.style.padding[1] = 10.0f;
+        child.style.padding[2] = 6.0f;
+        child.style.padding[3] = 10.0f;
+        child.border_radius = 8.0f;
+
+        parent.children.push_back(child_h);
+        detail::node_at(root_h).children.push_back(parent_h);
+        return root_h;
+    };
+
+    auto mirror_cmd_to_prev = []() {
+        auto len = CMD_LEN;
+        if (len > AppState::PAINT_CACHE_BUF_SIZE)
+            len = AppState::PAINT_CACHE_BUF_SIZE;
+        std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, len);
+        detail::g_app.prev_cmd_len = len;
+    };
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.callback_roles.clear();
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::g_app.prev_hovered_id = 0xFFFFFFFFu;
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.prev_focused_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = false;
+    detail::g_app.prev_focus_visible = false;
+    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
+    detail::g_app.paint_invalidation_mask = 0;
+    detail::g_app.prev_scroll_x = 0.0f;
+    detail::g_app.prev_scroll_y = 0.0f;
+    detail::clear_pointer_position();
+    metrics::reset_all();
+
+    auto root_0 = build_tree();
+    LAYOUT_NODE(root_0, 480.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(root_0, 0, 0, 0, 320.0f);
+    auto const parent_0_h = detail::node_at(root_0).children[0];
+    assert(detail::node_at(parent_0_h).self_paint_valid);
+    mirror_cmd_to_prev();
+    detail::g_app.prev_root = root_0;
+    detail::persist_paint_inputs(detail::g_app);
+
+    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.callback_roles.clear();
+
+    auto root_1 = build_tree();
+    auto matched = detail::diff_and_copy_layout(
+        detail::g_app.prev_root,
+        root_1,
+        detail::g_app.prev_arena,
+        detail::g_app.arena);
+    assert(matched);
+
+    detail::g_app.hovered_id = kChildCallback;
+    detail::g_app.paint_invalidation_mask =
+        detail::compute_paint_invalidation_mask(detail::g_app);
+    auto const self_blits_before =
+        metrics::inst::paint_self_prefixes_blitted.total();
+    LAYOUT_NODE(root_1, 480.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(root_1, 0, 0, 0, 320.0f);
+    auto const self_blits_during =
+        metrics::inst::paint_self_prefixes_blitted.total()
+        - self_blits_before;
+
+    auto const parent_1_h = detail::node_at(root_1).children[0];
+    assert(detail::node_at(parent_1_h).layout_valid);
+    assert(detail::node_at(parent_1_h).paint_valid);
+    assert(detail::node_at(parent_1_h).self_paint_valid);
+    assert(self_blits_during >= 1);
+
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::persist_paint_inputs(detail::g_app);
+
+    std::puts("PASS: static parent self-paint survives child hover walk");
+}
+
 // Regression: after diff_and_copy_layout marks a subtree layout_valid,
 // re-running layout with a different available_width must NOT short-
 // circuit on the cached width. Otherwise window resize leaves the tree
@@ -2436,6 +2553,7 @@ int main() {
     test_canvas_paint_token_hit_skips_paint_fn();
     test_canvas_paint_token_miss_invokes_paint_fn();
     test_canvas_paint_token_lets_ancestor_blit();
+    test_static_parent_self_paint_survives_child_hover_walk();
     test_layout_relayout_when_available_width_changes();
     test_checkbox_and_radio_widgets();
     test_frame_skip_on_identical_cmd_buffer();

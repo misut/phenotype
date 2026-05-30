@@ -702,6 +702,7 @@ struct RendererState {
     id content_view = nullptr;
     int drawable_width = 0;
     int drawable_height = 0;
+    double layer_contents_scale = 0.0;
     int last_render_width = 0;
     int last_render_height = 0;
     double last_clear_alpha = 1.0;
@@ -1232,7 +1233,20 @@ inline bool ensure_frame_readback_buffer(std::size_t required) {
     return true;
 }
 
-inline void sync_drawable_size(int fbw, int fbh) {
+inline void sync_layer_backing_geometry(int fbw, int fbh, float content_scale) {
+    if (!g_renderer.layer)
+        return;
+    double const scale =
+        content_scale > 0.0f && std::isfinite(content_scale)
+            ? static_cast<double>(content_scale)
+            : 1.0;
+    if (std::fabs(g_renderer.layer_contents_scale - scale) > 0.001) {
+        reinterpret_cast<void(*)(void*, SEL, double)>(objc_msgSend)(
+            reinterpret_cast<void*>(g_renderer.layer),
+            sel_registerName("setContentsScale:"),
+            scale);
+        g_renderer.layer_contents_scale = scale;
+    }
     if (fbw == g_renderer.drawable_width && fbh == g_renderer.drawable_height)
         return;
     CGSize drawable_size{
@@ -1663,6 +1677,34 @@ inline void configure_visual_effect_backdrop(
     }
 }
 
+inline void flush_appkit_backdrop_view(id view) {
+    if (!view)
+        return;
+    using ObjcBool = signed char;
+    if (objc_responds_to(view, sel_registerName("setNeedsLayout:"))) {
+        objc_send<void>(
+            view,
+            sel_registerName("setNeedsLayout:"),
+            static_cast<ObjcBool>(1));
+    }
+    if (objc_responds_to(view, sel_registerName("layoutSubtreeIfNeeded"))) {
+        objc_send<void>(
+            view,
+            sel_registerName("layoutSubtreeIfNeeded"));
+    }
+    if (objc_responds_to(view, sel_registerName("setNeedsDisplay:"))) {
+        objc_send<void>(
+            view,
+            sel_registerName("setNeedsDisplay:"),
+            static_cast<ObjcBool>(1));
+    }
+    if (objc_responds_to(view, sel_registerName("displayIfNeeded"))) {
+        objc_send<void>(
+            view,
+            sel_registerName("displayIfNeeded"));
+    }
+}
+
 inline bool install_integrated_titlebar_backdrop_underlay(
         NativeSurfaceDescriptor* surface,
         id ns_window,
@@ -1685,6 +1727,8 @@ inline bool install_integrated_titlebar_backdrop_underlay(
             window_content,
             material,
             opacity);
+        flush_appkit_backdrop_view(window_content);
+        flush_appkit_backdrop_view(content_view);
         return true;
     }
     if (content_superview && content_superview == window_content) {
@@ -1694,6 +1738,9 @@ inline bool install_integrated_titlebar_backdrop_underlay(
                 existing_backdrop,
                 material,
                 opacity);
+            flush_appkit_backdrop_view(existing_backdrop);
+            flush_appkit_backdrop_view(content_superview);
+            flush_appkit_backdrop_view(content_view);
             return true;
         }
     }
@@ -1750,6 +1797,9 @@ inline bool install_integrated_titlebar_backdrop_underlay(
         sel_registerName("setAutoresizingMask:"),
         autoresizing);
     objc_send<void>(container_view, sel_add_subview(), content_view);
+    flush_appkit_backdrop_view(effect_view);
+    flush_appkit_backdrop_view(content_view);
+    flush_appkit_backdrop_view(container_view);
     objc_send<void>(content_view, sel_release());
     objc_send<void>(effect_view, sel_release());
     objc_send<void>(container_view, sel_release());
@@ -1850,7 +1900,7 @@ inline void renderer_init(native_surface_handle handle) {
     int fbw = 0;
     int fbh = 0;
     surface_framebuffer_size(surface, fbw, fbh);
-    sync_drawable_size(fbw, fbh);
+    sync_layer_backing_geometry(fbw, fbh, surface_content_scale(surface));
 
     // Prime the host's cached content scale even when the host bypassed
     // refresh_cached_canvas_size (e.g. test harnesses that wire the
@@ -1941,7 +1991,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         return;
     }
 
-    sync_drawable_size(fbw, fbh);
+    sync_layer_backing_geometry(fbw, fbh, frame_scale);
     bool const backdrop_ready =
         g_renderer.material_pipeline
         && g_renderer.material_backdrop_texture
@@ -2010,6 +2060,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
     if (transparent_window_surface)
         ca = 0.0;
+    if (ca <= 0.0) {
+        cr = 0.0;
+        cg = 0.0;
+        cb = 0.0;
+    }
     g_renderer.last_clear_alpha = ca;
     g_renderer.last_clear_alpha_for_transparent_window =
         transparent_window_surface && ca == 0.0;
@@ -2682,6 +2737,7 @@ inline void renderer_shutdown() {
     g_renderer.debug_capture_copy_count = 0;
     g_renderer.material_backdrop_width = 0;
     g_renderer.material_backdrop_height = 0;
+    g_renderer.layer_contents_scale = 0.0;
     g_renderer.last_render_width = 0;
     g_renderer.last_render_height = 0;
     g_renderer.last_clear_alpha = 1.0;
@@ -2864,6 +2920,18 @@ inline float last_scroll_event_vertical_multiplier_for_tests() {
 
 inline bool last_scroll_event_handled_y_for_tests() {
     return detail::g_ime.last_scroll_event.handled_y;
+}
+
+inline double renderer_layer_contents_scale_for_tests() {
+    return detail::g_renderer.layer_contents_scale;
+}
+
+inline double renderer_layer_reported_contents_scale_for_tests() {
+    if (!detail::g_renderer.layer)
+        return 0.0;
+    return reinterpret_cast<double(*)(void*, SEL)>(objc_msgSend)(
+        reinterpret_cast<void*>(detail::g_renderer.layer),
+        sel_registerName("contentsScale"));
 }
 
 inline CompositionVisualDebug build_visual_text(std::string const& committed,
