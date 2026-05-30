@@ -218,6 +218,31 @@ inline float desktop_scroll_height_for_viewport(
     return std::clamp(height, minimum, maximum);
 }
 
+inline float desktop_icon_grid_scroll_height_for_viewport(
+        ExplorerViewport const& viewport,
+        bool status_bar_visible) {
+    float const shell_inner_height = std::max(
+        0.0f,
+        static_cast<float>(viewport.height)
+            - k_desktop_window_content_inset * 2.0f
+            - k_desktop_main_shell_padding * 2.0f);
+    float const status_height = status_bar_visible
+        ? 1.0f + k_desktop_status_bar_height + k_desktop_main_shell_gap * 2.0f
+        : 0.0f;
+    float const content_slot_height = std::max(
+        0.0f,
+        shell_inner_height
+            - k_desktop_toolbar_group_height
+            - 1.0f
+            - k_desktop_main_shell_gap * 2.0f
+            - status_height);
+    float const scroll_height = content_slot_height
+        - k_desktop_content_section_padding
+        - k_desktop_icon_grid_top_inset
+        - k_desktop_content_section_gap;
+    return std::clamp(scroll_height, 320.0f, 660.0f);
+}
+
 inline float desktop_scroll_height(
         ExplorerState const& state,
         float chrome_budget,
