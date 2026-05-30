@@ -52,7 +52,7 @@ void finder_grid(State const& state,
             layout::spacer(chrome.icon_grid_top_inset);
             layout::ScrollViewOptions scroll_options;
             scroll_options.gap = SpaceToken::Sm;
-            scroll_options.edge_fade.extent = 28.0f;
+            scroll_options.edge_fade.extent = 12.0f;
             scroll_options.edge_fade.color =
                 main_content_shell_material_style().tint;
             layout::scroll_view(chrome.icon_grid_scroll_height, [&] {
