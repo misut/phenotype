@@ -1519,7 +1519,7 @@ MaterialRectCmd const& first_material_command(
 }
 
 void test_plain_material_style_disables_liquid_glass_for_chrome_roles() {
-    detail::g_app.theme = Theme{};
+    set_theme(Theme{});
     auto style = layout::plain_material_style(
         Color{255, 255, 255, 255},
         Color{209, 209, 214, 255},
@@ -1574,6 +1574,16 @@ void test_plain_material_style_disables_liquid_glass_for_chrome_roles() {
     assert(std::string(plan.reference_model.technology)
            == "standard-material");
 
+    auto translucent_style = layout::plain_material_style(
+        Color{255, 255, 255, 76},
+        Color{209, 209, 214, 255},
+        MaterialSurfaceRole::Control,
+        "test-translucent-plain-control",
+        "test-translucent-plain-control");
+    assert(std::fabs(translucent_style.opacity
+                     - static_cast<float>(translucent_style.tint.a) / 255.0f)
+           < 0.0001f);
+
     std::puts("PASS: plain material disables liquid glass for chrome roles");
 }
 
@@ -1621,6 +1631,10 @@ void test_interaction_glass_button_uses_plain_idle_material() {
     assert(!idle.allows_liquid_glass);
     assert(idle.role == MaterialSurfaceRole::Control);
     assert(idle.blur_radius == 0.0f);
+    assert(idle.tint.a > 0);
+    assert(std::fabs(idle.opacity
+                     - static_cast<float>(idle.tint.a) / 255.0f)
+           < 0.0001f);
 
     auto hover_commands = paint_button(0u);
     auto const& hover = first_material_command(hover_commands).material;
@@ -1650,7 +1664,7 @@ void test_interaction_glass_button_uses_plain_idle_material() {
     assert(std::fabs(right_pointer.pointer_x - 0.5f) < 0.0001f);
     assert(std::fabs(right_pointer.pointer_y - 0.5f) < 0.0001f);
 
-    detail::g_app.theme = apply_dark_color_scheme(Theme{});
+    set_theme(apply_dark_color_scheme(Theme{}));
     auto dark_hover_commands = paint_button(0u);
     auto const& dark_hover = first_material_command(dark_hover_commands).material;
     auto const dark_hover_tint =
@@ -1659,7 +1673,7 @@ void test_interaction_glass_button_uses_plain_idle_material() {
     assert(dark_hover.tint.r < 80);
     assert(dark_hover.tint.g < 80);
     assert(dark_hover.tint.b < 80);
-    detail::g_app.theme = Theme{};
+    set_theme(Theme{});
 
     std::puts("PASS: interaction glass button uses plain idle material");
 }
@@ -3598,6 +3612,10 @@ void test_material_command_preserves_style_optics() {
     material.material.noise_opacity = 0.031f;
     material.material.shadow_alpha = 0.22f;
     material.material.shadow_radius = 17.0f;
+    material.material.foreground = Color{230, 240, 250, 255};
+    material.material.secondary_foreground = Color{180, 190, 205, 255};
+    material.material.accent_foreground = Color{80, 160, 255, 255};
+    material.material.strong_accent_foreground = Color{45, 120, 220, 255};
     material.material.prominence = MaterialProminenceDescriptor{
         .enabled = true,
         .intensity = 0.82f,
@@ -3647,6 +3665,13 @@ void test_material_command_preserves_style_optics() {
     assert(std::fabs(descriptor.shadow_radius - 17.0f) < 0.0001f);
     assert(descriptor.prominence.enabled);
     assert(std::fabs(descriptor.prominence.intensity - 0.82f) < 0.0001f);
+    assert(descriptor.has_foreground_palette);
+    assert((descriptor.foreground == Color{230, 240, 250, 255}));
+    assert((descriptor.secondary_foreground
+            == Color{180, 190, 205, 255}));
+    assert((descriptor.accent_foreground == Color{80, 160, 255, 255}));
+    assert((descriptor.strong_accent_foreground
+            == Color{45, 120, 220, 255}));
 
     MaterialEnvironment env{};
     env.capabilities.material_surfaces = true;
@@ -3709,6 +3734,8 @@ void test_material_command_preserves_style_optics() {
     assert(plan.noise_opacity == 0.0f);
     assert(std::fabs(plan.shadow_alpha - 0.22f) < 0.0001f);
     assert(std::fabs(plan.shadow_radius - 17.0f) < 0.0001f);
+    assert(plan.command_descriptor.has_foreground_palette);
+    assert((plan.theme.foreground == Color{230, 240, 250, 255}));
 
     std::puts("PASS: material command preserves style optics");
 }

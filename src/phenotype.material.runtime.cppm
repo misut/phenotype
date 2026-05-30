@@ -1784,11 +1784,15 @@ inline void material_apply_glass_effect_match_appearance_source(
         MaterialRuntimeRecord const& source) noexcept {
     auto const& source_plan = source.plan;
     auto const& target_plan = target.plan;
+    auto const blend =
+        material_glass_effect_match_appearance_blend(target_plan.transition);
+    if (!target_plan.transition.active || blend >= 0.999f)
+        return;
+
     execution.glass_effect_match_appearance_active = true;
     execution.glass_effect_match_appearance_source_command_index =
         source.command_index;
-    execution.glass_effect_match_appearance_blend =
-        material_glass_effect_match_appearance_blend(target_plan.transition);
+    execution.glass_effect_match_appearance_blend = blend;
 
     execution.glass_effect_match_appearance_tint_active =
         source_plan.tint != target_plan.tint;

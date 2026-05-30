@@ -628,7 +628,7 @@ append-only opcodes:
 | 12 | FillPath | u32 color, verb_count; path verb stream |
 | 13 | FillQuads | u32 quad_count; repeated u32 color + 8 f32 points |
 | 14 | FillRects | u32 rect_count; repeated f32 x, y, w, h + u32 color |
-| 15 | MaterialRect | f32 x, y, w, h, radius; u32 kind, role; f32 opacity, blur_radius; u32 tint; f32 saturation, luminance_floor, luminance_gain, edge_highlight, edge_width, noise_opacity, shadow_alpha, shadow_radius; u32 container_id, union_id; f32 container_spacing; u32 container_flags |
+| 15 | MaterialRect | f32 x, y, w, h, radius; u32 kind, role, allows_liquid_glass; f32 opacity, blur_radius; u32 tint; f32 saturation, luminance_floor, luminance_gain, edge_highlight, edge_width, noise_opacity, shadow_alpha, shadow_radius; u32 container_id, union_id; f32 container_spacing; u32 container_flags, interaction_flags; f32 interaction_x, interaction_y; u32 transition_kind; f32 transition_progress; u32 transition_flags, glass_namespace_id, glass_effect_id, glass_background_kind; f32 glass_background_feather_padding, glass_background_soft_edge_radius; u32 prominence_flags; f32 prominence_intensity; u32 foreground_flags, foreground, secondary_foreground, accent_foreground, strong_accent_foreground |
 | 16 | LinearGradientRect | f32 x, y, w, h; u32 from_color, to_color, axis, steps |
 
 All values are little-endian. Colors are packed as `(r << 24) | (g << 16) | (b << 8) | a`.

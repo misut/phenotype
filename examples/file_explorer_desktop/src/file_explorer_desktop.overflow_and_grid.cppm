@@ -110,7 +110,7 @@ void settings_choice_button(std::string_view label,
     bool const dark = finder_dark_palette();
     ButtonStyleOptions options;
     options.has_background = true;
-    options.background = selected ? with_alpha(t.accent, 230)
+    options.background = selected ? t.state_active_bg
                                   : (dark ? rgba(255, 255, 255, 24)
                                           : rgba(255, 255, 255, 210));
     options.has_hover_background = true;
@@ -122,7 +122,7 @@ void settings_choice_button(std::string_view label,
                                           : (dark ? rgba(255, 255, 255, 52)
                                                   : rgba(220, 220, 226, 245));
     options.has_text_color = true;
-    options.text_color = selected ? rgba(255, 255, 255)
+    options.text_color = selected ? t.state_active_fg
                                   : t.foreground;
     options.has_border_color = true;
     options.border_color = selected ? with_alpha(t.accent, 0)
@@ -137,7 +137,7 @@ void settings_choice_button(std::string_view label,
     options = widget::interaction_glass_button_style(
         options,
         MaterialSurfaceRole::Control,
-        MaterialKind::Clear,
+        selected ? MaterialKind::Regular : MaterialKind::Clear,
         MaterialKind::Regular);
     phenotype::keyed(static_cast<std::uint32_t>(token), [&] {
         widget::button<Msg>(str{std::string(label)}, std::move(msg), options);

@@ -1184,7 +1184,12 @@ inline MaterialCommandDescriptor material_command_descriptor(
         style.transition,
         style.glass_identity,
         style.glass_background,
-        style.prominence};
+        style.prominence,
+        true,
+        style.foreground,
+        style.secondary_foreground,
+        style.accent_foreground,
+        style.strong_accent_foreground};
 }
 
 inline MaterialStyle material_style_for_command(MaterialKind kind,
@@ -1258,6 +1263,13 @@ inline MaterialStyle material_style_for_command(
     style.glass_identity = descriptor.glass_identity;
     style.glass_background = descriptor.glass_background;
     style.prominence = descriptor.prominence;
+    if (descriptor.has_foreground_palette) {
+        style.foreground = descriptor.foreground;
+        style.secondary_foreground = descriptor.secondary_foreground;
+        style.accent_foreground = descriptor.accent_foreground;
+        style.strong_accent_foreground =
+            descriptor.strong_accent_foreground;
+    }
     return style;
 }
 
@@ -1270,6 +1282,7 @@ inline MaterialRequest material_request_for_command(MaterialKind kind,
     return MaterialRequest{
         material_style_for_command(kind, opacity, blur_radius, tint, theme),
         geometry,
+        theme,
     };
 }
 
@@ -1280,6 +1293,7 @@ inline MaterialRequest material_request_for_command(
     return MaterialRequest{
         material_style_for_command(descriptor, theme),
         geometry,
+        theme,
     };
 }
 
@@ -1407,6 +1421,23 @@ inline float material_color_luma(Color color) noexcept {
         + 0.0722f * material_srgb_channel_luma(color.b);
 }
 
+inline Color material_semantic_underlay_color(MaterialSurfaceRole role,
+                                              Theme const& theme) noexcept {
+    switch (role) {
+        case MaterialSurfaceRole::Toolbar:
+        case MaterialSurfaceRole::Sidebar:
+        case MaterialSurfaceRole::StatusBar:
+        case MaterialSurfaceRole::Navigation:
+        case MaterialSurfaceRole::Overlay:
+        case MaterialSurfaceRole::Control:
+        case MaterialSurfaceRole::Surface:
+            return theme.surface;
+        case MaterialSurfaceRole::Content:
+            return theme.background;
+    }
+    return theme.surface;
+}
+
 inline float material_contrast_ratio(float a, float b) noexcept {
     auto const lighter = std::max(a, b);
     auto const darker = std::min(a, b);
@@ -1446,16 +1477,31 @@ inline Color material_pick_readable_color(Color preferred,
     return best;
 }
 
-inline float material_estimated_surface_luma(MaterialPlan const& plan) noexcept {
-    auto const backdrop_luma = plan.backdrop.available
-        ? plan.backdrop.luma_mean
-        : material_color_luma(plan.tint);
-    auto const tint_luma = material_color_luma(plan.tint);
-    auto const alpha = std::clamp(
-        plan.opacity * (static_cast<float>(plan.tint.a) / 255.0f),
+inline float material_effective_fill_alpha(Color tint,
+                                           float opacity) noexcept {
+    return std::clamp(
+        std::max(material_alpha_fraction(tint), opacity),
         0.0f,
         1.0f);
-    auto mixed = backdrop_luma * (1.0f - alpha) + tint_luma * alpha;
+}
+
+inline float material_effective_luma_alpha(MaterialPlan const& plan) noexcept {
+    if (plan.backdrop_sampling) {
+        return std::clamp(
+            plan.opacity * material_alpha_fraction(plan.tint),
+            0.0f,
+            1.0f);
+    }
+    return material_effective_fill_alpha(plan.tint, plan.opacity);
+}
+
+inline float material_estimated_surface_luma(MaterialPlan const& plan) noexcept {
+    auto const underlay_luma = plan.backdrop_sampling && plan.backdrop.available
+        ? plan.backdrop.luma_mean
+        : material_color_luma(plan.theme.semantic_underlay);
+    auto const tint_luma = material_color_luma(plan.tint);
+    auto const alpha = material_effective_luma_alpha(plan);
+    auto mixed = underlay_luma * (1.0f - alpha) + tint_luma * alpha;
     if (plan.clear_glass_legibility.active) {
         auto const bright_gate =
             std::clamp((mixed - 0.54f) / 0.38f, 0.0f, 1.0f);
@@ -1590,7 +1636,8 @@ inline Color material_color_from_contract_token(
 }
 
 inline MaterialThemeSnapshot material_resolve_theme_snapshot(
-        MaterialStyle const& style) noexcept {
+        MaterialStyle const& style,
+        Theme const& theme) noexcept {
     MaterialThemeSnapshot snapshot{};
     auto const contract = theme_contract::default_glass_theme_contract();
     auto const default_foreground =
@@ -1611,6 +1658,8 @@ inline MaterialThemeSnapshot material_resolve_theme_snapshot(
     snapshot.strong_accent_foreground = style.strong_accent_foreground;
     snapshot.tint = style.tint;
     snapshot.border = style.border;
+    snapshot.semantic_underlay =
+        material_semantic_underlay_color(style.role, theme);
     snapshot.foreground_matches_theme =
         style.foreground == default_foreground
         && style.secondary_foreground == default_muted;
@@ -1675,7 +1724,8 @@ inline MaterialForegroundTextResolution material_resolve_text_foreground(
 
         result.has_material = true;
         result.material_command_index = record.command_index;
-        auto const style = material_style_for_kind(plan.kind, theme);
+        auto const style =
+            material_style_for_command(plan.command_descriptor, theme);
 
         if (material_color_rgb_equal(text_color, style.foreground)) {
             result.color = material_preserve_text_alpha(
@@ -6398,7 +6448,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.blur_radius = std::clamp(
         style.blur_radius, 0.0f, max_blur_radius);
     plan.tint = style.tint;
-    plan.theme = material_resolve_theme_snapshot(style);
+    plan.theme = material_resolve_theme_snapshot(style, request.theme);
     plan.saturation = std::max(0.0f, style.saturation);
     plan.luminance_floor = std::clamp(style.luminance_floor, 0.0f, 1.0f);
     plan.luminance_gain = std::max(0.0f, style.luminance_gain);

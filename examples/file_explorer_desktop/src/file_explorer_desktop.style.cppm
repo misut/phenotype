@@ -214,17 +214,45 @@ phenotype::MaterialStyle finder_sidebar_material_style() {
     return material;
 }
 
-phenotype::layout::MaterialSurfaceOptions finder_sidebar_options() {
+phenotype::layout::MaterialSurfaceOptions finder_sidebar_options(
+        file_explorer_demo::ExplorerState const& explorer) {
     using namespace phenotype;
     auto options = layout::glass_surface_options(
         layout::GlassSurfacePreset::Sidebar,
         "Sidebar");
     options.max_width = k_sidebar_width;
+    options.fixed_height = main_content_shell_inner_height(explorer);
     options.padding = SpaceToken::Lg;
     options.gap = SpaceToken::Xs;
     options.border_radius = k_window_radius;
     options.has_material_override = true;
     options.material_override = finder_sidebar_material_style();
+    return options;
+}
+
+phenotype::MaterialStyle finder_settings_dialog_material_style() {
+    using namespace phenotype;
+    auto const& t = current_theme();
+    bool const dark = finder_dark_palette();
+    auto material = layout::plain_material_style(
+        dark ? rgba(36, 36, 38) : rgba(255, 255, 255),
+        dark ? with_alpha(t.border, 210) : rgba(226, 226, 230),
+        MaterialSurfaceRole::Overlay,
+        "plain-settings-dialog",
+        "plain-settings-dialog");
+    material.shadow_alpha = dark ? 0.28f : 0.10f;
+    material.shadow_radius = 18.0f;
+    return material;
+}
+
+phenotype::layout::MaterialSurfaceOptions finder_settings_dialog_options() {
+    using namespace phenotype;
+    auto options = layout::glass_surface_options(
+        layout::GlassSurfacePreset::Sheet,
+        "Settings Dialog");
+    options.has_material_override = true;
+    options.material_override = finder_settings_dialog_material_style();
+    options.border_width = 1.0f;
     return options;
 }
 

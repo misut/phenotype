@@ -232,6 +232,7 @@ struct MaterialDebugSeed {
 struct MaterialRequest {
     MaterialStyle style{};
     MaterialGeometry geometry{};
+    Theme theme{};
 };
 
 enum class MaterialFallbackPath {
@@ -1236,6 +1237,7 @@ struct MaterialThemeSnapshot {
     Color strong_accent_foreground = {0, 0, 0, 255};
     Color tint = {0, 0, 0, 0};
     Color border = {0, 0, 0, 0};
+    Color semantic_underlay = {255, 255, 255, 255};
     char const* source = "material-style";
     char const* profile_name = "custom";
     char const* token_policy = "explicit-material-style-tokens";

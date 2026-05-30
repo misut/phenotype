@@ -317,6 +317,8 @@ struct MaterialGlassBackgroundDescriptor {
 struct MaterialProminenceDescriptor {
     bool enabled = false;
     float intensity = 1.0f;
+
+    bool operator==(MaterialProminenceDescriptor const&) const = default;
 };
 
 inline unsigned int material_prominence_flags(
@@ -415,6 +417,11 @@ struct MaterialCommandDescriptor {
     MaterialGlassIdentityDescriptor glass_identity{};
     MaterialGlassBackgroundDescriptor glass_background{};
     MaterialProminenceDescriptor prominence{};
+    bool has_foreground_palette = false;
+    Color foreground = {0, 0, 0, 255};
+    Color secondary_foreground = {0, 0, 0, 255};
+    Color accent_foreground = {0, 0, 0, 255};
+    Color strong_accent_foreground = {0, 0, 0, 255};
 };
 
 // A solid convex quadrilateral in canvas-local coordinates. Intended
@@ -563,6 +570,8 @@ struct Theme {
     Color semantic_error_bg       = {254, 242, 242, 255}; // = state_error_bg
     Color semantic_error_fg       = {185,  28,  28, 255}; // = state_error_fg
     Color semantic_error_border   = {220,  38,  38, 255}; // = state_error_border
+
+    bool operator==(Theme const&) const = default;
 };
 
 struct PlatformSystemSettingsSnapshot {
@@ -2068,6 +2077,7 @@ struct LayoutNode {
     unsigned int callback_id = 0xFFFFFFFF;
     unsigned int cursor_type = 0; // 0=default, 1=pointer
     bool focusable = true;        // false = clickable but skipped by Tab + no focus ring
+    bool hit_region_before_children = false;
     InteractionRole interaction_role = InteractionRole::None;
     float min_hit_width = 0.0f;
     float min_hit_height = 0.0f;
@@ -2164,6 +2174,8 @@ struct LayoutNode {
     float         paint_ay = 0.0f;
     float         self_paint_ax = 0.0f;
     float         self_paint_ay = 0.0f;
+    std::uint64_t paint_theme_generation = 0;
+    std::uint64_t self_paint_theme_generation = 0;
     std::uint64_t paint_callback_mask = 0;
     bool          paint_dynamic = false;
     bool          paint_valid = false;

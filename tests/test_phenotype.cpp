@@ -1048,6 +1048,132 @@ void test_canvas_paint_token_hit_skips_paint_fn() {
     std::puts("PASS: widget::canvas with stable paint_token blits and skips paint_fn");
 }
 
+void test_theme_change_invalidates_token_stable_canvas_paint() {
+    auto make_canvas_tree = [](int& paint_calls,
+                               std::uint64_t token,
+                               bool paint) {
+        auto root_h = detail::alloc_node();
+        detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+        Scope scope(root_h);
+        Scope::set_current(&scope);
+        widget::canvas(200.0f, 100.0f,
+            [&paint_calls](Painter& p) {
+                ++paint_calls;
+                auto ink = current_theme().foreground;
+                p.line(10.0f, 20.0f, 60.0f, 70.0f, 1.0f, ink);
+            },
+            {},
+            token);
+        Scope::set_current(nullptr);
+
+        if (paint) {
+            LAYOUT_NODE(root_h, 400.0f);
+            CMD_LEN = 0;
+            PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+            std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, CMD_LEN);
+            detail::g_app.prev_cmd_len = CMD_LEN;
+        }
+        return root_h;
+    };
+
+    set_theme(Theme{});
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.prev_cmd_len = 0;
+    detail::g_app.paint_invalidation_mask = 0;
+    detail::g_app.prev_scroll_x = 0;
+    detail::g_app.prev_scroll_y = 0;
+    metrics::reset_all();
+
+    constexpr std::uint64_t kToken = 0x1234'ABCD'5678'EF90ULL;
+
+    int old_calls = 0;
+    auto old_root = make_canvas_tree(old_calls, kToken, true);
+    assert(old_calls == 1);
+    auto const old_generation = detail::g_app.theme_generation;
+    auto& old_canvas = detail::node_at(detail::node_at(old_root).children[0]);
+    assert(old_canvas.paint_theme_generation == old_generation);
+    assert(old_canvas.paint_valid);
+
+    detail::g_app.prev_root = old_root;
+    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+
+    Theme dark = apply_dark_color_scheme(Theme{});
+    set_theme(dark);
+    assert(detail::g_app.theme_generation != old_generation);
+
+    int new_calls = 0;
+    auto new_root = make_canvas_tree(new_calls, kToken, false);
+    auto matched = detail::diff_and_copy_layout(
+        detail::g_app.prev_root, new_root,
+        detail::g_app.prev_arena, detail::g_app.arena);
+    assert(matched);
+
+    auto& new_canvas = detail::node_at(detail::node_at(new_root).children[0]);
+    assert(new_canvas.paint_token == kToken);
+    assert(new_canvas.paint_token_prev == kToken);
+    assert(new_canvas.paint_theme_generation == old_generation);
+
+    auto blits_before = metrics::inst::paint_subtrees_blitted.total();
+    LAYOUT_NODE(new_root, 400.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(new_root, 0, 0, 0, 600.0f);
+    auto blits_during =
+        metrics::inst::paint_subtrees_blitted.total() - blits_before;
+
+    assert(new_calls == 1);
+    assert(blits_during == 0);
+    assert(new_canvas.paint_theme_generation
+           == detail::g_app.theme_generation);
+
+    set_theme(Theme{});
+
+    std::puts("PASS: theme changes invalidate token-stable canvas paint");
+}
+
+void test_material_foreground_palette_invalidates_diff_cache() {
+    auto make_tree = [](Color foreground) {
+        auto root_h = detail::alloc_node();
+        auto& root = detail::node_at(root_h);
+        root.style.flex_direction = FlexDirection::Column;
+
+        auto child_h = detail::alloc_node();
+        auto& child = detail::node_at(child_h);
+        child.style.fixed_height = 48.0f;
+        child.material.kind = MaterialKind::Regular;
+        child.material.foreground = foreground;
+        child.material.secondary_foreground = foreground;
+        child.material.accent_foreground = foreground;
+        child.material.strong_accent_foreground = foreground;
+        root.children.push_back(child_h);
+        return root_h;
+    };
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.prev_cmd_len = 0;
+
+    auto old_root = make_tree(Color{20, 20, 20, 255});
+    LAYOUT_NODE(old_root, 400.0f);
+    detail::g_app.prev_root = old_root;
+    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
+    detail::g_app.arena.reset();
+
+    auto new_root = make_tree(Color{240, 240, 245, 255});
+    auto matched = detail::diff_and_copy_layout(
+        detail::g_app.prev_root, new_root,
+        detail::g_app.prev_arena, detail::g_app.arena);
+
+    assert(!matched);
+    assert(!detail::node_at(new_root).layout_valid);
+
+    std::puts("PASS: material foreground palette invalidates diff cache");
+}
+
 // Token mismatch: a non-zero token that differs from prev frame's
 // recorded value falls through to the miss path and paint_fn fires.
 void test_canvas_paint_token_miss_invokes_paint_fn() {
@@ -2551,6 +2677,8 @@ int main() {
     test_canvas_linear_gradient_rect_emits_command();
     test_canvas_bypasses_paint_cache_after_diff();
     test_canvas_paint_token_hit_skips_paint_fn();
+    test_theme_change_invalidates_token_stable_canvas_paint();
+    test_material_foreground_palette_invalidates_diff_cache();
     test_canvas_paint_token_miss_invokes_paint_fn();
     test_canvas_paint_token_lets_ancestor_blit();
     test_static_parent_self_paint_survives_child_hover_walk();

@@ -268,6 +268,7 @@ enum class FocusVisibilityReason {
 
 struct AppState {
     Theme theme;
+    std::uint64_t theme_generation = 1;
     Arena arena;
     Arena prev_arena;       // previous frame's tree, kept alive for diff
     NodeHandle root = NodeHandle::null();
