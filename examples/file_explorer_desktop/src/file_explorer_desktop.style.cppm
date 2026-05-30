@@ -116,6 +116,7 @@ phenotype::layout::MaterialSurfaceOptions main_content_shell_options(
     options.fixed_height = main_content_shell_inner_height(explorer);
     options.padding = SpaceToken::Xs;
     options.gap = SpaceToken::Xs;
+    options.gap_px = 0.0f;
     options.border_radius = k_window_radius;
     options.shape = MaterialSurfaceShape::RoundedRectangle;
     options.border_width = 1.0f;

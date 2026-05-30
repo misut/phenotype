@@ -998,10 +998,13 @@ void paint_scroll_view_edge_fade(R& r,
     Color const clear = color_with_alpha(solid, 0);
 
     if (node.scroll_edge_fade_top && offset_y > 0.5f) {
+        float const top_outset = std::max(
+            0.0f,
+            node.scroll_edge_fade_top_outset);
         emit_linear_gradient_rect(
             r,
             viewport_x,
-            viewport_y,
+            viewport_y - top_outset,
             node.width,
             extent,
             solid,
@@ -1010,10 +1013,13 @@ void paint_scroll_view_edge_fade(R& r,
             24);
     }
     if (node.scroll_edge_fade_bottom && offset_y < max_offset - 0.5f) {
+        float const bottom_outset = std::max(
+            0.0f,
+            node.scroll_edge_fade_bottom_outset);
         emit_linear_gradient_rect(
             r,
             viewport_x,
-            viewport_y + node.height - extent,
+            viewport_y + node.height + bottom_outset - extent,
             node.width,
             extent,
             clear,

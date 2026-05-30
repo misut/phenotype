@@ -227,7 +227,7 @@ inline float desktop_icon_grid_scroll_height_for_viewport(
             - k_desktop_window_content_inset * 2.0f
             - k_desktop_main_shell_padding * 2.0f);
     float const status_height = status_bar_visible
-        ? 1.0f + k_desktop_status_bar_height + k_desktop_main_shell_gap * 2.0f
+        ? 1.0f + k_desktop_status_bar_height
         : 0.0f;
     float const content_slot_height = std::max(
         0.0f,
@@ -237,7 +237,8 @@ inline float desktop_icon_grid_scroll_height_for_viewport(
             - k_desktop_main_shell_gap * 2.0f
             - status_height);
     float const scroll_height = content_slot_height
-        - k_desktop_content_section_padding * 2.0f
+        - k_desktop_content_section_padding
+        - k_desktop_content_section_bottom_padding
         - k_desktop_icon_grid_top_inset
         - k_desktop_content_section_gap;
     return std::clamp(scroll_height, 320.0f, 660.0f);

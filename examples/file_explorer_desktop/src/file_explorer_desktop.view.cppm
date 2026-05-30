@@ -65,7 +65,11 @@ void view(State const& state) {
                             main_content_shell_options(state.explorer),
                             [&] {
                                 finder_toolbar(state, snap);
+                                layout::spacer(static_cast<unsigned int>(
+                                    file_explorer_demo::k_desktop_main_shell_gap));
                                 layout::divider();
+                                layout::spacer(static_cast<unsigned int>(
+                                    file_explorer_demo::k_desktop_main_shell_gap));
                                 if (state.more_actions_open)
                                     finder_more_actions(state, snap);
                                 layout::weighted(1.0f, [&] {

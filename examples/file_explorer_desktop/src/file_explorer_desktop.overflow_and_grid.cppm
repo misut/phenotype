@@ -42,8 +42,11 @@ void finder_grid(State const& state,
         state.explorer,
         "desktop");
     auto const& icon_cache = state.icon_cache;
+    auto content_options = content_section_options();
+    content_options.padding_bottom =
+        file_explorer_demo::k_desktop_content_section_bottom_padding;
     layout::material_surface(
-        content_section_options(),
+        content_options,
         [&] {
             if (entries.empty()) {
                 widget::text(state.labels.no_matching_files);
@@ -53,6 +56,8 @@ void finder_grid(State const& state,
             layout::ScrollViewOptions scroll_options;
             scroll_options.gap = SpaceToken::Sm;
             scroll_options.edge_fade.extent = 12.0f;
+            scroll_options.edge_fade.bottom_outset =
+                scroll_options.edge_fade.extent;
             scroll_options.edge_fade.color =
                 main_content_shell_material_style().tint;
             layout::scroll_view(chrome.icon_grid_scroll_height, [&] {

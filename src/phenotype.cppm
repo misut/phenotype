@@ -3417,7 +3417,12 @@ struct MaterialSurfaceOptions {
     bool inherit_material_identity = true;
     FlexDirection direction = FlexDirection::Column;
     SpaceToken padding = SpaceToken::Lg;
+    float padding_top = -1.0f;
+    float padding_right = -1.0f;
+    float padding_bottom = -1.0f;
+    float padding_left = -1.0f;
     SpaceToken gap = SpaceToken::Md;
+    float gap_px = -1.0f;
     CrossAxisAlignment cross_align = CrossAxisAlignment::Start;
     MainAxisAlignment main_align = MainAxisAlignment::Start;
     float max_width = 0.0f;
@@ -3785,16 +3790,26 @@ inline void configure_material_surface(LayoutNode& node,
         : t.radius_lg;
     node.material_shape = options.shape;
     node.style.flex_direction = options.direction;
-    node.style.gap = space_value(options.gap);
+    node.style.gap = options.gap_px >= 0.0f
+        ? options.gap_px
+        : space_value(options.gap);
     node.style.cross_align = options.cross_align;
     node.style.main_align = options.main_align;
     node.style.max_width = options.max_width;
     node.style.fixed_height = options.fixed_height;
     float p = space_value(options.padding);
-    node.style.padding[0] = p;
-    node.style.padding[1] = p;
-    node.style.padding[2] = p;
-    node.style.padding[3] = p;
+    float default_padding[4] = {p, p, p, p};
+    float option_padding[4] = {
+        options.padding_top,
+        options.padding_right,
+        options.padding_bottom,
+        options.padding_left,
+    };
+    for (int i = 0; i < 4; ++i) {
+        node.style.padding[i] = option_padding[i] >= 0.0f
+            ? option_padding[i]
+            : default_padding[i];
+    }
     if (options.semantic_label && options.semantic_label[0] != '\0')
         node.debug_semantic_label = options.semantic_label;
 }
@@ -4916,6 +4931,8 @@ void accordion(str title, F&& builder) {
 
 struct ScrollViewEdgeFade {
     float extent = 0.0f;
+    float top_outset = 0.0f;
+    float bottom_outset = 0.0f;
     Color color = {0, 0, 0, 0};
     bool top = true;
     bool bottom = true;
@@ -4963,6 +4980,8 @@ void scroll_view(float fixed_height, F&& builder,
     node.scroll_state = &state;
     node.scroll_offset_y = state.offset_y;
     node.scroll_edge_fade_extent = options.edge_fade.extent;
+    node.scroll_edge_fade_top_outset = options.edge_fade.top_outset;
+    node.scroll_edge_fade_bottom_outset = options.edge_fade.bottom_outset;
     node.scroll_edge_fade_color = options.edge_fade.color;
     node.scroll_edge_fade_top = options.edge_fade.top;
     node.scroll_edge_fade_bottom = options.edge_fade.bottom;
@@ -6775,6 +6794,7 @@ inline void collect_semantic_nodes_from(
     bool const has_material = node.material.kind != MaterialKind::None;
     bool auto_semantics = is_root
         || has_material
+        || node.is_scroll_container
         || node.is_input
         || has_interaction_role
         || !node.image_url.empty()
@@ -6805,6 +6825,8 @@ inline void collect_semantic_nodes_from(
         semantic.role = "root";
     } else if (has_interaction_role) {
         semantic.role = interaction_role_name(node.interaction_role);
+    } else if (node.is_scroll_container) {
+        semantic.role = "scroll";
     } else if (!node.image_url.empty()) {
         semantic.role = "image";
     } else if (has_material) {
@@ -6853,7 +6875,7 @@ inline void collect_semantic_nodes_from(
         : (semantic_callback_id != 0xFFFFFFFFu && node.focusable);
     semantic.focused = semantic_callback_id != 0xFFFFFFFFu
         && semantic_callback_id == g_app.focused_id;
-    semantic.scroll_container = is_root;
+    semantic.scroll_container = is_root || node.is_scroll_container;
 
     for (auto child_h : node.children)
         collect_semantic_nodes_from(
