@@ -1274,6 +1274,42 @@ void test_material_surface_per_edge_padding_overrides() {
     std::puts("PASS: material surface supports per-edge padding and gap overrides");
 }
 
+void test_material_surface_fixed_outer_height_accounts_for_padding() {
+    set_theme(Theme{});
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::None,
+            .padding = SpaceToken::Lg,
+            .fixed_outer_height = 120.0f,
+            .gap_px = 0.0f,
+        },
+        [] {
+            widget::text("Padding-box fixed height");
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    auto& surface = detail::node_at(root.children[0]);
+    float const vertical_padding =
+        surface.style.padding[0] + surface.style.padding[2];
+    assert(vertical_padding == 32.0f);
+    assert(surface.style.fixed_height == 88.0f);
+    assert(surface.height == 120.0f);
+
+    std::puts("PASS: material surface fixed_outer_height includes padding");
+}
+
 void test_material_surface_shape_overrides() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -3746,6 +3782,7 @@ int main() {
     test_material_text_foreground_resolution();
     test_material_surface_emits_material_rect_command();
     test_material_surface_per_edge_padding_overrides();
+    test_material_surface_fixed_outer_height_accounts_for_padding();
     test_material_surface_shape_overrides();
     test_material_surface_glass_effect_shape_options();
     test_material_surface_style_override_emits_explicit_material_contract();

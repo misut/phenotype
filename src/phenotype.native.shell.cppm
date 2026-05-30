@@ -1089,6 +1089,18 @@ inline bool dispatch_scroll_in_view(float mx, float my, float delta_pixels) {
     return false;
 }
 
+inline bool dispatch_scroll_pixels_at_cursor(float delta_pixels,
+                                             float viewport_height_value,
+                                             char const* detail,
+                                             float cursor_x,
+                                             float cursor_y) {
+    if (dispatch_scroll_in_view(cursor_x, cursor_y, delta_pixels))
+        return true;
+    return dispatch_scroll_pixels(delta_pixels,
+                                  viewport_height_value,
+                                  detail);
+}
+
 inline bool dispatch_scroll(double dy,
                             bool has_precise_scrolling_deltas,
                             float viewport_height_value) {
@@ -1104,14 +1116,12 @@ inline bool dispatch_scroll(double dy,
             "scroll", "shell", "wheel", "ignored", invalid_callback_id);
         return false;
     }
-    if (dispatch_scroll_in_view(g_app_state.last_mouse_x,
-                                g_app_state.last_mouse_y,
-                                scroll_delta)) {
-        return true;
-    }
-    return dispatch_scroll_pixels(scroll_delta,
-                                  viewport_height_value,
-                                  "wheel");
+    return dispatch_scroll_pixels_at_cursor(
+        scroll_delta,
+        viewport_height_value,
+        "wheel",
+        g_app_state.last_mouse_x,
+        g_app_state.last_mouse_y);
 }
 
 // Two-axis wheel dispatch. dx > 0 scrolls content to the right (so the
