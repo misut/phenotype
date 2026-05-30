@@ -1526,6 +1526,12 @@ void test_plain_material_style_disables_liquid_glass_for_chrome_roles() {
         MaterialSurfaceRole::Sidebar,
         "test-plain-sidebar",
         "test-plain-sidebar");
+    style.container = MaterialContainerDescriptor{
+        4100u,
+        0u,
+        16.0f,
+        false,
+        true};
     assert(!style.allows_liquid_glass);
     assert(style.kind == MaterialKind::Regular);
     assert(style.role == MaterialSurfaceRole::Sidebar);
@@ -1554,6 +1560,12 @@ void test_plain_material_style_disables_liquid_glass_for_chrome_roles() {
     assert(plan.decision_trace.role_allows_liquid_glass);
     assert(plan.decision_trace.content_layer_standard_material);
     assert(!plan.decision_trace.liquid_glass_backdrop_candidate);
+    assert(plan.command_descriptor.container.container_id == 0u);
+    assert(plan.container.mode == MaterialContainerMode::Isolated);
+    assert(!plan.container.participates);
+    assert(!plan.reference_model.container_grouped);
+    assert(plan.resource_budget.max_container_spacing == 0.0f);
+    assert(!plan.verifier.require_container_identity);
     assert(!plan.backdrop_sampling);
     assert(plan.blur_radius == 0.0f);
     assert(plan.opacity == 1.0f);
@@ -3676,15 +3688,17 @@ void test_material_command_preserves_style_optics() {
     assert(std::string(plan.primary_pass.executor) == "standard-fill");
     assert(std::string(plan.primary_pass.likely_layer)
            == "material-standard-pass");
-    assert(plan.container.mode == MaterialContainerMode::Union);
-    assert(plan.container.container_id == 88u);
-    assert(plan.container.union_id == 12u);
-    assert(plan.container.interactive);
-    assert(plan.container.morph_transitions);
+    assert(plan.command_descriptor.container.container_id == 0u);
+    assert(plan.command_descriptor.container.union_id == 0u);
+    assert(!plan.command_descriptor.container.interactive);
+    assert(plan.container.mode == MaterialContainerMode::Isolated);
+    assert(!plan.container.participates);
+    assert(!plan.container.interactive);
+    assert(!plan.container.morph_transitions);
     assert(plan.glass_identity.namespace_id == 44u);
     assert(plan.glass_identity.effect_id == 144u);
     assert(plan.glass_identity.participates);
-    assert(plan.glass_identity.container_scoped);
+    assert(!plan.glass_identity.container_scoped);
     assert(plan.blur_radius == 0.0f);
     assert(plan.sample_taps == 0u);
     assert(plan.saturation == 1.0f);

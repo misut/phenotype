@@ -3778,6 +3778,10 @@ inline void configure_material_surface(LayoutNode& node,
     node.material.container = options.inherit_material_container
         ? current_material_container()
         : options.container;
+    if (!node.material.allows_liquid_glass
+        || !material_role_allows_liquid_glass(node.material.role)) {
+        node.material.container = MaterialContainerDescriptor{};
+    }
     if (options.interactive)
         node.material.container.interactive = true;
     node.background = node.material.tint;
