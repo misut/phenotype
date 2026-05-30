@@ -2321,11 +2321,16 @@ struct MacRendererFixture {
     NativeSurfaceDescriptor surface{};
     native_host host{};
 
-    MacRendererFixture() {
+    explicit MacRendererFixture(
+            WindowChromeStyle chrome = WindowChromeStyle::System) {
         window = create_hidden_macos_window(320, 240, "phenotype-test");
 
         text::init();
         surface = make_macos_surface(window);
+        if (chrome != WindowChromeStyle::System) {
+            surface.window_options_valid = true;
+            surface.window_chrome = chrome;
+        }
         auto const* previous_capture =
             std::getenv("PHENOTYPE_DEBUG_CAPTURE_EACH_FRAME");
         auto previous_capture_value =
@@ -2539,6 +2544,43 @@ static void test_macos_debug_capture_frame_from_rendered_frame() {
     assert(frame.has_value());
     assert_non_empty_frame_capture(*frame);
     std::puts("PASS: macOS debug capture returns RGBA for a rendered frame");
+}
+
+static void test_macos_transparent_integrated_clear_uses_zero_rgb() {
+    MacRendererFixture fixture(WindowChromeStyle::IntegratedTitlebar);
+
+    std::vector<unsigned char> commands;
+    append_u32(commands, static_cast<unsigned int>(Cmd::Clear));
+    append_u32(commands, Color{246, 246, 246, 0}.packed());
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto frame = phenotype::native::debug::capture_frame_rgba();
+    assert(frame.has_value());
+    assert(frame->width > 0);
+    assert(frame->height > 0);
+    assert(frame->rgba.size()
+        == static_cast<std::size_t>(frame->width)
+            * static_cast<std::size_t>(frame->height) * 4u);
+    assert(frame->rgba[0] == 0);
+    assert(frame->rgba[1] == 0);
+    assert(frame->rgba[2] == 0);
+    assert(frame->rgba[3] == 0);
+    std::puts("PASS: macOS transparent integrated clear uses zero RGB");
+}
+
+static void test_macos_metal_layer_matches_surface_scale() {
+    MacRendererFixture fixture(WindowChromeStyle::IntegratedTitlebar);
+
+    double const expected = fixture.surface.content_scale > 0.0f
+        ? static_cast<double>(fixture.surface.content_scale)
+        : 1.0;
+    double const cached =
+        phenotype::native::macos_test::renderer_layer_contents_scale_for_tests();
+    double const reported =
+        phenotype::native::macos_test::renderer_layer_reported_contents_scale_for_tests();
+    assert(std::fabs(cached - expected) <= 0.001);
+    assert(std::fabs(reported - expected) <= 0.001);
+    std::puts("PASS: macOS Metal layer contentsScale matches surface scale");
 }
 
 static void test_macos_rasterized_text_run_preserves_logical_end_for_latin_and_hangul() {
@@ -4381,6 +4423,8 @@ int main() {
     test_macos_common_debug_contract_entry_points();
     test_macos_accessibility_display_capabilities_follow_env();
     test_macos_debug_capture_frame_from_rendered_frame();
+    test_macos_transparent_integrated_clear_uses_zero_rgb();
+    test_macos_metal_layer_matches_surface_scale();
     test_default_scroll_delta_fallback();
     test_text_measure_basic();
     test_text_measure_proportional();

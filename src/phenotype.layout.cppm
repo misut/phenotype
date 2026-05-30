@@ -395,8 +395,12 @@ inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
     new_n->content_height = old_n->content_height;
     new_n->paint_offset = old_n->paint_offset;
     new_n->paint_length = old_n->paint_length;
+    new_n->self_paint_offset = old_n->self_paint_offset;
+    new_n->self_paint_length = old_n->self_paint_length;
     new_n->paint_ax = old_n->paint_ax;
     new_n->paint_ay = old_n->paint_ay;
+    new_n->self_paint_ax = old_n->self_paint_ax;
+    new_n->self_paint_ay = old_n->self_paint_ay;
     new_n->paint_callback_mask = old_n->paint_callback_mask;
     // paint_token_prev carries last frame's recorded token forward so
     // paint_node's blit guard can compare it against the
@@ -426,6 +430,7 @@ inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
         (static_cast<bool>(new_n->paint_fn) && !canvas_token_match)
         || any_child_dynamic;
     new_n->paint_valid = old_n->paint_valid;
+    new_n->self_paint_valid = old_n->self_paint_valid;
     new_n->layout_valid = true;
     return true;
 }

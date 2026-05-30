@@ -856,6 +856,21 @@ inline bool material_should_resolve_live_interaction(
         || material_interaction_active(node.material.interaction);
 }
 
+inline bool node_self_paint_cacheable(LayoutNode const& node) noexcept {
+    if (node.callback_id != 0xFFFFFFFFu
+        || node.gesture_callback_id != 0xFFFFFFFFu
+        || node.is_scroll_container
+        || node.is_input
+        || node.paint_fn) {
+        return false;
+    }
+    if (node.material.kind != MaterialKind::None
+        && material_should_resolve_live_interaction(node)) {
+        return false;
+    }
+    return true;
+}
+
 inline constexpr float scroll_bar_fade_in_ms = 120.0f;
 inline constexpr float scroll_bar_hold_ms = 620.0f;
 inline constexpr float scroll_bar_fade_out_ms = 520.0f;
@@ -1149,6 +1164,7 @@ inline void invalidate_descendant_paint_cache(NodeHandle node_h) {
     for (auto child_h : node.children) {
         auto& child = node_at(child_h);
         child.paint_valid = false;
+        child.self_paint_valid = false;
         invalidate_descendant_paint_cache(child_h);
     }
 }
@@ -1308,6 +1324,42 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     float draw_x = ax - scroll_x;
     float draw_y = ay - scroll_y;
 
+    bool const self_cacheable = node_self_paint_cacheable(node);
+    bool const broad_paint_activity =
+        g_app.has_active_animations
+        || g_app.scrollbar_animation_active
+        || g_app.debug_panel_refresh_active;
+    bool self_blitted = false;
+    if (self_cacheable
+        && !effective_inside
+        && !broad_paint_activity
+        && node.layout_valid
+        && node.self_paint_valid
+        && ax == node.self_paint_ax
+        && ay == node.self_paint_ay
+        && scroll_x == g_app.prev_scroll_x
+        && scroll_y == g_app.prev_scroll_y
+        && node.self_paint_offset + node.self_paint_length <= g_app.prev_cmd_len
+        && node.self_paint_length > 0)
+    {
+        auto const self_entry_flush_epoch = g_app.paint_flush_epoch;
+        auto const len = node.self_paint_length;
+        auto const write_pos = r.buf_len();
+        (void)ensure_blit(r, len);
+        if (g_app.paint_flush_epoch == self_entry_flush_epoch
+            && r.buf_len() + len <= r.buf_size())
+        {
+            std::memcpy(&r.buf()[write_pos],
+                        &g_app.prev_cmd_buf[node.self_paint_offset], len);
+            r.buf_len() += len;
+            node.self_paint_offset = write_pos;
+            self_blitted = true;
+            metrics::inst::paint_self_prefixes_blitted.add();
+            metrics::inst::paint_self_bytes_blitted.add(len);
+        }
+    }
+
+    if (!self_blitted) {
     bool is_hovered = (node.callback_id != 0xFFFFFFFF &&
                        node.callback_id == g_app.hovered_id);
     bool is_focused = (node.callback_id != 0xFFFFFFFF &&
@@ -1809,6 +1861,9 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         g_app.gesture_target_w  = node.width;
         g_app.gesture_target_h  = node.height;
     }
+    }
+
+    auto const self_after = r.buf_len();
 
     // Scroll viewport setup. Clamp the offset against this frame's
     // measured content_height so a layout shrink (or a wheel write
@@ -1930,6 +1985,17 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     // offset would render stale draw positions.
     auto const after = r.buf_len();
     node.paint_dynamic = subtree_dynamic;
+    if (!effective_inside
+        && self_cacheable && self_after > before
+        && g_app.paint_flush_epoch == entry_flush_epoch) {
+        node.self_paint_offset = before;
+        node.self_paint_length = self_after - before;
+        node.self_paint_ax = ax;
+        node.self_paint_ay = ay;
+        node.self_paint_valid = true;
+    } else {
+        node.self_paint_valid = false;
+    }
     if (!effective_inside
         && !subtree_dynamic && after >= before
         && g_app.paint_flush_epoch == entry_flush_epoch) {

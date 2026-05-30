@@ -41,9 +41,9 @@ inline void append_color_instance(std::vector<ColorInstanceGPU>& out,
     inst.rect[1] = y;
     inst.rect[2] = w;
     inst.rect[3] = h;
-    inst.color[0] = r;
-    inst.color[1] = g;
-    inst.color[2] = b;
+    inst.color[0] = a <= 0.0f ? 0.0f : r;
+    inst.color[1] = a <= 0.0f ? 0.0f : g;
+    inst.color[2] = a <= 0.0f ? 0.0f : b;
     inst.color[3] = a;
     inst.params[0] = p0;
     inst.params[1] = p1;
