@@ -292,7 +292,11 @@ inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
         // intentionally excluded — it shifts paint output but leaves
         // the layout tree untouched, and the paint cache is bypassed
         // for scroll-container subtrees anyway.
-        && a.is_scroll_container == b.is_scroll_container;
+        && a.is_scroll_container == b.is_scroll_container
+        && a.scroll_edge_fade_extent == b.scroll_edge_fade_extent
+        && color_equal(a.scroll_edge_fade_color, b.scroll_edge_fade_color)
+        && a.scroll_edge_fade_top == b.scroll_edge_fade_top
+        && a.scroll_edge_fade_bottom == b.scroll_edge_fade_bottom;
 }
 
 inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,

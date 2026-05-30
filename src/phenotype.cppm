@@ -4914,6 +4914,18 @@ void accordion(str title, F&& builder) {
     Scope::set_current(prev);
 }
 
+struct ScrollViewEdgeFade {
+    float extent = 0.0f;
+    Color color = {0, 0, 0, 0};
+    bool top = true;
+    bool bottom = true;
+};
+
+struct ScrollViewOptions {
+    SpaceToken gap = SpaceToken::Md;
+    ScrollViewEdgeFade edge_fade{};
+};
+
 // scroll_view — fixed-height vertical viewport whose contents scroll
 // when their natural total exceeds the viewport. The scroll offset is
 // kept in framework_local keyed by this call site, so each view rebuild
@@ -4935,7 +4947,7 @@ void accordion(str title, F&& builder) {
 template<typename F>
     requires std::is_invocable_v<F>
 void scroll_view(float fixed_height, F&& builder,
-                 SpaceToken gap = SpaceToken::Md) {
+                 ScrollViewOptions options) {
     // Reading framework_local in the *parent* scope (before
     // open_container pushes a new one) lets sibling scroll_views at
     // the same source_location disambiguate via the parent's
@@ -4945,12 +4957,26 @@ void scroll_view(float fixed_height, F&& builder,
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
-    node.style.gap = space_value(gap);
+    node.style.gap = space_value(options.gap);
     node.style.fixed_height = fixed_height;
     node.is_scroll_container = true;
     node.scroll_state = &state;
     node.scroll_offset_y = state.offset_y;
+    node.scroll_edge_fade_extent = options.edge_fade.extent;
+    node.scroll_edge_fade_color = options.edge_fade.color;
+    node.scroll_edge_fade_top = options.edge_fade.top;
+    node.scroll_edge_fade_bottom = options.edge_fade.bottom;
     detail::open_container(h, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void scroll_view(float fixed_height, F&& builder,
+                 SpaceToken gap = SpaceToken::Md) {
+    scroll_view(
+        fixed_height,
+        std::forward<F>(builder),
+        ScrollViewOptions{.gap = gap});
 }
 
 // grid — rigid track container. Mirrors CSS Grid's

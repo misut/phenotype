@@ -74,6 +74,8 @@ inline constexpr float k_desktop_toolbar_group_radius = 22.0f;
 inline constexpr float k_desktop_toolbar_group_height = 46.0f;
 inline constexpr float k_desktop_toolbar_shell_height = 52.0f;
 inline constexpr float k_desktop_toolbar_shell_padding = 4.0f;
+inline constexpr float k_desktop_main_shell_padding = 4.0f;
+inline constexpr float k_desktop_main_shell_gap = 4.0f;
 inline constexpr float k_desktop_toolbar_navigation_group_width = 96.0f;
 inline constexpr float k_desktop_toolbar_view_group_width = 216.0f;
 inline constexpr float k_desktop_toolbar_sort_group_width = 48.0f;
@@ -133,6 +135,9 @@ inline constexpr float k_desktop_icon_grid_label_height = 46.0f;
 inline constexpr float k_desktop_icon_grid_label_font_size = 14.0f;
 inline constexpr char k_desktop_icon_grid_label_policy[] =
     "finder_two_line_middle_ellipsis_preserve_suffix";
+inline constexpr float k_desktop_content_section_padding = 16.0f;
+inline constexpr float k_desktop_content_section_gap = 12.0f;
+inline constexpr float k_desktop_status_bar_height = 28.0f;
 inline constexpr float k_desktop_icon_grid_top_inset = 8.0f;
 inline constexpr float k_desktop_icon_grid_gap = 24.0f;
 

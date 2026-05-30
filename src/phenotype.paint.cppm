@@ -801,6 +801,11 @@ inline std::uint64_t callback_mask_bit(unsigned int callback_id) noexcept {
     return 1ULL << (callback_id & 63u);
 }
 
+inline Color color_with_alpha(Color color, unsigned char alpha) noexcept {
+    color.a = alpha;
+    return color;
+}
+
 struct SubtreeInteractionState {
     bool hovered = false;
     bool focused = false;
@@ -972,6 +977,50 @@ void emit_vertical_overlay_scroll_bar(R& r,
     Color thumb = g_app.theme.foreground;
     thumb.a = scaled_alpha(124.0f, alpha_factor);
     emit_round_rect(r, thumb_x, thumb_y, thickness, thumb_h, radius, thumb);
+}
+
+template <render_backend R>
+void paint_scroll_view_edge_fade(R& r,
+                                 LayoutNode const& node,
+                                 float viewport_x,
+                                 float viewport_y,
+                                 float offset_y) {
+    float const extent = std::min(
+        std::max(0.0f, node.scroll_edge_fade_extent),
+        std::max(0.0f, node.height * 0.5f));
+    if (extent <= 0.0f
+        || node.scroll_edge_fade_color.a == 0
+        || node.content_height <= node.height)
+        return;
+
+    float const max_offset = std::max(0.0f, node.content_height - node.height);
+    Color const solid = node.scroll_edge_fade_color;
+    Color const clear = color_with_alpha(solid, 0);
+
+    if (node.scroll_edge_fade_top && offset_y > 0.5f) {
+        emit_linear_gradient_rect(
+            r,
+            viewport_x,
+            viewport_y,
+            node.width,
+            extent,
+            solid,
+            clear,
+            GradientAxis::Vertical,
+            24);
+    }
+    if (node.scroll_edge_fade_bottom && offset_y < max_offset - 0.5f) {
+        emit_linear_gradient_rect(
+            r,
+            viewport_x,
+            viewport_y + node.height - extent,
+            node.width,
+            extent,
+            clear,
+            solid,
+            GradientAxis::Vertical,
+            24);
+    }
 }
 
 template <render_backend R>
@@ -1838,18 +1887,26 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         }
     }
 
-    if (node.is_scroll_container && node.scroll_state) {
-        paint_scroll_view_scroll_bar(
-            r,
-            node,
-            ax - scroll_x,
-            ay - scroll_y,
-            node.scroll_offset_y);
-    }
-
     if (emit_scroll_scissor) {
         emit_scissor_reset(r);
         --g_app.paint_scissor_depth;
+    }
+
+    if (node.is_scroll_container && node.scroll_state) {
+        float const viewport_x = ax - scroll_x;
+        float const viewport_y = ay - scroll_y;
+        paint_scroll_view_edge_fade(
+            r,
+            node,
+            viewport_x,
+            viewport_y,
+            node.scroll_offset_y);
+        paint_scroll_view_scroll_bar(
+            r,
+            node,
+            viewport_x,
+            viewport_y,
+            node.scroll_offset_y);
     }
 
     // Record paint-cache state for the next frame's diff to copy and

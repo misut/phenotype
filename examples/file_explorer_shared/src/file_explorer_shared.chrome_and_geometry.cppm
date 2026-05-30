@@ -382,11 +382,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         };
     }
     auto columns = desktop_icon_grid_column_count(viewport);
-    auto scroll_height = desktop_scroll_height_for_viewport(
+    bool const status_visible = desktop_status_bar_visible(state);
+    auto scroll_height = desktop_icon_grid_scroll_height_for_viewport(
         viewport,
-        176.0f,
-        528.0f,
-        660.0f);
+        status_visible);
     int visible_rows = static_cast<int>(
         scroll_height / k_desktop_icon_grid_row_height);
     if (visible_rows < 1)
@@ -617,7 +616,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_multicolor_rendering = false,
         .thumbnail_uses_external_previews = false,
         .artifact_window_control_markers = false,
-        .status_bar_visible = desktop_status_bar_visible(state),
+        .status_bar_visible = status_visible,
         .theme_contract_version =
             static_cast<int>(theme_contract::theme_contract_version),
         .icon_module = "phenotype.icons",

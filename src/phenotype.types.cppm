@@ -2119,6 +2119,10 @@ struct LayoutNode {
     float        content_height      = 0.0f;
     float        scroll_offset_y     = 0.0f;
     ScrollState* scroll_state        = nullptr;
+    float        scroll_edge_fade_extent = 0.0f;
+    Color        scroll_edge_fade_color  = {0, 0, 0, 0};
+    bool         scroll_edge_fade_top    = true;
+    bool         scroll_edge_fade_bottom = true;
 
     // Computed layout
     float x = 0, y = 0, width = 0, height = 0;

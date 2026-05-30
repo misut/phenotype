@@ -50,6 +50,11 @@ void finder_grid(State const& state,
                 return;
             }
             layout::spacer(chrome.icon_grid_top_inset);
+            layout::ScrollViewOptions scroll_options;
+            scroll_options.gap = SpaceToken::Sm;
+            scroll_options.edge_fade.extent = 28.0f;
+            scroll_options.edge_fade.color =
+                main_content_shell_material_style().tint;
             layout::scroll_view(chrome.icon_grid_scroll_height, [&] {
                 auto columns = file_explorer_demo::explorer_icon_grid_columns(chrome);
                 layout::grid(std::move(columns), chrome.icon_grid_row_height, [&] {
@@ -87,7 +92,7 @@ void finder_grid(State const& state,
                            MainAxisAlignment::Start);
                     }
                 }, chrome.icon_grid_gap);
-            }, SpaceToken::Sm);
+            }, scroll_options);
         });
 }
 
