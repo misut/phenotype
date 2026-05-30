@@ -1260,6 +1260,42 @@ struct KeyCommandHarness {
 
 } // namespace input_regression
 
+namespace scroll_containment_regression {
+
+struct State {};
+using Msg = int;
+
+static void update(State&, Msg) {}
+
+static void view(State const&) {
+    phenotype::layout::column([&] {
+        phenotype::layout::scroll_view(80.0f, [] {
+            for (int i = 0; i < 8; ++i)
+                phenotype::widget::text("inner row");
+        });
+        phenotype::layout::spacer(1200);
+    });
+}
+
+struct Harness {
+    platform_api platform = make_stub_platform("test-scroll-containment", nullptr);
+    native_host host{};
+
+    Harness() {
+        input_regression::reset_core_state();
+        host.platform = &platform;
+        phenotype::native::run<State, Msg>(host, view, update);
+        assert(phenotype::detail::g_app.scroll_targets.size() == 1);
+    }
+
+    ~Harness() {
+        phenotype::native::detail::shutdown_host(host);
+        input_regression::reset_core_state();
+    }
+};
+
+} // namespace scroll_containment_regression
+
 #ifdef _WIN32
 struct WindowsInputHarness {
     HWND window = nullptr;
@@ -2122,6 +2158,39 @@ static void test_shell_scroll_and_escape_observability() {
     assert(debug.result == "handled");
     assert(has_metric("key", "escape", "handled"));
     std::puts("PASS: shared shell scroll and escape observability");
+}
+
+static void test_shell_scroll_at_cursor_prefers_inner_scroll_view() {
+    using namespace scroll_containment_regression;
+
+    Harness harness;
+    auto& app = phenotype::detail::g_app;
+    assert(phenotype::detail::get_total_height() > harness.host.canvas_height());
+    assert(app.scroll_targets.size() == 1);
+    auto& target = app.scroll_targets[0];
+    assert(target.state != nullptr);
+    assert(target.content_height > target.h);
+    assert(phenotype::detail::get_scroll_y() == 0.0f);
+    auto* scroll_state = target.state;
+    assert(scroll_state->offset_y == 0.0f);
+    float const cursor_x = target.x + target.w * 0.5f;
+    float const cursor_y = target.y + target.h * 0.5f;
+
+    assert(phenotype::native::detail::dispatch_scroll_pixels_at_cursor(
+        -40.0f,
+        harness.host.canvas_height(),
+        "wheel-precise",
+        cursor_x,
+        cursor_y));
+
+    assert(phenotype::detail::get_scroll_y() == 0.0f);
+    assert(scroll_state->offset_y == 40.0f);
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.event == "scroll");
+    assert(debug.detail == "wheel-view");
+    assert(debug.result == "handled");
+
+    std::puts("PASS: shell scroll at cursor prefers inner scroll_view");
 }
 
 // ============================================================
@@ -4408,6 +4477,7 @@ int main() {
     test_focus_transitions_sync_platform_input();
     test_shell_repaint_coalesces_nested_requests();
     test_shell_scroll_and_escape_observability();
+    test_shell_scroll_at_cursor_prefers_inner_scroll_view();
 #ifdef __APPLE__
     test_macos_appkit_activation_slice_gate();
     test_macos_appkit_function_key_resolution();

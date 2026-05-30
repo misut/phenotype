@@ -90,17 +90,28 @@ phenotype::MaterialStyle main_content_shell_material_style() {
     return material;
 }
 
-float main_content_shell_inner_height(
+float main_content_shell_outer_height(
         file_explorer_demo::ExplorerState const& explorer) {
     auto const viewport =
         file_explorer_demo::effective_viewport(explorer, "desktop");
-    float const outer_height = std::max(
+    return std::max(
         0.0f,
         static_cast<float>(viewport.height)
             - file_explorer_demo::k_desktop_window_content_inset * 2.0f);
-    float const padding =
+}
+
+float sidebar_body_scroll_height(
+        file_explorer_demo::ExplorerState const& explorer) {
+    float const sidebar_padding =
+        phenotype::layout::space_value(phenotype::SpaceToken::Lg);
+    float const sidebar_gap =
         phenotype::layout::space_value(phenotype::SpaceToken::Xs);
-    return std::max(0.0f, outer_height - padding * 2.0f);
+    return std::max(
+        0.0f,
+        main_content_shell_outer_height(explorer)
+            - sidebar_padding * 2.0f
+            - k_native_window_control_reserve_height
+            - sidebar_gap);
 }
 
 phenotype::layout::MaterialSurfaceOptions main_content_shell_options(
@@ -113,7 +124,7 @@ phenotype::layout::MaterialSurfaceOptions main_content_shell_options(
     options.direction = FlexDirection::Column;
     options.kind = MaterialKind::Regular;
     options.max_width = 0.0f;
-    options.fixed_height = main_content_shell_inner_height(explorer);
+    options.fixed_outer_height = main_content_shell_outer_height(explorer);
     options.padding = SpaceToken::Xs;
     options.gap = SpaceToken::Xs;
     options.gap_px = 0.0f;
@@ -221,7 +232,7 @@ phenotype::layout::MaterialSurfaceOptions finder_sidebar_options(
         layout::GlassSurfacePreset::Sidebar,
         "Sidebar");
     options.max_width = k_sidebar_width;
-    options.fixed_height = main_content_shell_inner_height(explorer);
+    options.fixed_outer_height = main_content_shell_outer_height(explorer);
     options.padding = SpaceToken::Lg;
     options.gap = SpaceToken::Xs;
     options.border_radius = k_window_radius;

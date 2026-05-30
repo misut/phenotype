@@ -447,30 +447,44 @@ void finder_sidebar(State const& state) {
     auto const& icon_cache = state.icon_cache;
     layout::sidebar(finder_sidebar_options(explorer), [&] {
         native_window_control_reserve_slot();
-        sidebar_row(labels.sidebar_recents, "recents", "root", in_root, icon_cache);
-        sidebar_row(labels.sidebar_shared, "shared", "shared",
-                    relative == explorer.root_label + "/Shared", icon_cache);
-        layout::spacer(k_sidebar_section_gap);
-        sidebar_heading(labels.favorites, state.favorites_expanded, "favorites");
-        float const favorite_progress =
-            phenotype::animate_float(state.favorites_expanded ? 1.0f : 0.0f, 180);
-        if (favorite_progress > 0.05f) {
-            sidebar_row(labels.applications, "app", "root", false, icon_cache);
-            sidebar_row(labels.desktop, "desktop", "root", false, icon_cache);
-            sidebar_row(labels.documents, "doc", "documents",
-                        relative == explorer.root_label + "/Documents", icon_cache);
-            sidebar_row(labels.downloads, "download", "root", false, icon_cache);
-        }
-        layout::spacer(k_sidebar_section_gap * std::max(favorite_progress, 0.35f));
-        sidebar_heading(labels.locations, state.locations_expanded, "locations");
-        float const locations_progress =
-            phenotype::animate_float(state.locations_expanded ? 1.0f : 0.0f, 180);
-        if (locations_progress > 0.05f) {
-            sidebar_row(labels.icloud_drive, "cloud", "root", false, icon_cache);
-            sidebar_row(labels.home, "home", "root", false, icon_cache);
-            sidebar_row(labels.airdrop, "airdrop", "shared", false, icon_cache);
-            sidebar_row(labels.trash, "trash", "trash", relative == "Trash", icon_cache);
-        }
+        layout::scroll_view(sidebar_body_scroll_height(explorer), [&] {
+            sidebar_row(labels.sidebar_recents,
+                        "recents",
+                        "root",
+                        in_root,
+                        icon_cache);
+            sidebar_row(labels.sidebar_shared, "shared", "shared",
+                        relative == explorer.root_label + "/Shared", icon_cache);
+            layout::spacer(k_sidebar_section_gap);
+            sidebar_heading(labels.favorites, state.favorites_expanded, "favorites");
+            float const favorite_progress =
+                phenotype::animate_float(
+                    state.favorites_expanded ? 1.0f : 0.0f,
+                    180);
+            if (favorite_progress > 0.05f) {
+                sidebar_row(labels.applications, "app", "root", false, icon_cache);
+                sidebar_row(labels.desktop, "desktop", "root", false, icon_cache);
+                sidebar_row(labels.documents, "doc", "documents",
+                            relative == explorer.root_label + "/Documents", icon_cache);
+                sidebar_row(labels.downloads, "download", "root", false, icon_cache);
+            }
+            layout::spacer(k_sidebar_section_gap * std::max(favorite_progress, 0.35f));
+            sidebar_heading(labels.locations, state.locations_expanded, "locations");
+            float const locations_progress =
+                phenotype::animate_float(
+                    state.locations_expanded ? 1.0f : 0.0f,
+                    180);
+            if (locations_progress > 0.05f) {
+                sidebar_row(labels.icloud_drive, "cloud", "root", false, icon_cache);
+                sidebar_row(labels.home, "home", "root", false, icon_cache);
+                sidebar_row(labels.airdrop, "airdrop", "shared", false, icon_cache);
+                sidebar_row(labels.trash,
+                            "trash",
+                            "trash",
+                            relative == "Trash",
+                            icon_cache);
+            }
+        }, SpaceToken::Xs);
     });
 }
 

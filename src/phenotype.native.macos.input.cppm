@@ -1532,11 +1532,20 @@ inline bool handle_local_scroll_event(id event) {
     bool handled = false;
     bool handled_y = false;
     bool handled_x = false;
+    float cursor_x = g_app_state.last_mouse_x;
+    float cursor_y = g_app_state.last_mouse_y;
+    bool const has_cursor = event_cursor_position(event, cursor_x, cursor_y);
+    if (has_cursor) {
+        g_app_state.last_mouse_x = cursor_x;
+        g_app_state.last_mouse_y = cursor_y;
+    }
     if (normalized_delta != 0.0f) {
-        handled_y = dispatch_scroll_pixels(
+        handled_y = dispatch_scroll_pixels_at_cursor(
             normalized_delta,
             viewport_height_value,
-            has_precise_scrolling_deltas ? "wheel-precise" : "wheel-line");
+            has_precise_scrolling_deltas ? "wheel-precise" : "wheel-line",
+            cursor_x,
+            cursor_y);
         handled = handled_y;
     }
     if (normalized_delta_x != 0.0f) {

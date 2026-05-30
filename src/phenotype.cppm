@@ -2946,6 +2946,9 @@ struct GlassBackgroundEffectOptions {
     MainAxisAlignment main_align = MainAxisAlignment::Start;
     float max_width = 0.0f;
     float fixed_height = -1.0f;
+    // Rendered node height. Use when a surface must fit a parent/viewport
+    // without callers manually subtracting its top/bottom padding.
+    float fixed_outer_height = -1.0f;
     float border_radius = -1.0f;
     MaterialSurfaceShape shape = MaterialSurfaceShape::RoundedRectangle;
     float border_width = 0.0f;
@@ -3441,6 +3444,9 @@ struct MaterialSurfaceOptions {
     MainAxisAlignment main_align = MainAxisAlignment::Start;
     float max_width = 0.0f;
     float fixed_height = -1.0f;
+    // Rendered node height. Use when a surface must fit a parent/viewport
+    // without callers manually subtracting its top/bottom padding.
+    float fixed_outer_height = -1.0f;
     float border_radius = -1.0f;
     MaterialSurfaceShape shape = MaterialSurfaceShape::Default;
     float border_width = -1.0f;
@@ -3468,6 +3474,7 @@ struct GlassEffectOptions {
     MainAxisAlignment main_align = MainAxisAlignment::Start;
     float max_width = 0.0f;
     float fixed_height = -1.0f;
+    float fixed_outer_height = -1.0f;
     float border_radius = -1.0f;
     MaterialSurfaceShape shape = MaterialSurfaceShape::Capsule;
     float border_width = 0.0f;
@@ -3667,6 +3674,7 @@ inline MaterialSurfaceOptions glass_effect_surface_options(
     surface.main_align = options.main_align;
     surface.max_width = options.max_width;
     surface.fixed_height = options.fixed_height;
+    surface.fixed_outer_height = options.fixed_outer_height;
     surface.border_radius = options.border_radius;
     surface.shape = options.shape;
     surface.border_width = options.border_width;
@@ -3716,6 +3724,7 @@ inline MaterialSurfaceOptions glass_background_effect_surface_options(
     surface.main_align = options.main_align;
     surface.max_width = options.max_width;
     surface.fixed_height = options.fixed_height;
+    surface.fixed_outer_height = options.fixed_outer_height;
     surface.border_radius = options.border_radius;
     surface.shape = options.shape;
     surface.border_width = options.border_width;
@@ -3827,6 +3836,12 @@ inline void configure_material_surface(LayoutNode& node,
         node.style.padding[i] = option_padding[i] >= 0.0f
             ? option_padding[i]
             : default_padding[i];
+    }
+    if (options.fixed_outer_height >= 0.0f) {
+        float const vertical_padding =
+            node.style.padding[0] + node.style.padding[2];
+        node.style.fixed_height =
+            std::max(0.0f, options.fixed_outer_height - vertical_padding);
     }
     if (options.semantic_label && options.semantic_label[0] != '\0')
         node.debug_semantic_label = options.semantic_label;
