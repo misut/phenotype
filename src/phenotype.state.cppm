@@ -1560,6 +1560,46 @@ inline void configure_active_scene(SceneDescriptor descriptor) {
     detail::configure_active_scene(std::move(descriptor));
 }
 
+using SceneRunnerCallback = void (*)(void*);
+
+inline void install_active_scene_runner(SceneRunnerCallback runner,
+                                        void* context) {
+    detail::install_app_runner(runner, context);
+}
+
+inline void install_scene_runner(SceneHandle const& handle,
+                                 SceneRunnerCallback runner,
+                                 void* context) {
+    SceneActivation activate{handle};
+    install_active_scene_runner(runner, context);
+}
+
+inline void clear_scene_runner(SceneHandle const& handle) {
+    install_scene_runner(handle, nullptr, nullptr);
+}
+
+inline void clear_active_scene_runner() {
+    install_active_scene_runner(nullptr, nullptr);
+}
+
+inline bool active_scene_has_runner() {
+    return detail::g_app().app_runner != nullptr;
+}
+
+inline bool scene_has_runner(SceneHandle const& handle) {
+    SceneActivation activate{handle};
+    return active_scene_has_runner();
+}
+
+inline void trigger_active_scene_rebuild() {
+    detail::trigger_rebuild();
+}
+
+inline void trigger_scene_rebuild(SceneHandle const& handle) {
+    SceneActivation activate{handle};
+    trigger_active_scene_rebuild();
+}
+
 inline void clear_messages() {
     detail::msg_queue().clear();
 }

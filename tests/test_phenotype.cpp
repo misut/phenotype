@@ -548,6 +548,52 @@ void test_app_runner_uses_context_pointer() {
     std::puts("PASS: app runner uses context pointer");
 }
 
+void test_runtime_scene_runner_targets_scene() {
+    struct RunnerContext {
+        int rebuilds = 0;
+        int payload = 0;
+    };
+
+    auto main_scene = runtime::main_scene();
+    auto settings_scene = runtime::ensure_scene(SceneDescriptor{
+        .id = "runner-settings-scene",
+        .title = "Runner Settings",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+    auto active_before = runtime::active_scene_handle();
+
+    RunnerContext main_context{.payload = 3};
+    RunnerContext settings_context{.payload = 5};
+    auto runner = [](void* raw) {
+        auto& context = *static_cast<RunnerContext*>(raw);
+        context.rebuilds += context.payload;
+    };
+
+    runtime::install_scene_runner(main_scene, runner, &main_context);
+    runtime::install_scene_runner(settings_scene, runner, &settings_context);
+    assert(runtime::scene_has_runner(main_scene));
+    assert(runtime::scene_has_runner(settings_scene));
+
+    runtime::trigger_scene_rebuild(settings_scene);
+    assert(main_context.rebuilds == 0);
+    assert(settings_context.rebuilds == 5);
+    assert(runtime::active_scene_handle().id == active_before.id);
+
+    runtime::trigger_scene_rebuild(main_scene);
+    assert(main_context.rebuilds == 3);
+    assert(settings_context.rebuilds == 5);
+    assert(runtime::active_scene_handle().id == active_before.id);
+
+    runtime::clear_scene_runner(settings_scene);
+    assert(!runtime::scene_has_runner(settings_scene));
+    assert(runtime::scene_has_runner(main_scene));
+    runtime::clear_scene_runner(main_scene);
+    assert(!runtime::scene_has_runner(main_scene));
+
+    std::puts("PASS: runtime scene runner targets scenes");
+}
+
 void test_system_theme_preferences_are_pure_overlays() {
     Theme theme{};
     theme.default_font_family = "Pretendard";
@@ -2875,6 +2921,7 @@ int main() {
     test_scene_runtime_isolates_app_state_and_messages();
     test_render_surface_runtime_binds_scene_and_tracks_frames();
     test_app_runner_uses_context_pointer();
+    test_runtime_scene_runner_targets_scene();
     test_system_theme_preferences_are_pure_overlays();
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();
