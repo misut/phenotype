@@ -101,6 +101,14 @@ window handles in Electron/Tauri: scene identity is explicit, queue ownership
 stays scene-local, render-surface ownership is explicit, and callers do not
 depend on the singleton layout used by the compatibility runner.
 
+Scene runners follow the same rule. `runtime::install_scene_runner`,
+`runtime::trigger_scene_rebuild`, `runtime::clear_scene_runner`, and their
+active-scene variants wrap the low-level callback/context runner slot with a
+`SceneHandle`. They are intentionally small transitional hooks, but they let
+settings or debug-window code attach one runner per scene root without poking
+`detail::install_app_runner` directly, and targeted rebuilds restore the
+caller's previous active scene after running.
+
 ## Migration Rules
 
 - Keep `phenotype::run<State, Msg>` as the simple single-window entry point.
