@@ -430,11 +430,6 @@ struct AppState {
     std::vector<unsigned int> focusable_ids;
     // Tracks input nodes by callback_id for focus / handle_key lookup.
     std::vector<std::pair<unsigned int, NodeHandle>> input_nodes;
-    // Installed by phenotype::run<State, Msg>(...). trigger_rebuild calls it.
-    // The context pointer lets each scene own its eventual view/update runner
-    // without falling back to a single global static.
-    void (*app_runner)(void*) = nullptr;
-    void* app_runner_context = nullptr;
     // Sparse map of typed text-input dispatchers, registered by TextField<Msg>.
     std::vector<std::pair<unsigned int, InputHandler>> input_handlers;
     // FNV-1a 64-bit hash of the previous frame's cmd buffer. Used by
@@ -639,6 +634,12 @@ namespace detail {
         std::unique_ptr<AppState> owned_app{};
         AppState* app = nullptr;
         std::vector<DispatchedMsg> messages{};
+        // Installed by phenotype::run<State, Msg>(...) or the transitional
+        // runtime scene-runner API. trigger_rebuild calls this scene-local
+        // root runner; the context pointer lets each scene own its eventual
+        // view/update runner without falling back to a single global static.
+        void (*runner)(void*) = nullptr;
+        void* runner_context = nullptr;
         std::map<std::size_t, LocalEntry> framework_local_store{};
         std::uint32_t framework_local_gen = 1;
 
@@ -751,11 +752,16 @@ namespace detail {
         scene.descriptor = std::move(descriptor);
     }
 
-    inline SceneScheduleSnapshot scene_schedule_snapshot(AppState const* app) {
-        if (!app)
-            return SceneScheduleSnapshot{};
+    inline SceneScheduleSnapshot scene_schedule_snapshot(
+            SceneRuntime const& scene) {
+        auto const* app = scene.app;
+        if (!app) {
+            return SceneScheduleSnapshot{
+                .runner_installed = scene.runner != nullptr,
+            };
+        }
         return SceneScheduleSnapshot{
-            .runner_installed = app->app_runner != nullptr,
+            .runner_installed = scene.runner != nullptr,
             .has_active_animations = app->has_active_animations,
             .scrollbar_animation_active = app->scrollbar_animation_active,
             .has_active_input_motion = app->has_active_input_motion,
@@ -781,7 +787,7 @@ namespace detail {
             .framework_local_entries =
                 static_cast<unsigned int>(scene.framework_local_store.size()),
             .framework_local_generation = scene.framework_local_gen,
-            .schedule = scene_schedule_snapshot(app),
+            .schedule = scene_schedule_snapshot(scene),
         };
     }
 
@@ -1040,7 +1046,7 @@ namespace detail {
     }
 
     inline SceneScheduleSnapshot active_scene_schedule_snapshot() {
-        return scene_schedule_snapshot(&g_app());
+        return scene_schedule_snapshot(active_scene_runtime());
     }
 
     inline bool active_scene_has_view_animations() {
@@ -1068,12 +1074,14 @@ namespace detail {
     }
 
     inline void install_app_runner(void (*runner)(void*), void* context) {
-        g_app().app_runner = runner;
-        g_app().app_runner_context = context;
+        auto& scene = active_scene_runtime();
+        scene.runner = runner;
+        scene.runner_context = context;
     }
 
     inline void install_app_runner(void (*runner)()) {
-        g_app().app_runner = runner
+        auto& scene = active_scene_runtime();
+        scene.runner = runner
             ? [](void* raw) {
                 auto* thunk = static_cast<void (**)()>(raw);
                 (*thunk)();
@@ -1081,12 +1089,13 @@ namespace detail {
             : nullptr;
         static void (*legacy_runner)() = nullptr;
         legacy_runner = runner;
-        g_app().app_runner_context = runner ? &legacy_runner : nullptr;
+        scene.runner_context = runner ? &legacy_runner : nullptr;
     }
 
     inline void trigger_rebuild() {
-        if (g_app().app_runner)
-            g_app().app_runner(g_app().app_runner_context);
+        auto& scene = active_scene_runtime();
+        if (scene.runner)
+            scene.runner(scene.runner_context);
     }
 
     // ============================================================
@@ -1583,7 +1592,7 @@ inline void clear_active_scene_runner() {
 }
 
 inline bool active_scene_has_runner() {
-    return detail::g_app().app_runner != nullptr;
+    return detail::active_scene_runtime().runner != nullptr;
 }
 
 inline bool scene_has_runner(SceneHandle const& handle) {

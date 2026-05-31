@@ -72,13 +72,14 @@ these scene-schedule helpers instead of reading global flags directly, so a
 future settings or debug window can request frames without waking unrelated
 scenes.
 
-Scene rebuild runners are stored as context-aware callbacks on the scene's
-`AppState`. The compatibility `run<State, Msg>` entry point still installs one
-main-scene runner, but that runner now receives an explicit context object
-containing its host, user state, view, and update closures. This is the
-transition point toward multiple scene roots: a settings or debug scene can get
-its own runner context instead of sharing a process-global `saved_view` /
-`saved_update` singleton.
+Scene rebuild runners are stored as context-aware callbacks on `SceneRuntime`,
+not on widget app state. The compatibility `run<State, Msg>` entry point still
+installs one main-scene runner, but that runner now receives an explicit
+context object containing its host, user state, view, and update closures. This
+is the transition point toward multiple scene roots: a settings or debug scene
+can get its own runner context instead of sharing a process-global `saved_view`
+/ `saved_update` singleton, and resetting an `AppState` cannot accidentally
+detach the scene root that owns it.
 
 The frame pipeline itself is also shared. `run_scene_rebuild_frame` owns the
 update, view, layout, paint, flush, trace, and scheduling-flag lifecycle, while

@@ -84,8 +84,7 @@ inline void view_full(State const& s) {
 
 void reset_app() {
     auto& app = detail::g_app();
-    app.app_runner = nullptr;
-    app.app_runner_context = nullptr;
+    detail::install_app_runner(nullptr, nullptr);
     app.callbacks.clear();
     app.callback_roles.clear();
     app.input_handlers.clear();

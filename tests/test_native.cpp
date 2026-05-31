@@ -1201,8 +1201,7 @@ inline constexpr unsigned int text_field_id = 5;
 
 static void reset_core_state() {
     auto& app = phenotype::detail::g_app();
-    app.app_runner = nullptr;
-    app.app_runner_context = nullptr;
+    phenotype::detail::install_app_runner(nullptr, nullptr);
     app.callbacks.clear();
     app.callback_roles.clear();
     app.key_commands.clear();
