@@ -640,6 +640,7 @@ namespace detail {
         // view/update runner without falling back to a single global static.
         void (*runner)(void*) = nullptr;
         void* runner_context = nullptr;
+        std::shared_ptr<void> runner_context_owner{};
         std::map<std::size_t, LocalEntry> framework_local_store{};
         std::uint32_t framework_local_gen = 1;
 
@@ -1073,10 +1074,17 @@ namespace detail {
             && !active_scene_has_scrollbar_animation();
     }
 
-    inline void install_app_runner(void (*runner)(void*), void* context) {
+    inline void install_app_runner(void (*runner)(void*),
+                                   void* context,
+                                   std::shared_ptr<void> context_owner) {
         auto& scene = active_scene_runtime();
         scene.runner = runner;
         scene.runner_context = context;
+        scene.runner_context_owner = runner ? std::move(context_owner) : nullptr;
+    }
+
+    inline void install_app_runner(void (*runner)(void*), void* context) {
+        install_app_runner(runner, context, nullptr);
     }
 
     inline void install_app_runner(void (*runner)()) {
@@ -1090,6 +1098,7 @@ namespace detail {
         static void (*legacy_runner)() = nullptr;
         legacy_runner = runner;
         scene.runner_context = runner ? &legacy_runner : nullptr;
+        scene.runner_context_owner = nullptr;
     }
 
     inline void trigger_rebuild() {

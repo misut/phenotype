@@ -2678,7 +2678,6 @@ void run(Host& host, View view, Update update) {
         View view;
         Update update;
     };
-    static RunContext context{&host, State{}, view, update};
     detail::bind_scene_runtime(detail::default_scene_runtime());
     detail::configure_active_scene(SceneDescriptor{
         .id = "main",
@@ -2687,10 +2686,12 @@ void run(Host& host, View view, Update update) {
         .visible = true,
     });
     detail::msg_queue().clear();
-    context.host = &host;
-    context.state = State{};
-    context.view = std::move(view);
-    context.update = std::move(update);
+    auto context = std::make_shared<RunContext>(RunContext{
+        .host = &host,
+        .state = State{},
+        .view = std::move(view),
+        .update = std::move(update),
+    });
     detail::g_app().input_debug = {};
     detail::g_app().callback_roles.clear();
     detail::g_app().focus_visible = false;
@@ -2699,6 +2700,7 @@ void run(Host& host, View view, Update update) {
     detail::g_app().prev_pressed_id = 0xFFFFFFFFu;
     detail::reset_pointer_inputs(detail::g_app());
 
+    auto* raw_context = context.get();
     detail::install_app_runner([](void* raw) {
         auto& context = *static_cast<RunContext*>(raw);
         detail::NativeFrameBackend<Host> backend{context.host};
@@ -2710,7 +2712,7 @@ void run(Host& host, View view, Update update) {
             },
             [&] { context.view(context.state); },
             backend);
-    }, &context);
+    }, raw_context, std::move(context));
     detail::trigger_rebuild();
 }
 #else // __wasi__
@@ -2723,7 +2725,6 @@ void run(View view, Update update) {
         View view;
         Update update;
     };
-    static RunContext context{State{}, view, update};
     detail::bind_scene_runtime(detail::default_scene_runtime());
     detail::configure_active_scene(SceneDescriptor{
         .id = "main",
@@ -2732,9 +2733,11 @@ void run(View view, Update update) {
         .visible = true,
     });
     detail::msg_queue().clear();
-    context.state = State{};
-    context.view = std::move(view);
-    context.update = std::move(update);
+    auto context = std::make_shared<RunContext>(RunContext{
+        .state = State{},
+        .view = std::move(view),
+        .update = std::move(update),
+    });
     detail::g_app().input_debug = {};
     detail::g_app().callback_roles.clear();
     detail::g_app().focus_visible = false;
@@ -2743,6 +2746,7 @@ void run(View view, Update update) {
     detail::g_app().prev_pressed_id = 0xFFFFFFFFu;
     detail::reset_pointer_inputs(detail::g_app());
 
+    auto* raw_context = context.get();
     detail::install_app_runner([](void* raw) {
         auto& context = *static_cast<RunContext*>(raw);
         detail::WasiFrameBackend backend{};
@@ -2754,7 +2758,7 @@ void run(View view, Update update) {
             },
             [&] { context.view(context.state); },
             backend);
-    }, &context);
+    }, raw_context, std::move(context));
     detail::trigger_rebuild();
 }
 #endif
