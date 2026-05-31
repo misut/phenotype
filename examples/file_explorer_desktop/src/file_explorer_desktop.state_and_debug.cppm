@@ -51,6 +51,8 @@ struct State {
         apply_startup_inputs(explorer, "desktop");
         search_visible = !explorer.search.empty();
         sync_runtime_theme(explorer);
+        if (initial_settings_open())
+            phenotype::detail::post<Msg>(OpenSettings{});
     }
 };
 

@@ -3,6 +3,7 @@ module;
 #if !defined(__wasi__)
 #include <filesystem>
 #include <fstream>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -194,6 +195,32 @@ struct WindowOptions {
     char const* settings_menu_title = "Settings...";
     char const* settings_menu_key_equivalent = ",";
     void (*on_settings_menu)() = nullptr;
+};
+
+struct NativePreferencesChoice {
+    char const* label = "";
+    char const* value = "";
+    bool selected = false;
+};
+
+struct NativePreferencesSection {
+    char const* title = "";
+    char const* subtitle = "";
+    NativePreferencesChoice const* choices = nullptr;
+    std::size_t choice_count = 0;
+    void (*on_select)(char const* value, void* user_data) = nullptr;
+};
+
+struct NativePreferencesWindowOptions {
+    char const* identifier = "preferences";
+    char const* title = "Settings";
+    int width = 420;
+    int height = 300;
+    char const* appearance = "system";
+    NativePreferencesSection const* sections = nullptr;
+    std::size_t section_count = 0;
+    void* user_data = nullptr;
+    void (*on_close)(void* user_data) = nullptr;
 };
 
 struct NativeSurfaceDescriptor {

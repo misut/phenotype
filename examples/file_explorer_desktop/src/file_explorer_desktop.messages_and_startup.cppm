@@ -96,6 +96,7 @@ std::string g_initial_filesystem_root_source = "default-home";
 bool g_use_demo_root = false;
 bool g_initial_filesystem_root_configured = false;
 bool g_initial_filesystem_mutations_allowed = false;
+bool g_initial_settings_open = false;
 
 std::string read_text_file(fs::path const& path) {
     auto input = std::ifstream{path, std::ios::binary};
@@ -151,6 +152,11 @@ bool apply_initial_root_arg(
         g_initial_filesystem_mutations_allowed = true;
         return false;
     }
+    if (arg == "--settings" || arg == "--open-settings"
+        || arg == "--preferences") {
+        g_initial_settings_open = true;
+        return false;
+    }
     if (arg == "--path" || arg == "--root") {
         if (next && *next)
             set_initial_filesystem_root(fs::path{next}, "command-line");
@@ -196,6 +202,11 @@ void configure_initial_filesystem_root(int argc, char** argv) {
             "PHENOTYPE_FILE_EXPLORER_ALLOW_FILESYSTEM_MUTATIONS"))) {
         g_initial_filesystem_mutations_allowed = true;
     }
+    if (env_truthy(std::getenv("PHENOTYPE_FILE_EXPLORER_OPEN_SETTINGS"))
+        || env_truthy(std::getenv(
+            "PHENOTYPE_FILE_EXPLORER_SETTINGS_OPEN"))) {
+        g_initial_settings_open = true;
+    }
     for (int i = 1; i < argc; ++i) {
         auto arg = std::string_view{argv[i]};
         char const* next = (i + 1) < argc ? argv[i + 1] : nullptr;
@@ -206,6 +217,10 @@ void configure_initial_filesystem_root(int argc, char** argv) {
         && !std::getenv("PHENOTYPE_ARTIFACT_EXIT")) {
         set_initial_filesystem_root(home_directory(), "default-home", "Home");
     }
+}
+
+bool initial_settings_open() {
+    return g_initial_settings_open;
 }
 
 void apply_startup_inputs(file_explorer_demo::ExplorerState& state,
