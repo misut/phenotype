@@ -697,6 +697,7 @@ struct PlatformRuntimeSnapshot {
     std::string focus_visibility_reason = "no_focus";
     std::optional<unsigned int> hovered_callback_id;
     std::optional<unsigned int> pressed_callback_id;
+    json::Value application_runtime = json::Value{json::Object{}};
     json::Value scenes = json::Value{json::Array{}};
     json::Value render_surfaces = json::Value{json::Array{}};
     json::Value details = json::Value{json::Object{}};
@@ -5525,6 +5526,7 @@ inline json::Value platform_runtime_to_json(
     out.emplace(
         "pressed_callback_id",
         callback_id_to_json(runtime.pressed_callback_id));
+    out.emplace("application_runtime", runtime.application_runtime);
     out.emplace("scenes", runtime.scenes);
     out.emplace("render_surfaces", runtime.render_surfaces);
     out.emplace("details", runtime.details);

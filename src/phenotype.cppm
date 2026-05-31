@@ -7301,6 +7301,55 @@ inline json::Value render_surface_snapshots_to_json() {
     return json::Value{std::move(out)};
 }
 
+inline json::Value application_runtime_snapshot_to_json(
+        ApplicationRuntimeSnapshot const& snapshot) {
+    json::Object out;
+    out.emplace("active_scene_id", json::Value{snapshot.active_scene_id});
+    out.emplace(
+        "active_scene_role",
+        json::Value{scene_role_name(snapshot.active_scene_role)});
+    out.emplace(
+        "active_scene_visible",
+        json::Value{snapshot.active_scene_visible});
+    out.emplace(
+        "active_render_surface_id",
+        json::Value{snapshot.active_render_surface_id});
+    out.emplace(
+        "active_render_surface_scene_id",
+        json::Value{snapshot.active_render_surface_scene_id});
+    out.emplace(
+        "active_render_surface_role",
+        json::Value{
+            render_surface_role_name(snapshot.active_render_surface_role)});
+    out.emplace(
+        "active_render_surface_visible",
+        json::Value{snapshot.active_render_surface_visible});
+    out.emplace(
+        "scene_count",
+        json::Value{static_cast<std::int64_t>(snapshot.scene_count)});
+    out.emplace(
+        "visible_scene_count",
+        json::Value{static_cast<std::int64_t>(snapshot.visible_scene_count)});
+    out.emplace(
+        "scene_runner_count",
+        json::Value{static_cast<std::int64_t>(snapshot.scene_runner_count)});
+    out.emplace(
+        "scheduled_scene_count",
+        json::Value{static_cast<std::int64_t>(snapshot.scheduled_scene_count)});
+    out.emplace(
+        "render_surface_count",
+        json::Value{static_cast<std::int64_t>(snapshot.render_surface_count)});
+    out.emplace(
+        "visible_render_surface_count",
+        json::Value{static_cast<std::int64_t>(
+            snapshot.visible_render_surface_count)});
+    out.emplace(
+        "damaged_render_surface_count",
+        json::Value{static_cast<std::int64_t>(
+            snapshot.damaged_render_surface_count)});
+    return json::Value{std::move(out)};
+}
+
 inline diag::PlatformCapabilitiesSnapshot build_platform_capabilities_snapshot(
         std::optional<diag::PlatformCapabilitiesSnapshot> platform_override = std::nullopt) {
     auto snapshot = platform_override.has_value()
@@ -7342,6 +7391,8 @@ inline diag::PlatformRuntimeSnapshot build_platform_runtime_snapshot(
         focus_visibility_reason_name(g_app().focus_visibility_reason);
     runtime.hovered_callback_id = optional_callback_id(g_app().hovered_id);
     runtime.pressed_callback_id = optional_callback_id(g_app().pressed_id);
+    runtime.application_runtime =
+        application_runtime_snapshot_to_json(runtime::application_runtime());
     runtime.scenes = scene_snapshots_to_json();
     runtime.render_surfaces = render_surface_snapshots_to_json();
     runtime.details = runtime_details_override.has_value()

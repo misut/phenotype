@@ -52,12 +52,14 @@ Metal, D3D, and Vulkan resources into this surface owner before multiple native
 phenotype windows can render independently, but the public runtime snapshots and
 tests now make that ownership boundary explicit.
 
-The shared debug plane publishes both runtime owners in
+The shared debug plane publishes the process owner in
+`debug.platform_runtime.application_runtime`, then the per-root owners in
 `debug.platform_runtime.scenes[]` and
 `debug.platform_runtime.render_surfaces[]`. CLI, artifact, and side-panel tools
-can now confirm which scene owns hover/focus/message state and which surface
-owns size, visibility, damage, and frame counters before relying on
-platform-specific renderer diagnostics.
+can now confirm which scene and surface are active, how many roots are visible,
+which scenes have runners or scheduled ticks, and which surface owns size,
+visibility, damage, and frame counters before relying on platform-specific
+renderer diagnostics.
 Render surfaces also own the paint/flush cache key (`last_paint_hash`) and
 flush/skip counters. The legacy `AppState::last_paint_hash` remains mirrored for
 older tests and callers, but `flush_if_changed` compares against the active
@@ -189,8 +191,8 @@ scene's runner, queue, and framework-local storage for a later reopen.
 
 ## Settings Window Path
 
-The settings window should become a `SceneRole::Settings` scene. On macOS it can
-still be opened from the native application menu, but the content should be a
-phenotype scene backed by its own scene state and render surface. This prevents
-settings interaction from stealing main-window hover/focus state and gives the
-debug panel a clean way to inspect both windows.
+The file-explorer settings window now opens as a `SceneRole::Settings` scene on
+macOS. It is still launched from the native application menu, but the content is
+a phenotype scene backed by its own scene state and render surface. This
+prevents settings interaction from stealing main-window hover/focus state and
+gives the debug panel a clean way to inspect both windows.
