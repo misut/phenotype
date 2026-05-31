@@ -7184,6 +7184,28 @@ inline json::Value scene_schedule_snapshot_to_json(
         "debug_panel_refresh_active",
         json::Value{snapshot.debug_panel_refresh_active});
     out.emplace(
+        "needs_scheduled_tick",
+        json::Value{snapshot.needs_scheduled_tick});
+    out.emplace(
+        "debug_panel_only_refresh",
+        json::Value{snapshot.debug_panel_only_refresh});
+    out.emplace(
+        "scheduled_tick_interval_ns",
+        json::Value{
+            static_cast<std::int64_t>(snapshot.scheduled_tick_interval_ns)});
+    out.emplace(
+        "last_scheduled_tick_ns",
+        json::Value{
+            static_cast<std::int64_t>(snapshot.last_scheduled_tick_ns)});
+    out.emplace(
+        "next_scheduled_tick_ns",
+        json::Value{
+            static_cast<std::int64_t>(snapshot.next_scheduled_tick_ns)});
+    out.emplace(
+        "scheduled_tick_count",
+        json::Value{
+            static_cast<std::int64_t>(snapshot.scheduled_tick_count)});
+    out.emplace(
         "frame_trace_input_active",
         json::Value{snapshot.frame_trace_input_active});
     out.emplace(

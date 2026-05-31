@@ -358,6 +358,12 @@ void test_snapshot_shape() {
         assert(schedule.at("scrollbar_animation_active").is_bool());
         assert(schedule.at("has_active_input_motion").is_bool());
         assert(schedule.at("debug_panel_refresh_active").is_bool());
+        assert(schedule.at("needs_scheduled_tick").is_bool());
+        assert(schedule.at("debug_panel_only_refresh").is_bool());
+        (void)schedule.at("scheduled_tick_interval_ns").as_integer();
+        (void)schedule.at("last_scheduled_tick_ns").as_integer();
+        (void)schedule.at("next_scheduled_tick_ns").as_integer();
+        (void)schedule.at("scheduled_tick_count").as_integer();
         assert(schedule.at("frame_trace_input_active").is_bool());
         assert(schedule.at("frame_trace_input_action").is_string());
         (void)schedule.at("frame_trace_count").as_integer();
