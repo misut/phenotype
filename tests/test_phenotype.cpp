@@ -421,6 +421,54 @@ void test_scene_runtime_isolates_app_state_and_messages() {
     std::puts("PASS: scene runtime isolates app state and messages");
 }
 
+void test_message_queue_is_derived_from_active_scene() {
+    auto main_scene = runtime::main_scene();
+    auto tools_scene = runtime::ensure_scene(SceneDescriptor{
+        .id = "message-queue-tools",
+        .title = "Message Queue Tools",
+        .role = SceneRole::Custom,
+        .visible = true,
+    });
+
+    {
+        auto activate_main = runtime::activate_scene(main_scene);
+        runtime::clear_messages();
+        runtime::post<int>(101);
+
+        auto* main_queue = &detail::msg_queue();
+        assert(main_queue == &detail::active_scene_runtime().messages);
+
+        {
+            auto activate_tools = runtime::activate_scene(tools_scene);
+            runtime::clear_messages();
+            auto* tools_queue = &detail::msg_queue();
+            assert(tools_queue == &detail::active_scene_runtime().messages);
+            assert(tools_queue != main_queue);
+            assert(runtime::active_scene().queued_messages == 0u);
+
+            runtime::post<int>(202);
+            assert(tools_queue->size() == 1u);
+        }
+
+        assert(runtime::active_scene().id == "main");
+        assert(&detail::msg_queue() == main_queue);
+        assert(runtime::active_scene().queued_messages == 1u);
+
+        auto main_messages = runtime::drain<int>();
+        assert(main_messages.size() == 1u);
+        assert(main_messages[0] == 101);
+    }
+
+    {
+        auto activate_tools = runtime::activate_scene(tools_scene);
+        auto tools_messages = runtime::drain<int>();
+        assert(tools_messages.size() == 1u);
+        assert(tools_messages[0] == 202);
+    }
+
+    std::puts("PASS: message queue is derived from active scene");
+}
+
 void test_scene_scheduler_clock_is_scene_local() {
     auto main_scene = runtime::main_scene();
     auto debug_scene = runtime::ensure_scene(SceneDescriptor{
@@ -3522,6 +3570,7 @@ int main() {
     test_set_theme_updates_and_invalidates_cache();
     test_default_theme_glass_contract();
     test_scene_runtime_isolates_app_state_and_messages();
+    test_message_queue_is_derived_from_active_scene();
     test_scene_scheduler_clock_is_scene_local();
     test_render_surface_runtime_binds_scene_and_tracks_frames();
     test_render_surface_visibility_updates_bound_scene();
