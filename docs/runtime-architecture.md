@@ -121,6 +121,10 @@ area closer to SwiftUI's scene handles, React's explicit roots, and desktop
 window handles in Electron/Tauri: scene identity is explicit, queue ownership
 stays scene-local, render-surface ownership is explicit, and callers do not
 depend on the singleton layout used by the compatibility runner.
+The active message queue is not tracked by a separate process-global pointer;
+it is always derived from the active `SceneRuntime`. That avoids a second
+restore path during nested scene or render-surface activation and makes stale
+queue ownership harder to reintroduce as more windows are added.
 
 Scene runners follow the same rule. `runtime::install_scene_runner`,
 `runtime::trigger_scene_rebuild`, `runtime::clear_scene_runner`, and their

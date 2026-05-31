@@ -712,8 +712,6 @@ namespace detail {
     }
 
     inline SceneRuntime* g_active_scene = &default_scene_runtime();
-    inline std::vector<DispatchedMsg>* g_active_msg_queue =
-        &default_scene_runtime().messages;
 
     inline SceneRuntime& active_scene_runtime() {
         if (!g_active_scene)
@@ -722,9 +720,7 @@ namespace detail {
     }
 
     inline std::vector<DispatchedMsg>& msg_queue() {
-        if (!g_active_msg_queue)
-            g_active_msg_queue = &active_scene_runtime().messages;
-        return *g_active_msg_queue;
+        return active_scene_runtime().messages;
     }
 
     inline SceneRuntime* find_scene_runtime(std::string_view id) {
@@ -757,27 +753,21 @@ namespace detail {
     inline void bind_scene_runtime(SceneRuntime& scene) {
         g_active_scene = &scene;
         bind_app_state(scene.app_state());
-        g_active_msg_queue = &scene.messages;
     }
 
     struct ScopedSceneActivation {
         SceneRuntime* previous_scene = nullptr;
         AppState* previous_app = nullptr;
-        std::vector<DispatchedMsg>* previous_messages = nullptr;
 
         explicit ScopedSceneActivation(SceneRuntime& scene)
             : previous_scene(g_active_scene),
-              previous_app(g_active_app),
-              previous_messages(g_active_msg_queue) {
+              previous_app(g_active_app) {
             bind_scene_runtime(scene);
         }
 
         ~ScopedSceneActivation() {
             g_active_scene = previous_scene ? previous_scene : &default_scene_runtime();
             g_active_app = previous_app ? previous_app : &default_app_state();
-            g_active_msg_queue = previous_messages
-                ? previous_messages
-                : &default_scene_runtime().messages;
         }
     };
 
@@ -1008,13 +998,11 @@ namespace detail {
         RenderSurfaceRuntime* previous_surface = nullptr;
         SceneRuntime* previous_scene = nullptr;
         AppState* previous_app = nullptr;
-        std::vector<DispatchedMsg>* previous_messages = nullptr;
 
         explicit ScopedRenderSurfaceActivation(RenderSurfaceRuntime& surface)
             : previous_surface(g_active_render_surface),
               previous_scene(g_active_scene),
-              previous_app(g_active_app),
-              previous_messages(g_active_msg_queue) {
+              previous_app(g_active_app) {
             bind_render_surface_runtime(surface);
         }
 
@@ -1026,9 +1014,6 @@ namespace detail {
                 ? previous_scene
                 : &default_scene_runtime();
             g_active_app = previous_app ? previous_app : &default_app_state();
-            g_active_msg_queue = previous_messages
-                ? previous_messages
-                : &default_scene_runtime().messages;
         }
     };
 
@@ -1642,7 +1627,6 @@ inline SceneSnapshot scene(std::string_view id) {
 class SceneActivation {
     void* previous_scene_ = nullptr;
     void* previous_app_ = nullptr;
-    void* previous_messages_ = nullptr;
     bool active_ = false;
 
     void activate(std::string_view id) {
@@ -1655,7 +1639,6 @@ class SceneActivation {
         }
         previous_scene_ = detail::g_active_scene;
         previous_app_ = detail::g_active_app;
-        previous_messages_ = detail::g_active_msg_queue;
         detail::bind_scene_runtime(*scene);
         active_ = true;
     }
@@ -1669,10 +1652,6 @@ class SceneActivation {
         detail::g_active_app = previous_app_
             ? static_cast<AppState*>(previous_app_)
             : &detail::default_app_state();
-        detail::g_active_msg_queue = previous_messages_
-            ? static_cast<std::vector<detail::DispatchedMsg>*>(
-                previous_messages_)
-            : &detail::default_scene_runtime().messages;
         active_ = false;
     }
 
@@ -1691,11 +1670,9 @@ public:
     SceneActivation(SceneActivation&& other) noexcept
         : previous_scene_(other.previous_scene_),
           previous_app_(other.previous_app_),
-          previous_messages_(other.previous_messages_),
           active_(other.active_) {
         other.previous_scene_ = nullptr;
         other.previous_app_ = nullptr;
-        other.previous_messages_ = nullptr;
         other.active_ = false;
     }
 
@@ -1869,7 +1846,6 @@ class RenderSurfaceActivation {
     void* previous_surface_ = nullptr;
     void* previous_scene_ = nullptr;
     void* previous_app_ = nullptr;
-    void* previous_messages_ = nullptr;
     bool active_ = false;
 
     void activate(std::string_view id) {
@@ -1884,7 +1860,6 @@ class RenderSurfaceActivation {
         previous_surface_ = detail::g_active_render_surface;
         previous_scene_ = detail::g_active_scene;
         previous_app_ = detail::g_active_app;
-        previous_messages_ = detail::g_active_msg_queue;
         detail::bind_render_surface_runtime(*surface);
         active_ = true;
     }
@@ -1901,10 +1876,6 @@ class RenderSurfaceActivation {
         detail::g_active_app = previous_app_
             ? static_cast<AppState*>(previous_app_)
             : &detail::default_app_state();
-        detail::g_active_msg_queue = previous_messages_
-            ? static_cast<std::vector<detail::DispatchedMsg>*>(
-                previous_messages_)
-            : &detail::default_scene_runtime().messages;
         active_ = false;
     }
 
@@ -1924,12 +1895,10 @@ public:
         : previous_surface_(other.previous_surface_),
           previous_scene_(other.previous_scene_),
           previous_app_(other.previous_app_),
-          previous_messages_(other.previous_messages_),
           active_(other.active_) {
         other.previous_surface_ = nullptr;
         other.previous_scene_ = nullptr;
         other.previous_app_ = nullptr;
-        other.previous_messages_ = nullptr;
         other.active_ = false;
     }
 
