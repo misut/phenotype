@@ -72,6 +72,14 @@ these scene-schedule helpers instead of reading global flags directly, so a
 future settings or debug window can request frames without waking unrelated
 scenes.
 
+Scene rebuild runners are stored as context-aware callbacks on the scene's
+`AppState`. The compatibility `run<State, Msg>` entry point still installs one
+main-scene runner, but that runner now receives an explicit context object
+containing its host, user state, view, and update closures. This is the
+transition point toward multiple scene roots: a settings or debug scene can get
+its own runner context instead of sharing a process-global `saved_view` /
+`saved_update` singleton.
+
 Framework and example code should use the public `runtime::SceneHandle`,
 `runtime::ensure_scene`, `runtime::SceneActivation`, `runtime::post`,
 `runtime::post_to_scene`, and `runtime::drain_scene` APIs when it needs to

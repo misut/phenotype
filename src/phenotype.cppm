@@ -2452,10 +2452,13 @@ template<typename State, typename Msg, host_platform Host,
     requires std::invocable<View, State const&>
           && std::invocable<Update, State&, Msg>
 void run(Host& host, View view, Update update) {
-    static Host* saved_host = nullptr;
-    static State state{};
-    static View saved_view{view};
-    static Update saved_update{update};
+    struct RunContext {
+        Host* host = nullptr;
+        State state{};
+        View view;
+        Update update;
+    };
+    static RunContext context{&host, State{}, view, update};
     detail::bind_scene_runtime(detail::default_scene_runtime());
     detail::configure_active_scene(SceneDescriptor{
         .id = "main",
@@ -2464,10 +2467,10 @@ void run(Host& host, View view, Update update) {
         .visible = true,
     });
     detail::msg_queue().clear();
-    saved_host = &host;
-    state = State{};
-    saved_view = std::move(view);
-    saved_update = std::move(update);
+    context.host = &host;
+    context.state = State{};
+    context.view = std::move(view);
+    context.update = std::move(update);
     detail::g_app().input_debug = {};
     detail::g_app().callback_roles.clear();
     detail::g_app().focus_visible = false;
@@ -2476,13 +2479,14 @@ void run(Host& host, View view, Update update) {
     detail::g_app().prev_pressed_id = 0xFFFFFFFFu;
     detail::reset_pointer_inputs(detail::g_app());
 
-    detail::install_app_runner([] {
-        auto& host = *saved_host;
+    detail::install_app_runner([](void* raw) {
+        auto& context = *static_cast<RunContext*>(raw);
+        auto& host = *context.host;
         auto t0 = metrics::detail::now_ns();
 
         auto msgs = detail::drain<Msg>();
         for (auto& m : msgs)
-            saved_update(state, std::move(m));
+            context.update(context.state, std::move(m));
         auto t1 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t1 - t0, {{"phase", "update"}});
 
@@ -2510,7 +2514,7 @@ void run(Host& host, View view, Update update) {
 
         // Tag this frame's framework_local accesses so prune can drop
         // entries that disappeared from the view tree. Bumped before
-        // saved_view runs; entries written/read during view stamp the
+        // context.view runs; entries written/read during view stamp the
         // current generation; prune erases anything still on the prior
         // generation.
         detail::bump_local_gen();
@@ -2525,7 +2529,7 @@ void run(Host& host, View view, Update update) {
 
         Scope scope(root_h);
         Scope::set_current(&scope);
-        saved_view(state);
+        context.view(context.state);
 #ifndef NDEBUG
         detail::render_debug_panel_overlay();
 #endif
@@ -2594,7 +2598,7 @@ void run(Host& host, View view, Update update) {
             metrics::inst::rebuilds.total(), total / 1000,
             (t1 - t0) / 1000, (t2 - t1) / 1000, (t3 - t2) / 1000,
             (t4 - t3) / 1000, (t5 - t4) / 1000);
-    });
+    }, &context);
     detail::trigger_rebuild();
 }
 #else // __wasi__
@@ -2602,9 +2606,12 @@ template<typename State, typename Msg, typename View, typename Update>
     requires std::invocable<View, State const&>
           && std::invocable<Update, State&, Msg>
 void run(View view, Update update) {
-    static State state{};
-    static View saved_view{view};
-    static Update saved_update{update};
+    struct RunContext {
+        State state{};
+        View view;
+        Update update;
+    };
+    static RunContext context{State{}, view, update};
     detail::bind_scene_runtime(detail::default_scene_runtime());
     detail::configure_active_scene(SceneDescriptor{
         .id = "main",
@@ -2613,9 +2620,9 @@ void run(View view, Update update) {
         .visible = true,
     });
     detail::msg_queue().clear();
-    state = State{};
-    saved_view = std::move(view);
-    saved_update = std::move(update);
+    context.state = State{};
+    context.view = std::move(view);
+    context.update = std::move(update);
     detail::g_app().input_debug = {};
     detail::g_app().callback_roles.clear();
     detail::g_app().focus_visible = false;
@@ -2624,12 +2631,13 @@ void run(View view, Update update) {
     detail::g_app().prev_pressed_id = 0xFFFFFFFFu;
     detail::reset_pointer_inputs(detail::g_app());
 
-    detail::install_app_runner([] {
+    detail::install_app_runner([](void* raw) {
+        auto& context = *static_cast<RunContext*>(raw);
         auto t0 = metrics::detail::now_ns();
 
         auto msgs = detail::drain<Msg>();
         for (auto& m : msgs)
-            saved_update(state, std::move(m));
+            context.update(context.state, std::move(m));
         auto t1 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t1 - t0, {{"phase", "update"}});
 
@@ -2665,7 +2673,7 @@ void run(View view, Update update) {
 
         Scope scope(root_h);
         Scope::set_current(&scope);
-        saved_view(state);
+        context.view(context.state);
 #ifndef NDEBUG
         detail::render_debug_panel_overlay();
 #endif
@@ -2724,7 +2732,7 @@ void run(View view, Update update) {
             metrics::inst::rebuilds.total(), total / 1000,
             (t1 - t0) / 1000, (t2 - t1) / 1000, (t3 - t2) / 1000,
             (t4 - t3) / 1000, (t5 - t4) / 1000);
-    });
+    }, &context);
     detail::trigger_rebuild();
 }
 #endif
