@@ -1456,13 +1456,13 @@ namespace detail {
 // The vector is expected to hold a handful of entries per scope; if
 // profiling ever shows it dominates, swap for std::map.
 //
-// `widget_id_seed` is reserved for future container-driven seeding so
-// that two columns at the same source_location nested in different
-// parents can produce non-colliding widget_ids without explicit keys.
-// Today every container constructs its Scope with seed=0, so cross-
-// scope collisions are still possible — callers that need to resolve
-// them should pass an explicit key to framework_local<T>() (typically
-// the loop index when iterating).
+// `widget_id_seed` carries the parent-aware container seed used by
+// framework_local<T>(). Structural containers derive it from their
+// parent seed plus their own node identity, so the same widget helper
+// called inside two sibling containers lands in two distinct slots.
+// Manual scopes should use the same derived seed helper that
+// open_container uses; explicit framework_local keys are still the
+// right tool for data-driven list identity when item order changes.
 struct Scope {
     NodeHandle node;
     std::size_t widget_id_seed = 0;
@@ -1514,12 +1514,11 @@ struct Scope {
 //     repeated calls at the same source_location within one scope
 //     without requiring an explicit key.
 //
-// Limitation: two scopes constructed with seed=0 (the default for
-// every container today) cannot distinguish framework_local calls at
-// the same source_location nested in each. Pass an explicit key
-// in such cases (e.g. `framework_local<int>(0, item_id)` inside a
-// keyed list). A future PR will thread parent_id through Scope
-// construction so the seed is non-zero by default.
+// Container scopes derive a non-zero parent-aware seed through
+// open_container, so sibling containers can call the same helper
+// source_location without sharing storage. Pass an explicit key
+// when the identity comes from data rather than tree position
+// (e.g. `framework_local<int>(0, item_id)` inside a keyed list).
 //
 // Type safety: each call site pins to a single T; reusing the same
 // site with a different T will std::abort with a clear diagnostic

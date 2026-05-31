@@ -41,6 +41,10 @@ NodeHandle build(View&& view) {
     return root_h;
 }
 
+int& accordion_body_slot() {
+    return framework_local<int>(0);
+}
+
 }  // namespace
 
 // A fresh `accordion` starts collapsed: header only, no body row.
@@ -139,11 +143,47 @@ void test_accordion_state_persists_across_frames() {
     std::puts("PASS: accordion expanded state persists across rebuilds");
 }
 
+// Body content belongs to the accordion body's tree position, not to the
+// implementation call site alone. Two expanded accordions that call the same
+// widget helper must therefore get separate framework_local slots.
+void test_accordion_body_framework_local_is_scoped() {
+    detail::local_store().clear();
+    auto run = [] {
+        layout::accordion("first", [&] {
+            auto& slot = accordion_body_slot();
+            if (slot == 0)
+                slot = 11;
+            assert(slot == 11);
+            widget::text("a");
+        });
+        layout::accordion("second", [&] {
+            auto& slot = accordion_body_slot();
+            if (slot == 0)
+                slot = 22;
+            assert(slot == 22);
+            widget::text("b");
+        });
+    };
+
+    build(run);
+    assert(detail::g_app().callbacks.size() == 2);
+    detail::g_app().callbacks[0]();
+    detail::g_app().callbacks[1]();
+
+    build(run);
+    assert(detail::local_store().size() >= 4);
+
+    build(run);
+    assert(detail::local_store().size() >= 4);
+    std::puts("PASS: accordion body framework_local slots are scoped");
+}
+
 int main() {
     test_accordion_starts_collapsed();
     test_accordion_click_expands_body();
     test_two_accordions_stay_independent();
     test_accordion_state_persists_across_frames();
+    test_accordion_body_framework_local_is_scoped();
     std::puts("\nAll accordion tests passed.");
     return 0;
 }
