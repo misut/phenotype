@@ -80,6 +80,13 @@ transition point toward multiple scene roots: a settings or debug scene can get
 its own runner context instead of sharing a process-global `saved_view` /
 `saved_update` singleton.
 
+The frame pipeline itself is also shared. `run_scene_rebuild_frame` owns the
+update, view, layout, paint, flush, trace, and scheduling-flag lifecycle, while
+small backend adapters provide the native or WASI canvas operations. This keeps
+Compose/SwiftUI-style scene execution as one framework contract instead of two
+platform copies, and it gives future settings or debug windows a single place
+to hook scene-local scheduling, diagnostics, and render-surface flushing.
+
 Framework and example code should use the public `runtime::SceneHandle`,
 `runtime::ensure_scene`, `runtime::SceneActivation`, `runtime::post`,
 `runtime::post_to_scene`, and `runtime::drain_scene` APIs when it needs to

@@ -2419,6 +2419,226 @@ inline void reset_pointer_inputs(AppState& app) noexcept {
 inline void render_debug_panel_overlay();
 #endif
 inline bool set_pointer_position(float x, float y) noexcept;
+
+#ifndef __wasi__
+template<host_platform Host>
+struct NativeFrameBackend {
+    Host* host = nullptr;
+
+    float canvas_width() const { return host->canvas_width(); }
+    float canvas_height() const { return host->canvas_height(); }
+    void layout(NodeHandle node, float width) {
+        layout_node(*host, node, width);
+    }
+    void clear(Color color) { emit_clear(*host, color); }
+    void paint(NodeHandle node,
+               float offset_x,
+               float offset_y,
+               float scroll_x,
+               float scroll_y,
+               float viewport_width,
+               float viewport_height) {
+        paint_node(*host, *host, node, offset_x, offset_y,
+                   scroll_x, scroll_y, viewport_width, viewport_height);
+    }
+    void reset_paint_scissor_boundary() {
+        detail::reset_paint_scissor_boundary(*host);
+    }
+    void paint_root_vertical_scroll_bar(float width, float height) {
+        detail::paint_root_vertical_scroll_bar(*host, width, height);
+    }
+    void flush_if_changed() { phenotype::flush_if_changed(*host); }
+};
+#else
+struct WasiFrameBackend {
+    float canvas_width() const { return phenotype_get_canvas_width(); }
+    float canvas_height() const { return phenotype_get_canvas_height(); }
+    void layout(NodeHandle node, float width) {
+        layout_node(node, width);
+    }
+    void clear(Color color) { wasi_emit_clear(color); }
+    void paint(NodeHandle node,
+               float offset_x,
+               float offset_y,
+               float scroll_x,
+               float scroll_y,
+               float viewport_width,
+               float viewport_height) {
+        wasi_paint_node(node, offset_x, offset_y,
+                        scroll_x, scroll_y, viewport_width, viewport_height);
+    }
+    void reset_paint_scissor_boundary() {
+        wasi_reset_paint_scissor_boundary();
+    }
+    void paint_root_vertical_scroll_bar(float width, float height) {
+        wasi_paint_root_vertical_scroll_bar(width, height);
+    }
+    void flush_if_changed() { wasi_flush_if_changed(); }
+};
+#endif
+
+template<typename UpdateMessages, typename BuildView, typename Backend>
+inline void run_scene_rebuild_frame(UpdateMessages&& update_messages,
+                                    BuildView&& build_view,
+                                    Backend&& backend) {
+    auto t0 = metrics::detail::now_ns();
+
+    update_messages();
+    auto t1 = metrics::detail::now_ns();
+    metrics::inst::phase_duration.record(t1 - t0, {{"phase", "update"}});
+
+    auto& app = g_app();
+    app.prev_root = app.root;
+    std::swap(app.arena, app.prev_arena);
+    app.arena.reset();
+    app.callbacks.clear();
+    app.callback_roles.clear();
+    app.key_commands.clear();
+    app.gesture_callbacks.clear();
+    app.gesture_target_id = 0xFFFFFFFFu;
+    app.scroll_targets.clear();
+    app.overlays.clear();
+    app.input_handlers.clear();
+    app.input_nodes.clear();
+
+    auto root_h = alloc_node();
+    {
+        auto& root = node_at(root_h);
+        root.style.flex_direction = FlexDirection::Column;
+        root.background = app.theme.background;
+    }
+    app.root = root_h;
+
+    // Tag this frame's framework_local accesses so prune can drop entries
+    // that disappeared from the view tree. Entries read or written while the
+    // view runs stamp the current generation.
+    bump_local_gen();
+    // Reset per-frame scheduling flags before the view re-declares them.
+    app.has_active_animations = false;
+    app.debug_panel_refresh_active = false;
+    float cw = backend.canvas_width();
+    float vh = backend.canvas_height();
+    app.debug_viewport_width = cw;
+    app.debug_viewport_height = vh;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    build_view();
+#ifndef NDEBUG
+    render_debug_panel_overlay();
+#endif
+    Scope::set_current(nullptr);
+    prune_local_store();
+    auto t2 = metrics::detail::now_ns();
+    metrics::inst::phase_duration.record(t2 - t1, {{"phase", "view"}});
+
+    if (app.prev_root.valid())
+        diff_and_copy_layout(app.prev_root, root_h, app.prev_arena, app.arena);
+
+    backend.layout(root_h, cw);
+    for (auto overlay_h : app.overlays)
+        backend.layout(overlay_h, cw);
+    auto t3 = metrics::detail::now_ns();
+    metrics::inst::phase_duration.record(t3 - t2, {{"phase", "layout"}});
+
+    app.paint_invalidation_mask = compute_paint_invalidation_mask(app);
+
+    app.focusable_ids.clear();
+    collect_focusable_ids(root_h);
+    for (auto overlay_h : app.overlays)
+        collect_focusable_ids(overlay_h);
+    app.paint_scissor_depth = 0;
+    app.scrollbar_animation_active = false;
+    backend.clear(app.theme.background);
+    backend.paint(root_h, 0.0f, 0.0f, app.scroll_x, app.scroll_y, cw, vh);
+    backend.reset_paint_scissor_boundary();
+    backend.paint_root_vertical_scroll_bar(cw, vh);
+    // Overlays paint after the main tree with no ambient scroll applied. They
+    // stay fixed above the document and keep hit regions ordered last.
+    for (auto overlay_h : app.overlays)
+        backend.paint(overlay_h, 0.0f, 0.0f, 0.0f, 0.0f, cw, vh);
+    auto t4 = metrics::detail::now_ns();
+    metrics::inst::phase_duration.record(t4 - t3, {{"phase", "paint"}});
+
+    backend.flush_if_changed();
+    auto t5 = metrics::detail::now_ns();
+    metrics::inst::phase_duration.record(t5 - t4, {{"phase", "flush"}});
+    record_frame_trace(
+        FrameTraceSample{
+            .total_ns = t5 - t0,
+            .update_ns = t1 - t0,
+            .view_ns = t2 - t1,
+            .layout_ns = t3 - t2,
+            .paint_ns = t4 - t3,
+            .flush_ns = t5 - t4,
+            .rebuild = true,
+        },
+        t0);
+
+    // Persist the ambient paint inputs for next frame's blit guard.
+    persist_paint_inputs(app);
+
+    auto total = t5 - t0;
+    metrics::inst::frame_duration.record(total);
+    metrics::inst::rebuilds.add();
+    log::debug("phenotype.runner",
+        "rebuild #{} total={}us update={}us view={}us layout={}us paint={}us flush={}us",
+        metrics::inst::rebuilds.total(), total / 1000,
+        (t1 - t0) / 1000, (t2 - t1) / 1000, (t3 - t2) / 1000,
+        (t4 - t3) / 1000, (t5 - t4) / 1000);
+}
+
+template<typename Backend>
+inline void repaint_scene_frame(Backend&& backend,
+                                float scroll_x,
+                                float scroll_y) {
+    auto& app = g_app();
+    auto const t0 = metrics::detail::now_ns();
+    app.scroll_x = scroll_x;
+    app.scroll_y = scroll_y;
+    if (!app.root.valid()) return;
+    auto* root_ptr = app.arena.get(app.root);
+    if (!root_ptr) return;
+
+    float cw = backend.canvas_width();
+    auto t1 = t0;
+    if (cw != root_ptr->width) {
+        backend.layout(app.root, cw);
+        for (auto overlay_h : app.overlays)
+            backend.layout(overlay_h, cw);
+        t1 = metrics::detail::now_ns();
+    }
+
+    app.focusable_ids.clear();
+    collect_focusable_ids(app.root);
+    for (auto overlay_h : app.overlays)
+        collect_focusable_ids(overlay_h);
+    app.paint_invalidation_mask = compute_paint_invalidation_mask(app);
+    app.paint_scissor_depth = 0;
+    app.scrollbar_animation_active = false;
+    backend.clear(app.theme.background);
+    float vh = backend.canvas_height();
+    app.debug_viewport_width = cw;
+    app.debug_viewport_height = vh;
+    backend.paint(app.root, 0.0f, 0.0f, scroll_x, scroll_y, cw, vh);
+    backend.reset_paint_scissor_boundary();
+    backend.paint_root_vertical_scroll_bar(cw, vh);
+    for (auto overlay_h : app.overlays)
+        backend.paint(overlay_h, 0.0f, 0.0f, 0.0f, 0.0f, cw, vh);
+    auto const t2 = metrics::detail::now_ns();
+    backend.flush_if_changed();
+    auto const t3 = metrics::detail::now_ns();
+    record_frame_trace(
+        FrameTraceSample{
+            .total_ns = t3 - t0,
+            .layout_ns = t1 - t0,
+            .paint_ns = t2 - t1,
+            .flush_ns = t3 - t2,
+            .rebuild = false,
+        },
+        t0);
+    persist_paint_inputs(app);
+}
 }
 
 // ============================================================
@@ -2481,123 +2701,15 @@ void run(Host& host, View view, Update update) {
 
     detail::install_app_runner([](void* raw) {
         auto& context = *static_cast<RunContext*>(raw);
-        auto& host = *context.host;
-        auto t0 = metrics::detail::now_ns();
-
-        auto msgs = detail::drain<Msg>();
-        for (auto& m : msgs)
-            context.update(context.state, std::move(m));
-        auto t1 = metrics::detail::now_ns();
-        metrics::inst::phase_duration.record(t1 - t0, {{"phase", "update"}});
-
-        auto& app = detail::g_app();
-        app.prev_root = app.root;
-        std::swap(app.arena, app.prev_arena);
-        app.arena.reset();
-        app.callbacks.clear();
-        app.callback_roles.clear();
-        app.key_commands.clear();
-        app.gesture_callbacks.clear();
-        app.gesture_target_id = 0xFFFFFFFFu;
-        app.scroll_targets.clear();
-        app.overlays.clear();
-        app.input_handlers.clear();
-        app.input_nodes.clear();
-
-        auto root_h = detail::alloc_node();
-        {
-            auto& root = detail::node_at(root_h);
-            root.style.flex_direction = FlexDirection::Column;
-            root.background = app.theme.background;
-        }
-        app.root = root_h;
-
-        // Tag this frame's framework_local accesses so prune can drop
-        // entries that disappeared from the view tree. Bumped before
-        // context.view runs; entries written/read during view stamp the
-        // current generation; prune erases anything still on the prior
-        // generation.
-        detail::bump_local_gen();
-        // Reset the auto-tick flag — animate_value re-sets it during
-        // view if any interpolation is still in flight.
-        app.has_active_animations = false;
-        app.debug_panel_refresh_active = false;
-        float cw = host.canvas_width();
-        float vh = host.canvas_height();
-        app.debug_viewport_width = cw;
-        app.debug_viewport_height = vh;
-
-        Scope scope(root_h);
-        Scope::set_current(&scope);
-        context.view(context.state);
-#ifndef NDEBUG
-        detail::render_debug_panel_overlay();
-#endif
-        Scope::set_current(nullptr);
-        detail::prune_local_store();
-        auto t2 = metrics::detail::now_ns();
-        metrics::inst::phase_duration.record(t2 - t1, {{"phase", "view"}});
-
-        if (app.prev_root.valid())
-            detail::diff_and_copy_layout(app.prev_root, root_h,
-                                         app.prev_arena, app.arena);
-
-        detail::layout_node(host, root_h, cw);
-        for (auto overlay_h : app.overlays)
-            detail::layout_node(host, overlay_h, cw);
-        auto t3 = metrics::detail::now_ns();
-        metrics::inst::phase_duration.record(t3 - t2, {{"phase", "layout"}});
-
-        app.paint_invalidation_mask =
-            detail::compute_paint_invalidation_mask(app);
-
-        app.focusable_ids.clear();
-        detail::collect_focusable_ids(root_h);
-        for (auto overlay_h : app.overlays)
-            detail::collect_focusable_ids(overlay_h);
-        app.paint_scissor_depth = 0;
-        app.scrollbar_animation_active = false;
-        emit_clear(host, app.theme.background);
-        detail::paint_node(host, host, root_h, 0, 0,
-                           app.scroll_x, app.scroll_y, cw, vh);
-        detail::reset_paint_scissor_boundary(host);
-        detail::paint_root_vertical_scroll_bar(host, cw, vh);
-        // Overlays paint after the main tree with no ambient scroll
-        // applied — they sit on top of everything and stay fixed when
-        // the document scrolls underneath.
-        for (auto overlay_h : app.overlays) {
-            detail::paint_node(host, host, overlay_h, 0, 0,
-                               0.0f, 0.0f, cw, vh);
-        }
-        auto t4 = metrics::detail::now_ns();
-        metrics::inst::phase_duration.record(t4 - t3, {{"phase", "paint"}});
-
-        flush_if_changed(host);
-        auto t5 = metrics::detail::now_ns();
-        metrics::inst::phase_duration.record(t5 - t4, {{"phase", "flush"}});
-        detail::record_frame_trace(
-            FrameTraceSample{
-                .total_ns = t5 - t0,
-                .update_ns = t1 - t0,
-                .view_ns = t2 - t1,
-                .layout_ns = t3 - t2,
-                .paint_ns = t4 - t3,
-                .flush_ns = t5 - t4,
-                .rebuild = true,
+        detail::NativeFrameBackend<Host> backend{context.host};
+        detail::run_scene_rebuild_frame(
+            [&] {
+                auto msgs = detail::drain<Msg>();
+                for (auto& m : msgs)
+                    context.update(context.state, std::move(m));
             },
-            t0);
-
-        // Persist the ambient paint inputs for next frame's blit guard.
-        detail::persist_paint_inputs(app);
-
-        auto total = t5 - t0;
-        metrics::inst::frame_duration.record(total);
-        metrics::inst::rebuilds.add();
-        log::debug("phenotype.runner",
-            "rebuild #{} total={}us update={}us view={}us layout={}us paint={}us flush={}us",
-            metrics::inst::rebuilds.total(), total / 1000,
-            (t1 - t0) / 1000, (t2 - t1) / 1000, (t3 - t2) / 1000,
-            (t4 - t3) / 1000, (t5 - t4) / 1000);
+            [&] { context.view(context.state); },
+            backend);
     }, &context);
     detail::trigger_rebuild();
 }
@@ -2633,105 +2745,15 @@ void run(View view, Update update) {
 
     detail::install_app_runner([](void* raw) {
         auto& context = *static_cast<RunContext*>(raw);
-        auto t0 = metrics::detail::now_ns();
-
-        auto msgs = detail::drain<Msg>();
-        for (auto& m : msgs)
-            context.update(context.state, std::move(m));
-        auto t1 = metrics::detail::now_ns();
-        metrics::inst::phase_duration.record(t1 - t0, {{"phase", "update"}});
-
-        auto& app = detail::g_app();
-        app.prev_root = app.root;
-        std::swap(app.arena, app.prev_arena);
-        app.arena.reset();
-        app.callbacks.clear();
-        app.callback_roles.clear();
-        app.key_commands.clear();
-        app.gesture_callbacks.clear();
-        app.gesture_target_id = 0xFFFFFFFFu;
-        app.scroll_targets.clear();
-        app.overlays.clear();
-        app.input_handlers.clear();
-        app.input_nodes.clear();
-
-        auto root_h = detail::alloc_node();
-        {
-            auto& root = detail::node_at(root_h);
-            root.style.flex_direction = FlexDirection::Column;
-            root.background = app.theme.background;
-        }
-        app.root = root_h;
-
-        // See native runner — framework_local generation handling.
-        detail::bump_local_gen();
-        app.has_active_animations = false;
-        float cw = phenotype_get_canvas_width();
-        float vh = phenotype_get_canvas_height();
-        app.debug_viewport_width = cw;
-        app.debug_viewport_height = vh;
-
-        Scope scope(root_h);
-        Scope::set_current(&scope);
-        context.view(context.state);
-#ifndef NDEBUG
-        detail::render_debug_panel_overlay();
-#endif
-        Scope::set_current(nullptr);
-        detail::prune_local_store();
-        auto t2 = metrics::detail::now_ns();
-        metrics::inst::phase_duration.record(t2 - t1, {{"phase", "view"}});
-
-        if (app.prev_root.valid())
-            detail::diff_and_copy_layout(app.prev_root, root_h,
-                                         app.prev_arena, app.arena);
-
-        detail::layout_node(root_h, cw);
-        for (auto overlay_h : app.overlays)
-            detail::layout_node(overlay_h, cw);
-        auto t3 = metrics::detail::now_ns();
-        metrics::inst::phase_duration.record(t3 - t2, {{"phase", "layout"}});
-
-        // Paint-cache invalidation mask — see the native runner for a
-        // detailed explanation; the WASI path mirrors that logic.
-        app.paint_invalidation_mask =
-            detail::compute_paint_invalidation_mask(app);
-
-        app.focusable_ids.clear();
-        detail::collect_focusable_ids(root_h);
-        for (auto overlay_h : app.overlays)
-            detail::collect_focusable_ids(overlay_h);
-        app.paint_scissor_depth = 0;
-        app.scrollbar_animation_active = false;
-        detail::wasi_emit_clear(app.theme.background);
-        detail::wasi_paint_node(root_h, 0, 0,
-                                app.scroll_x, app.scroll_y, cw, vh);
-        detail::wasi_reset_paint_scissor_boundary();
-        detail::wasi_paint_root_vertical_scroll_bar(cw, vh);
-        // Overlays paint on top of the main tree with no ambient
-        // scroll — see native runner for the same logic.
-        for (auto overlay_h : app.overlays) {
-            detail::wasi_paint_node(overlay_h, 0, 0,
-                                    0.0f, 0.0f, cw, vh);
-        }
-        auto t4 = metrics::detail::now_ns();
-        metrics::inst::phase_duration.record(t4 - t3, {{"phase", "paint"}});
-
-        detail::wasi_flush_if_changed();
-        auto t5 = metrics::detail::now_ns();
-        metrics::inst::phase_duration.record(t5 - t4, {{"phase", "flush"}});
-
-        // Persist the ambient paint inputs for next frame's blit guard.
-        detail::persist_paint_inputs(app);
-
-        auto total = t5 - t0;
-        metrics::inst::frame_duration.record(total);
-        metrics::inst::rebuilds.add();
-        log::debug("phenotype.runner",
-            "rebuild #{} total={}us update={}us view={}us layout={}us paint={}us flush={}us",
-            metrics::inst::rebuilds.total(), total / 1000,
-            (t1 - t0) / 1000, (t2 - t1) / 1000, (t3 - t2) / 1000,
-            (t4 - t3) / 1000, (t5 - t4) / 1000);
+        detail::WasiFrameBackend backend{};
+        detail::run_scene_rebuild_frame(
+            [&] {
+                auto msgs = detail::drain<Msg>();
+                for (auto& m : msgs)
+                    context.update(context.state, std::move(m));
+            },
+            [&] { context.view(context.state); },
+            backend);
     }, &context);
     detail::trigger_rebuild();
 }
@@ -6717,97 +6739,13 @@ inline bool handle_key(unsigned int key_type, unsigned int codepoint,
 #ifndef __wasi__
 template<host_platform Host>
 void repaint(Host& host, float scroll_x, float scroll_y) {
-    auto& app = g_app();
-    auto const t0 = metrics::detail::now_ns();
-    app.scroll_x = scroll_x;
-    app.scroll_y = scroll_y;
-    if (!app.root.valid()) return;
-    auto* root_ptr = app.arena.get(app.root);
-    if (!root_ptr) return;
-    float cw = host.canvas_width();
-    auto t1 = t0;
-    if (cw != root_ptr->width) {
-        layout_node(host, app.root, cw);
-        for (auto overlay_h : app.overlays)
-            layout_node(host, overlay_h, cw);
-        t1 = metrics::detail::now_ns();
-    }
-    app.focusable_ids.clear();
-    collect_focusable_ids(app.root);
-    for (auto overlay_h : app.overlays)
-        collect_focusable_ids(overlay_h);
-    app.paint_invalidation_mask = compute_paint_invalidation_mask(app);
-    app.paint_scissor_depth = 0;
-    app.scrollbar_animation_active = false;
-    emit_clear(host, app.theme.background);
-    float vh = host.canvas_height();
-    app.debug_viewport_width = cw;
-    app.debug_viewport_height = vh;
-    paint_node(host, host, app.root, 0, 0, scroll_x, scroll_y, cw, vh);
-    reset_paint_scissor_boundary(host);
-    paint_root_vertical_scroll_bar(host, cw, vh);
-    for (auto overlay_h : app.overlays)
-        paint_node(host, host, overlay_h, 0, 0, 0.0f, 0.0f, cw, vh);
-    auto const t2 = metrics::detail::now_ns();
-    flush_if_changed(host);
-    auto const t3 = metrics::detail::now_ns();
-    record_frame_trace(
-        FrameTraceSample{
-            .total_ns = t3 - t0,
-            .layout_ns = t1 - t0,
-            .paint_ns = t2 - t1,
-            .flush_ns = t3 - t2,
-            .rebuild = false,
-        },
-        t0);
-    persist_paint_inputs(app);
+    NativeFrameBackend<Host> backend{&host};
+    repaint_scene_frame(backend, scroll_x, scroll_y);
 }
 #else
 inline void repaint(float scroll_x, float scroll_y) {
-    auto& app = g_app();
-    auto const t0 = metrics::detail::now_ns();
-    app.scroll_x = scroll_x;
-    app.scroll_y = scroll_y;
-    if (!app.root.valid()) return;
-    auto* root_ptr = app.arena.get(app.root);
-    if (!root_ptr) return;
-    float cw = phenotype_get_canvas_width();
-    auto t1 = t0;
-    if (cw != root_ptr->width) {
-        layout_node(app.root, cw);
-        for (auto overlay_h : app.overlays)
-            layout_node(overlay_h, cw);
-        t1 = metrics::detail::now_ns();
-    }
-    app.focusable_ids.clear();
-    collect_focusable_ids(app.root);
-    for (auto overlay_h : app.overlays)
-        collect_focusable_ids(overlay_h);
-    app.paint_invalidation_mask = compute_paint_invalidation_mask(app);
-    app.paint_scissor_depth = 0;
-    app.scrollbar_animation_active = false;
-    wasi_emit_clear(app.theme.background);
-    float vh = phenotype_get_canvas_height();
-    app.debug_viewport_width = cw;
-    app.debug_viewport_height = vh;
-    wasi_paint_node(app.root, 0, 0, scroll_x, scroll_y, cw, vh);
-    wasi_reset_paint_scissor_boundary();
-    wasi_paint_root_vertical_scroll_bar(cw, vh);
-    for (auto overlay_h : app.overlays)
-        wasi_paint_node(overlay_h, 0, 0, 0.0f, 0.0f, cw, vh);
-    auto const t2 = metrics::detail::now_ns();
-    wasi_flush_if_changed();
-    auto const t3 = metrics::detail::now_ns();
-    record_frame_trace(
-        FrameTraceSample{
-            .total_ns = t3 - t0,
-            .layout_ns = t1 - t0,
-            .paint_ns = t2 - t1,
-            .flush_ns = t3 - t2,
-            .rebuild = false,
-        },
-        t0);
-    persist_paint_inputs(app);
+    WasiFrameBackend backend{};
+    repaint_scene_frame(backend, scroll_x, scroll_y);
 }
 #endif
 
