@@ -20,6 +20,8 @@ import phenotype.native.platform;
 
 export namespace phenotype::native {
 
+struct native_host;
+
 // Neutral input enums. Values intentionally keep the original desktop numeric
 // assignments for source compatibility, while platform drivers translate
 // AppKit, Win32, Android, or future toolkit constants into this small set.
@@ -153,6 +155,30 @@ inline MouseButton mouse_button_from_legacy_code(int button) {
     }
 }
 
+struct ShellState {
+    native_host* host = nullptr;
+    float scroll_x = 0.0f;
+    float scroll_y = 0.0f;
+    // Last cursor position seen by `dispatch_cursor_pos` — wheel events
+    // arrive without an attached cursor location, so the scroll
+    // dispatcher uses these to hit-test against scroll targets before
+    // falling back to the root document scroll.
+    float last_mouse_x = 0.0f;
+    float last_mouse_y = 0.0f;
+    unsigned int hovered_id = invalid_callback_id;
+    bool drag_selecting = false;
+    unsigned int drag_selection_id = invalid_callback_id;
+    std::chrono::steady_clock::time_point next_caret_blink{};
+    bool caret_blink_armed = false;
+    bool repaint_in_progress = false;
+    bool repaint_requested = false;
+    std::chrono::steady_clock::time_point last_input_frame{};
+    std::chrono::steady_clock::time_point deferred_input_frame_deadline{};
+    bool deferred_input_paint = false;
+    bool deferred_input_rebuild = false;
+    char const* deferred_input_action = "input";
+};
+
 struct native_host {
     // Opaque native surface handle. Desktop shells pass a
     // NativeSurfaceDescriptor* carrying the OS window/view and viewport
@@ -182,6 +208,12 @@ struct native_host {
     // Optional driver hook for hardware-cursor updates. Pointer-based desktop drivers set
     // this; touch-only drivers leave it null.
     void (*set_hover_cursor)(bool pointing) = nullptr;
+
+    // Host-local transient shell state. A process may have multiple
+    // native windows/surfaces; scroll position, cursor position,
+    // drag-selection state, and repaint coalescing must follow the host
+    // receiving the event rather than live in one process-global bucket.
+    ShellState shell{};
 
     float measure_text(float font_size, ::phenotype::FontSpec font,
                        char const* text, unsigned int len) const {
@@ -278,36 +310,37 @@ static_assert(host_platform<native_host>);
 
 namespace detail {
 
-struct AppState {
-    native_host* host = nullptr;
-    float scroll_x = 0.0f;
-    float scroll_y = 0.0f;
-    // Last cursor position seen by `dispatch_cursor_pos` — wheel events
-    // arrive without an attached cursor location, so the scroll
-    // dispatcher uses these to hit-test against `g_app().scroll_targets`
-    // before falling back to the root document scroll.
-    float last_mouse_x = 0.0f;
-    float last_mouse_y = 0.0f;
-    unsigned int hovered_id = invalid_callback_id;
-    bool drag_selecting = false;
-    unsigned int drag_selection_id = invalid_callback_id;
-    std::chrono::steady_clock::time_point next_caret_blink{};
-    bool caret_blink_armed = false;
-    bool repaint_in_progress = false;
-    bool repaint_requested = false;
-    std::chrono::steady_clock::time_point last_input_frame{};
-    std::chrono::steady_clock::time_point deferred_input_frame_deadline{};
-    bool deferred_input_paint = false;
-    bool deferred_input_rebuild = false;
-    char const* deferred_input_action = "input";
-};
-
-inline AppState g_app_state;
 inline native_host* g_active_host = nullptr;
 
 inline native_host* active_host() {
     return g_active_host;
 }
+
+inline ShellState& fallback_shell_state() {
+    static ShellState& state = *new ShellState();
+    return state;
+}
+
+inline ShellState& shell_state() {
+    return g_active_host ? g_active_host->shell : fallback_shell_state();
+}
+
+inline native_host* activate_host(native_host& host) {
+    auto* previous = g_active_host;
+    g_active_host = &host;
+    return previous;
+}
+
+struct ScopedHostActivation {
+    native_host* previous = nullptr;
+
+    explicit ScopedHostActivation(native_host& host)
+        : previous(activate_host(host)) {}
+
+    ~ScopedHostActivation() {
+        g_active_host = previous;
+    }
+};
 
 inline void notify_viewport_changed(native_host* host,
                                     int width_px, int height_px,
@@ -322,14 +355,14 @@ inline void open_url_bridge(char const* url, unsigned int len) {
 }
 
 inline void sync_platform_input() {
-    if (!g_app_state.host || !g_app_state.host->platform
-        || !g_app_state.host->platform->input.sync)
+    if (!shell_state().host || !shell_state().host->platform
+        || !shell_state().host->platform->input.sync)
         return;
-    g_app_state.host->platform->input.sync();
+    shell_state().host->platform->input.sync();
 }
 
 inline bool platform_uses_shared_caret_blink() {
-    auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
+    auto const* platform = shell_state().host ? shell_state().host->platform : nullptr;
     if (!platform || !platform->input.uses_shared_caret_blink)
         return true;
     return platform->input.uses_shared_caret_blink();
@@ -337,7 +370,7 @@ inline bool platform_uses_shared_caret_blink() {
 
 inline std::optional<std::chrono::milliseconds>
 platform_caret_blink_interval() {
-    auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
+    auto const* platform = shell_state().host ? shell_state().host->platform : nullptr;
     if (!platform || !platform->input.caret_blink_interval_ms)
         return std::chrono::milliseconds{530};
     int const interval = platform->input.caret_blink_interval_ms();
@@ -350,10 +383,10 @@ platform_caret_blink_interval() {
 
 inline std::optional<unsigned int> hit_test(float x, float y,
                                             float scroll_x, float scroll_y) {
-    if (!g_app_state.host || !g_app_state.host->platform
-        || !g_app_state.host->platform->renderer.hit_test)
+    if (!shell_state().host || !shell_state().host->platform
+        || !shell_state().host->platform->renderer.hit_test)
         return std::nullopt;
-    return g_app_state.host->platform->renderer.hit_test(x, y, scroll_x, scroll_y);
+    return shell_state().host->platform->renderer.hit_test(x, y, scroll_x, scroll_y);
 }
 
 inline float scroll_line_height() {
@@ -407,22 +440,22 @@ inline float normalize_scroll_delta_x(platform_api const* platform,
 }
 
 inline void repaint_current() {
-    if (!g_app_state.host)
+    if (!shell_state().host)
         return;
-    if (g_app_state.repaint_in_progress) {
-        g_app_state.repaint_requested = true;
+    if (shell_state().repaint_in_progress) {
+        shell_state().repaint_requested = true;
         return;
     }
 
-    g_app_state.repaint_in_progress = true;
+    shell_state().repaint_in_progress = true;
     do {
-        g_app_state.repaint_requested = false;
-        ::phenotype::detail::repaint(*g_app_state.host,
-                                     g_app_state.scroll_x,
-                                     g_app_state.scroll_y);
+        shell_state().repaint_requested = false;
+        ::phenotype::detail::repaint(*shell_state().host,
+                                     shell_state().scroll_x,
+                                     shell_state().scroll_y);
         sync_platform_input();
-    } while (g_app_state.repaint_requested);
-    g_app_state.repaint_in_progress = false;
+    } while (shell_state().repaint_requested);
+    shell_state().repaint_in_progress = false;
 }
 
 inline void repaint_current_after_surface_presented() {
@@ -435,15 +468,15 @@ inline void repaint_current_after_surface_presented() {
 inline constexpr auto input_frame_interval = std::chrono::milliseconds{16};
 
 inline bool input_frame_due(std::chrono::steady_clock::time_point now) {
-    return g_app_state.last_input_frame.time_since_epoch().count() == 0
-        || now - g_app_state.last_input_frame >= input_frame_interval;
+    return shell_state().last_input_frame.time_since_epoch().count() == 0
+        || now - shell_state().last_input_frame >= input_frame_interval;
 }
 
 inline void remember_input_frame(std::chrono::steady_clock::time_point start) {
-    g_app_state.last_input_frame = start;
-    g_app_state.deferred_input_paint = false;
-    g_app_state.deferred_input_rebuild = false;
-    g_app_state.deferred_input_action = "input";
+    shell_state().last_input_frame = start;
+    shell_state().deferred_input_paint = false;
+    shell_state().deferred_input_rebuild = false;
+    shell_state().deferred_input_action = "input";
 }
 
 inline void run_input_frame(char const* action,
@@ -479,23 +512,23 @@ inline void request_input_frame(char const* action, bool rebuild) {
         run_input_frame(action, rebuild, now);
         return;
     }
-    g_app_state.deferred_input_paint = true;
-    g_app_state.deferred_input_rebuild =
-        g_app_state.deferred_input_rebuild || rebuild;
-    g_app_state.deferred_input_action = action ? action : "input";
-    g_app_state.deferred_input_frame_deadline =
-        g_app_state.last_input_frame + input_frame_interval;
+    shell_state().deferred_input_paint = true;
+    shell_state().deferred_input_rebuild =
+        shell_state().deferred_input_rebuild || rebuild;
+    shell_state().deferred_input_action = action ? action : "input";
+    shell_state().deferred_input_frame_deadline =
+        shell_state().last_input_frame + input_frame_interval;
 }
 
 inline bool service_deferred_input_frame(
         std::chrono::steady_clock::time_point now) {
-    if (!g_app_state.deferred_input_paint
-        || now < g_app_state.deferred_input_frame_deadline) {
+    if (!shell_state().deferred_input_paint
+        || now < shell_state().deferred_input_frame_deadline) {
         return false;
     }
     run_input_frame(
-        g_app_state.deferred_input_action,
-        g_app_state.deferred_input_rebuild,
+        shell_state().deferred_input_action,
+        shell_state().deferred_input_rebuild,
         now);
     return true;
 }
@@ -517,7 +550,7 @@ inline bool measure_input_action(char const* action, F&& fn) {
 inline void bind_host(native_host& host,
                       float scroll_x = 0.0f,
                       float scroll_y = 0.0f) {
-    g_app_state = {
+    host.shell = {
         &host,
         scroll_x,
         scroll_y,
@@ -531,6 +564,7 @@ inline void bind_host(native_host& host,
         false,
         false,
     };
+    g_active_host = &host;
     ::phenotype::detail::set_scroll_x(scroll_x);
     ::phenotype::detail::set_scroll_y(scroll_y);
     ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
@@ -538,13 +572,13 @@ inline void bind_host(native_host& host,
 
 inline float measure_utf8_prefix(::phenotype::FocusedInputSnapshot const& snapshot,
                                  std::size_t bytes) {
-    if (!g_app_state.host)
+    if (!shell_state().host)
         return 0.0f;
     bytes = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, bytes);
     ::phenotype::FontSpec const font{
         {}, ::phenotype::FontWeight::Regular,
         ::phenotype::FontStyle::Upright, snapshot.mono };
-    return g_app_state.host->measure_text(
+    return shell_state().host->measure_text(
         snapshot.font_size, font,
         snapshot.value.data(),
         static_cast<unsigned int>(bytes));
@@ -639,64 +673,64 @@ inline int normalized_key_command_modifiers(int mods) {
 
 inline void reset_caret_blink_timer() {
     if (!platform_uses_shared_caret_blink()) {
-        g_app_state.caret_blink_armed = false;
+        shell_state().caret_blink_armed = false;
         return;
     }
     if (!::phenotype::detail::focused_is_input()) {
-        g_app_state.caret_blink_armed = false;
+        shell_state().caret_blink_armed = false;
         return;
     }
     auto const interval = platform_caret_blink_interval();
     if (!interval) {
-        g_app_state.caret_blink_armed = false;
+        shell_state().caret_blink_armed = false;
         if (!::phenotype::detail::get_caret_visible())
             ::phenotype::detail::toggle_caret();
         return;
     }
-    g_app_state.caret_blink_armed = true;
-    g_app_state.next_caret_blink = std::chrono::steady_clock::now() + *interval;
+    shell_state().caret_blink_armed = true;
+    shell_state().next_caret_blink = std::chrono::steady_clock::now() + *interval;
 }
 
 inline void tick_caret_blink() {
     if (!platform_uses_shared_caret_blink()) {
-        g_app_state.caret_blink_armed = false;
+        shell_state().caret_blink_armed = false;
         return;
     }
     if (!::phenotype::detail::focused_is_input()) {
-        g_app_state.caret_blink_armed = false;
+        shell_state().caret_blink_armed = false;
         return;
     }
     auto const interval = platform_caret_blink_interval();
     if (!interval) {
-        g_app_state.caret_blink_armed = false;
+        shell_state().caret_blink_armed = false;
         return;
     }
-    if (!g_app_state.caret_blink_armed) {
+    if (!shell_state().caret_blink_armed) {
         reset_caret_blink_timer();
         return;
     }
     auto now = std::chrono::steady_clock::now();
-    if (now < g_app_state.next_caret_blink)
+    if (now < shell_state().next_caret_blink)
         return;
     ::phenotype::detail::toggle_caret();
-    g_app_state.next_caret_blink = now + *interval;
+    shell_state().next_caret_blink = now + *interval;
     repaint_current();
 }
 
 inline void update_hover_cursor(bool pointing) {
-    if (g_app_state.host && g_app_state.host->set_hover_cursor)
-        g_app_state.host->set_hover_cursor(pointing);
+    if (shell_state().host && shell_state().host->set_hover_cursor)
+        shell_state().host->set_hover_cursor(pointing);
 }
 
 inline float viewport_height() {
-    if (g_app_state.host)
-        return g_app_state.host->canvas_height();
+    if (shell_state().host)
+        return shell_state().host->canvas_height();
     return 600.0f;
 }
 
 inline float viewport_width() {
-    if (g_app_state.host)
-        return g_app_state.host->canvas_width();
+    if (shell_state().host)
+        return shell_state().host->canvas_width();
     return 800.0f;
 }
 
@@ -723,11 +757,11 @@ inline float max_scroll_x_for_viewport(float viewport_width) {
 // repaints.
 inline void schedule_post_scroll_paint() {
     // The runner reads `g_app().scroll_*` directly during paint; in the
-    // paint-only path `repaint_current` mirrors `g_app_state.scroll_*`
+    // paint-only path `repaint_current` mirrors `shell_state().scroll_*`
     // onto it as a side effect. The rebuild path bypasses that mirror,
     // so propagate explicitly here before either branch fires.
-    ::phenotype::detail::set_scroll_x(g_app_state.scroll_x);
-    ::phenotype::detail::set_scroll_y(g_app_state.scroll_y);
+    ::phenotype::detail::set_scroll_x(shell_state().scroll_x);
+    ::phenotype::detail::set_scroll_y(shell_state().scroll_y);
     if (::phenotype::detail::g_app().has_active_animations)
         request_input_frame("scroll", true);
     else
@@ -740,12 +774,12 @@ inline bool set_scroll_position(float next_scroll,
     float max_scroll = max_scroll_for_viewport(viewport_height);
     if (next_scroll < 0.0f) next_scroll = 0.0f;
     if (next_scroll > max_scroll) next_scroll = max_scroll;
-    if (next_scroll == g_app_state.scroll_y) {
+    if (next_scroll == shell_state().scroll_y) {
         ::phenotype::detail::note_input_event(
             "scroll", "shell", detail, "ignored", invalid_callback_id);
         return false;
     }
-    g_app_state.scroll_y = next_scroll;
+    shell_state().scroll_y = next_scroll;
     schedule_post_scroll_paint();
     ::phenotype::detail::note_input_event(
         "scroll", "shell", detail, "handled", invalid_callback_id);
@@ -758,12 +792,12 @@ inline bool set_scroll_position_x(float next_scroll,
     float max_scroll = max_scroll_x_for_viewport(viewport_width);
     if (next_scroll < 0.0f) next_scroll = 0.0f;
     if (next_scroll > max_scroll) next_scroll = max_scroll;
-    if (next_scroll == g_app_state.scroll_x) {
+    if (next_scroll == shell_state().scroll_x) {
         ::phenotype::detail::note_input_event(
             "scroll", "shell", detail, "ignored", invalid_callback_id);
         return false;
     }
-    g_app_state.scroll_x = next_scroll;
+    shell_state().scroll_x = next_scroll;
     schedule_post_scroll_paint();
     ::phenotype::detail::note_input_event(
         "scroll", "shell", detail, "handled", invalid_callback_id);
@@ -773,7 +807,7 @@ inline bool set_scroll_position_x(float next_scroll,
 inline bool scroll_by_pixels(float delta_pixels,
                              float viewport_height,
                              char const* detail) {
-    return set_scroll_position(g_app_state.scroll_y + delta_pixels,
+    return set_scroll_position(shell_state().scroll_y + delta_pixels,
                                viewport_height,
                                detail);
 }
@@ -782,7 +816,7 @@ inline bool dispatch_scroll_pixels(float delta_pixels,
                                    float viewport_height_value,
                                    char const* detail) {
     return measure_input_action("scroll", [&] {
-        return set_scroll_position(g_app_state.scroll_y - delta_pixels,
+        return set_scroll_position(shell_state().scroll_y - delta_pixels,
                                    viewport_height_value,
                                    detail);
     });
@@ -792,7 +826,7 @@ inline bool dispatch_scroll_pixels_x(float delta_pixels,
                                      float viewport_width_value,
                                      char const* detail) {
     return measure_input_action("scroll", [&] {
-        return set_scroll_position_x(g_app_state.scroll_x - delta_pixels,
+        return set_scroll_position_x(shell_state().scroll_x - delta_pixels,
                                      viewport_width_value,
                                      detail);
     });
@@ -817,7 +851,7 @@ inline bool dispatch_scroll_lines_x(double delta_lines,
 }
 
 inline bool dismiss_platform_transient() {
-    auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
+    auto const* platform = shell_state().host ? shell_state().host->platform : nullptr;
     return platform && platform->input.dismiss_transient
         && platform->input.dismiss_transient();
 }
@@ -867,9 +901,9 @@ inline bool dispatch_mouse_button(float mx, float my,
             sync_platform_input();
     }
 
-    if (g_app_state.host && g_app_state.host->platform
-        && g_app_state.host->platform->input.handle_mouse_button
-        && g_app_state.host->platform->input.handle_mouse_button(
+    if (shell_state().host && shell_state().host->platform
+        && shell_state().host->platform->input.handle_mouse_button
+        && shell_state().host->platform->input.handle_mouse_button(
             mx, my, static_cast<int>(button), static_cast<int>(action), mods)) {
         bool pressed_changed = false;
         if (button == MouseButton::Left && action == KeyAction::Release) {
@@ -894,9 +928,9 @@ inline bool dispatch_mouse_button(float mx, float my,
     }
 
     if (action == KeyAction::Release) {
-        bool had_drag = g_app_state.drag_selecting;
-        g_app_state.drag_selecting = false;
-        g_app_state.drag_selection_id = invalid_callback_id;
+        bool had_drag = shell_state().drag_selecting;
+        shell_state().drag_selecting = false;
+        shell_state().drag_selection_id = invalid_callback_id;
         bool pressed_changed = ::phenotype::detail::set_pressed_id(
             invalid_callback_id, "shell", "pointer-release");
         ::phenotype::detail::note_input_event(
@@ -920,7 +954,7 @@ inline bool dispatch_mouse_button(float mx, float my,
         return pointer_changed;
     }
 
-    if (auto hit = hit_test(mx, my, g_app_state.scroll_x, g_app_state.scroll_y)) {
+    if (auto hit = hit_test(mx, my, shell_state().scroll_x, shell_state().scroll_y)) {
         bool pressed_changed = ::phenotype::detail::set_pressed_id(
             *hit, "shell", "pointer-press");
         bool focus_changed = ::phenotype::detail::set_focus_id(
@@ -933,11 +967,11 @@ inline bool dispatch_mouse_button(float mx, float my,
         if (::phenotype::detail::focused_is_input()
             && ::phenotype::detail::get_focused_id() == *hit) {
             caret_changed = move_focused_selection_from_pointer_x(mx, false);
-            g_app_state.drag_selecting = true;
-            g_app_state.drag_selection_id = *hit;
+            shell_state().drag_selecting = true;
+            shell_state().drag_selection_id = *hit;
         } else {
-            g_app_state.drag_selecting = false;
-            g_app_state.drag_selection_id = invalid_callback_id;
+            shell_state().drag_selecting = false;
+            shell_state().drag_selection_id = invalid_callback_id;
         }
         if (focus_changed || caret_changed)
             sync_platform_input();
@@ -962,8 +996,8 @@ inline bool dispatch_mouse_button(float mx, float my,
             || caret_changed || activated || pointer_changed;
     }
 
-    g_app_state.drag_selecting = false;
-    g_app_state.drag_selection_id = invalid_callback_id;
+    shell_state().drag_selecting = false;
+    shell_state().drag_selection_id = invalid_callback_id;
     bool cleared = ::phenotype::detail::set_focus_id(
         invalid_callback_id, "shell", "pointer-clear");
     bool pressed_cleared = ::phenotype::detail::set_pressed_id(
@@ -993,14 +1027,14 @@ inline bool dispatch_mouse_button(float mx, float my,
 
 inline bool dispatch_cursor_pos(float mx, float my) {
     return measure_input_action("hover", [&] {
-        g_app_state.last_mouse_x = mx;
-        g_app_state.last_mouse_y = my;
+        shell_state().last_mouse_x = mx;
+        shell_state().last_mouse_y = my;
         bool const pointer_changed =
             ::phenotype::detail::set_pointer_position(mx, my);
-        if (g_app_state.host && g_app_state.host->platform
-            && g_app_state.host->platform->input.handle_cursor_pos
-            && g_app_state.host->platform->input.handle_cursor_pos(mx, my)) {
-            g_app_state.hovered_id = invalid_callback_id;
+        if (shell_state().host && shell_state().host->platform
+            && shell_state().host->platform->input.handle_cursor_pos
+            && shell_state().host->platform->input.handle_cursor_pos(mx, my)) {
+            shell_state().hovered_id = invalid_callback_id;
             ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
             request_input_frame("hover", false);
             update_hover_cursor(false);
@@ -1009,12 +1043,12 @@ inline bool dispatch_cursor_pos(float mx, float my) {
             return true;
         }
 
-        if (g_app_state.drag_selecting
+        if (shell_state().drag_selecting
             && ::phenotype::detail::focused_is_input()
-            && ::phenotype::detail::get_focused_id() == g_app_state.drag_selection_id) {
-            auto hit = hit_test(mx, my, g_app_state.scroll_x, g_app_state.scroll_y);
+            && ::phenotype::detail::get_focused_id() == shell_state().drag_selection_id) {
+            auto hit = hit_test(mx, my, shell_state().scroll_x, shell_state().scroll_y);
             auto hovered_id = hit.value_or(invalid_callback_id);
-            g_app_state.hovered_id = hovered_id;
+            shell_state().hovered_id = hovered_id;
             ::phenotype::detail::set_hover_id_without_event(hovered_id);
             bool handled = move_focused_selection_from_pointer_x(mx, true);
             if (handled)
@@ -1027,13 +1061,13 @@ inline bool dispatch_cursor_pos(float mx, float my) {
                 "shell",
                 "pointer-drag",
                 handled ? "handled" : "ignored",
-                g_app_state.drag_selection_id);
+                shell_state().drag_selection_id);
             return handled;
         }
 
-        auto hit = hit_test(mx, my, g_app_state.scroll_x, g_app_state.scroll_y);
+        auto hit = hit_test(mx, my, shell_state().scroll_x, shell_state().scroll_y);
         auto hovered_id = hit.value_or(invalid_callback_id);
-        g_app_state.hovered_id = hovered_id;
+        shell_state().hovered_id = hovered_id;
         bool handled = ::phenotype::detail::set_hover_id(
             hovered_id, "shell", "pointer-move");
         // Hover transitions are now view-time animations (animate_color in
@@ -1103,7 +1137,7 @@ inline bool dispatch_scroll_pixels_at_cursor(float delta_pixels,
 inline bool dispatch_scroll(double dy,
                             bool has_precise_scrolling_deltas,
                             float viewport_height_value) {
-    auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
+    auto const* platform = shell_state().host ? shell_state().host->platform : nullptr;
     float scroll_delta = normalize_scroll_delta(
         platform,
         dy,
@@ -1119,8 +1153,8 @@ inline bool dispatch_scroll(double dy,
         scroll_delta,
         viewport_height_value,
         "wheel",
-        g_app_state.last_mouse_x,
-        g_app_state.last_mouse_y);
+        shell_state().last_mouse_x,
+        shell_state().last_mouse_y);
 }
 
 // Two-axis wheel dispatch. dx > 0 scrolls content to the right (so the
@@ -1139,7 +1173,7 @@ inline bool dispatch_scroll_xy(double dx, double dy,
     if (dx != 0.0) {
         float line_h = scroll_line_height();
         float dxp = normalize_scroll_delta_x(
-            g_app_state.host ? g_app_state.host->platform : nullptr,
+            shell_state().host ? shell_state().host->platform : nullptr,
             dx,
             has_precise_scrolling_deltas,
             line_h,
@@ -1467,8 +1501,7 @@ template<typename State, typename Msg, typename View, typename Update>
     requires std::invocable<View, State const&>
           && std::invocable<Update, State&, Msg>
 void run_host(native_host& host, View view, Update update) {
-    bind_host(host, g_app_state.scroll_x, g_app_state.scroll_y);
-    detail::g_active_host = &host;
+    bind_host(host, host.shell.scroll_x, host.shell.scroll_y);
     ::phenotype::detail::g_open_url = detail::open_url_bridge;
     if (host.platform && host.platform->input.attach)
         host.platform->input.attach(host.window, detail::repaint_current);
@@ -1534,8 +1567,9 @@ inline void shutdown_host(native_host& host) {
         host.platform->text.shutdown();
     ::phenotype::detail::g_open_url = nullptr;
     ::phenotype::diag::set_application_debug_provider(nullptr);
-    detail::g_active_host = nullptr;
-    detail::g_app_state = {};
+    host.shell = {};
+    if (detail::g_active_host == &host)
+        detail::g_active_host = nullptr;
 }
 
 } // namespace detail

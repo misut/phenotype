@@ -2050,10 +2050,10 @@ inline bool run_performance_probe_if_requested() {
     int stats_long_frames = 0;
     int stats_handled_frames = 0;
     if (mode == "scroll" || mode == "mixed-input") {
-        float const w = g_app_state.host ? g_app_state.host->canvas_width() : 800.0f;
-        float const h = g_app_state.host ? g_app_state.host->canvas_height() : 600.0f;
-        g_app_state.last_mouse_x = w * 0.55f;
-        g_app_state.last_mouse_y = h * 0.55f;
+        float const w = shell_state().host ? shell_state().host->canvas_width() : 800.0f;
+        float const h = shell_state().host ? shell_state().host->canvas_height() : 600.0f;
+        shell_state().last_mouse_x = w * 0.55f;
+        shell_state().last_mouse_y = h * 0.55f;
     }
 
     for (int i = 0; i < *frames; ++i) {
@@ -2062,8 +2062,8 @@ inline bool run_performance_probe_if_requested() {
         if (mode == "rebuild") {
             ::phenotype::detail::trigger_rebuild();
         } else if (mode == "hover") {
-            float const w = g_app_state.host ? g_app_state.host->canvas_width() : 800.0f;
-            float const h = g_app_state.host ? g_app_state.host->canvas_height() : 600.0f;
+            float const w = shell_state().host ? shell_state().host->canvas_width() : 800.0f;
+            float const h = shell_state().host ? shell_state().host->canvas_height() : 600.0f;
             float const usable_w = std::max(1.0f, w - 96.0f);
             float const usable_h = std::max(1.0f, h - 96.0f);
             float const x = 48.0f + std::fmod(static_cast<float>(i * 37), usable_w);
@@ -2071,10 +2071,10 @@ inline bool run_performance_probe_if_requested() {
             handled = dispatch_cursor_pos(x, y);
         } else if (mode == "scroll") {
             double const dy = ((i / 18) % 2 == 0) ? -12.0 : 12.0;
-            float const w = g_app_state.host ? g_app_state.host->canvas_width() : 800.0f;
-            float const h = g_app_state.host ? g_app_state.host->canvas_height() : 600.0f;
-            g_app_state.last_mouse_x = w * 0.55f;
-            g_app_state.last_mouse_y = h * 0.55f;
+            float const w = shell_state().host ? shell_state().host->canvas_width() : 800.0f;
+            float const h = shell_state().host ? shell_state().host->canvas_height() : 600.0f;
+            shell_state().last_mouse_x = w * 0.55f;
+            shell_state().last_mouse_y = h * 0.55f;
             handled = dispatch_scroll_xy(0.0, dy, false, w, h);
             if (!handled) {
                 bool const previous_input_motion =
@@ -2086,8 +2086,8 @@ inline bool run_performance_probe_if_requested() {
                     previous_input_motion;
             }
         } else if (mode == "mixed-input") {
-            float const w = g_app_state.host ? g_app_state.host->canvas_width() : 800.0f;
-            float const h = g_app_state.host ? g_app_state.host->canvas_height() : 600.0f;
+            float const w = shell_state().host ? shell_state().host->canvas_width() : 800.0f;
+            float const h = shell_state().host ? shell_state().host->canvas_height() : 600.0f;
             switch (i % 4) {
                 case 0:
                     handled = dispatch_cursor_pos(
@@ -2095,8 +2095,8 @@ inline bool run_performance_probe_if_requested() {
                         48.0f + std::fmod(static_cast<float>(i * 31), std::max(1.0f, h - 96.0f)));
                     break;
                 case 1:
-                    g_app_state.last_mouse_x = w * 0.55f;
-                    g_app_state.last_mouse_y = h * 0.55f;
+                    shell_state().last_mouse_x = w * 0.55f;
+                    shell_state().last_mouse_y = h * 0.55f;
                     handled = dispatch_scroll_xy(
                         0.0,
                         ((i / 16) % 2 == 0) ? -12.0 : 12.0,

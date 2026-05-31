@@ -34,10 +34,13 @@ This follows the same ownership split used by established UI systems:
 
 The first migration steps keep the existing `phenotype::run` API source
 compatible, but internally route the active `AppState`, type-erased message
-queue, and `framework_local` storage through a `SceneRuntime`. This gives the
-codebase a safe place to attach future settings windows without sharing hover,
-focus, queued messages, scroll offsets, widget open/closed flags, or animation
-state with the main window.
+queue, and `framework_local` storage through a `SceneRuntime`. Native shell
+state such as scroll position, last pointer position, drag selection, caret
+blink, deferred input repaint, and repaint coalescing now lives on the
+`native_host` that receives the event. This gives the codebase a safe place to
+attach future settings windows without sharing hover, focus, queued messages,
+scroll offsets, widget open/closed flags, or animation state with the main
+window.
 
 ## Migration Rules
 
