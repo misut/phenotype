@@ -401,6 +401,90 @@ void test_scene_runtime_isolates_app_state_and_messages() {
     std::puts("PASS: scene runtime isolates app state and messages");
 }
 
+void test_render_surface_runtime_binds_scene_and_tracks_frames() {
+    auto& main_surface = detail::default_render_surface_runtime();
+    {
+        detail::ScopedRenderSurfaceActivation activate_main(main_surface);
+        runtime::configure_active_render_surface(RenderSurfaceDescriptor{
+            .id = "main",
+            .title = "Main",
+            .scene_id = "main",
+            .role = RenderSurfaceRole::MainWindow,
+            .visible = true,
+            .logical_width = 1024,
+            .logical_height = 768,
+            .framebuffer_width = 2048,
+            .framebuffer_height = 1536,
+            .content_scale = 2.0f,
+        });
+        auto snapshot = runtime::active_render_surface();
+        assert(snapshot.id == "main");
+        assert(snapshot.scene_id == "main");
+        assert(snapshot.role == RenderSurfaceRole::MainWindow);
+        assert(snapshot.active);
+        assert(snapshot.logical_width == 1024);
+        assert(snapshot.framebuffer_width == 2048);
+        assert(runtime::active_scene().id == "main");
+    }
+
+    auto& settings_surface =
+        detail::ensure_render_surface_runtime(RenderSurfaceDescriptor{
+            .id = "settings-window-surface",
+            .title = "Settings Surface",
+            .scene_id = "surface-settings-scene",
+            .role = RenderSurfaceRole::Settings,
+            .visible = true,
+            .logical_width = 420,
+            .logical_height = 320,
+            .framebuffer_width = 840,
+            .framebuffer_height = 640,
+            .content_scale = 2.0f,
+        });
+
+    {
+        detail::ScopedRenderSurfaceActivation activate_settings(settings_surface);
+        assert(runtime::active_scene().id == "surface-settings-scene");
+        assert(runtime::active_scene().role == SceneRole::Settings);
+        detail::g_app().hovered_id = 314u;
+        runtime::mark_active_render_surface_damaged();
+        runtime::note_active_render_surface_frame();
+
+        auto snapshot = runtime::active_render_surface();
+        assert(snapshot.id == "settings-window-surface");
+        assert(snapshot.scene_id == "surface-settings-scene");
+        assert(snapshot.role == RenderSurfaceRole::Settings);
+        assert(snapshot.active);
+        assert(snapshot.logical_width == 420);
+        assert(snapshot.frame_sequence == 1);
+        assert(snapshot.damage_generation == 1);
+        assert(runtime::active_scene().hovered_id == 314u);
+    }
+
+    {
+        detail::ScopedRenderSurfaceActivation activate_main(main_surface);
+        assert(runtime::active_scene().id == "main");
+        assert(runtime::active_scene().hovered_id != 314u);
+        assert(runtime::active_render_surface().id == "main");
+    }
+
+    auto surfaces = runtime::render_surfaces();
+    bool saw_main = false;
+    bool saw_settings = false;
+    for (auto const& surface : surfaces) {
+        saw_main = saw_main || (surface.id == "main"
+                                && surface.role == RenderSurfaceRole::MainWindow);
+        saw_settings = saw_settings
+            || (surface.id == "settings-window-surface"
+                && surface.scene_id == "surface-settings-scene"
+                && surface.frame_sequence == 1
+                && surface.damage_generation == 1);
+    }
+    assert(saw_main);
+    assert(saw_settings);
+
+    std::puts("PASS: render surface runtime binds scenes and tracks frames");
+}
+
 void test_system_theme_preferences_are_pure_overlays() {
     Theme theme{};
     theme.default_font_family = "Pretendard";
@@ -2726,6 +2810,7 @@ int main() {
     test_set_theme_updates_and_invalidates_cache();
     test_default_theme_glass_contract();
     test_scene_runtime_isolates_app_state_and_messages();
+    test_render_surface_runtime_binds_scene_and_tracks_frames();
     test_system_theme_preferences_are_pure_overlays();
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();

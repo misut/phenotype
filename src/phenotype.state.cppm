@@ -296,6 +296,44 @@ struct SceneSnapshot {
     std::uint32_t framework_local_generation = 0;
 };
 
+enum class RenderSurfaceRole {
+    MainWindow,
+    Window,
+    Settings,
+    Debug,
+    Offscreen,
+    Custom,
+};
+
+struct RenderSurfaceDescriptor {
+    std::string id = "main";
+    std::string title;
+    std::string scene_id = "main";
+    RenderSurfaceRole role = RenderSurfaceRole::Window;
+    bool visible = true;
+    int logical_width = 0;
+    int logical_height = 0;
+    int framebuffer_width = 0;
+    int framebuffer_height = 0;
+    float content_scale = 1.0f;
+};
+
+struct RenderSurfaceSnapshot {
+    std::string id;
+    std::string title;
+    std::string scene_id;
+    RenderSurfaceRole role = RenderSurfaceRole::Window;
+    bool active = false;
+    bool visible = false;
+    int logical_width = 0;
+    int logical_height = 0;
+    int framebuffer_width = 0;
+    int framebuffer_height = 0;
+    float content_scale = 1.0f;
+    std::uint64_t frame_sequence = 0;
+    std::uint64_t damage_generation = 0;
+};
+
 struct AppState {
     Theme theme;
     std::uint64_t theme_generation = 1;
@@ -713,6 +751,216 @@ namespace detail {
         return out;
     }
 
+    struct RenderSurfaceRuntime {
+        RenderSurfaceDescriptor descriptor{};
+        SceneRuntime* scene = nullptr;
+        std::uint64_t frame_sequence = 0;
+        std::uint64_t damage_generation = 0;
+    };
+
+    inline std::string normalize_render_surface_id(std::string id) {
+        return id.empty() ? std::string{"main"} : std::move(id);
+    }
+
+    inline SceneRole scene_role_for_render_surface(RenderSurfaceRole role) {
+        switch (role) {
+        case RenderSurfaceRole::MainWindow:
+            return SceneRole::Main;
+        case RenderSurfaceRole::Settings:
+            return SceneRole::Settings;
+        case RenderSurfaceRole::Debug:
+            return SceneRole::Debug;
+        case RenderSurfaceRole::Offscreen:
+            return SceneRole::Overlay;
+        case RenderSurfaceRole::Custom:
+            return SceneRole::Custom;
+        case RenderSurfaceRole::Window:
+        default:
+            return SceneRole::Window;
+        }
+    }
+
+    inline std::string render_surface_scene_id(
+        RenderSurfaceDescriptor const& descriptor) {
+        if (!descriptor.scene_id.empty())
+            return normalize_scene_id(descriptor.scene_id);
+        if (descriptor.id == "main")
+            return std::string{"main"};
+        return active_scene_runtime().descriptor.id;
+    }
+
+    inline SceneRuntime& scene_for_render_surface(
+        RenderSurfaceDescriptor const& descriptor) {
+        auto scene_id = render_surface_scene_id(descriptor);
+        if (auto* existing = find_scene_runtime(scene_id))
+            return *existing;
+        auto title = descriptor.title.empty() ? scene_id : descriptor.title;
+        return ensure_scene_runtime(SceneDescriptor{
+            .id = std::move(scene_id),
+            .title = std::move(title),
+            .role = scene_role_for_render_surface(descriptor.role),
+            .visible = descriptor.visible,
+        });
+    }
+
+    inline RenderSurfaceRuntime& default_render_surface_runtime() {
+        static RenderSurfaceRuntime& surface = *new RenderSurfaceRuntime();
+        if (!surface.scene) {
+            surface.descriptor = RenderSurfaceDescriptor{
+                .id = "main",
+                .title = "Main",
+                .scene_id = "main",
+                .role = RenderSurfaceRole::MainWindow,
+                .visible = true,
+            };
+            surface.scene = &default_scene_runtime();
+        }
+        return surface;
+    }
+
+    inline std::vector<std::unique_ptr<RenderSurfaceRuntime>>&
+    render_surface_registry() {
+        static std::vector<std::unique_ptr<RenderSurfaceRuntime>>& surfaces =
+            *new std::vector<std::unique_ptr<RenderSurfaceRuntime>>();
+        return surfaces;
+    }
+
+    inline RenderSurfaceRuntime* g_active_render_surface =
+        &default_render_surface_runtime();
+
+    inline RenderSurfaceRuntime& active_render_surface_runtime() {
+        if (!g_active_render_surface)
+            g_active_render_surface = &default_render_surface_runtime();
+        return *g_active_render_surface;
+    }
+
+    inline RenderSurfaceRuntime* find_render_surface_runtime(
+        std::string_view id) {
+        auto normalized = normalize_render_surface_id(std::string{id});
+        auto& main_surface = default_render_surface_runtime();
+        if (main_surface.descriptor.id == normalized)
+            return &main_surface;
+        for (auto& surface : render_surface_registry()) {
+            if (surface && surface->descriptor.id == normalized)
+                return surface.get();
+        }
+        return nullptr;
+    }
+
+    inline RenderSurfaceDescriptor normalize_render_surface_descriptor(
+        RenderSurfaceDescriptor descriptor) {
+        descriptor.id = normalize_render_surface_id(std::move(descriptor.id));
+        descriptor.scene_id = render_surface_scene_id(descriptor);
+        if (descriptor.content_scale <= 0.0f)
+            descriptor.content_scale = 1.0f;
+        return descriptor;
+    }
+
+    inline RenderSurfaceRuntime& ensure_render_surface_runtime(
+        RenderSurfaceDescriptor descriptor) {
+        descriptor = normalize_render_surface_descriptor(std::move(descriptor));
+        auto& scene = scene_for_render_surface(descriptor);
+        if (auto* existing = find_render_surface_runtime(descriptor.id)) {
+            existing->descriptor = std::move(descriptor);
+            existing->scene = &scene;
+            return *existing;
+        }
+        auto surface = std::make_unique<RenderSurfaceRuntime>();
+        surface->descriptor = std::move(descriptor);
+        surface->scene = &scene;
+        auto* ptr = surface.get();
+        render_surface_registry().push_back(std::move(surface));
+        return *ptr;
+    }
+
+    inline void bind_render_surface_runtime(RenderSurfaceRuntime& surface) {
+        g_active_render_surface = &surface;
+        if (!surface.scene)
+            surface.scene = &scene_for_render_surface(surface.descriptor);
+        bind_scene_runtime(*surface.scene);
+    }
+
+    struct ScopedRenderSurfaceActivation {
+        RenderSurfaceRuntime* previous_surface = nullptr;
+        SceneRuntime* previous_scene = nullptr;
+        AppState* previous_app = nullptr;
+        std::vector<DispatchedMsg>* previous_messages = nullptr;
+
+        explicit ScopedRenderSurfaceActivation(RenderSurfaceRuntime& surface)
+            : previous_surface(g_active_render_surface),
+              previous_scene(g_active_scene),
+              previous_app(g_active_app),
+              previous_messages(g_active_msg_queue) {
+            bind_render_surface_runtime(surface);
+        }
+
+        ~ScopedRenderSurfaceActivation() {
+            g_active_render_surface = previous_surface
+                ? previous_surface
+                : &default_render_surface_runtime();
+            g_active_scene = previous_scene
+                ? previous_scene
+                : &default_scene_runtime();
+            g_active_app = previous_app ? previous_app : &default_app_state();
+            g_active_msg_queue = previous_messages
+                ? previous_messages
+                : &default_scene_runtime().messages;
+        }
+    };
+
+    inline void configure_active_render_surface(
+        RenderSurfaceDescriptor descriptor) {
+        auto& surface = active_render_surface_runtime();
+        if (descriptor.id.empty())
+            descriptor.id = surface.descriptor.id;
+        if (descriptor.scene_id.empty()) {
+            descriptor.scene_id = surface.scene
+                ? surface.scene->descriptor.id
+                : active_scene_runtime().descriptor.id;
+        }
+        descriptor = normalize_render_surface_descriptor(std::move(descriptor));
+        surface.descriptor = std::move(descriptor);
+        surface.scene = &scene_for_render_surface(surface.descriptor);
+        bind_render_surface_runtime(surface);
+    }
+
+    inline void mark_active_render_surface_damaged() {
+        ++active_render_surface_runtime().damage_generation;
+    }
+
+    inline void note_active_render_surface_frame() {
+        ++active_render_surface_runtime().frame_sequence;
+    }
+
+    inline RenderSurfaceSnapshot render_surface_snapshot(
+        RenderSurfaceRuntime const& surface) {
+        return RenderSurfaceSnapshot{
+            .id = surface.descriptor.id,
+            .title = surface.descriptor.title,
+            .scene_id = surface.descriptor.scene_id,
+            .role = surface.descriptor.role,
+            .active = &surface == g_active_render_surface,
+            .visible = surface.descriptor.visible,
+            .logical_width = surface.descriptor.logical_width,
+            .logical_height = surface.descriptor.logical_height,
+            .framebuffer_width = surface.descriptor.framebuffer_width,
+            .framebuffer_height = surface.descriptor.framebuffer_height,
+            .content_scale = surface.descriptor.content_scale,
+            .frame_sequence = surface.frame_sequence,
+            .damage_generation = surface.damage_generation,
+        };
+    }
+
+    inline std::vector<RenderSurfaceSnapshot> render_surface_snapshots() {
+        std::vector<RenderSurfaceSnapshot> out;
+        out.push_back(render_surface_snapshot(default_render_surface_runtime()));
+        for (auto const& surface : render_surface_registry()) {
+            if (surface)
+                out.push_back(render_surface_snapshot(*surface));
+        }
+        return out;
+    }
+
     template<typename Msg>
     void post(Msg msg) {
         auto* p = new Msg(std::move(msg));
@@ -1101,6 +1349,27 @@ inline std::vector<SceneSnapshot> scenes() {
 
 inline void configure_active_scene(SceneDescriptor descriptor) {
     detail::configure_active_scene(std::move(descriptor));
+}
+
+inline RenderSurfaceSnapshot active_render_surface() {
+    return detail::render_surface_snapshot(
+        detail::active_render_surface_runtime());
+}
+
+inline std::vector<RenderSurfaceSnapshot> render_surfaces() {
+    return detail::render_surface_snapshots();
+}
+
+inline void configure_active_render_surface(RenderSurfaceDescriptor descriptor) {
+    detail::configure_active_render_surface(std::move(descriptor));
+}
+
+inline void mark_active_render_surface_damaged() {
+    detail::mark_active_render_surface_damaged();
+}
+
+inline void note_active_render_surface_frame() {
+    detail::note_active_render_surface_frame();
 }
 
 } // namespace runtime
