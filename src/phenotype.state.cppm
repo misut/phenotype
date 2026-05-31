@@ -681,6 +681,10 @@ namespace detail {
         }
     };
 
+    struct LegacyRunnerContext {
+        void (*runner)() = nullptr;
+    };
+
     inline std::string normalize_scene_id(std::string id) {
         return id.empty() ? std::string{"main"} : std::move(id);
     }
@@ -1209,16 +1213,22 @@ namespace detail {
 
     inline void install_app_runner(void (*runner)()) {
         auto& scene = active_scene_runtime();
-        scene.runner = runner
-            ? [](void* raw) {
-                auto* thunk = static_cast<void (**)()>(raw);
-                (*thunk)();
-            }
-            : nullptr;
-        static void (*legacy_runner)() = nullptr;
-        legacy_runner = runner;
-        scene.runner_context = runner ? &legacy_runner : nullptr;
-        scene.runner_context_owner = nullptr;
+        if (!runner) {
+            scene.runner = nullptr;
+            scene.runner_context = nullptr;
+            scene.runner_context_owner = nullptr;
+            return;
+        }
+
+        auto context = std::make_shared<LegacyRunnerContext>(
+            LegacyRunnerContext{.runner = runner});
+        scene.runner = [](void* raw) {
+            auto* context = static_cast<LegacyRunnerContext*>(raw);
+            if (context && context->runner)
+                context->runner();
+        };
+        scene.runner_context = context.get();
+        scene.runner_context_owner = std::move(context);
     }
 
     inline void trigger_rebuild() {

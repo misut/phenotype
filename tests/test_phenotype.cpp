@@ -769,6 +769,63 @@ void test_app_runner_can_own_context_pointer() {
     std::puts("PASS: app runner can own context pointer");
 }
 
+static int legacy_runner_scene_a_rebuilds = 0;
+static int legacy_runner_scene_b_rebuilds = 0;
+
+void legacy_runner_scene_a() {
+    ++legacy_runner_scene_a_rebuilds;
+}
+
+void legacy_runner_scene_b() {
+    ++legacy_runner_scene_b_rebuilds;
+}
+
+void test_legacy_app_runner_context_is_scene_local() {
+    auto active_before = runtime::active_scene_handle();
+    auto scene_a = runtime::ensure_scene(SceneDescriptor{
+        .id = "legacy-runner-scene-a",
+        .title = "Legacy Runner Scene A",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+    auto scene_b = runtime::ensure_scene(SceneDescriptor{
+        .id = "legacy-runner-scene-b",
+        .title = "Legacy Runner Scene B",
+        .role = SceneRole::Debug,
+        .visible = true,
+    });
+
+    {
+        auto activate = runtime::activate_scene(scene_a);
+        detail::install_app_runner(legacy_runner_scene_a);
+    }
+    {
+        auto activate = runtime::activate_scene(scene_b);
+        detail::install_app_runner(legacy_runner_scene_b);
+    }
+
+    legacy_runner_scene_a_rebuilds = 0;
+    legacy_runner_scene_b_rebuilds = 0;
+    runtime::trigger_scene_rebuild(scene_a);
+    assert(legacy_runner_scene_a_rebuilds == 1);
+    assert(legacy_runner_scene_b_rebuilds == 0);
+
+    runtime::trigger_scene_rebuild(scene_b);
+    assert(legacy_runner_scene_a_rebuilds == 1);
+    assert(legacy_runner_scene_b_rebuilds == 1);
+
+    runtime::clear_scene_runner(scene_a);
+    runtime::trigger_scene_rebuild(scene_a);
+    runtime::trigger_scene_rebuild(scene_b);
+    assert(legacy_runner_scene_a_rebuilds == 1);
+    assert(legacy_runner_scene_b_rebuilds == 2);
+
+    runtime::clear_scene_runner(scene_b);
+    assert(runtime::active_scene_handle().id == active_before.id);
+
+    std::puts("PASS: legacy app runner context is scene-local");
+}
+
 void test_runtime_run_scene_keeps_same_types_scene_local() {
     struct SceneRunState {
         int value = 0;
@@ -3339,6 +3396,7 @@ int main() {
     test_application_runtime_snapshot_tracks_process_owners();
     test_app_runner_uses_context_pointer();
     test_app_runner_can_own_context_pointer();
+    test_legacy_app_runner_context_is_scene_local();
     test_runtime_run_scene_keeps_same_types_scene_local();
     test_runtime_run_scene_can_share_external_state();
     test_runtime_scene_runner_targets_scene();

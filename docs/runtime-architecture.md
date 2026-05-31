@@ -93,6 +93,8 @@ not on widget app state. The compatibility `run<State, Msg>` entry point still
 installs one main-scene runner, but that runner now receives an explicit
 context object containing its host, user state, view, and update closures, and
 that context is owned by the scene rather than by a function-template static.
+The older no-argument runner shim follows the same rule by wrapping the function
+pointer in scene-owned storage instead of sharing a process-wide thunk slot.
 This is the transition point toward multiple scene roots: a settings or debug
 scene can get its own runner context instead of sharing a process-global
 `saved_view` / `saved_update` singleton, and resetting an `AppState` cannot
