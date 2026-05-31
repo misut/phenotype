@@ -585,6 +585,58 @@ void test_render_surface_runtime_binds_scene_and_tracks_frames() {
     std::puts("PASS: render surface runtime binds scenes and tracks frames");
 }
 
+void test_render_surface_visibility_updates_bound_scene() {
+    auto scene = runtime::ensure_scene(SceneDescriptor{
+        .id = "surface-lifecycle-scene",
+        .title = "Surface Lifecycle Scene",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+    auto surface = runtime::ensure_render_surface(RenderSurfaceDescriptor{
+        .id = "surface-lifecycle-surface",
+        .title = "Surface Lifecycle Surface",
+        .scene_id = "surface-lifecycle-scene",
+        .role = RenderSurfaceRole::Settings,
+        .visible = true,
+        .logical_width = 320,
+        .logical_height = 240,
+        .framebuffer_width = 640,
+        .framebuffer_height = 480,
+        .content_scale = 2.0f,
+    });
+    assert(runtime::scene(scene).visible);
+    assert(runtime::render_surface(surface).visible);
+
+    runtime::ensure_render_surface(RenderSurfaceDescriptor{
+        .id = "surface-lifecycle-surface",
+        .title = "Surface Lifecycle Surface",
+        .scene_id = "surface-lifecycle-scene",
+        .role = RenderSurfaceRole::Settings,
+        .visible = false,
+        .logical_width = 320,
+        .logical_height = 240,
+        .framebuffer_width = 640,
+        .framebuffer_height = 480,
+        .content_scale = 2.0f,
+    });
+    assert(!runtime::render_surface(surface).visible);
+    assert(!runtime::scene(scene).visible);
+
+    runtime::set_scene_visible(scene, true);
+    assert(runtime::scene(scene).visible);
+    assert(!runtime::render_surface(surface).visible);
+
+    runtime::set_render_surface_visible(surface, true);
+    assert(runtime::render_surface(surface).visible);
+    assert(runtime::scene(scene).visible);
+
+    runtime::set_render_surface_visible("surface-lifecycle-surface", false);
+    assert(!runtime::render_surface(surface).visible);
+    assert(!runtime::scene(scene).visible);
+
+    std::puts("PASS: render surface visibility updates bound scene");
+}
+
 void test_app_runner_uses_context_pointer() {
     struct RunnerContext {
         int rebuilds = 0;
@@ -3220,6 +3272,7 @@ int main() {
     test_scene_runtime_isolates_app_state_and_messages();
     test_scene_scheduler_clock_is_scene_local();
     test_render_surface_runtime_binds_scene_and_tracks_frames();
+    test_render_surface_visibility_updates_bound_scene();
     test_app_runner_uses_context_pointer();
     test_app_runner_can_own_context_pointer();
     test_runtime_run_scene_keeps_same_types_scene_local();
