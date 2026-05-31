@@ -110,6 +110,11 @@ active-scene variants wrap the low-level callback/context runner slot with a
 settings or debug-window code attach one runner per scene root without poking
 `detail::install_app_runner` directly, and targeted rebuilds restore the
 caller's previous active scene after running.
+`runtime::run_scene<State, Msg>` is the higher-level version of that transition:
+it installs the same compatibility `run` frame pipeline into an explicit scene
+instead of always binding `main`, so future settings/debug windows can mount a
+declarative root while keeping their state, messages, and runner context
+separate from the main window.
 
 ## Migration Rules
 

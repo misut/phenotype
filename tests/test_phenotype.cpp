@@ -586,6 +586,96 @@ void test_app_runner_can_own_context_pointer() {
     std::puts("PASS: app runner can own context pointer");
 }
 
+void test_runtime_run_scene_keeps_same_types_scene_local() {
+    struct SceneRunState {
+        int value = 0;
+    };
+
+    struct ViewProbe {
+        int* last_seen = nullptr;
+
+        void operator()(SceneRunState const& state) const {
+            if (last_seen)
+                *last_seen = state.value;
+            widget::text("scene value=" + std::to_string(state.value));
+        }
+    };
+
+    struct UpdateProbe {
+        void operator()(SceneRunState& state, int msg) const {
+            state.value += msg;
+        }
+    };
+
+    auto scene_a = runtime::ensure_scene(SceneDescriptor{
+        .id = "run-scene-a",
+        .title = "Run Scene A",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+    auto scene_b = runtime::ensure_scene(SceneDescriptor{
+        .id = "run-scene-b",
+        .title = "Run Scene B",
+        .role = SceneRole::Debug,
+        .visible = true,
+    });
+    auto active_before = runtime::active_scene_handle();
+    int last_a = -1;
+    int last_b = -1;
+
+#if !defined(__wasi__) && !defined(__ANDROID__)
+    null_host host_a;
+    null_host host_b;
+    runtime::run_scene<SceneRunState, int>(
+        scene_a,
+        host_a,
+        ViewProbe{&last_a},
+        UpdateProbe{});
+    runtime::run_scene<SceneRunState, int>(
+        scene_b,
+        host_b,
+        ViewProbe{&last_b},
+        UpdateProbe{});
+#elif defined(__wasi__)
+    runtime::run_scene<SceneRunState, int>(
+        scene_a,
+        ViewProbe{&last_a},
+        UpdateProbe{});
+    runtime::run_scene<SceneRunState, int>(
+        scene_b,
+        ViewProbe{&last_b},
+        UpdateProbe{});
+#else
+    std::puts("SKIP: runtime run_scene scene-local contexts");
+    return;
+#endif
+
+    assert(runtime::active_scene_handle().id == active_before.id);
+    assert(last_a == 0);
+    assert(last_b == 0);
+
+    runtime::post_to_scene<int>(scene_a, 3);
+    runtime::trigger_scene_rebuild(scene_a);
+    assert(last_a == 3);
+    assert(last_b == 0);
+    assert(runtime::active_scene_handle().id == active_before.id);
+
+    runtime::post_to_scene<int>(scene_b, 5);
+    runtime::trigger_scene_rebuild(scene_b);
+    assert(last_a == 3);
+    assert(last_b == 5);
+
+    runtime::post_to_scene<int>(scene_a, 2);
+    runtime::trigger_scene_rebuild(scene_a);
+    assert(last_a == 5);
+    assert(last_b == 5);
+
+    runtime::clear_scene_runner(scene_a);
+    runtime::clear_scene_runner(scene_b);
+
+    std::puts("PASS: runtime run_scene keeps same types scene-local");
+}
+
 void test_runtime_scene_runner_targets_scene() {
     struct RunnerContext {
         int rebuilds = 0;
@@ -2994,6 +3084,7 @@ int main() {
     test_render_surface_runtime_binds_scene_and_tracks_frames();
     test_app_runner_uses_context_pointer();
     test_app_runner_can_own_context_pointer();
+    test_runtime_run_scene_keeps_same_types_scene_local();
     test_runtime_scene_runner_targets_scene();
     test_scene_runner_survives_app_state_swap();
     test_system_theme_preferences_are_pure_overlays();

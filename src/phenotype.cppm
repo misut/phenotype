@@ -2666,65 +2666,98 @@ inline Theme const& current_theme() noexcept {
 // Native: run(host, view, update) — host satisfies host_platform concept.
 // WASM:   run(view, update)       — uses phenotype_host.h C linkage.
 
+namespace detail {
+
+inline void reset_active_scene_runner_inputs() {
+    auto& app = g_app();
+    app.input_debug = {};
+    app.callback_roles.clear();
+    app.focus_visible = false;
+    app.prev_focus_visible = false;
+    app.pressed_id = 0xFFFFFFFFu;
+    app.prev_pressed_id = 0xFFFFFFFFu;
+    reset_pointer_inputs(app);
+}
+
 #ifndef __wasi__
 template<typename State, typename Msg, host_platform Host,
          typename View, typename Update>
     requires std::invocable<View, State const&>
           && std::invocable<Update, State&, Msg>
-void run(Host& host, View view, Update update) {
+void install_native_scene_run_context(Host& host, View view, Update update) {
     struct RunContext {
         Host* host = nullptr;
         State state{};
         View view;
         Update update;
     };
-    detail::bind_scene_runtime(detail::default_scene_runtime());
-    detail::configure_active_scene(SceneDescriptor{
-        .id = "main",
-        .title = "Main",
-        .role = SceneRole::Main,
-        .visible = true,
-    });
-    detail::msg_queue().clear();
+    msg_queue().clear();
     auto context = std::make_shared<RunContext>(RunContext{
         .host = &host,
         .state = State{},
         .view = std::move(view),
         .update = std::move(update),
     });
-    detail::g_app().input_debug = {};
-    detail::g_app().callback_roles.clear();
-    detail::g_app().focus_visible = false;
-    detail::g_app().prev_focus_visible = false;
-    detail::g_app().pressed_id = 0xFFFFFFFFu;
-    detail::g_app().prev_pressed_id = 0xFFFFFFFFu;
-    detail::reset_pointer_inputs(detail::g_app());
+    reset_active_scene_runner_inputs();
 
     auto* raw_context = context.get();
-    detail::install_app_runner([](void* raw) {
+    install_app_runner([](void* raw) {
         auto& context = *static_cast<RunContext*>(raw);
-        detail::NativeFrameBackend<Host> backend{context.host};
-        detail::run_scene_rebuild_frame(
+        NativeFrameBackend<Host> backend{context.host};
+        run_scene_rebuild_frame(
             [&] {
-                auto msgs = detail::drain<Msg>();
+                auto msgs = drain<Msg>();
                 for (auto& m : msgs)
                     context.update(context.state, std::move(m));
             },
             [&] { context.view(context.state); },
             backend);
     }, raw_context, std::move(context));
-    detail::trigger_rebuild();
+    trigger_rebuild();
 }
 #else // __wasi__
 template<typename State, typename Msg, typename View, typename Update>
     requires std::invocable<View, State const&>
           && std::invocable<Update, State&, Msg>
-void run(View view, Update update) {
+void install_wasi_scene_run_context(View view, Update update) {
     struct RunContext {
         State state{};
         View view;
         Update update;
     };
+    msg_queue().clear();
+    auto context = std::make_shared<RunContext>(RunContext{
+        .state = State{},
+        .view = std::move(view),
+        .update = std::move(update),
+    });
+    reset_active_scene_runner_inputs();
+
+    auto* raw_context = context.get();
+    install_app_runner([](void* raw) {
+        auto& context = *static_cast<RunContext*>(raw);
+        WasiFrameBackend backend{};
+        run_scene_rebuild_frame(
+            [&] {
+                auto msgs = drain<Msg>();
+                for (auto& m : msgs)
+                    context.update(context.state, std::move(m));
+            },
+            [&] { context.view(context.state); },
+            backend);
+    }, raw_context, std::move(context));
+    trigger_rebuild();
+}
+#endif
+
+} // namespace detail
+
+#ifndef __wasi__
+template<typename State, typename Msg, host_platform Host,
+         typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+void run(Host& host, View view, Update update) {
     detail::bind_scene_runtime(detail::default_scene_runtime());
     detail::configure_active_scene(SceneDescriptor{
         .id = "main",
@@ -2732,35 +2765,60 @@ void run(View view, Update update) {
         .role = SceneRole::Main,
         .visible = true,
     });
-    detail::msg_queue().clear();
-    auto context = std::make_shared<RunContext>(RunContext{
-        .state = State{},
-        .view = std::move(view),
-        .update = std::move(update),
-    });
-    detail::g_app().input_debug = {};
-    detail::g_app().callback_roles.clear();
-    detail::g_app().focus_visible = false;
-    detail::g_app().prev_focus_visible = false;
-    detail::g_app().pressed_id = 0xFFFFFFFFu;
-    detail::g_app().prev_pressed_id = 0xFFFFFFFFu;
-    detail::reset_pointer_inputs(detail::g_app());
-
-    auto* raw_context = context.get();
-    detail::install_app_runner([](void* raw) {
-        auto& context = *static_cast<RunContext*>(raw);
-        detail::WasiFrameBackend backend{};
-        detail::run_scene_rebuild_frame(
-            [&] {
-                auto msgs = detail::drain<Msg>();
-                for (auto& m : msgs)
-                    context.update(context.state, std::move(m));
-            },
-            [&] { context.view(context.state); },
-            backend);
-    }, raw_context, std::move(context));
-    detail::trigger_rebuild();
+    detail::install_native_scene_run_context<State, Msg>(
+        host,
+        std::move(view),
+        std::move(update));
 }
+
+namespace runtime {
+
+template<typename State, typename Msg, host_platform Host,
+         typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+void run_scene(SceneHandle const& scene,
+               Host& host,
+               View view,
+               Update update) {
+    SceneActivation activate{scene};
+    detail::install_native_scene_run_context<State, Msg>(
+        host,
+        std::move(view),
+        std::move(update));
+}
+
+} // namespace runtime
+#else // __wasi__
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+void run(View view, Update update) {
+    detail::bind_scene_runtime(detail::default_scene_runtime());
+    detail::configure_active_scene(SceneDescriptor{
+        .id = "main",
+        .title = "Main",
+        .role = SceneRole::Main,
+        .visible = true,
+    });
+    detail::install_wasi_scene_run_context<State, Msg>(
+        std::move(view),
+        std::move(update));
+}
+
+namespace runtime {
+
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+void run_scene(SceneHandle const& scene, View view, Update update) {
+    SceneActivation activate{scene};
+    detail::install_wasi_scene_run_context<State, Msg>(
+        std::move(view),
+        std::move(update));
+}
+
+} // namespace runtime
 #endif
 
 // ============================================================
