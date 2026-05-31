@@ -14,6 +14,7 @@ module;
 #include <fstream>
 #include <format>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -777,6 +778,327 @@ inline std::string safe_preferences_text(char const* value,
     return value && value[0] != '\0' ? std::string{value} : std::string{fallback};
 }
 
+inline void appkit_set_hover_cursor(bool pointing);
+
+struct AppKitSceneWindowOptions {
+    char const* identifier = "scene-window";
+    char const* title = "Window";
+    int width = 640;
+    int height = 420;
+    char const* scene_id = nullptr;
+    char const* surface_id = nullptr;
+    ::phenotype::SceneRole scene_role = ::phenotype::SceneRole::Window;
+    ::phenotype::RenderSurfaceRole surface_role =
+        ::phenotype::RenderSurfaceRole::Window;
+    WindowOptions window_options = {};
+    bool order_front = true;
+};
+
+struct AppKitSceneWindowState {
+    std::string identifier;
+    std::string title;
+    std::string scene_id;
+    std::string surface_id;
+    int width = 640;
+    int height = 420;
+    ::phenotype::SceneRole scene_role = ::phenotype::SceneRole::Window;
+    ::phenotype::RenderSurfaceRole surface_role =
+        ::phenotype::RenderSurfaceRole::Window;
+    WindowOptions window_options = {};
+    id window = nullptr;
+    id content_view = nullptr;
+    NativeSurfaceDescriptor surface{};
+    native_host host{};
+    bool visible = false;
+    bool runner_installed = false;
+    std::chrono::steady_clock::time_point last_animation_tick =
+        std::chrono::steady_clock::now();
+};
+
+inline std::vector<std::unique_ptr<AppKitSceneWindowState>>
+    g_appkit_scene_windows;
+inline id g_appkit_scene_window_delegate = nullptr;
+
+inline std::string scene_window_identifier_or_default(char const* value) {
+    auto identifier = safe_preferences_text(value, "scene-window");
+    return identifier.empty() ? std::string{"scene-window"} : identifier;
+}
+
+inline AppKitSceneWindowState* find_appkit_scene_window(
+        std::string_view identifier) {
+    for (auto& state : g_appkit_scene_windows) {
+        if (state && state->identifier == identifier)
+            return state.get();
+    }
+    return nullptr;
+}
+
+inline AppKitSceneWindowState* find_appkit_scene_window_by_window(id window) {
+    if (!window)
+        return nullptr;
+    for (auto& state : g_appkit_scene_windows) {
+        if (state && state->window == window)
+            return state.get();
+    }
+    return nullptr;
+}
+
+inline std::string default_scene_id_for_window(std::string_view identifier) {
+    return "appkit:" + std::string{identifier};
+}
+
+inline std::string default_surface_id_for_window(std::string_view identifier) {
+    return "appkit:" + std::string{identifier} + ":surface";
+}
+
+inline void mark_appkit_scene_window_visibility(AppKitSceneWindowState& state,
+                                                bool visible) {
+    state.visible = visible;
+    state.host.render_surface_visible = visible;
+    {
+        ScopedHostActivation activate(state.host);
+        sync_host_render_surface(state.host, true);
+    }
+}
+
+inline void refresh_appkit_scene_window_visibility(
+        AppKitSceneWindowState& state) {
+    mark_appkit_scene_window_visibility(
+        state,
+        appkit_window_is_visible(state.window));
+}
+
+inline void appkit_scene_window_will_close(id, SEL, id notification) {
+    id window = notification
+        ? objc_send<id>(notification, sel("object"))
+        : nullptr;
+    if (auto* state = find_appkit_scene_window_by_window(window)) {
+        mark_appkit_scene_window_visibility(*state, false);
+        ::phenotype::detail::trigger_rebuild();
+    }
+}
+
+inline id create_appkit_scene_window_delegate() {
+    if (g_appkit_scene_window_delegate)
+        return g_appkit_scene_window_delegate;
+    static Class delegate_class = nullptr;
+    if (!delegate_class) {
+        Class base = reinterpret_cast<Class>(class_id("NSObject"));
+        delegate_class = objc_allocateClassPair(
+            base,
+            "PhenotypeAppKitSceneWindowDelegate",
+            0);
+        if (!delegate_class)
+            return nullptr;
+        class_addMethod(
+            delegate_class,
+            sel("windowWillClose:"),
+            reinterpret_cast<IMP>(appkit_scene_window_will_close),
+            "v@:@");
+        objc_registerClassPair(delegate_class);
+    }
+    g_appkit_scene_window_delegate = objc_send<id>(
+        objc_send<id>(reinterpret_cast<id>(delegate_class), sel("alloc")),
+        sel("init"));
+    return g_appkit_scene_window_delegate;
+}
+
+inline void configure_appkit_scene_window_host(
+        AppKitSceneWindowState& state,
+        platform_api const& platform) {
+    state.content_view = objc_send<id>(state.window, sel("contentView"));
+    state.surface.kind = NativeSurfaceKind::MacOSWindow;
+    state.surface.window = state.window;
+    state.surface.view = state.content_view;
+    state.surface.window_chrome = state.window_options.chrome;
+    state.surface.integrated_titlebar = state.window_options.integrated_titlebar;
+    state.surface.native_backdrop_material =
+        state.window_options.native_backdrop_material;
+    state.surface.native_backdrop_opacity =
+        state.window_options.native_backdrop_opacity;
+    state.surface.window_options_valid = true;
+
+    state.host.window = &state.surface;
+    state.host.surface_descriptor = &state.surface;
+    state.host.platform = &platform;
+    state.host.set_hover_cursor = &appkit_set_hover_cursor;
+    state.host.render_surface_id = state.surface_id;
+    state.host.render_scene_id = state.scene_id;
+    state.host.render_surface_title = state.title;
+    state.host.render_surface_role = state.surface_role;
+    state.host.render_surface_visible = state.visible;
+    sync_appkit_surface(state.host, state.surface, state.window, false);
+}
+
+inline void sync_appkit_scene_window_options(
+        AppKitSceneWindowState& state,
+        AppKitSceneWindowOptions const& options,
+        platform_api const& platform) {
+    state.title = safe_preferences_text(options.title, "Window");
+    state.width = options.width > 0 ? options.width : 640;
+    state.height = options.height > 0 ? options.height : 420;
+    state.scene_id = options.scene_id && options.scene_id[0] != '\0'
+        ? std::string{options.scene_id}
+        : default_scene_id_for_window(state.identifier);
+    state.surface_id = options.surface_id && options.surface_id[0] != '\0'
+        ? std::string{options.surface_id}
+        : default_surface_id_for_window(state.identifier);
+    state.scene_role = options.scene_role;
+    state.surface_role = options.surface_role;
+    state.window_options = options.window_options;
+    if (state.window) {
+        objc_send<void>(state.window, sel("setTitle:"), ns_string(state.title.c_str()));
+        CGSize content_size{
+            static_cast<double>(state.width),
+            static_cast<double>(state.height),
+        };
+        objc_send<void>(state.window, sel("setContentSize:"), content_size);
+    }
+    configure_appkit_scene_window_host(state, platform);
+}
+
+inline AppKitSceneWindowState* ensure_appkit_scene_window(
+        AppKitSceneWindowOptions const& options,
+        platform_api const& platform) {
+    auto identifier = scene_window_identifier_or_default(options.identifier);
+    auto* state = find_appkit_scene_window(identifier);
+    if (!state) {
+        g_appkit_scene_windows.push_back(
+            std::make_unique<AppKitSceneWindowState>());
+        state = g_appkit_scene_windows.back().get();
+        state->identifier = identifier;
+    }
+
+    state->title = safe_preferences_text(options.title, "Window");
+    state->width = options.width > 0 ? options.width : 640;
+    state->height = options.height > 0 ? options.height : 420;
+    state->window_options = options.window_options;
+    if (!state->window) {
+        state->window = create_appkit_window(
+            state->width,
+            state->height,
+            state->title.c_str(),
+            state->window_options);
+        if (!state->window)
+            return nullptr;
+        objc_send<void>(
+            state->window,
+            sel("setDelegate:"),
+            create_appkit_scene_window_delegate());
+    }
+    sync_appkit_scene_window_options(*state, options, platform);
+    return state;
+}
+
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+bool show_appkit_scene_window(platform_api const& platform,
+                              AppKitSceneWindowOptions const& options,
+                              View view,
+                              Update update) {
+    auto* state = ensure_appkit_scene_window(options, platform);
+    if (!state)
+        return false;
+
+    auto scene = ::phenotype::runtime::ensure_scene(::phenotype::SceneDescriptor{
+        .id = state->scene_id,
+        .title = state->title,
+        .role = state->scene_role,
+        .visible = true,
+    });
+    if (!state->runner_installed) {
+        run_host_scene<State, Msg>(
+            state->host,
+            scene,
+            std::move(view),
+            std::move(update));
+        state->runner_installed = true;
+    } else {
+        ScopedHostActivation activate(state->host);
+        ::phenotype::runtime::trigger_scene_rebuild(scene);
+    }
+
+    if (options.order_front) {
+        id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
+        activate_current_running_application();
+        if (app) {
+            objc_send<void>(
+                app,
+                sel("activateIgnoringOtherApps:"),
+                static_cast<signed char>(1));
+        }
+        objc_send<void>(state->window, sel("makeKeyAndOrderFront:"), nullptr);
+        objc_send<void>(state->window, sel("orderFrontRegardless"));
+    }
+    refresh_appkit_scene_window_visibility(*state);
+    return true;
+}
+
+inline bool is_appkit_scene_window_visible(char const* identifier) {
+    auto* state = find_appkit_scene_window(
+        scene_window_identifier_or_default(identifier));
+    return state && state->visible && appkit_window_is_visible(state->window);
+}
+
+inline void close_appkit_scene_window(char const* identifier) {
+    auto* state = find_appkit_scene_window(
+        scene_window_identifier_or_default(identifier));
+    if (!state || !state->window)
+        return;
+    mark_appkit_scene_window_visibility(*state, false);
+    objc_send<void>(state->window, sel("close"));
+}
+
+inline void close_all_appkit_scene_windows() {
+    for (auto& state : g_appkit_scene_windows) {
+        if (!state || !state->window)
+            continue;
+        mark_appkit_scene_window_visibility(*state, false);
+        objc_send<void>(state->window, sel("close"));
+    }
+}
+
+inline std::size_t appkit_scene_window_count() {
+    return g_appkit_scene_windows.size();
+}
+
+inline void reset_appkit_scene_windows_for_tests() {
+    close_all_appkit_scene_windows();
+    for (auto& state : g_appkit_scene_windows) {
+        if (state)
+            shutdown_host(state->host);
+    }
+    g_appkit_scene_windows.clear();
+}
+
+inline bool visible_appkit_scene_window_is_front() {
+    for (auto& state : g_appkit_scene_windows) {
+        if (!state || !state->visible
+            || !appkit_window_is_visible(state->window)) {
+            continue;
+        }
+        if (appkit_window_is_key(state->window)
+            || appkit_window_is_main(state->window))
+            return true;
+    }
+    return false;
+}
+
+inline void raise_visible_appkit_scene_windows() {
+    for (auto& state : g_appkit_scene_windows) {
+        if (!state || !state->visible
+            || !appkit_window_is_visible(state->window)) {
+            continue;
+        }
+        if (appkit_window_is_key(state->window)
+            || appkit_window_is_main(state->window))
+            continue;
+        objc_send<void>(state->window, sel("makeKeyAndOrderFront:"), nullptr);
+        objc_send<void>(state->window, sel("orderFrontRegardless"));
+    }
+}
+
 inline AppKitPreferencesWindowState* find_appkit_preferences_window(
         std::string_view identifier) {
     for (auto& state : g_appkit_preferences_windows) {
@@ -1320,6 +1642,7 @@ inline void request_appkit_window_front(id app, id window) {
     objc_send<void>(window, sel("makeKeyAndOrderFront:"), nullptr);
     objc_send<void>(window, sel("orderFrontRegardless"));
     raise_visible_appkit_preferences_windows();
+    raise_visible_appkit_scene_windows();
 }
 
 inline void schedule_appkit_window_front_request(id app,
@@ -1598,7 +1921,8 @@ inline bool appkit_window_or_auxiliary_front_ready(id app, id window) {
     return appkit_window_front_ready(app, window)
         || (appkit_app_is_active(app)
             && appkit_window_is_visible(window)
-            && visible_appkit_preferences_window_is_front());
+            && (visible_appkit_preferences_window_is_front()
+                || visible_appkit_scene_window_is_front()));
 }
 
 inline void service_appkit_activation_reopen(id app, id window, bool visible) {
@@ -1623,7 +1947,8 @@ inline void service_appkit_activation_reopen(id app, id window, bool visible) {
                 appkit_app_is_active(app),
                 appkit_window_is_key(window),
                 appkit_window_is_main(window),
-                visible_appkit_preferences_window_is_front())) {
+                visible_appkit_preferences_window_is_front()
+                    || visible_appkit_scene_window_is_front())) {
             request_appkit_window_front(app, window);
         }
         return;
@@ -1636,7 +1961,8 @@ inline void service_appkit_activation_reopen(id app, id window, bool visible) {
             appkit_app_is_active(app),
             appkit_window_is_key(window),
             appkit_window_is_main(window),
-            visible_appkit_preferences_window_is_front())) {
+            visible_appkit_preferences_window_is_front()
+                || visible_appkit_scene_window_is_front())) {
         request_appkit_window_front(app, window);
     }
 }
@@ -1765,6 +2091,41 @@ inline bool service_appkit_host_event(id app,
     update_appkit_mouse_tracking_mode_after_send(event);
     complete_appkit_close_button_after_event(event, surface, window);
     return true;
+}
+
+inline bool service_appkit_scene_window_event(id app, id event) {
+    if (!event)
+        return false;
+    for (auto& state : g_appkit_scene_windows) {
+        if (!state || !state->visible
+            || !appkit_window_is_visible(state->window)) {
+            continue;
+        }
+        if (service_appkit_host_event(
+                app,
+                event,
+                state->host,
+                state->surface,
+                state->window,
+                true)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline void service_appkit_scene_windows() {
+    for (auto& state : g_appkit_scene_windows) {
+        if (!state || !state->visible)
+            continue;
+        bool const visible = appkit_window_is_visible(state->window);
+        if (!visible) {
+            mark_appkit_scene_window_visibility(*state, false);
+            continue;
+        }
+        sync_appkit_host_surface(state->host, state->surface, state->window, true);
+        service_host_tick(state->host, state->last_animation_tick);
+    }
 }
 
 struct AppKitWindowServerSurface {
@@ -2417,12 +2778,20 @@ int run_app_with_macos_platform(platform_api const& platform,
                 host,
                 surface,
                 window,
-                visible))
+                visible)
+            && !service_appkit_scene_window_event(app, event))
             service_appkit_unhandled_event(app, event);
         objc_send<void>(app, sel("updateWindows"));
+        service_appkit_scene_windows();
         service_host_tick(host, last_animation_tick);
     }
 
+    close_all_appkit_scene_windows();
+    for (auto& state : g_appkit_scene_windows) {
+        if (state)
+            shutdown_host(state->host);
+    }
+    g_appkit_scene_windows.clear();
     shutdown_host(host);
     g_active_appkit_window = nullptr;
     g_active_appkit_surface = nullptr;

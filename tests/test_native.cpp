@@ -1615,6 +1615,63 @@ static void test_native_run_scene_targets_host_surface_scene() {
     std::puts("PASS: native run_scene targets host surface scene");
 }
 
+#ifdef __APPLE__
+static void test_macos_appkit_scene_window_registry_targets_scene() {
+    using namespace native_scene_run_regression;
+
+    input_regression::reset_core_state();
+    reset_observed_state();
+    phenotype::native::detail::reset_appkit_scene_windows_for_tests();
+
+    auto app = test_objc_send<id>(
+        test_class_id("NSApplication"),
+        test_sel("sharedApplication"));
+    test_objc_send<void>(app, test_sel("setActivationPolicy:"), static_cast<long>(0));
+    test_objc_send<void>(app, test_sel("finishLaunching"));
+
+    platform_api platform = make_stub_platform("test-appkit-scene-window", nullptr);
+    phenotype::native::detail::AppKitSceneWindowOptions options{
+        .identifier = "test-settings-scene-window",
+        .title = "Settings",
+        .width = 360,
+        .height = 240,
+        .scene_id = "test-settings-scene",
+        .surface_id = "test-settings-surface",
+        .scene_role = SceneRole::Settings,
+        .surface_role = RenderSurfaceRole::Settings,
+        .order_front = true,
+    };
+
+    bool const opened =
+        phenotype::native::detail::show_appkit_scene_window<State, Msg>(
+            platform,
+            options,
+            view,
+            update);
+    assert(opened);
+    assert(phenotype::native::detail::appkit_scene_window_count() == 1);
+    assert(phenotype::native::detail::is_appkit_scene_window_visible(
+        "test-settings-scene-window"));
+    assert(phenotype::runtime::active_scene().id == "test-settings-scene");
+    assert(phenotype::runtime::active_scene().role == SceneRole::Settings);
+    assert(phenotype::runtime::active_render_surface().id
+           == "test-settings-surface");
+    assert(phenotype::runtime::active_render_surface().scene_id
+           == "test-settings-scene");
+    assert(phenotype::runtime::active_render_surface().role
+           == RenderSurfaceRole::Settings);
+    assert(g_render_count == 1);
+
+    phenotype::native::detail::close_appkit_scene_window(
+        "test-settings-scene-window");
+    assert(!phenotype::native::detail::is_appkit_scene_window_visible(
+        "test-settings-scene-window"));
+    phenotype::native::detail::reset_appkit_scene_windows_for_tests();
+    input_regression::reset_core_state();
+    std::puts("PASS: macOS AppKit scene window registry targets scene");
+}
+#endif
+
 namespace scroll_containment_regression {
 
 struct State {};
@@ -4839,6 +4896,7 @@ int main() {
     test_macos_renderer_state_tracks_surfaces();
     test_macos_appkit_activation_slice_gate();
     test_macos_appkit_function_key_resolution();
+    test_macos_appkit_scene_window_registry_targets_scene();
     test_macos_appkit_settings_key_equivalent_dispatch();
     test_macos_appkit_preferences_window_lifecycle();
     test_macos_utf16_utf8_range_helpers();
