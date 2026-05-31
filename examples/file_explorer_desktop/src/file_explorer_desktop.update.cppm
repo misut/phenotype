@@ -46,9 +46,34 @@ std::vector<file_explorer_demo::Entry> finder_entries(
     return entries;
 }
 
+constexpr char const* k_settings_scene_id = "file-explorer-desktop-settings";
+constexpr char const* k_settings_render_surface_id =
+    "file-explorer-desktop-settings-window";
+
+void sync_settings_runtime_scene(State const& state) {
+    phenotype::runtime::ensure_scene(phenotype::SceneDescriptor{
+        .id = k_settings_scene_id,
+        .title = "File Explorer Settings",
+        .role = phenotype::SceneRole::Settings,
+        .visible = state.settings_open,
+    });
+    phenotype::runtime::ensure_render_surface(phenotype::RenderSurfaceDescriptor{
+        .id = k_settings_render_surface_id,
+        .title = "File Explorer Settings",
+        .scene_id = k_settings_scene_id,
+        .role = phenotype::RenderSurfaceRole::Settings,
+        .visible = state.settings_open,
+        .logical_width = 500,
+        .logical_height = 284,
+        .framebuffer_width = 500,
+        .framebuffer_height = 284,
+        .content_scale = 1.0f,
+    });
+}
+
 #if defined(__APPLE__)
 constexpr char const* k_settings_window_identifier =
-    "file-explorer-desktop-settings";
+    k_settings_scene_id;
 
 void native_settings_color_scheme_selected(char const* value, void*) {
     phenotype::runtime::post<Msg>(
@@ -353,6 +378,7 @@ void update(State& state, Msg msg) {
         }
     }, msg);
     sync_runtime_theme(explorer);
+    sync_settings_runtime_scene(state);
 #if defined(__APPLE__)
     refresh_native_settings_window_if_visible(state);
 #endif
