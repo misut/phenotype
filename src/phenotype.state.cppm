@@ -431,7 +431,10 @@ struct AppState {
     // Tracks input nodes by callback_id for focus / handle_key lookup.
     std::vector<std::pair<unsigned int, NodeHandle>> input_nodes;
     // Installed by phenotype::run<State, Msg>(...). trigger_rebuild calls it.
-    void (*app_runner)() = nullptr;
+    // The context pointer lets each scene own its eventual view/update runner
+    // without falling back to a single global static.
+    void (*app_runner)(void*) = nullptr;
+    void* app_runner_context = nullptr;
     // Sparse map of typed text-input dispatchers, registered by TextField<Msg>.
     std::vector<std::pair<unsigned int, InputHandler>> input_handlers;
     // FNV-1a 64-bit hash of the previous frame's cmd buffer. Used by
@@ -1064,10 +1067,26 @@ namespace detail {
             && !active_scene_has_scrollbar_animation();
     }
 
-    inline void install_app_runner(void (*runner)()) { g_app().app_runner = runner; }
+    inline void install_app_runner(void (*runner)(void*), void* context) {
+        g_app().app_runner = runner;
+        g_app().app_runner_context = context;
+    }
+
+    inline void install_app_runner(void (*runner)()) {
+        g_app().app_runner = runner
+            ? [](void* raw) {
+                auto* thunk = static_cast<void (**)()>(raw);
+                (*thunk)();
+            }
+            : nullptr;
+        static void (*legacy_runner)() = nullptr;
+        legacy_runner = runner;
+        g_app().app_runner_context = runner ? &legacy_runner : nullptr;
+    }
 
     inline void trigger_rebuild() {
-        if (g_app().app_runner) g_app().app_runner();
+        if (g_app().app_runner)
+            g_app().app_runner(g_app().app_runner_context);
     }
 
     // ============================================================

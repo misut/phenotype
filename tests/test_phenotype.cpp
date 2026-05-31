@@ -516,6 +516,38 @@ void test_render_surface_runtime_binds_scene_and_tracks_frames() {
     std::puts("PASS: render surface runtime binds scenes and tracks frames");
 }
 
+void test_app_runner_uses_context_pointer() {
+    struct RunnerContext {
+        int rebuilds = 0;
+        int payload = 0;
+    };
+
+    auto& app = detail::g_app();
+    auto* previous_runner = app.app_runner;
+    auto* previous_context = app.app_runner_context;
+
+    RunnerContext first{.payload = 7};
+    RunnerContext second{.payload = 11};
+    detail::install_app_runner([](void* raw) {
+        auto& context = *static_cast<RunnerContext*>(raw);
+        context.rebuilds += context.payload;
+    }, &first);
+    detail::trigger_rebuild();
+    assert(first.rebuilds == 7);
+    assert(second.rebuilds == 0);
+
+    detail::install_app_runner([](void* raw) {
+        auto& context = *static_cast<RunnerContext*>(raw);
+        context.rebuilds += context.payload;
+    }, &second);
+    detail::trigger_rebuild();
+    assert(first.rebuilds == 7);
+    assert(second.rebuilds == 11);
+
+    detail::install_app_runner(previous_runner, previous_context);
+    std::puts("PASS: app runner uses context pointer");
+}
+
 void test_system_theme_preferences_are_pure_overlays() {
     Theme theme{};
     theme.default_font_family = "Pretendard";
@@ -2842,6 +2874,7 @@ int main() {
     test_default_theme_glass_contract();
     test_scene_runtime_isolates_app_state_and_messages();
     test_render_surface_runtime_binds_scene_and_tracks_frames();
+    test_app_runner_uses_context_pointer();
     test_system_theme_preferences_are_pure_overlays();
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();
