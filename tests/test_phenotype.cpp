@@ -343,28 +343,28 @@ void test_default_theme_glass_contract() {
 }
 
 void test_scene_runtime_isolates_app_state_and_messages() {
-    auto& main_scene = detail::default_scene_runtime();
+    auto main_scene = runtime::main_scene();
     {
-        detail::ScopedSceneActivation activate_main(main_scene);
+        auto activate_main = runtime::activate_scene(main_scene);
         detail::g_app().hovered_id = 11u;
         detail::g_app().focused_id = 12u;
-        detail::msg_queue().clear();
-        detail::post<int>(7);
+        runtime::clear_messages();
+        runtime::post<int>(7);
     }
 
-    auto& settings_scene = detail::ensure_scene_runtime(SceneDescriptor{
+    auto settings_scene = runtime::ensure_scene(SceneDescriptor{
         .id = "settings",
         .title = "Settings",
         .role = SceneRole::Settings,
         .visible = true,
     });
     {
-        detail::ScopedSceneActivation activate_settings(settings_scene);
+        auto activate_settings = runtime::activate_scene(settings_scene);
         assert(detail::g_app().hovered_id == 0xFFFFFFFFu);
         assert(detail::g_app().focused_id == 0xFFFFFFFFu);
         detail::g_app().hovered_id = 21u;
         detail::g_app().focused_id = 22u;
-        detail::post<int>(42);
+        runtime::post<int>(42);
         auto settings_snapshot = runtime::active_scene();
         assert(settings_snapshot.id == "settings");
         assert(settings_snapshot.role == SceneRole::Settings);
@@ -377,23 +377,30 @@ void test_scene_runtime_isolates_app_state_and_messages() {
         assert(settings_schedule.has_active_animations);
         assert(settings_schedule.debug_panel_refresh_active);
         assert(detail::active_scene_needs_scheduled_tick());
-        auto settings_messages = detail::drain<int>();
+        auto settings_messages = runtime::drain<int>();
         assert(settings_messages.size() == 1);
         assert(settings_messages[0] == 42);
     }
 
     {
-        detail::ScopedSceneActivation activate_main(main_scene);
+        auto activate_main = runtime::activate_scene(main_scene);
         assert(runtime::active_scene().id == "main");
         assert(detail::g_app().hovered_id == 11u);
         assert(detail::g_app().focused_id == 12u);
         assert(!runtime::active_scene_schedule().has_active_animations);
         assert(!runtime::active_scene_schedule().debug_panel_refresh_active);
         assert(!detail::active_scene_needs_scheduled_tick());
-        auto main_messages = detail::drain<int>();
+        auto main_messages = runtime::drain<int>();
         assert(main_messages.size() == 1);
         assert(main_messages[0] == 7);
     }
+
+    runtime::post_to_scene<int>(settings_scene, 99);
+    assert(runtime::scene(settings_scene).queued_messages == 1u);
+    auto settings_messages = runtime::drain_scene<int>(settings_scene);
+    assert(settings_messages.size() == 1);
+    assert(settings_messages[0] == 99);
+    assert(runtime::active_scene().id == "main");
 
     auto snapshots = runtime::scenes();
     bool saw_main = false;

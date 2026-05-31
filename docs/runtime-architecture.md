@@ -72,6 +72,16 @@ these scene-schedule helpers instead of reading global flags directly, so a
 future settings or debug window can request frames without waking unrelated
 scenes.
 
+Framework and example code should use the public `runtime::SceneHandle`,
+`runtime::ensure_scene`, `runtime::SceneActivation`, `runtime::post`,
+`runtime::post_to_scene`, and `runtime::drain_scene` APIs when it needs to
+address a scene or its queue. `detail::ScopedSceneActivation` and
+`detail::post` remain the low-level implementation path used by widgets and
+the runner, but application code should not need to reach into them. This keeps
+the surface area closer to SwiftUI's scene handles and React's explicit roots:
+scene identity is explicit, queue ownership stays scene-local, and the caller
+does not depend on the singleton layout used by the compatibility runner.
+
 ## Migration Rules
 
 - Keep `phenotype::run<State, Msg>` as the simple single-window entry point.

@@ -52,7 +52,7 @@ struct State {
         search_visible = !explorer.search.empty();
         sync_runtime_theme(explorer);
         if (initial_settings_open())
-            phenotype::detail::post<Msg>(OpenSettings{});
+            phenotype::runtime::post<Msg>(OpenSettings{});
     }
 };
 
