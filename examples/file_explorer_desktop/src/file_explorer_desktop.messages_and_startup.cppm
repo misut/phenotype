@@ -87,7 +87,7 @@ using Msg = std::variant<
     Noop>;
 
 void open_settings_from_app_menu() {
-    phenotype::detail::post<Msg>(OpenSettings{});
+    phenotype::runtime::post<Msg>(OpenSettings{});
 }
 
 fs::path g_initial_filesystem_root;

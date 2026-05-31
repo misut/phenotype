@@ -309,6 +309,10 @@ struct SceneSnapshot {
     SceneScheduleSnapshot schedule{};
 };
 
+struct SceneHandle {
+    std::string id = "main";
+};
+
 enum class RenderSurfaceRole {
     MainWindow,
     Window,
@@ -1406,6 +1410,117 @@ T& framework_local(T initial = T{},
 
 namespace runtime {
 
+inline SceneHandle main_scene() {
+    return SceneHandle{.id = "main"};
+}
+
+inline SceneHandle active_scene_handle() {
+    return SceneHandle{.id = detail::active_scene_runtime().descriptor.id};
+}
+
+inline SceneHandle ensure_scene(SceneDescriptor descriptor) {
+    auto& scene = detail::ensure_scene_runtime(std::move(descriptor));
+    return SceneHandle{.id = scene.descriptor.id};
+}
+
+inline bool scene_exists(std::string_view id) {
+    return detail::find_scene_runtime(id) != nullptr;
+}
+
+inline bool scene_exists(SceneHandle const& handle) {
+    return scene_exists(handle.id);
+}
+
+inline SceneSnapshot scene(SceneHandle const& handle) {
+    auto* scene = detail::find_scene_runtime(handle.id);
+    if (!scene) {
+        log::error("phenotype.runtime",
+            "scene '{}' does not exist; call runtime::ensure_scene first",
+            handle.id);
+        std::abort();
+    }
+    return detail::scene_snapshot(*scene);
+}
+
+inline SceneSnapshot scene(std::string_view id) {
+    return scene(SceneHandle{.id = std::string{id}});
+}
+
+class SceneActivation {
+    void* previous_scene_ = nullptr;
+    void* previous_app_ = nullptr;
+    void* previous_messages_ = nullptr;
+    bool active_ = false;
+
+    void activate(std::string_view id) {
+        auto* scene = detail::find_scene_runtime(id);
+        if (!scene) {
+            log::error("phenotype.runtime",
+                "scene '{}' does not exist; call runtime::ensure_scene first",
+                id);
+            std::abort();
+        }
+        previous_scene_ = detail::g_active_scene;
+        previous_app_ = detail::g_active_app;
+        previous_messages_ = detail::g_active_msg_queue;
+        detail::bind_scene_runtime(*scene);
+        active_ = true;
+    }
+
+    void reset() {
+        if (!active_)
+            return;
+        detail::g_active_scene = previous_scene_
+            ? static_cast<detail::SceneRuntime*>(previous_scene_)
+            : &detail::default_scene_runtime();
+        detail::g_active_app = previous_app_
+            ? static_cast<AppState*>(previous_app_)
+            : &detail::default_app_state();
+        detail::g_active_msg_queue = previous_messages_
+            ? static_cast<std::vector<detail::DispatchedMsg>*>(
+                previous_messages_)
+            : &detail::default_scene_runtime().messages;
+        active_ = false;
+    }
+
+public:
+    explicit SceneActivation(SceneHandle const& handle) {
+        activate(handle.id);
+    }
+
+    explicit SceneActivation(std::string_view id) {
+        activate(id);
+    }
+
+    SceneActivation(SceneActivation const&) = delete;
+    SceneActivation& operator=(SceneActivation const&) = delete;
+
+    SceneActivation(SceneActivation&& other) noexcept
+        : previous_scene_(other.previous_scene_),
+          previous_app_(other.previous_app_),
+          previous_messages_(other.previous_messages_),
+          active_(other.active_) {
+        other.previous_scene_ = nullptr;
+        other.previous_app_ = nullptr;
+        other.previous_messages_ = nullptr;
+        other.active_ = false;
+    }
+
+    SceneActivation& operator=(SceneActivation&&) = delete;
+
+    ~SceneActivation() {
+        reset();
+    }
+};
+
+inline SceneActivation activate_scene(SceneHandle const& handle) {
+    return SceneActivation{handle};
+}
+
+inline SceneActivation activate_scene(std::string_view id) {
+    return SceneActivation{id};
+}
+
 inline SceneSnapshot active_scene() {
     return detail::scene_snapshot(detail::active_scene_runtime());
 }
@@ -1420,6 +1535,37 @@ inline std::vector<SceneSnapshot> scenes() {
 
 inline void configure_active_scene(SceneDescriptor descriptor) {
     detail::configure_active_scene(std::move(descriptor));
+}
+
+inline void clear_messages() {
+    detail::msg_queue().clear();
+}
+
+inline void clear_scene_messages(SceneHandle const& handle) {
+    SceneActivation activate{handle};
+    clear_messages();
+}
+
+template<typename Msg>
+inline void post(Msg msg) {
+    detail::post<Msg>(std::move(msg));
+}
+
+template<typename Msg>
+inline void post_to_scene(SceneHandle const& handle, Msg msg) {
+    SceneActivation activate{handle};
+    post<Msg>(std::move(msg));
+}
+
+template<typename Msg>
+inline std::vector<Msg> drain() {
+    return detail::drain<Msg>();
+}
+
+template<typename Msg>
+inline std::vector<Msg> drain_scene(SceneHandle const& handle) {
+    SceneActivation activate{handle};
+    return drain<Msg>();
 }
 
 inline RenderSurfaceSnapshot active_render_surface() {

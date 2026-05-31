@@ -51,22 +51,22 @@ constexpr char const* k_settings_window_identifier =
     "file-explorer-desktop-settings";
 
 void native_settings_color_scheme_selected(char const* value, void*) {
-    phenotype::detail::post<Msg>(
+    phenotype::runtime::post<Msg>(
         color_scheme_message(value && *value ? value : "system"));
 }
 
 void native_settings_sidebar_position_selected(char const* value, void*) {
-    phenotype::detail::post<Msg>(
+    phenotype::runtime::post<Msg>(
         SetSidebarPosition{std::string_view{value ? value : ""} == "right"});
 }
 
 void native_settings_scrollbar_selected(char const* value, void*) {
-    phenotype::detail::post<Msg>(
+    phenotype::runtime::post<Msg>(
         scroll_bar_visibility_message(value && *value ? value : "auto"));
 }
 
 void native_settings_window_closed(void*) {
-    phenotype::detail::post<Msg>(CloseSettings{});
+    phenotype::runtime::post<Msg>(CloseSettings{});
 }
 
 std::string native_settings_appearance(State const& state) {
