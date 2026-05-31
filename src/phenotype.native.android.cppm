@@ -8315,10 +8315,10 @@ void phenotype_android_attach_surface(void* native_window) {
     // where the swapchain persists across idle, but catastrophic here
     // because APP_CMD_TERM_WINDOW / _INIT_WINDOW destroys + recreates
     // Vulkan while phenotype's view output is byte-identical. Clearing
-    // last_paint_hash forces the next trigger_rebuild to land a real
-    // flush. No-op before phenotype_android_start_app has installed the
-    // active scene runner.
-    ::phenotype::detail::g_app().last_paint_hash = 0;
+    // Invalidating the active render surface paint cache forces the next
+    // trigger_rebuild to land a real flush. No-op before
+    // phenotype_android_start_app has installed the active scene runner.
+    ::phenotype::detail::invalidate_active_render_surface_paint_cache();
     ::phenotype::detail::trigger_rebuild();
 }
 

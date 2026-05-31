@@ -4905,7 +4905,7 @@ inline std::optional<DebugFrameCapture> macos_capture_frame_rgba() {
         && !renderer_state().last_frame_available
         && ::phenotype::native::detail::active_host()) {
         request_debug_capture_next_frame();
-        ::phenotype::detail::g_app().last_paint_hash = 0;
+        ::phenotype::detail::invalidate_active_render_surface_paint_cache();
         ::phenotype::native::detail::repaint_current();
     }
     if (!renderer_state().initialized
@@ -4998,7 +4998,7 @@ inline DebugArtifactBundleResult macos_write_artifact_bundle(
         char const* reason) {
     if (renderer_state().initialized && ::phenotype::native::detail::active_host()) {
         request_debug_capture_next_frame();
-        ::phenotype::detail::g_app().last_paint_hash = 0;
+        ::phenotype::detail::invalidate_active_render_surface_paint_cache();
         ::phenotype::native::detail::repaint_current();
     }
     auto snapshot = macos_snapshot_json();

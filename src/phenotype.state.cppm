@@ -1050,6 +1050,21 @@ namespace detail {
         ++active_render_surface_runtime().damage_generation;
     }
 
+    inline std::uint64_t active_render_surface_paint_hash() {
+        return active_render_surface_runtime().last_paint_hash;
+    }
+
+    inline void set_active_render_surface_paint_hash(std::uint64_t hash) {
+        active_render_surface_runtime().last_paint_hash = hash;
+    }
+
+    inline void invalidate_active_render_surface_paint_cache() {
+        set_active_render_surface_paint_hash(0);
+        // Keep the legacy AppState mirror in lockstep while render surfaces own
+        // the real paint cache key.
+        g_app().last_paint_hash = 0;
+    }
+
     inline void note_active_render_surface_frame() {
         ++active_render_surface_runtime().frame_sequence;
     }
@@ -1965,15 +1980,15 @@ inline void note_active_render_surface_frame() {
 }
 
 inline std::uint64_t active_render_surface_paint_hash() {
-    return detail::active_render_surface_runtime().last_paint_hash;
+    return detail::active_render_surface_paint_hash();
 }
 
 inline void set_active_render_surface_paint_hash(std::uint64_t hash) {
-    detail::active_render_surface_runtime().last_paint_hash = hash;
+    detail::set_active_render_surface_paint_hash(hash);
 }
 
 inline void invalidate_active_render_surface_paint_cache() {
-    set_active_render_surface_paint_hash(0);
+    detail::invalidate_active_render_surface_paint_cache();
 }
 
 inline void note_active_render_surface_paint_flush() {

@@ -68,9 +68,10 @@ inspect process services without accidentally treating them as scene-local
 state.
 Render surfaces also own the paint/flush cache key (`last_paint_hash`) and
 flush/skip counters. The legacy `AppState::last_paint_hash` remains mirrored for
-older tests and callers, but `flush_if_changed` compares against the active
-surface so independent windows do not accidentally suppress each other's first
-paint.
+older tests and callers, but invalidation flows through the active render
+surface runtime first and updates that mirror as a compatibility detail.
+`flush_if_changed` compares against the active surface so independent windows do
+not accidentally suppress each other's first paint.
 
 Each scene snapshot also carries a `schedule` object. It reports whether a
 runner is installed, whether view-time animations, scrollbar animation,

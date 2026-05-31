@@ -6295,7 +6295,7 @@ inline void clear_caret_state(bool visible = true) {
     g_app().caret_pos = 0xFFFFFFFFu;
     g_app().selection_anchor = 0xFFFFFFFFu;
     g_app().caret_visible = visible;
-    g_app().last_paint_hash = 0;
+    invalidate_active_render_surface_paint_cache();
     sync_input_debug_caret_state();
 }
 
@@ -6306,7 +6306,7 @@ inline unsigned int set_selection_state(std::string const& value,
     g_app().selection_anchor = static_cast<unsigned int>(clamp_utf8_boundary(value, anchor));
     g_app().caret_pos = static_cast<unsigned int>(clamp_utf8_boundary(value, caret));
     g_app().caret_visible = visible;
-    g_app().last_paint_hash = 0;
+    invalidate_active_render_surface_paint_cache();
     sync_input_debug_caret_state(&value);
     return g_app().caret_pos;
 }
@@ -6501,7 +6501,7 @@ inline bool toggle_debug_panel(char const* source = "core",
 #ifndef NDEBUG
     g_app().debug_panel_open = !g_app().debug_panel_open;
     g_app().debug_panel_warmup_frames = g_app().debug_panel_open ? 4u : 0u;
-    g_app().last_paint_hash = 0;
+    invalidate_active_render_surface_paint_cache();
     note_input_event("key", source, detail, "handled", 0xFFFFFFFFu);
     trigger_rebuild();
     return true;
@@ -6653,7 +6653,7 @@ inline bool handle_tab(unsigned int reverse,
 
 inline void toggle_caret() {
     g_app().caret_visible = !g_app().caret_visible;
-    g_app().last_paint_hash = 0;
+    invalidate_active_render_surface_paint_cache();
     sync_input_debug_caret_state();
 }
 
@@ -6787,7 +6787,7 @@ inline void set_input_composition_state(bool active,
     snapshot.composition_active = active;
     snapshot.composition_text.assign(text.data(), text.size());
     snapshot.composition_cursor = cursor;
-    g_app().last_paint_hash = 0;
+    invalidate_active_render_surface_paint_cache();
 }
 
 inline void clear_input_composition_state() {
@@ -7658,7 +7658,7 @@ inline void set_debug_panel_tab(DebugPanelTab tab) {
         return;
     g_app().debug_panel_tab = tab;
     g_app().debug_panel_warmup_frames = 3u;
-    g_app().last_paint_hash = 0;
+    invalidate_active_render_surface_paint_cache();
     trigger_rebuild();
 }
 

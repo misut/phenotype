@@ -21,11 +21,11 @@ returns fresh pixels without re-rendering.
 
 The example survives window-create / window-destroy / rotation
 lifecycles. After Stage 7, the first post-resume frame repaints
-immediately — `phenotype_android_attach_surface` clears
-`last_paint_hash` and calls `trigger_rebuild()` so the shell re-flushes
-the current view against the fresh Vulkan state instead of short-
-circuiting via the unchanged-buffer fast path. Soft keyboard show/hide
-and IME composition remain follow-up work.
+immediately — `phenotype_android_attach_surface` invalidates the active
+render surface paint cache and calls `trigger_rebuild()` so the shell
+re-flushes the current view against the fresh Vulkan state instead of
+short-circuiting via the unchanged-buffer fast path. Soft keyboard
+show/hide and IME composition remain follow-up work.
 
 The driver calls four bootstrap hooks at `android_main` startup:
 `phenotype_android_bind_jvm(app->activity->vm)` (text pipeline's JNI
