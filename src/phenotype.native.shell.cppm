@@ -1622,21 +1622,17 @@ inline void service_host_tick(std::chrono::steady_clock::time_point& last_animat
     ::phenotype::detail::sample_frame_timeline(now_ns);
     bool const serviced_input_frame = service_deferred_input_frame(now);
     bool const needs_tick =
-        ::phenotype::detail::g_app().has_active_animations
-        || ::phenotype::detail::g_app().scrollbar_animation_active
-        || ::phenotype::detail::g_app().debug_panel_refresh_active;
+        ::phenotype::detail::active_scene_needs_scheduled_tick();
     if (needs_tick) {
         bool const debug_panel_only_refresh =
-            ::phenotype::detail::g_app().debug_panel_refresh_active
-            && !::phenotype::detail::g_app().has_active_animations
-            && !::phenotype::detail::g_app().scrollbar_animation_active;
+            ::phenotype::detail::active_scene_debug_panel_only_refresh();
         auto const refresh_interval = debug_panel_only_refresh
             ? std::chrono::milliseconds(100)
             : std::chrono::milliseconds(16);
         if (now - last_animation_tick >= refresh_interval) {
             if (!serviced_input_frame) {
-                if (::phenotype::detail::g_app().has_active_animations
-                    || ::phenotype::detail::g_app().debug_panel_refresh_active)
+                if (::phenotype::detail::active_scene_has_view_animations()
+                    || ::phenotype::detail::active_scene_needs_debug_panel_refresh())
                     ::phenotype::detail::trigger_rebuild();
                 else
                     repaint_current();

@@ -283,6 +283,18 @@ struct SceneDescriptor {
     bool visible = true;
 };
 
+struct SceneScheduleSnapshot {
+    bool runner_installed = false;
+    bool has_active_animations = false;
+    bool scrollbar_animation_active = false;
+    bool has_active_input_motion = false;
+    bool debug_panel_refresh_active = false;
+    bool frame_trace_input_active = false;
+    FrameTraceAction frame_trace_input_action = FrameTraceAction::None;
+    std::uint64_t frame_trace_count = 0;
+    std::uint64_t frame_timeline_tick = 0;
+};
+
 struct SceneSnapshot {
     std::string id;
     std::string title;
@@ -294,6 +306,7 @@ struct SceneSnapshot {
     unsigned int queued_messages = 0;
     unsigned int framework_local_entries = 0;
     std::uint32_t framework_local_generation = 0;
+    SceneScheduleSnapshot schedule{};
 };
 
 enum class RenderSurfaceRole {
@@ -724,6 +737,22 @@ namespace detail {
         scene.descriptor = std::move(descriptor);
     }
 
+    inline SceneScheduleSnapshot scene_schedule_snapshot(AppState const* app) {
+        if (!app)
+            return SceneScheduleSnapshot{};
+        return SceneScheduleSnapshot{
+            .runner_installed = app->app_runner != nullptr,
+            .has_active_animations = app->has_active_animations,
+            .scrollbar_animation_active = app->scrollbar_animation_active,
+            .has_active_input_motion = app->has_active_input_motion,
+            .debug_panel_refresh_active = app->debug_panel_refresh_active,
+            .frame_trace_input_active = app->frame_trace_input_active,
+            .frame_trace_input_action = app->frame_trace_input_action,
+            .frame_trace_count = app->frame_perf.count,
+            .frame_timeline_tick = app->frame_timeline.tick,
+        };
+    }
+
     inline SceneSnapshot scene_snapshot(SceneRuntime const& scene) {
         auto const* app = scene.app;
         return SceneSnapshot{
@@ -738,6 +767,7 @@ namespace detail {
             .framework_local_entries =
                 static_cast<unsigned int>(scene.framework_local_store.size()),
             .framework_local_generation = scene.framework_local_gen,
+            .schedule = scene_schedule_snapshot(app),
         };
     }
 
@@ -987,6 +1017,34 @@ namespace detail {
         }
         q.clear();
         return out;
+    }
+
+    inline SceneScheduleSnapshot active_scene_schedule_snapshot() {
+        return scene_schedule_snapshot(&g_app());
+    }
+
+    inline bool active_scene_has_view_animations() {
+        return g_app().has_active_animations;
+    }
+
+    inline bool active_scene_has_scrollbar_animation() {
+        return g_app().scrollbar_animation_active;
+    }
+
+    inline bool active_scene_needs_debug_panel_refresh() {
+        return g_app().debug_panel_refresh_active;
+    }
+
+    inline bool active_scene_needs_scheduled_tick() {
+        return active_scene_has_view_animations()
+            || active_scene_has_scrollbar_animation()
+            || active_scene_needs_debug_panel_refresh();
+    }
+
+    inline bool active_scene_debug_panel_only_refresh() {
+        return active_scene_needs_debug_panel_refresh()
+            && !active_scene_has_view_animations()
+            && !active_scene_has_scrollbar_animation();
     }
 
     inline void install_app_runner(void (*runner)()) { g_app().app_runner = runner; }
@@ -1341,6 +1399,10 @@ namespace runtime {
 
 inline SceneSnapshot active_scene() {
     return detail::scene_snapshot(detail::active_scene_runtime());
+}
+
+inline SceneScheduleSnapshot active_scene_schedule() {
+    return detail::active_scene_schedule_snapshot();
 }
 
 inline std::vector<SceneSnapshot> scenes() {
