@@ -380,6 +380,13 @@ static void test_macos_appkit_activation_slice_gate() {
     assert(should_request_appkit_window_front(true, false, true, false, true));
     assert(should_request_appkit_window_front(true, false, true, true, false));
     assert(!should_request_appkit_window_front(true, false, true, true, true));
+    assert(!should_request_appkit_window_front(
+        true,
+        false,
+        true,
+        false,
+        false,
+        true));
     assert(!should_request_appkit_window_front(false, false, true, false, false));
     assert(!should_request_appkit_window_front(true, true, true, false, false));
     assert(!should_request_appkit_window_front(true, false, false, false, false));
@@ -590,11 +597,19 @@ static void test_macos_appkit_preferences_window_lifecycle() {
            >= before + 1);
     assert(phenotype::native::detail::is_appkit_preferences_window_visible(
         "test-native-preferences"));
+    auto const rebuilds =
+        phenotype::native::detail::appkit_preferences_content_rebuild_count(
+            "test-native-preferences");
     choices[0].selected = false;
     choices[1].selected = true;
-    assert(phenotype::native::detail::show_appkit_preferences_window(options));
+    assert(phenotype::native::detail::sync_appkit_preferences_window(options));
     assert(phenotype::native::detail::is_appkit_preferences_window_visible(
         "test-native-preferences"));
+    assert(phenotype::native::detail::appkit_preferences_content_rebuild_count(
+        "test-native-preferences") == rebuilds);
+    assert(phenotype::native::detail::show_appkit_preferences_window(options));
+    assert(phenotype::native::detail::appkit_preferences_content_rebuild_count(
+        "test-native-preferences") == rebuilds);
 
     phenotype::native::detail::close_appkit_preferences_window(
         "test-native-preferences");

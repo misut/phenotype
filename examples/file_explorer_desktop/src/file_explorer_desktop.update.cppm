@@ -77,7 +77,7 @@ std::string native_settings_appearance(State const& state) {
         : "light";
 }
 
-bool show_native_settings_window(State const& state) {
+bool publish_native_settings_window(State const& state, bool order_front) {
     auto const appearance = native_settings_appearance(state);
     phenotype::native::NativePreferencesChoice appearance_choices[] = {
         {
@@ -142,23 +142,29 @@ bool show_native_settings_window(State const& state) {
             native_settings_scrollbar_selected,
         },
     };
-    return phenotype::native::preferences::show_window(
-        phenotype::native::NativePreferencesWindowOptions{
-            .identifier = k_settings_window_identifier,
-            .title = "File Explorer Settings",
-            .width = 500,
-            .height = 284,
-            .appearance = appearance.c_str(),
-            .sections = sections,
-            .section_count = std::size(sections),
-            .on_close = native_settings_window_closed,
-        });
+    phenotype::native::NativePreferencesWindowOptions const options{
+        .identifier = k_settings_window_identifier,
+        .title = "File Explorer Settings",
+        .width = 500,
+        .height = 284,
+        .appearance = appearance.c_str(),
+        .sections = sections,
+        .section_count = std::size(sections),
+        .on_close = native_settings_window_closed,
+    };
+    return order_front
+        ? phenotype::native::preferences::show_window(options)
+        : phenotype::native::preferences::sync_window(options);
+}
+
+bool show_native_settings_window(State const& state) {
+    return publish_native_settings_window(state, true);
 }
 
 void refresh_native_settings_window_if_visible(State const& state) {
     if (phenotype::native::preferences::is_window_visible(
             k_settings_window_identifier)) {
-        (void)show_native_settings_window(state);
+        (void)publish_native_settings_window(state, false);
     }
 }
 
