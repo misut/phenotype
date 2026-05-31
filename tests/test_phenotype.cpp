@@ -526,6 +526,7 @@ void test_app_runner_uses_context_pointer() {
     auto& scene = detail::active_scene_runtime();
     auto* previous_runner = scene.runner;
     auto* previous_context = scene.runner_context;
+    auto previous_owner = scene.runner_context_owner;
 
     RunnerContext first{.payload = 7};
     RunnerContext second{.payload = 11};
@@ -545,8 +546,44 @@ void test_app_runner_uses_context_pointer() {
     assert(first.rebuilds == 7);
     assert(second.rebuilds == 11);
 
-    detail::install_app_runner(previous_runner, previous_context);
+    detail::install_app_runner(previous_runner, previous_context, previous_owner);
     std::puts("PASS: app runner uses context pointer");
+}
+
+void test_app_runner_can_own_context_pointer() {
+    struct RunnerContext {
+        int rebuilds = 0;
+    };
+
+    auto& scene = detail::active_scene_runtime();
+    auto* previous_runner = scene.runner;
+    auto* previous_context = scene.runner_context;
+    auto previous_owner = scene.runner_context_owner;
+
+    std::weak_ptr<RunnerContext> weak_context;
+    {
+        auto context = std::make_shared<RunnerContext>();
+        weak_context = context;
+        auto* raw_context = context.get();
+        detail::install_app_runner([](void* raw) {
+            auto& context = *static_cast<RunnerContext*>(raw);
+            context.rebuilds += 1;
+        }, raw_context, std::move(context));
+    }
+
+    assert(!weak_context.expired());
+    detail::trigger_rebuild();
+    {
+        auto locked = weak_context.lock();
+        assert(locked);
+        assert(locked->rebuilds == 1);
+    }
+
+    detail::install_app_runner(nullptr, nullptr);
+    assert(weak_context.expired());
+    detail::install_app_runner(previous_runner, previous_context, previous_owner);
+
+    std::puts("PASS: app runner can own context pointer");
 }
 
 void test_runtime_scene_runner_targets_scene() {
@@ -2956,6 +2993,7 @@ int main() {
     test_scene_runtime_isolates_app_state_and_messages();
     test_render_surface_runtime_binds_scene_and_tracks_frames();
     test_app_runner_uses_context_pointer();
+    test_app_runner_can_own_context_pointer();
     test_runtime_scene_runner_targets_scene();
     test_scene_runner_survives_app_state_swap();
     test_system_theme_preferences_are_pure_overlays();
