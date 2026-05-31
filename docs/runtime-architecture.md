@@ -60,6 +60,12 @@ can now confirm which scene and surface are active, how many roots are visible,
 which scenes have runners or scheduled ticks, and which surface owns size,
 visibility, damage, and frame counters before relying on platform-specific
 renderer diagnostics.
+The same object reports whether process-wide debug payload, application debug,
+platform capability, and platform runtime-details providers are installed. Those
+providers are stored together in the application-runtime diagnostics owner
+instead of being separate hidden globals, so future scene/window APIs can
+inspect process services without accidentally treating them as scene-local
+state.
 Render surfaces also own the paint/flush cache key (`last_paint_hash`) and
 flush/skip counters. The legacy `AppState::last_paint_hash` remains mirrored for
 older tests and callers, but `flush_if_changed` compares against the active

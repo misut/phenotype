@@ -7350,6 +7350,23 @@ inline json::Value application_runtime_snapshot_to_json(
     return json::Value{std::move(out)};
 }
 
+inline void append_application_runtime_provider_snapshot(json::Value& value) {
+    auto providers = diag::detail::application_runtime_provider_snapshot();
+    auto& out = value.as_object();
+    out.emplace(
+        "debug_payload_builder_installed",
+        json::Value{providers.debug_payload_builder_installed});
+    out.emplace(
+        "application_debug_provider_installed",
+        json::Value{providers.application_debug_provider_installed});
+    out.emplace(
+        "platform_capabilities_provider_installed",
+        json::Value{providers.platform_capabilities_provider_installed});
+    out.emplace(
+        "platform_runtime_details_provider_installed",
+        json::Value{providers.platform_runtime_details_provider_installed});
+}
+
 inline diag::PlatformCapabilitiesSnapshot build_platform_capabilities_snapshot(
         std::optional<diag::PlatformCapabilitiesSnapshot> platform_override = std::nullopt) {
     auto snapshot = platform_override.has_value()
@@ -7393,6 +7410,7 @@ inline diag::PlatformRuntimeSnapshot build_platform_runtime_snapshot(
     runtime.pressed_callback_id = optional_callback_id(g_app().pressed_id);
     runtime.application_runtime =
         application_runtime_snapshot_to_json(runtime::application_runtime());
+    append_application_runtime_provider_snapshot(runtime.application_runtime);
     runtime.scenes = scene_snapshots_to_json();
     runtime.render_surfaces = render_surface_snapshots_to_json();
     runtime.details = runtime_details_override.has_value()

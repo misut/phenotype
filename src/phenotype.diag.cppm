@@ -731,58 +731,82 @@ namespace detail {
     using PlatformCapabilitiesProvider = PlatformCapabilitiesSnapshot (*)();
     using PlatformRuntimeDetailsProvider = json::Value (*)();
 
-    DebugPayloadBuilder& debug_payload_builder_storage() noexcept {
-        static DebugPayloadBuilder builder = nullptr;
-        return builder;
+    struct ApplicationRuntimeProviders {
+        DebugPayloadBuilder debug_payload_builder = nullptr;
+        ApplicationDebugProvider application_debug_provider = nullptr;
+        PlatformCapabilitiesProvider platform_capabilities_provider = nullptr;
+        PlatformRuntimeDetailsProvider platform_runtime_details_provider = nullptr;
+    };
+
+    struct ApplicationRuntimeProviderSnapshot {
+        bool debug_payload_builder_installed = false;
+        bool application_debug_provider_installed = false;
+        bool platform_capabilities_provider_installed = false;
+        bool platform_runtime_details_provider_installed = false;
+    };
+
+    ApplicationRuntimeProviders& application_runtime_providers() noexcept {
+        static ApplicationRuntimeProviders& providers =
+            *new ApplicationRuntimeProviders();
+        return providers;
     }
 
-    ApplicationDebugProvider& application_debug_provider_storage() noexcept {
-        static ApplicationDebugProvider provider = nullptr;
-        return provider;
-    }
-
-    PlatformCapabilitiesProvider& platform_capabilities_provider_storage() noexcept {
-        static PlatformCapabilitiesProvider provider = nullptr;
-        return provider;
-    }
-
-    PlatformRuntimeDetailsProvider& platform_runtime_details_provider_storage() noexcept {
-        static PlatformRuntimeDetailsProvider provider = nullptr;
-        return provider;
+    ApplicationRuntimeProviderSnapshot
+    application_runtime_provider_snapshot() noexcept {
+        auto const& providers = application_runtime_providers();
+        return ApplicationRuntimeProviderSnapshot{
+            .debug_payload_builder_installed =
+                providers.debug_payload_builder != nullptr,
+            .application_debug_provider_installed =
+                providers.application_debug_provider != nullptr,
+            .platform_capabilities_provider_installed =
+                providers.platform_capabilities_provider != nullptr,
+            .platform_runtime_details_provider_installed =
+                providers.platform_runtime_details_provider != nullptr,
+        };
     }
 
     void set_debug_payload_builder(DebugPayloadBuilder builder) noexcept {
-        debug_payload_builder_storage() = builder;
+        application_runtime_providers().debug_payload_builder = builder;
     }
 
     void set_application_debug_provider(ApplicationDebugProvider provider) noexcept {
-        application_debug_provider_storage() = provider;
+        application_runtime_providers().application_debug_provider = provider;
     }
 
     void set_platform_capabilities_provider(PlatformCapabilitiesProvider provider) noexcept {
-        platform_capabilities_provider_storage() = provider;
+        application_runtime_providers().platform_capabilities_provider = provider;
     }
 
     void set_platform_runtime_details_provider(PlatformRuntimeDetailsProvider provider) noexcept {
-        platform_runtime_details_provider_storage() = provider;
+        application_runtime_providers().platform_runtime_details_provider = provider;
     }
 
     DebugPayloadBuilder current_debug_payload_builder() noexcept {
-        return debug_payload_builder_storage();
+        return application_runtime_providers().debug_payload_builder;
     }
 
     ApplicationDebugProvider current_application_debug_provider() noexcept {
-        return application_debug_provider_storage();
+        return application_runtime_providers().application_debug_provider;
+    }
+
+    PlatformCapabilitiesProvider current_platform_capabilities_provider() noexcept {
+        return application_runtime_providers().platform_capabilities_provider;
+    }
+
+    PlatformRuntimeDetailsProvider
+    current_platform_runtime_details_provider() noexcept {
+        return application_runtime_providers().platform_runtime_details_provider;
     }
 
     PlatformCapabilitiesSnapshot current_platform_capabilities() {
-        if (auto provider = platform_capabilities_provider_storage())
+        if (auto provider = current_platform_capabilities_provider())
             return provider();
         return {};
     }
 
     json::Value current_platform_runtime_details() {
-        if (auto provider = platform_runtime_details_provider_storage())
+        if (auto provider = current_platform_runtime_details_provider())
             return provider();
         return json::Value{json::Object{}};
     }
