@@ -70,19 +70,19 @@ void test_material_props_invalidate_diff_cache() {
         return root_h;
     };
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
     auto old_root = make_tree(16.0f);
-    detail::g_app.prev_root = old_root;
-    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
-    detail::g_app.arena.reset();
+    detail::g_app().prev_root = old_root;
+    std::swap(detail::g_app().arena, detail::g_app().prev_arena);
+    detail::g_app().arena.reset();
 
     auto new_root = make_tree(30.0f);
     auto matched = detail::diff_and_copy_layout(
-        detail::g_app.prev_root,
+        detail::g_app().prev_root,
         new_root,
-        detail::g_app.prev_arena,
-        detail::g_app.arena);
+        detail::g_app().prev_arena,
+        detail::g_app().arena);
 
     assert(!matched);
     auto const& material = detail::node_at(detail::node_at(new_root).children[0]);
@@ -1181,9 +1181,9 @@ void test_material_text_foreground_resolution() {
 }
 
 void test_material_surface_emits_material_rect_command() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -1236,9 +1236,9 @@ void test_material_surface_emits_material_rect_command() {
 }
 
 void test_material_surface_per_edge_padding_overrides() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -1276,9 +1276,9 @@ void test_material_surface_per_edge_padding_overrides() {
 
 void test_material_surface_fixed_outer_height_accounts_for_padding() {
     set_theme(Theme{});
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -1311,9 +1311,9 @@ void test_material_surface_fixed_outer_height_accounts_for_padding() {
 }
 
 void test_material_surface_shape_overrides() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -1366,9 +1366,9 @@ void test_material_surface_shape_overrides() {
 }
 
 void test_material_surface_glass_effect_shape_options() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -1449,7 +1449,7 @@ void test_material_surface_glass_effect_shape_options() {
                 materials[0].w,
                 materials[0].h,
                 materials[0].radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
     auto capsule_plan = make_test_material_plan(
         material_request_for_command(
@@ -1460,7 +1460,7 @@ void test_material_surface_glass_effect_shape_options() {
                 materials[1].w,
                 materials[1].h,
                 materials[1].radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
     auto rectangle_plan = make_test_material_plan(
         material_request_for_command(
@@ -1471,7 +1471,7 @@ void test_material_surface_glass_effect_shape_options() {
                 materials[2].w,
                 materials[2].h,
                 materials[2].radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
 
     assert(rounded_plan->shape.kind == MaterialShapeKind::RoundedRectangle);
@@ -1483,9 +1483,9 @@ void test_material_surface_glass_effect_shape_options() {
 }
 
 void test_material_surface_style_override_emits_explicit_material_contract() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto override_material = layout::material_style(MaterialKind::Thin);
@@ -1626,14 +1626,14 @@ void test_plain_material_style_disables_liquid_glass_for_chrome_roles() {
 void test_interaction_glass_button_uses_plain_idle_material() {
     auto paint_button = [](unsigned int hovered_id,
                            std::optional<std::pair<float, float>> pointer = {}) {
-        detail::g_app.arena.reset();
-        detail::g_app.prev_arena.reset();
-        detail::g_app.callbacks.clear();
-        detail::g_app.callback_roles.clear();
-        detail::g_app.hovered_id = hovered_id;
-        detail::g_app.pressed_id = 0xFFFFFFFFu;
-        detail::g_app.focused_id = 0xFFFFFFFFu;
-        detail::g_app.focus_visible = false;
+        detail::g_app().arena.reset();
+        detail::g_app().prev_arena.reset();
+        detail::g_app().callbacks.clear();
+        detail::g_app().callback_roles.clear();
+        detail::g_app().hovered_id = hovered_id;
+        detail::g_app().pressed_id = 0xFFFFFFFFu;
+        detail::g_app().focused_id = 0xFFFFFFFFu;
+        detail::g_app().focus_visible = false;
         if (pointer.has_value())
             detail::set_pointer_position(pointer->first, pointer->second);
         else
@@ -1704,7 +1704,7 @@ void test_interaction_glass_button_uses_plain_idle_material() {
     auto dark_hover_commands = paint_button(0u);
     auto const& dark_hover = first_material_command(dark_hover_commands).material;
     auto const dark_hover_tint =
-        material_with_alpha(detail::g_app.theme.surface, 150);
+        material_with_alpha(detail::g_app().theme.surface, 150);
     assert(dark_hover.tint == dark_hover_tint);
     assert(dark_hover.tint.r < 80);
     assert(dark_hover.tint.g < 80);
@@ -1715,22 +1715,22 @@ void test_interaction_glass_button_uses_plain_idle_material() {
 }
 
 void test_material_surface_resolves_live_input_interaction() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.hovered_id = 0u;
-    detail::g_app.focused_id = 0u;
-    detail::g_app.focus_visible = false;
-    detail::g_app.pressed_id = 0u;
-    detail::g_app.prev_hovered_id = 0xFFFFFFFFu;
-    detail::g_app.prev_focused_id = 0xFFFFFFFFu;
-    detail::g_app.prev_focus_visible = false;
-    detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
-    detail::g_app.prev_pointer_valid = false;
+    detail::g_app().hovered_id = 0u;
+    detail::g_app().focused_id = 0u;
+    detail::g_app().focus_visible = false;
+    detail::g_app().pressed_id = 0u;
+    detail::g_app().prev_hovered_id = 0xFFFFFFFFu;
+    detail::g_app().prev_focused_id = 0xFFFFFFFFu;
+    detail::g_app().prev_focus_visible = false;
+    detail::g_app().prev_pressed_id = 0xFFFFFFFFu;
+    detail::g_app().prev_pointer_valid = false;
     detail::set_pointer_position(80.0f, 18.0f);
     CMD_LEN = 0;
 
@@ -1766,8 +1766,8 @@ void test_material_surface_resolves_live_input_interaction() {
     Scope::set_current(nullptr);
 
     LAYOUT_NODE(root_h, 320.0f);
-    detail::g_app.paint_invalidation_mask =
-        detail::compute_paint_invalidation_mask(detail::g_app);
+    detail::g_app().paint_invalidation_mask =
+        detail::compute_paint_invalidation_mask(detail::g_app());
     PAINT_NODE(root_h, 0, 0, 0, 600.0f);
 
     auto commands = parse_commands(CMD_BUF, CMD_LEN);
@@ -1781,12 +1781,12 @@ void test_material_surface_resolves_live_input_interaction() {
     assert(pointer.pointer_x > 0.20f && pointer.pointer_x < 0.30f);
     assert(pointer.pointer_y > 0.16f && pointer.pointer_y < 0.24f);
 
-    detail::persist_paint_inputs(detail::g_app);
-    detail::g_app.focus_visible = true;
-    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::persist_paint_inputs(detail::g_app());
+    detail::g_app().focus_visible = true;
+    detail::g_app().pressed_id = 0xFFFFFFFFu;
     CMD_LEN = 0;
-    detail::g_app.paint_invalidation_mask =
-        detail::compute_paint_invalidation_mask(detail::g_app);
+    detail::g_app().paint_invalidation_mask =
+        detail::compute_paint_invalidation_mask(detail::g_app());
     PAINT_NODE(root_h, 0, 0, 0, 600.0f);
     auto focused_commands = parse_commands(CMD_BUF, CMD_LEN);
     auto const& focused_cmd = first_material_command(focused_commands);
@@ -1796,31 +1796,31 @@ void test_material_surface_resolves_live_input_interaction() {
     assert(focused.focused);
     assert(focused.pointer_inside);
 
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = false;
-    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::g_app().hovered_id = 0xFFFFFFFFu;
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = false;
+    detail::g_app().pressed_id = 0xFFFFFFFFu;
     detail::clear_pointer_position();
     std::puts("PASS: material surface resolves live input interaction");
 }
 
 void test_capture_only_surface_ignores_live_hover_material_interaction() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.hovered_id = 0u;
-    detail::g_app.focused_id = 0u;
-    detail::g_app.focus_visible = true;
-    detail::g_app.pressed_id = 0u;
-    detail::g_app.prev_hovered_id = 0xFFFFFFFFu;
-    detail::g_app.prev_focused_id = 0xFFFFFFFFu;
-    detail::g_app.prev_focus_visible = false;
-    detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
-    detail::g_app.prev_pointer_valid = false;
+    detail::g_app().hovered_id = 0u;
+    detail::g_app().focused_id = 0u;
+    detail::g_app().focus_visible = true;
+    detail::g_app().pressed_id = 0u;
+    detail::g_app().prev_hovered_id = 0xFFFFFFFFu;
+    detail::g_app().prev_focused_id = 0xFFFFFFFFu;
+    detail::g_app().prev_focus_visible = false;
+    detail::g_app().prev_pressed_id = 0xFFFFFFFFu;
+    detail::g_app().prev_pointer_valid = false;
     detail::set_pointer_position(40.0f, 20.0f);
     CMD_LEN = 0;
 
@@ -1840,10 +1840,10 @@ void test_capture_only_surface_ignores_live_hover_material_interaction() {
         [] {});
     Scope::set_current(nullptr);
 
-    assert(detail::g_app.callbacks.size() == 1u);
+    assert(detail::g_app().callbacks.size() == 1u);
     LAYOUT_NODE(root_h, 320.0f);
-    detail::g_app.paint_invalidation_mask =
-        detail::compute_paint_invalidation_mask(detail::g_app);
+    detail::g_app().paint_invalidation_mask =
+        detail::compute_paint_invalidation_mask(detail::g_app());
     PAINT_NODE(root_h, 0, 0, 0, 600.0f);
 
     auto commands = parse_commands(CMD_BUF, CMD_LEN);
@@ -1855,18 +1855,18 @@ void test_capture_only_surface_ignores_live_hover_material_interaction() {
     assert(!interaction.focused);
     assert(!interaction.pointer_inside);
 
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = false;
-    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::g_app().hovered_id = 0xFFFFFFFFu;
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = false;
+    detail::g_app().pressed_id = 0xFFFFFFFFu;
     detail::clear_pointer_position();
     std::puts("PASS: capture-only surface ignores live hover material interaction");
 }
 
 void test_material_surface_interactive_option_enables_plan_response() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -1925,7 +1925,7 @@ void test_material_surface_interactive_option_enables_plan_response() {
         material_request_for_command(
             descriptor,
             MaterialGeometry{cmd.x, cmd.y, cmd.w, cmd.h, cmd.radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
     auto& plan = *plan_owner;
     assert(plan.container.interactive);
@@ -1985,9 +1985,9 @@ void test_glass_effect_surface_api_emits_capsule_tint_contract() {
     assert(tinted.material_override.tint == glass_tint);
     assert(tinted.material_override.border == glass_border);
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -2044,7 +2044,7 @@ void test_glass_effect_surface_api_emits_capsule_tint_contract() {
         material_request_for_command(
             cmd.material,
             MaterialGeometry{cmd.x, cmd.y, cmd.w, cmd.h, cmd.radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
     assert(plan->shape.kind == MaterialShapeKind::Capsule);
     assert(plan->interaction.enabled);
@@ -2070,9 +2070,9 @@ void test_glass_effect_shape_argument_anchors_material_contract() {
     assert(rounded_surface.shape == MaterialSurfaceShape::RoundedRectangle);
     assert(rounded_surface.interactive);
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -2131,7 +2131,7 @@ void test_glass_effect_shape_argument_anchors_material_contract() {
                 materials[0].w,
                 materials[0].h,
                 materials[0].radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
     auto rounded_plan = make_test_material_plan(
         material_request_for_command(
@@ -2142,7 +2142,7 @@ void test_glass_effect_shape_argument_anchors_material_contract() {
                 materials[1].w,
                 materials[1].h,
                 materials[1].radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
     assert(rectangle_plan->shape.kind == MaterialShapeKind::Rectangle);
     assert(rounded_plan->shape.kind == MaterialShapeKind::RoundedRectangle);
@@ -2200,9 +2200,9 @@ void test_glass_background_effect_display_modes_follow_containment_contract() {
     assert(never.shape == MaterialSurfaceShape::RoundedRectangle);
     assert(!never.has_material_override);
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -2308,7 +2308,7 @@ void test_glass_background_effect_display_modes_follow_containment_contract() {
                 materials[0].w,
                 materials[0].h,
                 materials[0].radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
     assert(background_plan->shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(background_plan->reference_model.view_bounds_anchored);
@@ -2349,9 +2349,9 @@ void test_glass_background_effect_variants_map_to_material_contract() {
     assert(feathered_surface.material_override.edge_width
            > automatic_surface.material_override.edge_width);
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -2410,7 +2410,7 @@ void test_glass_background_effect_variants_map_to_material_contract() {
                 materials[0].w,
                 materials[0].h,
                 materials[0].radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
     auto feathered_plan = make_test_material_plan(
         material_request_for_command(
@@ -2421,7 +2421,7 @@ void test_glass_background_effect_variants_map_to_material_contract() {
                 materials[1].w,
                 materials[1].h,
                 materials[1].radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
 
     assert(plate_plan->glass_background.plate);
@@ -2476,9 +2476,9 @@ void test_glass_effect_style_variants_map_to_material_contract() {
     assert(!identity.has_tint);
     assert(!identity.has_border);
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto identity_root_h = detail::alloc_node();
@@ -2511,9 +2511,9 @@ void test_glass_effect_style_variants_map_to_material_contract() {
     }
     assert(!identity_emitted_material);
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto clear_root_h = detail::alloc_node();
@@ -2581,9 +2581,9 @@ void test_glass_effect_style_carries_transition_and_identity() {
     assert(identity_style.inherit_material_transition);
     assert(identity_style.inherit_material_identity);
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -2668,9 +2668,9 @@ void test_glass_effect_style_carries_union_context() {
     assert(ignored_identity.kind == MaterialKind::None);
     assert(ignored_identity.inherit_material_container);
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -2729,7 +2729,7 @@ void test_glass_effect_style_carries_union_context() {
                 materials[0].w,
                 materials[0].h,
                 materials[0].radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
     assert(plan->container.mode == MaterialContainerMode::Union);
     assert(plan->container.shape_union_expected);
@@ -2814,9 +2814,9 @@ void test_glass_surface_presets_emit_material_contract() {
     assert(!content.interactive);
     assert(std::string_view{content.semantic_label} == "Files");
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -2837,7 +2837,7 @@ void test_glass_surface_presets_emit_material_contract() {
     assert(surface.material.kind == MaterialKind::Thick);
     assert(surface.material.role == MaterialSurfaceRole::Toolbar);
     assert(surface.border_width == 0.0f);
-    assert(surface.border_radius == detail::g_app.theme.radius_lg);
+    assert(surface.border_radius == detail::g_app().theme.radius_lg);
     assert(surface.material_shape == MaterialSurfaceShape::Capsule);
     assert(std::string_view{surface.debug_semantic_label}
            == "Preset Toolbar Group");
@@ -2903,9 +2903,9 @@ void test_glass_surface_presets_emit_material_contract() {
     assert(!styled_nav.inherit_material_container);
     assert(std::string_view{styled_nav.semantic_label} == "Glass Navigation");
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto sheet_root_h = detail::alloc_node();
@@ -2946,9 +2946,9 @@ void test_glass_surface_presets_emit_material_contract() {
     assert(std::string_view{sheet_surface.debug_semantic_label}
            == "Glass Sheet");
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto scoped_root_h = detail::alloc_node();
@@ -3000,9 +3000,9 @@ void test_glass_surface_presets_emit_material_contract() {
 }
 
 void test_material_container_scope_emits_command_context() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -3058,9 +3058,9 @@ void test_glass_effect_container_scope_emits_morph_context() {
     assert(!defaults.interactive);
     assert(defaults.morph_transitions);
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -3140,7 +3140,7 @@ void test_glass_effect_container_scope_emits_morph_context() {
                 materials[0].w,
                 materials[0].h,
                 materials[0].radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
     assert(plan->container.mode == MaterialContainerMode::Union);
     assert(plan->container.shared_backdrop_scope);
@@ -3186,9 +3186,9 @@ void test_glass_effect_union_scope_emits_view_union_context() {
     assert(stable.union_id == layout::glass_effect_stable_id("filters"));
     assert(stable.mode() == MaterialContainerMode::Union);
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -3277,7 +3277,7 @@ void test_glass_effect_union_scope_emits_view_union_context() {
                 materials[1].w,
                 materials[1].h,
                 materials[1].radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
     assert(union_plan->container.mode == MaterialContainerMode::Union);
     assert(union_plan->container.shape_union_expected);
@@ -3288,9 +3288,9 @@ void test_glass_effect_union_scope_emits_view_union_context() {
 }
 
 void test_glass_effect_transition_scope_emits_command_context() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -3380,9 +3380,9 @@ void test_glass_effect_container_default_transition_respects_explicit_scope() {
     assert(matched_default.progress == 1.0f);
     assert(matched_default.appearing);
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -3425,9 +3425,9 @@ void test_glass_effect_container_default_transition_respects_explicit_scope() {
 }
 
 void test_glass_effect_id_scope_emits_command_context() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -3505,9 +3505,9 @@ void test_glass_effect_string_id_scope_emits_stable_context() {
     assert(!layout::glass_effect_identity("", "pencil").participates());
     assert(!layout::glass_effect_identity("showcase", "").participates());
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -3584,7 +3584,7 @@ void test_glass_effect_string_id_scope_emits_stable_context() {
                     material.w,
                     material.h,
                     material.radius},
-                detail::g_app.theme),
+                detail::g_app().theme),
             env);
         records.push_back(MaterialRuntimeRecord{*plan, command_index++});
     }
@@ -3613,9 +3613,9 @@ void test_glass_effect_string_id_scope_emits_stable_context() {
 }
 
 void test_material_command_preserves_style_optics() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
 
     auto root_h = detail::alloc_node();
@@ -3722,7 +3722,7 @@ void test_material_command_preserves_style_optics() {
         material_request_for_command(
             descriptor,
             MaterialGeometry{cmd->x, cmd->y, cmd->w, cmd->h, cmd->radius},
-            detail::g_app.theme),
+            detail::g_app().theme),
         env);
     auto& plan = *plan_owner;
     assert(!plan.fallback());

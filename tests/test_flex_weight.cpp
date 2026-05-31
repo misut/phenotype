@@ -35,7 +35,7 @@ bool nearly(float a, float b, float eps = 0.5f) {
 template <typename View>
 NodeHandle build(View&& view) {
     detail::bump_local_gen();
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
 

@@ -138,7 +138,7 @@ void test_gc_drops_unvisited() {
 // a hot loop returns a fresh slot rather than aliasing onto the first.
 void test_same_call_site_disambiguation() {
     reset_store();
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     auto root_h = detail::alloc_node();
 
     Scope scope(root_h);
@@ -164,7 +164,7 @@ void test_same_call_site_disambiguation() {
 // guarantee that).
 void test_loop_key_isolation() {
     reset_store();
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     auto root_h = detail::alloc_node();
 
     auto write_pass = [&] {

@@ -125,7 +125,7 @@ inline FontSpec default_text_font(bool mono) noexcept {
     if (mono)
         return FontSpec{ {}, FontWeight::Regular, FontStyle::Upright, true };
     return FontSpec{
-        g_app.theme.default_font_family,
+        g_app().theme.default_font_family,
         FontWeight::Regular,
         FontStyle::Upright,
         false,
@@ -472,7 +472,7 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
 
     // Text leaf
     if (!node.text.empty() && node.children.empty()) {
-        float line_height = node.font_size * g_app.theme.line_height_ratio;
+        float line_height = node.font_size * g_app().theme.line_height_ratio;
         auto tl = layout_text(measurer, node.text, node.font_size,
                               default_text_font(node.mono),
                               inner_width, line_height);

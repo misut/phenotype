@@ -89,19 +89,19 @@ inline void apply_debug_panel_env_tab() {
         return;
     std::string_view tab{value};
     if (tab == "layout" || tab == "Layout") {
-        ::phenotype::detail::g_app.debug_panel_tab =
+        ::phenotype::detail::g_app().debug_panel_tab =
             ::phenotype::DebugPanelTab::Layout;
     } else if (tab == "console" || tab == "Console") {
-        ::phenotype::detail::g_app.debug_panel_tab =
+        ::phenotype::detail::g_app().debug_panel_tab =
             ::phenotype::DebugPanelTab::Console;
     } else if (tab == "input" || tab == "Input") {
-        ::phenotype::detail::g_app.debug_panel_tab =
+        ::phenotype::detail::g_app().debug_panel_tab =
             ::phenotype::DebugPanelTab::Input;
     } else if (tab == "protocol" || tab == "Protocol") {
-        ::phenotype::detail::g_app.debug_panel_tab =
+        ::phenotype::detail::g_app().debug_panel_tab =
             ::phenotype::DebugPanelTab::Protocol;
     } else {
-        ::phenotype::detail::g_app.debug_panel_tab =
+        ::phenotype::detail::g_app().debug_panel_tab =
             ::phenotype::DebugPanelTab::Performance;
     }
 }
@@ -284,7 +284,7 @@ struct AppState {
     float scroll_y = 0.0f;
     // Last cursor position seen by `dispatch_cursor_pos` — wheel events
     // arrive without an attached cursor location, so the scroll
-    // dispatcher uses these to hit-test against `g_app.scroll_targets`
+    // dispatcher uses these to hit-test against `g_app().scroll_targets`
     // before falling back to the root document scroll.
     float last_mouse_x = 0.0f;
     float last_mouse_y = 0.0f;
@@ -428,7 +428,7 @@ inline void repaint_current() {
 inline void repaint_current_after_surface_presented() {
     // The initial run() paint can occur before a native drawable is visible.
     // Force one startup repaint once the platform confirms the surface is shown.
-    ::phenotype::detail::g_app.last_paint_hash = 0;
+    ::phenotype::detail::g_app().last_paint_hash = 0;
     repaint_current();
 }
 
@@ -454,13 +454,13 @@ inline void run_input_frame(char const* action,
         ? ::phenotype::detail::begin_frame_trace_input(action)
         : ::phenotype::detail::FrameTraceInputContext{};
     bool const previous_input_motion =
-        ::phenotype::detail::g_app.has_active_input_motion;
-    ::phenotype::detail::g_app.has_active_input_motion = true;
+        ::phenotype::detail::g_app().has_active_input_motion;
+    ::phenotype::detail::g_app().has_active_input_motion = true;
     if (rebuild)
         ::phenotype::detail::trigger_rebuild();
     else
         repaint_current();
-    ::phenotype::detail::g_app.has_active_input_motion =
+    ::phenotype::detail::g_app().has_active_input_motion =
         previous_input_motion;
     auto const end = std::chrono::steady_clock::now();
     auto const elapsed =
@@ -722,13 +722,13 @@ inline float max_scroll_x_for_viewport(float viewport_width) {
 // for ticks so the animation advances in lockstep with scroll
 // repaints.
 inline void schedule_post_scroll_paint() {
-    // The runner reads `g_app.scroll_*` directly during paint; in the
+    // The runner reads `g_app().scroll_*` directly during paint; in the
     // paint-only path `repaint_current` mirrors `g_app_state.scroll_*`
     // onto it as a side effect. The rebuild path bypasses that mirror,
     // so propagate explicitly here before either branch fires.
     ::phenotype::detail::set_scroll_x(g_app_state.scroll_x);
     ::phenotype::detail::set_scroll_y(g_app_state.scroll_y);
-    if (::phenotype::detail::g_app.has_active_animations)
+    if (::phenotype::detail::g_app().has_active_animations)
         request_input_frame("scroll", true);
     else
         request_input_frame("scroll", false);
@@ -830,22 +830,21 @@ inline bool dismiss_platform_transient() {
 // consumed by a canvas.
 inline bool dispatch_gesture(::phenotype::GestureEvent ev) {
     return measure_input_action("gesture", [&] {
-    using ::phenotype::detail::g_app;
-    auto id = g_app.gesture_target_id;
+    auto id = ::phenotype::detail::g_app().gesture_target_id;
     if (id == 0xFFFFFFFFu) return false;
-    if (id >= g_app.gesture_callbacks.size()) return false;
+    if (id >= ::phenotype::detail::g_app().gesture_callbacks.size()) return false;
 
-    float lx = ev.focus_x - g_app.gesture_target_x;
-    float ly = ev.focus_y - g_app.gesture_target_y;
+    float lx = ev.focus_x - ::phenotype::detail::g_app().gesture_target_x;
+    float ly = ev.focus_y - ::phenotype::detail::g_app().gesture_target_y;
     if (lx < 0.0f || ly < 0.0f
-        || lx > g_app.gesture_target_w
-        || ly > g_app.gesture_target_h) {
+        || lx > ::phenotype::detail::g_app().gesture_target_w
+        || ly > ::phenotype::detail::g_app().gesture_target_h) {
         return false;
     }
     ev.focus_x = lx;
     ev.focus_y = ly;
 
-    auto const& fn = g_app.gesture_callbacks[id];
+    auto const& fn = ::phenotype::detail::g_app().gesture_callbacks[id];
     if (!fn) return false;
     fn(ev);
     repaint_current();
@@ -1057,7 +1056,7 @@ inline bool dispatch_cursor_pos(float mx, float my) {
 // first. Returns true when a scroll_view consumed the delta — the
 // caller suppresses the root-scroll fallback in that case.
 inline bool dispatch_scroll_in_view(float mx, float my, float delta_pixels) {
-    auto& targets = ::phenotype::detail::g_app.scroll_targets;
+    auto& targets = ::phenotype::detail::g_app().scroll_targets;
     if (targets.empty() || delta_pixels == 0.0f) return false;
     for (std::size_t i = targets.size(); i-- > 0; ) {
         auto& tgt = targets[i];
@@ -1481,10 +1480,10 @@ void run_host(native_host& host, View view, Update update) {
 #ifndef NDEBUG
     if (debug_panel_env_enabled("PHENOTYPE_DEBUG_PANEL")
         || debug_panel_env_enabled("PHENOTYPE_PERF_DEBUG_PANEL")) {
-        ::phenotype::detail::g_app.debug_panel_open = true;
+        ::phenotype::detail::g_app().debug_panel_open = true;
         apply_debug_panel_env_tab();
-        ::phenotype::detail::g_app.debug_panel_warmup_frames = 4u;
-        ::phenotype::detail::g_app.last_paint_hash = 0;
+        ::phenotype::detail::g_app().debug_panel_warmup_frames = 4u;
+        ::phenotype::detail::g_app().last_paint_hash = 0;
         ::phenotype::detail::trigger_rebuild();
     }
 #endif
@@ -1502,21 +1501,21 @@ inline void service_host_tick(std::chrono::steady_clock::time_point& last_animat
     ::phenotype::detail::sample_frame_timeline(now_ns);
     bool const serviced_input_frame = service_deferred_input_frame(now);
     bool const needs_tick =
-        ::phenotype::detail::g_app.has_active_animations
-        || ::phenotype::detail::g_app.scrollbar_animation_active
-        || ::phenotype::detail::g_app.debug_panel_refresh_active;
+        ::phenotype::detail::g_app().has_active_animations
+        || ::phenotype::detail::g_app().scrollbar_animation_active
+        || ::phenotype::detail::g_app().debug_panel_refresh_active;
     if (needs_tick) {
         bool const debug_panel_only_refresh =
-            ::phenotype::detail::g_app.debug_panel_refresh_active
-            && !::phenotype::detail::g_app.has_active_animations
-            && !::phenotype::detail::g_app.scrollbar_animation_active;
+            ::phenotype::detail::g_app().debug_panel_refresh_active
+            && !::phenotype::detail::g_app().has_active_animations
+            && !::phenotype::detail::g_app().scrollbar_animation_active;
         auto const refresh_interval = debug_panel_only_refresh
             ? std::chrono::milliseconds(100)
             : std::chrono::milliseconds(16);
         if (now - last_animation_tick >= refresh_interval) {
             if (!serviced_input_frame) {
-                if (::phenotype::detail::g_app.has_active_animations
-                    || ::phenotype::detail::g_app.debug_panel_refresh_active)
+                if (::phenotype::detail::g_app().has_active_animations
+                    || ::phenotype::detail::g_app().debug_panel_refresh_active)
                     ::phenotype::detail::trigger_rebuild();
                 else
                     repaint_current();

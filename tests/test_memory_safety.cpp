@@ -83,7 +83,7 @@ inline void view_full(State const& s) {
 } // namespace m
 
 void reset_app() {
-    auto& app = detail::g_app;
+    auto& app = detail::g_app();
     app.app_runner = nullptr;
     app.callbacks.clear();
     app.callback_roles.clear();
@@ -122,7 +122,7 @@ void test_run_cycle() {
     }
 
     assert(detail::msg_queue().empty());
-    assert(detail::g_app.callbacks.size() == 1);
+    assert(detail::g_app().callbacks.size() == 1);
 
     reset_app();
     std::puts("PASS: run cycle (100 clicks)");
@@ -141,7 +141,7 @@ void test_message_dispatch_identity() {
 
     for (int i = 0; i < 5; ++i)
         detail::handle_event(0);
-    assert(detail::g_app.callbacks.size() == 1);
+    assert(detail::g_app().callbacks.size() == 1);
     assert(detail::msg_queue().empty());
 
     reset_app();
@@ -162,7 +162,7 @@ void test_textfield_dispatch() {
     detail::handle_key(/*char*/ 0, 'i');
     detail::handle_key(/*backspace*/ 1, 0);
 
-    assert(!detail::g_app.input_handlers.empty());
+    assert(!detail::g_app().input_handlers.empty());
     assert(detail::msg_queue().empty());
 
     reset_app();
@@ -223,7 +223,7 @@ void test_stress_random_events() {
     }
 
     assert(detail::msg_queue().empty());
-    assert(!detail::g_app.callbacks.empty());
+    assert(!detail::g_app().callbacks.empty());
 
     reset_app();
     std::puts("PASS: stress random events (1000 ops)");
@@ -261,8 +261,8 @@ void test_arena_overflow_graceful() {
     reset_app();
 
     bool aborted = runs_to_abort([] {
-        auto& a = detail::g_app.arena;
-        for (unsigned int i = 0; i < detail::g_app.arena.MAX_NODES + 1; ++i)
+        auto& a = detail::g_app().arena;
+        for (unsigned int i = 0; i < detail::g_app().arena.MAX_NODES + 1; ++i)
             a.alloc_node();
     });
     assert(aborted);
@@ -274,15 +274,15 @@ void test_arena_overflow_graceful() {
 void test_node_handle_stale_traps() {
     reset_app();
 
-    auto h = detail::g_app.arena.alloc_node();
-    assert(detail::g_app.arena.get(h) != nullptr);
+    auto h = detail::g_app().arena.alloc_node();
+    assert(detail::g_app().arena.get(h) != nullptr);
 
-    detail::g_app.arena.reset();
-    assert(detail::g_app.arena.get(h) == nullptr);
+    detail::g_app().arena.reset();
+    assert(detail::g_app().arena.get(h) == nullptr);
 
     bool aborted = runs_to_abort([h] {
-        (void)detail::g_app.arena.alloc_node();
-        detail::g_app.arena.must_get(h);
+        (void)detail::g_app().arena.alloc_node();
+        detail::g_app().arena.must_get(h);
     });
     assert(aborted);
 

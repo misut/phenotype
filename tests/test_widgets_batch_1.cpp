@@ -33,9 +33,9 @@ bool nearly(float a, float b, float eps = 0.5f) {
 template <typename View>
 NodeHandle build(View&& view) {
     detail::bump_local_gen();
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
@@ -162,7 +162,7 @@ void test_switch_registers_callback() {
     build([&] {
         widget::switch_<Msg>("a", false, Toggle);
     });
-    auto& app = detail::g_app;
+    auto& app = detail::g_app();
     assert(app.callbacks.size() == 1);
     // Invoking the callback should post a Msg, but the test isn't
     // wiring an `update` — we just confirm a callable was registered.

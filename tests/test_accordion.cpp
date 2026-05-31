@@ -28,9 +28,9 @@ namespace {
 template <typename View>
 NodeHandle build(View&& view) {
     detail::bump_local_gen();
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
@@ -83,8 +83,8 @@ void test_accordion_click_expands_body() {
     // Simulate the click that the shell would post on the header's
     // callback — this is exactly what `dispatch_mouse_button` does
     // when it routes a hit into the registered slot.
-    assert(detail::g_app.callbacks.size() == 1);
-    detail::g_app.callbacks[0]();   // toggle expanded → true
+    assert(detail::g_app().callbacks.size() == 1);
+    detail::g_app().callbacks[0]();   // toggle expanded → true
 
     auto root_h = build(run);
 
@@ -110,8 +110,8 @@ void test_two_accordions_stay_independent() {
     };
 
     build(run);
-    assert(detail::g_app.callbacks.size() == 2);
-    detail::g_app.callbacks[0]();   // expand first only
+    assert(detail::g_app().callbacks.size() == 2);
+    detail::g_app().callbacks[0]();   // expand first only
 
     auto root_h = build(run);
     auto& root = detail::node_at(root_h);
@@ -131,7 +131,7 @@ void test_accordion_state_persists_across_frames() {
         layout::accordion("section", [&] { widget::text("body"); });
     };
     build(run);
-    detail::g_app.callbacks[0]();   // expand
+    detail::g_app().callbacks[0]();   // expand
     build(run);
     auto root_h = build(run);       // re-render, no flip in between
     auto& col = detail::node_at(detail::node_at(root_h).children[0]);

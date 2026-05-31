@@ -37,12 +37,12 @@ namespace {
 template <typename View>
 NodeHandle build(View&& view) {
     detail::bump_local_gen();
-    detail::g_app.arena.reset();
-    detail::g_app.overlays.clear();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
-    detail::g_app.debug_viewport_width = 800.0f;
-    detail::g_app.debug_viewport_height = 600.0f;
+    detail::g_app().arena.reset();
+    detail::g_app().overlays.clear();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
+    detail::g_app().debug_viewport_width = 800.0f;
+    detail::g_app().debug_viewport_height = 600.0f;
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
@@ -67,7 +67,7 @@ void test_dialog_registers_overlay_with_centered_card() {
     });
     (void)root_h;
 
-    auto& app = detail::g_app;
+    auto& app = detail::g_app();
     assert(app.overlays.size() == 1);
     auto overlay_h = app.overlays[0];
     auto& overlay = detail::node_at(overlay_h);
@@ -110,7 +110,7 @@ void test_dialog_modal_capture_paints_after_main_hit_regions() {
         }, 360.0f, 0);
     });
 
-    auto& app = detail::g_app;
+    auto& app = detail::g_app();
     assert(app.overlays.size() == 1);
     auto overlay_h = app.overlays[0];
     auto& overlay = detail::node_at(overlay_h);
@@ -166,7 +166,7 @@ void test_dialog_horizontal_centering() {
     });
     (void)root_h;
 
-    auto& app = detail::g_app;
+    auto& app = detail::g_app();
     assert(app.overlays.size() == 1);
     auto overlay_h = app.overlays[0];
     LAYOUT_NODE(overlay_h, 800.0f);
@@ -188,7 +188,7 @@ void test_dialog_two_invocations_are_independent() {
         layout::dialog([&] { widget::text("first"); });
         layout::dialog([&] { widget::text("second"); });
     });
-    assert(detail::g_app.overlays.size() == 2);
+    assert(detail::g_app().overlays.size() == 2);
     std::puts("PASS: two dialogs in one view register two overlays");
 }
 
@@ -212,7 +212,7 @@ void test_glass_overlay_helpers_register_preset_chrome() {
                                         "Command Search");
     });
 
-    auto& overlays = detail::g_app.overlays;
+    auto& overlays = detail::g_app().overlays;
     assert(overlays.size() == 4);
 
     auto assert_overlay_surface =

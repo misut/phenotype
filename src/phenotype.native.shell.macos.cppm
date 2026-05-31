@@ -2036,17 +2036,17 @@ inline bool run_performance_probe_if_requested() {
             static_cast<long long>(1'000'000'000ll / pace_hz)}
         : std::chrono::nanoseconds{0};
     bool const debug_panel = env_flag_enabled("PHENOTYPE_PERF_DEBUG_PANEL");
-    if (debug_panel && !::phenotype::detail::g_app.debug_panel_open) {
-        ::phenotype::detail::g_app.debug_panel_open = true;
+    if (debug_panel && !::phenotype::detail::g_app().debug_panel_open) {
+        ::phenotype::detail::g_app().debug_panel_open = true;
         ::phenotype::detail::trigger_rebuild();
     }
 
     auto samples = std::vector<std::uint64_t>{};
     samples.reserve(static_cast<std::size_t>(*frames));
     bool const previous_active_animations =
-        ::phenotype::detail::g_app.has_active_animations;
+        ::phenotype::detail::g_app().has_active_animations;
     if (mode == "force-flush")
-        ::phenotype::detail::g_app.has_active_animations = true;
+        ::phenotype::detail::g_app().has_active_animations = true;
     int stats_long_frames = 0;
     int stats_handled_frames = 0;
     if (mode == "scroll" || mode == "mixed-input") {
@@ -2078,11 +2078,11 @@ inline bool run_performance_probe_if_requested() {
             handled = dispatch_scroll_xy(0.0, dy, false, w, h);
             if (!handled) {
                 bool const previous_input_motion =
-                    ::phenotype::detail::g_app.has_active_input_motion;
-                ::phenotype::detail::g_app.has_active_input_motion = true;
-                ::phenotype::detail::g_app.last_paint_hash = 0;
+                    ::phenotype::detail::g_app().has_active_input_motion;
+                ::phenotype::detail::g_app().has_active_input_motion = true;
+                ::phenotype::detail::g_app().last_paint_hash = 0;
                 repaint_current();
-                ::phenotype::detail::g_app.has_active_input_motion =
+                ::phenotype::detail::g_app().has_active_input_motion =
                     previous_input_motion;
             }
         } else if (mode == "mixed-input") {
@@ -2105,11 +2105,11 @@ inline bool run_performance_probe_if_requested() {
                         h);
                     if (!handled) {
                         bool const previous_input_motion =
-                            ::phenotype::detail::g_app.has_active_input_motion;
-                        ::phenotype::detail::g_app.has_active_input_motion = true;
-                        ::phenotype::detail::g_app.last_paint_hash = 0;
+                            ::phenotype::detail::g_app().has_active_input_motion;
+                        ::phenotype::detail::g_app().has_active_input_motion = true;
+                        ::phenotype::detail::g_app().last_paint_hash = 0;
                         repaint_current();
-                        ::phenotype::detail::g_app.has_active_input_motion =
+                        ::phenotype::detail::g_app().has_active_input_motion =
                             previous_input_motion;
                     }
                     break;
@@ -2122,7 +2122,7 @@ inline bool run_performance_probe_if_requested() {
             }
         } else {
             if (mode == "force-flush")
-                ::phenotype::detail::g_app.last_paint_hash = 0;
+                ::phenotype::detail::g_app().last_paint_hash = 0;
             repaint_current();
         }
         auto const end = std::chrono::steady_clock::now();
@@ -2137,7 +2137,7 @@ inline bool run_performance_probe_if_requested() {
         if (pace_duration.count() > 0 && elapsed < pace_duration)
             std::this_thread::sleep_for(pace_duration - elapsed);
     }
-    ::phenotype::detail::g_app.has_active_animations =
+    ::phenotype::detail::g_app().has_active_animations =
         previous_active_animations;
 
     auto sorted = samples;
@@ -2312,7 +2312,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     bool const artifact_requested = artifact_dir && artifact_dir[0] != '\0';
     if (artifact_requested && platform.debug.capabilities
         && platform.debug.capabilities().material_backdrop_blur) {
-        ::phenotype::detail::g_app.last_paint_hash = 0;
+        ::phenotype::detail::g_app().last_paint_hash = 0;
         repaint_current();
         wait_for_appkit_window_front(app, window);
     }

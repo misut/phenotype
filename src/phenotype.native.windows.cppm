@@ -3275,7 +3275,7 @@ inline bool decode_frame_commands(unsigned char const* buf,
                 material_request_for_command(
                     descriptor,
                     MaterialGeometry{x, y, w, h, radius},
-                    ::phenotype::detail::g_app.theme),
+                    ::phenotype::detail::g_app().theme),
                 material_env_for_command);
             frame.material_records.push_back(
                 MaterialRuntimeRecord{plan, current_command_index});
@@ -3327,7 +3327,7 @@ inline bool decode_frame_commands(unsigned char const* buf,
                 x,
                 y,
                 color,
-                ::phenotype::detail::g_app.theme);
+                ::phenotype::detail::g_app().theme);
             if (foreground.has_material)
                 ++frame.foreground_text_candidate_count;
             if (foreground.remapped) {
@@ -5676,7 +5676,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
 
     float text_scale = surface_content_scale(g_renderer.surface);
-    float line_height_ratio = ::phenotype::detail::g_app.theme.line_height_ratio;
+    float line_height_ratio = ::phenotype::detail::g_app().theme.line_height_ratio;
     auto const accessibility = windows_accessibility_display_options();
     g_renderer.accessibility_options = accessibility;
     MaterialEnvironment material_env{};

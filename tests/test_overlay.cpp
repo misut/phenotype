@@ -39,10 +39,10 @@ namespace {
 template <typename View>
 NodeHandle build(View&& view) {
     detail::bump_local_gen();
-    detail::g_app.arena.reset();
-    detail::g_app.overlays.clear();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().overlays.clear();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
 
@@ -77,7 +77,7 @@ DropdownMsg dropdown_pick(std::size_t index) {
 
 }  // namespace
 
-// Calling `layout::overlay` registers a NodeHandle on `g_app.overlays`
+// Calling `layout::overlay` registers a NodeHandle on `g_app().overlays`
 // and *not* on the parent root's children — the overlay subtree is a
 // root-level alternate the runner walks separately.
 void test_overlay_registers_off_main_tree() {
@@ -89,8 +89,8 @@ void test_overlay_registers_off_main_tree() {
     });
     auto& root = detail::node_at(root_h);
     assert(root.children.size() == 1);                   // only "main"
-    assert(detail::g_app.overlays.size() == 1);
-    auto& overlay_root = detail::node_at(detail::g_app.overlays[0]);
+    assert(detail::g_app().overlays.size() == 1);
+    auto& overlay_root = detail::node_at(detail::g_app().overlays[0]);
     assert(overlay_root.children.size() == 1);           // "on top"
     std::puts("PASS: overlay registers as a root-level alternate");
 }
@@ -110,11 +110,11 @@ void test_overlay_paints_on_top_of_main_tree() {
     });
 
     LAYOUT_NODE(root_h, 800.0f);
-    for (auto h : detail::g_app.overlays) LAYOUT_NODE(h, 800.0f);
+    for (auto h : detail::g_app().overlays) LAYOUT_NODE(h, 800.0f);
     CMD_LEN = 0;
     PAINT_NODE(root_h);
     auto main_end = CMD_LEN;
-    for (auto h : detail::g_app.overlays) PAINT_NODE(h);
+    for (auto h : detail::g_app().overlays) PAINT_NODE(h);
 
     // Walk HitRegions in emit order, locating the indices of the two
     // buttons. Overlay's button is registered *after* the main button
@@ -151,17 +151,17 @@ void test_overlay_cleared_between_rebuilds() {
     build([&] {
         layout::overlay([&] { widget::text("transient"); });
     });
-    assert(detail::g_app.overlays.size() == 1);
+    assert(detail::g_app().overlays.size() == 1);
 
     build([&] {
         widget::text("only main");
     });
-    assert(detail::g_app.overlays.empty());
+    assert(detail::g_app().overlays.empty());
     std::puts("PASS: overlays clear between rebuilds");
 }
 
 // Overlay buttons participate in Tab navigation by being collected
-// into `g_app.focusable_ids` alongside main-tree focusables.
+// into `g_app().focusable_ids` alongside main-tree focusables.
 void test_overlay_focusables_collected() {
     enum Msg { Action };
     auto root_h = build([&] {
@@ -171,7 +171,7 @@ void test_overlay_focusables_collected() {
         });
     });
 
-    auto& app = detail::g_app;
+    auto& app = detail::g_app();
     LAYOUT_NODE(root_h, 800.0f);
     for (auto h : app.overlays) LAYOUT_NODE(h, 800.0f);
 
@@ -210,22 +210,22 @@ void test_glass_dropdown_button_opens_context_menu() {
     };
 
     auto root_h = render();
-    assert(detail::g_app.overlays.empty());
+    assert(detail::g_app().overlays.empty());
     auto const& closed_root = detail::node_at(root_h);
     assert(closed_root.children.size() == 1);
     auto const& closed_button = detail::node_at(closed_root.children[0]);
     assert(closed_button.text.compare("View: Icon") == 0);
     assert(closed_button.material.kind == MaterialKind::Clear);
     assert(closed_button.material.role == MaterialSurfaceRole::Navigation);
-    assert(detail::g_app.callbacks.size() == 1);
+    assert(detail::g_app().callbacks.size() == 1);
 
-    detail::g_app.callbacks[closed_button.callback_id]();
+    detail::g_app().callbacks[closed_button.callback_id]();
 
     root_h = render();
-    assert(detail::g_app.overlays.size() == 1);
-    assert(detail::g_app.callbacks.size() == items.size() + 1);
-    auto const* icon = find_text(detail::g_app.overlays[0], "Icon");
-    auto const* list = find_text(detail::g_app.overlays[0], "List");
+    assert(detail::g_app().overlays.size() == 1);
+    assert(detail::g_app().callbacks.size() == items.size() + 1);
+    auto const* icon = find_text(detail::g_app().overlays[0], "Icon");
+    auto const* list = find_text(detail::g_app().overlays[0], "List");
     assert(icon != nullptr);
     assert(list != nullptr);
     assert(icon->material.kind == MaterialKind::Thin);
@@ -233,13 +233,13 @@ void test_glass_dropdown_button_opens_context_menu() {
     assert(list->material.kind == MaterialKind::Clear);
     assert(list->material.role == MaterialSurfaceRole::Overlay);
 
-    detail::g_app.callbacks[2]();
+    detail::g_app().callbacks[2]();
     auto messages = detail::drain<DropdownMsg>();
     assert(messages.size() == 1);
     assert(messages[0] == DropdownMsg::List);
 
     render();
-    assert(detail::g_app.overlays.empty());
+    assert(detail::g_app().overlays.empty());
     std::puts("PASS: glass dropdown opens a material context menu");
 }
 

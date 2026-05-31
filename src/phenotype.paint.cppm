@@ -94,12 +94,12 @@ inline void report_paint_overflow(Cmd opcode, unsigned int needed,
         "buf_size={} canvas={{cb={}, ax={}, ay={}, w={}, h={}}}",
         static_cast<unsigned int>(opcode), op_name,
         needed, buf_len, buf_size,
-        g_app.current_paint_callback_id,
-        g_app.current_paint_ax, g_app.current_paint_ay,
-        g_app.current_paint_w,  g_app.current_paint_h);
-    ++g_app.paint_flush_epoch;
+        g_app().current_paint_callback_id,
+        g_app().current_paint_ax, g_app().current_paint_ay,
+        g_app().current_paint_w,  g_app().current_paint_h);
+    ++g_app().paint_flush_epoch;
 #ifndef NDEBUG
-    if (g_app.diag_abort_on_paint_overflow) {
+    if (g_app().diag_abort_on_paint_overflow) {
         // Flush every open stream so the [ERROR] line above survives
         // the abort under shell-redirected stderr (where libc may
         // block-buffer instead of line-buffering). Without this, the
@@ -138,7 +138,7 @@ template <render_backend R>
         // have been consumed and cleared from r.buf(). paint_node
         // compares this epoch at entry and exit to know whether its
         // recorded range is still trustworthy.
-        ++g_app.paint_flush_epoch;
+        ++g_app().paint_flush_epoch;
         metrics::inst::paint_buffer_flushes.add();
     }
     if (r.buf_len() + needed > r.buf_size()) {
@@ -160,14 +160,14 @@ template <render_backend R>
         if (r.reserve(r.buf_len() + needed)) return true;
         r.flush();
         r.buf_len() = 0;
-        ++g_app.paint_flush_epoch;
+        ++g_app().paint_flush_epoch;
         metrics::inst::paint_buffer_flushes.add();
     }
     return r.buf_len() + needed <= r.buf_size();
 }
 
 // RAII guard that pushes the currently-painting node's identity into
-// `g_app.current_paint_*` on entry and restores the previous value on
+// `g_app().current_paint_*` on entry and restores the previous value on
 // exit. paint_node is recursive, so the snapshot/restore lets the log
 // line in report_paint_overflow always name the *deepest* node being
 // processed when the overflow happens — which is the canvas / widget
@@ -178,25 +178,25 @@ struct PaintCtxGuard {
 
     PaintCtxGuard(unsigned int cb, float ax, float ay,
                    float w, float h) noexcept
-        : prev_cb{g_app.current_paint_callback_id},
-          prev_ax{g_app.current_paint_ax},
-          prev_ay{g_app.current_paint_ay},
-          prev_w {g_app.current_paint_w},
-          prev_h {g_app.current_paint_h}
+        : prev_cb{g_app().current_paint_callback_id},
+          prev_ax{g_app().current_paint_ax},
+          prev_ay{g_app().current_paint_ay},
+          prev_w {g_app().current_paint_w},
+          prev_h {g_app().current_paint_h}
     {
-        g_app.current_paint_callback_id = cb;
-        g_app.current_paint_ax = ax;
-        g_app.current_paint_ay = ay;
-        g_app.current_paint_w  = w;
-        g_app.current_paint_h  = h;
+        g_app().current_paint_callback_id = cb;
+        g_app().current_paint_ax = ax;
+        g_app().current_paint_ay = ay;
+        g_app().current_paint_w  = w;
+        g_app().current_paint_h  = h;
     }
 
     ~PaintCtxGuard() {
-        g_app.current_paint_callback_id = prev_cb;
-        g_app.current_paint_ax = prev_ax;
-        g_app.current_paint_ay = prev_ay;
-        g_app.current_paint_w  = prev_w;
-        g_app.current_paint_h  = prev_h;
+        g_app().current_paint_callback_id = prev_cb;
+        g_app().current_paint_ax = prev_ax;
+        g_app().current_paint_ay = prev_ay;
+        g_app().current_paint_w  = prev_w;
+        g_app().current_paint_h  = prev_h;
     }
 
     PaintCtxGuard(PaintCtxGuard const&) = delete;
@@ -688,7 +688,7 @@ void flush(R& r) {
 template <render_backend R>
 void flush_if_changed(R& r) {
     if (r.buf_len() == 0) return;
-    auto& app = detail::g_app;
+    auto& app = detail::g_app();
 
     // Snapshot the current frame's byte stream before flush() resets
     // buf_len. The subtree paint cache (see paint_node entry guard)
@@ -742,7 +742,7 @@ inline FontSpec paint_default_text_font(bool mono) noexcept {
     if (mono)
         return FontSpec{ {}, FontWeight::Regular, FontStyle::Upright, true };
     return FontSpec{
-        g_app.theme.default_font_family,
+        g_app().theme.default_font_family,
         FontWeight::Regular,
         FontStyle::Upright,
         false,
@@ -751,7 +751,7 @@ inline FontSpec paint_default_text_font(bool mono) noexcept {
 
 template <render_backend R>
 void reset_paint_scissor_boundary(R& r) {
-    g_app.paint_scissor_depth = 0;
+    g_app().paint_scissor_depth = 0;
     emit_scissor_reset(r);
 }
 
@@ -796,7 +796,7 @@ void emit_focused_input_selection(R& r,
 inline void collect_focusable_ids(NodeHandle node_h) {
     auto& node = node_at(node_h);
     if (node.callback_id != 0xFFFFFFFF && node.focusable)
-        g_app.focusable_ids.push_back(node.callback_id);
+        g_app().focusable_ids.push_back(node.callback_id);
     for (auto child_h : node.children)
         collect_focusable_ids(child_h);
 }
@@ -822,11 +822,11 @@ inline void collect_subtree_interaction_state(
         SubtreeInteractionState& state) {
     auto& node = node_at(node_h);
     if (node.callback_id != 0xFFFFFFFFu) {
-        state.hovered = state.hovered || node.callback_id == g_app.hovered_id;
+        state.hovered = state.hovered || node.callback_id == g_app().hovered_id;
         state.focused = state.focused || (
-            g_app.focus_visible
-            && node.callback_id == g_app.focused_id);
-        state.pressed = state.pressed || node.callback_id == g_app.pressed_id;
+            g_app().focus_visible
+            && node.callback_id == g_app().focused_id);
+        state.pressed = state.pressed || node.callback_id == g_app().pressed_id;
     }
     for (auto child_h : node.children)
         collect_subtree_interaction_state(child_h, state);
@@ -941,7 +941,7 @@ inline float scroll_bar_alpha_factor(std::string const& visibility,
     if (mode == "always")
         return 1.0f;
     if (scroll_bar_auto_animating(now_ns, active_since_ns))
-        g_app.scrollbar_animation_active = true;
+        g_app().scrollbar_animation_active = true;
     return scroll_bar_auto_alpha(now_ns, active_since_ns);
 }
 
@@ -982,7 +982,7 @@ void emit_vertical_overlay_scroll_bar(R& r,
     float const radius = thickness * 0.5f;
 
     if (persistent) {
-        Color track = g_app.theme.foreground;
+        Color track = g_app().theme.foreground;
         track.a = scaled_alpha(18.0f, alpha_factor);
         emit_round_rect(
             r,
@@ -994,7 +994,7 @@ void emit_vertical_overlay_scroll_bar(R& r,
             track);
     }
 
-    Color thumb = g_app.theme.foreground;
+    Color thumb = g_app().theme.foreground;
     thumb.a = scaled_alpha(124.0f, alpha_factor);
     emit_round_rect(r, thumb_x, thumb_y, thickness, thumb_h, radius, thumb);
 }
@@ -1066,9 +1066,9 @@ void paint_scroll_view_scroll_bar(R& r,
         now);
 
     auto const mode = normalized_scroll_bar_visibility(
-        g_app.theme.scroll_bar_visibility);
+        g_app().theme.scroll_bar_visibility);
     float const alpha = scroll_bar_alpha_factor(
-        g_app.theme.scroll_bar_visibility,
+        g_app().theme.scroll_bar_visibility,
         now,
         state.scrollbar_active_since_ns);
     emit_vertical_overlay_scroll_bar(
@@ -1087,22 +1087,22 @@ template <render_backend R>
 void paint_root_vertical_scroll_bar(R& r,
                                     float viewport_width,
                                     float viewport_height) {
-    auto* root = g_app.arena.get(g_app.root);
+    auto* root = g_app().arena.get(g_app().root);
     if (!root)
         return;
     auto const now = metrics::detail::now_ns();
     update_scroll_bar_activity(
-        g_app.scroll_y,
-        g_app.root_scrollbar_last_scroll_y,
-        g_app.root_scrollbar_active_since_ns,
+        g_app().scroll_y,
+        g_app().root_scrollbar_last_scroll_y,
+        g_app().root_scrollbar_active_since_ns,
         now);
 
     auto const mode = normalized_scroll_bar_visibility(
-        g_app.theme.scroll_bar_visibility);
+        g_app().theme.scroll_bar_visibility);
     float const alpha = scroll_bar_alpha_factor(
-        g_app.theme.scroll_bar_visibility,
+        g_app().theme.scroll_bar_visibility,
         now,
-        g_app.root_scrollbar_active_since_ns);
+        g_app().root_scrollbar_active_since_ns);
     emit_vertical_overlay_scroll_bar(
         r,
         0.0f,
@@ -1110,7 +1110,7 @@ void paint_root_vertical_scroll_bar(R& r,
         viewport_width,
         viewport_height,
         root->height,
-        g_app.scroll_y,
+        g_app().scroll_y,
         alpha,
         mode == "always");
 }
@@ -1135,10 +1135,10 @@ inline MaterialInteractionDescriptor resolve_material_interaction(
     resolved.focused = resolved.focused || subtree.focused;
     resolved.pressed = resolved.pressed || subtree.pressed;
 
-    bool const pointer_inside = g_app.pointer_valid
+    bool const pointer_inside = g_app().pointer_valid
         && point_inside_rect(
-            g_app.pointer_x,
-            g_app.pointer_y,
+            g_app().pointer_x,
+            g_app().pointer_y,
             draw_x,
             draw_y,
             node.width,
@@ -1146,11 +1146,11 @@ inline MaterialInteractionDescriptor resolve_material_interaction(
     resolved.pointer_inside = resolved.pointer_inside || pointer_inside;
     if (pointer_inside && !has_explicit_anchor) {
         resolved.pointer_x = normalized_pointer_axis(
-            g_app.pointer_x,
+            g_app().pointer_x,
             draw_x,
             node.width);
         resolved.pointer_y = normalized_pointer_axis(
-            g_app.pointer_y,
+            g_app().pointer_y,
             draw_y,
             node.height);
     }
@@ -1188,11 +1188,11 @@ inline void register_cached_paint_side_effects(NodeHandle node_h,
     float ay = oy + node.y;
 
     if (node.gesture_callback_id != 0xFFFFFFFFu) {
-        g_app.gesture_target_id = node.gesture_callback_id;
-        g_app.gesture_target_x  = ax;
-        g_app.gesture_target_y  = ay;
-        g_app.gesture_target_w  = node.width;
-        g_app.gesture_target_h  = node.height;
+        g_app().gesture_target_id = node.gesture_callback_id;
+        g_app().gesture_target_x  = ax;
+        g_app().gesture_target_y  = ay;
+        g_app().gesture_target_w  = node.width;
+        g_app().gesture_target_h  = node.height;
     }
 
     float child_scroll_x = scroll_x;
@@ -1212,7 +1212,7 @@ inline void register_cached_paint_side_effects(NodeHandle node_h,
         tgt.h = node.height;
         tgt.state = node.scroll_state;
         tgt.content_height = node.content_height;
-        g_app.scroll_targets.push_back(tgt);
+        g_app().scroll_targets.push_back(tgt);
     }
 
     for (auto child_h : node.children) {
@@ -1237,8 +1237,8 @@ void emit_node_hit_region(R& r,
     // scroll (ambient minus global) so the rect lines up with the
     // visual position once hit_test re-applies global. Root children
     // always have inner == 0 and so emit at the unchanged (ax, ay).
-    float inner_scroll_x = scroll_x - g_app.scroll_x;
-    float inner_scroll_y = scroll_y - g_app.scroll_y;
+    float inner_scroll_x = scroll_x - g_app().scroll_x;
+    float inner_scroll_y = scroll_y - g_app().scroll_y;
     float const hit_slop_x = std::max(
         0.0f,
         (node.min_hit_width - node.width) * 0.5f);
@@ -1269,7 +1269,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     PaintCtxGuard _ctx_guard(node.callback_id, ax, ay, node.width, node.height);
 
     // A subtree rooted at (or under) a scroll_view is recorded with
-    // local-ambient scroll values that don't match `g_app.prev_scroll_y`
+    // local-ambient scroll values that don't match `g_app().prev_scroll_y`
     // (which only tracks the root). Skip the cache for such subtrees
     // and never record paint_valid for their nodes — re-walk every
     // frame. The blit cache for nodes outside scroll views still works
@@ -1285,7 +1285,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     // ---- Subtree paint cache blit guard ----------------------------
     // If diff copied this subtree's layout AND every paint-ambient
     // input is unchanged since the frame that emitted it, memcpy the
-    // saved byte range out of g_app.prev_cmd_buf instead of re-walking.
+    // saved byte range out of g_app().prev_cmd_buf instead of re-walking.
     // Byte-exact reuse: the bytes were emitted with identical ax/ay/
     // scroll_x/scroll_y and no intersecting hover/focus transition, so
     // they are byte-for-byte what this walk would produce.
@@ -1306,14 +1306,14 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         && !node.paint_dynamic
         && ax == node.paint_ax
         && ay == node.paint_ay
-        && scroll_x == g_app.prev_scroll_x
-        && scroll_y == g_app.prev_scroll_y
-        && node.paint_theme_generation == g_app.theme_generation
-        && (node.paint_callback_mask & g_app.paint_invalidation_mask) == 0
-        && node.paint_offset + node.paint_length <= g_app.prev_cmd_len
+        && scroll_x == g_app().prev_scroll_x
+        && scroll_y == g_app().prev_scroll_y
+        && node.paint_theme_generation == g_app().theme_generation
+        && (node.paint_callback_mask & g_app().paint_invalidation_mask) == 0
+        && node.paint_offset + node.paint_length <= g_app().prev_cmd_len
         && node.paint_length > 0)
     {
-        auto const entry_flush_epoch = g_app.paint_flush_epoch;
+        auto const entry_flush_epoch = g_app().paint_flush_epoch;
         auto const len = node.paint_length;
         auto const write_pos = r.buf_len();
         // Discard return — the (epoch_changed || not_enough_room) check
@@ -1321,11 +1321,11 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         // to the miss-path walk. Treating ensure_blit's false return as
         // an early return here would leave the subtree blank.
         (void)ensure_blit(r, len);
-        if (g_app.paint_flush_epoch == entry_flush_epoch
+        if (g_app().paint_flush_epoch == entry_flush_epoch
             && r.buf_len() + len <= r.buf_size())
         {
             std::memcpy(&r.buf()[write_pos],
-                        &g_app.prev_cmd_buf[node.paint_offset], len);
+                        &g_app().prev_cmd_buf[node.paint_offset], len);
             r.buf_len() += len;
             // Update paint_offset to this frame's *write* position so
             // next frame's prev_cmd_buf — which captures the current
@@ -1345,7 +1345,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
 
     // ---- Miss path: walk, emit, and record paint cache state -------
     auto const before = r.buf_len();
-    auto const entry_flush_epoch = g_app.paint_flush_epoch;
+    auto const entry_flush_epoch = g_app().paint_flush_epoch;
     std::uint64_t subtree_mask = callback_mask_bit(node.callback_id);
     // A canvas paint_fn is dynamic UNLESS the caller opted into the
     // dirty-token contract by passing a non-zero paint_token. The
@@ -1364,9 +1364,9 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
 
     bool const self_cacheable = node_self_paint_cacheable(node);
     bool const broad_paint_activity =
-        g_app.has_active_animations
-        || g_app.scrollbar_animation_active
-        || g_app.debug_panel_refresh_active;
+        g_app().has_active_animations
+        || g_app().scrollbar_animation_active
+        || g_app().debug_panel_refresh_active;
     bool self_blitted = false;
     if (self_cacheable
         && !effective_inside
@@ -1375,21 +1375,21 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         && node.self_paint_valid
         && ax == node.self_paint_ax
         && ay == node.self_paint_ay
-        && scroll_x == g_app.prev_scroll_x
-        && scroll_y == g_app.prev_scroll_y
-        && node.self_paint_theme_generation == g_app.theme_generation
-        && node.self_paint_offset + node.self_paint_length <= g_app.prev_cmd_len
+        && scroll_x == g_app().prev_scroll_x
+        && scroll_y == g_app().prev_scroll_y
+        && node.self_paint_theme_generation == g_app().theme_generation
+        && node.self_paint_offset + node.self_paint_length <= g_app().prev_cmd_len
         && node.self_paint_length > 0)
     {
-        auto const self_entry_flush_epoch = g_app.paint_flush_epoch;
+        auto const self_entry_flush_epoch = g_app().paint_flush_epoch;
         auto const len = node.self_paint_length;
         auto const write_pos = r.buf_len();
         (void)ensure_blit(r, len);
-        if (g_app.paint_flush_epoch == self_entry_flush_epoch
+        if (g_app().paint_flush_epoch == self_entry_flush_epoch
             && r.buf_len() + len <= r.buf_size())
         {
             std::memcpy(&r.buf()[write_pos],
-                        &g_app.prev_cmd_buf[node.self_paint_offset], len);
+                        &g_app().prev_cmd_buf[node.self_paint_offset], len);
             r.buf_len() += len;
             node.self_paint_offset = write_pos;
             self_blitted = true;
@@ -1400,9 +1400,9 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
 
     if (!self_blitted) {
     bool is_hovered = (node.callback_id != 0xFFFFFFFF &&
-                       node.callback_id == g_app.hovered_id);
+                       node.callback_id == g_app().hovered_id);
     bool is_focused = (node.callback_id != 0xFFFFFFFF &&
-                       node.callback_id == g_app.focused_id &&
+                       node.callback_id == g_app().focused_id &&
                        node.focusable);
 
     Color bg = (is_hovered && node.hover_background.a > 0)
@@ -1426,7 +1426,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     }
 
     if (node.decoration != Decoration::None) {
-        Color decoration_color = g_app.theme.surface;
+        Color decoration_color = g_app().theme.surface;
         if (node.decoration == Decoration::Check) {
             float cx = draw_x + node.width * 0.5f;
             float cy = draw_y + node.height * 0.5f;
@@ -1466,7 +1466,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             emit_focused_input_selection(r, measurer, snapshot, scroll_x, scroll_y);
     }
     if (!html_overlay_active && !node.text_lines.empty()) {
-        float line_height = node.font_size * g_app.theme.line_height_ratio;
+        float line_height = node.font_size * g_app().theme.line_height_ratio;
         float inner_width = node.width - node.style.padding[1] - node.style.padding[3];
         float inner_height = node.height - node.style.padding[0] - node.style.padding[2];
         float text_block_height = line_height
@@ -1844,10 +1844,10 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         // emit positions slid up by `scroll_y` while the clip stayed
         // at the canvas's original top, masking the top of the
         // drawing and leaking a horizontal band of "frozen" content.
-        bool emit_canvas_scissor = (g_app.paint_scissor_depth == 0);
+        bool emit_canvas_scissor = (g_app().paint_scissor_depth == 0);
         if (emit_canvas_scissor) {
             emit_scissor(r, draw_x, draw_y, node.width, node.height);
-            ++g_app.paint_scissor_depth;
+            ++g_app().paint_scissor_depth;
             metrics::inst::scissor_emitted.add();
         }
         PainterImpl painter(r, measurer, draw_x, draw_y,
@@ -1856,7 +1856,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         node.paint_fn(painter);
         if (emit_canvas_scissor) {
             emit_scissor_reset(r);
-            --g_app.paint_scissor_depth;
+            --g_app().paint_scissor_depth;
         }
     }
 
@@ -1864,7 +1864,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         emit_node_hit_region(r, node, ax, ay, scroll_x, scroll_y);
 
     // Register this canvas as the active gesture target — the shell
-    // looks at `g_app.gesture_target_*` to route platform pinch / pan
+    // looks at `g_app().gesture_target_*` to route platform pinch / pan
     // events. Last canvas painted wins on the rare apps that have
     // multiple gesture-aware canvases on screen at once; that policy
     // matches z-order intuition for nested canvases (the inner one
@@ -1872,11 +1872,11 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     // post-scroll surface coords, matching what `dispatch_gesture`
     // receives from the input backend.
     if (node.gesture_callback_id != 0xFFFFFFFFu) {
-        g_app.gesture_target_id = node.gesture_callback_id;
-        g_app.gesture_target_x  = ax;
-        g_app.gesture_target_y  = ay;
-        g_app.gesture_target_w  = node.width;
-        g_app.gesture_target_h  = node.height;
+        g_app().gesture_target_id = node.gesture_callback_id;
+        g_app().gesture_target_x  = ax;
+        g_app().gesture_target_y  = ay;
+        g_app().gesture_target_w  = node.width;
+        g_app().gesture_target_h  = node.height;
     }
     }
 
@@ -1907,7 +1907,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         tgt.h = node.height;
         tgt.state = node.scroll_state;
         tgt.content_height = node.content_height;
-        g_app.scroll_targets.push_back(tgt);
+        g_app().scroll_targets.push_back(tgt);
 
         // Scissor the viewport so children that scroll past the rect
         // get clipped. Skip when already nested in another scissor —
@@ -1915,10 +1915,10 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         // scroll_views that lose the scissor still scroll correctly,
         // they just visually bleed past the inner viewport's edges
         // (rare in practice; documented limitation).
-        if (g_app.paint_scissor_depth == 0) {
+        if (g_app().paint_scissor_depth == 0) {
             emit_scissor(r, ax - scroll_x, ay - scroll_y,
                          node.width, node.height);
-            ++g_app.paint_scissor_depth;
+            ++g_app().paint_scissor_depth;
             emit_scroll_scissor = true;
             metrics::inst::scissor_emitted.add();
         }
@@ -1932,7 +1932,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     // touch pixels that actually changed this frame. The four target
     // graphics APIs do not support nested scissor regions, so we only
     // wrap when not already inside one (tracked via the paint-cache's
-    // scissor_depth on g_app).
+    // scissor_depth on g_app()).
     bool any_sibling_blits = false;
     for (auto child_h : node.children) {
         if (node_at(child_h).layout_valid) { any_sibling_blits = true; break; }
@@ -1943,13 +1943,13 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         bool const child_is_dirty_root =
             !child.layout_valid
             && any_sibling_blits
-            && g_app.paint_scissor_depth == 0;
+            && g_app().paint_scissor_depth == 0;
 
         if (child_is_dirty_root) {
             float cx = ax + child.x - child_scroll_x;
             float cy = ay + child.y - child_scroll_y;
             emit_scissor(r, cx, cy, child.width, child.height);
-            ++g_app.paint_scissor_depth;
+            ++g_app().paint_scissor_depth;
             metrics::inst::scissor_emitted.add();
         }
 
@@ -1961,13 +1961,13 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
 
         if (child_is_dirty_root) {
             emit_scissor_reset(r);
-            --g_app.paint_scissor_depth;
+            --g_app().paint_scissor_depth;
         }
     }
 
     if (emit_scroll_scissor) {
         emit_scissor_reset(r);
-        --g_app.paint_scissor_depth;
+        --g_app().paint_scissor_depth;
     }
 
     if (!node.hit_region_before_children)
@@ -2007,24 +2007,24 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     node.paint_dynamic = subtree_dynamic;
     if (!effective_inside
         && self_cacheable && self_after > before
-        && g_app.paint_flush_epoch == entry_flush_epoch) {
+        && g_app().paint_flush_epoch == entry_flush_epoch) {
         node.self_paint_offset = before;
         node.self_paint_length = self_after - before;
         node.self_paint_ax = ax;
         node.self_paint_ay = ay;
-        node.self_paint_theme_generation = g_app.theme_generation;
+        node.self_paint_theme_generation = g_app().theme_generation;
         node.self_paint_valid = true;
     } else {
         node.self_paint_valid = false;
     }
     if (!effective_inside
         && !subtree_dynamic && after >= before
-        && g_app.paint_flush_epoch == entry_flush_epoch) {
+        && g_app().paint_flush_epoch == entry_flush_epoch) {
         node.paint_offset = before;
         node.paint_length = after - before;
         node.paint_ax = ax;
         node.paint_ay = ay;
-        node.paint_theme_generation = g_app.theme_generation;
+        node.paint_theme_generation = g_app().theme_generation;
         node.paint_callback_mask = subtree_mask;
         node.paint_valid = true;
     } else {

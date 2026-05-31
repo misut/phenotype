@@ -21,7 +21,7 @@ inline MaterialStyle plain_control_material(Color tint,
                                             MaterialSurfaceRole role) noexcept {
     auto material = material_style_for_kind(
         MaterialKind::Regular,
-        detail::g_app.theme);
+        detail::g_app().theme);
     material.role = role;
     material.allows_liquid_glass = false;
     material.opacity = material_alpha_fraction(tint);
@@ -50,7 +50,7 @@ inline MaterialStyle interaction_glass_material(
         Color tint,
         Color border,
         Color foreground) noexcept {
-    auto material = material_style_for_kind(kind, detail::g_app.theme);
+    auto material = material_style_for_kind(kind, detail::g_app().theme);
     material.role = role;
     material.fallback = kind != MaterialKind::None;
     material.tint = tint;
@@ -73,7 +73,7 @@ inline ButtonStyleOptions interaction_glass_button_style(
         MaterialSurfaceRole role = MaterialSurfaceRole::Control,
         MaterialKind hover_kind = MaterialKind::Clear,
         MaterialKind pressed_kind = MaterialKind::Regular) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto const base_bg = style.has_background
         ? style.background
         : (style.variant == ButtonVariant::Primary ? t.accent : t.surface);
@@ -123,7 +123,7 @@ inline ButtonStyleOptions interaction_glass_button_style(
 
 inline ButtonStyleOptions glass_control_button_style(
         GlassControlStyleOptions options = {}) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto const kind = options.selected && options.kind == MaterialKind::None
         ? MaterialKind::Thin
         : (options.prominent && options.kind == MaterialKind::Clear
@@ -245,7 +245,7 @@ inline ButtonStyleOptions glass_prominent_button_style(
 
 inline ButtonStyleOptions glass_split_button_style(
         GlassSplitButtonStyleOptions options = {}) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto const kind = options.disabled ? MaterialKind::None : options.kind;
     auto material = material_style_for_kind(kind, t);
     material.role = options.role;
@@ -310,7 +310,7 @@ inline ButtonStyleOptions glass_split_button_style(
 
 inline ButtonStyleOptions glass_selection_button_style(
         GlassSelectionStyleOptions options = {}) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto const kind = options.selected
         ? options.selected_kind
         : options.unselected_kind;
@@ -384,7 +384,7 @@ inline ButtonStyleOptions glass_selection_button_style(
 
 inline ButtonStyleOptions glass_outline_row_button_style(
         GlassOutlineRowStyleOptions options = {}) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto const kind = options.disabled ? MaterialKind::None
         : (options.selected ? options.selected_kind
            : (options.expanded ? options.expanded_kind
@@ -469,7 +469,7 @@ inline ButtonStyleOptions glass_outline_row_button_style(
 
 inline ButtonStyleOptions glass_menu_item_button_style(
         GlassMenuItemStyleOptions options = {}) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto const kind = options.disabled ? MaterialKind::None : options.kind;
     auto material = material_style_for_kind(kind, t);
     material.role = options.role;
@@ -514,7 +514,7 @@ inline ButtonStyleOptions glass_menu_item_button_style(
 
 inline ButtonStyleOptions glass_table_header_button_style(
         GlassTableHeaderStyleOptions options = {}) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto const kind = options.disabled ? MaterialKind::None : options.kind;
     auto material = material_style_for_kind(kind, t);
     material.role = options.role;
@@ -571,7 +571,7 @@ inline ButtonStyleOptions glass_table_header_button_style(
 
 inline ButtonStyleOptions glass_disclosure_header_style(
         GlassDisclosureStyleOptions options = {}) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto const kind = options.disabled ? MaterialKind::None : options.kind;
     auto material = material_style_for_kind(kind, t);
     material.role = options.role;
@@ -624,7 +624,7 @@ inline ButtonStyleOptions glass_disclosure_header_style(
 
 inline TextFieldStyleOptions glass_text_field_style(
         GlassTextFieldStyleOptions options = {}) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto material = material_style_for_kind(options.kind, t);
     material.role = options.role;
     material.fallback = options.kind != MaterialKind::None;

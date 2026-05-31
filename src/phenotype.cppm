@@ -77,8 +77,8 @@ inline void attach_to_scope(NodeHandle h) {
 
 inline bool focus_ring_visible(unsigned int callback_id) {
     return callback_id != 0xFFFFFFFFu
-        && callback_id == g_app.focused_id
-        && g_app.focus_visible;
+        && callback_id == g_app().focused_id
+        && g_app().focus_visible;
 }
 
 inline char const* input_modality_name(InputModality modality) {
@@ -113,10 +113,10 @@ inline icons::SymbolDocumentCache const& icon_document_cache() {
 
 inline bool focus_ring_hidden_by_pointer_modality(unsigned int callback_id) {
     return callback_id != 0xFFFFFFFFu
-        && !g_app.focus_visible
-        && g_app.prev_focus_visible
-        && (callback_id == g_app.focused_id
-            || callback_id == g_app.prev_focused_id);
+        && !g_app().focus_visible
+        && g_app().prev_focus_visible
+        && (callback_id == g_app().focused_id
+            || callback_id == g_app().prev_focused_id);
 }
 
 inline int focus_ring_transition_ms(unsigned int callback_id,
@@ -208,7 +208,7 @@ inline void text(str content,
                  TextColor color = TextColor::Default) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     node.text = std::string(content.data, content.len);
 
     switch (size) {
@@ -253,7 +253,7 @@ inline void text(str content,
 inline void link(str label, str href) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     node.text = std::string(label.data, label.len);
     node.font_size = t.small_font_size;
     node.url = std::string(href.data, href.len);
@@ -261,8 +261,8 @@ inline void link(str label, str href) {
     node.interaction_role = InteractionRole::Link;
 
     auto url_copy = node.url;
-    auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
-    bool const is_hovered = (id == detail::g_app.hovered_id);
+    auto id = static_cast<unsigned int>(detail::g_app().callbacks.size());
+    bool const is_hovered = (id == detail::g_app().hovered_id);
     bool const is_focused = detail::focus_ring_visible(id);
     // View-time hover fade between accent and the deeper hover blue.
     // `node.hover_text_color` stays unset so paint's
@@ -284,7 +284,7 @@ inline void link(str label, str href) {
     node.border_color = animate_color(
         is_focused ? t.state_focus_ring : ring_off, focus_ms);
 
-    detail::g_app.callbacks.push_back([url_copy] {
+    detail::g_app().callbacks.push_back([url_copy] {
     #ifdef __wasi__
         phenotype_open_url(url_copy.c_str(),
                            static_cast<unsigned int>(url_copy.size()));
@@ -294,7 +294,7 @@ inline void link(str label, str href) {
                                static_cast<unsigned int>(url_copy.size()));
 #endif
     });
-    detail::g_app.callback_roles.push_back(InteractionRole::Link);
+    detail::g_app().callback_roles.push_back(InteractionRole::Link);
     node.callback_id = id;
 
     detail::attach_to_scope(h);
@@ -305,17 +305,17 @@ inline void code(str content) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.text = std::string(content.data, content.len);
-    node.font_size = detail::g_app.theme.code_font_size;
-    node.text_color = detail::g_app.theme.foreground;
+    node.font_size = detail::g_app().theme.code_font_size;
+    node.text_color = detail::g_app().theme.foreground;
     node.mono = true;
-    node.background = detail::g_app.theme.code_bg;
-    node.border_color = detail::g_app.theme.border;
+    node.background = detail::g_app().theme.code_bg;
+    node.border_color = detail::g_app().theme.border;
     node.border_width = 1;
-    node.border_radius = detail::g_app.theme.radius_md;
-    node.style.padding[0] = detail::g_app.theme.space_lg;
-    node.style.padding[1] = detail::g_app.theme.space_lg;
-    node.style.padding[2] = detail::g_app.theme.space_lg;
-    node.style.padding[3] = detail::g_app.theme.space_lg;
+    node.border_radius = detail::g_app().theme.radius_md;
+    node.style.padding[0] = detail::g_app().theme.space_lg;
+    node.style.padding[1] = detail::g_app().theme.space_lg;
+    node.style.padding[2] = detail::g_app().theme.space_lg;
+    node.style.padding[3] = detail::g_app().theme.space_lg;
 
     detail::attach_to_scope(h);
 }
@@ -333,7 +333,7 @@ inline void cell(str content,
                  float height = -1) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     node.text = std::string(content.data, content.len);
     node.font_size = t.small_font_size;
     node.text_color = header ? t.muted : t.foreground;
@@ -440,7 +440,7 @@ inline void action_button(str label,
                           std::function<void()> callback) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     node.text = std::string(label.data, label.len);
     node.font_size = options.font_size > 0.0f
         ? options.font_size
@@ -500,11 +500,11 @@ inline void action_button(str label,
     // samples mirror paint's own checks (phenotype.paint.cppm:632-636)
     // at view time.
     auto const id = static_cast<unsigned int>(
-        detail::g_app.callbacks.size());
-    bool const is_hovered = (id == detail::g_app.hovered_id);
+        detail::g_app().callbacks.size());
+    bool const is_hovered = (id == detail::g_app().hovered_id);
     bool const is_focused =
         options.focus_ring && detail::focus_ring_visible(id);
-    bool const is_pressed = (id == detail::g_app.pressed_id);
+    bool const is_pressed = (id == detail::g_app().pressed_id);
 
     Color base_bg, hover_bg, pressed_bg, base_border;
     switch (options.variant) {
@@ -561,8 +561,8 @@ inline void action_button(str label,
         is_focused);
     node.cursor_type = 1;
 
-    detail::g_app.callbacks.push_back(std::move(callback));
-    detail::g_app.callback_roles.push_back(InteractionRole::Button);
+    detail::g_app().callbacks.push_back(std::move(callback));
+    detail::g_app().callback_roles.push_back(InteractionRole::Button);
     node.callback_id = id;
 
     detail::attach_to_scope(h);
@@ -614,7 +614,7 @@ inline MaterialStyle glass_control_indicator_material(
         Color idle_tint,
         Color active_border,
         Color idle_border) {
-    auto const& t = ::phenotype::detail::g_app.theme;
+    auto const& t = ::phenotype::detail::g_app().theme;
     auto material = material_style_for_kind(kind, t);
     material.role = role;
     material.fallback = kind != MaterialKind::None;
@@ -700,12 +700,12 @@ inline void toggle(str label, bool active, Msg msg,
                    float corner_radius, Decoration active_decoration,
                    InteractionRole role,
                    GlassToggleStyleOptions const* glass_options = nullptr) {
-    auto const& t = ::phenotype::detail::g_app.theme;
+    auto const& t = ::phenotype::detail::g_app().theme;
     auto id = static_cast<unsigned int>(
-        ::phenotype::detail::g_app.callbacks.size());
-    bool const is_hovered = (id == ::phenotype::detail::g_app.hovered_id);
+        ::phenotype::detail::g_app().callbacks.size());
+    bool const is_hovered = (id == ::phenotype::detail::g_app().hovered_id);
     bool const is_focused = ::phenotype::detail::focus_ring_visible(id);
-    bool const is_pressed = (id == ::phenotype::detail::g_app.pressed_id);
+    bool const is_pressed = (id == ::phenotype::detail::g_app().pressed_id);
     Color const ring_off{t.state_focus_ring.r, t.state_focus_ring.g,
                          t.state_focus_ring.b, 0};
     auto row_h = ::phenotype::detail::alloc_node();
@@ -745,27 +745,27 @@ inline void toggle(str label, bool active, Msg msg,
     }
     ::phenotype::detail::attach_to_scope(row_h);
 
-    ::phenotype::detail::g_app.callbacks.push_back([msg = std::move(msg)] {
+    ::phenotype::detail::g_app().callbacks.push_back([msg = std::move(msg)] {
         ::phenotype::detail::post<Msg>(msg);
         ::phenotype::detail::trigger_rebuild();
     });
-    ::phenotype::detail::g_app.callback_roles.push_back(role);
+    ::phenotype::detail::g_app().callback_roles.push_back(role);
 
     {
         auto box_h = ::phenotype::detail::alloc_node();
         auto& box  = ::phenotype::detail::node_at(box_h);
-        float box_size = ::phenotype::detail::g_app.theme.toggle_box_size;
+        float box_size = ::phenotype::detail::g_app().theme.toggle_box_size;
         box.style.max_width    = box_size;
         box.style.fixed_height = box_size;
         box.border_radius      = corner_radius;
         box.debug_semantic_hidden = true;
         if (active) {
-            box.background   = ::phenotype::detail::g_app.theme.accent;
-            box.border_color = ::phenotype::detail::g_app.theme.accent;
+            box.background   = ::phenotype::detail::g_app().theme.accent;
+            box.border_color = ::phenotype::detail::g_app().theme.accent;
             box.decoration   = active_decoration;
         } else {
-            box.background   = ::phenotype::detail::g_app.theme.surface;
-            box.border_color = ::phenotype::detail::g_app.theme.border;
+            box.background   = ::phenotype::detail::g_app().theme.surface;
+            box.border_color = ::phenotype::detail::g_app().theme.border;
         }
         if (glass_options && glass_options->kind != MaterialKind::None) {
             auto const active_blue =
@@ -816,8 +816,8 @@ inline void toggle(str label, bool active, Msg msg,
         auto lbl_h = ::phenotype::detail::alloc_node();
         auto& lbl  = ::phenotype::detail::node_at(lbl_h);
         lbl.text        = std::string(label.data, label.len);
-        lbl.font_size   = ::phenotype::detail::g_app.theme.body_font_size;
-        lbl.text_color  = ::phenotype::detail::g_app.theme.foreground;
+        lbl.font_size   = ::phenotype::detail::g_app().theme.body_font_size;
+        lbl.text_color  = ::phenotype::detail::g_app().theme.foreground;
         lbl.focusable   = false;
         lbl.debug_semantic_hidden = true;
         ::phenotype::detail::append_child(row_h, lbl_h);
@@ -828,7 +828,7 @@ inline void toggle(str label, bool active, Msg msg,
 template<typename Msg>
 inline void checkbox(str label, bool checked, Msg msg) {
     _impl::toggle(label, checked, std::move(msg),
-                  detail::g_app.theme.radius_xs, Decoration::Check,
+                  detail::g_app().theme.radius_xs, Decoration::Check,
                   InteractionRole::Checkbox);
 }
 
@@ -836,14 +836,14 @@ template<typename Msg>
 inline void glass_checkbox(str label, bool checked, Msg msg,
                            GlassToggleStyleOptions options = {}) {
     _impl::toggle(label, checked, std::move(msg),
-                  detail::g_app.theme.radius_xs, Decoration::Check,
+                  detail::g_app().theme.radius_xs, Decoration::Check,
                   InteractionRole::Checkbox, &options);
 }
 
 template<typename Msg>
 inline void radio(str label, bool selected, Msg msg) {
     _impl::toggle(label, selected, std::move(msg),
-                  detail::g_app.theme.radius_lg, Decoration::Dot,
+                  detail::g_app().theme.radius_lg, Decoration::Dot,
                   InteractionRole::Radio);
 }
 
@@ -851,7 +851,7 @@ template<typename Msg>
 inline void glass_radio(str label, bool selected, Msg msg,
                         GlassToggleStyleOptions options = {}) {
     _impl::toggle(label, selected, std::move(msg),
-                  detail::g_app.theme.radius_lg, Decoration::Dot,
+                  detail::g_app().theme.radius_lg, Decoration::Dot,
                   InteractionRole::Radio, &options);
 }
 
@@ -869,7 +869,7 @@ inline void text_field(str hint, std::string const& current,
                        TextFieldStyleOptions options) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     node.interaction_role = InteractionRole::TextField;
     node.placeholder = std::string(hint.data, hint.len);
     node.text = current.empty() ? node.placeholder : current;
@@ -939,10 +939,10 @@ inline void text_field(str hint, std::string const& current,
         node.text_color = options.text_color;
     node.cursor_type = 1;
 
-    auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
-    bool const is_hovered = id == detail::g_app.hovered_id;
+    auto id = static_cast<unsigned int>(detail::g_app().callbacks.size());
+    bool const is_hovered = id == detail::g_app().hovered_id;
     bool const is_focused = detail::focus_ring_visible(id);
-    bool const is_pressed = id == detail::g_app.pressed_id;
+    bool const is_pressed = id == detail::g_app().pressed_id;
     float const base_border_width = options.border_width >= 0.0f
         ? options.border_width
         : 1.0f;
@@ -961,11 +961,11 @@ inline void text_field(str hint, std::string const& current,
         is_hovered,
         is_pressed,
         is_focused);
-    detail::g_app.callbacks.push_back([] {});
-    detail::g_app.callback_roles.push_back(InteractionRole::TextField);
+    detail::g_app().callbacks.push_back([] {});
+    detail::g_app().callback_roles.push_back(InteractionRole::TextField);
     using MapperFn = Msg(*)(std::string);
     auto* mapper_storage = new MapperFn(mapper);
-    detail::g_app.input_handlers.push_back({
+    detail::g_app().input_handlers.push_back({
         id,
         InputHandler{
             current,
@@ -981,7 +981,7 @@ inline void text_field(str hint, std::string const& current,
         }
     });
     node.callback_id = id;
-    detail::g_app.input_nodes.push_back({id, h});
+    detail::g_app().input_nodes.push_back({id, h});
 
     detail::attach_to_scope(h);
 }
@@ -1045,8 +1045,8 @@ inline void canvas(float width, float height,
     node.paint_token = paint_token;
     if (on_gesture) {
         auto gid = static_cast<unsigned int>(
-            detail::g_app.gesture_callbacks.size());
-        detail::g_app.gesture_callbacks.push_back(std::move(on_gesture));
+            detail::g_app().gesture_callbacks.size());
+        detail::g_app().gesture_callbacks.push_back(std::move(on_gesture));
         node.gesture_callback_id = gid;
     }
     detail::attach_to_scope(h);
@@ -1073,8 +1073,8 @@ inline void semantic_canvas(float width, float height,
     node.paint_token = paint_token;
     if (on_gesture) {
         auto gid = static_cast<unsigned int>(
-            detail::g_app.gesture_callbacks.size());
-        detail::g_app.gesture_callbacks.push_back(std::move(on_gesture));
+            detail::g_app().gesture_callbacks.size());
+        detail::g_app().gesture_callbacks.push_back(std::move(on_gesture));
         node.gesture_callback_id = gid;
     }
     detail::attach_to_scope(h);
@@ -1086,7 +1086,7 @@ inline void svg_image(svg::Document document,
                       SvgImageOptions options) {
     auto const current_color = options.has_current_color
         ? options.current_color
-        : detail::g_app.theme.foreground;
+        : detail::g_app().theme.foreground;
     auto const paint_token =
         svg::paint_token(
             document,
@@ -1196,7 +1196,7 @@ inline void icon(icons::SymbolPresentation presentation) {
 }
 
 inline void icon(icons::Symbol symbol, float size) {
-    icon(symbol, size, detail::g_app.theme.foreground);
+    icon(symbol, size, detail::g_app().theme.foreground);
 }
 
 inline std::uint64_t button_visual_state_token(
@@ -1226,7 +1226,7 @@ inline void canvas_button(str label,
                           std::uint64_t paint_token = 0) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
 
     float default_padding[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     float option_padding[4] = {
@@ -1287,11 +1287,11 @@ inline void canvas_button(str label,
         detail::attach_to_scope(h);
     } else {
         auto const id = static_cast<unsigned int>(
-            detail::g_app.callbacks.size());
-        bool const is_hovered = (id == detail::g_app.hovered_id);
+            detail::g_app().callbacks.size());
+        bool const is_hovered = (id == detail::g_app().hovered_id);
         bool const is_focused =
             options.focus_ring && detail::focus_ring_visible(id);
-        bool const is_pressed = (id == detail::g_app.pressed_id);
+        bool const is_pressed = (id == detail::g_app().pressed_id);
         visual_state = ButtonVisualState{
             .hovered = is_hovered,
             .focused = is_focused,
@@ -1347,11 +1347,11 @@ inline void canvas_button(str label,
             is_focused);
         node.cursor_type = 1;
 
-        detail::g_app.callbacks.push_back([msg = std::move(msg)] {
+        detail::g_app().callbacks.push_back([msg = std::move(msg)] {
             detail::post<Msg>(msg);
             detail::trigger_rebuild();
         });
-        detail::g_app.callback_roles.push_back(InteractionRole::Button);
+        detail::g_app().callback_roles.push_back(InteractionRole::Button);
         node.callback_id = id;
 
         detail::attach_to_scope(h);
@@ -1406,7 +1406,7 @@ inline void symbol_button(str label,
                 presentation,
                 options.material_axes);
             themed.color = icons::theme_tone_color(
-                detail::g_app.theme,
+                detail::g_app().theme,
                 themed.tone);
             icons::paint_symbol_centered(
                 painter,
@@ -1442,7 +1442,7 @@ inline void symbol_button(str label,
 inline void progress(float value, float max_width = 200.0f) {
     if (value < 0.0f) value = 0.0f;
     if (value > 1.0f) value = 1.0f;
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
 
     auto outer_h = detail::alloc_node();
     {
@@ -1481,7 +1481,7 @@ inline void progress(float value, float max_width = 200.0f) {
 // lockstep, which reads as intentional uniformity in a list of
 // pending operations rather than visual noise.
 inline void progress_indeterminate(float max_width = 200.0f) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
 
     auto outer_h = detail::alloc_node();
     {
@@ -1530,7 +1530,7 @@ inline void progress_indeterminate(float max_width = 200.0f) {
 
     // Keep the auto-tick alive so the host loop keeps repainting and
     // the slug advances frame to frame.
-    detail::g_app.has_active_animations = true;
+    detail::g_app().has_active_animations = true;
 }
 
 // switch_ — labelled on/off toggle rendered as a track + sliding
@@ -1549,12 +1549,12 @@ namespace _impl {
 template<typename Msg>
 inline void switch_control(str label, bool on, Msg msg,
                            GlassSwitchStyleOptions const* glass_options = nullptr) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto id = static_cast<unsigned int>(
-        detail::g_app.callbacks.size());
-    bool const is_hovered = (id == detail::g_app.hovered_id);
+        detail::g_app().callbacks.size());
+    bool const is_hovered = (id == detail::g_app().hovered_id);
     bool const is_focused = detail::focus_ring_visible(id);
-    bool const is_pressed = (id == detail::g_app.pressed_id);
+    bool const is_pressed = (id == detail::g_app().pressed_id);
     Color const ring_off{t.state_focus_ring.r, t.state_focus_ring.g,
                          t.state_focus_ring.b, 0};
 
@@ -1583,11 +1583,11 @@ inline void switch_control(str label, bool on, Msg msg,
     }
     detail::attach_to_scope(row_h);
 
-    detail::g_app.callbacks.push_back([msg = std::move(msg)] {
+    detail::g_app().callbacks.push_back([msg = std::move(msg)] {
         detail::post<Msg>(msg);
         detail::trigger_rebuild();
     });
-    detail::g_app.callback_roles.push_back(InteractionRole::Checkbox);
+    detail::g_app().callback_roles.push_back(InteractionRole::Checkbox);
 
     // Track (the row's first child). Always Row + Start aligned;
     // the thumb's position is driven by an animated leading spacer
@@ -1740,7 +1740,7 @@ inline void tabs(std::vector<str> const& items,
                  std::size_t selected,
                  Msg (*on_select)(std::size_t),
                  TabsStyleOptions options = {}) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
 
     auto pill_h = detail::alloc_node();
     {
@@ -1819,10 +1819,10 @@ inline void tabs(std::vector<str> const& items,
     for (std::size_t i = 0; i < items.size(); ++i) {
         bool is_selected = (i == selected);
         auto id = static_cast<unsigned int>(
-            detail::g_app.callbacks.size());
-        bool const is_hovered = id == detail::g_app.hovered_id;
+            detail::g_app().callbacks.size());
+        bool const is_hovered = id == detail::g_app().hovered_id;
         bool const is_focused = detail::focus_ring_visible(id);
-        bool const is_pressed = id == detail::g_app.pressed_id;
+        bool const is_pressed = id == detail::g_app().pressed_id;
 
         auto btn_h = detail::alloc_node();
         {
@@ -1934,11 +1934,11 @@ inline void tabs(std::vector<str> const& items,
             detail::append_child(btn_h, lbl_h);
         }
 
-        detail::g_app.callbacks.push_back([on_select, idx = i] {
+        detail::g_app().callbacks.push_back([on_select, idx = i] {
             detail::post<Msg>(on_select(idx));
             detail::trigger_rebuild();
         });
-        detail::g_app.callback_roles.push_back(InteractionRole::Button);
+        detail::g_app().callback_roles.push_back(InteractionRole::Button);
     }
 
     // Sliding indicator track. Children: leading spacer, 1-unit
@@ -2002,13 +2002,13 @@ inline void key_command(unsigned int key,
     if (options.disabled)
         return;
     auto const id = static_cast<unsigned int>(
-        detail::g_app.callbacks.size());
-    detail::g_app.callbacks.push_back([msg = std::move(msg)] {
+        detail::g_app().callbacks.size());
+    detail::g_app().callbacks.push_back([msg = std::move(msg)] {
         detail::post<Msg>(msg);
         detail::trigger_rebuild();
     });
-    detail::g_app.callback_roles.push_back(InteractionRole::Command);
-    detail::g_app.key_commands.push_back(KeyCommand{
+    detail::g_app().callback_roles.push_back(InteractionRole::Command);
+    detail::g_app().key_commands.push_back(KeyCommand{
         .key = key,
         .modifiers = modifiers,
         .allow_when_input_focused = options.allow_when_input_focused,
@@ -2085,7 +2085,7 @@ inline Color anim_lerp(Color a, Color b, float t) noexcept {
 inline int scaled_animation_duration_ms(int duration_ms) noexcept {
     if (duration_ms <= 0)
         return 0;
-    float multiplier = g_app.theme.motion_duration_multiplier;
+    float multiplier = g_app().theme.motion_duration_multiplier;
     if (!(multiplier > 0.0f))
         return 0;
     if (multiplier > 4.0f)
@@ -2109,7 +2109,7 @@ T animate_value(T target, int duration_ms,
     auto const effective_duration_ms =
         detail::scaled_animation_duration_ms(duration_ms);
 
-    auto const current_theme_generation = detail::g_app.theme_generation;
+    auto const current_theme_generation = detail::g_app().theme_generation;
     if (!s.initialized
         || s.theme_generation != current_theme_generation
         || effective_duration_ms <= 0) {
@@ -2140,7 +2140,7 @@ T animate_value(T target, int duration_ms,
     // runner clears the flag at the start of every view; native
     // shells re-enter `repaint_current` while it stays set.
     if (progress < 1.0f) {
-        detail::g_app.has_active_animations = true;
+        detail::g_app().has_active_animations = true;
     }
 
     if (!(s.target == target)) {
@@ -2153,7 +2153,7 @@ T animate_value(T target, int duration_ms,
         s.theme_generation = current_theme_generation;
         // A new fade has just started, so it's definitionally
         // unfinished and we want another tick.
-        detail::g_app.has_active_animations = true;
+        detail::g_app().has_active_animations = true;
         return current;
     }
     return current;
@@ -2185,16 +2185,16 @@ inline std::uint64_t paint_invalidation_bit(unsigned int id) noexcept {
 
 inline ActionPerfStats& action_perf_stats(std::string_view action) noexcept {
     if (action == "hover")
-        return g_app.action_perf.hover;
+        return g_app().action_perf.hover;
     if (action == "scroll")
-        return g_app.action_perf.scroll;
+        return g_app().action_perf.scroll;
     if (action == "click")
-        return g_app.action_perf.click;
+        return g_app().action_perf.click;
     if (action == "key")
-        return g_app.action_perf.key;
+        return g_app().action_perf.key;
     if (action == "gesture")
-        return g_app.action_perf.gesture;
-    return g_app.action_perf.other;
+        return g_app().action_perf.gesture;
+    return g_app().action_perf.other;
 }
 
 inline std::uint64_t action_perf_recent_percentile(
@@ -2270,28 +2270,28 @@ struct FrameTraceInputContext {
 };
 
 inline bool frame_trace_input_active() noexcept {
-    return g_app.frame_trace_input_active;
+    return g_app().frame_trace_input_active;
 }
 
 inline FrameTraceInputContext begin_frame_trace_input(
         char const* action) noexcept {
     FrameTraceInputContext previous{
-        g_app.frame_trace_input_active,
-        g_app.frame_trace_input_action,
-        g_app.frame_trace_input_start_ns,
+        g_app().frame_trace_input_active,
+        g_app().frame_trace_input_action,
+        g_app().frame_trace_input_start_ns,
     };
-    g_app.frame_trace_input_active = true;
-    g_app.frame_trace_input_action = frame_trace_action_from_name(
+    g_app().frame_trace_input_active = true;
+    g_app().frame_trace_input_action = frame_trace_action_from_name(
         action ? std::string_view{action} : std::string_view{});
-    g_app.frame_trace_input_start_ns = metrics::detail::now_ns();
+    g_app().frame_trace_input_start_ns = metrics::detail::now_ns();
     return previous;
 }
 
 inline void restore_frame_trace_input(
         FrameTraceInputContext previous) noexcept {
-    g_app.frame_trace_input_active = previous.active;
-    g_app.frame_trace_input_action = previous.action;
-    g_app.frame_trace_input_start_ns = previous.start_ns;
+    g_app().frame_trace_input_active = previous.active;
+    g_app().frame_trace_input_action = previous.action;
+    g_app().frame_trace_input_start_ns = previous.start_ns;
 }
 
 struct FrameTraceInputScope {
@@ -2307,16 +2307,16 @@ struct FrameTraceInputScope {
 
 inline void record_frame_trace(FrameTraceSample sample,
                                std::uint64_t frame_start_ns) noexcept {
-    if (g_app.frame_trace_input_active) {
-        sample.action = g_app.frame_trace_input_action;
-        if (g_app.frame_trace_input_start_ns > 0
-            && g_app.frame_trace_input_start_ns <= frame_start_ns) {
+    if (g_app().frame_trace_input_active) {
+        sample.action = g_app().frame_trace_input_action;
+        if (g_app().frame_trace_input_start_ns > 0
+            && g_app().frame_trace_input_start_ns <= frame_start_ns) {
             sample.input_ns =
-                frame_start_ns - g_app.frame_trace_input_start_ns;
+                frame_start_ns - g_app().frame_trace_input_start_ns;
         }
     }
 
-    auto& stats = g_app.frame_perf;
+    auto& stats = g_app().frame_perf;
     ++stats.count;
     stats.total_ns += sample.total_ns;
     stats.last_ns = sample.total_ns;
@@ -2333,11 +2333,11 @@ inline void record_frame_trace(FrameTraceSample sample,
     if (stats.recent_count < FrameTraceMonitor::RECENT_CAPACITY)
         ++stats.recent_count;
 
-    g_app.frame_timeline.last = sample;
+    g_app().frame_timeline.last = sample;
 }
 
 inline void sample_frame_timeline(std::uint64_t now_ns) noexcept {
-    auto& timeline = g_app.frame_timeline;
+    auto& timeline = g_app().frame_timeline;
     if (timeline.last_sample_ns == 0)
         timeline.last_sample_ns = now_ns;
     if (now_ns < timeline.last_sample_ns)
@@ -2426,17 +2426,17 @@ inline bool set_pointer_position(float x, float y) noexcept;
 // ============================================================
 
 inline void set_theme(Theme const& theme) {
-    if (detail::g_app.theme == theme)
+    if (detail::g_app().theme == theme)
         return;
-    detail::g_app.theme = theme;
-    ++detail::g_app.theme_generation;
-    if (detail::g_app.theme_generation == 0)
-        detail::g_app.theme_generation = 1;
+    detail::g_app().theme = theme;
+    ++detail::g_app().theme_generation;
+    if (detail::g_app().theme_generation == 0)
+        detail::g_app().theme_generation = 1;
     detail::clear_measure_cache();
 }
 
 inline Theme const& current_theme() noexcept {
-    return detail::g_app.theme;
+    return detail::g_app().theme;
 }
 
 // ============================================================
@@ -2456,17 +2456,25 @@ void run(Host& host, View view, Update update) {
     static State state{};
     static View saved_view{view};
     static Update saved_update{update};
+    detail::bind_scene_runtime(detail::default_scene_runtime());
+    detail::configure_active_scene(SceneDescriptor{
+        .id = "main",
+        .title = "Main",
+        .role = SceneRole::Main,
+        .visible = true,
+    });
+    detail::msg_queue().clear();
     saved_host = &host;
     state = State{};
     saved_view = std::move(view);
     saved_update = std::move(update);
-    detail::g_app.input_debug = {};
-    detail::g_app.callback_roles.clear();
-    detail::g_app.focus_visible = false;
-    detail::g_app.prev_focus_visible = false;
-    detail::g_app.pressed_id = 0xFFFFFFFFu;
-    detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
-    detail::reset_pointer_inputs(detail::g_app);
+    detail::g_app().input_debug = {};
+    detail::g_app().callback_roles.clear();
+    detail::g_app().focus_visible = false;
+    detail::g_app().prev_focus_visible = false;
+    detail::g_app().pressed_id = 0xFFFFFFFFu;
+    detail::g_app().prev_pressed_id = 0xFFFFFFFFu;
+    detail::reset_pointer_inputs(detail::g_app());
 
     detail::install_app_runner([] {
         auto& host = *saved_host;
@@ -2478,7 +2486,7 @@ void run(Host& host, View view, Update update) {
         auto t1 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t1 - t0, {{"phase", "update"}});
 
-        auto& app = detail::g_app;
+        auto& app = detail::g_app();
         app.prev_root = app.root;
         std::swap(app.arena, app.prev_arena);
         app.arena.reset();
@@ -2597,16 +2605,24 @@ void run(View view, Update update) {
     static State state{};
     static View saved_view{view};
     static Update saved_update{update};
+    detail::bind_scene_runtime(detail::default_scene_runtime());
+    detail::configure_active_scene(SceneDescriptor{
+        .id = "main",
+        .title = "Main",
+        .role = SceneRole::Main,
+        .visible = true,
+    });
+    detail::msg_queue().clear();
     state = State{};
     saved_view = std::move(view);
     saved_update = std::move(update);
-    detail::g_app.input_debug = {};
-    detail::g_app.callback_roles.clear();
-    detail::g_app.focus_visible = false;
-    detail::g_app.prev_focus_visible = false;
-    detail::g_app.pressed_id = 0xFFFFFFFFu;
-    detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
-    detail::reset_pointer_inputs(detail::g_app);
+    detail::g_app().input_debug = {};
+    detail::g_app().callback_roles.clear();
+    detail::g_app().focus_visible = false;
+    detail::g_app().prev_focus_visible = false;
+    detail::g_app().pressed_id = 0xFFFFFFFFu;
+    detail::g_app().prev_pressed_id = 0xFFFFFFFFu;
+    detail::reset_pointer_inputs(detail::g_app());
 
     detail::install_app_runner([] {
         auto t0 = metrics::detail::now_ns();
@@ -2617,7 +2633,7 @@ void run(View view, Update update) {
         auto t1 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t1 - t0, {{"phase", "update"}});
 
-        auto& app = detail::g_app;
+        auto& app = detail::g_app();
         app.prev_root = app.root;
         std::swap(app.arena, app.prev_arena);
         app.arena.reset();
@@ -2765,7 +2781,7 @@ namespace layout {
 
 // Resolve a SpaceToken against the active Theme's spacing scale.
 inline float space_value(SpaceToken token) noexcept {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     switch (token) {
         case SpaceToken::Xs:  return t.space_xs;
         case SpaceToken::Sm:  return t.space_sm;
@@ -2778,7 +2794,7 @@ inline float space_value(SpaceToken token) noexcept {
 }
 
 inline MaterialStyle material_style(MaterialKind kind) noexcept {
-    return material_style_for_kind(kind, detail::g_app.theme);
+    return material_style_for_kind(kind, detail::g_app().theme);
 }
 
 inline MaterialStyle plain_material_style(
@@ -3317,7 +3333,7 @@ void column(A&& a, B&& b, Rest&&... rest) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
-    node.style.gap = detail::g_app.theme.space_md;
+    node.style.gap = detail::g_app().theme.space_md;
     detail::attach_to_scope(h);
     auto* prev = Scope::current();
     Scope child_scope(h, detail::derived_scope_seed(h));
@@ -3351,7 +3367,7 @@ void row(A&& a, B&& b, Rest&&... rest) {
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Row;
     node.style.cross_align = CrossAxisAlignment::Center;
-    node.style.gap = detail::g_app.theme.space_sm;
+    node.style.gap = detail::g_app().theme.space_sm;
     detail::attach_to_scope(h);
     auto* prev = Scope::current();
     Scope child_scope(h, detail::derived_scope_seed(h));
@@ -3786,7 +3802,7 @@ inline char const* glass_surface_preset_name(
 
 inline void configure_material_surface(LayoutNode& node,
                                        MaterialSurfaceOptions const& options) {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     node.material = options.has_material_override
         ? options.material_override
         : material_style(options.kind);
@@ -3848,9 +3864,9 @@ inline void configure_material_surface(LayoutNode& node,
 }
 
 inline void configure_pointer_capture_node(LayoutNode& node) {
-    auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
-    detail::g_app.callbacks.push_back([] {});
-    detail::g_app.callback_roles.push_back(InteractionRole::None);
+    auto id = static_cast<unsigned int>(detail::g_app().callbacks.size());
+    detail::g_app().callbacks.push_back([] {});
+    detail::g_app().callback_roles.push_back(InteractionRole::None);
     node.callback_id = id;
     node.focusable = false;
     node.hit_region_before_children = true;
@@ -3993,7 +4009,7 @@ inline char const* chrome_label_or(char const* label,
 inline MaterialSurfaceOptions glass_surface_options(
         GlassSurfacePreset preset,
         char const* semantic_label = "") {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     MaterialSurfaceOptions options{};
     options.border_width = 0.0f;
     options.border_radius = t.radius_lg;
@@ -4597,7 +4613,7 @@ void toast(F&& builder,
 // draw commands paint over the main content.
 //
 // Overlays are *not* attached to the parent scope — they're root-
-// level alternates collected on `g_app.overlays`. The runner lays
+// level alternates collected on `g_app().overlays`. The runner lays
 // each one out at the canvas width and paints them with no scroll
 // applied, so an overlay stays fixed on screen even when the root
 // document is scrolled.
@@ -4613,7 +4629,7 @@ void overlay(F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
-    detail::g_app.overlays.push_back(h);
+    detail::g_app().overlays.push_back(h);
     auto* prev = Scope::current();
     Scope scope(h, detail::derived_scope_seed(h));
     Scope::set_current(&scope);
@@ -4627,9 +4643,9 @@ void modal_overlay(F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
-    node.style.fixed_height = std::max(1.0f, detail::g_app.debug_viewport_height);
+    node.style.fixed_height = std::max(1.0f, detail::g_app().debug_viewport_height);
     configure_pointer_capture_node(node);
-    detail::g_app.overlays.push_back(h);
+    detail::g_app().overlays.push_back(h);
     auto* prev = Scope::current();
     Scope scope(h, detail::derived_scope_seed(h));
     Scope::set_current(&scope);
@@ -4854,7 +4870,7 @@ template<typename F>
     requires std::is_invocable_v<F>
 void accordion(str title, F&& builder) {
     auto& expanded = framework_local<bool>(false);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
 
     auto col_h = detail::alloc_node();
     detail::node_at(col_h).style.flex_direction = FlexDirection::Column;
@@ -4868,7 +4884,7 @@ void accordion(str title, F&& builder) {
     // ---- Header row ----------------------------------------------
     {
         auto id = static_cast<unsigned int>(
-            detail::g_app.callbacks.size());
+            detail::g_app().callbacks.size());
         bool const is_focused = detail::focus_ring_visible(id);
         auto const chrome = widget::glass_disclosure_header_style(
             GlassDisclosureStyleOptions{.expanded = expanded});
@@ -4939,11 +4955,11 @@ void accordion(str title, F&& builder) {
         // the value when the click fires. trigger_rebuild then re-
         // runs view, which sees the new value.
         bool* exp_ptr = &expanded;
-        detail::g_app.callbacks.push_back([exp_ptr] {
+        detail::g_app().callbacks.push_back([exp_ptr] {
             *exp_ptr = !*exp_ptr;
             detail::trigger_rebuild();
         });
-        detail::g_app.callback_roles.push_back(InteractionRole::Button);
+        detail::g_app().callback_roles.push_back(InteractionRole::Button);
 
         // Chevron glyph — UTF-8 right-pointing triangle when collapsed,
         // down-pointing when expanded. Rotation animation lands with
@@ -5091,18 +5107,18 @@ inline void scaffold(std::function<void()> top_bar,
         {
             auto& header = detail::node_at(header_h);
             header.style.flex_direction = FlexDirection::Column;
-            header.style.gap = detail::g_app.theme.space_sm;
+            header.style.gap = detail::g_app().theme.space_sm;
             header.style.cross_align = CrossAxisAlignment::Center;
             header.style.text_align = TextAlign::Center;
-            header.background = detail::g_app.theme.hero_bg;
-            header.style.padding[0] = detail::g_app.theme.space_3xl;
-            header.style.padding[1] = detail::g_app.theme.space_xl;
-            header.style.padding[2] = detail::g_app.theme.space_3xl;
-            header.style.padding[3] = detail::g_app.theme.space_xl;
+            header.background = detail::g_app().theme.hero_bg;
+            header.style.padding[0] = detail::g_app().theme.space_3xl;
+            header.style.padding[1] = detail::g_app().theme.space_xl;
+            header.style.padding[2] = detail::g_app().theme.space_3xl;
+            header.style.padding[3] = detail::g_app().theme.space_xl;
         }
 
         detail::open_container(header_h, std::move(top_bar));
-        auto const& t = detail::g_app.theme;
+        auto const& t = detail::g_app().theme;
         auto& header = detail::node_at(header_h);
         if (header.children.size() >= 1) {
             auto& c0 = detail::node_at(header.children[0]);
@@ -5121,12 +5137,12 @@ inline void scaffold(std::function<void()> top_bar,
         {
             auto& main = detail::node_at(main_h);
             main.style.flex_direction = FlexDirection::Column;
-            main.style.gap = detail::g_app.theme.space_2xl;
-            main.style.max_width = detail::g_app.theme.max_content_width;
-            main.style.padding[0] = detail::g_app.theme.space_2xl;
-            main.style.padding[1] = detail::g_app.theme.space_xl;
-            main.style.padding[2] = detail::g_app.theme.space_2xl;
-            main.style.padding[3] = detail::g_app.theme.space_xl;
+            main.style.gap = detail::g_app().theme.space_2xl;
+            main.style.max_width = detail::g_app().theme.max_content_width;
+            main.style.padding[0] = detail::g_app().theme.space_2xl;
+            main.style.padding[1] = detail::g_app().theme.space_xl;
+            main.style.padding[2] = detail::g_app().theme.space_2xl;
+            main.style.padding[3] = detail::g_app().theme.space_xl;
         }
 
         detail::open_container(main_h, std::move(content));
@@ -5140,16 +5156,16 @@ inline void scaffold(std::function<void()> top_bar,
             footer.style.gap = 0;
             footer.style.main_align = MainAxisAlignment::Center;
             footer.style.cross_align = CrossAxisAlignment::Center;
-            footer.style.padding[0] = detail::g_app.theme.space_2xl;
-            footer.style.padding[1] = detail::g_app.theme.space_xl;
-            footer.style.padding[2] = detail::g_app.theme.space_2xl;
-            footer.style.padding[3] = detail::g_app.theme.space_xl;
-            footer.border_color = detail::g_app.theme.border;
+            footer.style.padding[0] = detail::g_app().theme.space_2xl;
+            footer.style.padding[1] = detail::g_app().theme.space_xl;
+            footer.style.padding[2] = detail::g_app().theme.space_2xl;
+            footer.style.padding[3] = detail::g_app().theme.space_xl;
+            footer.border_color = detail::g_app().theme.border;
             footer.border_width = 1;
         }
 
         detail::open_container(footer_h, std::move(bottom_bar));
-        auto const& t = detail::g_app.theme;
+        auto const& t = detail::g_app().theme;
         for (auto child_h : detail::node_at(footer_h).children) {
             auto& child = detail::node_at(child_h);
             child.font_size = t.small_font_size;
@@ -5170,14 +5186,14 @@ template<typename F>
 void card(F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
-    node.border_radius = detail::g_app.theme.radius_lg;
-    node.background = detail::g_app.theme.surface;
-    node.border_color = detail::g_app.theme.border;
+    node.border_radius = detail::g_app().theme.radius_lg;
+    node.background = detail::g_app().theme.surface;
+    node.border_color = detail::g_app().theme.border;
     node.border_width = 1;
-    node.style.padding[0] = detail::g_app.theme.space_lg;
-    node.style.padding[1] = detail::g_app.theme.space_lg;
-    node.style.padding[2] = detail::g_app.theme.space_lg;
-    node.style.padding[3] = detail::g_app.theme.space_lg;
+    node.style.padding[0] = detail::g_app().theme.space_lg;
+    node.style.padding[1] = detail::g_app().theme.space_lg;
+    node.style.padding[2] = detail::g_app().theme.space_lg;
+    node.style.padding[3] = detail::g_app().theme.space_lg;
     detail::open_container(h, std::forward<F>(builder));
 }
 
@@ -5188,7 +5204,7 @@ void list_items(F&& builder) {
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
     node.style.gap = 6;
-    node.style.padding[3] = detail::g_app.theme.space_xl;
+    node.style.padding[3] = detail::g_app().theme.space_xl;
     detail::open_container(h, std::forward<F>(builder));
 }
 
@@ -5197,15 +5213,15 @@ inline void item(str content) {
     {
         auto& row = detail::node_at(row_h);
         row.style.flex_direction = FlexDirection::Row;
-        row.style.gap = detail::g_app.theme.space_sm;
+        row.style.gap = detail::g_app().theme.space_sm;
     }
 
     auto bullet_h = detail::alloc_node();
     {
         auto& bullet = detail::node_at(bullet_h);
         bullet.text = "\xe2\x80\xa2";
-        bullet.font_size = detail::g_app.theme.body_font_size;
-        bullet.text_color = detail::g_app.theme.foreground;
+        bullet.font_size = detail::g_app().theme.body_font_size;
+        bullet.text_color = detail::g_app().theme.foreground;
     }
     detail::append_child(row_h, bullet_h);
 
@@ -5213,8 +5229,8 @@ inline void item(str content) {
     {
         auto& text = detail::node_at(text_h);
         text.text = std::string(content.data, content.len);
-        text.font_size = detail::g_app.theme.body_font_size;
-        text.text_color = detail::g_app.theme.foreground;
+        text.font_size = detail::g_app().theme.body_font_size;
+        text.text_color = detail::g_app().theme.foreground;
     }
     detail::append_child(row_h, text_h);
 
@@ -5225,7 +5241,7 @@ inline void divider() {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.fixed_height = 1;
-    node.background = detail::g_app.theme.border;
+    node.background = detail::g_app().theme.border;
 
     detail::attach_to_scope(h);
 }
@@ -5831,7 +5847,7 @@ inline void glass_checkbox(str label,
         label,
         checked,
         std::move(msg),
-        detail::g_app.theme.radius_xs,
+        detail::g_app().theme.radius_xs,
         Decoration::Check,
         InteractionRole::Checkbox,
         &style);
@@ -5848,7 +5864,7 @@ inline void glass_radio(str label,
         label,
         selected,
         std::move(msg),
-        detail::g_app.theme.radius_lg,
+        detail::g_app().theme.radius_lg,
         Decoration::Dot,
         InteractionRole::Radio,
         &style);
@@ -5937,13 +5953,13 @@ inline std::size_t next_utf8_boundary(std::string const& value, std::size_t pos)
 }
 
 inline InteractionRole callback_role(unsigned int callback_id) {
-    if (callback_id < g_app.callback_roles.size())
-        return g_app.callback_roles[callback_id];
+    if (callback_id < g_app().callback_roles.size())
+        return g_app().callback_roles[callback_id];
     return InteractionRole::None;
 }
 
 inline InputHandler* find_input_handler(unsigned int callback_id) {
-    for (auto& [id, handler] : g_app.input_handlers) {
+    for (auto& [id, handler] : g_app().input_handlers) {
         if (id == callback_id)
             return &handler;
     }
@@ -5951,17 +5967,17 @@ inline InputHandler* find_input_handler(unsigned int callback_id) {
 }
 
 inline unsigned int resolved_caret_pos(std::string const& value) {
-    if (g_app.caret_pos == 0xFFFFFFFFu)
+    if (g_app().caret_pos == 0xFFFFFFFFu)
         return static_cast<unsigned int>(value.size());
     return static_cast<unsigned int>(
-        clamp_utf8_boundary(value, static_cast<std::size_t>(g_app.caret_pos)));
+        clamp_utf8_boundary(value, static_cast<std::size_t>(g_app().caret_pos)));
 }
 
 inline unsigned int resolved_selection_anchor(std::string const& value) {
-    if (g_app.selection_anchor == 0xFFFFFFFFu)
+    if (g_app().selection_anchor == 0xFFFFFFFFu)
         return resolved_caret_pos(value);
     return static_cast<unsigned int>(
-        clamp_utf8_boundary(value, static_cast<std::size_t>(g_app.selection_anchor)));
+        clamp_utf8_boundary(value, static_cast<std::size_t>(g_app().selection_anchor)));
 }
 
 struct ResolvedSelectionState {
@@ -5985,12 +6001,12 @@ inline ResolvedSelectionState resolved_selection_state(std::string const& value)
 }
 
 inline void sync_input_debug_selection_state(std::string const* value_override = nullptr) {
-    auto& snapshot = g_app.input_debug;
+    auto& snapshot = g_app().input_debug;
     snapshot.selection_active = false;
     snapshot.selection_start = 0xFFFFFFFFu;
     snapshot.selection_end = 0xFFFFFFFFu;
 
-    auto* handler = find_input_handler(g_app.focused_id);
+    auto* handler = find_input_handler(g_app().focused_id);
     if (!handler)
         return;
 
@@ -6002,10 +6018,10 @@ inline void sync_input_debug_selection_state(std::string const* value_override =
 }
 
 inline void sync_input_debug_caret_state(std::string const* value_override = nullptr) {
-    auto& snapshot = g_app.input_debug;
-    snapshot.caret_pos = g_app.caret_pos;
-    snapshot.caret_visible = g_app.caret_visible;
-    snapshot.focused_is_input = find_input_handler(g_app.focused_id) != nullptr;
+    auto& snapshot = g_app().input_debug;
+    snapshot.caret_pos = g_app().caret_pos;
+    snapshot.caret_visible = g_app().caret_visible;
+    snapshot.focused_is_input = find_input_handler(g_app().focused_id) != nullptr;
     sync_input_debug_selection_state(value_override);
     if (!snapshot.focused_is_input) {
         snapshot.caret_renderer = "hidden";
@@ -6037,7 +6053,7 @@ inline void set_input_debug_caret_presentation(char const* renderer,
                                                float y,
                                                float w,
                                                float h) {
-    auto& snapshot = g_app.input_debug;
+    auto& snapshot = g_app().input_debug;
     snapshot.caret_renderer = renderer ? renderer : "hidden";
     snapshot.caret_rect = make_debug_rect_snapshot(x, y, w, h);
     snapshot.caret_draw_rect = snapshot.caret_rect;
@@ -6055,7 +6071,7 @@ inline void set_input_debug_caret_geometry(char const* renderer,
                                            diag::RectSnapshot host_bounds,
                                            bool host_flipped,
                                            char const* geometry_source = "draw") {
-    auto& snapshot = g_app.input_debug;
+    auto& snapshot = g_app().input_debug;
     snapshot.caret_renderer = renderer ? renderer : "hidden";
     snapshot.caret_rect = draw_rect;
     snapshot.caret_draw_rect = draw_rect;
@@ -6067,7 +6083,7 @@ inline void set_input_debug_caret_geometry(char const* renderer,
 }
 
 inline void clear_input_debug_caret_presentation(char const* renderer = "hidden") {
-    auto& snapshot = g_app.input_debug;
+    auto& snapshot = g_app().input_debug;
     snapshot.caret_renderer = renderer ? renderer : "hidden";
     snapshot.caret_rect = {};
     snapshot.caret_draw_rect = {};
@@ -6079,10 +6095,10 @@ inline void clear_input_debug_caret_presentation(char const* renderer = "hidden"
 }
 
 inline void clear_caret_state(bool visible = true) {
-    g_app.caret_pos = 0xFFFFFFFFu;
-    g_app.selection_anchor = 0xFFFFFFFFu;
-    g_app.caret_visible = visible;
-    g_app.last_paint_hash = 0;
+    g_app().caret_pos = 0xFFFFFFFFu;
+    g_app().selection_anchor = 0xFFFFFFFFu;
+    g_app().caret_visible = visible;
+    g_app().last_paint_hash = 0;
     sync_input_debug_caret_state();
 }
 
@@ -6090,12 +6106,12 @@ inline unsigned int set_selection_state(std::string const& value,
                                         std::size_t anchor,
                                         std::size_t caret,
                                         bool visible = true) {
-    g_app.selection_anchor = static_cast<unsigned int>(clamp_utf8_boundary(value, anchor));
-    g_app.caret_pos = static_cast<unsigned int>(clamp_utf8_boundary(value, caret));
-    g_app.caret_visible = visible;
-    g_app.last_paint_hash = 0;
+    g_app().selection_anchor = static_cast<unsigned int>(clamp_utf8_boundary(value, anchor));
+    g_app().caret_pos = static_cast<unsigned int>(clamp_utf8_boundary(value, caret));
+    g_app().caret_visible = visible;
+    g_app().last_paint_hash = 0;
     sync_input_debug_caret_state(&value);
-    return g_app.caret_pos;
+    return g_app().caret_pos;
 }
 
 inline unsigned int set_caret_state(std::string const& value,
@@ -6105,7 +6121,7 @@ inline unsigned int set_caret_state(std::string const& value,
 }
 
 inline bool set_focused_input_caret_pos(std::size_t pos, bool visible = true) {
-    auto* handler = find_input_handler(g_app.focused_id);
+    auto* handler = find_input_handler(g_app().focused_id);
     if (!handler)
         return false;
     set_caret_state(handler->current, pos, visible);
@@ -6115,7 +6131,7 @@ inline bool set_focused_input_caret_pos(std::size_t pos, bool visible = true) {
 inline bool set_focused_input_selection(std::size_t anchor,
                                         std::size_t caret,
                                         bool visible = true) {
-    auto* handler = find_input_handler(g_app.focused_id);
+    auto* handler = find_input_handler(g_app().focused_id);
     if (!handler)
         return false;
     set_selection_state(handler->current, anchor, caret, visible);
@@ -6123,7 +6139,7 @@ inline bool set_focused_input_selection(std::size_t anchor,
 }
 
 inline bool select_all_focused_input(bool visible = true) {
-    auto* handler = find_input_handler(g_app.focused_id);
+    auto* handler = find_input_handler(g_app().focused_id);
     if (!handler)
         return false;
     set_selection_state(handler->current, 0, handler->current.size(), visible);
@@ -6147,16 +6163,16 @@ inline void assign_focus(
         unsigned int callback_id,
         bool focus_visible = false,
         InputModality modality = InputModality::Programmatic) {
-    g_app.focused_id = callback_id;
-    g_app.focus_visible = callback_id != 0xFFFFFFFFu && focus_visible;
+    g_app().focused_id = callback_id;
+    g_app().focus_visible = callback_id != 0xFFFFFFFFu && focus_visible;
     if (callback_id == 0xFFFFFFFFu)
-        g_app.focus_input_modality = InputModality::None;
+        g_app().focus_input_modality = InputModality::None;
     else
-        g_app.focus_input_modality = modality;
-    g_app.focus_visibility_reason = resolved_focus_visibility_reason(
+        g_app().focus_input_modality = modality;
+    g_app().focus_visibility_reason = resolved_focus_visibility_reason(
         callback_id,
-        g_app.focus_visible,
-        g_app.focus_input_modality);
+        g_app().focus_visible,
+        g_app().focus_input_modality);
     if (auto const* handler = find_input_handler(callback_id)) {
         set_caret_state(handler->current, handler->current.size());
     } else {
@@ -6189,28 +6205,28 @@ inline void note_input_event(char const* event,
                              char const* result,
                              unsigned int callback_id) {
     auto role = callback_role(callback_id);
-    auto focused_role = callback_role(g_app.focused_id);
-    auto& snapshot = g_app.input_debug;
+    auto focused_role = callback_role(g_app().focused_id);
+    auto& snapshot = g_app().input_debug;
     snapshot.event = event ? event : "";
     snapshot.source = source ? source : "";
     snapshot.detail = detail ? detail : "";
     snapshot.result = result ? result : "";
     snapshot.callback_id = callback_id;
     snapshot.role = interaction_role_name(role);
-    snapshot.focused_id = g_app.focused_id;
+    snapshot.focused_id = g_app().focused_id;
     snapshot.focused_role = interaction_role_name(focused_role);
-    snapshot.focus_visible = g_app.focus_visible;
+    snapshot.focus_visible = g_app().focus_visible;
     snapshot.input_modality =
-        input_modality_name(g_app.focus_input_modality);
+        input_modality_name(g_app().focus_input_modality);
     snapshot.focus_visibility_reason =
-        focus_visibility_reason_name(g_app.focus_visibility_reason);
-    snapshot.hovered_id = g_app.hovered_id;
-    snapshot.pressed_id = g_app.pressed_id;
-    snapshot.scroll_x = g_app.scroll_x;
-    snapshot.scroll_y = g_app.scroll_y;
-    snapshot.caret_pos = g_app.caret_pos;
-    snapshot.caret_visible = g_app.caret_visible;
-    snapshot.focused_is_input = find_input_handler(g_app.focused_id) != nullptr;
+        focus_visibility_reason_name(g_app().focus_visibility_reason);
+    snapshot.hovered_id = g_app().hovered_id;
+    snapshot.pressed_id = g_app().pressed_id;
+    snapshot.scroll_x = g_app().scroll_x;
+    snapshot.scroll_y = g_app().scroll_y;
+    snapshot.caret_pos = g_app().caret_pos;
+    snapshot.caret_visible = g_app().caret_visible;
+    snapshot.focused_is_input = find_input_handler(g_app().focused_id) != nullptr;
     sync_input_debug_selection_state();
     if (!snapshot.focused_is_input) {
         snapshot.caret_renderer = "hidden";
@@ -6236,15 +6252,15 @@ inline void note_input_event(char const* event,
 inline bool handle_event(unsigned int callback_id,
                          char const* source = "core",
                          char const* detail = "activate") {
-    if (callback_id < g_app.callbacks.size()) {
+    if (callback_id < g_app().callbacks.size()) {
         log::trace("phenotype.input", "click id={}", callback_id);
-        g_app.callbacks[callback_id]();
+        g_app().callbacks[callback_id]();
         note_input_event("click", source, detail, "handled", callback_id);
         return true;
     }
     log::warn("phenotype.input",
         "click id={} out of range (size={})",
-        callback_id, g_app.callbacks.size());
+        callback_id, g_app().callbacks.size());
     note_input_event("click", source, detail, "ignored", callback_id);
     return false;
 }
@@ -6254,16 +6270,16 @@ inline bool handle_key_command(unsigned int key,
                                bool focused_is_input,
                                char const* source = "core",
                                char const* detail = "command") {
-    for (auto it = g_app.key_commands.rbegin();
-         it != g_app.key_commands.rend();
+    for (auto it = g_app().key_commands.rbegin();
+         it != g_app().key_commands.rend();
          ++it) {
         if (it->key != key || it->modifiers != modifiers)
             continue;
         if (focused_is_input && !it->allow_when_input_focused)
             return false;
         auto const callback_id = it->callback_id;
-        if (callback_id < g_app.callbacks.size()) {
-            g_app.callbacks[callback_id]();
+        if (callback_id < g_app().callbacks.size()) {
+            g_app().callbacks[callback_id]();
             note_input_event(
                 "key",
                 source,
@@ -6286,9 +6302,9 @@ inline bool handle_key_command(unsigned int key,
 inline bool toggle_debug_panel(char const* source = "core",
                                char const* detail = "f12") {
 #ifndef NDEBUG
-    g_app.debug_panel_open = !g_app.debug_panel_open;
-    g_app.debug_panel_warmup_frames = g_app.debug_panel_open ? 4u : 0u;
-    g_app.last_paint_hash = 0;
+    g_app().debug_panel_open = !g_app().debug_panel_open;
+    g_app().debug_panel_warmup_frames = g_app().debug_panel_open ? 4u : 0u;
+    g_app().last_paint_hash = 0;
     note_input_event("key", source, detail, "handled", 0xFFFFFFFFu);
     trigger_rebuild();
     return true;
@@ -6302,11 +6318,11 @@ inline bool toggle_debug_panel(char const* source = "core",
 inline bool set_hover_id(unsigned int callback_id,
                          char const* source = "core",
                          char const* detail = "pointer-move") {
-    if (g_app.hovered_id == callback_id) {
+    if (g_app().hovered_id == callback_id) {
         note_input_event("hover", source, detail, "ignored", callback_id);
         return false;
     }
-    g_app.hovered_id = callback_id;
+    g_app().hovered_id = callback_id;
     note_input_event("hover", source, detail, "handled", callback_id);
     return true;
 }
@@ -6314,11 +6330,11 @@ inline bool set_hover_id(unsigned int callback_id,
 inline bool set_pressed_id(unsigned int callback_id,
                            char const* source = "core",
                            char const* detail = "pointer-press") {
-    if (g_app.pressed_id == callback_id) {
+    if (g_app().pressed_id == callback_id) {
         note_input_event("press", source, detail, "ignored", callback_id);
         return false;
     }
-    g_app.pressed_id = callback_id;
+    g_app().pressed_id = callback_id;
     note_input_event("press", source, detail, "handled", callback_id);
     return true;
 }
@@ -6339,17 +6355,17 @@ inline bool set_focus_id(unsigned int callback_id,
         callback_id,
         next_focus_visible,
         next_modality);
-    if (g_app.focused_id == callback_id
-        && g_app.focus_visible == next_focus_visible
-        && g_app.focus_input_modality == next_modality
-        && g_app.focus_visibility_reason == next_reason) {
+    if (g_app().focused_id == callback_id
+        && g_app().focus_visible == next_focus_visible
+        && g_app().focus_input_modality == next_modality
+        && g_app().focus_visibility_reason == next_reason) {
         note_input_event("focus", source, detail, "ignored", callback_id);
         return false;
     }
-    if (g_app.focused_id == callback_id) {
-        g_app.focus_visible = next_focus_visible;
-        g_app.focus_input_modality = next_modality;
-        g_app.focus_visibility_reason = next_reason;
+    if (g_app().focused_id == callback_id) {
+        g_app().focus_visible = next_focus_visible;
+        g_app().focus_input_modality = next_modality;
+        g_app().focus_visibility_reason = next_reason;
         sync_input_debug_caret_state();
     } else {
         assign_focus(callback_id, next_focus_visible, next_modality);
@@ -6361,10 +6377,10 @@ inline bool set_focus_id(unsigned int callback_id,
 inline bool clear_focus_visible_for_pointer(
         char const* source = "core",
         char const* detail = "pointer-focus-visible-reset") {
-    if (!g_app.focus_visible || g_app.focused_id == 0xFFFFFFFFu)
+    if (!g_app().focus_visible || g_app().focused_id == 0xFFFFFFFFu)
         return false;
     return set_focus_id(
-        g_app.focused_id,
+        g_app().focused_id,
         source,
         detail,
         false,
@@ -6372,15 +6388,15 @@ inline bool clear_focus_visible_for_pointer(
 }
 
 inline unsigned int get_focused_id() {
-    return g_app.focused_id;
+    return g_app().focused_id;
 }
 
 inline unsigned int get_pressed_id() {
-    return g_app.pressed_id;
+    return g_app().pressed_id;
 }
 
 inline float get_total_height() {
-    if (auto* root_ptr = g_app.arena.get(g_app.root))
+    if (auto* root_ptr = g_app().arena.get(g_app().root))
         return root_ptr->height;
     return 0;
 }
@@ -6394,7 +6410,7 @@ inline float get_total_height() {
 // container's right padding is added back so that scrolling fully right
 // still leaves the same breathing room the user sees on the left.
 inline float subtree_right_extent(NodeHandle h, float origin_x) {
-    auto* np = g_app.arena.get(h);
+    auto* np = g_app().arena.get(h);
     if (!np) return origin_x;
     float self_right = origin_x + np->x + np->width;
     float max_right = self_right;
@@ -6409,10 +6425,10 @@ inline float subtree_right_extent(NodeHandle h, float origin_x) {
 }
 
 inline float get_total_width() {
-    auto* root_ptr = g_app.arena.get(g_app.root);
+    auto* root_ptr = g_app().arena.get(g_app().root);
     if (!root_ptr) return 0;
     float root_right = root_ptr->width;
-    float subtree_right = subtree_right_extent(g_app.root, 0.0f);
+    float subtree_right = subtree_right_extent(g_app().root, 0.0f);
     return (subtree_right > root_right) ? subtree_right : root_right;
 }
 
@@ -6420,27 +6436,27 @@ inline bool handle_tab(unsigned int reverse,
                        char const* source = "core",
                        char const* detail = nullptr) {
     auto detail_name = detail ? detail : (reverse ? "shift-tab" : "tab");
-    if (g_app.focusable_ids.empty()) {
-        note_input_event("tab", source, detail_name, "ignored", g_app.focused_id);
+    if (g_app().focusable_ids.empty()) {
+        note_input_event("tab", source, detail_name, "ignored", g_app().focused_id);
         return false;
     }
-    int n = static_cast<int>(g_app.focusable_ids.size());
+    int n = static_cast<int>(g_app().focusable_ids.size());
     int idx = -1;
     for (int i = 0; i < n; ++i) {
-        if (g_app.focusable_ids[i] == g_app.focused_id) { idx = i; break; }
+        if (g_app().focusable_ids[i] == g_app().focused_id) { idx = i; break; }
     }
     if (reverse)
         idx = (idx <= 0) ? n - 1 : idx - 1;
     else
         idx = (idx < 0 || idx >= n - 1) ? 0 : idx + 1;
-    assign_focus(g_app.focusable_ids[idx], true, InputModality::Keyboard);
-    note_input_event("tab", source, detail_name, "handled", g_app.focused_id);
+    assign_focus(g_app().focusable_ids[idx], true, InputModality::Keyboard);
+    note_input_event("tab", source, detail_name, "handled", g_app().focused_id);
     return true;
 }
 
 inline void toggle_caret() {
-    g_app.caret_visible = !g_app.caret_visible;
-    g_app.last_paint_hash = 0;
+    g_app().caret_visible = !g_app().caret_visible;
+    g_app().last_paint_hash = 0;
     sync_input_debug_caret_state();
 }
 
@@ -6540,7 +6556,7 @@ inline bool apply_key_to_string(unsigned int key_type,
 inline bool replace_focused_input_text(std::size_t start,
                                        std::size_t end,
                                        std::string_view replacement) {
-    auto* handler = find_input_handler(g_app.focused_id);
+    auto* handler = find_input_handler(g_app().focused_id);
     if (!handler)
         return false;
 
@@ -6557,7 +6573,7 @@ inline bool replace_focused_input_text(std::size_t start,
 }
 
 inline bool insert_focused_input_text(std::string_view replacement) {
-    auto* handler = find_input_handler(g_app.focused_id);
+    auto* handler = find_input_handler(g_app().focused_id);
     if (!handler)
         return false;
     auto selection = resolved_selection_state(handler->current);
@@ -6570,11 +6586,11 @@ inline bool insert_focused_input_text(std::string_view replacement) {
 inline void set_input_composition_state(bool active,
                                         std::string_view text,
                                         unsigned int cursor) {
-    auto& snapshot = g_app.input_debug;
+    auto& snapshot = g_app().input_debug;
     snapshot.composition_active = active;
     snapshot.composition_text.assign(text.data(), text.size());
     snapshot.composition_cursor = cursor;
-    g_app.last_paint_hash = 0;
+    g_app().last_paint_hash = 0;
 }
 
 inline void clear_input_composition_state() {
@@ -6593,25 +6609,25 @@ inline void clear_input_debug_caret_fields(diag::InputDebugSnapshot& snapshot) {
 }
 
 inline diag::InputDebugSnapshot materialize_input_debug_snapshot() {
-    auto snapshot = g_app.input_debug;
-    snapshot.focused_id = g_app.focused_id;
-    snapshot.focused_role = interaction_role_name(callback_role(g_app.focused_id));
-    snapshot.focus_visible = g_app.focus_visible;
+    auto snapshot = g_app().input_debug;
+    snapshot.focused_id = g_app().focused_id;
+    snapshot.focused_role = interaction_role_name(callback_role(g_app().focused_id));
+    snapshot.focus_visible = g_app().focus_visible;
     snapshot.input_modality =
-        input_modality_name(g_app.focus_input_modality);
+        input_modality_name(g_app().focus_input_modality);
     snapshot.focus_visibility_reason =
-        focus_visibility_reason_name(g_app.focus_visibility_reason);
-    snapshot.hovered_id = g_app.hovered_id;
-    snapshot.pressed_id = g_app.pressed_id;
-    snapshot.scroll_x = g_app.scroll_x;
-    snapshot.scroll_y = g_app.scroll_y;
-    snapshot.caret_pos = g_app.caret_pos;
+        focus_visibility_reason_name(g_app().focus_visibility_reason);
+    snapshot.hovered_id = g_app().hovered_id;
+    snapshot.pressed_id = g_app().pressed_id;
+    snapshot.scroll_x = g_app().scroll_x;
+    snapshot.scroll_y = g_app().scroll_y;
+    snapshot.caret_pos = g_app().caret_pos;
     sync_input_debug_selection_state();
-    snapshot.selection_active = g_app.input_debug.selection_active;
-    snapshot.selection_start = g_app.input_debug.selection_start;
-    snapshot.selection_end = g_app.input_debug.selection_end;
-    snapshot.caret_visible = g_app.caret_visible;
-    snapshot.focused_is_input = find_input_handler(g_app.focused_id) != nullptr;
+    snapshot.selection_active = g_app().input_debug.selection_active;
+    snapshot.selection_start = g_app().input_debug.selection_start;
+    snapshot.selection_end = g_app().input_debug.selection_end;
+    snapshot.caret_visible = g_app().caret_visible;
+    snapshot.focused_is_input = find_input_handler(g_app().focused_id) != nullptr;
     if (!snapshot.focused_is_input)
         clear_input_debug_caret_fields(snapshot);
     return snapshot;
@@ -6622,9 +6638,9 @@ inline bool handle_key(unsigned int key_type, unsigned int codepoint,
                        char const* source = "core",
                        char const* detail = nullptr) {
     auto detail_name = detail ? detail : input_key_detail_name(key_type);
-    auto* handler = find_input_handler(g_app.focused_id);
+    auto* handler = find_input_handler(g_app().focused_id);
     if (!handler) {
-        note_input_event("key", source, detail_name, "ignored", g_app.focused_id);
+        note_input_event("key", source, detail_name, "ignored", g_app().focused_id);
         return false;
     }
 
@@ -6660,15 +6676,15 @@ inline bool handle_key(unsigned int key_type, unsigned int codepoint,
             }
             set_caret_state(value, collapsed);
             if (previous_anchor == collapsed && previous_caret == collapsed) {
-                note_input_event("key", source, detail_name, "ignored", g_app.focused_id);
+                note_input_event("key", source, detail_name, "ignored", g_app().focused_id);
                 return false;
             }
-            note_input_event("key", source, detail_name, "handled", g_app.focused_id);
+            note_input_event("key", source, detail_name, "handled", g_app().focused_id);
             return true;
         }
 
         if (!apply_key_to_string(key_type, codepoint, value, caret, text_changed)) {
-            note_input_event("key", source, detail_name, "ignored", g_app.focused_id);
+            note_input_event("key", source, detail_name, "ignored", g_app().focused_id);
             return false;
         }
         if (extend_selection) {
@@ -6678,7 +6694,7 @@ inline bool handle_key(unsigned int key_type, unsigned int codepoint,
         }
     } else {
         if (!apply_key_to_string(key_type, codepoint, value, caret, text_changed)) {
-            note_input_event("key", source, detail_name, "ignored", g_app.focused_id);
+            note_input_event("key", source, detail_name, "ignored", g_app().focused_id);
             return false;
         }
         set_caret_state(value, caret);
@@ -6686,14 +6702,14 @@ inline bool handle_key(unsigned int key_type, unsigned int codepoint,
 
     if (text_changed)
         handler->invoke(handler->state, std::move(value));
-    note_input_event("key", source, detail_name, "handled", g_app.focused_id);
+    note_input_event("key", source, detail_name, "handled", g_app().focused_id);
     return true;
 }
 
 #ifndef __wasi__
 template<host_platform Host>
 void repaint(Host& host, float scroll_x, float scroll_y) {
-    auto& app = g_app;
+    auto& app = g_app();
     auto const t0 = metrics::detail::now_ns();
     app.scroll_x = scroll_x;
     app.scroll_y = scroll_y;
@@ -6740,7 +6756,7 @@ void repaint(Host& host, float scroll_x, float scroll_y) {
 }
 #else
 inline void repaint(float scroll_x, float scroll_y) {
-    auto& app = g_app;
+    auto& app = g_app();
     auto const t0 = metrics::detail::now_ns();
     app.scroll_x = scroll_x;
     app.scroll_y = scroll_y;
@@ -6789,11 +6805,11 @@ inline void repaint(float scroll_x, float scroll_y) {
 
 // Input buffer helpers — used by WASM exports for text input overlay.
 inline bool focused_is_input() {
-    return find_input_handler(g_app.focused_id) != nullptr;
+    return find_input_handler(g_app().focused_id) != nullptr;
 }
 
 inline unsigned int input_load_focused(unsigned char* buf, unsigned int buf_size) {
-    auto* handler = find_input_handler(g_app.focused_id);
+    auto* handler = find_input_handler(g_app().focused_id);
     if (!handler)
         return 0;
     unsigned int n = static_cast<unsigned int>(handler->current.size());
@@ -6812,15 +6828,15 @@ inline bool rect_intersects_viewport(diag::RectSnapshot const& rect,
                                      bool screen_fixed = false) {
     if (!rect.valid)
         return false;
-    auto viewport_width = g_app.debug_viewport_width;
-    auto viewport_height = g_app.debug_viewport_height;
+    auto viewport_width = g_app().debug_viewport_width;
+    auto viewport_height = g_app().debug_viewport_height;
     if (viewport_width <= 0.0f || viewport_height <= 0.0f)
         return false;
-    float viewport_left  = screen_fixed ? 0.0f : g_app.scroll_x;
+    float viewport_left  = screen_fixed ? 0.0f : g_app().scroll_x;
     float viewport_right = viewport_left + viewport_width;
     if (rect.x + rect.w <= viewport_left || rect.x >= viewport_right)
         return false;
-    float viewport_top = screen_fixed ? 0.0f : g_app.scroll_y;
+    float viewport_top = screen_fixed ? 0.0f : g_app().scroll_y;
     float viewport_bottom = viewport_top + viewport_height;
     return rect.y + rect.h > viewport_top && rect.y < viewport_bottom;
 }
@@ -6940,7 +6956,7 @@ inline void collect_semantic_nodes_from(
         ? (node.debug_semantic_focusable && semantic.enabled)
         : (semantic_callback_id != 0xFFFFFFFFu && node.focusable);
     semantic.focused = semantic_callback_id != 0xFFFFFFFFu
-        && semantic_callback_id == g_app.focused_id;
+        && semantic_callback_id == g_app().focused_id;
     semantic.scroll_container = is_root || node.is_scroll_container;
 
     for (auto child_h : node.children)
@@ -6961,7 +6977,7 @@ inline void collect_semantic_nodes(
         std::vector<diag::SemanticNodeSnapshot>& out,
         bool screen_fixed = false) {
     collect_semantic_nodes_from(
-        g_app.arena,
+        g_app().arena,
         node_h,
         ox,
         oy,
@@ -6970,7 +6986,7 @@ inline void collect_semantic_nodes(
 }
 
 inline void append_overlay_semantic_nodes(diag::SemanticNodeSnapshot& root) {
-    for (auto overlay_h : g_app.overlays) {
+    for (auto overlay_h : g_app().overlays) {
         std::vector<diag::SemanticNodeSnapshot> overlay_nodes;
         collect_semantic_nodes(overlay_h, 0.0f, 0.0f, overlay_nodes, true);
         for (auto& overlay_node : overlay_nodes) {
@@ -6986,7 +7002,7 @@ inline void append_overlay_semantic_nodes(diag::SemanticNodeSnapshot& root) {
 
 inline std::optional<diag::SemanticNodeSnapshot> build_semantic_tree_snapshot() {
     std::vector<diag::SemanticNodeSnapshot> nodes;
-    collect_semantic_nodes(g_app.root, 0.0f, 0.0f, nodes);
+    collect_semantic_nodes(g_app().root, 0.0f, 0.0f, nodes);
     if (nodes.empty())
         return std::nullopt;
     auto root = std::move(nodes.front());
@@ -7043,18 +7059,18 @@ inline diag::PlatformRuntimeSnapshot build_platform_runtime_snapshot(
     runtime.viewport = node_bounds_snapshot(
         0.0f,
         0.0f,
-        g_app.debug_viewport_width,
-        g_app.debug_viewport_height);
-    runtime.scroll_x = g_app.scroll_x;
-    runtime.scroll_y = g_app.scroll_y;
+        g_app().debug_viewport_width,
+        g_app().debug_viewport_height);
+    runtime.scroll_x = g_app().scroll_x;
+    runtime.scroll_y = g_app().scroll_y;
     runtime.content_height = get_total_height();
-    runtime.focused_callback_id = optional_callback_id(g_app.focused_id);
-    runtime.focus_visible = g_app.focus_visible;
-    runtime.input_modality = input_modality_name(g_app.focus_input_modality);
+    runtime.focused_callback_id = optional_callback_id(g_app().focused_id);
+    runtime.focus_visible = g_app().focus_visible;
+    runtime.input_modality = input_modality_name(g_app().focus_input_modality);
     runtime.focus_visibility_reason =
-        focus_visibility_reason_name(g_app.focus_visibility_reason);
-    runtime.hovered_callback_id = optional_callback_id(g_app.hovered_id);
-    runtime.pressed_callback_id = optional_callback_id(g_app.pressed_id);
+        focus_visibility_reason_name(g_app().focus_visibility_reason);
+    runtime.hovered_callback_id = optional_callback_id(g_app().hovered_id);
+    runtime.pressed_callback_id = optional_callback_id(g_app().pressed_id);
     runtime.details = runtime_details_override.has_value()
         ? *runtime_details_override
         : diag::detail::current_platform_runtime_details();
@@ -7216,12 +7232,12 @@ inline DebugPanelRect callback_rect(unsigned int callback_id) {
         return {};
     DebugPanelRect out;
     (void)find_callback_rect(
-        g_app.root,
+        g_app().root,
         callback_id,
         0.0f,
         0.0f,
-        g_app.scroll_x,
-        g_app.scroll_y,
+        g_app().scroll_x,
+        g_app().scroll_y,
         out);
     return out;
 }
@@ -7296,11 +7312,11 @@ inline char const* debug_panel_tab_label(DebugPanelTab tab) noexcept {
 }
 
 inline void set_debug_panel_tab(DebugPanelTab tab) {
-    if (g_app.debug_panel_tab == tab)
+    if (g_app().debug_panel_tab == tab)
         return;
-    g_app.debug_panel_tab = tab;
-    g_app.debug_panel_warmup_frames = 3u;
-    g_app.last_paint_hash = 0;
+    g_app().debug_panel_tab = tab;
+    g_app().debug_panel_warmup_frames = 3u;
+    g_app().last_paint_hash = 0;
     trigger_rebuild();
 }
 
@@ -7308,7 +7324,7 @@ inline ButtonStyleOptions debug_panel_button_options(bool selected,
                                                      float fixed_height,
                                                      unsigned char idle_tint = 70,
                                                      unsigned char idle_border = 130) {
-    auto const& t = g_app.theme;
+    auto const& t = g_app().theme;
     ButtonStyleOptions options{};
     options.has_material = true;
     options.material = layout::material_style(
@@ -7352,7 +7368,7 @@ inline ButtonStyleOptions debug_panel_button_options(bool selected,
 }
 
 inline void debug_panel_tab_button(DebugPanelTab tab) {
-    bool const selected = g_app.debug_panel_tab == tab;
+    bool const selected = g_app().debug_panel_tab == tab;
     auto const* label = debug_panel_tab_label(tab);
     widget::_impl::action_button(
         str{label, static_cast<unsigned int>(std::strlen(label))},
@@ -7427,15 +7443,15 @@ inline std::string input_debug_block(diag::InputDebugSnapshot const& debug) {
 inline std::optional<diag::SemanticNodeSnapshot>
 debug_panel_app_semantic_tree_snapshot() {
     std::vector<diag::SemanticNodeSnapshot> nodes;
-    if (g_app.prev_root.valid()) {
+    if (g_app().prev_root.valid()) {
         collect_semantic_nodes_from(
-            g_app.prev_arena,
-            g_app.prev_root,
+            g_app().prev_arena,
+            g_app().prev_root,
             0.0f,
             0.0f,
             nodes);
     } else {
-        collect_semantic_nodes(g_app.root, 0.0f, 0.0f, nodes);
+        collect_semantic_nodes(g_app().root, 0.0f, 0.0f, nodes);
     }
     if (nodes.empty())
         return std::nullopt;
@@ -7546,11 +7562,11 @@ inline std::uint64_t debug_layout_diagram_token(
     token = static_cast<std::uint64_t>(hash_combine(token, debug.hovered_id));
     token = static_cast<std::uint64_t>(hash_combine(token, debug.focused_id));
     token = static_cast<std::uint64_t>(
-        hash_combine(token, static_cast<unsigned int>(g_app.overlays.size())));
+        hash_combine(token, static_cast<unsigned int>(g_app().overlays.size())));
     token = static_cast<std::uint64_t>(
-        hash_combine(token, static_cast<unsigned int>(g_app.debug_viewport_width)));
+        hash_combine(token, static_cast<unsigned int>(g_app().debug_viewport_width)));
     token = static_cast<std::uint64_t>(
-        hash_combine(token, static_cast<unsigned int>(g_app.debug_viewport_height)));
+        hash_combine(token, static_cast<unsigned int>(g_app().debug_viewport_height)));
     if (root) {
         token = static_cast<std::uint64_t>(
             hash_combine(token, debug_semantic_node_count(*root)));
@@ -7591,7 +7607,7 @@ inline void paint_debug_layout_node_rects(
             && *node.callback_id == hovered_id;
         bool const focused = node.callback_id.has_value()
             && *node.callback_id == focused_id;
-        auto const& t = g_app.theme;
+        auto const& t = g_app().theme;
         Color fill = debug_with_alpha(
             depth % 2 == 0 ? t.accent : t.semantic_success_border,
             hovered ? 76 : 22);
@@ -7640,7 +7656,7 @@ inline void paint_debug_layout_diagram(
         Painter& painter,
         std::optional<diag::SemanticNodeSnapshot> root,
         diag::InputDebugSnapshot debug) {
-    auto const& t = g_app.theme;
+    auto const& t = g_app().theme;
     constexpr float width = DEBUG_PANEL_BODY_WIDTH;
     constexpr float height = DEBUG_LAYOUT_OVERVIEW_HEIGHT;
     PaintRect bg{0.0f, 0.0f, width, height, debug_with_alpha(t.code_bg, 156)};
@@ -7652,8 +7668,8 @@ inline void paint_debug_layout_diagram(
         return;
     }
 
-    float const viewport_w = std::max(g_app.debug_viewport_width, root->bounds.w);
-    float const viewport_h = std::max(g_app.debug_viewport_height, root->bounds.h);
+    float const viewport_w = std::max(g_app().debug_viewport_width, root->bounds.w);
+    float const viewport_h = std::max(g_app().debug_viewport_height, root->bounds.h);
     float const scale = std::min(
         (width - 32.0f) / std::max(1.0f, viewport_w),
         (height - 38.0f) / std::max(1.0f, viewport_h));
@@ -7703,7 +7719,7 @@ inline void paint_debug_layout_diagram(
 inline void paint_debug_box_model_diagram(
         Painter& painter,
         diag::SemanticNodeSnapshot const* node) {
-    auto const& t = g_app.theme;
+    auto const& t = g_app().theme;
     constexpr float width = DEBUG_PANEL_BODY_WIDTH;
     constexpr float height = DEBUG_BOX_MODEL_HEIGHT;
     PaintRect bg{0.0f, 0.0f, width, height, debug_with_alpha(t.code_bg, 156)};
@@ -7801,38 +7817,38 @@ inline unsigned int debug_find_callback_at_point(
 
 inline unsigned int debug_find_app_callback_at_point(float x, float y) {
     return debug_find_callback_at_point(
-        g_app.root,
+        g_app().root,
         x,
         y,
         0.0f,
         0.0f,
-        g_app.scroll_x,
-        g_app.scroll_y);
+        g_app().scroll_x,
+        g_app().scroll_y);
 }
 
 inline void debug_set_virtual_pointer(float x, float y) {
-    g_app.debug_virtual_pointer_valid = true;
-    g_app.debug_virtual_pointer_x = std::clamp(
+    g_app().debug_virtual_pointer_valid = true;
+    g_app().debug_virtual_pointer_x = std::clamp(
         x,
         0.0f,
-        std::max(0.0f, g_app.debug_viewport_width));
-    g_app.debug_virtual_pointer_y = std::clamp(
+        std::max(0.0f, g_app().debug_viewport_width));
+    g_app().debug_virtual_pointer_y = std::clamp(
         y,
         0.0f,
-        std::max(0.0f, g_app.debug_viewport_height));
-    g_app.debug_virtual_hit_id = debug_find_app_callback_at_point(
-        g_app.debug_virtual_pointer_x,
-        g_app.debug_virtual_pointer_y);
+        std::max(0.0f, g_app().debug_viewport_height));
+    g_app().debug_virtual_hit_id = debug_find_app_callback_at_point(
+        g_app().debug_virtual_pointer_x,
+        g_app().debug_virtual_pointer_y);
     set_pointer_position(
-        g_app.debug_virtual_pointer_x,
-        g_app.debug_virtual_pointer_y);
+        g_app().debug_virtual_pointer_x,
+        g_app().debug_virtual_pointer_y);
     trigger_rebuild();
 }
 
 inline void debug_center_virtual_pointer() {
     debug_set_virtual_pointer(
-        std::max(1.0f, g_app.debug_viewport_width) * 0.5f,
-        std::max(1.0f, g_app.debug_viewport_height) * 0.5f);
+        std::max(1.0f, g_app().debug_viewport_width) * 0.5f,
+        std::max(1.0f, g_app().debug_viewport_height) * 0.5f);
 }
 
 inline bool debug_set_virtual_pointer_to_semantic_node(
@@ -7840,8 +7856,8 @@ inline bool debug_set_virtual_pointer_to_semantic_node(
     if (!node.bounds.valid || node.bounds.w <= 0.0f || node.bounds.h <= 0.0f)
         return false;
     debug_set_virtual_pointer(
-        node.bounds.x - g_app.scroll_x + node.bounds.w * 0.5f,
-        node.bounds.y - g_app.scroll_y + node.bounds.h * 0.5f);
+        node.bounds.x - g_app().scroll_x + node.bounds.w * 0.5f,
+        node.bounds.y - g_app().scroll_y + node.bounds.h * 0.5f);
     return true;
 }
 
@@ -7856,42 +7872,42 @@ inline bool debug_set_virtual_pointer_to_callback(unsigned int callback_id) {
 }
 
 inline void debug_set_virtual_pointer_to_hovered() {
-    if (!debug_set_virtual_pointer_to_callback(g_app.hovered_id))
+    if (!debug_set_virtual_pointer_to_callback(g_app().hovered_id))
         debug_center_virtual_pointer();
 }
 
 inline void debug_set_virtual_pointer_to_focused() {
-    if (!debug_set_virtual_pointer_to_callback(g_app.focused_id))
+    if (!debug_set_virtual_pointer_to_callback(g_app().focused_id))
         debug_center_virtual_pointer();
 }
 
 inline void debug_nudge_virtual_pointer(float dx, float dy) {
-    if (!g_app.debug_virtual_pointer_valid)
+    if (!g_app().debug_virtual_pointer_valid)
         debug_center_virtual_pointer();
     else
         debug_set_virtual_pointer(
-            g_app.debug_virtual_pointer_x + dx,
-            g_app.debug_virtual_pointer_y + dy);
+            g_app().debug_virtual_pointer_x + dx,
+            g_app().debug_virtual_pointer_y + dy);
 }
 
 inline void debug_virtual_hover() {
-    if (!g_app.debug_virtual_pointer_valid)
+    if (!g_app().debug_virtual_pointer_valid)
         debug_center_virtual_pointer();
     auto const hit = debug_find_app_callback_at_point(
-        g_app.debug_virtual_pointer_x,
-        g_app.debug_virtual_pointer_y);
-    g_app.debug_virtual_hit_id = hit;
+        g_app().debug_virtual_pointer_x,
+        g_app().debug_virtual_pointer_y);
+    g_app().debug_virtual_hit_id = hit;
     set_hover_id(hit, "debug-panel", "virtual-hover");
     trigger_rebuild();
 }
 
 inline void debug_virtual_click() {
-    if (!g_app.debug_virtual_pointer_valid)
+    if (!g_app().debug_virtual_pointer_valid)
         debug_center_virtual_pointer();
     auto const hit = debug_find_app_callback_at_point(
-        g_app.debug_virtual_pointer_x,
-        g_app.debug_virtual_pointer_y);
-    g_app.debug_virtual_hit_id = hit;
+        g_app().debug_virtual_pointer_x,
+        g_app().debug_virtual_pointer_y);
+    g_app().debug_virtual_hit_id = hit;
     set_hover_id(hit, "debug-panel", "virtual-click-hover");
     if (hit != DEBUG_INVALID_ID) {
         set_pressed_id(hit, "debug-panel", "virtual-click-press");
@@ -7910,8 +7926,8 @@ inline void debug_virtual_click() {
 }
 
 inline void debug_virtual_clear() {
-    g_app.debug_virtual_pointer_valid = false;
-    g_app.debug_virtual_hit_id = DEBUG_INVALID_ID;
+    g_app().debug_virtual_pointer_valid = false;
+    g_app().debug_virtual_hit_id = DEBUG_INVALID_ID;
     set_hover_id(DEBUG_INVALID_ID, "debug-panel", "virtual-clear");
     set_pressed_id(DEBUG_INVALID_ID, "debug-panel", "virtual-clear");
     trigger_rebuild();
@@ -7920,13 +7936,13 @@ inline void debug_virtual_clear() {
 inline std::uint64_t debug_virtual_input_token() noexcept {
     std::uint64_t token = 0x64656275696e7074ULL;
     token = static_cast<std::uint64_t>(
-        hash_combine(token, g_app.debug_virtual_pointer_valid ? 1u : 0u));
+        hash_combine(token, g_app().debug_virtual_pointer_valid ? 1u : 0u));
     token = static_cast<std::uint64_t>(
-        hash_combine(token, static_cast<unsigned int>(g_app.debug_virtual_pointer_x)));
+        hash_combine(token, static_cast<unsigned int>(g_app().debug_virtual_pointer_x)));
     token = static_cast<std::uint64_t>(
-        hash_combine(token, static_cast<unsigned int>(g_app.debug_virtual_pointer_y)));
+        hash_combine(token, static_cast<unsigned int>(g_app().debug_virtual_pointer_y)));
     token = static_cast<std::uint64_t>(
-        hash_combine(token, g_app.debug_virtual_hit_id));
+        hash_combine(token, g_app().debug_virtual_hit_id));
     return token;
 }
 
@@ -7939,8 +7955,8 @@ inline void paint_debug_virtual_input_target(
         Color color) {
     if (!node || !node->bounds.valid)
         return;
-    float const x = rect_x + (node->bounds.x - g_app.scroll_x) * scale;
-    float const y = rect_y + (node->bounds.y - g_app.scroll_y) * scale;
+    float const x = rect_x + (node->bounds.x - g_app().scroll_x) * scale;
+    float const y = rect_y + (node->bounds.y - g_app().scroll_y) * scale;
     float const w = std::max(1.0f, node->bounds.w * scale);
     float const h = std::max(1.0f, node->bounds.h * scale);
     debug_stroke_rect(painter, x, y, w, h, 1.5f, color);
@@ -7950,13 +7966,13 @@ inline void paint_debug_virtual_input_pad(
         Painter& painter,
         std::optional<diag::SemanticNodeSnapshot> semantic_tree,
         diag::InputDebugSnapshot input_debug) {
-    auto const& t = g_app.theme;
+    auto const& t = g_app().theme;
     constexpr float width = DEBUG_PANEL_BODY_WIDTH;
     constexpr float height = DEBUG_VIRTUAL_INPUT_HEIGHT;
     PaintRect bg{0.0f, 0.0f, width, height, debug_with_alpha(t.code_bg, 156)};
     painter.fill_rects(&bg, 1);
-    float const viewport_w = std::max(1.0f, g_app.debug_viewport_width);
-    float const viewport_h = std::max(1.0f, g_app.debug_viewport_height);
+    float const viewport_w = std::max(1.0f, g_app().debug_viewport_width);
+    float const viewport_h = std::max(1.0f, g_app().debug_viewport_height);
     float const scale = std::min(
         (width - 28.0f) / viewport_w,
         (height - 28.0f) / viewport_h);
@@ -7986,7 +8002,7 @@ inline void paint_debug_virtual_input_pad(
         ? find_semantic_node_by_callback(*root, input_debug.focused_id)
         : nullptr;
     auto const* virtual_hit = root
-        ? find_semantic_node_by_callback(*root, g_app.debug_virtual_hit_id)
+        ? find_semantic_node_by_callback(*root, g_app().debug_virtual_hit_id)
         : nullptr;
     paint_debug_virtual_input_target(
         painter,
@@ -8009,10 +8025,10 @@ inline void paint_debug_virtual_input_pad(
         rect_y,
         scale,
         debug_with_alpha(t.semantic_success_border, 220));
-    if (g_app.debug_virtual_pointer_valid) {
-        float const px = rect_x + g_app.debug_virtual_pointer_x * scale;
-        float const py = rect_y + g_app.debug_virtual_pointer_y * scale;
-        Color pointer_color = g_app.debug_virtual_hit_id == DEBUG_INVALID_ID
+    if (g_app().debug_virtual_pointer_valid) {
+        float const px = rect_x + g_app().debug_virtual_pointer_x * scale;
+        float const py = rect_y + g_app().debug_virtual_pointer_y * scale;
+        Color pointer_color = g_app().debug_virtual_hit_id == DEBUG_INVALID_ID
             ? debug_with_alpha(t.semantic_warning_border, 235)
             : debug_with_alpha(t.accent_strong, 240);
         painter.line(px - 8.0f, py, px + 8.0f, py, 2.0f, pointer_color);
@@ -8021,9 +8037,9 @@ inline void paint_debug_virtual_input_pad(
     }
     auto label = std::format(
         "x {:.0f}  y {:.0f}  hit {}",
-        g_app.debug_virtual_pointer_x,
-        g_app.debug_virtual_pointer_y,
-        debug_id_text(g_app.debug_virtual_hit_id));
+        g_app().debug_virtual_pointer_x,
+        g_app().debug_virtual_pointer_y,
+        debug_id_text(g_app().debug_virtual_hit_id));
     painter.text(
         10.0f,
         8.0f,
@@ -8037,18 +8053,18 @@ inline std::string virtual_input_debug_block() {
     DebugTextBlock block;
     block.line(
         "virtual_pointer",
-        g_app.debug_virtual_pointer_valid ? "active" : "inactive");
-    block.line("x", std::format("{:.1f}", g_app.debug_virtual_pointer_x));
-    block.line("y", std::format("{:.1f}", g_app.debug_virtual_pointer_y));
-    block.line("hit_callback_id", debug_id_text(g_app.debug_virtual_hit_id));
+        g_app().debug_virtual_pointer_valid ? "active" : "inactive");
+    block.line("x", std::format("{:.1f}", g_app().debug_virtual_pointer_x));
+    block.line("y", std::format("{:.1f}", g_app().debug_virtual_pointer_y));
+    block.line("hit_callback_id", debug_id_text(g_app().debug_virtual_hit_id));
     return block.text;
 }
 
 inline void paint_debug_virtual_pointer_overlay(Painter& painter) {
-    if (!g_app.debug_virtual_pointer_valid)
+    if (!g_app().debug_virtual_pointer_valid)
         return;
-    float const x = g_app.debug_virtual_pointer_x;
-    float const y = g_app.debug_virtual_pointer_y;
+    float const x = g_app().debug_virtual_pointer_x;
+    float const y = g_app().debug_virtual_pointer_y;
     PathBuilder cursor;
     cursor.move_to(x, y);
     cursor.line_to(x, y + 24.0f);
@@ -8060,7 +8076,7 @@ inline void paint_debug_virtual_pointer_overlay(Painter& painter) {
     cursor.close();
     painter.fill_path(cursor, Color{255, 255, 255, 245});
     painter.stroke_path(cursor, 1.4f, Color{20, 20, 22, 235});
-    if (g_app.debug_virtual_hit_id != DEBUG_INVALID_ID) {
+    if (g_app().debug_virtual_hit_id != DEBUG_INVALID_ID) {
         painter.arc(x + 8.0f,
                     y + 8.0f,
                     18.0f,
@@ -8072,12 +8088,12 @@ inline void paint_debug_virtual_pointer_overlay(Painter& painter) {
 }
 
 inline void render_debug_virtual_pointer_overlay() {
-    if (!g_app.debug_virtual_pointer_valid)
+    if (!g_app().debug_virtual_pointer_valid)
         return;
     layout::overlay([&] {
         widget::semantic_canvas(
-            std::max(1.0f, g_app.debug_viewport_width),
-            std::max(1.0f, g_app.debug_viewport_height),
+            std::max(1.0f, g_app().debug_viewport_width),
+            std::max(1.0f, g_app().debug_viewport_height),
             "Debug Virtual Pointer Overlay",
             [](Painter& painter) {
                 paint_debug_virtual_pointer_overlay(painter);
@@ -8124,19 +8140,19 @@ inline std::string debug_console_records_text(
 }
 
 inline void debug_console_copy(std::string text) {
-    g_app.debug_console_copy_buffer = std::move(text);
-    ++g_app.debug_console_copy_serial;
+    g_app().debug_console_copy_buffer = std::move(text);
+    ++g_app().debug_console_copy_serial;
     trigger_rebuild();
 }
 
 inline void debug_console_clear_copy() {
-    g_app.debug_console_copy_buffer.clear();
-    ++g_app.debug_console_copy_serial;
+    g_app().debug_console_copy_buffer.clear();
+    ++g_app().debug_console_copy_serial;
     trigger_rebuild();
 }
 
 inline void render_debug_console_record(log::Record const& record) {
-    auto const& t = g_app.theme;
+    auto const& t = g_app().theme;
     auto time_text = debug_console_time_text(record.time_unix_nano);
     auto level_text = std::string{log::severity_text(record.severity)};
     auto scope_text = record.scope_name.empty()
@@ -8357,19 +8373,19 @@ inline void debug_mix_frame_timeline_token(
 
 inline std::uint64_t debug_performance_chart_token() noexcept {
     std::uint64_t token = 0x6475626770657266ULL;
-    debug_mix_frame_perf_token(token, g_app.frame_perf);
-    debug_mix_frame_timeline_token(token, g_app.frame_timeline);
+    debug_mix_frame_perf_token(token, g_app().frame_perf);
+    debug_mix_frame_timeline_token(token, g_app().frame_timeline);
     token = static_cast<std::uint64_t>(
-        hash_combine(token, static_cast<unsigned int>(g_app.frame_perf.last.action)));
+        hash_combine(token, static_cast<unsigned int>(g_app().frame_perf.last.action)));
     token = static_cast<std::uint64_t>(
-        hash_combine(token, g_app.frame_perf.last.paint_ns));
+        hash_combine(token, g_app().frame_perf.last.paint_ns));
     token = static_cast<std::uint64_t>(
-        hash_combine(token, g_app.frame_perf.last.flush_ns));
+        hash_combine(token, g_app().frame_perf.last.flush_ns));
     return token;
 }
 
 inline void paint_debug_performance_chart(Painter& painter) {
-    auto const& t = g_app.theme;
+    auto const& t = g_app().theme;
     constexpr float width = DEBUG_PANEL_BODY_WIDTH;
     constexpr float height = DEBUG_PERFORMANCE_CHART_HEIGHT;
     constexpr double budget_60_ms = 16.666667;
@@ -8383,8 +8399,8 @@ inline void paint_debug_performance_chart(Painter& painter) {
     float const bottom = 128.0f;
     float const graph_w = right - left;
     float const graph_h = bottom - top;
-    auto const& stats = g_app.frame_perf;
-    auto const& timeline = g_app.frame_timeline;
+    auto const& stats = g_app().frame_perf;
+    auto const& timeline = g_app().frame_timeline;
     auto const p95 = timeline.recent_count > 0
         ? debug_timeline_recent_percentile(timeline, 0.95)
         : debug_frame_recent_percentile(stats, 0.95);
@@ -8526,7 +8542,7 @@ inline void paint_debug_performance_chart(Painter& painter) {
 }
 
 inline std::string performance_debug_block() {
-    auto const& frame = g_app.frame_perf;
+    auto const& frame = g_app().frame_perf;
     auto const p95 = debug_frame_recent_percentile(frame, 0.95);
     auto const average_ms = frame.count == 0
         ? 0.0
@@ -8570,7 +8586,7 @@ inline std::string performance_debug_block() {
 }
 
 inline void render_debug_performance_tab() {
-    g_app.debug_panel_refresh_active = true;
+    g_app().debug_panel_refresh_active = true;
     widget::text("Frame Timeline", TextSize::Small, TextColor::Muted);
     widget::semantic_canvas(
         DEBUG_PANEL_BODY_WIDTH,
@@ -8648,13 +8664,13 @@ inline void render_debug_console_tab() {
             "Clear copy",
             [] { debug_console_clear_copy(); });
     }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
-    if (!g_app.debug_console_copy_buffer.empty()) {
+    if (!g_app().debug_console_copy_buffer.empty()) {
         widget::text(
             std::string{"Copy Buffer #"}
-                + std::to_string(g_app.debug_console_copy_serial),
+                + std::to_string(g_app().debug_console_copy_serial),
             TextSize::Small,
             TextColor::Muted);
-        widget::code(g_app.debug_console_copy_buffer);
+        widget::code(g_app().debug_console_copy_buffer);
     }
     if (records.empty()) {
         widget::code("live_tail: true\nrecords: 0\n\n(no console records yet)");
@@ -8676,8 +8692,8 @@ inline void render_debug_input_tab(
             paint_debug_virtual_input_pad(painter, semantic_tree, input_debug);
         },
         [](GestureEvent const& ev) {
-            float const viewport_w = std::max(1.0f, g_app.debug_viewport_width);
-            float const viewport_h = std::max(1.0f, g_app.debug_viewport_height);
+            float const viewport_w = std::max(1.0f, g_app().debug_viewport_width);
+            float const viewport_h = std::max(1.0f, g_app().debug_viewport_height);
             debug_set_virtual_pointer(
                 std::clamp(ev.focus_x / DEBUG_PANEL_BODY_WIDTH, 0.0f, 1.0f)
                     * viewport_w,
@@ -8719,7 +8735,7 @@ inline void render_debug_protocol_tab() {
 
 inline void render_debug_panel_tab_content(
         diag::InputDebugSnapshot const& input_debug) {
-    switch (g_app.debug_panel_tab) {
+    switch (g_app().debug_panel_tab) {
         case DebugPanelTab::Performance:
             render_debug_performance_tab();
             break;
@@ -8748,11 +8764,11 @@ struct DebugPanelGeometry {
 
 inline DebugPanelGeometry debug_panel_geometry() {
     DebugPanelGeometry geometry{};
-    geometry.viewport_width = g_app.debug_viewport_width > 1.0f
-        ? g_app.debug_viewport_width
+    geometry.viewport_width = g_app().debug_viewport_width > 1.0f
+        ? g_app().debug_viewport_width
         : 1280.0f;
-    geometry.viewport_height = g_app.debug_viewport_height > 1.0f
-        ? g_app.debug_viewport_height
+    geometry.viewport_height = g_app().debug_viewport_height > 1.0f
+        ? g_app().debug_viewport_height
         : 720.0f;
     geometry.panel_width = geometry.viewport_width > 540.0f
         ? 480.0f
@@ -8769,7 +8785,7 @@ inline void render_debug_hover_highlight(DebugPanelGeometry const& geometry,
     if (hovered_id != DEBUG_INVALID_ID) {
         float const panel_left =
             geometry.viewport_width - geometry.panel_width - 16.0f;
-        if (g_app.pointer_valid && g_app.pointer_x >= panel_left)
+        if (g_app().pointer_valid && g_app().pointer_x >= panel_left)
             return;
         layout::overlay([&] {
             widget::semantic_canvas(
@@ -8799,8 +8815,8 @@ inline layout::MaterialSurfaceOptions debug_panel_surface_options(
     panel_options.border_width = 1.0f;
     panel_options.has_material_override = true;
     panel_options.material_override = layout::plain_material_style(
-        debug_with_alpha(g_app.theme.surface, 255),
-        debug_with_alpha(g_app.theme.border, 236),
+        debug_with_alpha(g_app().theme.surface, 255),
+        debug_with_alpha(g_app().theme.border, 236),
         MaterialSurfaceRole::Sidebar,
         "debug-panel-plain-surface",
         "debug-panel-plain-surface");
@@ -8821,11 +8837,11 @@ inline void render_debug_panel_header() {
 }
 
 inline void render_debug_panel_overlay() {
-    if (!g_app.debug_panel_open)
+    if (!g_app().debug_panel_open)
         return;
-    if (g_app.debug_panel_warmup_frames > 0u) {
-        g_app.debug_panel_refresh_active = true;
-        --g_app.debug_panel_warmup_frames;
+    if (g_app().debug_panel_warmup_frames > 0u) {
+        g_app().debug_panel_refresh_active = true;
+        --g_app().debug_panel_warmup_frames;
     }
 
     auto input_debug = current_input_debug_snapshot();
@@ -8853,83 +8869,83 @@ inline void render_debug_panel_overlay() {
 #endif
 
 inline InteractionRole focused_role() {
-    return callback_role(g_app.focused_id);
+    return callback_role(g_app().focused_id);
 }
 
 inline unsigned int get_hovered_id() {
-    return g_app.hovered_id;
+    return g_app().hovered_id;
 }
 
 inline float get_scroll_x() {
-    return g_app.scroll_x;
+    return g_app().scroll_x;
 }
 
 inline float get_scroll_y() {
-    return g_app.scroll_y;
+    return g_app().scroll_y;
 }
 
 inline unsigned int get_caret_pos() {
-    return g_app.caret_pos;
+    return g_app().caret_pos;
 }
 
 inline unsigned int get_selection_anchor() {
-    return g_app.selection_anchor;
+    return g_app().selection_anchor;
 }
 
 inline bool selection_active() {
-    auto* handler = find_input_handler(g_app.focused_id);
+    auto* handler = find_input_handler(g_app().focused_id);
     return handler && resolved_selection_state(handler->current).active;
 }
 
 inline unsigned int selection_start() {
-    auto* handler = find_input_handler(g_app.focused_id);
+    auto* handler = find_input_handler(g_app().focused_id);
     if (!handler)
         return 0xFFFFFFFFu;
     return static_cast<unsigned int>(resolved_selection_state(handler->current).start);
 }
 
 inline unsigned int selection_end() {
-    auto* handler = find_input_handler(g_app.focused_id);
+    auto* handler = find_input_handler(g_app().focused_id);
     if (!handler)
         return 0xFFFFFFFFu;
     return static_cast<unsigned int>(resolved_selection_state(handler->current).end);
 }
 
 inline bool get_caret_visible() {
-    return g_app.caret_visible;
+    return g_app().caret_visible;
 }
 
 inline void set_scroll_x(float scroll_x) {
-    g_app.scroll_x = scroll_x;
+    g_app().scroll_x = scroll_x;
 }
 
 inline void set_scroll_y(float scroll_y) {
-    g_app.scroll_y = scroll_y;
+    g_app().scroll_y = scroll_y;
 }
 
 inline bool set_pointer_position(float x, float y) noexcept {
-    bool const changed = !g_app.pointer_valid
-        || g_app.pointer_x != x
-        || g_app.pointer_y != y;
-    g_app.pointer_valid = true;
-    g_app.pointer_x = x;
-    g_app.pointer_y = y;
+    bool const changed = !g_app().pointer_valid
+        || g_app().pointer_x != x
+        || g_app().pointer_y != y;
+    g_app().pointer_valid = true;
+    g_app().pointer_x = x;
+    g_app().pointer_y = y;
     return changed;
 }
 
 inline bool clear_pointer_position() noexcept {
-    if (!g_app.pointer_valid)
+    if (!g_app().pointer_valid)
         return false;
-    g_app.pointer_valid = false;
+    g_app().pointer_valid = false;
     return true;
 }
 
 inline void set_hover_id_without_event(unsigned int callback_id) {
-    g_app.hovered_id = callback_id;
+    g_app().hovered_id = callback_id;
 }
 
 inline void input_commit(unsigned char const* buf, unsigned int len) {
-    auto* handler = find_input_handler(g_app.focused_id);
+    auto* handler = find_input_handler(g_app().focused_id);
     if (!handler)
         return;
     std::string value(reinterpret_cast<char const*>(buf), len);
@@ -8956,7 +8972,7 @@ inline InputDebugSnapshot input_debug_snapshot() {
 extern "C" {
     __attribute__((export_name("phenotype_repaint")))
     void phenotype_repaint(float scroll_y) {
-        phenotype::detail::repaint(phenotype::detail::g_app.scroll_x, scroll_y);
+        phenotype::detail::repaint(phenotype::detail::g_app().scroll_x, scroll_y);
     }
 
     __attribute__((export_name("phenotype_get_total_height")))
@@ -8972,7 +8988,7 @@ extern "C" {
     __attribute__((export_name("phenotype_set_hover")))
     void phenotype_set_hover(unsigned int callback_id) {
         if (phenotype::detail::set_hover_id(callback_id))
-            phenotype_repaint(phenotype::detail::g_app.scroll_y);
+            phenotype_repaint(phenotype::detail::g_app().scroll_y);
     }
 
     __attribute__((export_name("phenotype_set_pointer")))
@@ -8988,7 +9004,7 @@ extern "C" {
     __attribute__((export_name("phenotype_set_focus")))
     void phenotype_set_focus(unsigned int callback_id) {
         phenotype::detail::set_focus_id(callback_id);
-        phenotype_repaint(phenotype::detail::g_app.scroll_y);
+        phenotype_repaint(phenotype::detail::g_app().scroll_y);
     }
 
     __attribute__((export_name("phenotype_get_focused_id")))
@@ -8999,13 +9015,13 @@ extern "C" {
     __attribute__((export_name("phenotype_handle_tab")))
     void phenotype_handle_tab(unsigned int reverse) {
         phenotype::detail::handle_tab(reverse);
-        phenotype_repaint(phenotype::detail::g_app.scroll_y);
+        phenotype_repaint(phenotype::detail::g_app().scroll_y);
     }
 
     __attribute__((export_name("phenotype_toggle_caret")))
     void phenotype_toggle_caret(void) {
         phenotype::detail::toggle_caret();
-        phenotype_repaint(phenotype::detail::g_app.scroll_y);
+        phenotype_repaint(phenotype::detail::g_app().scroll_y);
     }
 
     __attribute__((export_name("phenotype_handle_key")))

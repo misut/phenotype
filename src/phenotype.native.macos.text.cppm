@@ -56,7 +56,7 @@ inline FontCacheKey default_text_font_key(bool mono) {
     FontCacheKey key{};
     key.mono = mono;
     if (!mono)
-        key.family = ::phenotype::detail::g_app.theme.default_font_family;
+        key.family = ::phenotype::detail::g_app().theme.default_font_family;
     return key;
 }
 
