@@ -8316,8 +8316,8 @@ void phenotype_android_attach_surface(void* native_window) {
     // because APP_CMD_TERM_WINDOW / _INIT_WINDOW destroys + recreates
     // Vulkan while phenotype's view output is byte-identical. Clearing
     // last_paint_hash forces the next trigger_rebuild to land a real
-    // flush. No-op before phenotype_android_start_app has installed an
-    // app runner (trigger_rebuild guards on app_runner).
+    // flush. No-op before phenotype_android_start_app has installed the
+    // active scene runner.
     ::phenotype::detail::g_app().last_paint_hash = 0;
     ::phenotype::detail::trigger_rebuild();
 }

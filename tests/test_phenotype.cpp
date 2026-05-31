@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -522,9 +523,9 @@ void test_app_runner_uses_context_pointer() {
         int payload = 0;
     };
 
-    auto& app = detail::g_app();
-    auto* previous_runner = app.app_runner;
-    auto* previous_context = app.app_runner_context;
+    auto& scene = detail::active_scene_runtime();
+    auto* previous_runner = scene.runner;
+    auto* previous_context = scene.runner_context;
 
     RunnerContext first{.payload = 7};
     RunnerContext second{.payload = 11};
@@ -592,6 +593,40 @@ void test_runtime_scene_runner_targets_scene() {
     assert(!runtime::scene_has_runner(main_scene));
 
     std::puts("PASS: runtime scene runner targets scenes");
+}
+
+void test_scene_runner_survives_app_state_swap() {
+    struct RunnerContext {
+        int rebuilds = 0;
+    };
+
+    auto scene = runtime::ensure_scene(SceneDescriptor{
+        .id = "runner-app-swap-scene",
+        .title = "Runner App Swap",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+
+    RunnerContext context{};
+    auto runner = [](void* raw) {
+        auto& context = *static_cast<RunnerContext*>(raw);
+        context.rebuilds += 1;
+    };
+
+    {
+        runtime::SceneActivation activate{scene};
+        detail::install_app_runner(runner, &context);
+        auto& runtime_scene = detail::active_scene_runtime();
+        runtime_scene.owned_app = std::make_unique<AppState>();
+        runtime_scene.app = runtime_scene.owned_app.get();
+    }
+
+    assert(runtime::scene_has_runner(scene));
+    runtime::trigger_scene_rebuild(scene);
+    assert(context.rebuilds == 1);
+    runtime::clear_scene_runner(scene);
+
+    std::puts("PASS: scene runner survives app state swap");
 }
 
 void test_system_theme_preferences_are_pure_overlays() {
@@ -2922,6 +2957,7 @@ int main() {
     test_render_surface_runtime_binds_scene_and_tracks_frames();
     test_app_runner_uses_context_pointer();
     test_runtime_scene_runner_targets_scene();
+    test_scene_runner_survives_app_state_swap();
     test_system_theme_preferences_are_pure_overlays();
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();
