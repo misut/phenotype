@@ -135,6 +135,31 @@ std::string read_text_file(std::filesystem::path const& path) {
         std::istreambuf_iterator<char>());
 }
 
+json::Value test_debug_payload_builder() {
+    json::Object debug;
+    debug.emplace("builder", json::Value{true});
+    return json::Value{std::move(debug)};
+}
+
+json::Value test_application_debug_provider() {
+    json::Object application;
+    application.emplace("provider", json::Value{true});
+    return json::Value{std::move(application)};
+}
+
+diag::PlatformCapabilitiesSnapshot test_platform_capabilities_provider() {
+    diag::PlatformCapabilitiesSnapshot snapshot{};
+    snapshot.platform = "provider-test";
+    snapshot.capture_frame_rgba = true;
+    return snapshot;
+}
+
+json::Value test_platform_runtime_details_provider() {
+    json::Object details;
+    details.emplace("provider", json::Value{true});
+    return json::Value{std::move(details)};
+}
+
 } // namespace
 
 void test_counter_add_and_total() {
@@ -428,6 +453,10 @@ void test_snapshot_shape() {
            >= 1);
     assert(application_runtime.at("damaged_render_surface_count").as_integer()
            >= 0);
+    assert(!application_runtime.at("debug_payload_builder_installed").as_bool());
+    assert(!application_runtime.at("application_debug_provider_installed").as_bool());
+    assert(!application_runtime.at("platform_capabilities_provider_installed").as_bool());
+    assert(!application_runtime.at("platform_runtime_details_provider_installed").as_bool());
 
     // Resource carries service.name + service.version.
     auto const& resource = root.at("resource").as_object();
@@ -494,6 +523,57 @@ void test_snapshot_shape() {
         }
     }
     assert(found_log);
+}
+
+void test_application_runtime_owns_debug_providers() {
+    auto previous_builder = diag::detail::current_debug_payload_builder();
+    auto previous_application =
+        diag::detail::current_application_debug_provider();
+    auto previous_capabilities =
+        diag::detail::current_platform_capabilities_provider();
+    auto previous_runtime_details =
+        diag::detail::current_platform_runtime_details_provider();
+
+    diag::detail::set_debug_payload_builder(test_debug_payload_builder);
+    diag::detail::set_application_debug_provider(test_application_debug_provider);
+    diag::detail::set_platform_capabilities_provider(
+        test_platform_capabilities_provider);
+    diag::detail::set_platform_runtime_details_provider(
+        test_platform_runtime_details_provider);
+
+    auto providers = diag::detail::application_runtime_provider_snapshot();
+    assert(providers.debug_payload_builder_installed);
+    assert(providers.application_debug_provider_installed);
+    assert(providers.platform_capabilities_provider_installed);
+    assert(providers.platform_runtime_details_provider_installed);
+
+    auto direct = diag::build_snapshot();
+    auto const& direct_debug = direct.as_object().at("debug").as_object();
+    assert(direct_debug.at("builder").as_bool() == true);
+
+    auto enriched = json::parse(detail::serialize_diag_snapshot_with_debug());
+    auto const& runtime = enriched.as_object()
+        .at("debug").as_object()
+        .at("platform_runtime").as_object();
+    auto const& application_runtime =
+        runtime.at("application_runtime").as_object();
+    assert(application_runtime.at("debug_payload_builder_installed").as_bool());
+    assert(application_runtime.at("application_debug_provider_installed").as_bool());
+    assert(application_runtime.at("platform_capabilities_provider_installed").as_bool());
+    assert(application_runtime.at("platform_runtime_details_provider_installed").as_bool());
+    assert(runtime.at("platform").as_string() == "provider-test");
+    assert(runtime.at("details").as_object().at("provider").as_bool() == true);
+    assert(enriched.as_object()
+               .at("debug").as_object()
+               .at("application").as_object()
+               .at("provider").as_bool() == true);
+
+    diag::detail::set_debug_payload_builder(previous_builder);
+    diag::detail::set_application_debug_provider(previous_application);
+    diag::detail::set_platform_capabilities_provider(previous_capabilities);
+    diag::detail::set_platform_runtime_details_provider(previous_runtime_details);
+
+    std::puts("PASS: application runtime owns debug providers");
 }
 
 // Smoke-test the runner: a single run<> pass should populate the
@@ -2036,6 +2116,7 @@ int main() {
     std::printf("PASS: log ring buffer wraps at capacity\n");
     test_snapshot_shape();
     std::printf("PASS: JSON snapshot shape\n");
+    test_application_runtime_owns_debug_providers();
 #if !defined(__wasi__) && !defined(__ANDROID__)
     test_paint_buffer_overflow_records_metric_and_drops_command();
     std::printf("PASS: paint overflow records metric + drops command\n");
