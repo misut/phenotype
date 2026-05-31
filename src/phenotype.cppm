@@ -7030,6 +7030,101 @@ inline bool is_empty_runtime_details(json::Value const& value) {
     return value.is_object() && value.as_object().empty();
 }
 
+inline char const* scene_role_name(SceneRole role) {
+    switch (role) {
+    case SceneRole::Main: return "main";
+    case SceneRole::Window: return "window";
+    case SceneRole::Settings: return "settings";
+    case SceneRole::Debug: return "debug";
+    case SceneRole::Overlay: return "overlay";
+    case SceneRole::Custom: return "custom";
+    default: return "window";
+    }
+}
+
+inline char const* render_surface_role_name(RenderSurfaceRole role) {
+    switch (role) {
+    case RenderSurfaceRole::MainWindow: return "main_window";
+    case RenderSurfaceRole::Window: return "window";
+    case RenderSurfaceRole::Settings: return "settings";
+    case RenderSurfaceRole::Debug: return "debug";
+    case RenderSurfaceRole::Offscreen: return "offscreen";
+    case RenderSurfaceRole::Custom: return "custom";
+    default: return "window";
+    }
+}
+
+inline json::Value scene_snapshot_to_json(SceneSnapshot const& snapshot) {
+    json::Object out;
+    out.emplace("id", json::Value{snapshot.id});
+    out.emplace("title", json::Value{snapshot.title});
+    out.emplace("role", json::Value{scene_role_name(snapshot.role)});
+    out.emplace("active", json::Value{snapshot.active});
+    out.emplace("visible", json::Value{snapshot.visible});
+    out.emplace(
+        "hovered_callback_id",
+        diag::callback_id_to_json(optional_callback_id(snapshot.hovered_id)));
+    out.emplace(
+        "focused_callback_id",
+        diag::callback_id_to_json(optional_callback_id(snapshot.focused_id)));
+    out.emplace(
+        "queued_messages",
+        json::Value{static_cast<std::int64_t>(snapshot.queued_messages)});
+    out.emplace(
+        "framework_local_entries",
+        json::Value{static_cast<std::int64_t>(snapshot.framework_local_entries)});
+    out.emplace(
+        "framework_local_generation",
+        json::Value{static_cast<std::int64_t>(
+            snapshot.framework_local_generation)});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value scene_snapshots_to_json() {
+    json::Array out;
+    for (auto const& snapshot : runtime::scenes())
+        out.push_back(scene_snapshot_to_json(snapshot));
+    return json::Value{std::move(out)};
+}
+
+inline json::Value render_surface_snapshot_to_json(
+        RenderSurfaceSnapshot const& snapshot) {
+    json::Object out;
+    out.emplace("id", json::Value{snapshot.id});
+    out.emplace("title", json::Value{snapshot.title});
+    out.emplace("scene_id", json::Value{snapshot.scene_id});
+    out.emplace("role", json::Value{render_surface_role_name(snapshot.role)});
+    out.emplace("active", json::Value{snapshot.active});
+    out.emplace("visible", json::Value{snapshot.visible});
+    out.emplace(
+        "logical_width",
+        json::Value{static_cast<std::int64_t>(snapshot.logical_width)});
+    out.emplace(
+        "logical_height",
+        json::Value{static_cast<std::int64_t>(snapshot.logical_height)});
+    out.emplace(
+        "framebuffer_width",
+        json::Value{static_cast<std::int64_t>(snapshot.framebuffer_width)});
+    out.emplace(
+        "framebuffer_height",
+        json::Value{static_cast<std::int64_t>(snapshot.framebuffer_height)});
+    out.emplace("content_scale", json::Value{snapshot.content_scale});
+    out.emplace(
+        "frame_sequence",
+        json::Value{static_cast<std::int64_t>(snapshot.frame_sequence)});
+    out.emplace(
+        "damage_generation",
+        json::Value{static_cast<std::int64_t>(snapshot.damage_generation)});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value render_surface_snapshots_to_json() {
+    json::Array out;
+    for (auto const& snapshot : runtime::render_surfaces())
+        out.push_back(render_surface_snapshot_to_json(snapshot));
+    return json::Value{std::move(out)};
+}
+
 inline diag::PlatformCapabilitiesSnapshot build_platform_capabilities_snapshot(
         std::optional<diag::PlatformCapabilitiesSnapshot> platform_override = std::nullopt) {
     auto snapshot = platform_override.has_value()
@@ -7071,6 +7166,8 @@ inline diag::PlatformRuntimeSnapshot build_platform_runtime_snapshot(
         focus_visibility_reason_name(g_app().focus_visibility_reason);
     runtime.hovered_callback_id = optional_callback_id(g_app().hovered_id);
     runtime.pressed_callback_id = optional_callback_id(g_app().pressed_id);
+    runtime.scenes = scene_snapshots_to_json();
+    runtime.render_surfaces = render_surface_snapshots_to_json();
     runtime.details = runtime_details_override.has_value()
         ? *runtime_details_override
         : diag::detail::current_platform_runtime_details();

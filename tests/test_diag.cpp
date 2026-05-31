@@ -335,6 +335,54 @@ void test_snapshot_shape() {
     assert(runtime.at("backend").as_string() == "native");
 #endif
     assert(runtime.contains("viewport"));
+    assert(runtime.contains("scenes"));
+    assert(runtime.contains("render_surfaces"));
+
+    auto const& runtime_scenes = runtime.at("scenes").as_array();
+    assert(!runtime_scenes.empty());
+    bool found_active_main_scene = false;
+    for (auto const& scene_value : runtime_scenes) {
+        auto const& scene = scene_value.as_object();
+        assert(scene.at("id").is_string());
+        assert(scene.at("title").is_string());
+        assert(scene.at("role").is_string());
+        assert(scene.at("visible").is_bool());
+        assert(scene.contains("hovered_callback_id"));
+        assert(scene.contains("focused_callback_id"));
+        (void)scene.at("queued_messages").as_integer();
+        (void)scene.at("framework_local_entries").as_integer();
+        (void)scene.at("framework_local_generation").as_integer();
+        found_active_main_scene = found_active_main_scene
+            || (scene.at("id").as_string() == "main"
+                && scene.at("role").as_string() == "main"
+                && scene.at("active").as_bool());
+    }
+    assert(found_active_main_scene);
+
+    auto const& runtime_surfaces = runtime.at("render_surfaces").as_array();
+    assert(!runtime_surfaces.empty());
+    bool found_active_main_surface = false;
+    for (auto const& surface_value : runtime_surfaces) {
+        auto const& surface = surface_value.as_object();
+        assert(surface.at("id").is_string());
+        assert(surface.at("title").is_string());
+        assert(surface.at("scene_id").is_string());
+        assert(surface.at("role").is_string());
+        assert(surface.at("visible").is_bool());
+        (void)surface.at("logical_width").as_integer();
+        (void)surface.at("logical_height").as_integer();
+        (void)surface.at("framebuffer_width").as_integer();
+        (void)surface.at("framebuffer_height").as_integer();
+        (void)surface.at("content_scale").as_float();
+        (void)surface.at("frame_sequence").as_integer();
+        (void)surface.at("damage_generation").as_integer();
+        found_active_main_surface = found_active_main_surface
+            || (surface.at("id").as_string() == "main"
+                && surface.at("scene_id").as_string() == "main"
+                && surface.at("role").as_string() == "main_window"
+                && surface.at("active").as_bool());
+    }
+    assert(found_active_main_surface);
 
     // Resource carries service.name + service.version.
     auto const& resource = root.at("resource").as_object();
