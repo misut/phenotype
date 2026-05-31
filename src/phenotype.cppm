@@ -7147,6 +7147,15 @@ inline json::Value render_surface_snapshot_to_json(
     out.emplace(
         "damage_generation",
         json::Value{static_cast<std::int64_t>(snapshot.damage_generation)});
+    out.emplace(
+        "last_paint_hash",
+        json::Value{static_cast<std::int64_t>(snapshot.last_paint_hash)});
+    out.emplace(
+        "paint_flush_count",
+        json::Value{static_cast<std::int64_t>(snapshot.paint_flush_count)});
+    out.emplace(
+        "paint_skip_count",
+        json::Value{static_cast<std::int64_t>(snapshot.paint_skip_count)});
     return json::Value{std::move(out)};
 }
 

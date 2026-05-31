@@ -701,14 +701,21 @@ void flush_if_changed(R& r) {
     app.prev_cmd_len = len;
 
     auto hash = detail::fnv1a_64(r.buf(), r.buf_len());
-    if (hash == app.last_paint_hash) {
+    if (app.last_paint_hash == 0)
+        runtime::invalidate_active_render_surface_paint_cache();
+    auto const previous_hash = runtime::active_render_surface_paint_hash();
+    if (hash == previous_hash) {
+        app.last_paint_hash = previous_hash;
         r.buf_len() = 0;
         metrics::inst::frames_skipped.add();
+        runtime::note_active_render_surface_paint_skip();
         return;
     }
+    runtime::set_active_render_surface_paint_hash(hash);
     app.last_paint_hash = hash;
     flush(r);
     metrics::inst::flush_calls.add();
+    runtime::note_active_render_surface_paint_flush();
 }
 
 // ---- WASM non-template overloads ----

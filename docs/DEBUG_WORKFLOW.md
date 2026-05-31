@@ -56,6 +56,9 @@ The common snapshot schema remains the source of truth for all platforms:
   side panel can identify active scene ownership, queued messages,
   framework-local entries, surface size, damage generation, and frame counters
   without scraping platform-specific `details`.
+  Each `render_surfaces[]` entry includes the surface-local paint cache hash
+  and flush/skip counters used by `flush_if_changed`, which keeps repeated-frame
+  suppression scoped to the actual drawing target.
   Each `scenes[]` entry includes `schedule`, a scene-local tick contract for
   runner installation, active animation, scrollbar animation, input motion,
   debug-panel refresh, and frame trace/timeline counters.
