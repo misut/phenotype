@@ -1472,6 +1472,107 @@ struct KeyCommandHarness {
 
 } // namespace input_regression
 
+namespace native_scene_run_regression {
+
+struct State {
+    int total = 0;
+};
+
+using Msg = int;
+
+inline int g_last_rendered_total = -1;
+inline int g_render_count = 0;
+
+static void update(State& state, Msg msg) {
+    state.total += msg;
+}
+
+static void view(State const& state) {
+    g_last_rendered_total = state.total;
+    ++g_render_count;
+    phenotype::widget::text("scene host");
+}
+
+static void reset_observed_state() {
+    g_last_rendered_total = -1;
+    g_render_count = 0;
+}
+
+} // namespace native_scene_run_regression
+
+static void test_native_run_scene_targets_host_surface_scene() {
+    using namespace native_scene_run_regression;
+
+    input_regression::reset_core_state();
+    reset_observed_state();
+
+    platform_api platform = make_stub_platform("test-native-run-scene", nullptr);
+    native_host host{};
+    NativeSurfaceDescriptor surface{
+        .kind = NativeSurfaceKind::Unknown,
+        .logical_width = 360,
+        .logical_height = 240,
+        .framebuffer_width = 720,
+        .framebuffer_height = 480,
+        .content_scale = 2.0f,
+    };
+    host.window = &surface;
+    host.surface_descriptor = &surface;
+    host.platform = &platform;
+    host.render_surface_id = "native-run-scene-surface";
+    host.render_surface_title = "Native Run Scene";
+    host.render_surface_role = RenderSurfaceRole::Settings;
+
+    int main_runner_runs = 0;
+    auto main_scene = phenotype::runtime::ensure_scene(SceneDescriptor{
+        .id = "main",
+        .title = "Main",
+        .role = SceneRole::Main,
+        .visible = true,
+    });
+    phenotype::runtime::install_scene_runner(
+        main_scene,
+        [](void* raw) {
+            ++*static_cast<int*>(raw);
+        },
+        &main_runner_runs);
+
+    auto scene = phenotype::runtime::ensure_scene(SceneDescriptor{
+        .id = "native-run-scene",
+        .title = "Native Run Scene",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+
+    phenotype::native::run_scene<State, Msg>(scene, host, view, update);
+
+    assert(host.render_scene_id == "native-run-scene");
+    assert(phenotype::runtime::active_scene().id == "native-run-scene");
+    assert(phenotype::runtime::active_render_surface().id
+        == "native-run-scene-surface");
+    assert(phenotype::runtime::active_render_surface().scene_id
+        == "native-run-scene");
+    assert(phenotype::runtime::active_render_surface().role
+        == RenderSurfaceRole::Settings);
+    assert(phenotype::runtime::scene_has_runner(main_scene));
+    assert(phenotype::runtime::scene_has_runner(scene));
+    assert(g_last_rendered_total == 0);
+    assert(g_render_count == 1);
+
+    phenotype::runtime::post_to_scene<Msg>(scene, 7);
+    phenotype::runtime::trigger_scene_rebuild(scene);
+    assert(g_last_rendered_total == 7);
+    assert(g_render_count == 2);
+
+    phenotype::runtime::trigger_scene_rebuild(main_scene);
+    assert(main_runner_runs == 1);
+    assert(g_render_count == 2);
+
+    phenotype::native::detail::shutdown_host(host);
+    input_regression::reset_core_state();
+    std::puts("PASS: native run_scene targets host surface scene");
+}
+
 namespace scroll_containment_regression {
 
 struct State {};
@@ -4673,6 +4774,7 @@ static void test_stub_renderer_hit_test() {
 int main() {
     test_window_options_integrated_titlebar_contract();
     test_native_shell_state_is_host_local();
+    test_native_run_scene_targets_host_surface_scene();
     test_native_backdrop_composition_plan_contract();
     test_native_system_settings_product_api();
     test_shell_pointer_hover_click_and_tab_navigation();

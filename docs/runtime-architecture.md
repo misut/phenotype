@@ -115,6 +115,11 @@ it installs the same compatibility `run` frame pipeline into an explicit scene
 instead of always binding `main`, so future settings/debug windows can mount a
 declarative root while keeping their state, messages, and runner context
 separate from the main window.
+Native integrations should use `phenotype::native::run_scene<State, Msg>` when
+a `native_host` represents a secondary window or surface. That wrapper first
+binds the host's render surface to the requested scene, then installs the same
+scene-local runner, so window creation code can keep native surface ownership
+and declarative scene identity aligned.
 
 ## Migration Rules
 

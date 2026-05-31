@@ -347,6 +347,21 @@ void run(native_host& host, View view, Update update) {
     detail::run_host<State, Msg>(host, std::move(view), std::move(update));
 }
 
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+void run_scene(SceneHandle const& scene,
+               native_host& host,
+               View view,
+               Update update) {
+    host.platform = &detail::require_platform(host.platform);
+    detail::run_host_scene<State, Msg>(
+        host,
+        scene,
+        std::move(view),
+        std::move(update));
+}
+
 #if !defined(__ANDROID__)
 // run_app assumes the platform-native desktop windowing driver. Android consumers write
 // their own android_main that pumps the GameActivity loop and calls

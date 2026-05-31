@@ -1588,7 +1588,11 @@ inline bool dispatch_char(unsigned int codepoint) {
 template<typename State, typename Msg, typename View, typename Update>
     requires std::invocable<View, State const&>
           && std::invocable<Update, State&, Msg>
-void run_host(native_host& host, View view, Update update) {
+void run_host_scene(native_host& host,
+                    ::phenotype::SceneHandle const& scene,
+                    View view,
+                    Update update) {
+    host.render_scene_id = scene.id;
     bind_host(host, host.shell.scroll_x, host.shell.scroll_y);
     ::phenotype::detail::g_open_url = detail::open_url_bridge;
     if (host.platform && host.platform->input.attach)
@@ -1597,7 +1601,11 @@ void run_host(native_host& host, View view, Update update) {
         host.platform->text.init();
     if (host.platform && host.platform->renderer.init)
         host.platform->renderer.init(host.window);
-    phenotype::run<State, Msg>(host, std::move(view), std::move(update));
+    ::phenotype::runtime::run_scene<State, Msg>(
+        scene,
+        host,
+        std::move(view),
+        std::move(update));
 #ifndef NDEBUG
     if (debug_panel_env_enabled("PHENOTYPE_DEBUG_PANEL")
         || debug_panel_env_enabled("PHENOTYPE_PERF_DEBUG_PANEL")) {
@@ -1609,6 +1617,27 @@ void run_host(native_host& host, View view, Update update) {
     }
 #endif
     sync_platform_input();
+}
+
+inline ::phenotype::SceneHandle ensure_host_scene(native_host const& host) {
+    return ::phenotype::runtime::ensure_scene(::phenotype::SceneDescriptor{
+        .id = host.render_scene_id,
+        .title = host.render_surface_title,
+        .role = ::phenotype::detail::scene_role_for_render_surface(
+            host.render_surface_role),
+        .visible = host.render_surface_visible,
+    });
+}
+
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+void run_host(native_host& host, View view, Update update) {
+    run_host_scene<State, Msg>(
+        host,
+        ensure_host_scene(host),
+        std::move(view),
+        std::move(update));
 }
 
 inline void service_host_tick(std::chrono::steady_clock::time_point& last_animation_tick) {
