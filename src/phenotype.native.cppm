@@ -112,6 +112,15 @@ inline bool show_window(NativePreferencesWindowOptions const& options) {
 #endif
 }
 
+inline bool sync_window(NativePreferencesWindowOptions const& options) {
+#if defined(__APPLE__)
+    return detail::sync_appkit_preferences_window(options);
+#else
+    (void)options;
+    return false;
+#endif
+}
+
 inline bool is_window_visible(char const* identifier = "preferences") {
 #if defined(__APPLE__)
     return detail::is_appkit_preferences_window_visible(identifier);
