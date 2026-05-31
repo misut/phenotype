@@ -367,6 +367,10 @@ The native example captures OS settings through the product native API before
 the first frame and refreshes them when app input triggers theme sync, so font,
 appearance, accent, and scroll policy changes can be reflected without
 restarting the demo.
+On macOS, `PHENOTYPE_FILE_EXPLORER_SETTINGS_ARTIFACT_DIR` captures the separate
+phenotype-rendered settings scene window through the scene-window artifact API.
+Use it when verifying secondary-window chrome, clear alpha, and theme
+propagation independently from the main file explorer surface.
 The desktop More menu exposes the same family, OS/package text-size policy,
 text scale, body/heading/small point-size, line-height, appearance, and scroll
 controls as shared file explorer inputs.

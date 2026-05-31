@@ -15,6 +15,7 @@ export module phenotype.native.platform;
 
 #if !defined(__wasi__)
 import phenotype.diag;
+import phenotype.state;
 import phenotype.types;
 
 export namespace phenotype::native {
@@ -219,6 +220,21 @@ struct NativePreferencesWindowOptions {
     char const* appearance = "system";
     NativePreferencesSection const* sections = nullptr;
     std::size_t section_count = 0;
+    void* user_data = nullptr;
+    void (*on_close)(void* user_data) = nullptr;
+};
+
+struct NativeSceneWindowOptions {
+    char const* identifier = "scene-window";
+    char const* title = "Window";
+    int width = 640;
+    int height = 420;
+    char const* scene_id = nullptr;
+    char const* surface_id = nullptr;
+    SceneRole scene_role = SceneRole::Window;
+    RenderSurfaceRole surface_role = RenderSurfaceRole::Window;
+    WindowOptions window_options = {};
+    bool order_front = true;
     void* user_data = nullptr;
     void (*on_close)(void* user_data) = nullptr;
 };

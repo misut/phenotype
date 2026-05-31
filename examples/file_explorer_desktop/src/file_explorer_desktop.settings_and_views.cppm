@@ -98,6 +98,82 @@ void finder_settings_window(State const& state) {
     }, 460.0f, 72);
 }
 
+void finder_settings_scene(State const& state) {
+    using namespace phenotype;
+    auto options = finder_settings_dialog_options();
+    options.max_width = 0.0f;
+    options.fixed_height = -1.0f;
+    options.border_radius = 16.0f;
+    layout::material_container(
+        layout::MaterialContainerOptions{
+            .container_id = 7200u,
+            .spacing = 0.0f,
+            .morph_transitions = true,
+        },
+        [&] {
+            layout::material_surface(options, [&] {
+                layout::column([&] {
+                    widget::text("Settings", TextSize::Heading);
+                    widget::text("Appearance", TextSize::Small, TextColor::Muted);
+                    layout::row([&] {
+                        settings_choice_button(
+                            state.labels.preferences_system_appearance,
+                            color_scheme_message("system"),
+                            state.explorer.theme_preferences.prefer_system_color_scheme,
+                            0x7101u);
+                        settings_choice_button(
+                            state.labels.preferences_light_appearance,
+                            color_scheme_message("light"),
+                            !state.explorer.theme_preferences.prefer_system_color_scheme
+                                && state.explorer.theme_preferences.color_scheme == "light",
+                            0x7102u);
+                        settings_choice_button(
+                            state.labels.preferences_dark_appearance,
+                            color_scheme_message("dark"),
+                            !state.explorer.theme_preferences.prefer_system_color_scheme
+                                && state.explorer.theme_preferences.color_scheme == "dark",
+                            0x7103u);
+                    }, SpaceToken::Xs);
+                    widget::text("Sidebar", TextSize::Small, TextColor::Muted);
+                    layout::row([&] {
+                        settings_choice_button(
+                            "Left",
+                            SetSidebarPosition{false},
+                            !state.sidebar_right,
+                            0x7111u);
+                        settings_choice_button(
+                            "Right",
+                            SetSidebarPosition{true},
+                            state.sidebar_right,
+                            0x7112u);
+                    }, SpaceToken::Xs);
+                    widget::text("Scroll Bars", TextSize::Small, TextColor::Muted);
+                    layout::row([&] {
+                        settings_choice_button(
+                            state.labels.preferences_scrollbar_auto,
+                            scroll_bar_visibility_message("auto"),
+                            state.explorer.theme_preferences.scroll_bar_visibility == "auto",
+                            0x7121u);
+                        settings_choice_button(
+                            state.labels.preferences_scrollbar_always,
+                            scroll_bar_visibility_message("always"),
+                            state.explorer.theme_preferences.scroll_bar_visibility == "always",
+                            0x7122u);
+                        settings_choice_button(
+                            state.labels.preferences_scrollbar_hidden,
+                            scroll_bar_visibility_message("hidden"),
+                            state.explorer.theme_preferences.scroll_bar_visibility == "hidden",
+                            0x7123u);
+                    }, SpaceToken::Xs);
+                    layout::row([&] {
+                        layout::weighted(1.0f, [] {});
+                        settings_choice_button("Done", CloseSettings{}, true, 0x7131u);
+                    }, SpaceToken::Xs);
+                }, SpaceToken::Md);
+            });
+        });
+}
+
 void finder_list(State const& state,
                  file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;

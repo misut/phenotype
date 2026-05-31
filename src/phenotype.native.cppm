@@ -140,6 +140,97 @@ inline void close_window(char const* identifier = "preferences") {
 
 } // namespace preferences
 
+namespace scene_window {
+
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+inline bool show_with_state(NativeSceneWindowOptions const& options,
+                            State& state,
+                            View view,
+                            Update update) {
+#if defined(__APPLE__)
+    return detail::show_appkit_scene_window_with_state<State, Msg>(
+        current_platform(),
+        detail::appkit_scene_window_options(options),
+        state,
+        std::move(view),
+        std::move(update));
+#else
+    (void)options;
+    (void)state;
+    (void)view;
+    (void)update;
+    return false;
+#endif
+}
+
+inline bool is_window_visible(char const* identifier = "scene-window") {
+#if defined(__APPLE__)
+    return detail::is_appkit_scene_window_visible(identifier);
+#else
+    (void)identifier;
+    return false;
+#endif
+}
+
+inline void close_window(char const* identifier = "scene-window") {
+#if defined(__APPLE__)
+    detail::close_appkit_scene_window(identifier);
+#else
+    (void)identifier;
+#endif
+}
+
+inline DebugArtifactBundleResult write_artifact_bundle(
+        char const* identifier,
+        std::string_view directory,
+        std::string_view reason = {}) {
+#if defined(__APPLE__)
+    auto* state = detail::find_appkit_scene_window(
+        detail::scene_window_identifier_or_default(identifier));
+    if (!state) {
+        return {
+            false,
+            std::string(directory),
+            {},
+            {},
+            {},
+            "Scene window is not registered",
+        };
+    }
+    auto const& platform = current_platform();
+    if (!platform.debug.write_artifact_bundle) {
+        return {
+            false,
+            std::string(directory),
+            {},
+            {},
+            {},
+            "Current platform does not expose write_artifact_bundle()",
+        };
+    }
+    detail::ScopedHostActivation activate(state->host);
+    auto directory_copy = std::string(directory);
+    auto reason_copy = std::string(reason);
+    return platform.debug.write_artifact_bundle(
+        directory_copy.empty() ? nullptr : directory_copy.c_str(),
+        reason_copy.empty() ? nullptr : reason_copy.c_str());
+#else
+    (void)identifier;
+    return {
+        false,
+        std::string(directory),
+        {},
+        {},
+        {},
+        "Scene window artifact capture is only available on Apple targets",
+    };
+#endif
+}
+
+} // namespace scene_window
+
 inline PlatformSystemSettingsSnapshot system_settings() {
     auto const& platform = current_platform();
     if (platform.system.settings)

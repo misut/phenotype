@@ -1616,6 +1616,11 @@ static void test_native_run_scene_targets_host_surface_scene() {
 }
 
 #ifdef __APPLE__
+static void appkit_scene_window_close_probe(void* raw) {
+    if (auto* close_count = static_cast<int*>(raw))
+        ++(*close_count);
+}
+
 static void test_macos_appkit_scene_window_registry_targets_scene() {
     using namespace native_scene_run_regression;
 
@@ -1641,6 +1646,9 @@ static void test_macos_appkit_scene_window_registry_targets_scene() {
         .surface_role = RenderSurfaceRole::Settings,
         .order_front = true,
     };
+    auto const active_scene_before = phenotype::runtime::active_scene().id;
+    auto const active_surface_before =
+        phenotype::runtime::active_render_surface().id;
 
     bool const opened =
         phenotype::native::detail::show_appkit_scene_window<State, Msg>(
@@ -1652,20 +1660,67 @@ static void test_macos_appkit_scene_window_registry_targets_scene() {
     assert(phenotype::native::detail::appkit_scene_window_count() == 1);
     assert(phenotype::native::detail::is_appkit_scene_window_visible(
         "test-settings-scene-window"));
-    assert(phenotype::runtime::active_scene().id == "test-settings-scene");
-    assert(phenotype::runtime::active_scene().role == SceneRole::Settings);
+    assert(phenotype::runtime::active_scene().id == active_scene_before);
     assert(phenotype::runtime::active_render_surface().id
-           == "test-settings-surface");
-    assert(phenotype::runtime::active_render_surface().scene_id
-           == "test-settings-scene");
-    assert(phenotype::runtime::active_render_surface().role
-           == RenderSurfaceRole::Settings);
+           == active_surface_before);
+    auto scene = phenotype::runtime::scene("test-settings-scene");
+    auto surface = phenotype::runtime::render_surface("test-settings-surface");
+    assert(scene.id == "test-settings-scene");
+    assert(scene.role == SceneRole::Settings);
+    assert(surface.id == "test-settings-surface");
+    assert(surface.scene_id == "test-settings-scene");
+    assert(surface.role == RenderSurfaceRole::Settings);
     assert(g_render_count == 1);
 
     phenotype::native::detail::close_appkit_scene_window(
         "test-settings-scene-window");
     assert(!phenotype::native::detail::is_appkit_scene_window_visible(
         "test-settings-scene-window"));
+
+    int close_count = 0;
+    phenotype::native::detail::AppKitSceneWindowOptions callback_options{
+        .identifier = "test-settings-scene-window-callback",
+        .title = "Settings Callback",
+        .width = 360,
+        .height = 240,
+        .scene_id = "test-settings-scene-callback",
+        .surface_id = "test-settings-surface-callback",
+        .scene_role = SceneRole::Settings,
+        .surface_role = RenderSurfaceRole::Settings,
+        .order_front = true,
+        .user_data = &close_count,
+        .on_close = appkit_scene_window_close_probe,
+    };
+    bool const callback_opened =
+        phenotype::native::detail::show_appkit_scene_window<State, Msg>(
+            platform,
+            callback_options,
+            view,
+            update);
+    assert(callback_opened);
+    assert(close_count == 0);
+    auto missing_artifact =
+        phenotype::native::scene_window::write_artifact_bundle(
+            "test-missing-scene-window",
+            "/tmp/phenotype-test-missing-scene-window",
+            "missing-scene-window");
+    assert(!missing_artifact.ok);
+    assert(missing_artifact.error.find("not registered") != std::string::npos);
+    auto* scene_window = phenotype::native::detail::find_appkit_scene_window(
+        "test-settings-scene-window-callback");
+    assert(scene_window && scene_window->window);
+    id close_notification = test_objc_send<id>(
+        test_class_id("NSNotification"),
+        test_sel("notificationWithName:object:"),
+        test_ns_string("NSWindowWillCloseNotification"),
+        scene_window->window);
+    phenotype::native::detail::appkit_scene_window_will_close(
+        nullptr,
+        nullptr,
+        close_notification);
+    assert(close_count == 1);
+    assert(!phenotype::native::detail::is_appkit_scene_window_visible(
+        "test-settings-scene-window-callback"));
     phenotype::native::detail::reset_appkit_scene_windows_for_tests();
     input_regression::reset_core_state();
     std::puts("PASS: macOS AppKit scene window registry targets scene");

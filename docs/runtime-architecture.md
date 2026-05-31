@@ -114,7 +114,13 @@ caller's previous active scene after running.
 it installs the same compatibility `run` frame pipeline into an explicit scene
 instead of always binding `main`, so future settings/debug windows can mount a
 declarative root while keeping their state, messages, and runner context
-separate from the main window.
+separate from the main window. `runtime::run_scene_with_state<State, Msg>` is
+the state-hoisting counterpart. It keeps the scene's queue, runner, framework
+local storage, and render surface isolated, but lets the caller provide a shared
+application state object when a secondary scene edits the same model as the main
+window. That mirrors Compose's state-hoisting rule and React's explicit roots:
+ownership is visible at the call site, and scene-local transient state does not
+accidentally leak across windows.
 Native integrations should use `phenotype::native::run_scene<State, Msg>` when
 a `native_host` represents a secondary window or surface. That wrapper first
 binds the host's render surface to the requested scene, then installs the same
@@ -137,9 +143,18 @@ macOS also has an internal scene-window registry for secondary phenotype
 windows. A registered AppKit scene window owns a stable `native_host`,
 `NativeSurfaceDescriptor`, scene id, render-surface id, visibility flag, and
 animation tick clock; the AppKit loop services those windows beside the main
-window instead of treating settings/debug windows as global side effects. The
-next migration step can mount the file-explorer settings UI into this registry
-as a `SceneRole::Settings` scene.
+window instead of treating settings/debug windows as global side effects.
+`phenotype::native::scene_window::show_with_state` exposes that registry as the
+first public native window API for shared-state secondary scenes. The
+file-explorer settings window now uses it to render a real phenotype
+`SceneRole::Settings` scene in a separate AppKit window instead of mirroring the
+state into one-off native controls.
+`phenotype::native::scene_window::write_artifact_bundle` temporarily activates a
+registered scene window's host and writes the same debug artifact bundle used by
+the main window. This keeps visual verification and renderer diagnostics
+surface-local: a settings/debug window can prove its own chrome, clear alpha,
+Metal layer opacity, and frame pixels without relying on the main scene's active
+renderer.
 
 ## Migration Rules
 
