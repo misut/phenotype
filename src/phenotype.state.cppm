@@ -669,6 +669,8 @@ namespace detail {
         std::shared_ptr<void> runner_context_owner{};
         std::map<std::size_t, LocalEntry> framework_local_store{};
         std::uint32_t framework_local_gen = 1;
+        void* current_build_scope = nullptr;
+        std::uint32_t pending_child_key = LayoutNode::unkeyed_key;
         std::uint64_t last_scheduled_tick_ns = 0;
         std::uint64_t scheduled_tick_count = 0;
 
@@ -1497,12 +1499,14 @@ struct Scope {
     Scope(NodeHandle n, std::size_t seed)
         : node(n), widget_id_seed(seed) {}
 
-    static Scope*& current() {
-        static Scope* s = nullptr;
-        return s;
+    static Scope* current() {
+        return static_cast<Scope*>(
+            detail::active_scene_runtime().current_build_scope);
     }
 
-    static void set_current(Scope* s) { current() = s; }
+    static void set_current(Scope* s) {
+        detail::active_scene_runtime().current_build_scope = s;
+    }
 
     // Returns the next sibling counter for `call_site_hash` within this
     // scope, then increments the stored count so the next call at the

@@ -138,6 +138,12 @@ scene's current material union or popping its stack. This keeps composable
 helpers close to React root isolation and Compose state-holder rules: implicit
 context is available during a rebuild, but the owner is still the scene root
 that is actively building.
+The lower-level DSL build scope is scene-owned too: `Scope::current()` and the
+pending keyed-child marker live on `SceneRuntime`. A nested builder can
+temporarily activate another scene without inheriting the caller's implicit
+parent node, framework-local call counters, or unconsumed keyed child. That
+keeps structural helpers predictable when future windows rebuild independently
+or when one scene triggers another scene's view work from a shared model update.
 `runtime::run_scene<State, Msg>` is the higher-level version of that transition:
 it installs the same compatibility `run` frame pipeline into an explicit scene
 instead of always binding `main`, so future settings/debug windows can mount a

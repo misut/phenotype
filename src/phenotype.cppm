@@ -58,8 +58,7 @@ inline void append_child(NodeHandle parent, NodeHandle child) {
 // `children_keyed = true` so diff's keyed salvage pass runs on that
 // parent next frame.
 inline std::uint32_t& pending_child_key() {
-    static std::uint32_t k = LayoutNode::unkeyed_key;
-    return k;
+    return active_scene_runtime().pending_child_key;
 }
 
 inline void attach_to_scope(NodeHandle h) {

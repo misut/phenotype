@@ -902,6 +902,62 @@ void test_material_build_context_is_scene_local() {
     std::puts("PASS: material build context is scene-local");
 }
 
+void test_view_build_scope_is_scene_local() {
+    auto active_before = runtime::active_scene_handle();
+    auto scene_a = runtime::ensure_scene(SceneDescriptor{
+        .id = "view-build-scope-scene-a",
+        .title = "View Build Scope Scene A",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+    auto scene_b = runtime::ensure_scene(SceneDescriptor{
+        .id = "view-build-scope-scene-b",
+        .title = "View Build Scope Scene B",
+        .role = SceneRole::Debug,
+        .visible = true,
+    });
+
+    {
+        auto activate_a = runtime::activate_scene(scene_a);
+        detail::g_app().arena.reset();
+        auto root_a = detail::alloc_node();
+        Scope scope_a(root_a, 111u);
+        Scope::set_current(&scope_a);
+        assert(Scope::current() == &scope_a);
+
+        keyed(101u, [&] {
+            assert(detail::pending_child_key() == 101u);
+            {
+                auto activate_b = runtime::activate_scene(scene_b);
+                assert(Scope::current() == nullptr);
+                assert(detail::pending_child_key() == LayoutNode::unkeyed_key);
+
+                detail::g_app().arena.reset();
+                auto root_b = detail::alloc_node();
+                Scope scope_b(root_b, 222u);
+                Scope::set_current(&scope_b);
+                assert(Scope::current() == &scope_b);
+
+                keyed(202u, [&] {
+                    assert(detail::pending_child_key() == 202u);
+                });
+                assert(detail::pending_child_key() == LayoutNode::unkeyed_key);
+                Scope::set_current(nullptr);
+            }
+
+            assert(runtime::active_scene_handle().id == scene_a.id);
+            assert(Scope::current() == &scope_a);
+            assert(detail::pending_child_key() == 101u);
+        });
+
+        assert(detail::pending_child_key() == LayoutNode::unkeyed_key);
+        Scope::set_current(nullptr);
+    }
+
+    assert(runtime::active_scene_handle().id == active_before.id);
+    std::puts("PASS: view build scope is scene-local");
+}
+
 void test_runtime_run_scene_keeps_same_types_scene_local() {
     struct SceneRunState {
         int value = 0;
@@ -3474,6 +3530,7 @@ int main() {
     test_app_runner_can_own_context_pointer();
     test_legacy_app_runner_context_is_scene_local();
     test_material_build_context_is_scene_local();
+    test_view_build_scope_is_scene_local();
     test_runtime_run_scene_keeps_same_types_scene_local();
     test_runtime_run_scene_can_share_external_state();
     test_runtime_scene_runner_targets_scene();
