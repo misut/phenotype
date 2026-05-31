@@ -129,6 +129,15 @@ active-scene variants wrap the low-level callback/context runner slot with a
 settings or debug-window code attach one runner per scene root without poking
 `detail::install_app_runner` directly, and targeted rebuilds restore the
 caller's previous active scene after running.
+View-build context follows the same boundary. Material/glass container,
+transition, identity, and active-surface scopes are transient stacks on the
+active scene rather than process-wide globals. A settings or debug scene can
+build a glass button, matched-geometry transition, or material surface while
+the main scene is in the middle of a rebuild without inheriting the main
+scene's current material union or popping its stack. This keeps composable
+helpers close to React root isolation and Compose state-holder rules: implicit
+context is available during a rebuild, but the owner is still the scene root
+that is actively building.
 `runtime::run_scene<State, Msg>` is the higher-level version of that transition:
 it installs the same compatibility `run` frame pipeline into an explicit scene
 instead of always binding `main`, so future settings/debug windows can mount a

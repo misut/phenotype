@@ -6,6 +6,7 @@ module;
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <source_location>
 #include <string>
@@ -3199,10 +3200,41 @@ inline MaterialContainerDescriptor glass_effect_union_descriptor(
         options.morph_transitions};
 }
 
+struct MaterialBuildContext {
+    std::string scene_id{};
+    std::vector<MaterialContainerDescriptor> container_stack{};
+    std::vector<MaterialTransitionDescriptor> transition_stack{};
+    std::vector<MaterialGlassIdentityDescriptor> glass_identity_stack{};
+    unsigned int surface_scope_depth = 0;
+};
+
+inline std::vector<std::unique_ptr<MaterialBuildContext>>&
+material_build_contexts() {
+    static std::vector<std::unique_ptr<MaterialBuildContext>>& contexts =
+        *new std::vector<std::unique_ptr<MaterialBuildContext>>();
+    return contexts;
+}
+
+inline std::string active_material_context_scene_id() {
+    auto const& id = detail::active_scene_runtime().descriptor.id;
+    return id.empty() ? std::string{"main"} : id;
+}
+
+inline MaterialBuildContext& active_material_build_context() {
+    auto id = active_material_context_scene_id();
+    auto& contexts = material_build_contexts();
+    for (auto& context : contexts) {
+        if (context && context->scene_id == id)
+            return *context;
+    }
+    auto context = std::make_unique<MaterialBuildContext>();
+    context->scene_id = std::move(id);
+    contexts.push_back(std::move(context));
+    return *contexts.back();
+}
+
 inline std::vector<MaterialContainerDescriptor>& material_container_stack() {
-    static std::vector<MaterialContainerDescriptor>& stack =
-        *new std::vector<MaterialContainerDescriptor>();
-    return stack;
+    return active_material_build_context().container_stack;
 }
 
 inline MaterialContainerDescriptor current_material_container() {
@@ -3218,9 +3250,7 @@ inline bool material_transition_is_identity(
 }
 
 inline std::vector<MaterialTransitionDescriptor>& material_transition_stack() {
-    static std::vector<MaterialTransitionDescriptor>& stack =
-        *new std::vector<MaterialTransitionDescriptor>();
-    return stack;
+    return active_material_build_context().transition_stack;
 }
 
 inline MaterialTransitionDescriptor current_material_transition() {
@@ -3229,8 +3259,7 @@ inline MaterialTransitionDescriptor current_material_transition() {
 }
 
 inline unsigned int& material_surface_scope_depth() {
-    static unsigned int& depth = *new unsigned int(0u);
-    return depth;
+    return active_material_build_context().surface_scope_depth;
 }
 
 inline bool current_material_surface_contains_glass() noexcept {
@@ -3318,9 +3347,7 @@ inline bool material_glass_identity_is_empty(
 
 inline std::vector<MaterialGlassIdentityDescriptor>&
 material_glass_identity_stack() {
-    static std::vector<MaterialGlassIdentityDescriptor>& stack =
-        *new std::vector<MaterialGlassIdentityDescriptor>();
-    return stack;
+    return active_material_build_context().glass_identity_stack;
 }
 
 inline MaterialGlassIdentityDescriptor current_material_glass_identity() {
