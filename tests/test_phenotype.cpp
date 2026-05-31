@@ -371,6 +371,12 @@ void test_scene_runtime_isolates_app_state_and_messages() {
         assert(settings_snapshot.hovered_id == 21u);
         assert(settings_snapshot.focused_id == 22u);
         assert(settings_snapshot.queued_messages == 1u);
+        detail::g_app().has_active_animations = true;
+        detail::g_app().debug_panel_refresh_active = true;
+        auto settings_schedule = runtime::active_scene_schedule();
+        assert(settings_schedule.has_active_animations);
+        assert(settings_schedule.debug_panel_refresh_active);
+        assert(detail::active_scene_needs_scheduled_tick());
         auto settings_messages = detail::drain<int>();
         assert(settings_messages.size() == 1);
         assert(settings_messages[0] == 42);
@@ -381,6 +387,9 @@ void test_scene_runtime_isolates_app_state_and_messages() {
         assert(runtime::active_scene().id == "main");
         assert(detail::g_app().hovered_id == 11u);
         assert(detail::g_app().focused_id == 12u);
+        assert(!runtime::active_scene_schedule().has_active_animations);
+        assert(!runtime::active_scene_schedule().debug_panel_refresh_active);
+        assert(!detail::active_scene_needs_scheduled_tick());
         auto main_messages = detail::drain<int>();
         assert(main_messages.size() == 1);
         assert(main_messages[0] == 7);
@@ -391,9 +400,12 @@ void test_scene_runtime_isolates_app_state_and_messages() {
     bool saw_settings = false;
     for (auto const& snapshot : snapshots) {
         saw_main = saw_main || (snapshot.id == "main"
-                                && snapshot.role == SceneRole::Main);
+                                && snapshot.role == SceneRole::Main
+                                && !snapshot.schedule.has_active_animations);
         saw_settings = saw_settings || (snapshot.id == "settings"
-                                        && snapshot.role == SceneRole::Settings);
+                                        && snapshot.role == SceneRole::Settings
+                                        && snapshot.schedule.has_active_animations
+                                        && snapshot.schedule.debug_panel_refresh_active);
     }
     assert(saw_main);
     assert(saw_settings);

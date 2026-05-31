@@ -7054,6 +7054,37 @@ inline char const* render_surface_role_name(RenderSurfaceRole role) {
     }
 }
 
+inline json::Value scene_schedule_snapshot_to_json(
+        SceneScheduleSnapshot const& snapshot) {
+    json::Object out;
+    out.emplace("runner_installed", json::Value{snapshot.runner_installed});
+    out.emplace(
+        "has_active_animations",
+        json::Value{snapshot.has_active_animations});
+    out.emplace(
+        "scrollbar_animation_active",
+        json::Value{snapshot.scrollbar_animation_active});
+    out.emplace(
+        "has_active_input_motion",
+        json::Value{snapshot.has_active_input_motion});
+    out.emplace(
+        "debug_panel_refresh_active",
+        json::Value{snapshot.debug_panel_refresh_active});
+    out.emplace(
+        "frame_trace_input_active",
+        json::Value{snapshot.frame_trace_input_active});
+    out.emplace(
+        "frame_trace_input_action",
+        json::Value{frame_trace_action_label(snapshot.frame_trace_input_action)});
+    out.emplace(
+        "frame_trace_count",
+        json::Value{static_cast<std::int64_t>(snapshot.frame_trace_count)});
+    out.emplace(
+        "frame_timeline_tick",
+        json::Value{static_cast<std::int64_t>(snapshot.frame_timeline_tick)});
+    return json::Value{std::move(out)};
+}
+
 inline json::Value scene_snapshot_to_json(SceneSnapshot const& snapshot) {
     json::Object out;
     out.emplace("id", json::Value{snapshot.id});
@@ -7077,6 +7108,7 @@ inline json::Value scene_snapshot_to_json(SceneSnapshot const& snapshot) {
         "framework_local_generation",
         json::Value{static_cast<std::int64_t>(
             snapshot.framework_local_generation)});
+    out.emplace("schedule", scene_schedule_snapshot_to_json(snapshot.schedule));
     return json::Value{std::move(out)};
 }
 

@@ -352,6 +352,16 @@ void test_snapshot_shape() {
         (void)scene.at("queued_messages").as_integer();
         (void)scene.at("framework_local_entries").as_integer();
         (void)scene.at("framework_local_generation").as_integer();
+        auto const& schedule = scene.at("schedule").as_object();
+        assert(schedule.at("runner_installed").is_bool());
+        assert(schedule.at("has_active_animations").is_bool());
+        assert(schedule.at("scrollbar_animation_active").is_bool());
+        assert(schedule.at("has_active_input_motion").is_bool());
+        assert(schedule.at("debug_panel_refresh_active").is_bool());
+        assert(schedule.at("frame_trace_input_active").is_bool());
+        assert(schedule.at("frame_trace_input_action").is_string());
+        (void)schedule.at("frame_trace_count").as_integer();
+        (void)schedule.at("frame_timeline_tick").as_integer();
         found_active_main_scene = found_active_main_scene
             || (scene.at("id").as_string() == "main"
                 && scene.at("role").as_string() == "main"

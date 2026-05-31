@@ -8364,7 +8364,7 @@ void phenotype_android_draw_frame(void) {
     // not during a paint-only replay. Android draws every frame already,
     // so promote animation frames to rebuilds while an interpolation is
     // active; the flag self-clears once animate_value reaches its target.
-    if (::phenotype::detail::g_app().has_active_animations)
+    if (::phenotype::detail::active_scene_has_view_animations())
         ::phenotype::detail::trigger_rebuild();
     else
         d::repaint_current();

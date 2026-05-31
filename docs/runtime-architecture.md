@@ -59,6 +59,14 @@ can now confirm which scene owns hover/focus/message state and which surface
 owns size, visibility, damage, and frame counters before relying on
 platform-specific renderer diagnostics.
 
+Each scene snapshot also carries a `schedule` object. It reports whether a
+runner is installed, whether view-time animations, scrollbar animation,
+input-motion, or debug-panel refresh are requesting future ticks, and how far
+the frame trace/timeline counters have advanced. Native shells should query
+these scene-schedule helpers instead of reading global flags directly, so a
+future settings or debug window can request frames without waking unrelated
+scenes.
+
 ## Migration Rules
 
 - Keep `phenotype::run<State, Msg>` as the simple single-window entry point.

@@ -56,6 +56,9 @@ The common snapshot schema remains the source of truth for all platforms:
   side panel can identify active scene ownership, queued messages,
   framework-local entries, surface size, damage generation, and frame counters
   without scraping platform-specific `details`.
+  Each `scenes[]` entry includes `schedule`, a scene-local tick contract for
+  runner installation, active animation, scrollbar animation, input motion,
+  debug-panel refresh, and frame trace/timeline counters.
 - Native desktop `platform_runtime.details.window` records the resolved window
   surface kind, requested `WindowOptions`, integrated titlebar metrics,
   native-control ownership, and `uses_glfw=false` / `toolkit_window_shim=false`
