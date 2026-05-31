@@ -45,10 +45,12 @@ window.
 `RenderSurfaceRuntime` is the next foundation layer. It binds one native drawing
 target to one `SceneRuntime`, records logical/framebuffer size, visibility, frame
 sequence, and damage generation, and switches the active scene when a surface is
-activated. Platform renderer backends still need to move their Metal, D3D, and
-Vulkan resources into this surface owner before multiple native phenotype
-windows can render independently, but the public runtime snapshots and tests now
-make that ownership boundary explicit.
+activated. Desktop `native_host` instances now synchronize their
+`NativeSurfaceDescriptor` into this runtime and record frame completion after a
+successful native present. Platform renderer backends still need to move their
+Metal, D3D, and Vulkan resources into this surface owner before multiple native
+phenotype windows can render independently, but the public runtime snapshots and
+tests now make that ownership boundary explicit.
 
 ## Migration Rules
 

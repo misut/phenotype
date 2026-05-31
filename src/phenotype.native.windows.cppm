@@ -6062,6 +6062,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     g_renderer.last_render_height = static_cast<UINT>(fbh);
     g_renderer.last_frame_available = true;
     g_renderer.hit_regions.swap(decoded.hit_regions);
+    if (auto* host = ::phenotype::native::detail::active_host())
+        ::phenotype::native::detail::note_host_render_surface_frame(*host);
 }
 
 inline void renderer_shutdown() {

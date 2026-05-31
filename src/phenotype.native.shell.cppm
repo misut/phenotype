@@ -7,6 +7,7 @@ module;
 #include <cstdlib>
 #include <functional>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -21,6 +22,11 @@ import phenotype.native.platform;
 export namespace phenotype::native {
 
 struct native_host;
+
+namespace detail {
+    inline void sync_host_render_surface(native_host& host,
+                                         bool damaged = false);
+}
 
 // Neutral input enums. Values intentionally keep the original desktop numeric
 // assignments for source compatibility, while platform drivers translate
@@ -184,7 +190,19 @@ struct native_host {
     // NativeSurfaceDescriptor* carrying the OS window/view and viewport
     // metadata; Android keeps passing its ANativeWindow* directly.
     native_surface_handle window = nullptr;
+    NativeSurfaceDescriptor* surface_descriptor = nullptr;
     platform_api const* platform = nullptr;
+
+    // Runtime identity for the declarative render target represented by this
+    // host. Desktop drivers can override these before bind_host/run_host when
+    // they create settings/debug/tool windows; the default preserves the
+    // existing single-window entry point.
+    std::string render_surface_id = "main";
+    std::string render_scene_id = "main";
+    std::string render_surface_title = "Main";
+    ::phenotype::RenderSurfaceRole render_surface_role =
+        ::phenotype::RenderSurfaceRole::MainWindow;
+    bool render_surface_visible = true;
 
     // Cached framebuffer size, populated by the driver layer. Used by the host_platform concept so
     // shell dispatch code never has to query the windowing toolkit
@@ -278,6 +296,7 @@ struct native_host {
     }
     void flush() {
         if (len_ == 0) return;
+        ::phenotype::native::detail::sync_host_render_surface(*this, true);
         if (platform && platform->renderer.flush)
             platform->renderer.flush(buffer_.data(), len_);
         len_ = 0;
@@ -325,9 +344,73 @@ inline ShellState& shell_state() {
     return g_active_host ? g_active_host->shell : fallback_shell_state();
 }
 
+inline ::phenotype::RenderSurfaceDescriptor
+render_surface_descriptor_for_host(native_host const& host) {
+    auto const* surface = host.surface_descriptor;
+    int logical_width = host.cached_width_px;
+    int logical_height = host.cached_height_px;
+    int framebuffer_width = host.cached_width_px;
+    int framebuffer_height = host.cached_height_px;
+    float content_scale = host.cached_content_scale;
+
+    if (surface) {
+        logical_width = surface->logical_width;
+        logical_height = surface->logical_height;
+        framebuffer_width = surface->framebuffer_width;
+        framebuffer_height = surface->framebuffer_height;
+        content_scale = surface->content_scale;
+    }
+    if (logical_width <= 0)
+        logical_width = 800;
+    if (logical_height <= 0)
+        logical_height = 600;
+    if (framebuffer_width <= 0)
+        framebuffer_width = logical_width;
+    if (framebuffer_height <= 0)
+        framebuffer_height = logical_height;
+    if (!(content_scale > 0.0f))
+        content_scale = 1.0f;
+
+    return ::phenotype::RenderSurfaceDescriptor{
+        .id = host.render_surface_id,
+        .title = host.render_surface_title,
+        .scene_id = host.render_scene_id,
+        .role = host.render_surface_role,
+        .visible = host.render_surface_visible,
+        .logical_width = logical_width,
+        .logical_height = logical_height,
+        .framebuffer_width = framebuffer_width,
+        .framebuffer_height = framebuffer_height,
+        .content_scale = content_scale,
+    };
+}
+
+inline ::phenotype::detail::RenderSurfaceRuntime&
+ensure_host_render_surface(native_host& host) {
+    return ::phenotype::detail::ensure_render_surface_runtime(
+        render_surface_descriptor_for_host(host));
+}
+
+inline void sync_host_render_surface(native_host& host, bool damaged) {
+    auto& surface = ensure_host_render_surface(host);
+    if (&host == g_active_host)
+        ::phenotype::detail::bind_render_surface_runtime(surface);
+    if (damaged) {
+        ::phenotype::detail::ScopedRenderSurfaceActivation activate(surface);
+        ::phenotype::runtime::mark_active_render_surface_damaged();
+    }
+}
+
+inline void note_host_render_surface_frame(native_host& host) {
+    auto& surface = ensure_host_render_surface(host);
+    ::phenotype::detail::ScopedRenderSurfaceActivation activate(surface);
+    ::phenotype::runtime::note_active_render_surface_frame();
+}
+
 inline native_host* activate_host(native_host& host) {
     auto* previous = g_active_host;
     g_active_host = &host;
+    sync_host_render_surface(host);
     return previous;
 }
 
@@ -339,6 +422,11 @@ struct ScopedHostActivation {
 
     ~ScopedHostActivation() {
         g_active_host = previous;
+        if (previous)
+            sync_host_render_surface(*previous);
+        else
+            ::phenotype::detail::bind_render_surface_runtime(
+                ::phenotype::detail::default_render_surface_runtime());
     }
 };
 
@@ -564,7 +652,7 @@ inline void bind_host(native_host& host,
         false,
         false,
     };
-    g_active_host = &host;
+    activate_host(host);
     ::phenotype::detail::set_scroll_x(scroll_x);
     ::phenotype::detail::set_scroll_y(scroll_y);
     ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
@@ -1568,8 +1656,11 @@ inline void shutdown_host(native_host& host) {
     ::phenotype::detail::g_open_url = nullptr;
     ::phenotype::diag::set_application_debug_provider(nullptr);
     host.shell = {};
-    if (detail::g_active_host == &host)
+    if (detail::g_active_host == &host) {
         detail::g_active_host = nullptr;
+        ::phenotype::detail::bind_render_surface_runtime(
+            ::phenotype::detail::default_render_surface_runtime());
+    }
 }
 
 } // namespace detail

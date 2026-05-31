@@ -141,13 +141,59 @@ static void test_window_options_integrated_titlebar_contract() {
 static void test_native_shell_state_is_host_local() {
     native_host first{};
     native_host second{};
+    NativeSurfaceDescriptor first_surface{
+        .kind = NativeSurfaceKind::MacOSWindow,
+        .logical_width = 640,
+        .logical_height = 480,
+        .framebuffer_width = 1280,
+        .framebuffer_height = 960,
+        .content_scale = 2.0f,
+    };
+    NativeSurfaceDescriptor second_surface{
+        .kind = NativeSurfaceKind::Win32Window,
+        .logical_width = 420,
+        .logical_height = 320,
+        .framebuffer_width = 420,
+        .framebuffer_height = 320,
+        .content_scale = 1.0f,
+    };
+
+    first.window = &first_surface;
+    first.surface_descriptor = &first_surface;
+    first.render_surface_id = "native-host-first-surface";
+    first.render_scene_id = "native-host-first-scene";
+    first.render_surface_title = "Native Host First";
+    first.render_surface_role = RenderSurfaceRole::Window;
+
+    second.window = &second_surface;
+    second.surface_descriptor = &second_surface;
+    second.render_surface_id = "native-host-settings-surface";
+    second.render_scene_id = "native-host-settings-scene";
+    second.render_surface_title = "Native Host Settings";
+    second.render_surface_role = RenderSurfaceRole::Settings;
 
     phenotype::native::detail::bind_host(first, 10.0f, 20.0f);
+    assert(phenotype::runtime::active_render_surface().id
+           == "native-host-first-surface");
+    assert(phenotype::runtime::active_render_surface().logical_width == 640);
+    assert(phenotype::runtime::active_render_surface().framebuffer_width == 1280);
+    assert(phenotype::runtime::active_scene().id == "native-host-first-scene");
     phenotype::native::detail::shell_state().last_mouse_x = 101.0f;
     phenotype::native::detail::shell_state().last_mouse_y = 102.0f;
     phenotype::native::detail::shell_state().drag_selecting = true;
+    phenotype::native::detail::sync_host_render_surface(first, true);
+    phenotype::native::detail::note_host_render_surface_frame(first);
+    assert(phenotype::runtime::active_render_surface().damage_generation == 1);
+    assert(phenotype::runtime::active_render_surface().frame_sequence == 1);
 
     phenotype::native::detail::bind_host(second, 30.0f, 40.0f);
+    assert(phenotype::runtime::active_render_surface().id
+           == "native-host-settings-surface");
+    assert(phenotype::runtime::active_render_surface().role
+           == RenderSurfaceRole::Settings);
+    assert(phenotype::runtime::active_render_surface().logical_width == 420);
+    assert(phenotype::runtime::active_scene().id == "native-host-settings-scene");
+    assert(phenotype::runtime::active_scene().role == SceneRole::Settings);
     phenotype::native::detail::shell_state().last_mouse_x = 201.0f;
     phenotype::native::detail::shell_state().last_mouse_y = 202.0f;
 
@@ -168,15 +214,20 @@ static void test_native_shell_state_is_host_local() {
     {
         phenotype::native::detail::ScopedHostActivation activate(first);
         assert(phenotype::native::detail::active_host() == &first);
+        assert(phenotype::runtime::active_render_surface().id
+               == "native-host-first-surface");
         assert(phenotype::native::detail::shell_state().last_mouse_x == 101.0f);
         phenotype::native::detail::shell_state().scroll_y = 25.0f;
     }
     assert(phenotype::native::detail::active_host() == &second);
+    assert(phenotype::runtime::active_render_surface().id
+           == "native-host-settings-surface");
     assert(first.shell.scroll_y == 25.0f);
     assert(second.shell.scroll_y == 40.0f);
 
     phenotype::native::detail::shutdown_host(second);
     assert(phenotype::native::detail::active_host() == nullptr);
+    assert(phenotype::runtime::active_render_surface().id == "main");
     assert(second.shell.host == nullptr);
     assert(first.shell.host == &first);
 
