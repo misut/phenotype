@@ -5074,7 +5074,7 @@ void accordion(str title, F&& builder) {
     detail::node_at(col_h).style.gap = t.space_xs;
     detail::attach_to_scope(col_h);
 
-    Scope col_scope(col_h);
+    Scope col_scope(col_h, detail::derived_scope_seed(col_h));
     auto* prev = Scope::current();
     Scope::set_current(&col_scope);
 
@@ -5200,7 +5200,7 @@ void accordion(str title, F&& builder) {
         }
         detail::attach_to_scope(body_h);
 
-        Scope body_scope(body_h);
+        Scope body_scope(body_h, detail::derived_scope_seed(body_h));
         Scope::set_current(&body_scope);
         std::forward<F>(builder)();
     }
