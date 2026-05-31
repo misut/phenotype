@@ -163,6 +163,14 @@ the main window. This keeps visual verification and renderer diagnostics
 surface-local: a settings/debug window can prove its own chrome, clear alpha,
 Metal layer opacity, and frame pixels without relying on the main scene's active
 renderer.
+Scene/window visibility is synchronized through the same ownership boundary.
+When a native scene window opens, hides, closes, or refreshes its host surface,
+the bound `RenderSurfaceRuntime.visible` value updates the corresponding
+`SceneRuntime.visible` snapshot as well. Applications can also use
+`runtime::set_scene_visible` and `runtime::set_render_surface_visible` for
+explicit lifecycle transitions. This keeps diagnostics and CLI automation from
+seeing a closed settings/debug window as a live scene, while preserving the
+scene's runner, queue, and framework-local storage for a later reopen.
 
 ## Migration Rules
 

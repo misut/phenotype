@@ -1675,6 +1675,8 @@ static void test_macos_appkit_scene_window_registry_targets_scene() {
         "test-settings-scene-window");
     assert(!phenotype::native::detail::is_appkit_scene_window_visible(
         "test-settings-scene-window"));
+    assert(!phenotype::runtime::render_surface("test-settings-surface").visible);
+    assert(!phenotype::runtime::scene("test-settings-scene").visible);
 
     int close_count = 0;
     phenotype::native::detail::AppKitSceneWindowOptions callback_options{
@@ -1720,6 +1722,9 @@ static void test_macos_appkit_scene_window_registry_targets_scene() {
     assert(close_count == 1);
     assert(!phenotype::native::detail::is_appkit_scene_window_visible(
         "test-settings-scene-window-callback"));
+    assert(!phenotype::runtime::render_surface(
+        "test-settings-surface-callback").visible);
+    assert(!phenotype::runtime::scene("test-settings-scene-callback").visible);
     phenotype::native::detail::reset_appkit_scene_windows_for_tests();
     input_regression::reset_core_state();
     std::puts("PASS: macOS AppKit scene window registry targets scene");

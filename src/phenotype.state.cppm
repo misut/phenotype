@@ -891,8 +891,10 @@ namespace detail {
     inline SceneRuntime& scene_for_render_surface(
         RenderSurfaceDescriptor const& descriptor) {
         auto scene_id = render_surface_scene_id(descriptor);
-        if (auto* existing = find_scene_runtime(scene_id))
+        if (auto* existing = find_scene_runtime(scene_id)) {
+            existing->descriptor.visible = descriptor.visible;
             return *existing;
+        }
         auto title = descriptor.title.empty() ? scene_id : descriptor.title;
         return ensure_scene_runtime(SceneDescriptor{
             .id = std::move(scene_id),
@@ -1648,6 +1650,19 @@ inline void configure_active_scene(SceneDescriptor descriptor) {
     detail::configure_active_scene(std::move(descriptor));
 }
 
+inline void set_active_scene_visible(bool visible) {
+    detail::active_scene_runtime().descriptor.visible = visible;
+}
+
+inline void set_scene_visible(SceneHandle const& handle, bool visible) {
+    SceneActivation activate{handle};
+    set_active_scene_visible(visible);
+}
+
+inline void set_scene_visible(std::string_view id, bool visible) {
+    set_scene_visible(SceneHandle{.id = std::string{id}}, visible);
+}
+
 using SceneRunnerCallback = void (*)(void*);
 
 inline void install_active_scene_runner(SceneRunnerCallback runner,
@@ -1855,6 +1870,24 @@ inline std::vector<RenderSurfaceSnapshot> render_surfaces() {
 
 inline void configure_active_render_surface(RenderSurfaceDescriptor descriptor) {
     detail::configure_active_render_surface(std::move(descriptor));
+}
+
+inline void set_active_render_surface_visible(bool visible) {
+    auto& surface = detail::active_render_surface_runtime();
+    surface.descriptor.visible = visible;
+    if (surface.scene)
+        surface.scene->descriptor.visible = visible;
+}
+
+inline void set_render_surface_visible(RenderSurfaceHandle const& handle,
+                                       bool visible) {
+    RenderSurfaceActivation activate{handle};
+    set_active_render_surface_visible(visible);
+}
+
+inline void set_render_surface_visible(std::string_view id, bool visible) {
+    set_render_surface_visible(RenderSurfaceHandle{.id = std::string{id}},
+                               visible);
 }
 
 inline void mark_active_render_surface_damaged() {
