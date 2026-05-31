@@ -132,6 +132,8 @@ inline void sync_appkit_surface(native_host& host,
     host.cached_width_px = logical_width;
     host.cached_height_px = logical_height;
     host.cached_content_scale = scale;
+    host.surface_descriptor = &surface;
+    sync_host_render_surface(host, changed);
 
     if (changed && notify) {
         notify_viewport_changed(&host, logical_width, logical_height, scale);
@@ -2277,6 +2279,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     surface.native_backdrop_opacity = options.native_backdrop_opacity;
     surface.window_options_valid = true;
     host.window = &surface;
+    host.surface_descriptor = &surface;
     host.platform = &platform;
     host.set_hover_cursor = &appkit_set_hover_cursor;
     host.on_viewport_changed = std::move(on_viewport);

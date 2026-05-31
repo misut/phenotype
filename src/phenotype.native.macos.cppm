@@ -2846,6 +2846,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     g_renderer.debug_capture_next_frame = false;
     command_buffer->presentDrawable(drawable);
     command_buffer->commit();
+    if (auto* host = ::phenotype::native::detail::active_host())
+        ::phenotype::native::detail::note_host_render_surface_frame(*host);
     material_summary.cpu_total_ns =
         metrics::detail::now_ns() - flush_started;
     finalize_material_executor_execution_status(material_summary);
