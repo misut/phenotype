@@ -27,7 +27,7 @@ namespace {
 
 void reset() {
     set_theme(Theme{});
-    detail::g_app.has_active_animations = false;
+    detail::g_app().has_active_animations = false;
     detail::local_store().clear();
 }
 
@@ -91,7 +91,7 @@ void test_theme_motion_multiplier_skips_interpolation() {
     auto v = anim_float_helper(50.0f, 200);
     detail::prune_local_store();
     assert(v == 50.0f);
-    assert(!detail::g_app.has_active_animations);
+    assert(!detail::g_app().has_active_animations);
     std::puts("PASS: theme motion multiplier skips interpolation");
 }
 
@@ -107,15 +107,15 @@ void test_theme_generation_rebases_color_animation() {
     auto fading = anim_color_helper(dark_hover, 2000);
     detail::prune_local_store();
     assert(fading.r > dark_hover.r);
-    assert(detail::g_app.has_active_animations);
+    assert(detail::g_app().has_active_animations);
 
     set_theme(apply_dark_color_scheme(Theme{}));
-    detail::g_app.has_active_animations = false;
+    detail::g_app().has_active_animations = false;
     detail::bump_local_gen();
     auto rebased = anim_color_helper(dark_hover, 2000);
     detail::prune_local_store();
     assert(rebased == dark_hover);
-    assert(!detail::g_app.has_active_animations);
+    assert(!detail::g_app().has_active_animations);
     std::puts("PASS: theme generation rebases color animation");
 }
 

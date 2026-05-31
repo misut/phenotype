@@ -638,7 +638,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     material_request_for_command(
                         descriptor,
                         MaterialGeometry{x, y, w, h, radius},
-                        ::phenotype::detail::g_app.theme),
+                        ::phenotype::detail::g_app().theme),
                     material_env_for_command);
                 scratch.material_records.push_back(
                     MaterialRuntimeRecord{plan, current_command_index});
@@ -700,7 +700,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     x,
                     y,
                     color,
-                    ::phenotype::detail::g_app.theme);
+                    ::phenotype::detail::g_app().theme);
                 if (foreground.has_material)
                     ++scratch.foreground_text_candidate_count;
                 if (foreground.remapped) {

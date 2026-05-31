@@ -92,7 +92,7 @@ namespace detail {
     inline LogRing& ring() {
         // Heap-bound reference: the LogRing has dynamic-storage duration so
         // wasi-sdk's crt1-command.o never destroys it after _start() returns.
-        // Same intent as the placement-new trick g_app uses in
+        // Same intent as the placement-new trick g_app() uses in
         // phenotype_state.cppm; standard C++ so it stays portable to MSVC
         // when the Direct3D backend lands.
         static LogRing& r = *new LogRing();
@@ -283,7 +283,7 @@ private:
 // so callers can refer to them as `metrics::inst::rebuilds.add()` etc.
 //
 // Every instrument is a static reference bound to a heap-allocated instance
-// (`inline T& foo = *new T{...}`) for the same reason g_app uses
+// (`inline T& foo = *new T{...}`) for the same reason g_app() uses
 // placement-new in phenotype_state.cppm: wasi-sdk's crt1-command.o runs
 // __cxa_finalize after _start() returns, which would otherwise destroy
 // these vectors out from under any JS callback (click, key, hover, scroll)
@@ -565,9 +565,9 @@ inline void reset_all() noexcept {
     inst::frame_duration.reset();
     inst::phase_duration.reset();
     inst::native_phase_duration.reset();
-    // NOTE: g_app.last_paint_hash is NOT reset here — phenotype.diag
+    // NOTE: g_app().last_paint_hash is NOT reset here — phenotype.diag
     // cannot import phenotype.state (cycle: state already imports diag).
-    // Tests that need a clean hash state assign detail::g_app.last_paint_hash
+    // Tests that need a clean hash state assign detail::g_app().last_paint_hash
     // = 0 directly themselves.
     auto& ring = ::phenotype::log::detail::ring();
     ring.head = 0;

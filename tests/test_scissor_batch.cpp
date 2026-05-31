@@ -66,10 +66,10 @@ void test_scissor_reset_uses_zero_sentinel() {
 
 void test_paint_scissor_boundary_clears_stale_depth() {
     reset_buffer();
-    detail::g_app.paint_scissor_depth = 3;
+    detail::g_app().paint_scissor_depth = 3;
     detail::reset_paint_scissor_boundary(host);
 
-    assert(detail::g_app.paint_scissor_depth == 0);
+    assert(detail::g_app().paint_scissor_depth == 0);
     auto cmds = parse_commands(host.buf(), host.buf_len());
     assert(cmds.size() == 1);
     auto const* sc = std::get_if<ScissorCmd>(&cmds[0]);

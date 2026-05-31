@@ -427,7 +427,7 @@ static DebugPlaneMsg map_debug_plane_text(std::string value) {
 // abort branch in `report_paint_overflow` is suppressed inside the
 // cap-exceeded part; production code never touches that flag.
 void test_paint_buffer_overflow_records_metric_and_drops_command() {
-    detail::g_app.diag_abort_on_paint_overflow = false;
+    detail::g_app().diag_abort_on_paint_overflow = false;
 
     // ---- Part 1: emit > INIT_SIZE but < MAX_SIZE.
     // The host's `reserve()` should grow `buffer_` past INIT_SIZE and
@@ -485,7 +485,7 @@ void test_paint_buffer_overflow_records_metric_and_drops_command() {
         assert(found_fillpath);
     }
 
-    detail::g_app.diag_abort_on_paint_overflow = true;
+    detail::g_app().diag_abort_on_paint_overflow = true;
 }
 #endif
 

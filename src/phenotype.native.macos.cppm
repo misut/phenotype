@@ -921,10 +921,10 @@ inline MaterialQualityPolicy macos_material_quality_policy(
     if (capabilities.max_shader_sample_taps > 0)
         policy.max_sample_taps = capabilities.max_shader_sample_taps;
     bool const debug_panel_needs_backdrop =
-        ::phenotype::detail::g_app.debug_panel_open;
+        ::phenotype::detail::g_app().debug_panel_open;
     if (!debug_panel_needs_backdrop
-        && (::phenotype::detail::g_app.has_active_animations
-         || ::phenotype::detail::g_app.has_active_input_motion)
+        && (::phenotype::detail::g_app().has_active_animations
+         || ::phenotype::detail::g_app().has_active_input_motion)
         && !macos_env_flag_enabled(
             "PHENOTYPE_MATERIAL_DISABLE_ACTIVE_QUALITY_THROTTLE")) {
         policy.allow_backdrop_sampling = false;
@@ -1971,7 +1971,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (!(frame_scale > 0.0f))
         frame_scale = surface_content_scale(g_renderer.surface);
     float text_scale = frame_scale;
-    float line_height_ratio = ::phenotype::detail::g_app.theme.line_height_ratio;
+    float line_height_ratio = ::phenotype::detail::g_app().theme.line_height_ratio;
 
     double cr = 0.98;
     double cg = 0.98;
@@ -1994,7 +1994,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     sync_layer_backing_geometry(fbw, fbh, frame_scale);
     auto const current_theme_generation =
-        ::phenotype::detail::g_app.theme_generation;
+        ::phenotype::detail::g_app().theme_generation;
     if (g_renderer.material_backdrop_theme_generation
         != current_theme_generation) {
         g_renderer.last_material_backdrop_available = false;
@@ -4818,7 +4818,7 @@ inline std::optional<DebugFrameCapture> macos_capture_frame_rgba() {
         && !g_renderer.last_frame_available
         && ::phenotype::native::detail::active_host()) {
         request_debug_capture_next_frame();
-        ::phenotype::detail::g_app.last_paint_hash = 0;
+        ::phenotype::detail::g_app().last_paint_hash = 0;
         ::phenotype::native::detail::repaint_current();
     }
     if (!g_renderer.initialized
@@ -4911,7 +4911,7 @@ inline DebugArtifactBundleResult macos_write_artifact_bundle(
         char const* reason) {
     if (g_renderer.initialized && ::phenotype::native::detail::active_host()) {
         request_debug_capture_next_frame();
-        ::phenotype::detail::g_app.last_paint_hash = 0;
+        ::phenotype::detail::g_app().last_paint_hash = 0;
         ::phenotype::native::detail::repaint_current();
     }
     auto snapshot = macos_snapshot_json();

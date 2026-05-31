@@ -116,10 +116,10 @@ bool assert_snapshot(char const* widget, char const* expected, std::string const
 }
 
 NodeHandle build_root() {
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.input_handlers.clear();
-    detail::g_app.input_nodes.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().input_handlers.clear();
+    detail::g_app().input_nodes.clear();
     detail::msg_queue().clear();
     return detail::alloc_node();
 }

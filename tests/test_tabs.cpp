@@ -30,9 +30,9 @@ namespace {
 template <typename View>
 NodeHandle build(View&& view) {
     detail::bump_local_gen();
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
@@ -127,7 +127,7 @@ void test_tabs_registers_per_tab_callback() {
         items.emplace_back("b", 1u);
         widget::tabs<Msg>(items, /*selected=*/0, on_select);
     });
-    auto& app = detail::g_app;
+    auto& app = detail::g_app();
     assert(app.callbacks.size() == 2);
     assert(app.callback_roles[0] == InteractionRole::Button);
     assert(app.callback_roles[1] == InteractionRole::Button);
@@ -148,7 +148,7 @@ void test_tabs_focusable_in_order() {
         widget::tabs<Msg>(items, 0, on_select);
     });
 
-    auto& app = detail::g_app;
+    auto& app = detail::g_app();
     LAYOUT_NODE(root_h, 600.0f);
     app.focusable_ids.clear();
     detail::collect_focusable_ids(root_h);

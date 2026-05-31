@@ -45,8 +45,8 @@ namespace {
 template <typename View>
 NodeHandle run_frame(View&& view) {
     detail::bump_local_gen();
-    detail::g_app.arena.reset();
-    detail::g_app.scroll_targets.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().scroll_targets.clear();
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
 
@@ -58,7 +58,7 @@ NodeHandle run_frame(View&& view) {
 
     LAYOUT_NODE(root_h, 800.0f);
     CMD_LEN = 0;
-    detail::g_app.scrollbar_animation_active = false;
+    detail::g_app().scrollbar_animation_active = false;
     PAINT_NODE(root_h);
     return root_h;
 }
@@ -123,8 +123,8 @@ void test_scroll_view_registers_target_and_emits_scissor() {
     });
     (void)root_h;
 
-    assert(detail::g_app.scroll_targets.size() == 1);
-    auto const& tgt = detail::g_app.scroll_targets[0];
+    assert(detail::g_app().scroll_targets.size() == 1);
+    auto const& tgt = detail::g_app().scroll_targets[0];
     assert(tgt.state != nullptr);
     assert(tgt.h == 80.0f);
     assert(tgt.content_height > tgt.h);
@@ -154,7 +154,7 @@ void test_scroll_view_edge_fade_emits_gradients() {
 
     run_frame(sv);
     assert(linear_gradient_rect_count() == 1);
-    auto* state = detail::g_app.scroll_targets[0].state;
+    auto* state = detail::g_app().scroll_targets[0].state;
     state->offset_y = 24.0f;
     run_frame(sv);
     assert(linear_gradient_rect_count() == 2);
@@ -196,13 +196,13 @@ void test_scroll_view_state_persists_across_frames() {
     };
 
     auto root_h = run_frame(sv);
-    assert(detail::g_app.scroll_targets.size() == 1);
-    auto* state = detail::g_app.scroll_targets[0].state;
+    assert(detail::g_app().scroll_targets.size() == 1);
+    auto* state = detail::g_app().scroll_targets[0].state;
     state->offset_y = 25.0f;
 
     root_h = run_frame(sv);
-    assert(detail::g_app.scroll_targets.size() == 1);
-    assert(detail::g_app.scroll_targets[0].state == state);
+    assert(detail::g_app().scroll_targets.size() == 1);
+    assert(detail::g_app().scroll_targets[0].state == state);
     assert(state->offset_y == 25.0f);
 
     // Confirm the LayoutNode picked up the persisted offset, since
@@ -225,9 +225,9 @@ void test_scroll_view_paint_clamps_offset() {
     };
 
     run_frame(sv);
-    assert(detail::g_app.scroll_targets.size() == 1);
-    auto* state = detail::g_app.scroll_targets[0].state;
-    float content_h = detail::g_app.scroll_targets[0].content_height;
+    assert(detail::g_app().scroll_targets.size() == 1);
+    auto* state = detail::g_app().scroll_targets[0].state;
+    float content_h = detail::g_app().scroll_targets[0].content_height;
     float max_off = content_h - 100.0f;
     if (max_off < 0.0f) max_off = 0.0f;
 
@@ -257,7 +257,7 @@ void test_scroll_view_hit_region_offset_matches_scroll() {
     };
 
     run_frame(sv);
-    auto* state = detail::g_app.scroll_targets[0].state;
+    auto* state = detail::g_app().scroll_targets[0].state;
     state->offset_y = 32.0f;
     auto root_h = run_frame(sv);
 
@@ -307,51 +307,51 @@ void test_two_scroll_views_get_independent_state() {
     };
 
     run_frame(view);
-    assert(detail::g_app.scroll_targets.size() == 2);
-    auto* sa = detail::g_app.scroll_targets[0].state;
-    auto* sb = detail::g_app.scroll_targets[1].state;
+    assert(detail::g_app().scroll_targets.size() == 2);
+    auto* sa = detail::g_app().scroll_targets[0].state;
+    auto* sb = detail::g_app().scroll_targets[1].state;
     assert(sa != sb);
     sa->offset_y = 10.0f;
     sb->offset_y = 20.0f;
 
     run_frame(view);
-    assert(detail::g_app.scroll_targets.size() == 2);
-    assert(detail::g_app.scroll_targets[0].state == sa);
-    assert(detail::g_app.scroll_targets[1].state == sb);
+    assert(detail::g_app().scroll_targets.size() == 2);
+    assert(detail::g_app().scroll_targets[0].state == sa);
+    assert(detail::g_app().scroll_targets[1].state == sb);
     assert(sa->offset_y == 10.0f);
     assert(sb->offset_y == 20.0f);
     std::puts("PASS: two scroll_views keep independent state");
 }
 
 void test_scroll_view_always_paints_overlay_scrollbar() {
-    auto previous_visibility = detail::g_app.theme.scroll_bar_visibility;
-    detail::g_app.theme.scroll_bar_visibility = "always";
+    auto previous_visibility = detail::g_app().theme.scroll_bar_visibility;
+    detail::g_app().theme.scroll_bar_visibility = "always";
     run_frame([&] {
         layout::scroll_view(80.0f, [&] {
             for (int i = 0; i < 6; ++i) widget::text("entry");
         });
     });
     assert(cmd_buf_contains_opcode(Cmd::RoundRect));
-    detail::g_app.theme.scroll_bar_visibility = previous_visibility;
+    detail::g_app().theme.scroll_bar_visibility = previous_visibility;
     std::puts("PASS: always-visible scroll_view paints overlay scrollbar");
 }
 
 void test_scroll_view_hidden_suppresses_overlay_scrollbar() {
-    auto previous_visibility = detail::g_app.theme.scroll_bar_visibility;
-    detail::g_app.theme.scroll_bar_visibility = "hidden";
+    auto previous_visibility = detail::g_app().theme.scroll_bar_visibility;
+    detail::g_app().theme.scroll_bar_visibility = "hidden";
     run_frame([&] {
         layout::scroll_view(80.0f, [&] {
             for (int i = 0; i < 6; ++i) widget::text("entry");
         });
     });
     assert(!cmd_buf_contains_opcode(Cmd::RoundRect));
-    detail::g_app.theme.scroll_bar_visibility = previous_visibility;
+    detail::g_app().theme.scroll_bar_visibility = previous_visibility;
     std::puts("PASS: hidden scroll_view suppresses overlay scrollbar");
 }
 
 void test_scroll_view_auto_scrollbar_fades_after_offset_change() {
-    auto previous_visibility = detail::g_app.theme.scroll_bar_visibility;
-    detail::g_app.theme.scroll_bar_visibility = "auto";
+    auto previous_visibility = detail::g_app().theme.scroll_bar_visibility;
+    detail::g_app().theme.scroll_bar_visibility = "auto";
     auto sv = [&] {
         layout::scroll_view(80.0f, [&] {
             for (int i = 0; i < 6; ++i) widget::text("entry");
@@ -359,18 +359,18 @@ void test_scroll_view_auto_scrollbar_fades_after_offset_change() {
     };
 
     run_frame(sv);
-    auto* state = detail::g_app.scroll_targets[0].state;
+    auto* state = detail::g_app().scroll_targets[0].state;
     state->offset_y = 0.0f;
     state->scrollbar_last_offset_y = 0.0f;
     state->scrollbar_active_since_ns = 0;
     run_frame(sv);
-    assert(!detail::g_app.scrollbar_animation_active);
-    state = detail::g_app.scroll_targets[0].state;
+    assert(!detail::g_app().scrollbar_animation_active);
+    state = detail::g_app().scroll_targets[0].state;
     state->offset_y = 24.0f;
     run_frame(sv);
     assert(cmd_buf_contains_opcode(Cmd::RoundRect));
-    assert(detail::g_app.scrollbar_animation_active);
-    detail::g_app.theme.scroll_bar_visibility = previous_visibility;
+    assert(detail::g_app().scrollbar_animation_active);
+    detail::g_app().theme.scroll_bar_visibility = previous_visibility;
     std::puts("PASS: auto scroll_view scrollbar fades in after scrolling");
 }
 

@@ -1101,7 +1101,7 @@ inline constexpr unsigned int radio_b_id = 4;
 inline constexpr unsigned int text_field_id = 5;
 
 static void reset_core_state() {
-    auto& app = phenotype::detail::g_app;
+    auto& app = phenotype::detail::g_app();
     app.app_runner = nullptr;
     app.callbacks.clear();
     app.callback_roles.clear();
@@ -1148,7 +1148,7 @@ static void reset_core_state() {
 
 static std::optional<bool> find_debug_panel_surface_interactive(
         NodeHandle node_h) {
-    auto* node = phenotype::detail::g_app.arena.get(node_h);
+    auto* node = phenotype::detail::g_app().arena.get(node_h);
     if (!node)
         return std::nullopt;
     if (node->debug_semantic_label == "Debug Panel"
@@ -1164,7 +1164,7 @@ static std::optional<bool> find_debug_panel_surface_interactive(
 
 static std::optional<MaterialStyle> find_debug_panel_surface_material(
         NodeHandle node_h) {
-    auto* node = phenotype::detail::g_app.arena.get(node_h);
+    auto* node = phenotype::detail::g_app().arena.get(node_h);
     if (!node)
         return std::nullopt;
     if (node->debug_semantic_label == "Debug Panel"
@@ -1180,7 +1180,7 @@ static std::optional<MaterialStyle> find_debug_panel_surface_material(
 
 static std::optional<unsigned int> find_debug_panel_surface_callback(
         NodeHandle node_h) {
-    auto* node = phenotype::detail::g_app.arena.get(node_h);
+    auto* node = phenotype::detail::g_app().arena.get(node_h);
     if (!node)
         return std::nullopt;
     if (node->debug_semantic_label == "Debug Panel"
@@ -1195,7 +1195,7 @@ static std::optional<unsigned int> find_debug_panel_surface_callback(
 }
 
 static std::optional<bool> debug_panel_surface_interactive() {
-    for (auto overlay_h : phenotype::detail::g_app.overlays) {
+    for (auto overlay_h : phenotype::detail::g_app().overlays) {
         if (auto found = find_debug_panel_surface_interactive(overlay_h))
             return found;
     }
@@ -1203,7 +1203,7 @@ static std::optional<bool> debug_panel_surface_interactive() {
 }
 
 static std::optional<MaterialStyle> debug_panel_surface_material() {
-    for (auto overlay_h : phenotype::detail::g_app.overlays) {
+    for (auto overlay_h : phenotype::detail::g_app().overlays) {
         if (auto found = find_debug_panel_surface_material(overlay_h))
             return found;
     }
@@ -1211,7 +1211,7 @@ static std::optional<MaterialStyle> debug_panel_surface_material() {
 }
 
 static std::optional<unsigned int> debug_panel_surface_callback() {
-    for (auto overlay_h : phenotype::detail::g_app.overlays) {
+    for (auto overlay_h : phenotype::detail::g_app().overlays) {
         if (auto found = find_debug_panel_surface_callback(overlay_h))
             return found;
     }
@@ -1310,7 +1310,7 @@ static bool has_metric(std::string_view event,
 }
 
 static unsigned int first_text_field_callback_id() {
-    auto const& roles = phenotype::detail::g_app.callback_roles;
+    auto const& roles = phenotype::detail::g_app().callback_roles;
     for (std::size_t i = 0; i < roles.size(); ++i) {
         if (roles[i] == phenotype::InteractionRole::TextField)
             return static_cast<unsigned int>(i);
@@ -1328,8 +1328,8 @@ struct Harness {
         platform.open_url = open_url;
         host.platform = &platform;
         phenotype::native::run<State, Msg>(host, view, update);
-        assert(phenotype::detail::g_app.callbacks.size() == 6);
-        assert(phenotype::detail::g_app.focusable_ids.size() == 6);
+        assert(phenotype::detail::g_app().callbacks.size() == 6);
+        assert(phenotype::detail::g_app().focusable_ids.size() == 6);
     }
 
     ~Harness() {
@@ -1361,8 +1361,8 @@ struct KeyCommandHarness {
         reset_core_state();
         host.platform = &platform;
         phenotype::native::run<State, Msg>(host, key_command_view, update);
-        assert(phenotype::detail::g_app.key_commands.size() == 2);
-        assert(phenotype::detail::g_app.callbacks.size() == 3);
+        assert(phenotype::detail::g_app().key_commands.size() == 2);
+        assert(phenotype::detail::g_app().callbacks.size() == 3);
     }
 
     ~KeyCommandHarness() {
@@ -1398,7 +1398,7 @@ struct Harness {
         input_regression::reset_core_state();
         host.platform = &platform;
         phenotype::native::run<State, Msg>(host, view, update);
-        assert(phenotype::detail::g_app.scroll_targets.size() == 1);
+        assert(phenotype::detail::g_app().scroll_targets.size() == 1);
     }
 
     ~Harness() {
@@ -1631,7 +1631,7 @@ static void test_shell_platform_consumed_pointer_hides_focus_ring() {
         "keyboard-setup",
         true);
     assert(phenotype::detail::get_focused_id() == button_id);
-    assert(phenotype::detail::g_app.focus_visible);
+    assert(phenotype::detail::g_app().focus_visible);
 
     harness.platform.input.handle_mouse_button =
         +[](float, float, int button, int action, int) {
@@ -1643,7 +1643,7 @@ static void test_shell_platform_consumed_pointer_hides_focus_ring() {
         x, y, LEGACY_MOUSE_BUTTON_LEFT, LEGACY_PRESS, 0));
     assert(g_observed_state.button_activations == 0);
     assert(phenotype::detail::get_focused_id() == button_id);
-    assert(!phenotype::detail::g_app.focus_visible);
+    assert(!phenotype::detail::g_app().focus_visible);
     auto debug = phenotype::diag::input_debug_snapshot();
     assert(debug.event == "click");
     assert(debug.detail == "pointer-click");
@@ -1768,10 +1768,10 @@ static void test_shell_key_commands_respect_input_focus_policy() {
         LEGACY_KEY_F12,
         LEGACY_PRESS,
         debug_panel_mods()));
-    assert(phenotype::detail::g_app.debug_panel_open);
-    assert(phenotype::detail::g_app.debug_panel_tab
+    assert(phenotype::detail::g_app().debug_panel_open);
+    assert(phenotype::detail::g_app().debug_panel_tab
         == phenotype::DebugPanelTab::Performance);
-    assert(!phenotype::detail::g_app.overlays.empty());
+    assert(!phenotype::detail::g_app().overlays.empty());
     auto panel_interactive = debug_panel_surface_interactive();
     assert(panel_interactive.has_value());
     assert(!*panel_interactive);
@@ -1791,7 +1791,7 @@ static void test_shell_key_commands_respect_input_focus_policy() {
         phenotype::detail::get_scroll_y());
     assert(panel_hit.has_value());
     assert(*panel_hit == *panel_callback);
-    auto const& frame_perf = phenotype::detail::g_app.frame_perf;
+    auto const& frame_perf = phenotype::detail::g_app().frame_perf;
     assert(frame_perf.count > 0);
     assert(frame_perf.last.total_ns > 0);
     debug = phenotype::diag::input_debug_snapshot();
@@ -1802,8 +1802,8 @@ static void test_shell_key_commands_respect_input_focus_policy() {
         LEGACY_KEY_F12,
         LEGACY_PRESS,
         debug_panel_mods()));
-    assert(!phenotype::detail::g_app.debug_panel_open);
-    assert(phenotype::detail::g_app.overlays.empty());
+    assert(!phenotype::detail::g_app().debug_panel_open);
+    assert(phenotype::detail::g_app().overlays.empty());
     std::puts("PASS: shared shell key commands and global debug panel shortcut respect input focus policy");
 }
 
@@ -2117,19 +2117,19 @@ static void test_caret_overlay_state_invalidates_cached_frame_hash() {
 
     phenotype::detail::set_focus_id(text_field_id, "test", "setup");
     phenotype::native::detail::repaint_current();
-    auto baseline_hash = phenotype::detail::g_app.last_paint_hash;
+    auto baseline_hash = phenotype::detail::g_app().last_paint_hash;
     assert(baseline_hash != 0);
 
     phenotype::detail::toggle_caret();
-    assert(phenotype::detail::g_app.last_paint_hash == 0);
+    assert(phenotype::detail::g_app().last_paint_hash == 0);
     phenotype::native::detail::repaint_current();
-    assert(phenotype::detail::g_app.last_paint_hash != 0);
+    assert(phenotype::detail::g_app().last_paint_hash != 0);
 
     assert(phenotype::detail::set_focused_input_caret_pos(0));
-    assert(phenotype::detail::g_app.last_paint_hash == 0);
+    assert(phenotype::detail::g_app().last_paint_hash == 0);
 
     phenotype::detail::set_input_composition_state(true, "가", 3);
-    assert(phenotype::detail::g_app.last_paint_hash == 0);
+    assert(phenotype::detail::g_app().last_paint_hash == 0);
 
     std::puts("PASS: caret overlay state invalidates cached frame hash");
 }
@@ -2277,7 +2277,7 @@ static void test_shell_scroll_at_cursor_prefers_inner_scroll_view() {
     using namespace scroll_containment_regression;
 
     Harness harness;
-    auto& app = phenotype::detail::g_app;
+    auto& app = phenotype::detail::g_app();
     assert(phenotype::detail::get_total_height() > harness.host.canvas_height());
     assert(app.scroll_targets.size() == 1);
     auto& target = app.scroll_targets[0];
@@ -4233,14 +4233,14 @@ static void test_windows_text_field_key_dispatch() {
 
     phenotype::detail::set_focus_id(0);
     phenotype::detail::handle_key(0, static_cast<unsigned int>('A'));
-    assert(phenotype::detail::g_app.input_handlers.size() == 1);
-    assert(phenotype::detail::g_app.input_handlers[0].second.current == "A");
+    assert(phenotype::detail::g_app().input_handlers.size() == 1);
+    assert(phenotype::detail::g_app().input_handlers[0].second.current == "A");
 
     phenotype::detail::handle_key(0, static_cast<unsigned int>('B'));
-    assert(phenotype::detail::g_app.input_handlers[0].second.current == "AB");
+    assert(phenotype::detail::g_app().input_handlers[0].second.current == "AB");
 
     phenotype::detail::handle_key(1, 0);
-    assert(phenotype::detail::g_app.input_handlers[0].second.current == "A");
+    assert(phenotype::detail::g_app().input_handlers[0].second.current == "A");
     std::puts("PASS: windows text field key dispatch");
 }
 

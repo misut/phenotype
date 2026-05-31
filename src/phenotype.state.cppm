@@ -6,6 +6,7 @@ module;
 #include <array>
 #include <functional>
 #include <map>
+#include <memory>
 #include <new>
 #include <source_location>
 #include <string>
@@ -266,6 +267,33 @@ enum class FocusVisibilityReason {
     ProgrammaticFocusHidden,
 };
 
+enum class SceneRole {
+    Main,
+    Window,
+    Settings,
+    Debug,
+    Overlay,
+    Custom,
+};
+
+struct SceneDescriptor {
+    std::string id = "main";
+    std::string title;
+    SceneRole role = SceneRole::Window;
+    bool visible = true;
+};
+
+struct SceneSnapshot {
+    std::string id;
+    std::string title;
+    SceneRole role = SceneRole::Window;
+    bool active = false;
+    bool visible = false;
+    unsigned int hovered_id = 0xFFFFFFFFu;
+    unsigned int focused_id = 0xFFFFFFFFu;
+    unsigned int queued_messages = 0;
+};
+
 struct AppState {
     Theme theme;
     std::uint64_t theme_generation = 1;
@@ -449,12 +477,23 @@ struct AppState {
 namespace detail {
     // Placement-new into static storage to avoid global destructor.
     // wasi-sdk's crt1-command.o calls __cxa_atexit on exit, which destroys
-    // global C++ objects. Without this trick, g_app's destructors run after
-    // _start() and clear the callbacks vector, breaking event handling.
+    // global C++ objects. Without this trick, the default AppState destructor
+    // runs after _start() and clears the callbacks vector, breaking event
+    // handling.
     alignas(AppState) inline unsigned char g_app_storage[sizeof(AppState)];
-    inline AppState& g_app = *new (&g_app_storage) AppState();
-    inline NodeHandle alloc_node() { return g_app.arena.alloc_node(); }
-    inline LayoutNode& node_at(NodeHandle h) { return g_app.arena.must_get(h); }
+    inline AppState& default_app_state() {
+        static AppState* app = new (&g_app_storage) AppState();
+        return *app;
+    }
+    inline AppState* g_active_app = &default_app_state();
+    inline AppState& g_app() { return *g_active_app; }
+    inline AppState* bind_app_state(AppState& app) {
+        auto* previous = g_active_app;
+        g_active_app = &app;
+        return previous;
+    }
+    inline NodeHandle alloc_node() { return g_app().arena.alloc_node(); }
+    inline LayoutNode& node_at(NodeHandle h) { return g_app().arena.must_get(h); }
 
     // ============================================================
     // Message dispatcher — type-erased message queue for the new DSL
@@ -489,9 +528,142 @@ namespace detail {
         DispatchedMsg& operator=(DispatchedMsg const&) = delete;
     };
 
+    struct SceneRuntime {
+        SceneDescriptor descriptor{};
+        std::unique_ptr<AppState> owned_app{};
+        AppState* app = nullptr;
+        std::vector<DispatchedMsg> messages{};
+
+        AppState& app_state() {
+            if (!app) {
+                owned_app = std::make_unique<AppState>();
+                app = owned_app.get();
+            }
+            return *app;
+        }
+    };
+
+    inline std::string normalize_scene_id(std::string id) {
+        return id.empty() ? std::string{"main"} : std::move(id);
+    }
+
+    inline SceneRuntime& default_scene_runtime() {
+        static SceneRuntime scene{};
+        if (!scene.app) {
+            scene.descriptor = SceneDescriptor{
+                .id = "main",
+                .title = "Main",
+                .role = SceneRole::Main,
+                .visible = true,
+            };
+            scene.app = &default_app_state();
+        }
+        return scene;
+    }
+
+    inline std::vector<std::unique_ptr<SceneRuntime>>& scene_registry() {
+        static std::vector<std::unique_ptr<SceneRuntime>> scenes;
+        return scenes;
+    }
+
+    inline SceneRuntime* g_active_scene = &default_scene_runtime();
+    inline std::vector<DispatchedMsg>* g_active_msg_queue =
+        &default_scene_runtime().messages;
+
+    inline SceneRuntime& active_scene_runtime() {
+        if (!g_active_scene)
+            g_active_scene = &default_scene_runtime();
+        return *g_active_scene;
+    }
+
     inline std::vector<DispatchedMsg>& msg_queue() {
-        static std::vector<DispatchedMsg> q;
-        return q;
+        if (!g_active_msg_queue)
+            g_active_msg_queue = &active_scene_runtime().messages;
+        return *g_active_msg_queue;
+    }
+
+    inline SceneRuntime* find_scene_runtime(std::string_view id) {
+        auto normalized = normalize_scene_id(std::string{id});
+        auto& main_scene = default_scene_runtime();
+        if (main_scene.descriptor.id == normalized)
+            return &main_scene;
+        for (auto& scene : scene_registry()) {
+            if (scene && scene->descriptor.id == normalized)
+                return scene.get();
+        }
+        return nullptr;
+    }
+
+    inline SceneRuntime& ensure_scene_runtime(SceneDescriptor descriptor) {
+        descriptor.id = normalize_scene_id(std::move(descriptor.id));
+        if (auto* existing = find_scene_runtime(descriptor.id)) {
+            existing->descriptor = std::move(descriptor);
+            return *existing;
+        }
+        auto scene = std::make_unique<SceneRuntime>();
+        scene->descriptor = std::move(descriptor);
+        scene->owned_app = std::make_unique<AppState>();
+        scene->app = scene->owned_app.get();
+        auto* ptr = scene.get();
+        scene_registry().push_back(std::move(scene));
+        return *ptr;
+    }
+
+    inline void bind_scene_runtime(SceneRuntime& scene) {
+        g_active_scene = &scene;
+        bind_app_state(scene.app_state());
+        g_active_msg_queue = &scene.messages;
+    }
+
+    struct ScopedSceneActivation {
+        SceneRuntime* previous_scene = nullptr;
+        AppState* previous_app = nullptr;
+        std::vector<DispatchedMsg>* previous_messages = nullptr;
+
+        explicit ScopedSceneActivation(SceneRuntime& scene)
+            : previous_scene(g_active_scene),
+              previous_app(g_active_app),
+              previous_messages(g_active_msg_queue) {
+            bind_scene_runtime(scene);
+        }
+
+        ~ScopedSceneActivation() {
+            g_active_scene = previous_scene ? previous_scene : &default_scene_runtime();
+            g_active_app = previous_app ? previous_app : &default_app_state();
+            g_active_msg_queue = previous_messages
+                ? previous_messages
+                : &default_scene_runtime().messages;
+        }
+    };
+
+    inline void configure_active_scene(SceneDescriptor descriptor) {
+        descriptor.id = normalize_scene_id(std::move(descriptor.id));
+        auto& scene = active_scene_runtime();
+        scene.descriptor = std::move(descriptor);
+    }
+
+    inline SceneSnapshot scene_snapshot(SceneRuntime const& scene) {
+        auto const* app = scene.app;
+        return SceneSnapshot{
+            .id = scene.descriptor.id,
+            .title = scene.descriptor.title,
+            .role = scene.descriptor.role,
+            .active = &scene == g_active_scene,
+            .visible = scene.descriptor.visible,
+            .hovered_id = app ? app->hovered_id : 0xFFFFFFFFu,
+            .focused_id = app ? app->focused_id : 0xFFFFFFFFu,
+            .queued_messages = static_cast<unsigned int>(scene.messages.size()),
+        };
+    }
+
+    inline std::vector<SceneSnapshot> scene_snapshots() {
+        std::vector<SceneSnapshot> out;
+        out.push_back(scene_snapshot(default_scene_runtime()));
+        for (auto const& scene : scene_registry()) {
+            if (scene)
+                out.push_back(scene_snapshot(*scene));
+        }
+        return out;
     }
 
     template<typename Msg>
@@ -522,10 +694,10 @@ namespace detail {
         return out;
     }
 
-    inline void install_app_runner(void (*runner)()) { g_app.app_runner = runner; }
+    inline void install_app_runner(void (*runner)()) { g_app().app_runner = runner; }
 
     inline void trigger_rebuild() {
-        if (g_app.app_runner) g_app.app_runner();
+        if (g_app().app_runner) g_app().app_runner();
     }
 
     // ============================================================
@@ -594,7 +766,7 @@ namespace detail {
     };
 
     // Heap-bound for the same wasi-sdk __cxa_finalize reason as
-    // measure_cache and g_app — keep alive past _start() exit so JS-
+    // measure_cache and g_app() — keep alive past _start() exit so JS-
     // driven rebuilds after termination still see consistent state.
     inline std::map<std::size_t, LocalEntry>& local_store() {
         static std::map<std::size_t, LocalEntry>& m
@@ -662,12 +834,12 @@ namespace detail {
 
     inline FocusedInputSnapshot focused_input_snapshot() {
         FocusedInputSnapshot snapshot{};
-        if (g_app.focused_id == 0xFFFFFFFFu)
+        if (g_app().focused_id == 0xFFFFFFFFu)
             return snapshot;
 
         NodeHandle input_h = NodeHandle::null();
-        for (auto const& [id, node_h] : g_app.input_nodes) {
-            if (id == g_app.focused_id) {
+        for (auto const& [id, node_h] : g_app().input_nodes) {
+            if (id == g_app().focused_id) {
                 input_h = node_h;
                 break;
             }
@@ -675,13 +847,13 @@ namespace detail {
         if (!input_h.valid())
             return snapshot;
 
-        auto* input = g_app.arena.get(input_h);
+        auto* input = g_app().arena.get(input_h);
         if (!input || !input->is_input)
             return snapshot;
 
         std::string current_value;
-        for (auto const& [id, handler] : g_app.input_handlers) {
-            if (id == g_app.focused_id) {
+        for (auto const& [id, handler] : g_app().input_handlers) {
+            if (id == g_app().focused_id) {
                 current_value = handler.current;
                 break;
             }
@@ -691,7 +863,7 @@ namespace detail {
         float ay = 0.0f;
         auto cursor = input_h;
         while (cursor.valid()) {
-            auto* node = g_app.arena.get(cursor);
+            auto* node = g_app().arena.get(cursor);
             if (!node) break;
             ax += node->x;
             ay += node->y;
@@ -699,24 +871,24 @@ namespace detail {
         }
 
         snapshot.valid = true;
-        snapshot.callback_id = g_app.focused_id;
+        snapshot.callback_id = g_app().focused_id;
         snapshot.role = input->interaction_role;
         snapshot.x = ax;
         snapshot.y = ay;
         snapshot.width = input->width;
         snapshot.height = input->height;
         snapshot.font_size = input->font_size;
-        snapshot.line_height = input->font_size * g_app.theme.line_height_ratio;
+        snapshot.line_height = input->font_size * g_app().theme.line_height_ratio;
         snapshot.mono = input->mono;
         for (int i = 0; i < 4; ++i)
             snapshot.padding[i] = input->style.padding[i];
         snapshot.background = input->background;
-        snapshot.foreground = g_app.theme.foreground;
-        snapshot.placeholder_color = g_app.theme.muted;
-        snapshot.accent = g_app.theme.accent;
-        snapshot.caret_pos = g_app.caret_pos;
-        snapshot.selection_anchor = g_app.selection_anchor;
-        snapshot.caret_visible = g_app.caret_visible;
+        snapshot.foreground = g_app().theme.foreground;
+        snapshot.placeholder_color = g_app().theme.muted;
+        snapshot.accent = g_app().theme.accent;
+        snapshot.caret_pos = g_app().caret_pos;
+        snapshot.selection_anchor = g_app().selection_anchor;
+        snapshot.caret_visible = g_app().caret_visible;
         snapshot.value = std::move(current_value);
         snapshot.placeholder = input->placeholder;
         auto clamp_boundary = [](std::string const& value, std::size_t pos) {
@@ -911,5 +1083,21 @@ T& framework_local(T initial = T{},
     it->second.last_seen_gen = cur;
     return *static_cast<T*>(it->second.storage);
 }
+
+namespace runtime {
+
+inline SceneSnapshot active_scene() {
+    return detail::scene_snapshot(detail::active_scene_runtime());
+}
+
+inline std::vector<SceneSnapshot> scenes() {
+    return detail::scene_snapshots();
+}
+
+inline void configure_active_scene(SceneDescriptor descriptor) {
+    detail::configure_active_scene(std::move(descriptor));
+}
+
+} // namespace runtime
 
 } // namespace phenotype

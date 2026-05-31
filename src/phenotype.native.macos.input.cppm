@@ -1488,7 +1488,7 @@ inline bool handle_local_scroll_event(id event) {
     // through to the layout-tree scroll path below otherwise.
     if (has_precise_scrolling_deltas
         && (scrolling_delta_x != 0.0 || scrolling_delta_y != 0.0)
-        && ::phenotype::detail::g_app.gesture_target_id != 0xFFFFFFFFu) {
+        && ::phenotype::detail::g_app().gesture_target_id != 0xFFFFFFFFu) {
         float cursor_x = 0.0f, cursor_y = 0.0f;
         if (event_cursor_position(event, cursor_x, cursor_y)) {
             auto modifier_flags =

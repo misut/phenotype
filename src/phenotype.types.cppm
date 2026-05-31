@@ -2111,7 +2111,7 @@ struct LayoutNode {
     // children are still painted normally afterwards.
     std::function<void(Painter&)> paint_fn;
 
-    // Index into `g_app.gesture_callbacks` — set by widget::canvas when
+    // Index into `g_app().gesture_callbacks` — set by widget::canvas when
     // the consumer passes an `on_gesture` lambda. 0xFFFFFFFFu = no
     // gesture handler on this node. Platform input backends look up
     // the active canvas's bounds via this id at dispatch time.
@@ -2148,7 +2148,7 @@ struct LayoutNode {
     // diff_and_copy_layout on match. When layout_valid and ambient paint
     // inputs (absolute position, scroll_y, hover/focus) are unchanged,
     // paint_node blits [paint_offset..paint_offset+paint_length) from
-    // g_app.prev_cmd_buf instead of re-walking this subtree.
+    // g_app().prev_cmd_buf instead of re-walking this subtree.
     //
     // self_paint_* stores the stable prefix emitted by this node before
     // children are painted. It lets a static container reuse its own

@@ -52,18 +52,18 @@ inline NodeHandle build_button(ButtonVariant variant, bool disabled,
                                unsigned int focused_id = 0xFFFFFFFFu,
                                unsigned int pressed_id = 0xFFFFFFFFu,
                                bool focus_visible = false) {
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
     // Wipe per-call-site animation state so the first `animate_color` /
     // `animate_float` inside `widget::button` snaps to its target
     // instead of inheriting the previous test's interpolation.
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.hovered_id = hovered_id;
-    detail::g_app.focused_id = focused_id;
-    detail::g_app.pressed_id = pressed_id;
-    detail::g_app.focus_visible = focus_visible;
+    detail::g_app().hovered_id = hovered_id;
+    detail::g_app().focused_id = focused_id;
+    detail::g_app().pressed_id = pressed_id;
+    detail::g_app().focus_visible = focus_visible;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -81,15 +81,15 @@ inline NodeHandle build_button(ButtonVariant variant, bool disabled,
 inline NodeHandle build_button_frame_preserving_animation(
         bool focus_visible,
         bool prev_focus_visible) {
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
-    detail::g_app.focused_id = 0u;
-    detail::g_app.prev_focused_id = 0u;
-    detail::g_app.pressed_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = focus_visible;
-    detail::g_app.prev_focus_visible = prev_focus_visible;
+    detail::g_app().hovered_id = 0xFFFFFFFFu;
+    detail::g_app().focused_id = 0u;
+    detail::g_app().prev_focused_id = 0u;
+    detail::g_app().pressed_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = focus_visible;
+    detail::g_app().prev_focus_visible = prev_focus_visible;
     detail::bump_local_gen();
 
     auto root_h = detail::alloc_node();
@@ -115,15 +115,15 @@ inline NodeHandle build_button_with_options(
         unsigned int focused_id = 0xFFFFFFFFu,
         unsigned int pressed_id = 0xFFFFFFFFu,
         bool focus_visible = false) {
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.hovered_id = hovered_id;
-    detail::g_app.focused_id = focused_id;
-    detail::g_app.pressed_id = pressed_id;
-    detail::g_app.focus_visible = focus_visible;
+    detail::g_app().hovered_id = hovered_id;
+    detail::g_app().focused_id = focused_id;
+    detail::g_app().pressed_id = pressed_id;
+    detail::g_app().focus_visible = focus_visible;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -145,16 +145,16 @@ inline NodeHandle build_canvas_button_with_options(
         unsigned int focused_id = 0xFFFFFFFFu,
         unsigned int pressed_id = 0xFFFFFFFFu,
         bool focus_visible = false) {
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.hovered_id = hovered_id;
-    detail::g_app.focused_id = focused_id;
-    detail::g_app.pressed_id = pressed_id;
-    detail::g_app.focus_visible = focus_visible;
+    detail::g_app().hovered_id = hovered_id;
+    detail::g_app().focused_id = focused_id;
+    detail::g_app().pressed_id = pressed_id;
+    detail::g_app().focus_visible = focus_visible;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -185,16 +185,16 @@ inline NodeHandle build_symbol_button_with_options(
         unsigned int focused_id = 0xFFFFFFFFu,
         unsigned int pressed_id = 0xFFFFFFFFu,
         bool focus_visible = false) {
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.hovered_id = hovered_id;
-    detail::g_app.focused_id = focused_id;
-    detail::g_app.pressed_id = pressed_id;
-    detail::g_app.focus_visible = focus_visible;
+    detail::g_app().hovered_id = hovered_id;
+    detail::g_app().focused_id = focused_id;
+    detail::g_app().pressed_id = pressed_id;
+    detail::g_app().focus_visible = focus_visible;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -217,7 +217,7 @@ inline NodeHandle build_symbol_button_with_options(
 void test_button_default_variant() {
     auto btn_h = button_test::build_button(ButtonVariant::Default, /*disabled=*/false);
     auto& btn = detail::node_at(btn_h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(btn.background.r == t.surface.r &&
            btn.background.g == t.surface.g &&
            btn.background.b == t.surface.b);
@@ -239,7 +239,7 @@ void test_button_default_variant() {
 void test_button_primary_variant() {
     auto btn_h = button_test::build_button(ButtonVariant::Primary, /*disabled=*/false);
     auto& btn = detail::node_at(btn_h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(btn.background.r == t.accent.r &&
            btn.background.g == t.accent.g &&
            btn.background.b == t.accent.b);
@@ -253,7 +253,7 @@ void test_button_primary_variant() {
     std::puts("PASS: button primary variant");
 }
 
-// Hover smoke test: build a button with `g_app.hovered_id` pre-set to
+// Hover smoke test: build a button with `g_app().hovered_id` pre-set to
 // the id we know the button will land on. animate_color's first call
 // snaps to its target (initialised=false), so the resulting node
 // background must equal the variant's hover colour exactly. This wires
@@ -262,12 +262,12 @@ void test_button_default_hovered_snaps_to_hover_bg() {
     auto btn_h = button_test::build_button(
         ButtonVariant::Default, /*disabled=*/false, /*hovered_id=*/0u);
     auto& btn = detail::node_at(btn_h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(btn.callback_id == 0u);
     assert(btn.background.r == t.state_hover_bg.r &&
            btn.background.g == t.state_hover_bg.g &&
            btn.background.b == t.state_hover_bg.b);
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::g_app().hovered_id = 0xFFFFFFFFu;
     std::puts("PASS: button default snaps to hover bg when hovered");
 }
 
@@ -289,8 +289,8 @@ void test_button_pressed_snaps_to_pressed_bg() {
     assert(btn.callback_id == 0u);
     assert(btn.background.r == 9 && btn.background.g == 10
            && btn.background.b == 11 && btn.background.a == 255);
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
-    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::g_app().hovered_id = 0xFFFFFFFFu;
+    detail::g_app().pressed_id = 0xFFFFFFFFu;
     std::puts("PASS: button snaps to pressed bg when pressed");
 }
 
@@ -298,17 +298,17 @@ void test_button_primary_hovered_snaps_to_hover_bg() {
     auto btn_h = button_test::build_button(
         ButtonVariant::Primary, /*disabled=*/false, /*hovered_id=*/0u);
     auto& btn = detail::node_at(btn_h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(btn.callback_id == 0u);
     assert(btn.background.r == t.accent_strong.r &&
            btn.background.g == t.accent_strong.g &&
            btn.background.b == t.accent_strong.b);
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::g_app().hovered_id = 0xFFFFFFFFu;
     std::puts("PASS: button primary snaps to accent_strong when hovered");
 }
 
-// Keyboard focus ring smoke test: pre-set `g_app.focused_id` and
-// `g_app.focus_visible` to the id the button is about to claim, then
+// Keyboard focus ring smoke test: pre-set `g_app().focused_id` and
+// `g_app().focus_visible` to the id the button is about to claim, then
 // assert the first frame snaps the animated border_width to
 // `state_focus_ring_width`. Pointer focus keeps the id for event routing
 // but leaves `focus_visible=false`, so it should not draw this ring.
@@ -318,11 +318,11 @@ void test_button_focused_snaps_to_focus_ring_width() {
         /*hovered_id=*/0xFFFFFFFFu, /*focused_id=*/0u,
         /*pressed_id=*/0xFFFFFFFFu, /*focus_visible=*/true);
     auto& btn = detail::node_at(btn_h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(btn.callback_id == 0u);
     assert(btn.border_width == t.state_focus_ring_width);
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = false;
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = false;
     std::puts("PASS: button border_width snaps to focus ring width when focused");
 }
 
@@ -332,12 +332,12 @@ void test_button_pointer_focused_hides_focus_ring() {
         /*hovered_id=*/0xFFFFFFFFu, /*focused_id=*/0u,
         /*pressed_id=*/0xFFFFFFFFu, /*focus_visible=*/false);
     auto& btn = detail::node_at(btn_h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(btn.callback_id == 0u);
     assert(btn.border_width == 1.0f);
     assert(btn.border_color.r == t.border.r);
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = false;
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = false;
     std::puts("PASS: pointer-focused button hides focus ring");
 }
 
@@ -350,7 +350,7 @@ void test_button_pointer_focus_reset_snaps_focus_ring_off() {
             /*focus_visible=*/true,
             /*prev_focus_visible=*/false);
     auto& keyboard = detail::node_at(keyboard_h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(keyboard.callback_id == 0u);
     assert(keyboard.border_width == t.state_focus_ring_width);
     assert(keyboard.border_color.r == t.state_focus_ring.r);
@@ -366,25 +366,25 @@ void test_button_pointer_focus_reset_snaps_focus_ring_off() {
 
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.prev_focused_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = false;
-    detail::g_app.prev_focus_visible = false;
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().prev_focused_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = false;
+    detail::g_app().prev_focus_visible = false;
     std::puts("PASS: pointer focus reset snaps focus ring off");
 }
 
 void test_focus_visible_tracks_keyboard_modality() {
-    detail::g_app.focusable_ids.clear();
-    detail::g_app.focusable_ids.push_back(7u);
-    detail::g_app.focusable_ids.push_back(11u);
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = false;
+    detail::g_app().focusable_ids.clear();
+    detail::g_app().focusable_ids.push_back(7u);
+    detail::g_app().focusable_ids.push_back(11u);
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = false;
 
     bool const tabbed =
         detail::handle_tab(0u, "test", "tab");
     assert(tabbed);
-    assert(detail::g_app.focused_id == 7u);
-    assert(detail::g_app.focus_visible == true);
+    assert(detail::g_app().focused_id == 7u);
+    assert(detail::g_app().focus_visible == true);
     auto debug = diag::input_debug_snapshot();
     assert(debug.focused_id == 7u);
     assert(debug.focus_visible == true);
@@ -399,17 +399,17 @@ void test_focus_visible_tracks_keyboard_modality() {
             false,
             InputModality::Pointer);
     assert(pointer_focus);
-    assert(detail::g_app.focused_id == 7u);
-    assert(detail::g_app.focus_visible == false);
+    assert(detail::g_app().focused_id == 7u);
+    assert(detail::g_app().focus_visible == false);
     debug = diag::input_debug_snapshot();
     assert(debug.focused_id == 7u);
     assert(debug.focus_visible == false);
     assert(debug.input_modality == "pointer");
     assert(debug.focus_visibility_reason == "pointer_input_hides_focus_ring");
 
-    detail::g_app.focusable_ids.clear();
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = false;
+    detail::g_app().focusable_ids.clear();
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = false;
     std::puts("PASS: focus-visible tracks keyboard modality");
 }
 
@@ -428,7 +428,7 @@ void test_button_disabled() {
     for (auto variant : {ButtonVariant::Default, ButtonVariant::Primary}) {
         auto btn_h = button_test::build_button(variant, /*disabled=*/true);
         auto& btn = detail::node_at(btn_h);
-        auto const& t = detail::g_app.theme;
+        auto const& t = detail::g_app().theme;
         assert(btn.background.r == t.state_disabled_bg.r);
         assert(btn.text_color.r == t.state_disabled_fg.r);
         assert(btn.border_color.r == t.state_disabled_border.r);
@@ -466,7 +466,7 @@ void test_button_disabled_custom_chrome() {
     assert(btn.focusable == false);
     assert(btn.callback_id == 0xFFFFFFFFu);
     assert(btn.debug_semantic_enabled == false);
-    assert(detail::g_app.callbacks.empty());
+    assert(detail::g_app().callbacks.empty());
 
     std::puts("PASS: button disabled custom chrome");
 }
@@ -559,9 +559,9 @@ void test_canvas_button_semantic_and_layout_contract() {
     assert(btn.callback_id == 0u);
     assert(btn.focusable == true);
     assert(btn.cursor_type == 1);
-    assert(detail::g_app.callbacks.size() == 1);
-    assert(detail::g_app.callback_roles.size() == 1);
-    assert(detail::g_app.callback_roles[0] == InteractionRole::Button);
+    assert(detail::g_app().callbacks.size() == 1);
+    assert(detail::g_app().callback_roles.size() == 1);
+    assert(detail::g_app().callback_roles[0] == InteractionRole::Button);
     assert(btn.children.size() == 1);
 
     auto& canvas = detail::node_at(btn.children[0]);
@@ -633,7 +633,7 @@ void test_canvas_button_focus_visible_contract() {
         /*pressed_id=*/0xFFFFFFFFu,
         /*focus_visible=*/true);
     auto& keyboard = detail::node_at(keyboard_h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(keyboard.callback_id == 0u);
     assert(keyboard.border_width == t.state_focus_ring_width);
     assert(keyboard.border_color.r == t.state_focus_ring.r);
@@ -649,8 +649,8 @@ void test_canvas_button_focus_visible_contract() {
     assert(pointer.callback_id == 0u);
     assert(pointer.border_width == 1.0f);
     assert(pointer.border_color.r == t.border.r);
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = false;
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = false;
 
     std::puts("PASS: canvas_button focus-visible contract");
 }
@@ -662,15 +662,15 @@ void test_canvas_button_visual_state_contract() {
     options.has_pressed_background = true;
     options.pressed_background = Color{9, 10, 11, 255};
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.hovered_id = 0u;
-    detail::g_app.focused_id = 0u;
-    detail::g_app.pressed_id = 0u;
+    detail::g_app().hovered_id = 0u;
+    detail::g_app().focused_id = 0u;
+    detail::g_app().pressed_id = 0u;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -708,9 +708,9 @@ void test_canvas_button_visual_state_contract() {
     PAINT_NODE(root_h, 0, 0, 0, 100.0f);
     assert(observed_pressed);
     assert(observed_hovered);
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::g_app().hovered_id = 0xFFFFFFFFu;
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().pressed_id = 0xFFFFFFFFu;
 
     std::puts("PASS: canvas_button visual state contract");
 }
@@ -728,7 +728,7 @@ void test_canvas_button_disabled_contract() {
     assert(btn.debug_semantic_enabled == false);
     assert(btn.callback_id == 0xFFFFFFFFu);
     assert(btn.focusable == false);
-    assert(detail::g_app.callbacks.empty());
+    assert(detail::g_app().callbacks.empty());
     assert(btn.children.size() == 1);
     assert(detail::node_at(btn.children[0]).paint_fn);
 
@@ -754,7 +754,7 @@ void test_canvas_button_disabled_custom_chrome() {
     assert(btn.debug_semantic_enabled == false);
     assert(btn.callback_id == 0xFFFFFFFFu);
     assert(btn.focusable == false);
-    assert(detail::g_app.callbacks.empty());
+    assert(detail::g_app().callbacks.empty());
     assert(btn.children.size() == 1);
 
     std::puts("PASS: canvas_button disabled custom chrome");
@@ -976,15 +976,15 @@ void test_glass_button_accepts_configurable_glass_style() {
         true,
         true);
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.pressed_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = false;
+    detail::g_app().hovered_id = 0xFFFFFFFFu;
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().pressed_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = false;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -1020,8 +1020,8 @@ void test_glass_button_accepts_configurable_glass_style() {
     assert(wrapped.style.max_width == 116.0f);
     assert(wrapped.style.fixed_height == 34.0f);
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
     CMD_LEN = 0;
 
@@ -1120,8 +1120,8 @@ void test_glass_prominent_button_style_material_contract() {
     assert(btn.material.border == btn.border_color);
     assert(btn.material.foreground == btn.text_color);
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
 
     auto root_h = detail::alloc_node();
@@ -1185,9 +1185,9 @@ void test_glass_split_button_style_material_contract() {
     assert(style.fixed_height == 36.0f);
     assert(style.text_align == TextAlign::Center);
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
@@ -1268,7 +1268,7 @@ void test_glass_selection_button_style_material_contract() {
     assert(style.shape == MaterialSurfaceShape::Capsule);
     assert(style.max_width == 188.0f);
     assert(style.fixed_height == 30.0f);
-    assert(style.text_color == detail::g_app.theme.accent);
+    assert(style.text_color == detail::g_app().theme.accent);
 
     auto btn_h = button_test::build_canvas_button_with_options(style);
     auto& btn = detail::node_at(btn_h);
@@ -1326,7 +1326,7 @@ void test_glass_outline_row_button_style_material_contract() {
     assert(selected.material.fallback);
     assert(selected.material.container.interactive);
     assert(selected.material.border.a == 0);
-    assert(selected.background == detail::g_app.theme.accent);
+    assert(selected.background == detail::g_app().theme.accent);
     assert(selected.border_width == 0.0f);
     assert(selected.border_radius == 8.0f);
     assert(selected.font_size == 13.0f);
@@ -1352,7 +1352,7 @@ void test_glass_outline_row_button_style_material_contract() {
     assert(sidebar.has_material);
     assert(sidebar.material.kind == MaterialKind::Thin);
     assert(sidebar.material.role == MaterialSurfaceRole::Sidebar);
-    assert(sidebar.text_color == detail::g_app.theme.accent);
+    assert(sidebar.text_color == detail::g_app().theme.accent);
     assert(sidebar.border_width == 0.0f);
     assert(sidebar.shape == MaterialSurfaceShape::Capsule);
 
@@ -1395,9 +1395,9 @@ void test_glass_menu_item_symbol_button_material_contract() {
     assert(style.border_radius == 11.0f);
     assert(style.shape == MaterialSurfaceShape::Default);
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
@@ -1463,9 +1463,9 @@ void test_glass_table_header_button_material_contract() {
     assert(style.fixed_height == 28.0f);
     assert(style.text_align == TextAlign::Start);
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
@@ -1542,9 +1542,9 @@ void test_glass_disclosure_header_style_material_contract() {
 
 void test_glass_widget_helpers_emit_material_buttons() {
     set_theme(Theme{});
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
@@ -1608,8 +1608,8 @@ void test_glass_widget_helpers_emit_material_buttons() {
 
     auto const& root = detail::node_at(root_h);
     assert(root.children.size() == 5u);
-    assert(detail::g_app.callbacks.size() == 5u);
-    assert(detail::g_app.callback_roles.size() == 5u);
+    assert(detail::g_app().callbacks.size() == 5u);
+    assert(detail::g_app().callback_roles.size() == 5u);
 
     auto const& selection = detail::node_at(root.children[0]);
     assert(selection.text == "Recents");
@@ -1837,8 +1837,8 @@ void test_glass_effect_context_reaches_control_styles() {
     assert(!disabled.has_material);
     assert(disabled.material.kind == MaterialKind::None);
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
 
     auto root_h = detail::alloc_node();
@@ -1954,8 +1954,8 @@ void test_glass_effect_context_reaches_indicator_controls() {
     assert(switch_options.container.container_id == container_id);
     assert(switch_options.container.union_id == union_id);
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
@@ -2041,8 +2041,8 @@ void test_glass_effect_context_reaches_indicator_controls() {
     assert(switch_row.callback_id != 0xFFFFFFFFu);
     assert(switch_row.focusable);
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
@@ -2135,15 +2135,15 @@ void test_glass_effect_context_reaches_tabs() {
     assert(tabs_options.container.container_id == container_id);
     assert(tabs_options.container.union_id == union_id);
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.hovered_id = 1u;
-    detail::g_app.focused_id = 1u;
-    detail::g_app.pressed_id = 1u;
-    detail::g_app.focus_visible = true;
+    detail::g_app().hovered_id = 1u;
+    detail::g_app().focused_id = 1u;
+    detail::g_app().pressed_id = 1u;
+    detail::g_app().focus_visible = true;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -2217,15 +2217,15 @@ void test_glass_effect_context_reaches_tabs() {
     auto const indicator_tint = Color{64, 156, 255, 206};
     assert(indicator.background == indicator_tint);
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.pressed_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = false;
+    detail::g_app().hovered_id = 0xFFFFFFFFu;
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().pressed_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = false;
 
     auto scoped_root_h = detail::alloc_node();
     detail::node_at(scoped_root_h).style.flex_direction = FlexDirection::Column;
@@ -2350,8 +2350,8 @@ void test_symbol_button_visual_state_token_contract() {
     assert(pressed_btn.background.a == 150);
     assert(pressed_token != normal_token);
 
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
-    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::g_app().hovered_id = 0xFFFFFFFFu;
+    detail::g_app().pressed_id = 0xFFFFFFFFu;
     std::puts("PASS: symbol_button visual-state paint token contract");
 }
 
@@ -2369,7 +2369,7 @@ void test_symbol_button_disabled_contract() {
     assert(btn.debug_semantic_enabled == false);
     assert(btn.callback_id == 0xFFFFFFFFu);
     assert(btn.focusable == false);
-    assert(detail::g_app.callbacks.empty());
+    assert(detail::g_app().callbacks.empty());
     assert(btn.children.size() == 1);
 
     auto& canvas = detail::node_at(btn.children[0]);
@@ -2389,10 +2389,10 @@ inline NodeHandle build_text_field_with_options(
         bool focus_visible = false,
         unsigned int hovered_id = 0xFFFFFFFFu,
         unsigned int pressed_id = 0xFFFFFFFFu) {
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.input_handlers.clear();
-    detail::g_app.input_nodes.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().input_handlers.clear();
+    detail::g_app().input_nodes.clear();
     detail::msg_queue().clear();
     // Wipe per-call-site animation state so the first `animate_float`
     // / `animate_color` inside `widget::text_field` snaps to its
@@ -2400,10 +2400,10 @@ inline NodeHandle build_text_field_with_options(
     // (default → error swap would otherwise return mid-fade colours).
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.hovered_id = hovered_id;
-    detail::g_app.focused_id = focused_id;
-    detail::g_app.pressed_id = pressed_id;
-    detail::g_app.focus_visible = focus_visible;
+    detail::g_app().hovered_id = hovered_id;
+    detail::g_app().focused_id = focused_id;
+    detail::g_app().pressed_id = pressed_id;
+    detail::g_app().focus_visible = focus_visible;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -2437,7 +2437,7 @@ inline NodeHandle build_text_field(std::string const& current,
 void test_text_field_default() {
     auto h = text_field_test::build_text_field("hello", /*error=*/false, /*disabled=*/false);
     auto& f = detail::node_at(h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(f.background.r == t.surface.r);
     assert(f.text_color.r == t.foreground.r); // current non-empty -> foreground
     assert(f.border_color.r == t.border.r);
@@ -2448,14 +2448,14 @@ void test_text_field_default() {
     assert(f.is_input == true);
     assert(f.callback_id != 0xFFFFFFFFu);
     assert(f.interaction_role == InteractionRole::TextField);
-    assert(detail::g_app.input_handlers.size() == 1);
+    assert(detail::g_app().input_handlers.size() == 1);
     std::puts("PASS: text_field default state");
 }
 
 void test_text_field_default_placeholder() {
     auto h = text_field_test::build_text_field("", /*error=*/false, /*disabled=*/false);
     auto& f = detail::node_at(h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(f.text_color.r == t.muted.r); // empty -> muted placeholder color
     assert(f.text == f.placeholder);
     std::puts("PASS: text_field default placeholder color");
@@ -2464,7 +2464,7 @@ void test_text_field_default_placeholder() {
 void test_text_field_error() {
     auto h = text_field_test::build_text_field("oops", /*error=*/true, /*disabled=*/false);
     auto& f = detail::node_at(h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(f.background.r == t.state_error_bg.r);
     assert(f.text_color.r == t.state_error_fg.r);
     assert(f.border_color.r == t.state_error_border.r);
@@ -2478,7 +2478,7 @@ void test_text_field_error() {
 void test_text_field_disabled() {
     auto h = text_field_test::build_text_field("anything", /*error=*/false, /*disabled=*/true);
     auto& f = detail::node_at(h);
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(f.background.r == t.state_disabled_bg.r);
     assert(f.text_color.r == t.state_disabled_fg.r);
     assert(f.border_color.r == t.state_disabled_border.r);
@@ -2487,12 +2487,12 @@ void test_text_field_disabled() {
     assert(f.cursor_type == 0);
     assert(f.callback_id == 0xFFFFFFFFu);
     // Disabled fields skip the input-handler registration entirely.
-    assert(detail::g_app.input_handlers.empty());
+    assert(detail::g_app().input_handlers.empty());
     std::puts("PASS: text_field disabled state");
 }
 
 void test_text_field_focus_ring_uses_keyboard_modality() {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto keyboard_h = text_field_test::build_text_field(
         "hello",
         /*error=*/false,
@@ -2515,8 +2515,8 @@ void test_text_field_focus_ring_uses_keyboard_modality() {
     assert(pointer.border_width == 1.0f);
     assert(pointer.border_color.r == t.border.r);
 
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = false;
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = false;
     std::puts("PASS: text_field focus ring uses keyboard modality");
 }
 
@@ -2623,10 +2623,10 @@ void test_glass_text_field_style_material_contract() {
         true,
         true);
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.input_handlers.clear();
-    detail::g_app.input_nodes.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().input_handlers.clear();
+    detail::g_app().input_nodes.clear();
     detail::msg_queue().clear();
 
     auto root_h = detail::alloc_node();
@@ -2689,8 +2689,8 @@ void test_glass_text_field_style_material_contract() {
 
 namespace text_variant_test {
 inline NodeHandle build_text(str content, TextSize size, TextColor color) {
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -2707,7 +2707,7 @@ inline NodeHandle build_text(str content, TextSize size, TextColor color) {
 } // namespace text_variant_test
 
 void test_text_size_variants() {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto& body = detail::node_at(text_variant_test::build_text(
         "body", TextSize::Body, TextColor::Default));
     assert(body.font_size == t.body_font_size);
@@ -2733,7 +2733,7 @@ void test_text_size_variants() {
 }
 
 void test_text_color_variants() {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto& def = detail::node_at(text_variant_test::build_text(
         "x", TextSize::Body, TextColor::Default));
     assert(def.text_color.r == t.foreground.r);
@@ -2758,7 +2758,7 @@ void test_text_color_variants() {
 }
 
 void test_text_inline_code_chrome() {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     auto& code = detail::node_at(text_variant_test::build_text(
         "fn()", TextSize::Code, TextColor::Default));
     assert(code.font_size == t.code_font_size);
@@ -2775,7 +2775,7 @@ void test_text_inline_code_chrome() {
 }
 
 void test_space_value_resolves_each_token() {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
     assert(layout::space_value(SpaceToken::Xs)  == t.space_xs);
     assert(layout::space_value(SpaceToken::Sm)  == t.space_sm);
     assert(layout::space_value(SpaceToken::Md)  == t.space_md);

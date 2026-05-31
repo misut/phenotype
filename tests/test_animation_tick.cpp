@@ -37,11 +37,11 @@ float anim_helper(float target, int ms) {
 // must NOT be set; the host loop should go right back to sleep.
 void test_first_call_does_not_request_tick() {
     detail::local_store().clear();
-    detail::g_app.has_active_animations = false;
+    detail::g_app().has_active_animations = false;
     detail::bump_local_gen();
     anim_helper(10.0f, 200);
     detail::prune_local_store();
-    assert(!detail::g_app.has_active_animations);
+    assert(!detail::g_app().has_active_animations);
     std::puts("PASS: first call leaves has_active_animations=false");
 }
 
@@ -50,19 +50,19 @@ void test_first_call_does_not_request_tick() {
 // auto-tick flag so the host knows to schedule another paint.
 void test_in_flight_animation_requests_tick() {
     detail::local_store().clear();
-    detail::g_app.has_active_animations = false;
+    detail::g_app().has_active_animations = false;
 
     detail::bump_local_gen();
     anim_helper(0.0f, 200);                // initialise
     detail::prune_local_store();
 
     // Reset the flag — initialisation snapped, no tick needed.
-    detail::g_app.has_active_animations = false;
+    detail::g_app().has_active_animations = false;
 
     detail::bump_local_gen();
     anim_helper(100.0f, 200);              // start fade
     detail::prune_local_store();
-    assert(detail::g_app.has_active_animations);
+    assert(detail::g_app().has_active_animations);
     std::puts("PASS: in-flight animation sets has_active_animations");
 }
 
@@ -71,7 +71,7 @@ void test_in_flight_animation_requests_tick() {
 // forever after a hover finishes.
 void test_completed_animation_releases_tick() {
     detail::local_store().clear();
-    detail::g_app.has_active_animations = false;
+    detail::g_app().has_active_animations = false;
 
     detail::bump_local_gen();
     anim_helper(0.0f, 50);                 // initialise
@@ -80,20 +80,20 @@ void test_completed_animation_releases_tick() {
     detail::bump_local_gen();
     anim_helper(100.0f, 50);               // start fade
     detail::prune_local_store();
-    assert(detail::g_app.has_active_animations);
+    assert(detail::g_app().has_active_animations);
 
     // Wait past the duration so the fade lands.
     std::this_thread::sleep_for(std::chrono::milliseconds(80));
 
     // Reset the flag — the next read should NOT re-set it, since
     // progress >= 1.0.
-    detail::g_app.has_active_animations = false;
+    detail::g_app().has_active_animations = false;
 
     detail::bump_local_gen();
     auto v = anim_helper(100.0f, 50);
     detail::prune_local_store();
     assert(v == 100.0f);
-    assert(!detail::g_app.has_active_animations);
+    assert(!detail::g_app().has_active_animations);
     std::puts("PASS: completed animation releases the auto-tick flag");
 }
 

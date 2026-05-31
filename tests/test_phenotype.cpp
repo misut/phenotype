@@ -48,7 +48,7 @@ extern "C" {
 // ============================================================
 
 void test_column_layout() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     auto root_h = detail::alloc_node();
     auto& root = detail::node_at(root_h);
     root.style.flex_direction = FlexDirection::Column;
@@ -79,7 +79,7 @@ void test_column_layout() {
 }
 
 void test_row_intrinsic_width() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     auto row_h = detail::alloc_node();
     auto& row = detail::node_at(row_h);
     row.style.flex_direction = FlexDirection::Row;
@@ -106,7 +106,7 @@ void test_row_intrinsic_width() {
 }
 
 void test_row_wraps_last_text_leaf() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     auto row_h = detail::alloc_node();
     auto& row = detail::node_at(row_h);
     row.style.flex_direction = FlexDirection::Row;
@@ -133,7 +133,7 @@ void test_row_wraps_last_text_leaf() {
 }
 
 void test_containment_invariant() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     auto root_h = detail::alloc_node();
     auto& root = detail::node_at(root_h);
     root.style.flex_direction = FlexDirection::Column;
@@ -162,7 +162,7 @@ void test_containment_invariant() {
 }
 
 void test_alignment_center() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     auto col_h = detail::alloc_node();
     auto& col = detail::node_at(col_h);
     col.style.flex_direction = FlexDirection::Column;
@@ -182,7 +182,7 @@ void test_alignment_center() {
 }
 
 void test_max_width_centering() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     auto root_h = detail::alloc_node();
     auto& root = detail::node_at(root_h);
     root.style.flex_direction = FlexDirection::Column;
@@ -206,7 +206,7 @@ void test_max_width_centering() {
 // ============================================================
 
 void test_word_wrap() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     auto node_h = detail::alloc_node();
     auto& node = detail::node_at(node_h);
     node.text = "hello world this is a longer text that should wrap";
@@ -221,7 +221,7 @@ void test_word_wrap() {
 }
 
 void test_newline_handling() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     auto node_h = detail::alloc_node();
     auto& node = detail::node_at(node_h);
     node.text = "line1\nline2\nline3";
@@ -237,7 +237,7 @@ void test_newline_handling() {
 }
 
 void test_measure_text_cache_dedup() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     metrics::reset_all();
     detail::clear_measure_cache();
 
@@ -271,7 +271,7 @@ void test_measure_text_cache_dedup() {
 }
 
 void test_set_theme_updates_and_invalidates_cache() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     metrics::reset_all();
     detail::clear_measure_cache();
 
@@ -340,6 +340,65 @@ void test_default_theme_glass_contract() {
     assert(!theme_matches_default_glass_contract(theme));
 
     std::puts("PASS: default theme exposes Apple glass contract metadata");
+}
+
+void test_scene_runtime_isolates_app_state_and_messages() {
+    auto& main_scene = detail::default_scene_runtime();
+    {
+        detail::ScopedSceneActivation activate_main(main_scene);
+        detail::g_app().hovered_id = 11u;
+        detail::g_app().focused_id = 12u;
+        detail::msg_queue().clear();
+        detail::post<int>(7);
+    }
+
+    auto& settings_scene = detail::ensure_scene_runtime(SceneDescriptor{
+        .id = "settings",
+        .title = "Settings",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+    {
+        detail::ScopedSceneActivation activate_settings(settings_scene);
+        assert(detail::g_app().hovered_id == 0xFFFFFFFFu);
+        assert(detail::g_app().focused_id == 0xFFFFFFFFu);
+        detail::g_app().hovered_id = 21u;
+        detail::g_app().focused_id = 22u;
+        detail::post<int>(42);
+        auto settings_snapshot = runtime::active_scene();
+        assert(settings_snapshot.id == "settings");
+        assert(settings_snapshot.role == SceneRole::Settings);
+        assert(settings_snapshot.hovered_id == 21u);
+        assert(settings_snapshot.focused_id == 22u);
+        assert(settings_snapshot.queued_messages == 1u);
+        auto settings_messages = detail::drain<int>();
+        assert(settings_messages.size() == 1);
+        assert(settings_messages[0] == 42);
+    }
+
+    {
+        detail::ScopedSceneActivation activate_main(main_scene);
+        assert(runtime::active_scene().id == "main");
+        assert(detail::g_app().hovered_id == 11u);
+        assert(detail::g_app().focused_id == 12u);
+        auto main_messages = detail::drain<int>();
+        assert(main_messages.size() == 1);
+        assert(main_messages[0] == 7);
+    }
+
+    auto snapshots = runtime::scenes();
+    bool saw_main = false;
+    bool saw_settings = false;
+    for (auto const& snapshot : snapshots) {
+        saw_main = saw_main || (snapshot.id == "main"
+                                && snapshot.role == SceneRole::Main);
+        saw_settings = saw_settings || (snapshot.id == "settings"
+                                        && snapshot.role == SceneRole::Settings);
+    }
+    assert(saw_main);
+    assert(saw_settings);
+
+    std::puts("PASS: scene runtime isolates app state and messages");
 }
 
 void test_system_theme_preferences_are_pure_overlays() {
@@ -534,7 +593,7 @@ void test_system_theme_preferences_are_pure_overlays() {
 }
 
 void test_sized_box_in_row() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
 
     auto root_h = detail::alloc_node();
     auto& root = detail::node_at(root_h);
@@ -569,7 +628,7 @@ void test_sized_box_in_row() {
 }
 
 void test_image_widget_layout_and_emit() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
 
     auto root_h = detail::alloc_node();
     auto& root = detail::node_at(root_h);
@@ -614,7 +673,7 @@ void test_image_widget_layout_and_emit() {
 }
 
 void test_svg_image_widget_uses_stable_paint_token() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
 
     auto root_h = detail::alloc_node();
     auto& root = detail::node_at(root_h);
@@ -653,7 +712,7 @@ void test_svg_image_widget_uses_stable_paint_token() {
 }
 
 void test_svg_image_widget_options_contract() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
 
     auto root_h = detail::alloc_node();
     auto& root = detail::node_at(root_h);
@@ -705,7 +764,7 @@ void test_svg_image_widget_options_contract() {
 }
 
 void test_grid_cell_text_is_vertically_centered() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -739,7 +798,7 @@ void test_grid_cell_text_is_vertically_centered() {
     }
     assert(found_text);
 
-    auto line_height = cell.font_size * detail::g_app.theme.line_height_ratio;
+    auto line_height = cell.font_size * detail::g_app().theme.line_height_ratio;
     auto expected_y = (cell.height - line_height) / 2.0f;
     assert(text_y > 0.0f);
     assert(std::fabs(text_y - expected_y) < 0.01f);
@@ -748,7 +807,7 @@ void test_grid_cell_text_is_vertically_centered() {
 }
 
 void test_canvas_widget_invokes_painter() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
 
     auto root_h = detail::alloc_node();
     auto& root = detail::node_at(root_h);
@@ -801,7 +860,7 @@ void test_canvas_widget_invokes_painter() {
 }
 
 void test_semantic_canvas_exposes_debug_label() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
 
     auto root_h = detail::alloc_node();
     auto& root = detail::node_at(root_h);
@@ -849,7 +908,7 @@ void test_semantic_canvas_exposes_debug_label() {
 }
 
 void test_canvas_linear_gradient_rect_emits_command() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
 
     auto root_h = detail::alloc_node();
     auto& root = detail::node_at(root_h);
@@ -916,16 +975,16 @@ void test_canvas_bypasses_paint_cache_after_diff() {
             LAYOUT_NODE(root_h, 400.0f);
             CMD_LEN = 0;
             PAINT_NODE(root_h, 0, 0, 0, 600.0f);
-            std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, CMD_LEN);
-            detail::g_app.prev_cmd_len = CMD_LEN;
+            std::memcpy(detail::g_app().prev_cmd_buf, CMD_BUF, CMD_LEN);
+            detail::g_app().prev_cmd_len = CMD_LEN;
         }
         return root_h;
     };
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.prev_cmd_len = 0;
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().prev_cmd_len = 0;
 
     int old_calls = 0;
     auto old_root = make_canvas_tree(old_calls, Color{255, 0, 0, 255}, true);
@@ -933,18 +992,18 @@ void test_canvas_bypasses_paint_cache_after_diff() {
     assert(detail::node_at(old_root).paint_dynamic);
     assert(!detail::node_at(old_root).paint_valid);
 
-    detail::g_app.prev_root = old_root;
-    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().prev_root = old_root;
+    std::swap(detail::g_app().arena, detail::g_app().prev_arena);
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
 
     int new_calls = 0;
     auto new_root = make_canvas_tree(new_calls, Color{0, 0, 255, 255}, false);
     auto matched = detail::diff_and_copy_layout(
-        detail::g_app.prev_root,
+        detail::g_app().prev_root,
         new_root,
-        detail::g_app.prev_arena,
-        detail::g_app.arena);
+        detail::g_app().prev_arena,
+        detail::g_app().arena);
     assert(matched);
 
     LAYOUT_NODE(new_root, 400.0f);
@@ -982,19 +1041,19 @@ void test_canvas_paint_token_hit_skips_paint_fn() {
             LAYOUT_NODE(root_h, 400.0f);
             CMD_LEN = 0;
             PAINT_NODE(root_h, 0, 0, 0, 600.0f);
-            std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, CMD_LEN);
-            detail::g_app.prev_cmd_len = CMD_LEN;
+            std::memcpy(detail::g_app().prev_cmd_buf, CMD_BUF, CMD_LEN);
+            detail::g_app().prev_cmd_len = CMD_LEN;
         }
         return root_h;
     };
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.prev_cmd_len = 0;
-    detail::g_app.paint_invalidation_mask = 0;
-    detail::g_app.prev_scroll_x = 0;
-    detail::g_app.prev_scroll_y = 0;
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().prev_cmd_len = 0;
+    detail::g_app().paint_invalidation_mask = 0;
+    detail::g_app().prev_scroll_x = 0;
+    detail::g_app().prev_scroll_y = 0;
     metrics::reset_all();
 
     constexpr std::uint64_t kToken = 0xABCD'1234'ABCD'1234ULL;
@@ -1010,10 +1069,10 @@ void test_canvas_paint_token_hit_skips_paint_fn() {
     assert(old_canvas.paint_valid);
     assert(old_canvas.paint_token == kToken);
 
-    detail::g_app.prev_root = old_root;
-    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().prev_root = old_root;
+    std::swap(detail::g_app().arena, detail::g_app().prev_arena);
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
 
     int new_calls = 0;
     // Same token, but a different colour the painter would emit if
@@ -1022,8 +1081,8 @@ void test_canvas_paint_token_hit_skips_paint_fn() {
     auto new_root = make_canvas_tree(new_calls,
         Color{0, 0, 255, 255}, kToken, false);
     auto matched = detail::diff_and_copy_layout(
-        detail::g_app.prev_root, new_root,
-        detail::g_app.prev_arena, detail::g_app.arena);
+        detail::g_app().prev_root, new_root,
+        detail::g_app().prev_arena, detail::g_app().arena);
     assert(matched);
 
     auto& new_canvas = detail::node_at(detail::node_at(new_root).children[0]);
@@ -1071,20 +1130,20 @@ void test_theme_change_invalidates_token_stable_canvas_paint() {
             LAYOUT_NODE(root_h, 400.0f);
             CMD_LEN = 0;
             PAINT_NODE(root_h, 0, 0, 0, 600.0f);
-            std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, CMD_LEN);
-            detail::g_app.prev_cmd_len = CMD_LEN;
+            std::memcpy(detail::g_app().prev_cmd_buf, CMD_BUF, CMD_LEN);
+            detail::g_app().prev_cmd_len = CMD_LEN;
         }
         return root_h;
     };
 
     set_theme(Theme{});
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.prev_cmd_len = 0;
-    detail::g_app.paint_invalidation_mask = 0;
-    detail::g_app.prev_scroll_x = 0;
-    detail::g_app.prev_scroll_y = 0;
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().prev_cmd_len = 0;
+    detail::g_app().paint_invalidation_mask = 0;
+    detail::g_app().prev_scroll_x = 0;
+    detail::g_app().prev_scroll_y = 0;
     metrics::reset_all();
 
     constexpr std::uint64_t kToken = 0x1234'ABCD'5678'EF90ULL;
@@ -1092,25 +1151,25 @@ void test_theme_change_invalidates_token_stable_canvas_paint() {
     int old_calls = 0;
     auto old_root = make_canvas_tree(old_calls, kToken, true);
     assert(old_calls == 1);
-    auto const old_generation = detail::g_app.theme_generation;
+    auto const old_generation = detail::g_app().theme_generation;
     auto& old_canvas = detail::node_at(detail::node_at(old_root).children[0]);
     assert(old_canvas.paint_theme_generation == old_generation);
     assert(old_canvas.paint_valid);
 
-    detail::g_app.prev_root = old_root;
-    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().prev_root = old_root;
+    std::swap(detail::g_app().arena, detail::g_app().prev_arena);
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
 
     Theme dark = apply_dark_color_scheme(Theme{});
     set_theme(dark);
-    assert(detail::g_app.theme_generation != old_generation);
+    assert(detail::g_app().theme_generation != old_generation);
 
     int new_calls = 0;
     auto new_root = make_canvas_tree(new_calls, kToken, false);
     auto matched = detail::diff_and_copy_layout(
-        detail::g_app.prev_root, new_root,
-        detail::g_app.prev_arena, detail::g_app.arena);
+        detail::g_app().prev_root, new_root,
+        detail::g_app().prev_arena, detail::g_app().arena);
     assert(matched);
 
     auto& new_canvas = detail::node_at(detail::node_at(new_root).children[0]);
@@ -1128,7 +1187,7 @@ void test_theme_change_invalidates_token_stable_canvas_paint() {
     assert(new_calls == 1);
     assert(blits_during == 0);
     assert(new_canvas.paint_theme_generation
-           == detail::g_app.theme_generation);
+           == detail::g_app().theme_generation);
 
     set_theme(Theme{});
 
@@ -1153,20 +1212,20 @@ void test_material_foreground_palette_invalidates_diff_cache() {
         return root_h;
     };
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.prev_cmd_len = 0;
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().prev_cmd_len = 0;
 
     auto old_root = make_tree(Color{20, 20, 20, 255});
     LAYOUT_NODE(old_root, 400.0f);
-    detail::g_app.prev_root = old_root;
-    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
-    detail::g_app.arena.reset();
+    detail::g_app().prev_root = old_root;
+    std::swap(detail::g_app().arena, detail::g_app().prev_arena);
+    detail::g_app().arena.reset();
 
     auto new_root = make_tree(Color{240, 240, 245, 255});
     auto matched = detail::diff_and_copy_layout(
-        detail::g_app.prev_root, new_root,
-        detail::g_app.prev_arena, detail::g_app.arena);
+        detail::g_app().prev_root, new_root,
+        detail::g_app().prev_arena, detail::g_app().arena);
 
     assert(!matched);
     assert(!detail::node_at(new_root).layout_valid);
@@ -1197,37 +1256,37 @@ void test_canvas_paint_token_miss_invokes_paint_fn() {
             LAYOUT_NODE(root_h, 400.0f);
             CMD_LEN = 0;
             PAINT_NODE(root_h, 0, 0, 0, 600.0f);
-            std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, CMD_LEN);
-            detail::g_app.prev_cmd_len = CMD_LEN;
+            std::memcpy(detail::g_app().prev_cmd_buf, CMD_BUF, CMD_LEN);
+            detail::g_app().prev_cmd_len = CMD_LEN;
         }
         return root_h;
     };
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.prev_cmd_len = 0;
-    detail::g_app.paint_invalidation_mask = 0;
-    detail::g_app.prev_scroll_x = 0;
-    detail::g_app.prev_scroll_y = 0;
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().prev_cmd_len = 0;
+    detail::g_app().paint_invalidation_mask = 0;
+    detail::g_app().prev_scroll_x = 0;
+    detail::g_app().prev_scroll_y = 0;
 
     int old_calls = 0;
     auto old_root = make_canvas_tree(old_calls,
         Color{255, 0, 0, 255}, 0xAAAA'AAAA'AAAA'AAAAULL, true);
     assert(old_calls == 1);
 
-    detail::g_app.prev_root = old_root;
-    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().prev_root = old_root;
+    std::swap(detail::g_app().arena, detail::g_app().prev_arena);
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
 
     int new_calls = 0;
     // Different token — represents an upstream input change.
     auto new_root = make_canvas_tree(new_calls,
         Color{0, 0, 255, 255}, 0xBBBB'BBBB'BBBB'BBBBULL, false);
     auto matched = detail::diff_and_copy_layout(
-        detail::g_app.prev_root, new_root,
-        detail::g_app.prev_arena, detail::g_app.arena);
+        detail::g_app().prev_root, new_root,
+        detail::g_app().prev_arena, detail::g_app().arena);
     assert(matched);
 
     LAYOUT_NODE(new_root, 400.0f);
@@ -1268,19 +1327,19 @@ void test_canvas_paint_token_lets_ancestor_blit() {
             LAYOUT_NODE(root_h, 400.0f);
             CMD_LEN = 0;
             PAINT_NODE(root_h, 0, 0, 0, 600.0f);
-            std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, CMD_LEN);
-            detail::g_app.prev_cmd_len = CMD_LEN;
+            std::memcpy(detail::g_app().prev_cmd_buf, CMD_BUF, CMD_LEN);
+            detail::g_app().prev_cmd_len = CMD_LEN;
         }
         return root_h;
     };
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.prev_cmd_len = 0;
-    detail::g_app.paint_invalidation_mask = 0;
-    detail::g_app.prev_scroll_x = 0;
-    detail::g_app.prev_scroll_y = 0;
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().prev_cmd_len = 0;
+    detail::g_app().paint_invalidation_mask = 0;
+    detail::g_app().prev_scroll_x = 0;
+    detail::g_app().prev_scroll_y = 0;
     metrics::reset_all();
 
     constexpr std::uint64_t kToken = 0x1234'5678'9ABC'DEF0ULL;
@@ -1298,17 +1357,17 @@ void test_canvas_paint_token_lets_ancestor_blit() {
     assert(!old_inner_col.paint_dynamic);
     assert(old_inner_col.paint_valid);
 
-    detail::g_app.prev_root = old_root;
-    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().prev_root = old_root;
+    std::swap(detail::g_app().arena, detail::g_app().prev_arena);
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
 
     int new_calls = 0;
     auto new_root = make_tree(new_calls,
         Color{0, 0, 255, 255}, kToken, false);
     auto matched = detail::diff_and_copy_layout(
-        detail::g_app.prev_root, new_root,
-        detail::g_app.prev_arena, detail::g_app.arena);
+        detail::g_app().prev_root, new_root,
+        detail::g_app().prev_arena, detail::g_app().arena);
     assert(matched);
 
     auto blits_before = metrics::inst::paint_subtrees_blitted.total();
@@ -1375,25 +1434,25 @@ void test_static_parent_self_paint_survives_child_hover_walk() {
         auto len = CMD_LEN;
         if (len > AppState::PAINT_CACHE_BUF_SIZE)
             len = AppState::PAINT_CACHE_BUF_SIZE;
-        std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, len);
-        detail::g_app.prev_cmd_len = len;
+        std::memcpy(detail::g_app().prev_cmd_buf, CMD_BUF, len);
+        detail::g_app().prev_cmd_len = len;
     };
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
-    detail::g_app.prev_hovered_id = 0xFFFFFFFFu;
-    detail::g_app.focused_id = 0xFFFFFFFFu;
-    detail::g_app.prev_focused_id = 0xFFFFFFFFu;
-    detail::g_app.focus_visible = false;
-    detail::g_app.prev_focus_visible = false;
-    detail::g_app.pressed_id = 0xFFFFFFFFu;
-    detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
-    detail::g_app.paint_invalidation_mask = 0;
-    detail::g_app.prev_scroll_x = 0.0f;
-    detail::g_app.prev_scroll_y = 0.0f;
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
+    detail::g_app().hovered_id = 0xFFFFFFFFu;
+    detail::g_app().prev_hovered_id = 0xFFFFFFFFu;
+    detail::g_app().focused_id = 0xFFFFFFFFu;
+    detail::g_app().prev_focused_id = 0xFFFFFFFFu;
+    detail::g_app().focus_visible = false;
+    detail::g_app().prev_focus_visible = false;
+    detail::g_app().pressed_id = 0xFFFFFFFFu;
+    detail::g_app().prev_pressed_id = 0xFFFFFFFFu;
+    detail::g_app().paint_invalidation_mask = 0;
+    detail::g_app().prev_scroll_x = 0.0f;
+    detail::g_app().prev_scroll_y = 0.0f;
     detail::clear_pointer_position();
     metrics::reset_all();
 
@@ -1404,25 +1463,25 @@ void test_static_parent_self_paint_survives_child_hover_walk() {
     auto const parent_0_h = detail::node_at(root_0).children[0];
     assert(detail::node_at(parent_0_h).self_paint_valid);
     mirror_cmd_to_prev();
-    detail::g_app.prev_root = root_0;
-    detail::persist_paint_inputs(detail::g_app);
+    detail::g_app().prev_root = root_0;
+    detail::persist_paint_inputs(detail::g_app());
 
-    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.callback_roles.clear();
+    std::swap(detail::g_app().arena, detail::g_app().prev_arena);
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
+    detail::g_app().callback_roles.clear();
 
     auto root_1 = build_tree();
     auto matched = detail::diff_and_copy_layout(
-        detail::g_app.prev_root,
+        detail::g_app().prev_root,
         root_1,
-        detail::g_app.prev_arena,
-        detail::g_app.arena);
+        detail::g_app().prev_arena,
+        detail::g_app().arena);
     assert(matched);
 
-    detail::g_app.hovered_id = kChildCallback;
-    detail::g_app.paint_invalidation_mask =
-        detail::compute_paint_invalidation_mask(detail::g_app);
+    detail::g_app().hovered_id = kChildCallback;
+    detail::g_app().paint_invalidation_mask =
+        detail::compute_paint_invalidation_mask(detail::g_app());
     auto const self_blits_before =
         metrics::inst::paint_self_prefixes_blitted.total();
     LAYOUT_NODE(root_1, 480.0f);
@@ -1438,8 +1497,8 @@ void test_static_parent_self_paint_survives_child_hover_walk() {
     assert(detail::node_at(parent_1_h).self_paint_valid);
     assert(self_blits_during >= 1);
 
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
-    detail::persist_paint_inputs(detail::g_app);
+    detail::g_app().hovered_id = 0xFFFFFFFFu;
+    detail::persist_paint_inputs(detail::g_app());
 
     std::puts("PASS: static parent self-paint survives child hover walk");
 }
@@ -1450,7 +1509,7 @@ void test_static_parent_self_paint_survives_child_hover_walk() {
 // at the previous-frame width and content collapses to one corner.
 void test_layout_relayout_when_available_width_changes() {
     auto build_tree = [](float canvas_w) {
-        detail::g_app.arena.reset();
+        detail::g_app().arena.reset();
         auto root_h = detail::alloc_node();
         auto& root = detail::node_at(root_h);
         root.style.flex_direction = FlexDirection::Column;
@@ -1473,25 +1532,25 @@ void test_layout_relayout_when_available_width_changes() {
         return root_h;
     };
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
 
     // Frame 1 at narrow width.
     auto old_root = build_tree(400.0f);
     assert(detail::node_at(old_root).width == 400.0f);
 
     // Hand the tree off as the previous frame.
-    detail::g_app.prev_root = old_root;
-    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().prev_root = old_root;
+    std::swap(detail::g_app().arena, detail::g_app().prev_arena);
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
 
     // Frame 2 at wider width — diff/copy will mark layout_valid.
     auto new_root = build_tree(400.0f);  // builds a structurally-identical tree
     auto matched = detail::diff_and_copy_layout(
-        detail::g_app.prev_root, new_root,
-        detail::g_app.prev_arena, detail::g_app.arena);
+        detail::g_app().prev_root, new_root,
+        detail::g_app().prev_arena, detail::g_app().arena);
     assert(matched);
     assert(detail::node_at(new_root).layout_valid);
 
@@ -1517,8 +1576,8 @@ void test_checkbox_and_radio_widgets() {
     struct PickB { int idx; };
     using Msg = std::variant<ToggleA, PickB>;
 
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
 
     auto root_h = detail::alloc_node();
@@ -1556,16 +1615,16 @@ void test_checkbox_and_radio_widgets() {
         assert(box.cursor_type == 0);
         assert(box.interaction_role == InteractionRole::None);
         if (active) {
-            assert(box.background.r == detail::g_app.theme.accent.r);
-            assert(box.background.g == detail::g_app.theme.accent.g);
-            assert(box.background.b == detail::g_app.theme.accent.b);
+            assert(box.background.r == detail::g_app().theme.accent.r);
+            assert(box.background.g == detail::g_app().theme.accent.g);
+            assert(box.background.b == detail::g_app().theme.accent.b);
             assert(box.background.a == 255);
             assert(box.decoration == expected_decoration);
         } else {
             assert(box.background.r == 255);
             assert(box.background.g == 255);
             assert(box.background.b == 255);
-            assert(box.border_color.r == detail::g_app.theme.border.r);
+            assert(box.border_color.r == detail::g_app().theme.border.r);
             assert(box.decoration == Decoration::None);
         }
 
@@ -1576,30 +1635,30 @@ void test_checkbox_and_radio_widgets() {
         assert(lbl.focusable == false);
     };
 
-    check_widget(root.children[0], false, detail::g_app.theme.radius_xs,
+    check_widget(root.children[0], false, detail::g_app().theme.radius_xs,
                  Decoration::Check, InteractionRole::Checkbox);
-    check_widget(root.children[1], true,  detail::g_app.theme.radius_xs,
+    check_widget(root.children[1], true,  detail::g_app().theme.radius_xs,
                  Decoration::Check, InteractionRole::Checkbox);
-    check_widget(root.children[2], false, detail::g_app.theme.radius_lg,
+    check_widget(root.children[2], false, detail::g_app().theme.radius_lg,
                  Decoration::Dot,   InteractionRole::Radio);
-    check_widget(root.children[3], true,  detail::g_app.theme.radius_lg,
+    check_widget(root.children[3], true,  detail::g_app().theme.radius_lg,
                  Decoration::Dot,   InteractionRole::Radio);
 
     auto cb_id_a = detail::node_at(root.children[0]).callback_id;
-    detail::g_app.callbacks[cb_id_a]();
+    detail::g_app().callbacks[cb_id_a]();
     auto msgs = detail::drain<Msg>();
     assert(msgs.size() == 1);
     assert(std::holds_alternative<ToggleA>(msgs[0]));
 
     auto cb_id_b = detail::node_at(root.children[3]).callback_id;
-    detail::g_app.callbacks[cb_id_b]();
+    detail::g_app().callbacks[cb_id_b]();
     auto msgs2 = detail::drain<Msg>();
     assert(msgs2.size() == 1);
     assert(std::holds_alternative<PickB>(msgs2[0]));
     assert(std::get<PickB>(msgs2[0]).idx == 1);
 
     CMD_LEN = 0;
-    detail::g_app.focusable_ids.clear();
+    detail::g_app().focusable_ids.clear();
     detail::collect_focusable_ids(root_h);
     PAINT_NODE(root_h, 0, 0, 0, 600.0f);
     int hit_regions = 0;
@@ -1609,14 +1668,14 @@ void test_checkbox_and_radio_widgets() {
         if (word == static_cast<unsigned int>(Cmd::HitRegion)) ++hit_regions;
     }
     assert(hit_regions == 4);
-    assert(detail::g_app.focusable_ids.size() == 4);
+    assert(detail::g_app().focusable_ids.size() == 4);
 
     // theme.toggle_box_size drives the box visual size. Override to a
     // touch-friendly 44 dp and confirm the laid-out box picks it up.
-    float saved_size = detail::g_app.theme.toggle_box_size;
-    detail::g_app.theme.toggle_box_size = 44.0f;
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    float saved_size = detail::g_app().theme.toggle_box_size;
+    detail::g_app().theme.toggle_box_size = 44.0f;
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
     auto root2_h = detail::alloc_node();
     detail::node_at(root2_h).style.flex_direction = FlexDirection::Column;
@@ -1631,17 +1690,17 @@ void test_checkbox_and_radio_widgets() {
     auto& touch_box = detail::node_at(touch_row.children[0]);
     assert(touch_box.style.max_width == 44.0f);
     assert(touch_box.style.fixed_height == 44.0f);
-    detail::g_app.theme.toggle_box_size = saved_size;
+    detail::g_app().theme.toggle_box_size = saved_size;
 
     std::puts("PASS: checkbox + radio widgets");
 }
 
 void test_frame_skip_on_identical_cmd_buffer() {
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
     metrics::reset_all();
     detail::clear_measure_cache();
-    detail::g_app.last_paint_hash = 0;
+    detail::g_app().last_paint_hash = 0;
     CMD_LEN = 0;
 
     RUN_APP(int, int,
@@ -1679,24 +1738,24 @@ void test_paint_only_props_invalidate_diff_cache() {
         return root_h;
     };
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
     auto old_root = make_radio_tree(true, true);
 
-    detail::g_app.prev_root = old_root;
-    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().prev_root = old_root;
+    std::swap(detail::g_app().arena, detail::g_app().prev_arena);
+    detail::g_app().arena.reset();
+    detail::g_app().callbacks.clear();
     CMD_LEN = 0;
     auto new_root = make_radio_tree(false, false);
 
     auto matched = detail::diff_and_copy_layout(
-        detail::g_app.prev_root,
+        detail::g_app().prev_root,
         new_root,
-        detail::g_app.prev_arena,
-        detail::g_app.arena);
+        detail::g_app().prev_arena,
+        detail::g_app().arena);
 
     assert(!matched);
     auto const& radio_row = detail::node_at(detail::node_at(new_root).children[0]);
@@ -1739,24 +1798,24 @@ void test_radio_paint_cache_stale_descendant_after_subtree_blit() {
     auto mirror_cmd_to_prev = []() {
         auto len = CMD_LEN;
         if (len > AppState::PAINT_CACHE_BUF_SIZE) len = AppState::PAINT_CACHE_BUF_SIZE;
-        std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, len);
-        detail::g_app.prev_cmd_len = len;
+        std::memcpy(detail::g_app().prev_cmd_buf, CMD_BUF, len);
+        detail::g_app().prev_cmd_len = len;
     };
 
     auto next_frame = []() {
-        std::swap(detail::g_app.arena, detail::g_app.prev_arena);
-        detail::g_app.arena.reset();
-        detail::g_app.callbacks.clear();
+        std::swap(detail::g_app().arena, detail::g_app().prev_arena);
+        detail::g_app().arena.reset();
+        detail::g_app().callbacks.clear();
         detail::msg_queue().clear();
     };
 
-    detail::g_app.arena.reset();
-    detail::g_app.prev_arena.reset();
-    detail::g_app.callbacks.clear();
+    detail::g_app().arena.reset();
+    detail::g_app().prev_arena.reset();
+    detail::g_app().callbacks.clear();
     detail::msg_queue().clear();
-    detail::g_app.paint_invalidation_mask = 0;
-    detail::g_app.prev_scroll_x = 0;
-    detail::g_app.prev_scroll_y = 0;
+    detail::g_app().paint_invalidation_mask = 0;
+    detail::g_app().prev_scroll_x = 0;
+    detail::g_app().prev_scroll_y = 0;
     metrics::reset_all();
 
     // Frame 0: A selected, initial walk seeds the cache.
@@ -1765,32 +1824,32 @@ void test_radio_paint_cache_stale_descendant_after_subtree_blit() {
     CMD_LEN = 0;
     PAINT_NODE(root_0, 0, 0, 0, 600.0f);
     mirror_cmd_to_prev();
-    detail::g_app.prev_root = root_0;
+    detail::g_app().prev_root = root_0;
 
     // Frame 1: click B. A and B flip; C unchanged so C.row blits as a
     // chunk and C's descendant offsets stay at frame-0 positions.
     next_frame();
     auto root_1 = build_radios(false, true, false);
-    detail::diff_and_copy_layout(detail::g_app.prev_root, root_1,
-                                 detail::g_app.prev_arena, detail::g_app.arena);
+    detail::diff_and_copy_layout(detail::g_app().prev_root, root_1,
+                                 detail::g_app().prev_arena, detail::g_app().arena);
     LAYOUT_NODE(root_1, 400.0f);
     CMD_LEN = 0;
     PAINT_NODE(root_1, 0, 0, 0, 600.0f);
     mirror_cmd_to_prev();
-    detail::g_app.prev_root = root_1;
+    detail::g_app().prev_root = root_1;
 
     // Frame 2: click A. C.row blits again. prev_cmd_buf is rewritten
     // each frame, so C.label's frame-0 offset now points to whatever
     // bytes happen to occupy that position in frame 2's emit.
     next_frame();
     auto root_2 = build_radios(true, false, false);
-    detail::diff_and_copy_layout(detail::g_app.prev_root, root_2,
-                                 detail::g_app.prev_arena, detail::g_app.arena);
+    detail::diff_and_copy_layout(detail::g_app().prev_root, root_2,
+                                 detail::g_app().prev_arena, detail::g_app().arena);
     LAYOUT_NODE(root_2, 400.0f);
     CMD_LEN = 0;
     PAINT_NODE(root_2, 0, 0, 0, 600.0f);
     mirror_cmd_to_prev();
-    detail::g_app.prev_root = root_2;
+    detail::g_app().prev_root = root_2;
 
     // Frame 3: click C. C.box decoration None→Dot fails diff and
     // cascades C.row to walk. C.label.diff still succeeds (text
@@ -1798,8 +1857,8 @@ void test_radio_paint_cache_stale_descendant_after_subtree_blit() {
     // offset without the descendant invalidation.
     next_frame();
     auto root_3 = build_radios(false, false, true);
-    detail::diff_and_copy_layout(detail::g_app.prev_root, root_3,
-                                 detail::g_app.prev_arena, detail::g_app.arena);
+    detail::diff_and_copy_layout(detail::g_app().prev_root, root_3,
+                                 detail::g_app().prev_arena, detail::g_app().arena);
     LAYOUT_NODE(root_3, 400.0f);
 
     auto blits_before = metrics::inst::paint_subtrees_blitted.total();
@@ -1831,7 +1890,7 @@ void test_radio_paint_cache_stale_descendant_after_subtree_blit() {
 }
 
 void test_row_cross_align_center_default() {
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
     auto root_h = detail::alloc_node();
     auto& root = detail::node_at(root_h);
     root.style.flex_direction = FlexDirection::Column;
@@ -2080,11 +2139,11 @@ void test_theme_json_mixed_overlay() {
 }
 
 void test_column_props_default_and_override() {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
 
     // Default builder overload — gap=Md, cross=Start, main=Start.
     {
-        detail::g_app.arena.reset();
+        detail::g_app().arena.reset();
         auto root_h = detail::alloc_node();
         Scope scope(root_h);
         Scope::set_current(&scope);
@@ -2101,7 +2160,7 @@ void test_column_props_default_and_override() {
     }
     // Explicit overrides.
     {
-        detail::g_app.arena.reset();
+        detail::g_app().arena.reset();
         auto root_h = detail::alloc_node();
         Scope scope(root_h);
         Scope::set_current(&scope);
@@ -2119,11 +2178,11 @@ void test_column_props_default_and_override() {
 }
 
 void test_row_props_default_and_override() {
-    auto const& t = detail::g_app.theme;
+    auto const& t = detail::g_app().theme;
 
     // Default builder overload — gap=Sm, cross=Center, main=Start.
     {
-        detail::g_app.arena.reset();
+        detail::g_app().arena.reset();
         auto root_h = detail::alloc_node();
         Scope scope(root_h);
         Scope::set_current(&scope);
@@ -2139,7 +2198,7 @@ void test_row_props_default_and_override() {
     }
     // Explicit overrides.
     {
-        detail::g_app.arena.reset();
+        detail::g_app().arena.reset();
         auto root_h = detail::alloc_node();
         Scope scope(root_h);
         Scope::set_current(&scope);
@@ -2240,7 +2299,7 @@ void test_draw_text_roundtrip_with_fontspec() {
 
 void test_widget_text_uses_theme_default_font_family() {
     set_theme(Theme{});
-    detail::g_app.arena.reset();
+    detail::g_app().arena.reset();
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -2666,6 +2725,7 @@ int main() {
     test_measure_text_cache_dedup();
     test_set_theme_updates_and_invalidates_cache();
     test_default_theme_glass_contract();
+    test_scene_runtime_isolates_app_state_and_messages();
     test_system_theme_preferences_are_pure_overlays();
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();

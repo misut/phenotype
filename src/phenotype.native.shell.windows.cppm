@@ -786,7 +786,7 @@ int run_app_with_windows_platform(platform_api const& platform,
     bool const artifact_requested = artifact_dir && artifact_dir[0] != '\0';
     if (artifact_requested && platform.debug.capabilities
         && platform.debug.capabilities().material_backdrop_blur) {
-        ::phenotype::detail::g_app.last_paint_hash = 0;
+        ::phenotype::detail::g_app().last_paint_hash = 0;
         repaint_current();
     }
     bool const artifact_ok = artifact_requested
