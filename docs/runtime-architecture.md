@@ -127,6 +127,12 @@ The current renderer entry points still look like the old single-window API, but
 state selection now follows host activation and gives future settings/debug
 windows a place to keep independent Metal layers, hit regions, debug captures,
 and transient renderer caches.
+AppKit event handling follows the same boundary: surface synchronization,
+native event dispatch, and frame ticks now activate the `native_host` they are
+servicing before touching shell, scene, renderer, or input state. The current
+desktop runner still registers one main window, but the event-loop structure is
+ready to dispatch each event to the host/window that owns it and to leave
+unrelated windows' hover, focus, animation, and frame-timeline state untouched.
 
 ## Migration Rules
 

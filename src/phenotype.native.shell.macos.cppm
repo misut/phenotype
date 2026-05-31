@@ -1716,6 +1716,57 @@ inline void complete_appkit_close_button_after_event(
         g_appkit_should_terminate = true;
 }
 
+inline void sync_appkit_host_surface(native_host& host,
+                                     NativeSurfaceDescriptor& surface,
+                                     id window,
+                                     bool notify) {
+    ScopedHostActivation activate(host);
+    sync_appkit_surface(host, surface, window, notify);
+}
+
+inline void service_appkit_unhandled_event(id app, id event) {
+    if (!event)
+        return;
+    auto const type = objc_send<unsigned long>(event, sel("type"));
+    if (type == 2 || type == 3)
+        g_appkit_close_button_candidate = false;
+    update_appkit_mouse_tracking_mode_before_send(event);
+    objc_send<void>(app, sel("sendEvent:"), event);
+    update_appkit_mouse_tracking_mode_after_send(event);
+}
+
+inline bool service_appkit_host_event(id app,
+                                      id event,
+                                      native_host& host,
+                                      NativeSurfaceDescriptor const& surface,
+                                      id window,
+                                      bool visible) {
+    if (!event || !appkit_event_targets_window(event, window))
+        return false;
+
+    ScopedHostActivation activate(host);
+    update_appkit_mouse_tracking_mode_before_send(event);
+    update_appkit_close_button_candidate_before_send(event, surface);
+    bool const close_button_fallback_event =
+        visible
+        && (g_appkit_close_button_candidate
+            || appkit_event_hits_close_button_fallback(event, surface));
+    if (close_button_fallback_event)
+        g_appkit_mouse_tracking_mode = false;
+    bool const native_titlebar_control_event =
+        visible
+        && appkit_event_hits_native_titlebar_control_reserve(event, surface);
+    if (visible
+        && !close_button_fallback_event
+        && !native_titlebar_control_event)
+        dispatch_appkit_event(event, surface);
+    if (!close_button_fallback_event)
+        objc_send<void>(app, sel("sendEvent:"), event);
+    update_appkit_mouse_tracking_mode_after_send(event);
+    complete_appkit_close_button_after_event(event, surface, window);
+    return true;
+}
+
 struct AppKitWindowServerSurface {
     bool valid = false;
     bool onscreen = false;
@@ -2356,39 +2407,20 @@ int run_app_with_macos_platform(platform_api const& platform,
             continue;
         }
         if (visible)
-            sync_appkit_surface(host, surface, window, true);
+            sync_appkit_host_surface(host, surface, window, true);
         service_appkit_activation_reopen(app, window, visible);
         id event = next_appkit_event(app, 0.016);
-        if (event) {
-            update_appkit_mouse_tracking_mode_before_send(event);
-            update_appkit_close_button_candidate_before_send(event, surface);
-            bool const main_window_event =
-                appkit_event_targets_window(event, window);
-            bool const close_button_fallback_event =
-                visible
-                && main_window_event
-                && (g_appkit_close_button_candidate
-                    || appkit_event_hits_close_button_fallback(event, surface));
-            if (close_button_fallback_event)
-                g_appkit_mouse_tracking_mode = false;
-            bool const native_titlebar_control_event =
-                visible
-                && main_window_event
-                && appkit_event_hits_native_titlebar_control_reserve(
-                    event,
-                    surface);
-            if (visible
-                && main_window_event
-                && !close_button_fallback_event
-                && !native_titlebar_control_event)
-                dispatch_appkit_event(event, surface);
-            if (!close_button_fallback_event)
-                objc_send<void>(app, sel("sendEvent:"), event);
-            update_appkit_mouse_tracking_mode_after_send(event);
-            complete_appkit_close_button_after_event(event, surface, window);
-        }
+        if (event
+            && !service_appkit_host_event(
+                app,
+                event,
+                host,
+                surface,
+                window,
+                visible))
+            service_appkit_unhandled_event(app, event);
         objc_send<void>(app, sel("updateWindows"));
-        service_host_tick(last_animation_tick);
+        service_host_tick(host, last_animation_tick);
     }
 
     shutdown_host(host);
