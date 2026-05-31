@@ -421,9 +421,9 @@ void test_scene_runtime_isolates_app_state_and_messages() {
 }
 
 void test_render_surface_runtime_binds_scene_and_tracks_frames() {
-    auto& main_surface = detail::default_render_surface_runtime();
+    auto main_surface = runtime::main_render_surface();
     {
-        detail::ScopedRenderSurfaceActivation activate_main(main_surface);
+        auto activate_main = runtime::activate_render_surface(main_surface);
         runtime::configure_active_render_surface(RenderSurfaceDescriptor{
             .id = "main",
             .title = "Main",
@@ -446,8 +446,8 @@ void test_render_surface_runtime_binds_scene_and_tracks_frames() {
         assert(runtime::active_scene().id == "main");
     }
 
-    auto& settings_surface =
-        detail::ensure_render_surface_runtime(RenderSurfaceDescriptor{
+    auto settings_surface =
+        runtime::ensure_render_surface(RenderSurfaceDescriptor{
             .id = "settings-window-surface",
             .title = "Settings Surface",
             .scene_id = "surface-settings-scene",
@@ -459,9 +459,12 @@ void test_render_surface_runtime_binds_scene_and_tracks_frames() {
             .framebuffer_height = 640,
             .content_scale = 2.0f,
         });
+    assert(runtime::render_surface_exists(settings_surface));
+    assert(runtime::render_surface(settings_surface).logical_width == 420);
 
     {
-        detail::ScopedRenderSurfaceActivation activate_settings(settings_surface);
+        auto activate_settings =
+            runtime::activate_render_surface(settings_surface);
         assert(runtime::active_scene().id == "surface-settings-scene");
         assert(runtime::active_scene().role == SceneRole::Settings);
         detail::g_app().hovered_id = 314u;
@@ -484,7 +487,7 @@ void test_render_surface_runtime_binds_scene_and_tracks_frames() {
     }
 
     {
-        detail::ScopedRenderSurfaceActivation activate_main(main_surface);
+        auto activate_main = runtime::activate_render_surface(main_surface);
         assert(runtime::active_scene().id == "main");
         assert(runtime::active_scene().hovered_id != 314u);
         assert(runtime::active_render_surface().id == "main");

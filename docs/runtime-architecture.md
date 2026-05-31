@@ -75,12 +75,16 @@ scenes.
 Framework and example code should use the public `runtime::SceneHandle`,
 `runtime::ensure_scene`, `runtime::SceneActivation`, `runtime::post`,
 `runtime::post_to_scene`, and `runtime::drain_scene` APIs when it needs to
-address a scene or its queue. `detail::ScopedSceneActivation` and
-`detail::post` remain the low-level implementation path used by widgets and
-the runner, but application code should not need to reach into them. This keeps
-the surface area closer to SwiftUI's scene handles and React's explicit roots:
-scene identity is explicit, queue ownership stays scene-local, and the caller
-does not depend on the singleton layout used by the compatibility runner.
+address a scene or its queue. Code that addresses drawing targets should use
+the matching `runtime::RenderSurfaceHandle`, `runtime::ensure_render_surface`,
+and `runtime::RenderSurfaceActivation` APIs. `detail::ScopedSceneActivation`,
+`detail::ScopedRenderSurfaceActivation`, and `detail::post` remain the
+low-level implementation path used by widgets, native hosts, and the runner,
+but application code should not need to reach into them. This keeps the surface
+area closer to SwiftUI's scene handles, React's explicit roots, and desktop
+window handles in Electron/Tauri: scene identity is explicit, queue ownership
+stays scene-local, render-surface ownership is explicit, and callers do not
+depend on the singleton layout used by the compatibility runner.
 
 ## Migration Rules
 

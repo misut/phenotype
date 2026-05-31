@@ -354,6 +354,10 @@ struct RenderSurfaceSnapshot {
     std::uint64_t paint_skip_count = 0;
 };
 
+struct RenderSurfaceHandle {
+    std::string id = "main";
+};
+
 struct AppState {
     Theme theme;
     std::uint64_t theme_generation = 1;
@@ -1571,6 +1575,131 @@ inline std::vector<Msg> drain_scene(SceneHandle const& handle) {
 inline RenderSurfaceSnapshot active_render_surface() {
     return detail::render_surface_snapshot(
         detail::active_render_surface_runtime());
+}
+
+inline RenderSurfaceHandle main_render_surface() {
+    return RenderSurfaceHandle{.id = "main"};
+}
+
+inline RenderSurfaceHandle active_render_surface_handle() {
+    return RenderSurfaceHandle{
+        .id = detail::active_render_surface_runtime().descriptor.id};
+}
+
+inline RenderSurfaceHandle ensure_render_surface(
+        RenderSurfaceDescriptor descriptor) {
+    auto& surface =
+        detail::ensure_render_surface_runtime(std::move(descriptor));
+    return RenderSurfaceHandle{.id = surface.descriptor.id};
+}
+
+inline bool render_surface_exists(std::string_view id) {
+    return detail::find_render_surface_runtime(id) != nullptr;
+}
+
+inline bool render_surface_exists(RenderSurfaceHandle const& handle) {
+    return render_surface_exists(handle.id);
+}
+
+inline RenderSurfaceSnapshot render_surface(
+        RenderSurfaceHandle const& handle) {
+    auto* surface = detail::find_render_surface_runtime(handle.id);
+    if (!surface) {
+        log::error("phenotype.runtime",
+            "render surface '{}' does not exist; call "
+            "runtime::ensure_render_surface first",
+            handle.id);
+        std::abort();
+    }
+    return detail::render_surface_snapshot(*surface);
+}
+
+inline RenderSurfaceSnapshot render_surface(std::string_view id) {
+    return render_surface(RenderSurfaceHandle{.id = std::string{id}});
+}
+
+class RenderSurfaceActivation {
+    void* previous_surface_ = nullptr;
+    void* previous_scene_ = nullptr;
+    void* previous_app_ = nullptr;
+    void* previous_messages_ = nullptr;
+    bool active_ = false;
+
+    void activate(std::string_view id) {
+        auto* surface = detail::find_render_surface_runtime(id);
+        if (!surface) {
+            log::error("phenotype.runtime",
+                "render surface '{}' does not exist; call "
+                "runtime::ensure_render_surface first",
+                id);
+            std::abort();
+        }
+        previous_surface_ = detail::g_active_render_surface;
+        previous_scene_ = detail::g_active_scene;
+        previous_app_ = detail::g_active_app;
+        previous_messages_ = detail::g_active_msg_queue;
+        detail::bind_render_surface_runtime(*surface);
+        active_ = true;
+    }
+
+    void reset() {
+        if (!active_)
+            return;
+        detail::g_active_render_surface = previous_surface_
+            ? static_cast<detail::RenderSurfaceRuntime*>(previous_surface_)
+            : &detail::default_render_surface_runtime();
+        detail::g_active_scene = previous_scene_
+            ? static_cast<detail::SceneRuntime*>(previous_scene_)
+            : &detail::default_scene_runtime();
+        detail::g_active_app = previous_app_
+            ? static_cast<AppState*>(previous_app_)
+            : &detail::default_app_state();
+        detail::g_active_msg_queue = previous_messages_
+            ? static_cast<std::vector<detail::DispatchedMsg>*>(
+                previous_messages_)
+            : &detail::default_scene_runtime().messages;
+        active_ = false;
+    }
+
+public:
+    explicit RenderSurfaceActivation(RenderSurfaceHandle const& handle) {
+        activate(handle.id);
+    }
+
+    explicit RenderSurfaceActivation(std::string_view id) {
+        activate(id);
+    }
+
+    RenderSurfaceActivation(RenderSurfaceActivation const&) = delete;
+    RenderSurfaceActivation& operator=(RenderSurfaceActivation const&) = delete;
+
+    RenderSurfaceActivation(RenderSurfaceActivation&& other) noexcept
+        : previous_surface_(other.previous_surface_),
+          previous_scene_(other.previous_scene_),
+          previous_app_(other.previous_app_),
+          previous_messages_(other.previous_messages_),
+          active_(other.active_) {
+        other.previous_surface_ = nullptr;
+        other.previous_scene_ = nullptr;
+        other.previous_app_ = nullptr;
+        other.previous_messages_ = nullptr;
+        other.active_ = false;
+    }
+
+    RenderSurfaceActivation& operator=(RenderSurfaceActivation&&) = delete;
+
+    ~RenderSurfaceActivation() {
+        reset();
+    }
+};
+
+inline RenderSurfaceActivation activate_render_surface(
+        RenderSurfaceHandle const& handle) {
+    return RenderSurfaceActivation{handle};
+}
+
+inline RenderSurfaceActivation activate_render_surface(std::string_view id) {
+    return RenderSurfaceActivation{id};
 }
 
 inline std::vector<RenderSurfaceSnapshot> render_surfaces() {
