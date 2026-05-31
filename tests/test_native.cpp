@@ -138,6 +138,54 @@ static void test_window_options_integrated_titlebar_contract() {
     std::puts("PASS: window options integrated titlebar contract");
 }
 
+static void test_native_shell_state_is_host_local() {
+    native_host first{};
+    native_host second{};
+
+    phenotype::native::detail::bind_host(first, 10.0f, 20.0f);
+    phenotype::native::detail::shell_state().last_mouse_x = 101.0f;
+    phenotype::native::detail::shell_state().last_mouse_y = 102.0f;
+    phenotype::native::detail::shell_state().drag_selecting = true;
+
+    phenotype::native::detail::bind_host(second, 30.0f, 40.0f);
+    phenotype::native::detail::shell_state().last_mouse_x = 201.0f;
+    phenotype::native::detail::shell_state().last_mouse_y = 202.0f;
+
+    assert(first.shell.host == &first);
+    assert(first.shell.scroll_x == 10.0f);
+    assert(first.shell.scroll_y == 20.0f);
+    assert(first.shell.last_mouse_x == 101.0f);
+    assert(first.shell.last_mouse_y == 102.0f);
+    assert(first.shell.drag_selecting);
+
+    assert(second.shell.host == &second);
+    assert(second.shell.scroll_x == 30.0f);
+    assert(second.shell.scroll_y == 40.0f);
+    assert(second.shell.last_mouse_x == 201.0f);
+    assert(second.shell.last_mouse_y == 202.0f);
+    assert(!second.shell.drag_selecting);
+
+    {
+        phenotype::native::detail::ScopedHostActivation activate(first);
+        assert(phenotype::native::detail::active_host() == &first);
+        assert(phenotype::native::detail::shell_state().last_mouse_x == 101.0f);
+        phenotype::native::detail::shell_state().scroll_y = 25.0f;
+    }
+    assert(phenotype::native::detail::active_host() == &second);
+    assert(first.shell.scroll_y == 25.0f);
+    assert(second.shell.scroll_y == 40.0f);
+
+    phenotype::native::detail::shutdown_host(second);
+    assert(phenotype::native::detail::active_host() == nullptr);
+    assert(second.shell.host == nullptr);
+    assert(first.shell.host == &first);
+
+    phenotype::native::detail::shutdown_host(first);
+    assert(first.shell.host == nullptr);
+
+    std::puts("PASS: native shell state is host-local");
+}
+
 static NativeBackdropCompositionInput ready_native_backdrop_input() {
     return NativeBackdropCompositionInput{
         .chrome = WindowChromeStyle::IntegratedTitlebar,
@@ -4573,6 +4621,7 @@ static void test_stub_renderer_hit_test() {
 
 int main() {
     test_window_options_integrated_titlebar_contract();
+    test_native_shell_state_is_host_local();
     test_native_backdrop_composition_plan_contract();
     test_native_system_settings_product_api();
     test_shell_pointer_hover_click_and_tab_navigation();

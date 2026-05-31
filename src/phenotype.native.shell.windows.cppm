@@ -377,7 +377,7 @@ inline void win32_frame_deltas(HWND hwnd,
 }
 
 inline bool phenotype_hit_region_at(float x, float y) {
-    auto hit = hit_test(x, y, g_app_state.scroll_x, g_app_state.scroll_y);
+    auto hit = hit_test(x, y, shell_state().scroll_x, shell_state().scroll_y);
     return hit.has_value();
 }
 

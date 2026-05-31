@@ -1532,12 +1532,12 @@ inline bool handle_local_scroll_event(id event) {
     bool handled = false;
     bool handled_y = false;
     bool handled_x = false;
-    float cursor_x = g_app_state.last_mouse_x;
-    float cursor_y = g_app_state.last_mouse_y;
+    float cursor_x = shell_state().last_mouse_x;
+    float cursor_y = shell_state().last_mouse_y;
     bool const has_cursor = event_cursor_position(event, cursor_x, cursor_y);
     if (has_cursor) {
-        g_app_state.last_mouse_x = cursor_x;
-        g_app_state.last_mouse_y = cursor_y;
+        shell_state().last_mouse_x = cursor_x;
+        shell_state().last_mouse_y = cursor_y;
     }
     if (normalized_delta != 0.0f) {
         handled_y = dispatch_scroll_pixels_at_cursor(
