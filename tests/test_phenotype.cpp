@@ -460,6 +460,8 @@ void test_render_surface_runtime_binds_scene_and_tracks_frames() {
         detail::g_app().hovered_id = 314u;
         runtime::mark_active_render_surface_damaged();
         runtime::note_active_render_surface_frame();
+        runtime::set_active_render_surface_paint_hash(12345u);
+        runtime::note_active_render_surface_paint_flush();
 
         auto snapshot = runtime::active_render_surface();
         assert(snapshot.id == "settings-window-surface");
@@ -469,6 +471,8 @@ void test_render_surface_runtime_binds_scene_and_tracks_frames() {
         assert(snapshot.logical_width == 420);
         assert(snapshot.frame_sequence == 1);
         assert(snapshot.damage_generation == 1);
+        assert(snapshot.last_paint_hash == 12345u);
+        assert(snapshot.paint_flush_count == 1u);
         assert(runtime::active_scene().hovered_id == 314u);
     }
 
@@ -477,6 +481,9 @@ void test_render_surface_runtime_binds_scene_and_tracks_frames() {
         assert(runtime::active_scene().id == "main");
         assert(runtime::active_scene().hovered_id != 314u);
         assert(runtime::active_render_surface().id == "main");
+        assert(runtime::active_render_surface().last_paint_hash != 12345u);
+        runtime::invalidate_active_render_surface_paint_cache();
+        assert(runtime::active_render_surface().last_paint_hash == 0u);
     }
 
     auto surfaces = runtime::render_surfaces();
@@ -489,7 +496,9 @@ void test_render_surface_runtime_binds_scene_and_tracks_frames() {
             || (surface.id == "settings-window-surface"
                 && surface.scene_id == "surface-settings-scene"
                 && surface.frame_sequence == 1
-                && surface.damage_generation == 1);
+                && surface.damage_generation == 1
+                && surface.last_paint_hash == 12345u
+                && surface.paint_flush_count == 1u);
     }
     assert(saw_main);
     assert(saw_settings);

@@ -58,6 +58,11 @@ The shared debug plane publishes both runtime owners in
 can now confirm which scene owns hover/focus/message state and which surface
 owns size, visibility, damage, and frame counters before relying on
 platform-specific renderer diagnostics.
+Render surfaces also own the paint/flush cache key (`last_paint_hash`) and
+flush/skip counters. The legacy `AppState::last_paint_hash` remains mirrored for
+older tests and callers, but `flush_if_changed` compares against the active
+surface so independent windows do not accidentally suppress each other's first
+paint.
 
 Each scene snapshot also carries a `schedule` object. It reports whether a
 runner is installed, whether view-time animations, scrollbar animation,

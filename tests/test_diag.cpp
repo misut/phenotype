@@ -386,6 +386,9 @@ void test_snapshot_shape() {
         (void)surface.at("content_scale").as_float();
         (void)surface.at("frame_sequence").as_integer();
         (void)surface.at("damage_generation").as_integer();
+        (void)surface.at("last_paint_hash").as_integer();
+        (void)surface.at("paint_flush_count").as_integer();
+        (void)surface.at("paint_skip_count").as_integer();
         found_active_main_surface = found_active_main_surface
             || (surface.at("id").as_string() == "main"
                 && surface.at("scene_id").as_string() == "main"

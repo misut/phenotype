@@ -345,6 +345,9 @@ struct RenderSurfaceSnapshot {
     float content_scale = 1.0f;
     std::uint64_t frame_sequence = 0;
     std::uint64_t damage_generation = 0;
+    std::uint64_t last_paint_hash = 0;
+    std::uint64_t paint_flush_count = 0;
+    std::uint64_t paint_skip_count = 0;
 };
 
 struct AppState {
@@ -786,6 +789,9 @@ namespace detail {
         SceneRuntime* scene = nullptr;
         std::uint64_t frame_sequence = 0;
         std::uint64_t damage_generation = 0;
+        std::uint64_t last_paint_hash = 0;
+        std::uint64_t paint_flush_count = 0;
+        std::uint64_t paint_skip_count = 0;
     };
 
     inline std::string normalize_render_surface_id(std::string id) {
@@ -978,6 +984,9 @@ namespace detail {
             .content_scale = surface.descriptor.content_scale,
             .frame_sequence = surface.frame_sequence,
             .damage_generation = surface.damage_generation,
+            .last_paint_hash = surface.last_paint_hash,
+            .paint_flush_count = surface.paint_flush_count,
+            .paint_skip_count = surface.paint_skip_count,
         };
     }
 
@@ -1432,6 +1441,26 @@ inline void mark_active_render_surface_damaged() {
 
 inline void note_active_render_surface_frame() {
     detail::note_active_render_surface_frame();
+}
+
+inline std::uint64_t active_render_surface_paint_hash() {
+    return detail::active_render_surface_runtime().last_paint_hash;
+}
+
+inline void set_active_render_surface_paint_hash(std::uint64_t hash) {
+    detail::active_render_surface_runtime().last_paint_hash = hash;
+}
+
+inline void invalidate_active_render_surface_paint_cache() {
+    set_active_render_surface_paint_hash(0);
+}
+
+inline void note_active_render_surface_paint_flush() {
+    ++detail::active_render_surface_runtime().paint_flush_count;
+}
+
+inline void note_active_render_surface_paint_skip() {
+    ++detail::active_render_surface_runtime().paint_skip_count;
 }
 
 } // namespace runtime
