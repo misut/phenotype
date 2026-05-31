@@ -225,6 +225,12 @@ static void test_native_shell_state_is_host_local() {
     assert(first.shell.scroll_y == 25.0f);
     assert(second.shell.scroll_y == 40.0f);
 
+    auto last_animation_tick = std::chrono::steady_clock::now();
+    phenotype::native::detail::service_host_tick(first, last_animation_tick);
+    assert(phenotype::native::detail::active_host() == &second);
+    assert(phenotype::runtime::active_render_surface().id
+           == "native-host-settings-surface");
+
     phenotype::native::detail::shutdown_host(second);
     assert(phenotype::native::detail::active_host() == nullptr);
     assert(phenotype::runtime::active_render_surface().id == "main");

@@ -1673,6 +1673,12 @@ inline void service_host_tick(std::chrono::steady_clock::time_point& last_animat
     }
 }
 
+inline void service_host_tick(native_host& host,
+                              std::chrono::steady_clock::time_point& last_animation_tick) {
+    ScopedHostActivation activate(host);
+    service_host_tick(last_animation_tick);
+}
+
 inline void shutdown_host(native_host& host) {
     if (host.platform && host.platform->input.detach)
         host.platform->input.detach();
