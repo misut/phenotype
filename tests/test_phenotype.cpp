@@ -828,6 +828,80 @@ void test_legacy_app_runner_context_is_scene_local() {
     std::puts("PASS: legacy app runner context is scene-local");
 }
 
+void test_material_build_context_is_scene_local() {
+    auto active_before = runtime::active_scene_handle();
+    auto scene_a = runtime::ensure_scene(SceneDescriptor{
+        .id = "material-build-context-scene-a",
+        .title = "Material Build Context Scene A",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+    auto scene_b = runtime::ensure_scene(SceneDescriptor{
+        .id = "material-build-context-scene-b",
+        .title = "Material Build Context Scene B",
+        .role = SceneRole::Debug,
+        .visible = true,
+    });
+    auto container_union = [] {
+        return layout::current_material_container().union_id;
+    };
+    auto transition_kind = [] {
+        return layout::current_material_transition().kind;
+    };
+    auto transition_progress = [] {
+        return layout::current_material_transition().progress;
+    };
+    auto identity_namespace = [] {
+        return layout::current_material_glass_identity().namespace_id;
+    };
+    auto identity_effect = [] {
+        return layout::current_material_glass_identity().effect_id;
+    };
+
+    {
+        auto activate_a = runtime::activate_scene(scene_a);
+        layout::glass_effect_union(101u, [&] {
+            assert(container_union() == 101u);
+            layout::glass_effect_transition(
+                layout::glass_matched_geometry_transition(0.25f),
+                [&] {
+                    assert(transition_kind()
+                           == MaterialGlassTransitionKind::MatchedGeometry);
+                    assert(transition_progress() == 0.25f);
+                    layout::glass_effect_id(201u, 301u, [&] {
+                        assert(identity_namespace() == 201u);
+                        assert(identity_effect() == 301u);
+
+                        {
+                            auto activate_b = runtime::activate_scene(scene_b);
+                            assert(container_union() == 0u);
+                            assert(transition_kind()
+                                   == MaterialGlassTransitionKind::Identity);
+                            assert(identity_effect() == 0u);
+                            layout::glass_effect_union(202u, [&] {
+                                assert(container_union() == 202u);
+                            });
+                            assert(container_union() == 0u);
+                        }
+
+                        assert(runtime::active_scene_handle().id == scene_a.id);
+                        assert(container_union() == 101u);
+                        assert(transition_kind()
+                               == MaterialGlassTransitionKind::MatchedGeometry);
+                        assert(identity_effect() == 301u);
+                    });
+                });
+        });
+        assert(container_union() == 0u);
+        assert(transition_kind() == MaterialGlassTransitionKind::Identity);
+        assert(identity_effect() == 0u);
+    }
+
+    assert(runtime::active_scene_handle().id == active_before.id);
+
+    std::puts("PASS: material build context is scene-local");
+}
+
 void test_runtime_run_scene_keeps_same_types_scene_local() {
     struct SceneRunState {
         int value = 0;
@@ -3399,6 +3473,7 @@ int main() {
     test_app_runner_uses_context_pointer();
     test_app_runner_can_own_context_pointer();
     test_legacy_app_runner_context_is_scene_local();
+    test_material_build_context_is_scene_local();
     test_runtime_run_scene_keeps_same_types_scene_local();
     test_runtime_run_scene_can_share_external_state();
     test_runtime_scene_runner_targets_scene();
