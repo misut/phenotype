@@ -52,7 +52,10 @@ The common snapshot schema remains the source of truth for all platforms:
   from artifact debugging when the document underneath is scrolled.
 - `platform_runtime` always includes the shared viewport, scroll, focus,
   `focus_visible`, `input_modality`, `focus_visibility_reason`, hover, and
-  press state plus a platform-specific `details` object.
+  press state. It also reports `scenes[]` and `render_surfaces[]` so the CLI and
+  side panel can identify active scene ownership, queued messages,
+  framework-local entries, surface size, damage generation, and frame counters
+  without scraping platform-specific `details`.
 - Native desktop `platform_runtime.details.window` records the resolved window
   surface kind, requested `WindowOptions`, integrated titlebar metrics,
   native-control ownership, and `uses_glfw=false` / `toolkit_window_shim=false`

@@ -52,6 +52,13 @@ Metal, D3D, and Vulkan resources into this surface owner before multiple native
 phenotype windows can render independently, but the public runtime snapshots and
 tests now make that ownership boundary explicit.
 
+The shared debug plane publishes both runtime owners in
+`debug.platform_runtime.scenes[]` and
+`debug.platform_runtime.render_surfaces[]`. CLI, artifact, and side-panel tools
+can now confirm which scene owns hover/focus/message state and which surface
+owns size, visibility, damage, and frame counters before relying on
+platform-specific renderer diagnostics.
+
 ## Migration Rules
 
 - Keep `phenotype::run<State, Msg>` as the simple single-window entry point.
