@@ -64,139 +64,12 @@ void sync_settings_runtime_scene(State const& state) {
         .role = phenotype::RenderSurfaceRole::Settings,
         .visible = state.settings_open,
         .logical_width = 500,
-        .logical_height = 284,
+        .logical_height = 360,
         .framebuffer_width = 500,
-        .framebuffer_height = 284,
+        .framebuffer_height = 360,
         .content_scale = 1.0f,
     });
 }
-
-#if defined(__APPLE__)
-constexpr char const* k_settings_window_identifier =
-    k_settings_scene_id;
-
-void native_settings_color_scheme_selected(char const* value, void*) {
-    phenotype::runtime::post<Msg>(
-        color_scheme_message(value && *value ? value : "system"));
-}
-
-void native_settings_sidebar_position_selected(char const* value, void*) {
-    phenotype::runtime::post<Msg>(
-        SetSidebarPosition{std::string_view{value ? value : ""} == "right"});
-}
-
-void native_settings_scrollbar_selected(char const* value, void*) {
-    phenotype::runtime::post<Msg>(
-        scroll_bar_visibility_message(value && *value ? value : "auto"));
-}
-
-void native_settings_window_closed(void*) {
-    phenotype::runtime::post<Msg>(CloseSettings{});
-}
-
-std::string native_settings_appearance(State const& state) {
-    if (state.explorer.theme_preferences.prefer_system_color_scheme)
-        return "system";
-    return state.explorer.theme_preferences.color_scheme == "dark"
-        ? "dark"
-        : "light";
-}
-
-bool publish_native_settings_window(State const& state, bool order_front) {
-    auto const appearance = native_settings_appearance(state);
-    phenotype::native::NativePreferencesChoice appearance_choices[] = {
-        {
-            state.labels.preferences_system_appearance.c_str(),
-            "system",
-            state.explorer.theme_preferences.prefer_system_color_scheme,
-        },
-        {
-            state.labels.preferences_light_appearance.c_str(),
-            "light",
-            !state.explorer.theme_preferences.prefer_system_color_scheme
-                && state.explorer.theme_preferences.color_scheme == "light",
-        },
-        {
-            state.labels.preferences_dark_appearance.c_str(),
-            "dark",
-            !state.explorer.theme_preferences.prefer_system_color_scheme
-                && state.explorer.theme_preferences.color_scheme == "dark",
-        },
-    };
-    phenotype::native::NativePreferencesChoice sidebar_choices[] = {
-        {"Left", "left", !state.sidebar_right},
-        {"Right", "right", state.sidebar_right},
-    };
-    phenotype::native::NativePreferencesChoice scrollbar_choices[] = {
-        {
-            state.labels.preferences_scrollbar_auto.c_str(),
-            "auto",
-            state.explorer.theme_preferences.scroll_bar_visibility == "auto",
-        },
-        {
-            state.labels.preferences_scrollbar_always.c_str(),
-            "always",
-            state.explorer.theme_preferences.scroll_bar_visibility == "always",
-        },
-        {
-            state.labels.preferences_scrollbar_hidden.c_str(),
-            "hidden",
-            state.explorer.theme_preferences.scroll_bar_visibility == "hidden",
-        },
-    };
-    phenotype::native::NativePreferencesSection sections[] = {
-        {
-            "Appearance",
-            "",
-            appearance_choices,
-            std::size(appearance_choices),
-            native_settings_color_scheme_selected,
-        },
-        {
-            "Sidebar",
-            "",
-            sidebar_choices,
-            std::size(sidebar_choices),
-            native_settings_sidebar_position_selected,
-        },
-        {
-            "Scroll Bars",
-            "",
-            scrollbar_choices,
-            std::size(scrollbar_choices),
-            native_settings_scrollbar_selected,
-        },
-    };
-    phenotype::native::NativePreferencesWindowOptions const options{
-        .identifier = k_settings_window_identifier,
-        .title = "File Explorer Settings",
-        .width = 500,
-        .height = 284,
-        .appearance = appearance.c_str(),
-        .sections = sections,
-        .section_count = std::size(sections),
-        .on_close = native_settings_window_closed,
-    };
-    return order_front
-        ? phenotype::native::preferences::show_window(options)
-        : phenotype::native::preferences::sync_window(options);
-}
-
-bool show_native_settings_window(State const& state) {
-    return publish_native_settings_window(state, true);
-}
-
-void refresh_native_settings_window_if_visible(State const& state) {
-    if (phenotype::native::preferences::is_window_visible(
-            k_settings_window_identifier)) {
-        (void)publish_native_settings_window(state, false);
-    }
-}
-
-void close_native_settings_window() {
-    phenotype::native::preferences::close_window(k_settings_window_identifier);
-}
-#endif
 
 void update(State& state, Msg msg) {
     auto& explorer = state.explorer;
@@ -258,9 +131,6 @@ void update(State& state, Msg msg) {
                 explorer.status = "More actions closed.";
             } else if (state.settings_open) {
                 state.settings_open = false;
-#if defined(__APPLE__)
-                close_native_settings_window();
-#endif
                 explorer.status = "Settings closed.";
             } else if (state.search_visible) {
                 state.search_visible = false;
@@ -308,16 +178,9 @@ void update(State& state, Msg msg) {
         } else if constexpr (std::same_as<T, OpenSettings>) {
             state.more_actions_open = false;
             state.settings_open = true;
-#if defined(__APPLE__)
-            if (!show_native_settings_window(state))
-                state.settings_open = true;
-#endif
             explorer.status = "Settings ready.";
         } else if constexpr (std::same_as<T, CloseSettings>) {
             state.settings_open = false;
-#if defined(__APPLE__)
-            close_native_settings_window();
-#endif
             explorer.status = "Ready";
         } else if constexpr (std::same_as<T, SetSidebarPosition>) {
             state.sidebar_right = m.right;
@@ -379,9 +242,6 @@ void update(State& state, Msg msg) {
     }, msg);
     sync_runtime_theme(explorer);
     sync_settings_runtime_scene(state);
-#if defined(__APPLE__)
-    refresh_native_settings_window_if_visible(state);
-#endif
 }
 
 } // namespace file_explorer_desktop

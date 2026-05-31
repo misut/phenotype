@@ -2,6 +2,7 @@ module;
 #include <algorithm>
 #include <cctype>
 #include <concepts>
+#include <cstdio>
 #include <cstdlib>
 #include <cstddef>
 #include <cstdint>
@@ -42,6 +43,118 @@ int run(int argc, char** argv);
 }
 
 namespace file_explorer_desktop {
+#if defined(__APPLE__)
+constexpr char const* k_settings_window_identifier =
+    k_settings_scene_id;
+
+char const* settings_scene_artifact_dir() {
+    if (char const* dir = std::getenv(
+            "PHENOTYPE_FILE_EXPLORER_SETTINGS_ARTIFACT_DIR")) {
+        if (*dir)
+            return dir;
+    }
+    if (char const* dir = std::getenv("PHENOTYPE_SETTINGS_ARTIFACT_DIR")) {
+        if (*dir)
+            return dir;
+    }
+    return nullptr;
+}
+
+void write_settings_scene_artifact_if_requested() {
+    char const* dir = settings_scene_artifact_dir();
+    if (!dir)
+        return;
+    auto result = phenotype::native::scene_window::write_artifact_bundle(
+        k_settings_window_identifier,
+        dir,
+        "file-explorer-settings-scene");
+    if (!result.ok && !result.error.empty()) {
+        std::fprintf(
+            stderr,
+            "[file-explorer] settings artifact failed: %s\n",
+            result.error.c_str());
+    }
+}
+
+void settings_scene_closed(void*) {
+    auto main_scene = phenotype::runtime::main_scene();
+    phenotype::runtime::post_to_scene<Msg>(main_scene, CloseSettings{});
+    phenotype::runtime::trigger_scene_rebuild(main_scene);
+}
+
+void sync_settings_scene_theme(State& state) {
+    auto settings_scene = phenotype::runtime::ensure_scene(
+        phenotype::SceneDescriptor{
+            .id = k_settings_scene_id,
+            .title = "File Explorer Settings",
+            .role = phenotype::SceneRole::Settings,
+            .visible = state.settings_open,
+        });
+    phenotype::runtime::SceneActivation activate{settings_scene};
+    sync_runtime_theme(state.explorer);
+    auto theme = phenotype::current_theme();
+    theme.background = with_alpha(theme.surface, 255);
+    phenotype::set_theme(theme);
+}
+
+void settings_scene_update(State& state, Msg msg) {
+    update(state, std::move(msg));
+    sync_settings_scene_theme(state);
+    if (!state.settings_open) {
+        phenotype::native::scene_window::close_window(
+            k_settings_window_identifier);
+    }
+    phenotype::runtime::trigger_scene_rebuild(phenotype::runtime::main_scene());
+}
+
+bool show_settings_scene_window(State& state, bool order_front) {
+    sync_settings_scene_theme(state);
+    phenotype::native::NativeSceneWindowOptions options{
+        .identifier = k_settings_window_identifier,
+        .title = "File Explorer Settings",
+        .width = 500,
+        .height = 360,
+        .scene_id = k_settings_scene_id,
+        .surface_id = k_settings_render_surface_id,
+        .scene_role = phenotype::SceneRole::Settings,
+        .surface_role = phenotype::RenderSurfaceRole::Settings,
+        .window_options = {
+            .chrome = phenotype::native::WindowChromeStyle::System,
+            .native_backdrop_material =
+                phenotype::native::NativeBackdropMaterial::UnderWindowBackground,
+            .native_backdrop_opacity = 1.0f,
+        },
+        .order_front = order_front,
+        .on_close = settings_scene_closed,
+    };
+    bool const shown = phenotype::native::scene_window::show_with_state<State, Msg>(
+        options,
+        state,
+        finder_settings_scene,
+        settings_scene_update);
+    if (shown)
+        write_settings_scene_artifact_if_requested();
+    return shown;
+}
+
+void sync_settings_scene_window(State& state, bool order_front) {
+    if (state.settings_open) {
+        (void)show_settings_scene_window(state, order_front);
+    } else {
+        phenotype::native::scene_window::close_window(
+            k_settings_window_identifier);
+    }
+}
+#endif
+
+void desktop_update(State& state, Msg msg) {
+    bool const order_settings_front = std::holds_alternative<OpenSettings>(msg);
+    update(state, std::move(msg));
+#if defined(__APPLE__)
+    sync_settings_scene_window(state, order_settings_front);
+#endif
+}
+
 int run(int argc, char** argv) {
     configure_initial_filesystem_root(argc, argv);
     phenotype::Theme theme = phenotype::current_theme();
@@ -104,7 +217,7 @@ int run(int argc, char** argv) {
         "phenotype file explorer desktop",
         window_options,
         view,
-        update,
+        desktop_update,
         [](int width, int height, float scale) -> Msg {
             return Resized{width, height, scale};
         });

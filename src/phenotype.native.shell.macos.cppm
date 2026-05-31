@@ -792,7 +792,27 @@ struct AppKitSceneWindowOptions {
         ::phenotype::RenderSurfaceRole::Window;
     WindowOptions window_options = {};
     bool order_front = true;
+    void* user_data = nullptr;
+    void (*on_close)(void* user_data) = nullptr;
 };
+
+inline AppKitSceneWindowOptions appkit_scene_window_options(
+        NativeSceneWindowOptions const& options) {
+    return AppKitSceneWindowOptions{
+        .identifier = options.identifier,
+        .title = options.title,
+        .width = options.width,
+        .height = options.height,
+        .scene_id = options.scene_id,
+        .surface_id = options.surface_id,
+        .scene_role = options.scene_role,
+        .surface_role = options.surface_role,
+        .window_options = options.window_options,
+        .order_front = options.order_front,
+        .user_data = options.user_data,
+        .on_close = options.on_close,
+    };
+}
 
 struct AppKitSceneWindowState {
     std::string identifier;
@@ -805,6 +825,8 @@ struct AppKitSceneWindowState {
     ::phenotype::RenderSurfaceRole surface_role =
         ::phenotype::RenderSurfaceRole::Window;
     WindowOptions window_options = {};
+    void* user_data = nullptr;
+    void (*on_close)(void* user_data) = nullptr;
     id window = nullptr;
     id content_view = nullptr;
     NativeSurfaceDescriptor surface{};
@@ -873,7 +895,10 @@ inline void appkit_scene_window_will_close(id, SEL, id notification) {
         ? objc_send<id>(notification, sel("object"))
         : nullptr;
     if (auto* state = find_appkit_scene_window_by_window(window)) {
+        bool const was_visible = state->visible;
         mark_appkit_scene_window_visibility(*state, false);
+        if (was_visible && state->on_close)
+            state->on_close(state->user_data);
         ::phenotype::detail::trigger_rebuild();
     }
 }
@@ -946,6 +971,8 @@ inline void sync_appkit_scene_window_options(
     state.scene_role = options.scene_role;
     state.surface_role = options.surface_role;
     state.window_options = options.window_options;
+    state.user_data = options.user_data;
+    state.on_close = options.on_close;
     if (state.window) {
         objc_send<void>(state.window, sel("setTitle:"), ns_string(state.title.c_str()));
         CGSize content_size{
@@ -1008,9 +1035,58 @@ bool show_appkit_scene_window(platform_api const& platform,
         .visible = true,
     });
     if (!state->runner_installed) {
+        ScopedHostActivation activate(state->host);
         run_host_scene<State, Msg>(
             state->host,
             scene,
+            std::move(view),
+            std::move(update));
+        state->runner_installed = true;
+    } else {
+        ScopedHostActivation activate(state->host);
+        ::phenotype::runtime::trigger_scene_rebuild(scene);
+    }
+
+    if (options.order_front) {
+        id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
+        activate_current_running_application();
+        if (app) {
+            objc_send<void>(
+                app,
+                sel("activateIgnoringOtherApps:"),
+                static_cast<signed char>(1));
+        }
+        objc_send<void>(state->window, sel("makeKeyAndOrderFront:"), nullptr);
+        objc_send<void>(state->window, sel("orderFrontRegardless"));
+    }
+    refresh_appkit_scene_window_visibility(*state);
+    return true;
+}
+
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+bool show_appkit_scene_window_with_state(platform_api const& platform,
+                                         AppKitSceneWindowOptions const& options,
+                                         State& app_state,
+                                         View view,
+                                         Update update) {
+    auto* state = ensure_appkit_scene_window(options, platform);
+    if (!state)
+        return false;
+
+    auto scene = ::phenotype::runtime::ensure_scene(::phenotype::SceneDescriptor{
+        .id = state->scene_id,
+        .title = state->title,
+        .role = state->scene_role,
+        .visible = true,
+    });
+    if (!state->runner_installed) {
+        ScopedHostActivation activate(state->host);
+        run_host_scene_with_state<State, Msg>(
+            state->host,
+            scene,
+            app_state,
             std::move(view),
             std::move(update));
         state->runner_installed = true;

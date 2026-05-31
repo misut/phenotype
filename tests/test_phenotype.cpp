@@ -676,6 +676,75 @@ void test_runtime_run_scene_keeps_same_types_scene_local() {
     std::puts("PASS: runtime run_scene keeps same types scene-local");
 }
 
+void test_runtime_run_scene_can_share_external_state() {
+    struct SharedState {
+        int value = 7;
+    };
+
+    struct ViewProbe {
+        int* last_seen = nullptr;
+
+        void operator()(SharedState const& state) const {
+            if (last_seen)
+                *last_seen = state.value;
+            widget::text("shared value=" + std::to_string(state.value));
+        }
+    };
+
+    struct UpdateProbe {
+        void operator()(SharedState& state, int msg) const {
+            state.value += msg;
+        }
+    };
+
+    auto scene = runtime::ensure_scene(SceneDescriptor{
+        .id = "run-scene-shared-state",
+        .title = "Run Scene Shared State",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+    auto active_before = runtime::active_scene_handle();
+    SharedState state{};
+    int last_seen = -1;
+
+#if !defined(__wasi__) && !defined(__ANDROID__)
+    null_host host;
+    runtime::run_scene_with_state<SharedState, int>(
+        scene,
+        host,
+        state,
+        ViewProbe{&last_seen},
+        UpdateProbe{});
+#elif defined(__wasi__)
+    runtime::run_scene_with_state<SharedState, int>(
+        scene,
+        state,
+        ViewProbe{&last_seen},
+        UpdateProbe{});
+#else
+    std::puts("SKIP: runtime run_scene shared external state");
+    return;
+#endif
+
+    assert(runtime::active_scene_handle().id == active_before.id);
+    assert(state.value == 7);
+    assert(last_seen == 7);
+
+    runtime::post_to_scene<int>(scene, 5);
+    runtime::trigger_scene_rebuild(scene);
+    assert(state.value == 12);
+    assert(last_seen == 12);
+    assert(runtime::active_scene_handle().id == active_before.id);
+
+    state.value = 40;
+    runtime::trigger_scene_rebuild(scene);
+    assert(last_seen == 40);
+
+    runtime::clear_scene_runner(scene);
+
+    std::puts("PASS: runtime run_scene can share external state");
+}
+
 void test_runtime_scene_runner_targets_scene() {
     struct RunnerContext {
         int rebuilds = 0;
@@ -3085,6 +3154,7 @@ int main() {
     test_app_runner_uses_context_pointer();
     test_app_runner_can_own_context_pointer();
     test_runtime_run_scene_keeps_same_types_scene_local();
+    test_runtime_run_scene_can_share_external_state();
     test_runtime_scene_runner_targets_scene();
     test_scene_runner_survives_app_state_swap();
     test_system_theme_preferences_are_pure_overlays();

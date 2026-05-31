@@ -1936,13 +1936,18 @@ inline void renderer_init(native_surface_handle handle) {
     renderer_state().layer->setDevice(renderer_state().device);
     renderer_state().layer->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
     renderer_state().layer->setFramebufferOnly(false);
+    using ObjcBool = signed char;
     if (surface->window_options_valid
         && surface->window_chrome == WindowChromeStyle::IntegratedTitlebar) {
-        using ObjcBool = signed char;
         objc_send<void>(
             reinterpret_cast<id>(renderer_state().layer),
             sel_set_opaque(),
             static_cast<ObjcBool>(0));
+    } else {
+        objc_send<void>(
+            reinterpret_cast<id>(renderer_state().layer),
+            sel_set_opaque(),
+            static_cast<ObjcBool>(1));
     }
 
     int fbw = 0;

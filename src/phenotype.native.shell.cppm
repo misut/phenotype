@@ -423,12 +423,13 @@ struct ScopedHostActivation {
         : previous(activate_host(host)) {}
 
     ~ScopedHostActivation() {
-        g_active_host = previous;
-        if (previous)
-            sync_host_render_surface(*previous);
-        else
+        if (previous) {
+            activate_host(*previous);
+        } else {
+            g_active_host = nullptr;
             ::phenotype::detail::bind_render_surface_runtime(
                 ::phenotype::detail::default_render_surface_runtime());
+        }
     }
 };
 
@@ -1606,6 +1607,42 @@ void run_host_scene(native_host& host,
     ::phenotype::runtime::run_scene<State, Msg>(
         scene,
         host,
+        std::move(view),
+        std::move(update));
+#ifndef NDEBUG
+    if (debug_panel_env_enabled("PHENOTYPE_DEBUG_PANEL")
+        || debug_panel_env_enabled("PHENOTYPE_PERF_DEBUG_PANEL")) {
+        ::phenotype::detail::g_app().debug_panel_open = true;
+        apply_debug_panel_env_tab();
+        ::phenotype::detail::g_app().debug_panel_warmup_frames = 4u;
+        ::phenotype::detail::g_app().last_paint_hash = 0;
+        ::phenotype::detail::trigger_rebuild();
+    }
+#endif
+    sync_platform_input();
+}
+
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+void run_host_scene_with_state(native_host& host,
+                               ::phenotype::SceneHandle const& scene,
+                               State& state,
+                               View view,
+                               Update update) {
+    host.render_scene_id = scene.id;
+    bind_host(host, host.shell.scroll_x, host.shell.scroll_y);
+    ::phenotype::detail::g_open_url = detail::open_url_bridge;
+    if (host.platform && host.platform->input.attach)
+        host.platform->input.attach(host.window, detail::repaint_current);
+    if (host.platform && host.platform->text.init)
+        host.platform->text.init();
+    if (host.platform && host.platform->renderer.init)
+        host.platform->renderer.init(host.window);
+    ::phenotype::runtime::run_scene_with_state<State, Msg>(
+        scene,
+        host,
+        state,
         std::move(view),
         std::move(update));
 #ifndef NDEBUG

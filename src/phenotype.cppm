@@ -2715,6 +2715,45 @@ void install_native_scene_run_context(Host& host, View view, Update update) {
     }, raw_context, std::move(context));
     trigger_rebuild();
 }
+
+template<typename State, typename Msg, host_platform Host,
+         typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+void install_native_scene_shared_state_run_context(Host& host,
+                                                  State& state,
+                                                  View view,
+                                                  Update update) {
+    struct RunContext {
+        Host* host = nullptr;
+        State* state = nullptr;
+        View view;
+        Update update;
+    };
+    msg_queue().clear();
+    auto context = std::make_shared<RunContext>(RunContext{
+        .host = &host,
+        .state = &state,
+        .view = std::move(view),
+        .update = std::move(update),
+    });
+    reset_active_scene_runner_inputs();
+
+    auto* raw_context = context.get();
+    install_app_runner([](void* raw) {
+        auto& context = *static_cast<RunContext*>(raw);
+        NativeFrameBackend<Host> backend{context.host};
+        run_scene_rebuild_frame(
+            [&] {
+                auto msgs = drain<Msg>();
+                for (auto& m : msgs)
+                    context.update(*context.state, std::move(m));
+            },
+            [&] { context.view(*context.state); },
+            backend);
+    }, raw_context, std::move(context));
+    trigger_rebuild();
+}
 #else // __wasi__
 template<typename State, typename Msg, typename View, typename Update>
     requires std::invocable<View, State const&>
@@ -2744,6 +2783,41 @@ void install_wasi_scene_run_context(View view, Update update) {
                     context.update(context.state, std::move(m));
             },
             [&] { context.view(context.state); },
+            backend);
+    }, raw_context, std::move(context));
+    trigger_rebuild();
+}
+
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+void install_wasi_scene_shared_state_run_context(State& state,
+                                                 View view,
+                                                 Update update) {
+    struct RunContext {
+        State* state = nullptr;
+        View view;
+        Update update;
+    };
+    msg_queue().clear();
+    auto context = std::make_shared<RunContext>(RunContext{
+        .state = &state,
+        .view = std::move(view),
+        .update = std::move(update),
+    });
+    reset_active_scene_runner_inputs();
+
+    auto* raw_context = context.get();
+    install_app_runner([](void* raw) {
+        auto& context = *static_cast<RunContext*>(raw);
+        WasiFrameBackend backend{};
+        run_scene_rebuild_frame(
+            [&] {
+                auto msgs = drain<Msg>();
+                for (auto& m : msgs)
+                    context.update(*context.state, std::move(m));
+            },
+            [&] { context.view(*context.state); },
             backend);
     }, raw_context, std::move(context));
     trigger_rebuild();
@@ -2788,6 +2862,23 @@ void run_scene(SceneHandle const& scene,
         std::move(update));
 }
 
+template<typename State, typename Msg, host_platform Host,
+         typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+void run_scene_with_state(SceneHandle const& scene,
+                          Host& host,
+                          State& state,
+                          View view,
+                          Update update) {
+    SceneActivation activate{scene};
+    detail::install_native_scene_shared_state_run_context<State, Msg>(
+        host,
+        state,
+        std::move(view),
+        std::move(update));
+}
+
 } // namespace runtime
 #else // __wasi__
 template<typename State, typename Msg, typename View, typename Update>
@@ -2814,6 +2905,20 @@ template<typename State, typename Msg, typename View, typename Update>
 void run_scene(SceneHandle const& scene, View view, Update update) {
     SceneActivation activate{scene};
     detail::install_wasi_scene_run_context<State, Msg>(
+        std::move(view),
+        std::move(update));
+}
+
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+void run_scene_with_state(SceneHandle const& scene,
+                          State& state,
+                          View view,
+                          Update update) {
+    SceneActivation activate{scene};
+    detail::install_wasi_scene_shared_state_run_context<State, Msg>(
+        state,
         std::move(view),
         std::move(update));
 }
