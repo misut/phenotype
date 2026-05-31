@@ -1679,7 +1679,7 @@ void run_host(native_host& host, View view, Update update) {
         std::move(update));
 }
 
-inline void service_host_tick(std::chrono::steady_clock::time_point& last_animation_tick) {
+inline void service_host_tick() {
     tick_caret_blink();
     sync_platform_input();
 
@@ -1689,31 +1689,21 @@ inline void service_host_tick(std::chrono::steady_clock::time_point& last_animat
             now.time_since_epoch()).count());
     ::phenotype::detail::sample_frame_timeline(now_ns);
     bool const serviced_input_frame = service_deferred_input_frame(now);
-    bool const needs_tick =
-        ::phenotype::detail::active_scene_needs_scheduled_tick();
-    if (needs_tick) {
-        bool const debug_panel_only_refresh =
-            ::phenotype::detail::active_scene_debug_panel_only_refresh();
-        auto const refresh_interval = debug_panel_only_refresh
-            ? std::chrono::milliseconds(100)
-            : std::chrono::milliseconds(16);
-        if (now - last_animation_tick >= refresh_interval) {
-            if (!serviced_input_frame) {
-                if (::phenotype::detail::active_scene_has_view_animations()
-                    || ::phenotype::detail::active_scene_needs_debug_panel_refresh())
-                    ::phenotype::detail::trigger_rebuild();
-                else
-                    repaint_current();
-            }
-            last_animation_tick = now;
+    if (::phenotype::detail::active_scene_scheduled_tick_due(now_ns)) {
+        if (!serviced_input_frame) {
+            if (::phenotype::detail::active_scene_has_view_animations()
+                || ::phenotype::detail::active_scene_needs_debug_panel_refresh())
+                ::phenotype::detail::trigger_rebuild();
+            else
+                repaint_current();
         }
+        ::phenotype::detail::note_active_scene_scheduled_tick(now_ns);
     }
 }
 
-inline void service_host_tick(native_host& host,
-                              std::chrono::steady_clock::time_point& last_animation_tick) {
+inline void service_host_tick(native_host& host) {
     ScopedHostActivation activate(host);
-    service_host_tick(last_animation_tick);
+    service_host_tick();
 }
 
 inline void shutdown_host(native_host& host) {

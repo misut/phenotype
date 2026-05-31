@@ -421,6 +421,74 @@ void test_scene_runtime_isolates_app_state_and_messages() {
     std::puts("PASS: scene runtime isolates app state and messages");
 }
 
+void test_scene_scheduler_clock_is_scene_local() {
+    auto main_scene = runtime::main_scene();
+    auto debug_scene = runtime::ensure_scene(SceneDescriptor{
+        .id = "scheduler-debug-scene",
+        .title = "Scheduler Debug Scene",
+        .role = SceneRole::Debug,
+        .visible = true,
+    });
+
+    {
+        auto activate_main = runtime::activate_scene(main_scene);
+        detail::g_app().has_active_animations = false;
+        detail::g_app().scrollbar_animation_active = false;
+        detail::g_app().debug_panel_refresh_active = false;
+        detail::reset_active_scene_schedule_clock();
+    }
+
+    {
+        auto activate_debug = runtime::activate_scene(debug_scene);
+        detail::g_app().has_active_animations = false;
+        detail::g_app().scrollbar_animation_active = false;
+        detail::g_app().debug_panel_refresh_active = true;
+        detail::reset_active_scene_schedule_clock();
+
+        assert(detail::active_scene_needs_scheduled_tick());
+        assert(detail::active_scene_debug_panel_only_refresh());
+        assert(detail::active_scene_scheduled_tick_due(1'000));
+
+        detail::note_active_scene_scheduled_tick(1'000);
+        auto debug_schedule = runtime::active_scene_schedule();
+        assert(debug_schedule.needs_scheduled_tick);
+        assert(debug_schedule.debug_panel_only_refresh);
+        assert(debug_schedule.scheduled_tick_interval_ns
+               == k_scene_debug_tick_interval_ns);
+        assert(debug_schedule.last_scheduled_tick_ns == 1'000);
+        assert(debug_schedule.next_scheduled_tick_ns
+               == 1'000 + k_scene_debug_tick_interval_ns);
+        assert(debug_schedule.scheduled_tick_count == 1);
+        assert(!detail::active_scene_scheduled_tick_due(1'000 + 10'000'000));
+        assert(detail::active_scene_scheduled_tick_due(
+            1'000 + k_scene_debug_tick_interval_ns));
+
+        detail::g_app().has_active_animations = true;
+        auto animation_schedule = runtime::active_scene_schedule();
+        assert(animation_schedule.needs_scheduled_tick);
+        assert(!animation_schedule.debug_panel_only_refresh);
+        assert(animation_schedule.scheduled_tick_interval_ns
+               == k_scene_animation_tick_interval_ns);
+        assert(!detail::active_scene_scheduled_tick_due(1'000 + 10'000'000));
+        assert(detail::active_scene_scheduled_tick_due(
+            1'000 + k_scene_animation_tick_interval_ns));
+    }
+
+    {
+        auto activate_main = runtime::activate_scene(main_scene);
+        auto main_schedule = runtime::active_scene_schedule();
+        assert(!main_schedule.needs_scheduled_tick);
+        assert(main_schedule.last_scheduled_tick_ns == 0);
+        assert(main_schedule.scheduled_tick_count == 0);
+
+        auto debug_schedule = runtime::scene_schedule(debug_scene);
+        assert(debug_schedule.scheduled_tick_count == 1);
+        assert(runtime::active_scene().id == "main");
+    }
+
+    std::puts("PASS: scene scheduler clock is scene-local");
+}
+
 void test_render_surface_runtime_binds_scene_and_tracks_frames() {
     auto main_surface = runtime::main_render_surface();
     {
@@ -3150,6 +3218,7 @@ int main() {
     test_set_theme_updates_and_invalidates_cache();
     test_default_theme_glass_contract();
     test_scene_runtime_isolates_app_state_and_messages();
+    test_scene_scheduler_clock_is_scene_local();
     test_render_surface_runtime_binds_scene_and_tracks_frames();
     test_app_runner_uses_context_pointer();
     test_app_runner_can_own_context_pointer();

@@ -245,6 +245,9 @@ struct FrameTimelineMonitor {
     std::size_t recent_next = 0;
 };
 
+constexpr std::uint64_t k_scene_animation_tick_interval_ns = 16'666'667ull;
+constexpr std::uint64_t k_scene_debug_tick_interval_ns = 100'000'000ull;
+
 enum class DebugPanelTab {
     Performance,
     Layout,
@@ -289,6 +292,12 @@ struct SceneScheduleSnapshot {
     bool scrollbar_animation_active = false;
     bool has_active_input_motion = false;
     bool debug_panel_refresh_active = false;
+    bool needs_scheduled_tick = false;
+    bool debug_panel_only_refresh = false;
+    std::uint64_t scheduled_tick_interval_ns = 0;
+    std::uint64_t last_scheduled_tick_ns = 0;
+    std::uint64_t next_scheduled_tick_ns = 0;
+    std::uint64_t scheduled_tick_count = 0;
     bool frame_trace_input_active = false;
     FrameTraceAction frame_trace_input_action = FrameTraceAction::None;
     std::uint64_t frame_trace_count = 0;
@@ -643,6 +652,8 @@ namespace detail {
         std::shared_ptr<void> runner_context_owner{};
         std::map<std::size_t, LocalEntry> framework_local_store{};
         std::uint32_t framework_local_gen = 1;
+        std::uint64_t last_scheduled_tick_ns = 0;
+        std::uint64_t scheduled_tick_count = 0;
 
         AppState& app_state() {
             if (!app) {
@@ -753,20 +764,54 @@ namespace detail {
         scene.descriptor = std::move(descriptor);
     }
 
+    inline bool scene_needs_scheduled_tick(AppState const* app) {
+        return app && (app->has_active_animations
+            || app->scrollbar_animation_active
+            || app->debug_panel_refresh_active);
+    }
+
+    inline bool scene_debug_panel_only_refresh(AppState const* app) {
+        return app && app->debug_panel_refresh_active
+            && !app->has_active_animations
+            && !app->scrollbar_animation_active;
+    }
+
+    inline std::uint64_t scene_scheduled_tick_interval_ns(AppState const* app) {
+        if (!scene_needs_scheduled_tick(app))
+            return 0;
+        return scene_debug_panel_only_refresh(app)
+            ? k_scene_debug_tick_interval_ns
+            : k_scene_animation_tick_interval_ns;
+    }
+
     inline SceneScheduleSnapshot scene_schedule_snapshot(
             SceneRuntime const& scene) {
         auto const* app = scene.app;
         if (!app) {
             return SceneScheduleSnapshot{
                 .runner_installed = scene.runner != nullptr,
+                .last_scheduled_tick_ns = scene.last_scheduled_tick_ns,
+                .scheduled_tick_count = scene.scheduled_tick_count,
             };
         }
+        auto const needs_tick = scene_needs_scheduled_tick(app);
+        auto const debug_only = scene_debug_panel_only_refresh(app);
+        auto const interval_ns = scene_scheduled_tick_interval_ns(app);
+        auto const next_ns = (needs_tick && scene.last_scheduled_tick_ns > 0)
+            ? scene.last_scheduled_tick_ns + interval_ns
+            : 0;
         return SceneScheduleSnapshot{
             .runner_installed = scene.runner != nullptr,
             .has_active_animations = app->has_active_animations,
             .scrollbar_animation_active = app->scrollbar_animation_active,
             .has_active_input_motion = app->has_active_input_motion,
             .debug_panel_refresh_active = app->debug_panel_refresh_active,
+            .needs_scheduled_tick = needs_tick,
+            .debug_panel_only_refresh = debug_only,
+            .scheduled_tick_interval_ns = interval_ns,
+            .last_scheduled_tick_ns = scene.last_scheduled_tick_ns,
+            .next_scheduled_tick_ns = next_ns,
+            .scheduled_tick_count = scene.scheduled_tick_count,
             .frame_trace_input_active = app->frame_trace_input_active,
             .frame_trace_input_action = app->frame_trace_input_action,
             .frame_trace_count = app->frame_perf.count,
@@ -1063,15 +1108,35 @@ namespace detail {
     }
 
     inline bool active_scene_needs_scheduled_tick() {
-        return active_scene_has_view_animations()
-            || active_scene_has_scrollbar_animation()
-            || active_scene_needs_debug_panel_refresh();
+        return scene_needs_scheduled_tick(&g_app());
     }
 
     inline bool active_scene_debug_panel_only_refresh() {
-        return active_scene_needs_debug_panel_refresh()
-            && !active_scene_has_view_animations()
-            && !active_scene_has_scrollbar_animation();
+        return scene_debug_panel_only_refresh(&g_app());
+    }
+
+    inline std::uint64_t active_scene_scheduled_tick_interval_ns() {
+        return scene_scheduled_tick_interval_ns(&g_app());
+    }
+
+    inline bool active_scene_scheduled_tick_due(std::uint64_t now_ns) {
+        auto const interval_ns = active_scene_scheduled_tick_interval_ns();
+        if (interval_ns == 0)
+            return false;
+        auto const last_ns = active_scene_runtime().last_scheduled_tick_ns;
+        return last_ns == 0 || now_ns < last_ns || now_ns - last_ns >= interval_ns;
+    }
+
+    inline void note_active_scene_scheduled_tick(std::uint64_t now_ns) {
+        auto& scene = active_scene_runtime();
+        scene.last_scheduled_tick_ns = now_ns;
+        ++scene.scheduled_tick_count;
+    }
+
+    inline void reset_active_scene_schedule_clock() {
+        auto& scene = active_scene_runtime();
+        scene.last_scheduled_tick_ns = 0;
+        scene.scheduled_tick_count = 0;
     }
 
     inline void install_app_runner(void (*runner)(void*),
@@ -1568,6 +1633,11 @@ inline SceneSnapshot active_scene() {
 
 inline SceneScheduleSnapshot active_scene_schedule() {
     return detail::active_scene_schedule_snapshot();
+}
+
+inline SceneScheduleSnapshot scene_schedule(SceneHandle const& handle) {
+    SceneActivation activate{handle};
+    return active_scene_schedule();
 }
 
 inline std::vector<SceneSnapshot> scenes() {

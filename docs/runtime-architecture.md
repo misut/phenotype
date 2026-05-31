@@ -71,6 +71,14 @@ the frame trace/timeline counters have advanced. Native shells should query
 these scene-schedule helpers instead of reading global flags directly, so a
 future settings or debug window can request frames without waking unrelated
 scenes.
+The schedule clock itself is scene-local as well: `SceneRuntime` records the
+last serviced scheduled tick, next due interval, and service count. Native
+loops activate the host they are servicing, ask that scene whether its tick is
+due, and then mark the tick on the same scene. This mirrors React roots and
+Compose recomposition scopes more closely than a process-level animation clock:
+an idle settings window no longer consumes the main window's debug cadence, and
+a debug panel can keep its steady chart refresh without forcing unrelated
+surfaces to rebuild.
 
 Scene rebuild runners are stored as context-aware callbacks on `SceneRuntime`,
 not on widget app state. The compatibility `run<State, Msg>` entry point still

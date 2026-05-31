@@ -802,7 +802,6 @@ int run_app_with_windows_platform(platform_api const& platform,
         return artifact_ok ? 0 : 1;
     }
 
-    auto last_animation_tick = std::chrono::steady_clock::now();
     while (shell.running) {
         MSG msg{};
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -815,7 +814,7 @@ int run_app_with_windows_platform(platform_api const& platform,
         }
         if (!shell.running)
             break;
-        service_host_tick(last_animation_tick);
+        service_host_tick();
         MsgWaitForMultipleObjectsEx(
             0,
             nullptr,

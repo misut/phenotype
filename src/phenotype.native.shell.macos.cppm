@@ -833,8 +833,6 @@ struct AppKitSceneWindowState {
     native_host host{};
     bool visible = false;
     bool runner_installed = false;
-    std::chrono::steady_clock::time_point last_animation_tick =
-        std::chrono::steady_clock::now();
 };
 
 inline std::vector<std::unique_ptr<AppKitSceneWindowState>>
@@ -2200,7 +2198,7 @@ inline void service_appkit_scene_windows() {
             continue;
         }
         sync_appkit_host_surface(state->host, state->surface, state->window, true);
-        service_host_tick(state->host, state->last_animation_tick);
+        service_host_tick(state->host);
     }
 }
 
@@ -2831,7 +2829,6 @@ int run_app_with_macos_platform(platform_api const& platform,
         return perf_ok ? 0 : 1;
     }
 
-    auto last_animation_tick = std::chrono::steady_clock::now();
     while (!g_appkit_should_terminate
            && (!g_appkit_keep_running_after_last_window_closed
                || window)) {
@@ -2840,7 +2837,6 @@ int run_app_with_macos_platform(platform_api const& platform,
             break;
         if (g_appkit_window_user_closed && !visible) {
             objc_send<void>(app, sel("run"));
-            last_animation_tick = std::chrono::steady_clock::now();
             continue;
         }
         if (visible)
@@ -2859,7 +2855,7 @@ int run_app_with_macos_platform(platform_api const& platform,
             service_appkit_unhandled_event(app, event);
         objc_send<void>(app, sel("updateWindows"));
         service_appkit_scene_windows();
-        service_host_tick(host, last_animation_tick);
+        service_host_tick(host);
     }
 
     close_all_appkit_scene_windows();
