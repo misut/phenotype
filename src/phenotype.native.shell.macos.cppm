@@ -2568,7 +2568,7 @@ inline bool run_performance_probe_if_requested() {
                 bool const previous_input_motion =
                     ::phenotype::detail::g_app().has_active_input_motion;
                 ::phenotype::detail::g_app().has_active_input_motion = true;
-                ::phenotype::detail::g_app().last_paint_hash = 0;
+                ::phenotype::detail::invalidate_active_render_surface_paint_cache();
                 repaint_current();
                 ::phenotype::detail::g_app().has_active_input_motion =
                     previous_input_motion;
@@ -2595,7 +2595,7 @@ inline bool run_performance_probe_if_requested() {
                         bool const previous_input_motion =
                             ::phenotype::detail::g_app().has_active_input_motion;
                         ::phenotype::detail::g_app().has_active_input_motion = true;
-                        ::phenotype::detail::g_app().last_paint_hash = 0;
+                        ::phenotype::detail::invalidate_active_render_surface_paint_cache();
                         repaint_current();
                         ::phenotype::detail::g_app().has_active_input_motion =
                             previous_input_motion;
@@ -2610,7 +2610,7 @@ inline bool run_performance_probe_if_requested() {
             }
         } else {
             if (mode == "force-flush")
-                ::phenotype::detail::g_app().last_paint_hash = 0;
+                ::phenotype::detail::invalidate_active_render_surface_paint_cache();
             repaint_current();
         }
         auto const end = std::chrono::steady_clock::now();
@@ -2801,7 +2801,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     bool const artifact_requested = artifact_dir && artifact_dir[0] != '\0';
     if (artifact_requested && platform.debug.capabilities
         && platform.debug.capabilities().material_backdrop_blur) {
-        ::phenotype::detail::g_app().last_paint_hash = 0;
+        ::phenotype::detail::invalidate_active_render_surface_paint_cache();
         repaint_current();
         wait_for_appkit_window_front(app, window);
     }

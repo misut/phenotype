@@ -561,8 +561,10 @@ void test_render_surface_runtime_binds_scene_and_tracks_frames() {
         assert(runtime::active_scene().hovered_id != 314u);
         assert(runtime::active_render_surface().id == "main");
         assert(runtime::active_render_surface().last_paint_hash != 12345u);
+        detail::g_app().last_paint_hash = 67890u;
         runtime::invalidate_active_render_surface_paint_cache();
         assert(runtime::active_render_surface().last_paint_hash == 0u);
+        assert(detail::g_app().last_paint_hash == 0u);
     }
 
     auto surfaces = runtime::render_surfaces();
@@ -2364,7 +2366,7 @@ void test_frame_skip_on_identical_cmd_buffer() {
     detail::g_app().prev_arena.reset();
     metrics::reset_all();
     detail::clear_measure_cache();
-    detail::g_app().last_paint_hash = 0;
+    detail::invalidate_active_render_surface_paint_cache();
     CMD_LEN = 0;
 
     RUN_APP(int, int,

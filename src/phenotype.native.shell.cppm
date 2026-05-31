@@ -552,7 +552,7 @@ inline void repaint_current() {
 inline void repaint_current_after_surface_presented() {
     // The initial run() paint can occur before a native drawable is visible.
     // Force one startup repaint once the platform confirms the surface is shown.
-    ::phenotype::detail::g_app().last_paint_hash = 0;
+    ::phenotype::detail::invalidate_active_render_surface_paint_cache();
     repaint_current();
 }
 
@@ -1615,7 +1615,7 @@ void run_host_scene(native_host& host,
         ::phenotype::detail::g_app().debug_panel_open = true;
         apply_debug_panel_env_tab();
         ::phenotype::detail::g_app().debug_panel_warmup_frames = 4u;
-        ::phenotype::detail::g_app().last_paint_hash = 0;
+        ::phenotype::detail::invalidate_active_render_surface_paint_cache();
         ::phenotype::detail::trigger_rebuild();
     }
 #endif
@@ -1651,7 +1651,7 @@ void run_host_scene_with_state(native_host& host,
         ::phenotype::detail::g_app().debug_panel_open = true;
         apply_debug_panel_env_tab();
         ::phenotype::detail::g_app().debug_panel_warmup_frames = 4u;
-        ::phenotype::detail::g_app().last_paint_hash = 0;
+        ::phenotype::detail::invalidate_active_render_surface_paint_cache();
         ::phenotype::detail::trigger_rebuild();
     }
 #endif
