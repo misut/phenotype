@@ -368,6 +368,7 @@ struct renderer_api {
     std::optional<unsigned int> (*hit_test)(float x, float y,
                                             float scroll_x,
                                             float scroll_y) = nullptr;
+    void (*activate)(native_surface_handle surface) = nullptr;
 };
 
 struct input_api {

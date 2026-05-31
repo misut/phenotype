@@ -410,6 +410,8 @@ inline void note_host_render_surface_frame(native_host& host) {
 inline native_host* activate_host(native_host& host) {
     auto* previous = g_active_host;
     g_active_host = &host;
+    if (host.platform && host.platform->renderer.activate)
+        host.platform->renderer.activate(host.window);
     sync_host_render_surface(host);
     return previous;
 }

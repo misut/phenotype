@@ -415,6 +415,42 @@ static void assert_non_empty_frame_capture(DebugFrameCapture const& frame) {
 }
 
 #ifdef __APPLE__
+static void test_macos_renderer_state_tracks_surfaces() {
+    phenotype::native::macos_test::reset_renderer_surface_states();
+
+    NativeSurfaceDescriptor first{
+        .kind = NativeSurfaceKind::MacOSWindow,
+        .logical_width = 320,
+        .logical_height = 240,
+        .framebuffer_width = 640,
+        .framebuffer_height = 480,
+        .content_scale = 2.0f,
+    };
+    NativeSurfaceDescriptor second{
+        .kind = NativeSurfaceKind::MacOSWindow,
+        .logical_width = 420,
+        .logical_height = 300,
+        .framebuffer_width = 840,
+        .framebuffer_height = 600,
+        .content_scale = 2.0f,
+    };
+
+    phenotype::native::macos_test::activate_renderer_surface_state(&first);
+    assert(phenotype::native::macos_test::renderer_surface_state_count() == 1);
+    assert(phenotype::native::macos_test::active_renderer_surface_is(&first));
+
+    phenotype::native::macos_test::activate_renderer_surface_state(&second);
+    assert(phenotype::native::macos_test::renderer_surface_state_count() == 2);
+    assert(phenotype::native::macos_test::active_renderer_surface_is(&second));
+
+    phenotype::native::macos_test::activate_renderer_surface_state(&first);
+    assert(phenotype::native::macos_test::renderer_surface_state_count() == 2);
+    assert(phenotype::native::macos_test::active_renderer_surface_is(&first));
+
+    phenotype::native::macos_test::reset_renderer_surface_states();
+    std::puts("PASS: macOS renderer state tracks surfaces");
+}
+
 template<typename R, typename... Args>
 static R test_objc_send(id object, SEL selector, Args... args) {
     return reinterpret_cast<R (*)(id, SEL, Args...)>(objc_msgSend)(
@@ -4794,6 +4830,7 @@ int main() {
     test_shell_scroll_and_escape_observability();
     test_shell_scroll_at_cursor_prefers_inner_scroll_view();
 #ifdef __APPLE__
+    test_macos_renderer_state_tracks_surfaces();
     test_macos_appkit_activation_slice_gate();
     test_macos_appkit_function_key_resolution();
     test_macos_appkit_settings_key_equivalent_dispatch();

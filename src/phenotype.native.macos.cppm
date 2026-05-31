@@ -12,6 +12,7 @@ module;
 #include <filesystem>
 #include <limits>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <set>
@@ -733,7 +734,52 @@ struct RendererState {
     bool initialized = false;
 };
 
-inline RendererState g_renderer;
+inline RendererState g_default_renderer;
+inline RendererState* g_active_renderer = &g_default_renderer;
+
+inline std::vector<std::unique_ptr<RendererState>>& renderer_registry() {
+    static std::vector<std::unique_ptr<RendererState>>& states =
+        *new std::vector<std::unique_ptr<RendererState>>();
+    return states;
+}
+
+inline RendererState& renderer_state() {
+    if (!g_active_renderer)
+        g_active_renderer = &g_default_renderer;
+    return *g_active_renderer;
+}
+
+inline RendererState* find_renderer_state(NativeSurfaceDescriptor* surface) {
+    if (!surface)
+        return &g_default_renderer;
+    if (g_default_renderer.surface == surface)
+        return &g_default_renderer;
+    for (auto& state : renderer_registry()) {
+        if (state && state->surface == surface)
+            return state.get();
+    }
+    return nullptr;
+}
+
+inline RendererState& ensure_renderer_state(NativeSurfaceDescriptor* surface) {
+    if (!surface)
+        return g_default_renderer;
+    if (!g_default_renderer.initialized && !g_default_renderer.surface) {
+        g_default_renderer.surface = surface;
+        return g_default_renderer;
+    }
+    if (auto* existing = find_renderer_state(surface))
+        return *existing;
+    auto state = std::make_unique<RendererState>();
+    state->surface = surface;
+    auto* ptr = state.get();
+    renderer_registry().push_back(std::move(state));
+    return *ptr;
+}
+
+inline void activate_renderer_state(NativeSurfaceDescriptor* surface) {
+    g_active_renderer = &ensure_renderer_state(surface);
+}
 
 inline MTL::RenderPipelineState* create_pipeline(
         MTL::Device* device, MTL::Library* lib,
@@ -785,7 +831,7 @@ inline bool ensure_instance_buffer(MTL::Buffer*& buffer,
     while (new_capacity < required)
         new_capacity *= 2;
 
-    auto* replacement = g_renderer.device->newBuffer(
+    auto* replacement = renderer_state().device->newBuffer(
         NS::UInteger(new_capacity),
         MTL::ResourceStorageModeShared);
     if (!replacement)
@@ -800,7 +846,7 @@ inline bool ensure_instance_buffer(MTL::Buffer*& buffer,
 }
 
 inline bool ensure_text_atlas_texture() {
-    if (g_renderer.text_atlas_texture)
+    if (renderer_state().text_atlas_texture)
         return true;
 
     auto* tex_desc = MTL::TextureDescriptor::texture2DDescriptor(
@@ -809,12 +855,12 @@ inline bool ensure_text_atlas_texture() {
         NS::UInteger(TextAtlasCache::atlas_size),
         false);
     tex_desc->setUsage(MTL::TextureUsageShaderRead);
-    g_renderer.text_atlas_texture = g_renderer.device->newTexture(tex_desc);
-    return g_renderer.text_atlas_texture != nullptr;
+    renderer_state().text_atlas_texture = renderer_state().device->newTexture(tex_desc);
+    return renderer_state().text_atlas_texture != nullptr;
 }
 
 inline bool ensure_image_atlas_texture() {
-    if (g_renderer.image_atlas_texture)
+    if (renderer_state().image_atlas_texture)
         return true;
 
     auto* tex_desc = MTL::TextureDescriptor::texture2DDescriptor(
@@ -823,24 +869,24 @@ inline bool ensure_image_atlas_texture() {
         NS::UInteger(ImageAtlasCache::atlas_size),
         false);
     tex_desc->setUsage(MTL::TextureUsageShaderRead);
-    g_renderer.image_atlas_texture = g_renderer.device->newTexture(tex_desc);
-    return g_renderer.image_atlas_texture != nullptr;
+    renderer_state().image_atlas_texture = renderer_state().device->newTexture(tex_desc);
+    return renderer_state().image_atlas_texture != nullptr;
 }
 
 inline bool ensure_debug_capture_texture(int width, int height) {
     if (width <= 0 || height <= 0)
         return false;
-    if (g_renderer.debug_capture_texture
-        && g_renderer.debug_capture_width == width
-        && g_renderer.debug_capture_height == height) {
+    if (renderer_state().debug_capture_texture
+        && renderer_state().debug_capture_width == width
+        && renderer_state().debug_capture_height == height) {
         return true;
     }
 
-    if (g_renderer.debug_capture_texture) {
-        g_renderer.debug_capture_texture->release();
-        g_renderer.debug_capture_texture = nullptr;
-        g_renderer.debug_capture_width = 0;
-        g_renderer.debug_capture_height = 0;
+    if (renderer_state().debug_capture_texture) {
+        renderer_state().debug_capture_texture->release();
+        renderer_state().debug_capture_texture = nullptr;
+        renderer_state().debug_capture_width = 0;
+        renderer_state().debug_capture_height = 0;
     }
 
     auto* tex_desc = MTL::TextureDescriptor::texture2DDescriptor(
@@ -849,16 +895,16 @@ inline bool ensure_debug_capture_texture(int width, int height) {
         NS::UInteger(height),
         false);
     tex_desc->setUsage(MTL::TextureUsageShaderRead | MTL::TextureUsageRenderTarget);
-    g_renderer.debug_capture_texture = g_renderer.device->newTexture(tex_desc);
-    if (g_renderer.debug_capture_texture) {
-        g_renderer.debug_capture_width = width;
-        g_renderer.debug_capture_height = height;
+    renderer_state().debug_capture_texture = renderer_state().device->newTexture(tex_desc);
+    if (renderer_state().debug_capture_texture) {
+        renderer_state().debug_capture_width = width;
+        renderer_state().debug_capture_height = height;
     }
-    return g_renderer.debug_capture_texture != nullptr;
+    return renderer_state().debug_capture_texture != nullptr;
 }
 
 inline void request_debug_capture_next_frame() {
-    g_renderer.debug_capture_next_frame = true;
+    renderer_state().debug_capture_next_frame = true;
 }
 
 inline void release_material_backdrop_luma_pending_command_buffer();
@@ -938,28 +984,28 @@ inline MaterialQualityPolicy macos_material_quality_policy(
 inline bool ensure_material_backdrop_texture(int width, int height) {
     if (width <= 0 || height <= 0)
         return false;
-    if (g_renderer.material_backdrop_texture
-        && g_renderer.material_backdrop_width == width
-        && g_renderer.material_backdrop_height == height) {
+    if (renderer_state().material_backdrop_texture
+        && renderer_state().material_backdrop_width == width
+        && renderer_state().material_backdrop_height == height) {
         return true;
     }
 
-    if (g_renderer.material_backdrop_texture) {
+    if (renderer_state().material_backdrop_texture) {
         release_material_backdrop_luma_pending_command_buffer();
-        g_renderer.material_backdrop_texture->release();
-        g_renderer.material_backdrop_texture = nullptr;
-        g_renderer.material_backdrop_width = 0;
-        g_renderer.material_backdrop_height = 0;
-        g_renderer.last_material_backdrop_available = false;
-        g_renderer.last_material_backdrop_excludes_foreground_text = false;
-        g_renderer.last_material_backdrop_color_available = false;
-        g_renderer.last_material_backdrop_color_mean = {255, 255, 255, 255};
-        g_renderer.last_material_backdrop_luma_available = false;
-        g_renderer.last_material_backdrop_luma_sample_count = 0;
-        g_renderer.last_material_backdrop_luma_grid_width = 0;
-        g_renderer.last_material_backdrop_luma_grid_height = 0;
-        g_renderer.last_material_backdrop_luma_frame = 0;
-        g_renderer.last_material_backdrop_luma_status = "not-sampled";
+        renderer_state().material_backdrop_texture->release();
+        renderer_state().material_backdrop_texture = nullptr;
+        renderer_state().material_backdrop_width = 0;
+        renderer_state().material_backdrop_height = 0;
+        renderer_state().last_material_backdrop_available = false;
+        renderer_state().last_material_backdrop_excludes_foreground_text = false;
+        renderer_state().last_material_backdrop_color_available = false;
+        renderer_state().last_material_backdrop_color_mean = {255, 255, 255, 255};
+        renderer_state().last_material_backdrop_luma_available = false;
+        renderer_state().last_material_backdrop_luma_sample_count = 0;
+        renderer_state().last_material_backdrop_luma_grid_width = 0;
+        renderer_state().last_material_backdrop_luma_grid_height = 0;
+        renderer_state().last_material_backdrop_luma_frame = 0;
+        renderer_state().last_material_backdrop_luma_status = "not-sampled";
     }
 
     auto* tex_desc = MTL::TextureDescriptor::texture2DDescriptor(
@@ -968,13 +1014,13 @@ inline bool ensure_material_backdrop_texture(int width, int height) {
         NS::UInteger(height),
         false);
     tex_desc->setUsage(MTL::TextureUsageShaderRead | MTL::TextureUsageRenderTarget);
-    g_renderer.material_backdrop_texture =
-        g_renderer.device->newTexture(tex_desc);
-    if (g_renderer.material_backdrop_texture) {
-        g_renderer.material_backdrop_width = width;
-        g_renderer.material_backdrop_height = height;
+    renderer_state().material_backdrop_texture =
+        renderer_state().device->newTexture(tex_desc);
+    if (renderer_state().material_backdrop_texture) {
+        renderer_state().material_backdrop_width = width;
+        renderer_state().material_backdrop_height = height;
     }
-    return g_renderer.material_backdrop_texture != nullptr;
+    return renderer_state().material_backdrop_texture != nullptr;
 }
 
 inline constexpr std::uint32_t k_material_backdrop_luma_grid_width = 5;
@@ -993,28 +1039,28 @@ inline bool ensure_material_backdrop_luma_sample_buffer(
         material_backdrop_luma_sample_required_bytes(sample_count);
     if (required == 0)
         return false;
-    if (required <= g_renderer.material_backdrop_luma_sample_capacity
-        && g_renderer.material_backdrop_luma_sample_buf) {
+    if (required <= renderer_state().material_backdrop_luma_sample_capacity
+        && renderer_state().material_backdrop_luma_sample_buf) {
         return true;
     }
 
     std::size_t new_capacity =
-        g_renderer.material_backdrop_luma_sample_capacity > 0
-            ? g_renderer.material_backdrop_luma_sample_capacity
+        renderer_state().material_backdrop_luma_sample_capacity > 0
+            ? renderer_state().material_backdrop_luma_sample_capacity
             : k_material_backdrop_luma_row_stride * 32u;
     while (new_capacity < required)
         new_capacity *= 2u;
 
-    auto* replacement = g_renderer.device->newBuffer(
+    auto* replacement = renderer_state().device->newBuffer(
         NS::UInteger(new_capacity),
         MTL::ResourceStorageModeShared);
     if (!replacement)
         return false;
 
-    if (g_renderer.material_backdrop_luma_sample_buf)
-        g_renderer.material_backdrop_luma_sample_buf->release();
-    g_renderer.material_backdrop_luma_sample_buf = replacement;
-    g_renderer.material_backdrop_luma_sample_capacity = new_capacity;
+    if (renderer_state().material_backdrop_luma_sample_buf)
+        renderer_state().material_backdrop_luma_sample_buf->release();
+    renderer_state().material_backdrop_luma_sample_buf = replacement;
+    renderer_state().material_backdrop_luma_sample_capacity = new_capacity;
     return true;
 }
 
@@ -1027,19 +1073,19 @@ inline float material_backdrop_sample_luma(std::uint8_t b,
 }
 
 inline void release_material_backdrop_luma_pending_command_buffer() {
-    if (g_renderer.material_backdrop_luma_pending_command_buffer) {
-        g_renderer.material_backdrop_luma_pending_command_buffer->release();
-        g_renderer.material_backdrop_luma_pending_command_buffer = nullptr;
+    if (renderer_state().material_backdrop_luma_pending_command_buffer) {
+        renderer_state().material_backdrop_luma_pending_command_buffer->release();
+        renderer_state().material_backdrop_luma_pending_command_buffer = nullptr;
     }
-    g_renderer.material_backdrop_luma_pending_sample_count = 0;
-    g_renderer.material_backdrop_luma_pending_grid_width = 0;
-    g_renderer.material_backdrop_luma_pending_grid_height = 0;
-    g_renderer.material_backdrop_luma_pending_frame = 0;
+    renderer_state().material_backdrop_luma_pending_sample_count = 0;
+    renderer_state().material_backdrop_luma_pending_grid_width = 0;
+    renderer_state().material_backdrop_luma_pending_grid_height = 0;
+    renderer_state().material_backdrop_luma_pending_frame = 0;
 }
 
 inline void process_completed_material_backdrop_luma_sample() {
     auto* command_buffer =
-        g_renderer.material_backdrop_luma_pending_command_buffer;
+        renderer_state().material_backdrop_luma_pending_command_buffer;
     if (!command_buffer)
         return;
 
@@ -1050,12 +1096,12 @@ inline void process_completed_material_backdrop_luma_sample() {
     }
 
     if (status == MTL::CommandBufferStatusError
-        || !g_renderer.material_backdrop_luma_sample_buf
-        || g_renderer.material_backdrop_luma_pending_sample_count == 0) {
-        g_renderer.last_material_backdrop_color_available = false;
-        g_renderer.last_material_backdrop_luma_available = false;
-        g_renderer.last_material_backdrop_luma_sample_count = 0;
-        g_renderer.last_material_backdrop_luma_status =
+        || !renderer_state().material_backdrop_luma_sample_buf
+        || renderer_state().material_backdrop_luma_pending_sample_count == 0) {
+        renderer_state().last_material_backdrop_color_available = false;
+        renderer_state().last_material_backdrop_luma_available = false;
+        renderer_state().last_material_backdrop_luma_sample_count = 0;
+        renderer_state().last_material_backdrop_luma_status =
             status == MTL::CommandBufferStatusError
                 ? "sample-command-buffer-error"
                 : "sample-buffer-unavailable";
@@ -1064,12 +1110,12 @@ inline void process_completed_material_backdrop_luma_sample() {
     }
 
     auto const* mapped = static_cast<std::uint8_t const*>(
-        g_renderer.material_backdrop_luma_sample_buf->contents());
+        renderer_state().material_backdrop_luma_sample_buf->contents());
     if (!mapped) {
-        g_renderer.last_material_backdrop_color_available = false;
-        g_renderer.last_material_backdrop_luma_available = false;
-        g_renderer.last_material_backdrop_luma_sample_count = 0;
-        g_renderer.last_material_backdrop_luma_status =
+        renderer_state().last_material_backdrop_color_available = false;
+        renderer_state().last_material_backdrop_luma_available = false;
+        renderer_state().last_material_backdrop_luma_sample_count = 0;
+        renderer_state().last_material_backdrop_luma_status =
             "sample-buffer-unmapped";
         release_material_backdrop_luma_pending_command_buffer();
         return;
@@ -1084,7 +1130,7 @@ inline void process_completed_material_backdrop_luma_sample() {
     std::uint64_t alpha_sum = 0;
     std::uint32_t sampled = 0;
     for (std::uint32_t i = 0;
-         i < g_renderer.material_backdrop_luma_pending_sample_count;
+         i < renderer_state().material_backdrop_luma_pending_sample_count;
          ++i) {
         auto const* pixel =
             mapped + static_cast<std::size_t>(i)
@@ -1109,26 +1155,26 @@ inline void process_completed_material_backdrop_luma_sample() {
                     (sum + static_cast<std::uint64_t>(sampled / 2u))
                         / static_cast<std::uint64_t>(sampled)));
         };
-        g_renderer.last_material_backdrop_color_available = true;
-        g_renderer.last_material_backdrop_color_mean = Color{
+        renderer_state().last_material_backdrop_color_available = true;
+        renderer_state().last_material_backdrop_color_mean = Color{
             mean_channel(red_sum),
             mean_channel(green_sum),
             mean_channel(blue_sum),
             mean_channel(alpha_sum),
         };
-        g_renderer.last_material_backdrop_luma_available = true;
-        g_renderer.last_material_backdrop_luma_min = luma_min;
-        g_renderer.last_material_backdrop_luma_max = luma_max;
-        g_renderer.last_material_backdrop_luma_mean =
+        renderer_state().last_material_backdrop_luma_available = true;
+        renderer_state().last_material_backdrop_luma_min = luma_min;
+        renderer_state().last_material_backdrop_luma_max = luma_max;
+        renderer_state().last_material_backdrop_luma_mean =
             luma_sum / static_cast<float>(sampled);
-        g_renderer.last_material_backdrop_luma_sample_count = sampled;
-        g_renderer.last_material_backdrop_luma_grid_width =
-            g_renderer.material_backdrop_luma_pending_grid_width;
-        g_renderer.last_material_backdrop_luma_grid_height =
-            g_renderer.material_backdrop_luma_pending_grid_height;
-        g_renderer.last_material_backdrop_luma_frame =
-            g_renderer.material_backdrop_luma_pending_frame;
-        g_renderer.last_material_backdrop_luma_status =
+        renderer_state().last_material_backdrop_luma_sample_count = sampled;
+        renderer_state().last_material_backdrop_luma_grid_width =
+            renderer_state().material_backdrop_luma_pending_grid_width;
+        renderer_state().last_material_backdrop_luma_grid_height =
+            renderer_state().material_backdrop_luma_pending_grid_height;
+        renderer_state().last_material_backdrop_luma_frame =
+            renderer_state().material_backdrop_luma_pending_frame;
+        renderer_state().last_material_backdrop_luma_status =
             "sampled-async-grid";
     }
     release_material_backdrop_luma_pending_command_buffer();
@@ -1148,11 +1194,11 @@ inline bool schedule_material_backdrop_luma_sample(
             "sample-source-unavailable";
         return false;
     }
-    if (g_renderer.material_backdrop_luma_pending_command_buffer) {
+    if (renderer_state().material_backdrop_luma_pending_command_buffer) {
         ++summary.backdrop_luma_sampling_skipped_count;
         summary.backdrop_luma_sampling_skip_reason =
             "previous-sample-pending";
-        ++g_renderer.material_backdrop_luma_skipped_sample_count;
+        ++renderer_state().material_backdrop_luma_skipped_sample_count;
         return false;
     }
 
@@ -1191,7 +1237,7 @@ inline bool schedule_material_backdrop_luma_sample(
                 NS::UInteger(0),
                 origin,
                 size,
-                g_renderer.material_backdrop_luma_sample_buf,
+                renderer_state().material_backdrop_luma_sample_buf,
                 NS::UInteger(
                     static_cast<std::size_t>(index)
                     * k_material_backdrop_luma_row_stride),
@@ -1200,67 +1246,67 @@ inline bool schedule_material_backdrop_luma_sample(
         }
     }
 
-    g_renderer.material_backdrop_luma_pending_sample_count = sample_count;
-    g_renderer.material_backdrop_luma_pending_grid_width = grid_w;
-    g_renderer.material_backdrop_luma_pending_grid_height = grid_h;
-    g_renderer.material_backdrop_luma_pending_frame = frame_index;
+    renderer_state().material_backdrop_luma_pending_sample_count = sample_count;
+    renderer_state().material_backdrop_luma_pending_grid_width = grid_w;
+    renderer_state().material_backdrop_luma_pending_grid_height = grid_h;
+    renderer_state().material_backdrop_luma_pending_frame = frame_index;
     command_buffer->retain();
-    g_renderer.material_backdrop_luma_pending_command_buffer = command_buffer;
+    renderer_state().material_backdrop_luma_pending_command_buffer = command_buffer;
     return true;
 }
 
 inline bool ensure_frame_readback_buffer(std::size_t required) {
     if (required == 0)
         return false;
-    if (required <= g_renderer.frame_readback_capacity && g_renderer.frame_readback_buf)
+    if (required <= renderer_state().frame_readback_capacity && renderer_state().frame_readback_buf)
         return true;
 
-    std::size_t new_capacity = (g_renderer.frame_readback_capacity > 0)
-        ? g_renderer.frame_readback_capacity
+    std::size_t new_capacity = (renderer_state().frame_readback_capacity > 0)
+        ? renderer_state().frame_readback_capacity
         : 4096;
     while (new_capacity < required)
         new_capacity *= 2;
 
-    auto* replacement = g_renderer.device->newBuffer(
+    auto* replacement = renderer_state().device->newBuffer(
         NS::UInteger(new_capacity),
         MTL::ResourceStorageModeShared);
     if (!replacement)
         return false;
 
-    if (g_renderer.frame_readback_buf)
-        g_renderer.frame_readback_buf->release();
-    g_renderer.frame_readback_buf = replacement;
-    g_renderer.frame_readback_capacity = new_capacity;
+    if (renderer_state().frame_readback_buf)
+        renderer_state().frame_readback_buf->release();
+    renderer_state().frame_readback_buf = replacement;
+    renderer_state().frame_readback_capacity = new_capacity;
     return true;
 }
 
 inline void sync_layer_backing_geometry(int fbw, int fbh, float content_scale) {
-    if (!g_renderer.layer)
+    if (!renderer_state().layer)
         return;
     double const scale =
         content_scale > 0.0f && std::isfinite(content_scale)
             ? static_cast<double>(content_scale)
             : 1.0;
-    if (std::fabs(g_renderer.layer_contents_scale - scale) > 0.001) {
+    if (std::fabs(renderer_state().layer_contents_scale - scale) > 0.001) {
         reinterpret_cast<void(*)(void*, SEL, double)>(objc_msgSend)(
-            reinterpret_cast<void*>(g_renderer.layer),
+            reinterpret_cast<void*>(renderer_state().layer),
             sel_registerName("setContentsScale:"),
             scale);
-        g_renderer.layer_contents_scale = scale;
+        renderer_state().layer_contents_scale = scale;
     }
-    if (fbw == g_renderer.drawable_width && fbh == g_renderer.drawable_height)
+    if (fbw == renderer_state().drawable_width && fbh == renderer_state().drawable_height)
         return;
     CGSize drawable_size{
         .width = static_cast<CGFloat>(fbw),
         .height = static_cast<CGFloat>(fbh),
     };
-    g_renderer.layer->setDrawableSize(drawable_size);
-    g_renderer.drawable_width = fbw;
-    g_renderer.drawable_height = fbh;
+    renderer_state().layer->setDrawableSize(drawable_size);
+    renderer_state().drawable_width = fbw;
+    renderer_state().drawable_height = fbh;
 }
 
 inline bool upload_text_cache() {
-    auto& cache = g_renderer.text_cache;
+    auto& cache = renderer_state().text_cache;
     if (!cache.dirty)
         return true;
     if (!ensure_text_atlas_texture())
@@ -1285,7 +1331,7 @@ inline bool upload_text_cache() {
     auto const* src = cache.pixels.data()
         + static_cast<std::size_t>(
             cache.dirty_min_y * TextAtlasCache::atlas_size + cache.dirty_min_x);
-    g_renderer.text_atlas_texture->replaceRegion(
+    renderer_state().text_atlas_texture->replaceRegion(
         region,
         0,
         src,
@@ -1328,7 +1374,7 @@ inline bool upload_image_cache() {
     auto const* src = cache.pixels.data()
         + static_cast<std::size_t>(
             (cache.dirty_min_y * ImageAtlasCache::atlas_size + cache.dirty_min_x) * 4);
-    g_renderer.image_atlas_texture->replaceRegion(
+    renderer_state().image_atlas_texture->replaceRegion(
         region,
         0,
         src,
@@ -1346,7 +1392,7 @@ inline bool upload_image_cache() {
 }
 
 inline bool prepare_text_instances(float scale) {
-    auto& scratch = g_renderer.scratch;
+    auto& scratch = renderer_state().scratch;
     for (auto& batch : scratch.batches) {
         batch.texts.clear();
         batch.text_command_indices.clear();
@@ -1355,7 +1401,7 @@ inline bool prepare_text_instances(float scale) {
     if (scratch.text_runs.empty())
         return true;
 
-    auto& cache = g_renderer.text_cache;
+    auto& cache = renderer_state().text_cache;
     int scale_key = quantize_metric(scale);
     if (cache.active_scale_key != scale_key) {
         reset_text_cache(cache);
@@ -1505,7 +1551,7 @@ inline bool prepare_text_instances(float scale) {
 }
 
 inline void prepare_image_instances(float scale) {
-    auto& scratch = g_renderer.scratch;
+    auto& scratch = renderer_state().scratch;
     for (auto& batch : scratch.batches)
         batch.images.clear();
 
@@ -1589,11 +1635,11 @@ inline void draw_deferred_text_range(MTL::RenderCommandEncoder* encoder,
                                      std::uint32_t count) {
     if (!text_uploaded || count == 0)
         return;
-    encoder->setRenderPipelineState(g_renderer.text_pipeline);
-    encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-    encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
-    encoder->setFragmentTexture(g_renderer.text_atlas_texture, 0);
-    encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+    encoder->setRenderPipelineState(renderer_state().text_pipeline);
+    encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
+    encoder->setVertexBuffer(renderer_state().text_instances_buf, 0, 1);
+    encoder->setFragmentTexture(renderer_state().text_atlas_texture, 0);
+    encoder->setFragmentSamplerState(renderer_state().sampler, 0);
     encoder->drawPrimitives(
         MTL::PrimitiveTypeTriangle,
         NS::UInteger(0), 6,
@@ -1863,37 +1909,38 @@ inline void configure_window(native_surface_handle handle,
 }
 
 inline void renderer_init(native_surface_handle handle) {
-    if (g_renderer.initialized) return;
     auto* surface = desktop_surface(handle);
-    g_renderer.surface = surface;
-    g_renderer.ns_window = surface_ns_window(surface);
-    g_renderer.content_view = surface_content_view(surface);
-    if (!g_renderer.ns_window || !g_renderer.content_view) {
+    activate_renderer_state(surface);
+    if (renderer_state().initialized) return;
+    renderer_state().surface = surface;
+    renderer_state().ns_window = surface_ns_window(surface);
+    renderer_state().content_view = surface_content_view(surface);
+    if (!renderer_state().ns_window || !renderer_state().content_view) {
         std::fprintf(stderr, "[metal] no NSWindow/NSView surface\n");
         return;
     }
 
-    g_renderer.device = MTL::CreateSystemDefaultDevice();
-    if (!g_renderer.device) {
+    renderer_state().device = MTL::CreateSystemDefaultDevice();
+    if (!renderer_state().device) {
         std::fprintf(stderr, "[metal] no device\n");
         return;
     }
-    g_renderer.queue = g_renderer.device->newCommandQueue();
+    renderer_state().queue = renderer_state().device->newCommandQueue();
 
     auto sel_wl = sel_registerName("setWantsLayer:");
     auto sel_sl = sel_registerName("setLayer:");
-    void* view = g_renderer.content_view;
+    void* view = renderer_state().content_view;
     reinterpret_cast<void(*)(void*, SEL, bool)>(objc_msgSend)(view, sel_wl, true);
 
-    g_renderer.layer = CA::MetalLayer::layer()->retain();
-    g_renderer.layer->setDevice(g_renderer.device);
-    g_renderer.layer->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
-    g_renderer.layer->setFramebufferOnly(false);
+    renderer_state().layer = CA::MetalLayer::layer()->retain();
+    renderer_state().layer->setDevice(renderer_state().device);
+    renderer_state().layer->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+    renderer_state().layer->setFramebufferOnly(false);
     if (surface->window_options_valid
         && surface->window_chrome == WindowChromeStyle::IntegratedTitlebar) {
         using ObjcBool = signed char;
         objc_send<void>(
-            reinterpret_cast<id>(g_renderer.layer),
+            reinterpret_cast<id>(renderer_state().layer),
             sel_set_opaque(),
             static_cast<ObjcBool>(0));
     }
@@ -1910,10 +1957,10 @@ inline void renderer_init(native_surface_handle handle) {
         host->cached_content_scale = surface_content_scale(surface);
 
     reinterpret_cast<void(*)(void*, SEL, void*)>(objc_msgSend)(
-        view, sel_sl, static_cast<void*>(g_renderer.layer));
+        view, sel_sl, static_cast<void*>(renderer_state().layer));
 
     NS::Error* err = nullptr;
-    auto* lib = g_renderer.device->newLibrary(
+    auto* lib = renderer_state().device->newLibrary(
         NS::String::string(MSL_SHADERS, NS::UTF8StringEncoding), nullptr, &err);
     if (!lib) {
         std::fprintf(stderr, "[metal] shader compile: %s\n",
@@ -1921,34 +1968,34 @@ inline void renderer_init(native_surface_handle handle) {
         return;
     }
 
-    g_renderer.tri_pipeline   = create_pipeline(g_renderer.device, lib, "vs_tri",   "fs_tri");
-    g_renderer.color_pipeline = create_pipeline(g_renderer.device, lib, "vs_color", "fs_color");
-    g_renderer.material_pipeline = create_pipeline(g_renderer.device, lib, "vs_material", "fs_material");
-    g_renderer.arc_pipeline   = create_pipeline(g_renderer.device, lib, "vs_arc",   "fs_arc");
-    g_renderer.image_pipeline = create_pipeline(g_renderer.device, lib, "vs_image", "fs_image");
-    g_renderer.text_pipeline = create_pipeline(g_renderer.device, lib, "vs_text", "fs_text");
+    renderer_state().tri_pipeline   = create_pipeline(renderer_state().device, lib, "vs_tri",   "fs_tri");
+    renderer_state().color_pipeline = create_pipeline(renderer_state().device, lib, "vs_color", "fs_color");
+    renderer_state().material_pipeline = create_pipeline(renderer_state().device, lib, "vs_material", "fs_material");
+    renderer_state().arc_pipeline   = create_pipeline(renderer_state().device, lib, "vs_arc",   "fs_arc");
+    renderer_state().image_pipeline = create_pipeline(renderer_state().device, lib, "vs_image", "fs_image");
+    renderer_state().text_pipeline = create_pipeline(renderer_state().device, lib, "vs_text", "fs_text");
     lib->release();
-    if (!g_renderer.tri_pipeline || !g_renderer.color_pipeline
-        || !g_renderer.material_pipeline
-        || !g_renderer.arc_pipeline
-        || !g_renderer.image_pipeline || !g_renderer.text_pipeline) {
+    if (!renderer_state().tri_pipeline || !renderer_state().color_pipeline
+        || !renderer_state().material_pipeline
+        || !renderer_state().arc_pipeline
+        || !renderer_state().image_pipeline || !renderer_state().text_pipeline) {
         std::fprintf(stderr, "[metal] failed to create render pipelines\n");
         return;
     }
 
-    g_renderer.uniform_buf = g_renderer.device->newBuffer(16, MTL::ResourceStorageModeShared);
+    renderer_state().uniform_buf = renderer_state().device->newBuffer(16, MTL::ResourceStorageModeShared);
 
     auto* sampler_desc = MTL::SamplerDescriptor::alloc()->init();
     sampler_desc->setMinFilter(MTL::SamplerMinMagFilterLinear);
     sampler_desc->setMagFilter(MTL::SamplerMinMagFilterLinear);
     sampler_desc->setSAddressMode(MTL::SamplerAddressModeClampToEdge);
     sampler_desc->setTAddressMode(MTL::SamplerAddressModeClampToEdge);
-    g_renderer.sampler = g_renderer.device->newSamplerState(sampler_desc);
+    renderer_state().sampler = renderer_state().device->newSamplerState(sampler_desc);
     sampler_desc->release();
 
-    g_renderer.initialized = true;
-    g_renderer.text_cache.active_scale_key = 0;
-    g_renderer.debug_capture_always =
+    renderer_state().initialized = true;
+    renderer_state().text_cache.active_scale_key = 0;
+    renderer_state().debug_capture_always =
         macos_env_flag_enabled("PHENOTYPE_DEBUG_CAPTURE_EACH_FRAME");
 
     int winw = 0;
@@ -1957,19 +2004,23 @@ inline void renderer_init(native_surface_handle handle) {
     std::printf("[phenotype-native] Metal initialized (%dx%d)\n", winw, winh);
 }
 
+inline void renderer_activate(native_surface_handle handle) {
+    activate_renderer_state(desktop_surface(handle));
+}
+
 inline void renderer_flush(unsigned char const* buf, unsigned int len) {
-    if (len == 0 || !g_renderer.initialized) return;
+    if (len == 0 || !renderer_state().initialized) return;
 
     NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
     auto const flush_started = metrics::detail::now_ns();
-    g_renderer.material_executor_summary = MaterialExecutorSummary{};
+    renderer_state().material_executor_summary = MaterialExecutorSummary{};
     // Read the host-cached HiDPI scale. The shell keeps cached_content_scale
     // in sync with native viewport and content-scale changes.
     float frame_scale = 1.0f;
     if (auto* host = ::phenotype::native::detail::active_host())
         frame_scale = host->cached_content_scale;
     if (!(frame_scale > 0.0f))
-        frame_scale = surface_content_scale(g_renderer.surface);
+        frame_scale = surface_content_scale(renderer_state().surface);
     float text_scale = frame_scale;
     float line_height_ratio = ::phenotype::detail::g_app().theme.line_height_ratio;
 
@@ -1977,16 +2028,16 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     double cg = 0.98;
     double cb = 0.98;
     bool const transparent_window_surface =
-        g_renderer.surface
-        && g_renderer.surface->window_options_valid
-        && g_renderer.surface->window_chrome
+        renderer_state().surface
+        && renderer_state().surface->window_options_valid
+        && renderer_state().surface->window_chrome
             == WindowChromeStyle::IntegratedTitlebar;
     double ca = transparent_window_surface ? 0.0 : 1.0;
     (void)process_completed_images();
     process_completed_material_backdrop_luma_sample();
     int fbw = 0;
     int fbh = 0;
-    surface_framebuffer_size(g_renderer.surface, fbw, fbh);
+    surface_framebuffer_size(renderer_state().surface, fbw, fbh);
     if (fbw == 0 || fbh == 0) {
         pool->release();
         return;
@@ -1995,62 +2046,62 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     sync_layer_backing_geometry(fbw, fbh, frame_scale);
     auto const current_theme_generation =
         ::phenotype::detail::g_app().theme_generation;
-    if (g_renderer.material_backdrop_theme_generation
+    if (renderer_state().material_backdrop_theme_generation
         != current_theme_generation) {
-        g_renderer.last_material_backdrop_available = false;
-        g_renderer.last_material_backdrop_excludes_foreground_text = false;
-        g_renderer.last_material_backdrop_color_available = false;
-        g_renderer.last_material_backdrop_luma_available = false;
+        renderer_state().last_material_backdrop_available = false;
+        renderer_state().last_material_backdrop_excludes_foreground_text = false;
+        renderer_state().last_material_backdrop_color_available = false;
+        renderer_state().last_material_backdrop_luma_available = false;
     }
     bool const backdrop_ready =
-        g_renderer.material_pipeline
-        && g_renderer.material_backdrop_texture
-        && g_renderer.last_material_backdrop_available
-        && g_renderer.material_backdrop_theme_generation
+        renderer_state().material_pipeline
+        && renderer_state().material_backdrop_texture
+        && renderer_state().last_material_backdrop_available
+        && renderer_state().material_backdrop_theme_generation
             == current_theme_generation
-        && g_renderer.material_backdrop_width == fbw
-        && g_renderer.material_backdrop_height == fbh;
+        && renderer_state().material_backdrop_width == fbw
+        && renderer_state().material_backdrop_height == fbh;
     MaterialEnvironment material_env{};
     auto const accessibility = accessibility_display_options();
-    g_renderer.accessibility_options = accessibility;
+    renderer_state().accessibility_options = accessibility;
     material_env.capabilities = macos_material_capability_input(
-        g_renderer.device,
-        g_renderer.material_pipeline != nullptr,
+        renderer_state().device,
+        renderer_state().material_pipeline != nullptr,
         backdrop_ready,
         accessibility);
     material_env.backdrop.available = backdrop_ready;
     material_env.backdrop.stable = backdrop_ready;
     material_env.backdrop.excludes_foreground_text =
         backdrop_ready
-        && g_renderer.last_material_backdrop_excludes_foreground_text;
+        && renderer_state().last_material_backdrop_excludes_foreground_text;
     material_env.backdrop.source = backdrop_ready
         ? "previous-presented-frame"
         : "none";
-    if (backdrop_ready && g_renderer.last_material_backdrop_luma_available) {
-        if (g_renderer.last_material_backdrop_color_available) {
+    if (backdrop_ready && renderer_state().last_material_backdrop_luma_available) {
+        if (renderer_state().last_material_backdrop_color_available) {
             material_env.backdrop.color_mean =
-                g_renderer.last_material_backdrop_color_mean;
+                renderer_state().last_material_backdrop_color_mean;
             material_env.backdrop.color_sample_count =
-                g_renderer.last_material_backdrop_luma_sample_count;
+                renderer_state().last_material_backdrop_luma_sample_count;
             material_env.backdrop.color_sample_status =
-                g_renderer.last_material_backdrop_luma_status;
+                renderer_state().last_material_backdrop_luma_status;
         }
         material_env.backdrop.luma_min =
-            g_renderer.last_material_backdrop_luma_min;
+            renderer_state().last_material_backdrop_luma_min;
         material_env.backdrop.luma_max =
-            g_renderer.last_material_backdrop_luma_max;
+            renderer_state().last_material_backdrop_luma_max;
         material_env.backdrop.luma_mean =
-            g_renderer.last_material_backdrop_luma_mean;
+            renderer_state().last_material_backdrop_luma_mean;
         material_env.backdrop.luma_sample_count =
-            g_renderer.last_material_backdrop_luma_sample_count;
+            renderer_state().last_material_backdrop_luma_sample_count;
         material_env.backdrop.luma_sample_grid_width =
-            g_renderer.last_material_backdrop_luma_grid_width;
+            renderer_state().last_material_backdrop_luma_grid_width;
         material_env.backdrop.luma_sample_grid_height =
-            g_renderer.last_material_backdrop_luma_grid_height;
+            renderer_state().last_material_backdrop_luma_grid_height;
         material_env.backdrop.luma_sample_frame =
-            g_renderer.last_material_backdrop_luma_frame;
+            renderer_state().last_material_backdrop_luma_frame;
         material_env.backdrop.luma_sample_status =
-            g_renderer.last_material_backdrop_luma_status;
+            renderer_state().last_material_backdrop_luma_status;
         material_env.backdrop.source =
             "previous-presented-frame-sampled-grid";
     }
@@ -2058,14 +2109,14 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_env.render_target.height = fbh;
     material_env.render_target.scale = frame_scale;
     material_env.render_target.pixel_format = "bgra8unorm";
-    material_env.debug_seed.frame = ++g_renderer.material_frame_sequence;
+    material_env.debug_seed.frame = ++renderer_state().material_frame_sequence;
     material_env.quality =
         macos_material_quality_policy(material_env.capabilities);
     auto decode_started = metrics::detail::now_ns();
     if (!decode_frame_commands(
             buf, len, line_height_ratio,
             material_env,
-            g_renderer.scratch, g_renderer.hit_regions,
+            renderer_state().scratch, renderer_state().hit_regions,
             cr, cg, cb, ca)) {
         pool->release();
         return;
@@ -2077,14 +2128,14 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         cg = 0.0;
         cb = 0.0;
     }
-    g_renderer.last_clear_alpha = ca;
-    g_renderer.last_clear_alpha_for_transparent_window =
+    renderer_state().last_clear_alpha = ca;
+    renderer_state().last_clear_alpha_for_transparent_window =
         transparent_window_surface && ca == 0.0;
-    g_renderer.last_full_frame_opaque_fill_count =
-        g_renderer.scratch.full_frame_opaque_fill_count;
-    g_renderer.last_transparent_window_has_opaque_frame_fill =
+    renderer_state().last_full_frame_opaque_fill_count =
+        renderer_state().scratch.full_frame_opaque_fill_count;
+    renderer_state().last_transparent_window_has_opaque_frame_fill =
         transparent_window_surface
-        && g_renderer.last_full_frame_opaque_fill_count > 0;
+        && renderer_state().last_full_frame_opaque_fill_count > 0;
     auto const decode_ns = metrics::detail::now_ns() - decode_started;
     metrics::inst::native_phase_duration.record(
         decode_ns,
@@ -2096,8 +2147,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         metrics::detail::now_ns() - image_started,
         native_attrs("image_prepare"));
 
-    append_ime_overlay(g_renderer.scratch);
-    append_generic_caret_overlay(g_renderer.scratch);
+    append_ime_overlay(renderer_state().scratch);
+    append_generic_caret_overlay(renderer_state().scratch);
 
     auto text_started = metrics::detail::now_ns();
     if (!prepare_text_instances(text_scale)) {
@@ -2108,8 +2159,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         metrics::detail::now_ns() - text_started,
         native_attrs("text_prepare"));
 
-    finalize_batches(g_renderer.scratch);
-    apply_material_container_execution_descriptors(g_renderer.scratch);
+    finalize_batches(renderer_state().scratch);
+    apply_material_container_execution_descriptors(renderer_state().scratch);
 
     MaterialExecutorSummary material_summary;
     material_summary.cpu_decode_ns = decode_ns;
@@ -2118,22 +2169,22 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_summary.material_backdrop_source_ready =
         material_env.backdrop.available;
     material_summary.foreground_text_candidate_count =
-        g_renderer.scratch.foreground_text_candidate_count;
+        renderer_state().scratch.foreground_text_candidate_count;
     material_summary.foreground_text_remap_count =
-        g_renderer.scratch.foreground_text_remap_count;
+        renderer_state().scratch.foreground_text_remap_count;
     set_material_executor_backdrop_descriptor_summary(
         material_summary,
         material_env.backdrop);
-    for (auto const& record : g_renderer.scratch.material_records) {
+    for (auto const& record : renderer_state().scratch.material_records) {
         accumulate_material_executor_plan_summary(
             material_summary,
             record.plan);
     }
     finalize_material_executor_summary(
         material_summary,
-        g_renderer.scratch.material_records);
+        renderer_state().scratch.material_records);
     material_summary.material_shader_content_scale = frame_scale;
-    for (auto const& record : g_renderer.scratch.material_records) {
+    for (auto const& record : renderer_state().scratch.material_records) {
         auto const& plan = record.plan;
         if (!material_plan_uses_sampled_backdrop_executor(plan))
             continue;
@@ -2151,14 +2202,14 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     int winw = 0;
     int winh = 0;
-    surface_logical_size(g_renderer.surface, winw, winh);
+    surface_logical_size(renderer_state().surface, winw, winh);
     float uniforms[4] = {
         static_cast<float>(winw),
         static_cast<float>(winh),
         frame_scale,
         0,
     };
-    std::memcpy(g_renderer.uniform_buf->contents(), uniforms, 16);
+    std::memcpy(renderer_state().uniform_buf->contents(), uniforms, 16);
 
     auto image_upload_started = metrics::detail::now_ns();
     if (!upload_image_cache()) {
@@ -2178,26 +2229,26 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         metrics::detail::now_ns() - upload_started,
         native_attrs("text_upload"));
 
-    auto* command_buffer = g_renderer.queue->commandBuffer();
+    auto* command_buffer = renderer_state().queue->commandBuffer();
     if (!command_buffer) {
         pool->release();
         return;
     }
 
-    auto& scratch = g_renderer.scratch;
+    auto& scratch = renderer_state().scratch;
     auto const tri_bytes = scratch.tri_vertices.size() * sizeof(TriVertexGPU);
     bool tri_uploaded = false;
     if (!scratch.tri_vertices.empty()) {
         if (!ensure_instance_buffer(
-                g_renderer.tri_vertices_buf,
-                g_renderer.tri_vertices_capacity,
+                renderer_state().tri_vertices_buf,
+                renderer_state().tri_vertices_capacity,
                 tri_bytes,
                 "tri_vertices")) {
             pool->release();
             return;
         }
         std::memcpy(
-            g_renderer.tri_vertices_buf->contents(),
+            renderer_state().tri_vertices_buf->contents(),
             scratch.tri_vertices.data(),
             tri_bytes);
         tri_uploaded = true;
@@ -2207,15 +2258,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     bool color_uploaded = false;
     if (!scratch.color_instances.empty()) {
         if (!ensure_instance_buffer(
-                g_renderer.color_instances_buf,
-                g_renderer.color_instances_capacity,
+                renderer_state().color_instances_buf,
+                renderer_state().color_instances_capacity,
                 color_bytes,
                 "color_instances")) {
             pool->release();
             return;
         }
         std::memcpy(
-            g_renderer.color_instances_buf->contents(),
+            renderer_state().color_instances_buf->contents(),
             scratch.color_instances.data(),
             color_bytes);
         color_uploaded = true;
@@ -2226,25 +2277,25 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     bool material_uploaded = false;
     auto material_upload_started = metrics::detail::now_ns();
     if (!scratch.material_instances.empty()) {
-        auto const old_material_capacity = g_renderer.material_instances_capacity;
+        auto const old_material_capacity = renderer_state().material_instances_capacity;
         if (!ensure_instance_buffer(
-                g_renderer.material_instances_buf,
-                g_renderer.material_instances_capacity,
+                renderer_state().material_instances_buf,
+                renderer_state().material_instances_capacity,
                 material_bytes,
                 "material_instances")) {
             pool->release();
             return;
         }
         std::memcpy(
-            g_renderer.material_instances_buf->contents(),
+            renderer_state().material_instances_buf->contents(),
             scratch.material_instances.data(),
             material_bytes);
         material_uploaded = true;
         material_summary.material_upload_bytes =
             static_cast<std::int64_t>(material_bytes);
         material_summary.material_buffer_capacity_bytes =
-            static_cast<std::int64_t>(g_renderer.material_instances_capacity);
-        if (g_renderer.material_instances_capacity != old_material_capacity)
+            static_cast<std::int64_t>(renderer_state().material_instances_capacity);
+        if (renderer_state().material_instances_capacity != old_material_capacity)
             ++material_summary.material_buffer_reallocations;
     }
     material_summary.cpu_material_upload_ns =
@@ -2254,15 +2305,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     bool arc_uploaded = false;
     if (!scratch.arc_instances.empty()) {
         if (!ensure_instance_buffer(
-                g_renderer.arc_instances_buf,
-                g_renderer.arc_instances_capacity,
+                renderer_state().arc_instances_buf,
+                renderer_state().arc_instances_capacity,
                 arc_bytes,
                 "arc_instances")) {
             pool->release();
             return;
         }
         std::memcpy(
-            g_renderer.arc_instances_buf->contents(),
+            renderer_state().arc_instances_buf->contents(),
             scratch.arc_instances.data(),
             arc_bytes);
         arc_uploaded = true;
@@ -2270,17 +2321,17 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     auto const image_bytes = scratch.image_instances.size() * sizeof(ImageInstanceGPU);
     bool image_uploaded = false;
-    if (!scratch.image_instances.empty() && g_renderer.image_atlas_texture) {
+    if (!scratch.image_instances.empty() && renderer_state().image_atlas_texture) {
         if (!ensure_instance_buffer(
-                g_renderer.image_instances_buf,
-                g_renderer.image_instances_capacity,
+                renderer_state().image_instances_buf,
+                renderer_state().image_instances_capacity,
                 image_bytes,
                 "image_instances")) {
             pool->release();
             return;
         }
         std::memcpy(
-            g_renderer.image_instances_buf->contents(),
+            renderer_state().image_instances_buf->contents(),
             scratch.image_instances.data(),
             image_bytes);
         image_uploaded = true;
@@ -2288,17 +2339,17 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     auto const text_bytes = scratch.text_instances.size() * sizeof(TextInstanceGPU);
     bool text_uploaded = false;
-    if (!scratch.text_instances.empty() && g_renderer.text_atlas_texture) {
+    if (!scratch.text_instances.empty() && renderer_state().text_atlas_texture) {
         if (!ensure_instance_buffer(
-                g_renderer.text_instances_buf,
-                g_renderer.text_instances_capacity,
+                renderer_state().text_instances_buf,
+                renderer_state().text_instances_capacity,
                 text_bytes,
                 "text_instances")) {
             pool->release();
             return;
         }
         std::memcpy(
-            g_renderer.text_instances_buf->contents(),
+            renderer_state().text_instances_buf->contents(),
             scratch.text_instances.data(),
             text_bytes);
         text_uploaded = true;
@@ -2408,17 +2459,17 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             }
             auto const sr = compute_metal_scissor(
                 batch, scissor_scale,
-                static_cast<std::uint32_t>(g_renderer.drawable_width),
-                static_cast<std::uint32_t>(g_renderer.drawable_height));
+                static_cast<std::uint32_t>(renderer_state().drawable_width),
+                static_cast<std::uint32_t>(renderer_state().drawable_height));
             if (sr.width == 0 || sr.height == 0)
                 return;
             target_encoder->setScissorRect(sr);
 
             if (tri_uploaded && batch_tri_count > 0) {
-                target_encoder->setRenderPipelineState(g_renderer.tri_pipeline);
-                target_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+                target_encoder->setRenderPipelineState(renderer_state().tri_pipeline);
+                target_encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
                 target_encoder->setVertexBuffer(
-                    g_renderer.tri_vertices_buf,
+                    renderer_state().tri_vertices_buf,
                     NS::UInteger(batch.tri_first * sizeof(TriVertexGPU)),
                     1);
                 target_encoder->drawPrimitives(
@@ -2428,10 +2479,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             }
 
             if (color_uploaded && batch_color_count > 0) {
-                target_encoder->setRenderPipelineState(g_renderer.color_pipeline);
-                target_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+                target_encoder->setRenderPipelineState(renderer_state().color_pipeline);
+                target_encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
                 target_encoder->setVertexBuffer(
-                    g_renderer.color_instances_buf, 0, 1);
+                    renderer_state().color_instances_buf, 0, 1);
                 draw_backdrop_underlay_colors(
                     target_encoder,
                     batch_index,
@@ -2439,9 +2490,9 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             }
 
             if (arc_uploaded && batch_arc_count > 0) {
-                target_encoder->setRenderPipelineState(g_renderer.arc_pipeline);
-                target_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-                target_encoder->setVertexBuffer(g_renderer.arc_instances_buf, 0, 1);
+                target_encoder->setRenderPipelineState(renderer_state().arc_pipeline);
+                target_encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
+                target_encoder->setVertexBuffer(renderer_state().arc_instances_buf, 0, 1);
                 target_encoder->drawPrimitives(
                     MTL::PrimitiveTypeTriangle,
                     NS::UInteger(0), 6,
@@ -2450,13 +2501,13 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             }
 
             if (image_uploaded && batch_image_count > 0) {
-                target_encoder->setRenderPipelineState(g_renderer.image_pipeline);
-                target_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+                target_encoder->setRenderPipelineState(renderer_state().image_pipeline);
+                target_encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
                 target_encoder->setVertexBuffer(
-                    g_renderer.image_instances_buf, 0, 1);
+                    renderer_state().image_instances_buf, 0, 1);
                 target_encoder->setFragmentTexture(
-                    g_renderer.image_atlas_texture, 0);
-                target_encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+                    renderer_state().image_atlas_texture, 0);
+                target_encoder->setFragmentSamplerState(renderer_state().sampler, 0);
                 target_encoder->drawPrimitives(
                     MTL::PrimitiveTypeTriangle,
                     NS::UInteger(0), 6,
@@ -2465,12 +2516,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             }
         };
 
-    g_renderer.last_material_backdrop_available = false;
-    g_renderer.last_material_backdrop_excludes_foreground_text = false;
+    renderer_state().last_material_backdrop_available = false;
+    renderer_state().last_material_backdrop_excludes_foreground_text = false;
     if (capture_frame_history && ensure_material_backdrop_texture(fbw, fbh)) {
         auto* backdrop_pass = MTL::RenderPassDescriptor::renderPassDescriptor();
         backdrop_pass->colorAttachments()->object(0)->setTexture(
-            g_renderer.material_backdrop_texture);
+            renderer_state().material_backdrop_texture);
         backdrop_pass->colorAttachments()->object(0)->setLoadAction(
             MTL::LoadActionClear);
         backdrop_pass->colorAttachments()->object(0)->setClearColor(
@@ -2492,17 +2543,17 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 (void)schedule_material_backdrop_luma_sample(
                     blit,
                     command_buffer,
-                    g_renderer.material_backdrop_texture,
+                    renderer_state().material_backdrop_texture,
                     fbw,
                     fbh,
                     material_env.debug_seed.frame,
                     material_summary);
                 blit->endEncoding();
             }
-            g_renderer.last_material_backdrop_available = true;
-            g_renderer.material_backdrop_theme_generation =
+            renderer_state().last_material_backdrop_available = true;
+            renderer_state().material_backdrop_theme_generation =
                 current_theme_generation;
-            g_renderer.last_material_backdrop_excludes_foreground_text = true;
+            renderer_state().last_material_backdrop_excludes_foreground_text = true;
             material_summary.backdrop_copy_excludes_foreground_text = true;
             material_summary.backdrop_copy_count = 1;
             material_summary.backdrop_copy_pixels =
@@ -2523,7 +2574,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             "no-material-plan-frame-capture";
     }
 
-    auto* drawable = g_renderer.layer->nextDrawable();
+    auto* drawable = renderer_state().layer->nextDrawable();
     if (!drawable) {
         release_material_backdrop_luma_pending_command_buffer();
         pool->release();
@@ -2562,8 +2613,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             continue;
         auto const sr = compute_metal_scissor(
             batch, scissor_scale,
-            static_cast<std::uint32_t>(g_renderer.drawable_width),
-            static_cast<std::uint32_t>(g_renderer.drawable_height));
+            static_cast<std::uint32_t>(renderer_state().drawable_width),
+            static_cast<std::uint32_t>(renderer_state().drawable_height));
         if (sr.width == 0 || sr.height == 0)
             continue;
         encoder->setScissorRect(sr);
@@ -2581,10 +2632,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         // batches would silently read the wrong slice on platforms
         // that report vertex_id relative to 0.
         if (tri_uploaded && batch_tri_count > 0) {
-            encoder->setRenderPipelineState(g_renderer.tri_pipeline);
-            encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+            encoder->setRenderPipelineState(renderer_state().tri_pipeline);
+            encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
             encoder->setVertexBuffer(
-                g_renderer.tri_vertices_buf,
+                renderer_state().tri_vertices_buf,
                 NS::UInteger(batch.tri_first * sizeof(TriVertexGPU)),
                 1);
             encoder->drawPrimitives(
@@ -2594,9 +2645,9 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         }
 
         if (color_uploaded && batch_color_count > 0) {
-            encoder->setRenderPipelineState(g_renderer.color_pipeline);
-            encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-            encoder->setVertexBuffer(g_renderer.color_instances_buf, 0, 1);
+            encoder->setRenderPipelineState(renderer_state().color_pipeline);
+            encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
+            encoder->setVertexBuffer(renderer_state().color_instances_buf, 0, 1);
             encoder->drawPrimitives(
                 MTL::PrimitiveTypeTriangle,
                 NS::UInteger(0), 6,
@@ -2604,13 +2655,13 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 NS::UInteger(batch.color_first));
         }
         if (material_uploaded && batch_material_count > 0
-            && g_renderer.material_backdrop_texture
-            && g_renderer.last_material_backdrop_available) {
-            encoder->setRenderPipelineState(g_renderer.material_pipeline);
-            encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-            encoder->setVertexBuffer(g_renderer.material_instances_buf, 0, 1);
-            encoder->setFragmentTexture(g_renderer.material_backdrop_texture, 0);
-            encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+            && renderer_state().material_backdrop_texture
+            && renderer_state().last_material_backdrop_available) {
+            encoder->setRenderPipelineState(renderer_state().material_pipeline);
+            encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
+            encoder->setVertexBuffer(renderer_state().material_instances_buf, 0, 1);
+            encoder->setFragmentTexture(renderer_state().material_backdrop_texture, 0);
+            encoder->setFragmentSamplerState(renderer_state().sampler, 0);
             encoder->drawPrimitives(
                 MTL::PrimitiveTypeTriangle,
                 NS::UInteger(0), 6,
@@ -2619,9 +2670,9 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             ++material_summary.material_draw_calls;
         }
         if (arc_uploaded && batch_arc_count > 0) {
-            encoder->setRenderPipelineState(g_renderer.arc_pipeline);
-            encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-            encoder->setVertexBuffer(g_renderer.arc_instances_buf, 0, 1);
+            encoder->setRenderPipelineState(renderer_state().arc_pipeline);
+            encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
+            encoder->setVertexBuffer(renderer_state().arc_instances_buf, 0, 1);
             encoder->drawPrimitives(
                 MTL::PrimitiveTypeTriangle,
                 NS::UInteger(0), 6,
@@ -2629,11 +2680,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 NS::UInteger(batch.arc_first));
         }
         if (image_uploaded && batch_image_count > 0) {
-            encoder->setRenderPipelineState(g_renderer.image_pipeline);
-            encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-            encoder->setVertexBuffer(g_renderer.image_instances_buf, 0, 1);
-            encoder->setFragmentTexture(g_renderer.image_atlas_texture, 0);
-            encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+            encoder->setRenderPipelineState(renderer_state().image_pipeline);
+            encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
+            encoder->setVertexBuffer(renderer_state().image_instances_buf, 0, 1);
+            encoder->setFragmentTexture(renderer_state().image_atlas_texture, 0);
+            encoder->setFragmentSamplerState(renderer_state().sampler, 0);
             encoder->drawPrimitives(
                 MTL::PrimitiveTypeTriangle,
                 NS::UInteger(0), 6,
@@ -2641,11 +2692,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 NS::UInteger(batch.image_first));
         }
         if (!defer_foreground_pass && text_uploaded && batch_text_count > 0) {
-            encoder->setRenderPipelineState(g_renderer.text_pipeline);
-            encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-            encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
-            encoder->setFragmentTexture(g_renderer.text_atlas_texture, 0);
-            encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+            encoder->setRenderPipelineState(renderer_state().text_pipeline);
+            encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
+            encoder->setVertexBuffer(renderer_state().text_instances_buf, 0, 1);
+            encoder->setFragmentTexture(renderer_state().text_atlas_texture, 0);
+            encoder->setFragmentSamplerState(renderer_state().sampler, 0);
             encoder->drawPrimitives(
                 MTL::PrimitiveTypeTriangle,
                 NS::UInteger(0), 6,
@@ -2658,8 +2709,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     // scissor so the last batch's clip rect doesn't leak into them.
     encoder->setScissorRect(MTL::ScissorRect{
         0, 0,
-        static_cast<NS::UInteger>(g_renderer.drawable_width),
-        static_cast<NS::UInteger>(g_renderer.drawable_height)});
+        static_cast<NS::UInteger>(renderer_state().drawable_width),
+        static_cast<NS::UInteger>(renderer_state().drawable_height)});
 
     auto const overlay_color_bytes =
         scratch.overlay_color_instances.size() * sizeof(ColorInstanceGPU);
@@ -2667,8 +2718,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         static_cast<uint32_t>(scratch.overlay_color_instances.size());
     if (!defer_foreground_pass && overlay_color_count > 0) {
         if (!ensure_instance_buffer(
-                g_renderer.overlay_color_instances_buf,
-                g_renderer.overlay_color_instances_capacity,
+                renderer_state().overlay_color_instances_buf,
+                renderer_state().overlay_color_instances_capacity,
                 overlay_color_bytes,
                 "overlay_color_instances")) {
             encoder->endEncoding();
@@ -2676,23 +2727,23 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             return;
         }
         std::memcpy(
-            g_renderer.overlay_color_instances_buf->contents(),
+            renderer_state().overlay_color_instances_buf->contents(),
             scratch.overlay_color_instances.data(),
             overlay_color_bytes);
-        encoder->setRenderPipelineState(g_renderer.color_pipeline);
-        encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-        encoder->setVertexBuffer(g_renderer.overlay_color_instances_buf, 0, 1);
+        encoder->setRenderPipelineState(renderer_state().color_pipeline);
+        encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
+        encoder->setVertexBuffer(renderer_state().overlay_color_instances_buf, 0, 1);
         encoder->drawPrimitives(
             MTL::PrimitiveTypeTriangle,
             NS::UInteger(0), 6, NS::UInteger(overlay_color_count));
     }
 
     if (!defer_foreground_pass && text_uploaded && scratch.overlay_text_count > 0) {
-        encoder->setRenderPipelineState(g_renderer.text_pipeline);
-        encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-        encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
-        encoder->setFragmentTexture(g_renderer.text_atlas_texture, 0);
-        encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+        encoder->setRenderPipelineState(renderer_state().text_pipeline);
+        encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
+        encoder->setVertexBuffer(renderer_state().text_instances_buf, 0, 1);
+        encoder->setFragmentTexture(renderer_state().text_atlas_texture, 0);
+        encoder->setFragmentSamplerState(renderer_state().sampler, 0);
         encoder->drawPrimitives(
             MTL::PrimitiveTypeTriangle,
             NS::UInteger(0), 6,
@@ -2701,8 +2752,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
 
     encoder->endEncoding();
-    g_renderer.last_render_width = fbw;
-    g_renderer.last_render_height = fbh;
+    renderer_state().last_render_width = fbw;
+    renderer_state().last_render_height = fbh;
 
     if (defer_foreground_pass) {
         auto* foreground_pass = MTL::RenderPassDescriptor::renderPassDescriptor();
@@ -2727,8 +2778,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 continue;
             auto const sr = compute_metal_scissor(
                 batch, scissor_scale,
-                static_cast<std::uint32_t>(g_renderer.drawable_width),
-                static_cast<std::uint32_t>(g_renderer.drawable_height));
+                static_cast<std::uint32_t>(renderer_state().drawable_width),
+                static_cast<std::uint32_t>(renderer_state().drawable_height));
             if (sr.width == 0 || sr.height == 0)
                 continue;
             foreground_encoder->setScissorRect(sr);
@@ -2773,13 +2824,13 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
         foreground_encoder->setScissorRect(MTL::ScissorRect{
             0, 0,
-            static_cast<NS::UInteger>(g_renderer.drawable_width),
-            static_cast<NS::UInteger>(g_renderer.drawable_height)});
+            static_cast<NS::UInteger>(renderer_state().drawable_width),
+            static_cast<NS::UInteger>(renderer_state().drawable_height)});
 
         if (overlay_color_count > 0) {
             if (!ensure_instance_buffer(
-                    g_renderer.overlay_color_instances_buf,
-                    g_renderer.overlay_color_instances_capacity,
+                    renderer_state().overlay_color_instances_buf,
+                    renderer_state().overlay_color_instances_capacity,
                     overlay_color_bytes,
                     "overlay_color_instances")) {
                 foreground_encoder->endEncoding();
@@ -2788,24 +2839,24 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 return;
             }
             std::memcpy(
-                g_renderer.overlay_color_instances_buf->contents(),
+                renderer_state().overlay_color_instances_buf->contents(),
                 scratch.overlay_color_instances.data(),
                 overlay_color_bytes);
-            foreground_encoder->setRenderPipelineState(g_renderer.color_pipeline);
-            foreground_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+            foreground_encoder->setRenderPipelineState(renderer_state().color_pipeline);
+            foreground_encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
             foreground_encoder->setVertexBuffer(
-                g_renderer.overlay_color_instances_buf, 0, 1);
+                renderer_state().overlay_color_instances_buf, 0, 1);
             foreground_encoder->drawPrimitives(
                 MTL::PrimitiveTypeTriangle,
                 NS::UInteger(0), 6, NS::UInteger(overlay_color_count));
         }
 
         if (text_uploaded && scratch.overlay_text_count > 0) {
-            foreground_encoder->setRenderPipelineState(g_renderer.text_pipeline);
-            foreground_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-            foreground_encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
-            foreground_encoder->setFragmentTexture(g_renderer.text_atlas_texture, 0);
-            foreground_encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+            foreground_encoder->setRenderPipelineState(renderer_state().text_pipeline);
+            foreground_encoder->setVertexBuffer(renderer_state().uniform_buf, 0, 0);
+            foreground_encoder->setVertexBuffer(renderer_state().text_instances_buf, 0, 1);
+            foreground_encoder->setFragmentTexture(renderer_state().text_atlas_texture, 0);
+            foreground_encoder->setFragmentSamplerState(renderer_state().sampler, 0);
             foreground_encoder->drawPrimitives(
                 MTL::PrimitiveTypeTriangle,
                 NS::UInteger(0), 6,
@@ -2818,8 +2869,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
 
     bool const capture_debug_frame =
-        g_renderer.debug_capture_always || g_renderer.debug_capture_next_frame;
-    g_renderer.last_frame_available = false;
+        renderer_state().debug_capture_always || renderer_state().debug_capture_next_frame;
+    renderer_state().last_frame_available = false;
     if (capture_debug_frame && ensure_debug_capture_texture(fbw, fbh)) {
         if (auto* blit = command_buffer->blitCommandEncoder()) {
             MTL::Origin origin{0, 0, 0};
@@ -2834,16 +2885,16 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 NS::UInteger(0),
                 origin,
                 size,
-                g_renderer.debug_capture_texture,
+                renderer_state().debug_capture_texture,
                 NS::UInteger(0),
                 NS::UInteger(0),
                 origin);
             blit->endEncoding();
-            g_renderer.last_frame_available = true;
-            ++g_renderer.debug_capture_copy_count;
+            renderer_state().last_frame_available = true;
+            ++renderer_state().debug_capture_copy_count;
         }
     }
-    g_renderer.debug_capture_next_frame = false;
+    renderer_state().debug_capture_next_frame = false;
     command_buffer->presentDrawable(drawable);
     command_buffer->commit();
     if (auto* host = ::phenotype::native::detail::active_host())
@@ -2851,95 +2902,108 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_summary.cpu_total_ns =
         metrics::detail::now_ns() - flush_started;
     finalize_material_executor_execution_status(material_summary);
-    g_renderer.material_executor_summary = material_summary;
+    renderer_state().material_executor_summary = material_summary;
 
     pool->release();
 }
 
-inline void renderer_shutdown() {
+inline void renderer_shutdown_active_state() {
     release_material_backdrop_luma_pending_command_buffer();
-    if (g_renderer.sampler) { g_renderer.sampler->release(); g_renderer.sampler = nullptr; }
-    if (g_renderer.debug_capture_texture) { g_renderer.debug_capture_texture->release(); g_renderer.debug_capture_texture = nullptr; }
-    if (g_renderer.material_backdrop_texture) { g_renderer.material_backdrop_texture->release(); g_renderer.material_backdrop_texture = nullptr; }
-    if (g_renderer.material_backdrop_luma_sample_buf) { g_renderer.material_backdrop_luma_sample_buf->release(); g_renderer.material_backdrop_luma_sample_buf = nullptr; }
-    g_renderer.last_frame_available = false;
-    g_renderer.debug_capture_next_frame = false;
-    g_renderer.debug_capture_always = false;
-    g_renderer.last_material_backdrop_available = false;
-    g_renderer.material_backdrop_theme_generation = 0;
-    g_renderer.last_material_backdrop_excludes_foreground_text = false;
-    g_renderer.last_material_backdrop_color_available = false;
-    g_renderer.last_material_backdrop_color_mean = {255, 255, 255, 255};
-    g_renderer.last_material_backdrop_luma_available = false;
-    if (g_renderer.frame_readback_buf) { g_renderer.frame_readback_buf->release(); g_renderer.frame_readback_buf = nullptr; }
-    if (g_renderer.image_atlas_texture) { g_renderer.image_atlas_texture->release(); g_renderer.image_atlas_texture = nullptr; }
-    if (g_renderer.text_atlas_texture) { g_renderer.text_atlas_texture->release(); g_renderer.text_atlas_texture = nullptr; }
-    if (g_renderer.image_instances_buf) { g_renderer.image_instances_buf->release(); g_renderer.image_instances_buf = nullptr; }
-    if (g_renderer.text_instances_buf) { g_renderer.text_instances_buf->release(); g_renderer.text_instances_buf = nullptr; }
-    if (g_renderer.color_instances_buf) { g_renderer.color_instances_buf->release(); g_renderer.color_instances_buf = nullptr; }
-    if (g_renderer.material_instances_buf) { g_renderer.material_instances_buf->release(); g_renderer.material_instances_buf = nullptr; }
-    if (g_renderer.tri_vertices_buf) { g_renderer.tri_vertices_buf->release(); g_renderer.tri_vertices_buf = nullptr; }
-    if (g_renderer.arc_instances_buf) { g_renderer.arc_instances_buf->release(); g_renderer.arc_instances_buf = nullptr; }
-    if (g_renderer.overlay_color_instances_buf) { g_renderer.overlay_color_instances_buf->release(); g_renderer.overlay_color_instances_buf = nullptr; }
-    if (g_renderer.uniform_buf) { g_renderer.uniform_buf->release(); g_renderer.uniform_buf = nullptr; }
-    if (g_renderer.image_pipeline) { g_renderer.image_pipeline->release(); g_renderer.image_pipeline = nullptr; }
-    if (g_renderer.text_pipeline) { g_renderer.text_pipeline->release(); g_renderer.text_pipeline = nullptr; }
-    if (g_renderer.arc_pipeline) { g_renderer.arc_pipeline->release(); g_renderer.arc_pipeline = nullptr; }
-    if (g_renderer.material_pipeline) { g_renderer.material_pipeline->release(); g_renderer.material_pipeline = nullptr; }
-    if (g_renderer.color_pipeline) { g_renderer.color_pipeline->release(); g_renderer.color_pipeline = nullptr; }
-    if (g_renderer.tri_pipeline) { g_renderer.tri_pipeline->release(); g_renderer.tri_pipeline = nullptr; }
-    if (g_renderer.layer) { g_renderer.layer->release(); g_renderer.layer = nullptr; }
-    if (g_renderer.queue) { g_renderer.queue->release(); g_renderer.queue = nullptr; }
-    if (g_renderer.device) { g_renderer.device->release(); g_renderer.device = nullptr; }
-    g_renderer.hit_regions.clear();
-    g_renderer.scratch.clear();
+    if (renderer_state().sampler) { renderer_state().sampler->release(); renderer_state().sampler = nullptr; }
+    if (renderer_state().debug_capture_texture) { renderer_state().debug_capture_texture->release(); renderer_state().debug_capture_texture = nullptr; }
+    if (renderer_state().material_backdrop_texture) { renderer_state().material_backdrop_texture->release(); renderer_state().material_backdrop_texture = nullptr; }
+    if (renderer_state().material_backdrop_luma_sample_buf) { renderer_state().material_backdrop_luma_sample_buf->release(); renderer_state().material_backdrop_luma_sample_buf = nullptr; }
+    renderer_state().last_frame_available = false;
+    renderer_state().debug_capture_next_frame = false;
+    renderer_state().debug_capture_always = false;
+    renderer_state().last_material_backdrop_available = false;
+    renderer_state().material_backdrop_theme_generation = 0;
+    renderer_state().last_material_backdrop_excludes_foreground_text = false;
+    renderer_state().last_material_backdrop_color_available = false;
+    renderer_state().last_material_backdrop_color_mean = {255, 255, 255, 255};
+    renderer_state().last_material_backdrop_luma_available = false;
+    if (renderer_state().frame_readback_buf) { renderer_state().frame_readback_buf->release(); renderer_state().frame_readback_buf = nullptr; }
+    if (renderer_state().image_atlas_texture) { renderer_state().image_atlas_texture->release(); renderer_state().image_atlas_texture = nullptr; }
+    if (renderer_state().text_atlas_texture) { renderer_state().text_atlas_texture->release(); renderer_state().text_atlas_texture = nullptr; }
+    if (renderer_state().image_instances_buf) { renderer_state().image_instances_buf->release(); renderer_state().image_instances_buf = nullptr; }
+    if (renderer_state().text_instances_buf) { renderer_state().text_instances_buf->release(); renderer_state().text_instances_buf = nullptr; }
+    if (renderer_state().color_instances_buf) { renderer_state().color_instances_buf->release(); renderer_state().color_instances_buf = nullptr; }
+    if (renderer_state().material_instances_buf) { renderer_state().material_instances_buf->release(); renderer_state().material_instances_buf = nullptr; }
+    if (renderer_state().tri_vertices_buf) { renderer_state().tri_vertices_buf->release(); renderer_state().tri_vertices_buf = nullptr; }
+    if (renderer_state().arc_instances_buf) { renderer_state().arc_instances_buf->release(); renderer_state().arc_instances_buf = nullptr; }
+    if (renderer_state().overlay_color_instances_buf) { renderer_state().overlay_color_instances_buf->release(); renderer_state().overlay_color_instances_buf = nullptr; }
+    if (renderer_state().uniform_buf) { renderer_state().uniform_buf->release(); renderer_state().uniform_buf = nullptr; }
+    if (renderer_state().image_pipeline) { renderer_state().image_pipeline->release(); renderer_state().image_pipeline = nullptr; }
+    if (renderer_state().text_pipeline) { renderer_state().text_pipeline->release(); renderer_state().text_pipeline = nullptr; }
+    if (renderer_state().arc_pipeline) { renderer_state().arc_pipeline->release(); renderer_state().arc_pipeline = nullptr; }
+    if (renderer_state().material_pipeline) { renderer_state().material_pipeline->release(); renderer_state().material_pipeline = nullptr; }
+    if (renderer_state().color_pipeline) { renderer_state().color_pipeline->release(); renderer_state().color_pipeline = nullptr; }
+    if (renderer_state().tri_pipeline) { renderer_state().tri_pipeline->release(); renderer_state().tri_pipeline = nullptr; }
+    if (renderer_state().layer) { renderer_state().layer->release(); renderer_state().layer = nullptr; }
+    if (renderer_state().queue) { renderer_state().queue->release(); renderer_state().queue = nullptr; }
+    if (renderer_state().device) { renderer_state().device->release(); renderer_state().device = nullptr; }
+    renderer_state().hit_regions.clear();
+    renderer_state().scratch.clear();
     reset_image_cache();
-    g_renderer.text_cache.entries.clear();
-    g_renderer.text_cache.pixels.clear();
-    g_renderer.text_cache.cursor_x = 0;
-    g_renderer.text_cache.cursor_y = 0;
-    g_renderer.text_cache.row_height = 0;
-    g_renderer.text_cache.dirty = false;
-    g_renderer.text_cache.dirty_min_x = TextAtlasCache::atlas_size;
-    g_renderer.text_cache.dirty_min_y = TextAtlasCache::atlas_size;
-    g_renderer.text_cache.dirty_max_x = 0;
-    g_renderer.text_cache.dirty_max_y = 0;
-    g_renderer.text_cache.active_scale_key = 0;
-    g_renderer.tri_vertices_capacity = 0;
-    g_renderer.color_instances_capacity = 0;
-    g_renderer.material_instances_capacity = 0;
-    g_renderer.overlay_color_instances_capacity = 0;
-    g_renderer.image_instances_capacity = 0;
-    g_renderer.text_instances_capacity = 0;
-    g_renderer.frame_readback_capacity = 0;
-    g_renderer.material_backdrop_luma_sample_capacity = 0;
-    g_renderer.drawable_width = 0;
-    g_renderer.drawable_height = 0;
-    g_renderer.debug_capture_width = 0;
-    g_renderer.debug_capture_height = 0;
-    g_renderer.debug_capture_copy_count = 0;
-    g_renderer.material_backdrop_width = 0;
-    g_renderer.material_backdrop_height = 0;
-    g_renderer.layer_contents_scale = 0.0;
-    g_renderer.last_render_width = 0;
-    g_renderer.last_render_height = 0;
-    g_renderer.last_clear_alpha = 1.0;
-    g_renderer.last_clear_alpha_for_transparent_window = false;
-    g_renderer.last_full_frame_opaque_fill_count = 0;
-    g_renderer.last_transparent_window_has_opaque_frame_fill = false;
-    g_renderer.material_frame_sequence = 0;
-    g_renderer.material_backdrop_luma_skipped_sample_count = 0;
-    g_renderer.last_material_backdrop_luma_sample_count = 0;
-    g_renderer.last_material_backdrop_luma_grid_width = 0;
-    g_renderer.last_material_backdrop_luma_grid_height = 0;
-    g_renderer.last_material_backdrop_luma_frame = 0;
-    g_renderer.last_material_backdrop_luma_status = "not-sampled";
-    g_renderer.material_executor_summary = MaterialExecutorSummary{};
-    g_renderer.last_frame_available = false;
-    g_renderer.surface = nullptr;
-    g_renderer.ns_window = nullptr;
-    g_renderer.content_view = nullptr;
-    g_renderer.initialized = false;
+    renderer_state().text_cache.entries.clear();
+    renderer_state().text_cache.pixels.clear();
+    renderer_state().text_cache.cursor_x = 0;
+    renderer_state().text_cache.cursor_y = 0;
+    renderer_state().text_cache.row_height = 0;
+    renderer_state().text_cache.dirty = false;
+    renderer_state().text_cache.dirty_min_x = TextAtlasCache::atlas_size;
+    renderer_state().text_cache.dirty_min_y = TextAtlasCache::atlas_size;
+    renderer_state().text_cache.dirty_max_x = 0;
+    renderer_state().text_cache.dirty_max_y = 0;
+    renderer_state().text_cache.active_scale_key = 0;
+    renderer_state().tri_vertices_capacity = 0;
+    renderer_state().color_instances_capacity = 0;
+    renderer_state().material_instances_capacity = 0;
+    renderer_state().overlay_color_instances_capacity = 0;
+    renderer_state().image_instances_capacity = 0;
+    renderer_state().text_instances_capacity = 0;
+    renderer_state().frame_readback_capacity = 0;
+    renderer_state().material_backdrop_luma_sample_capacity = 0;
+    renderer_state().drawable_width = 0;
+    renderer_state().drawable_height = 0;
+    renderer_state().debug_capture_width = 0;
+    renderer_state().debug_capture_height = 0;
+    renderer_state().debug_capture_copy_count = 0;
+    renderer_state().material_backdrop_width = 0;
+    renderer_state().material_backdrop_height = 0;
+    renderer_state().layer_contents_scale = 0.0;
+    renderer_state().last_render_width = 0;
+    renderer_state().last_render_height = 0;
+    renderer_state().last_clear_alpha = 1.0;
+    renderer_state().last_clear_alpha_for_transparent_window = false;
+    renderer_state().last_full_frame_opaque_fill_count = 0;
+    renderer_state().last_transparent_window_has_opaque_frame_fill = false;
+    renderer_state().material_frame_sequence = 0;
+    renderer_state().material_backdrop_luma_skipped_sample_count = 0;
+    renderer_state().last_material_backdrop_luma_sample_count = 0;
+    renderer_state().last_material_backdrop_luma_grid_width = 0;
+    renderer_state().last_material_backdrop_luma_grid_height = 0;
+    renderer_state().last_material_backdrop_luma_frame = 0;
+    renderer_state().last_material_backdrop_luma_status = "not-sampled";
+    renderer_state().material_executor_summary = MaterialExecutorSummary{};
+    renderer_state().last_frame_available = false;
+    renderer_state().surface = nullptr;
+    renderer_state().ns_window = nullptr;
+    renderer_state().content_view = nullptr;
+    renderer_state().initialized = false;
+}
+
+inline void renderer_shutdown() {
+    g_active_renderer = &g_default_renderer;
+    renderer_shutdown_active_state();
+    for (auto& state : renderer_registry()) {
+        if (!state)
+            continue;
+        g_active_renderer = state.get();
+        renderer_shutdown_active_state();
+    }
+    renderer_registry().clear();
+    g_active_renderer = &g_default_renderer;
 }
 
 inline std::optional<unsigned int> renderer_hit_test(float x, float y,
@@ -2947,8 +3011,8 @@ inline std::optional<unsigned int> renderer_hit_test(float x, float y,
                                                      float scroll_y) {
     float wx = x + scroll_x;
     float wy = y + scroll_y;
-    for (int i = static_cast<int>(g_renderer.hit_regions.size()) - 1; i >= 0; --i) {
-        auto const& hr = g_renderer.hit_regions[static_cast<std::size_t>(i)];
+    for (int i = static_cast<int>(renderer_state().hit_regions.size()) - 1; i >= 0; --i) {
+        auto const& hr = renderer_state().hit_regions[static_cast<std::size_t>(i)];
         if (wx >= hr.x && wx <= hr.x + hr.w && wy >= hr.y && wy <= hr.y + hr.h)
             return hr.callback_id;
     }
@@ -2960,6 +3024,22 @@ inline std::optional<unsigned int> renderer_hit_test(float x, float y,
 
 export namespace phenotype::native::macos_test {
 #ifdef __APPLE__
+inline void reset_renderer_surface_states() {
+    detail::renderer_shutdown();
+}
+
+inline void activate_renderer_surface_state(NativeSurfaceDescriptor* surface) {
+    detail::activate_renderer_state(surface);
+}
+
+inline std::size_t renderer_surface_state_count() {
+    return 1 + detail::renderer_registry().size();
+}
+
+inline bool active_renderer_surface_is(NativeSurfaceDescriptor* surface) {
+    return detail::renderer_state().surface == surface;
+}
+
 struct Utf8Range {
     std::size_t start = 0;
     std::size_t end = 0;
@@ -3106,14 +3186,14 @@ inline bool last_scroll_event_handled_y_for_tests() {
 }
 
 inline double renderer_layer_contents_scale_for_tests() {
-    return detail::g_renderer.layer_contents_scale;
+    return detail::renderer_state().layer_contents_scale;
 }
 
 inline double renderer_layer_reported_contents_scale_for_tests() {
-    if (!detail::g_renderer.layer)
+    if (!detail::renderer_state().layer)
         return 0.0;
     return reinterpret_cast<double(*)(void*, SEL)>(objc_msgSend)(
-        reinterpret_cast<void*>(detail::g_renderer.layer),
+        reinterpret_cast<void*>(detail::renderer_state().layer),
         sel_registerName("contentsScale"));
 }
 
@@ -3542,10 +3622,10 @@ namespace phenotype::native::detail {
 
 inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities() {
     auto accessibility = accessibility_display_options();
-    bool const material_pipeline_ready = g_renderer.material_pipeline != nullptr;
+    bool const material_pipeline_ready = renderer_state().material_pipeline != nullptr;
     bool const material_frame_history =
-        g_renderer.material_backdrop_texture != nullptr
-        && g_renderer.last_material_backdrop_available;
+        renderer_state().material_backdrop_texture != nullptr
+        && renderer_state().last_material_backdrop_available;
     ::phenotype::diag::PlatformCapabilitiesSnapshot snapshot{
         "macos",
         true,
@@ -3566,7 +3646,7 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities(
     snapshot.material_shader_blur = material_pipeline_ready;
     snapshot.material_frame_history = material_frame_history;
     auto const material_capabilities = macos_material_capability_input(
-        g_renderer.device,
+        renderer_state().device,
         material_pipeline_ready,
         material_frame_history,
         accessibility);
@@ -3584,12 +3664,12 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities(
 
 inline json::Array material_plans_runtime_json() {
     return ::phenotype::diag::detail::material_plans_runtime_json(
-        g_renderer.scratch.material_records);
+        renderer_state().scratch.material_records);
 }
 
 inline json::Object macos_metal_capabilities_json() {
     json::Object metal;
-    auto* device = g_renderer.device;
+    auto* device = renderer_state().device;
     metal.emplace("source", json::Value{"MTLDevice.supportsFamily"});
     metal.emplace(
         "reference",
@@ -3641,154 +3721,154 @@ inline json::Object macos_metal_capabilities_json() {
 
 inline json::Object macos_renderer_runtime_json() {
     json::Object renderer;
-    renderer.emplace("initialized", json::Value{g_renderer.initialized});
+    renderer.emplace("initialized", json::Value{renderer_state().initialized});
     renderer.emplace(
         "metal_capabilities",
         json::Value{macos_metal_capabilities_json()});
     renderer.emplace(
         "drawable_width",
-        json::Value{static_cast<std::int64_t>(g_renderer.drawable_width)});
+        json::Value{static_cast<std::int64_t>(renderer_state().drawable_width)});
     renderer.emplace(
         "drawable_height",
-        json::Value{static_cast<std::int64_t>(g_renderer.drawable_height)});
+        json::Value{static_cast<std::int64_t>(renderer_state().drawable_height)});
     renderer.emplace(
         "last_render_width",
-        json::Value{static_cast<std::int64_t>(g_renderer.last_render_width)});
+        json::Value{static_cast<std::int64_t>(renderer_state().last_render_width)});
     renderer.emplace(
         "last_render_height",
-        json::Value{static_cast<std::int64_t>(g_renderer.last_render_height)});
+        json::Value{static_cast<std::int64_t>(renderer_state().last_render_height)});
     renderer.emplace(
         "last_frame_available",
-        json::Value{g_renderer.last_frame_available});
+        json::Value{renderer_state().last_frame_available});
     renderer.emplace(
         "debug_capture_policy",
         json::Value{
-            g_renderer.debug_capture_always
+            renderer_state().debug_capture_always
                 ? "every-frame"
                 : "on-demand"});
     renderer.emplace(
         "debug_capture_pending",
-        json::Value{g_renderer.debug_capture_next_frame});
+        json::Value{renderer_state().debug_capture_next_frame});
     renderer.emplace(
         "debug_capture_copy_count",
         json::Value{static_cast<std::int64_t>(
-            g_renderer.debug_capture_copy_count)});
+            renderer_state().debug_capture_copy_count)});
     renderer.emplace(
         "clear_alpha",
-        json::Value{g_renderer.last_clear_alpha});
+        json::Value{renderer_state().last_clear_alpha});
     renderer.emplace(
         "clear_alpha_for_transparent_window",
-        json::Value{g_renderer.last_clear_alpha_for_transparent_window});
+        json::Value{renderer_state().last_clear_alpha_for_transparent_window});
     renderer.emplace(
         "full_frame_opaque_fill_count",
         json::Value{
             static_cast<std::int64_t>(
-                g_renderer.last_full_frame_opaque_fill_count)});
+                renderer_state().last_full_frame_opaque_fill_count)});
     renderer.emplace(
         "transparent_window_has_opaque_frame_fill",
         json::Value{
-            g_renderer.last_transparent_window_has_opaque_frame_fill});
+            renderer_state().last_transparent_window_has_opaque_frame_fill});
     renderer.emplace(
         "readback_texture_ready",
-        json::Value{g_renderer.debug_capture_texture != nullptr});
+        json::Value{renderer_state().debug_capture_texture != nullptr});
     renderer.emplace(
         "material_pipeline_ready",
-        json::Value{g_renderer.material_pipeline != nullptr});
+        json::Value{renderer_state().material_pipeline != nullptr});
     renderer.emplace(
         "material_backdrop_source_ready",
         json::Value{
-            g_renderer.material_backdrop_texture != nullptr
-            && g_renderer.last_material_backdrop_available});
+            renderer_state().material_backdrop_texture != nullptr
+            && renderer_state().last_material_backdrop_available});
     renderer.emplace(
         "material_backdrop_excludes_foreground_text",
         json::Value{
-            g_renderer.material_backdrop_texture != nullptr
-            && g_renderer.last_material_backdrop_available
-            && g_renderer.last_material_backdrop_excludes_foreground_text});
+            renderer_state().material_backdrop_texture != nullptr
+            && renderer_state().last_material_backdrop_available
+            && renderer_state().last_material_backdrop_excludes_foreground_text});
     json::Object luma_descriptor;
     luma_descriptor.emplace(
         "available",
-        json::Value{g_renderer.last_material_backdrop_luma_available});
+        json::Value{renderer_state().last_material_backdrop_luma_available});
     luma_descriptor.emplace(
         "color_available",
-        json::Value{g_renderer.last_material_backdrop_color_available});
+        json::Value{renderer_state().last_material_backdrop_color_available});
     json::Object color_mean;
     color_mean.emplace(
         "r",
         json::Value{static_cast<std::int64_t>(
-            g_renderer.last_material_backdrop_color_mean.r)});
+            renderer_state().last_material_backdrop_color_mean.r)});
     color_mean.emplace(
         "g",
         json::Value{static_cast<std::int64_t>(
-            g_renderer.last_material_backdrop_color_mean.g)});
+            renderer_state().last_material_backdrop_color_mean.g)});
     color_mean.emplace(
         "b",
         json::Value{static_cast<std::int64_t>(
-            g_renderer.last_material_backdrop_color_mean.b)});
+            renderer_state().last_material_backdrop_color_mean.b)});
     color_mean.emplace(
         "a",
         json::Value{static_cast<std::int64_t>(
-            g_renderer.last_material_backdrop_color_mean.a)});
+            renderer_state().last_material_backdrop_color_mean.a)});
     luma_descriptor.emplace(
         "color_mean",
         json::Value{std::move(color_mean)});
     luma_descriptor.emplace(
         "luma_min",
-        json::Value{g_renderer.last_material_backdrop_luma_min});
+        json::Value{renderer_state().last_material_backdrop_luma_min});
     luma_descriptor.emplace(
         "luma_max",
-        json::Value{g_renderer.last_material_backdrop_luma_max});
+        json::Value{renderer_state().last_material_backdrop_luma_max});
     luma_descriptor.emplace(
         "luma_mean",
-        json::Value{g_renderer.last_material_backdrop_luma_mean});
+        json::Value{renderer_state().last_material_backdrop_luma_mean});
     luma_descriptor.emplace(
         "sample_count",
         json::Value{static_cast<std::int64_t>(
-            g_renderer.last_material_backdrop_luma_sample_count)});
+            renderer_state().last_material_backdrop_luma_sample_count)});
     luma_descriptor.emplace(
         "sample_grid_width",
         json::Value{static_cast<std::int64_t>(
-            g_renderer.last_material_backdrop_luma_grid_width)});
+            renderer_state().last_material_backdrop_luma_grid_width)});
     luma_descriptor.emplace(
         "sample_grid_height",
         json::Value{static_cast<std::int64_t>(
-            g_renderer.last_material_backdrop_luma_grid_height)});
+            renderer_state().last_material_backdrop_luma_grid_height)});
     luma_descriptor.emplace(
         "sample_frame",
         json::Value{static_cast<std::int64_t>(
-            g_renderer.last_material_backdrop_luma_frame)});
+            renderer_state().last_material_backdrop_luma_frame)});
     luma_descriptor.emplace(
         "status",
-        json::Value{g_renderer.last_material_backdrop_luma_status
-                        ? g_renderer.last_material_backdrop_luma_status
+        json::Value{renderer_state().last_material_backdrop_luma_status
+                        ? renderer_state().last_material_backdrop_luma_status
                         : "not-sampled"});
     luma_descriptor.emplace(
         "pending",
         json::Value{
-            g_renderer.material_backdrop_luma_pending_command_buffer != nullptr});
+            renderer_state().material_backdrop_luma_pending_command_buffer != nullptr});
     luma_descriptor.emplace(
         "skipped_sample_count",
         json::Value{static_cast<std::int64_t>(
-            g_renderer.material_backdrop_luma_skipped_sample_count)});
+            renderer_state().material_backdrop_luma_skipped_sample_count)});
     renderer.emplace(
         "material_backdrop_luma_descriptor",
         json::Value{std::move(luma_descriptor)});
     renderer.emplace(
         "readback_buffer_ready",
-        json::Value{g_renderer.frame_readback_buf != nullptr});
+        json::Value{renderer_state().frame_readback_buf != nullptr});
     json::Object accessibility;
     accessibility.emplace(
         "source",
-        json::Value{g_renderer.accessibility_options.source});
+        json::Value{renderer_state().accessibility_options.source});
     accessibility.emplace(
         "reduce_transparency",
-        json::Value{g_renderer.accessibility_options.reduce_transparency});
+        json::Value{renderer_state().accessibility_options.reduce_transparency});
     accessibility.emplace(
         "increase_contrast",
-        json::Value{g_renderer.accessibility_options.increase_contrast});
+        json::Value{renderer_state().accessibility_options.increase_contrast});
     accessibility.emplace(
         "reduce_motion",
-        json::Value{g_renderer.accessibility_options.reduce_motion});
+        json::Value{renderer_state().accessibility_options.reduce_motion});
     renderer.emplace(
         "accessibility_display_options",
         json::Value{std::move(accessibility)});
@@ -3804,7 +3884,7 @@ inline json::Object macos_renderer_runtime_json() {
         "material_plan_count",
         json::Value{
             static_cast<std::int64_t>(
-                g_renderer.scratch.material_records.size())});
+                renderer_state().scratch.material_records.size())});
     renderer.emplace(
         "material_plans",
         json::Value{material_plans_runtime_json()});
@@ -3812,15 +3892,15 @@ inline json::Object macos_renderer_runtime_json() {
         "material_container_groups",
         json::Value{
             ::phenotype::diag::detail::material_container_group_details_json(
-                g_renderer.scratch.material_records)});
+                renderer_state().scratch.material_records)});
     renderer.emplace(
         "material_runtime_summary",
         ::phenotype::diag::detail::material_runtime_summary_json(
-            g_renderer.scratch.material_records));
+            renderer_state().scratch.material_records));
     renderer.emplace(
         "material_executor_summary",
         ::phenotype::diag::detail::material_executor_summary_json(
-            g_renderer.material_executor_summary));
+            renderer_state().material_executor_summary));
     return renderer;
 }
 
@@ -4353,13 +4433,13 @@ inline char const* visual_effect_state_name(long value) noexcept {
 }
 
 inline json::Object macos_window_runtime_json() {
-    auto const* surface = g_renderer.surface;
-    auto ns_window = g_renderer.ns_window;
+    auto const* surface = renderer_state().surface;
+    auto ns_window = renderer_state().ns_window;
     auto ns_app = objc_send<id>(
         class_as_id(objc_getClass("NSApplication")),
         sel_shared_application());
-    id content_view = g_renderer.content_view
-        ? g_renderer.content_view
+    id content_view = renderer_state().content_view
+        ? renderer_state().content_view
         : (ns_window ? objc_send<id>(ns_window, sel_content_view()) : nullptr);
     bool const has_options = surface && surface->window_options_valid;
     WindowChromeStyle const chrome =
@@ -4405,9 +4485,9 @@ inline json::Object macos_window_runtime_json() {
             background_rgba.has_value() ? background_rgba->a : 255);
     bool const window_background_clear =
         background_rgba.has_value() && background_rgba->a == 0;
-    bool const metal_layer_opaque = g_renderer.layer
+    bool const metal_layer_opaque = renderer_state().layer
         && objc_send<bool>(
-            reinterpret_cast<id>(g_renderer.layer),
+            reinterpret_cast<id>(renderer_state().layer),
             sel_is_opaque());
     id window_content_view = ns_window
         ? objc_send<id>(ns_window, sel_content_view())
@@ -4478,12 +4558,12 @@ inline json::Object macos_window_runtime_json() {
     bool const native_backdrop_underlay_active =
         native_backdrop_state == 1;
     bool const renderer_clear_alpha_zero =
-        g_renderer.last_clear_alpha == 0.0;
+        renderer_state().last_clear_alpha == 0.0;
     bool const renderer_clear_for_transparent_window =
-        g_renderer.last_clear_alpha_for_transparent_window;
+        renderer_state().last_clear_alpha_for_transparent_window;
     bool const renderer_has_full_frame_opaque_fill =
-        g_renderer.last_full_frame_opaque_fill_count != 0
-        || g_renderer.last_transparent_window_has_opaque_frame_fill;
+        renderer_state().last_full_frame_opaque_fill_count != 0
+        || renderer_state().last_transparent_window_has_opaque_frame_fill;
     auto const backdrop_composition_plan =
         plan_native_backdrop_composition(NativeBackdropCompositionInput{
             .chrome = chrome,
@@ -4816,23 +4896,23 @@ inline std::string macos_snapshot_json() {
 
 inline std::optional<DebugFrameCapture> macos_capture_frame_rgba() {
 #ifdef __APPLE__
-    if (g_renderer.initialized
-        && !g_renderer.last_frame_available
+    if (renderer_state().initialized
+        && !renderer_state().last_frame_available
         && ::phenotype::native::detail::active_host()) {
         request_debug_capture_next_frame();
         ::phenotype::detail::g_app().last_paint_hash = 0;
         ::phenotype::native::detail::repaint_current();
     }
-    if (!g_renderer.initialized
-        || !g_renderer.last_frame_available
-        || !g_renderer.debug_capture_texture
-        || !g_renderer.device
-        || !g_renderer.queue) {
+    if (!renderer_state().initialized
+        || !renderer_state().last_frame_available
+        || !renderer_state().debug_capture_texture
+        || !renderer_state().device
+        || !renderer_state().queue) {
         return std::nullopt;
     }
 
-    auto width = g_renderer.last_render_width;
-    auto height = g_renderer.last_render_height;
+    auto width = renderer_state().last_render_width;
+    auto height = renderer_state().last_render_height;
     if (width <= 0 || height <= 0)
         return std::nullopt;
 
@@ -4843,7 +4923,7 @@ inline std::optional<DebugFrameCapture> macos_capture_frame_rgba() {
         return std::nullopt;
 
     NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
-    auto* command_buffer = g_renderer.queue->commandBuffer();
+    auto* command_buffer = renderer_state().queue->commandBuffer();
     if (!command_buffer) {
         pool->release();
         return std::nullopt;
@@ -4861,12 +4941,12 @@ inline std::optional<DebugFrameCapture> macos_capture_frame_rgba() {
         NS::UInteger(1),
     };
     blit->copyFromTexture(
-        g_renderer.debug_capture_texture,
+        renderer_state().debug_capture_texture,
         NS::UInteger(0),
         NS::UInteger(0),
         origin,
         size,
-        g_renderer.frame_readback_buf,
+        renderer_state().frame_readback_buf,
         NS::UInteger(0),
         NS::UInteger(bytes_per_row),
         NS::UInteger(total_size));
@@ -4876,7 +4956,7 @@ inline std::optional<DebugFrameCapture> macos_capture_frame_rgba() {
     command_buffer->waitUntilCompleted();
 
     auto const* mapped =
-        static_cast<std::uint8_t const*>(g_renderer.frame_readback_buf->contents());
+        static_cast<std::uint8_t const*>(renderer_state().frame_readback_buf->contents());
     if (!mapped) {
         pool->release();
         return std::nullopt;
@@ -4911,7 +4991,7 @@ inline std::optional<DebugFrameCapture> macos_capture_frame_rgba() {
 inline DebugArtifactBundleResult macos_write_artifact_bundle(
         char const* directory,
         char const* reason) {
-    if (g_renderer.initialized && ::phenotype::native::detail::active_host()) {
+    if (renderer_state().initialized && ::phenotype::native::detail::active_host()) {
         request_debug_capture_next_frame();
         ::phenotype::detail::g_app().last_paint_hash = 0;
         ::phenotype::native::detail::repaint_current();
@@ -5127,6 +5207,7 @@ inline platform_api const& macos_platform() {
             detail::renderer_flush,
             detail::renderer_shutdown,
             detail::renderer_hit_test,
+            detail::renderer_activate,
         },
         {
             detail::input_attach,
