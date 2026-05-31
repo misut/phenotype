@@ -292,6 +292,8 @@ struct SceneSnapshot {
     unsigned int hovered_id = 0xFFFFFFFFu;
     unsigned int focused_id = 0xFFFFFFFFu;
     unsigned int queued_messages = 0;
+    unsigned int framework_local_entries = 0;
+    std::uint32_t framework_local_generation = 0;
 };
 
 struct AppState {
@@ -528,11 +530,52 @@ namespace detail {
         DispatchedMsg& operator=(DispatchedMsg const&) = delete;
     };
 
+    struct LocalEntry {
+        std::uint32_t last_seen_gen = 0;
+        void* storage = nullptr;
+        void (*deleter)(void*) = nullptr;
+        // Identity tag of the type T this entry was created for.
+        // Compared on subsequent access to catch the "same call site,
+        // different T" footgun (e.g. an in-place edit that changes
+        // `framework_local<int>(0)` to `framework_local<float>(0)` —
+        // raw reinterpret_cast would silently produce UB otherwise).
+        void const* type_id = nullptr;
+
+        LocalEntry() = default;
+        LocalEntry(LocalEntry&& o) noexcept
+            : last_seen_gen(o.last_seen_gen),
+              storage(o.storage),
+              deleter(o.deleter),
+              type_id(o.type_id) {
+            o.storage = nullptr;
+            o.deleter = nullptr;
+            o.type_id = nullptr;
+        }
+        LocalEntry& operator=(LocalEntry&& o) noexcept {
+            if (this != &o) {
+                if (deleter && storage) deleter(storage);
+                last_seen_gen = o.last_seen_gen;
+                storage = o.storage;
+                deleter = o.deleter;
+                type_id = o.type_id;
+                o.storage = nullptr;
+                o.deleter = nullptr;
+                o.type_id = nullptr;
+            }
+            return *this;
+        }
+        ~LocalEntry() { if (deleter && storage) deleter(storage); }
+        LocalEntry(LocalEntry const&) = delete;
+        LocalEntry& operator=(LocalEntry const&) = delete;
+    };
+
     struct SceneRuntime {
         SceneDescriptor descriptor{};
         std::unique_ptr<AppState> owned_app{};
         AppState* app = nullptr;
         std::vector<DispatchedMsg> messages{};
+        std::map<std::size_t, LocalEntry> framework_local_store{};
+        std::uint32_t framework_local_gen = 1;
 
         AppState& app_state() {
             if (!app) {
@@ -548,7 +591,7 @@ namespace detail {
     }
 
     inline SceneRuntime& default_scene_runtime() {
-        static SceneRuntime scene{};
+        static SceneRuntime& scene = *new SceneRuntime();
         if (!scene.app) {
             scene.descriptor = SceneDescriptor{
                 .id = "main",
@@ -562,7 +605,8 @@ namespace detail {
     }
 
     inline std::vector<std::unique_ptr<SceneRuntime>>& scene_registry() {
-        static std::vector<std::unique_ptr<SceneRuntime>> scenes;
+        static std::vector<std::unique_ptr<SceneRuntime>>& scenes =
+            *new std::vector<std::unique_ptr<SceneRuntime>>();
         return scenes;
     }
 
@@ -653,6 +697,9 @@ namespace detail {
             .hovered_id = app ? app->hovered_id : 0xFFFFFFFFu,
             .focused_id = app ? app->focused_id : 0xFFFFFFFFu,
             .queued_messages = static_cast<unsigned int>(scene.messages.size()),
+            .framework_local_entries =
+                static_cast<unsigned int>(scene.framework_local_store.size()),
+            .framework_local_generation = scene.framework_local_gen,
         };
     }
 
@@ -714,11 +761,14 @@ namespace detail {
     // of the `framework_local<T>()` invocation, in the same way React
     // fibers / Compose `currentCompositeKeyHash` do.
     //
-    // Lifetime: entries are tagged with `local_gen()` at every access;
-    // `prune_local_store()` (called by the runner after each `view`)
-    // drops entries whose tag is stale, so leaving a widget out of the
-    // tree implicitly destroys its local state. `bump_local_gen()`
-    // monotonically advances the tag at frame start.
+    // The store is scene-local: settings windows, debug panels, and
+    // document windows must not share scroll offsets, accordion state,
+    // or animation progress by accident. Lifetime: entries are tagged
+    // with `local_gen()` at every access; `prune_local_store()` (called
+    // by the runner after each `view`) drops entries whose tag is stale,
+    // so leaving a widget out of the tree implicitly destroys its local
+    // state. `bump_local_gen()` monotonically advances the tag at frame
+    // start.
     //
     // Storage uses std::map keyed by widget_id rather than
     // std::unordered_map for the same reason `measure_cache` does —
@@ -726,57 +776,12 @@ namespace detail {
     // wasi-sdk's clang-22 link line. log(n) over a few dozen widget
     // states is dwarfed by the host-call savings the store enables.
 
-    struct LocalEntry {
-        std::uint32_t last_seen_gen = 0;
-        void* storage = nullptr;
-        void (*deleter)(void*) = nullptr;
-        // Identity tag of the type T this entry was created for.
-        // Compared on subsequent access to catch the "same call site,
-        // different T" footgun (e.g. an in-place edit that changes
-        // `framework_local<int>(0)` to `framework_local<float>(0)` —
-        // raw reinterpret_cast would silently produce UB otherwise).
-        void const* type_id = nullptr;
-
-        LocalEntry() = default;
-        LocalEntry(LocalEntry&& o) noexcept
-            : last_seen_gen(o.last_seen_gen),
-              storage(o.storage),
-              deleter(o.deleter),
-              type_id(o.type_id) {
-            o.storage = nullptr;
-            o.deleter = nullptr;
-            o.type_id = nullptr;
-        }
-        LocalEntry& operator=(LocalEntry&& o) noexcept {
-            if (this != &o) {
-                if (deleter && storage) deleter(storage);
-                last_seen_gen = o.last_seen_gen;
-                storage = o.storage;
-                deleter = o.deleter;
-                type_id = o.type_id;
-                o.storage = nullptr;
-                o.deleter = nullptr;
-                o.type_id = nullptr;
-            }
-            return *this;
-        }
-        ~LocalEntry() { if (deleter && storage) deleter(storage); }
-        LocalEntry(LocalEntry const&) = delete;
-        LocalEntry& operator=(LocalEntry const&) = delete;
-    };
-
-    // Heap-bound for the same wasi-sdk __cxa_finalize reason as
-    // measure_cache and g_app() — keep alive past _start() exit so JS-
-    // driven rebuilds after termination still see consistent state.
     inline std::map<std::size_t, LocalEntry>& local_store() {
-        static std::map<std::size_t, LocalEntry>& m
-            = *new std::map<std::size_t, LocalEntry>();
-        return m;
+        return active_scene_runtime().framework_local_store;
     }
 
     inline std::uint32_t& local_gen() {
-        static std::uint32_t g = 1;
-        return g;
+        return active_scene_runtime().framework_local_gen;
     }
 
     inline void bump_local_gen() {
