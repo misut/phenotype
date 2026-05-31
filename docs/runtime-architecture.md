@@ -32,11 +32,12 @@ This follows the same ownership split used by established UI systems:
 - Desktop shells such as Electron and Tauri treat windows as addressable
   handles with separate lifecycle and focus behavior.
 
-The first migration step keeps the existing `phenotype::run` API source
-compatible, but internally routes the active `AppState` and type-erased message
-queue through a `SceneRuntime`. This gives the codebase a safe place to attach
-future settings windows without sharing hover, focus, or queued messages with
-the main window.
+The first migration steps keep the existing `phenotype::run` API source
+compatible, but internally route the active `AppState`, type-erased message
+queue, and `framework_local` storage through a `SceneRuntime`. This gives the
+codebase a safe place to attach future settings windows without sharing hover,
+focus, queued messages, scroll offsets, widget open/closed flags, or animation
+state with the main window.
 
 ## Migration Rules
 

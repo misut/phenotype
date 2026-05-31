@@ -77,6 +77,10 @@ int& key_slot(std::size_t k) {
     return framework_local<int>(0, k);
 }
 
+int& scene_slot() {
+    return framework_local<int>(0, 1001);
+}
+
 }  // namespace
 
 // Adjacent inline calls at distinct source_locations land in distinct
@@ -199,6 +203,63 @@ void test_loop_key_isolation() {
     std::puts("PASS: framework_local loop key isolation");
 }
 
+void test_scene_local_storage_isolation() {
+    auto& main_scene = detail::default_scene_runtime();
+    auto& settings_scene = detail::ensure_scene_runtime(SceneDescriptor{
+        .id = "framework-local-settings",
+        .title = "Framework Local Settings",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+
+    {
+        detail::ScopedSceneActivation activate(main_scene);
+        reset_store();
+    }
+    {
+        detail::ScopedSceneActivation activate(settings_scene);
+        reset_store();
+    }
+
+    {
+        detail::ScopedSceneActivation activate(main_scene);
+        next_frame([&] { scene_slot() = 7; });
+        auto snapshot = runtime::active_scene();
+        assert(snapshot.id == "main");
+        assert(snapshot.framework_local_entries == 1u);
+    }
+
+    {
+        detail::ScopedSceneActivation activate(settings_scene);
+        next_frame([&] {
+            assert(scene_slot() == 0);
+            scene_slot() = 42;
+        });
+        auto snapshot = runtime::active_scene();
+        assert(snapshot.id == "framework-local-settings");
+        assert(snapshot.framework_local_entries == 1u);
+    }
+
+    {
+        detail::ScopedSceneActivation activate(main_scene);
+        next_frame([&] { assert(scene_slot() == 7); });
+    }
+
+    {
+        detail::ScopedSceneActivation activate(settings_scene);
+        next_frame([&] {});
+        assert(detail::local_store().empty());
+    }
+
+    {
+        detail::ScopedSceneActivation activate(main_scene);
+        assert(detail::local_store().size() == 1);
+        next_frame([&] { assert(scene_slot() == 7); });
+    }
+
+    std::puts("PASS: framework_local storage is isolated by scene");
+}
+
 // Move-only payload type used to confirm that the type-erased deleter
 // actually runs the destructor when prune drops an entry — i.e.
 // framework_local doesn't leak resources owned by stored values.
@@ -235,6 +296,7 @@ int main() {
     test_gc_drops_unvisited();
     test_same_call_site_disambiguation();
     test_loop_key_isolation();
+    test_scene_local_storage_isolation();
     test_destructor_runs_on_prune();
     std::puts("\nAll framework_local tests passed.");
     return 0;
