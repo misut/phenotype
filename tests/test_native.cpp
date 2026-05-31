@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -338,6 +339,12 @@ static id test_ns_string(char const* text) {
         text ? text : "");
 }
 
+static bool g_appkit_settings_key_equivalent_called = false;
+
+static void appkit_settings_key_equivalent_test_handler() {
+    g_appkit_settings_key_equivalent_called = true;
+}
+
 static id create_hidden_macos_window(int width, int height, char const* title) {
     auto app = test_objc_send<id>(test_class_id("NSApplication"), test_sel("sharedApplication"));
     test_objc_send<void>(app, test_sel("setActivationPolicy:"), static_cast<long>(0));
@@ -504,6 +511,97 @@ static void test_macos_appkit_function_key_resolution() {
         appkit_debug_hot_key_identifier()));
 
     std::puts("PASS: macOS AppKit and Carbon function-key events accept Fn+Cmd F12 only");
+}
+
+static void test_macos_appkit_settings_key_equivalent_dispatch() {
+    using phenotype::native::detail::appkit_handle_standard_key_equivalent;
+    using phenotype::native::detail::g_appkit_settings_menu_handler;
+    constexpr unsigned long command = 1ul << 20;
+    CGPoint point{};
+    id comma = test_ns_string(",");
+    id key_down_comma = test_objc_send<id>(
+        test_class_id("NSEvent"),
+        test_sel("keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:"),
+        static_cast<unsigned long>(10),
+        point,
+        command,
+        0.0,
+        0l,
+        nullptr,
+        comma,
+        comma,
+        static_cast<signed char>(0),
+        static_cast<unsigned short>(43));
+    assert(key_down_comma != nullptr);
+
+    auto* previous_handler = g_appkit_settings_menu_handler;
+    g_appkit_settings_key_equivalent_called = false;
+    g_appkit_settings_menu_handler = appkit_settings_key_equivalent_test_handler;
+    assert(appkit_handle_standard_key_equivalent(key_down_comma));
+    assert(g_appkit_settings_key_equivalent_called);
+    g_appkit_settings_menu_handler = previous_handler;
+
+    std::puts("PASS: macOS AppKit settings key equivalent dispatches app menu handler");
+}
+
+static void test_macos_appkit_preferences_window_lifecycle() {
+    auto app = test_objc_send<id>(
+        test_class_id("NSApplication"),
+        test_sel("sharedApplication"));
+    test_objc_send<void>(
+        app,
+        test_sel("setActivationPolicy:"),
+        static_cast<long>(0));
+    test_objc_send<void>(app, test_sel("finishLaunching"));
+
+    bool selected = false;
+    auto on_select = [](char const* value, void* data) {
+        auto* flag = static_cast<bool*>(data);
+        *flag = std::string_view{value ? value : ""} == "dark";
+    };
+    NativePreferencesChoice choices[] = {
+        {"Light", "light", true},
+        {"Dark", "dark", false},
+    };
+    NativePreferencesSection sections[] = {
+        {
+            "Appearance",
+            "",
+            choices,
+            std::size(choices),
+            on_select,
+        },
+    };
+    auto const before =
+        phenotype::native::detail::appkit_preferences_window_count();
+    NativePreferencesWindowOptions options{
+        .identifier = "test-native-preferences",
+        .title = "Native Preferences",
+        .width = 360,
+        .height = 180,
+        .appearance = "light",
+        .sections = sections,
+        .section_count = std::size(sections),
+        .user_data = &selected,
+    };
+
+    assert(phenotype::native::detail::show_appkit_preferences_window(options));
+    assert(phenotype::native::detail::appkit_preferences_window_count()
+           >= before + 1);
+    assert(phenotype::native::detail::is_appkit_preferences_window_visible(
+        "test-native-preferences"));
+    choices[0].selected = false;
+    choices[1].selected = true;
+    assert(phenotype::native::detail::show_appkit_preferences_window(options));
+    assert(phenotype::native::detail::is_appkit_preferences_window_visible(
+        "test-native-preferences"));
+
+    phenotype::native::detail::close_appkit_preferences_window(
+        "test-native-preferences");
+    assert(!phenotype::native::detail::is_appkit_preferences_window_visible(
+        "test-native-preferences"));
+
+    std::puts("PASS: macOS AppKit preferences window lifecycle");
 }
 
 static NativeSurfaceDescriptor make_macos_surface(id window) {
@@ -4481,6 +4579,8 @@ int main() {
 #ifdef __APPLE__
     test_macos_appkit_activation_slice_gate();
     test_macos_appkit_function_key_resolution();
+    test_macos_appkit_settings_key_equivalent_dispatch();
+    test_macos_appkit_preferences_window_lifecycle();
     test_macos_utf16_utf8_range_helpers();
     test_macos_scroll_delta_normalization();
     test_macos_scroll_paths_record_precise_and_line_details();

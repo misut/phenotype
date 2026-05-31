@@ -101,6 +101,36 @@ inline platform_api const& current_platform() {
     return detail::select_platform();
 }
 
+namespace preferences {
+
+inline bool show_window(NativePreferencesWindowOptions const& options) {
+#if defined(__APPLE__)
+    return detail::show_appkit_preferences_window(options);
+#else
+    (void)options;
+    return false;
+#endif
+}
+
+inline bool is_window_visible(char const* identifier = "preferences") {
+#if defined(__APPLE__)
+    return detail::is_appkit_preferences_window_visible(identifier);
+#else
+    (void)identifier;
+    return false;
+#endif
+}
+
+inline void close_window(char const* identifier = "preferences") {
+#if defined(__APPLE__)
+    detail::close_appkit_preferences_window(identifier);
+#else
+    (void)identifier;
+#endif
+}
+
+} // namespace preferences
+
 inline PlatformSystemSettingsSnapshot system_settings() {
     auto const& platform = current_platform();
     if (platform.system.settings)

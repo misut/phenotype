@@ -373,6 +373,9 @@ inline bool appkit_event_hits_close_button_fallback(
         NativeSurfaceDescriptor const& surface) {
     if (!event || surface.window_chrome != WindowChromeStyle::IntegratedTitlebar)
         return false;
+    auto const type = objc_send<unsigned long>(event, sel("type"));
+    if (type != 1 && type != 2 && type != 5 && type != 6 && type != 7)
+        return false;
     auto const point = appkit_location(event);
     float const top_y = appkit_y(surface, point.y);
     float const titlebar_height = std::max(
@@ -515,6 +518,13 @@ inline void dispatch_appkit_event(id event, NativeSurfaceDescriptor const& surfa
         default:
             break;
     }
+}
+
+inline bool appkit_event_targets_window(id event, id window) {
+    if (!event || !window)
+        return false;
+    id event_window = objc_send<id>(event, sel("window"));
+    return !event_window || event_window == window;
 }
 
 inline id create_appkit_window(int width,
@@ -723,6 +733,404 @@ inline bool activate_current_running_application() {
         activate_all_windows | activate_ignoring_other_apps) != 0;
 }
 
+struct AppKitPreferencesChoiceState {
+    std::string label;
+    std::string value;
+    bool selected = false;
+};
+
+struct AppKitPreferencesSectionState {
+    std::string title;
+    std::string subtitle;
+    std::vector<AppKitPreferencesChoiceState> choices;
+    void (*on_select)(char const* value, void* user_data) = nullptr;
+    int control_tag = 0;
+};
+
+struct AppKitPreferencesWindowState {
+    std::string identifier;
+    std::string title;
+    std::string appearance = "system";
+    int width = 420;
+    int height = 300;
+    id window = nullptr;
+    id content_view = nullptr;
+    bool visible = false;
+    std::vector<AppKitPreferencesSectionState> sections;
+    void* user_data = nullptr;
+    void (*on_close)(void* user_data) = nullptr;
+};
+
+inline std::vector<AppKitPreferencesWindowState> g_appkit_preferences_windows;
+inline id g_appkit_preferences_delegate = nullptr;
+inline int g_appkit_preferences_next_tag = 7000;
+
+inline std::string safe_preferences_text(char const* value,
+                                         char const* fallback = "") {
+    return value && value[0] != '\0' ? std::string{value} : std::string{fallback};
+}
+
+inline AppKitPreferencesWindowState* find_appkit_preferences_window(
+        std::string_view identifier) {
+    for (auto& state : g_appkit_preferences_windows) {
+        if (state.identifier == identifier)
+            return &state;
+    }
+    return nullptr;
+}
+
+inline AppKitPreferencesSectionState* find_appkit_preferences_section_by_tag(
+        int tag,
+        AppKitPreferencesWindowState** owner = nullptr) {
+    for (auto& window : g_appkit_preferences_windows) {
+        for (auto& section : window.sections) {
+            if (section.control_tag == tag) {
+                if (owner)
+                    *owner = &window;
+                return &section;
+            }
+        }
+    }
+    return nullptr;
+}
+
+inline void copy_appkit_preferences_options(
+        AppKitPreferencesWindowState& state,
+        NativePreferencesWindowOptions const& options) {
+    state.title = safe_preferences_text(options.title, "Settings");
+    state.width = options.width > 0 ? options.width : 420;
+    state.height = options.height > 0 ? options.height : 300;
+    state.appearance = safe_preferences_text(options.appearance, "system");
+    state.user_data = options.user_data;
+    state.on_close = options.on_close;
+    state.sections.clear();
+    for (std::size_t i = 0; i < options.section_count; ++i) {
+        auto const& input = options.sections[i];
+        AppKitPreferencesSectionState section{};
+        section.title = safe_preferences_text(input.title);
+        section.subtitle = safe_preferences_text(input.subtitle);
+        section.on_select = input.on_select;
+        section.control_tag = g_appkit_preferences_next_tag++;
+        for (std::size_t c = 0; c < input.choice_count; ++c) {
+            auto const& choice = input.choices[c];
+            section.choices.push_back(AppKitPreferencesChoiceState{
+                .label = safe_preferences_text(choice.label),
+                .value = safe_preferences_text(choice.value),
+                .selected = choice.selected,
+            });
+        }
+        state.sections.push_back(std::move(section));
+    }
+}
+
+inline int selected_appkit_preferences_choice(
+        AppKitPreferencesSectionState const& section) {
+    for (std::size_t i = 0; i < section.choices.size(); ++i) {
+        if (section.choices[i].selected)
+            return static_cast<int>(i);
+    }
+    return section.choices.empty() ? -1 : 0;
+}
+
+inline id appkit_preferences_label(std::string_view text,
+                                   CGRect frame,
+                                   bool heading) {
+    id label = objc_send<id>(
+        class_id("NSTextField"),
+        sel("labelWithString:"),
+        ns_string(std::string{text}.c_str()));
+    if (!label)
+        return nullptr;
+    objc_send<void>(label, sel("setFrame:"), frame);
+    id font = objc_send<id>(
+        class_id("NSFont"),
+        heading ? sel("boldSystemFontOfSize:") : sel("systemFontOfSize:"),
+        heading ? 13.0 : 12.0);
+    if (font)
+        objc_send<void>(label, sel("setFont:"), font);
+    if (!heading) {
+        id color = objc_send<id>(class_id("NSColor"), sel("secondaryLabelColor"));
+        if (color)
+            objc_send<void>(label, sel("setTextColor:"), color);
+    }
+    return label;
+}
+
+inline void remove_all_appkit_preferences_subviews(id content) {
+    if (!content)
+        return;
+    while (true) {
+        id subviews = objc_send<id>(content, sel("subviews"));
+        auto const count = subviews
+            ? objc_send<unsigned long>(subviews, sel("count"))
+            : 0ul;
+        if (count == 0)
+            break;
+        id view = objc_send<id>(subviews, sel("objectAtIndex:"), count - 1ul);
+        if (!view)
+            break;
+        objc_send<void>(view, sel("removeFromSuperview"));
+    }
+}
+
+inline id appkit_preferences_appearance(std::string_view appearance) {
+    char const* name = nullptr;
+    if (appearance == "dark")
+        name = "NSAppearanceNameDarkAqua";
+    else if (appearance == "light")
+        name = "NSAppearanceNameAqua";
+    if (!name)
+        return nullptr;
+    return objc_send<id>(
+        class_id("NSAppearance"),
+        sel("appearanceNamed:"),
+        ns_string(name));
+}
+
+inline void apply_appkit_preferences_appearance(
+        AppKitPreferencesWindowState const& state) {
+    if (!state.window)
+        return;
+    id appearance = appkit_preferences_appearance(state.appearance);
+    objc_send<void>(
+        state.window,
+        sel("setAppearance:"),
+        appearance ? appearance : static_cast<id>(nullptr));
+}
+
+inline id create_appkit_preferences_window(
+        AppKitPreferencesWindowState const& state) {
+    CGRect frame{};
+    frame.size.width = state.width;
+    frame.size.height = state.height;
+    constexpr unsigned long titled = 1ul << 0;
+    constexpr unsigned long closable = 1ul << 1;
+    constexpr unsigned long miniaturizable = 1ul << 2;
+    id window = objc_send<id>(
+        objc_send<id>(class_id("NSWindow"), sel("alloc")),
+        sel("initWithContentRect:styleMask:backing:defer:"),
+        frame,
+        titled | closable | miniaturizable,
+        static_cast<unsigned long>(2),
+        static_cast<signed char>(0));
+    if (!window)
+        return nullptr;
+    objc_send<void>(window, sel("setReleasedWhenClosed:"), static_cast<signed char>(0));
+    objc_send<void>(window, sel("setTitle:"), ns_string(state.title.c_str()));
+    id background = objc_send<id>(class_id("NSColor"), sel("windowBackgroundColor"));
+    if (background)
+        objc_send<void>(window, sel("setBackgroundColor:"), background);
+    return window;
+}
+
+inline id create_appkit_preferences_delegate();
+
+inline void rebuild_appkit_preferences_content(AppKitPreferencesWindowState& state) {
+    if (!state.window)
+        return;
+    objc_send<void>(state.window, sel("setTitle:"), ns_string(state.title.c_str()));
+    CGSize content_size{
+        static_cast<double>(state.width),
+        static_cast<double>(state.height),
+    };
+    objc_send<void>(state.window, sel("setContentSize:"), content_size);
+    apply_appkit_preferences_appearance(state);
+    state.content_view = objc_send<id>(state.window, sel("contentView"));
+    remove_all_appkit_preferences_subviews(state.content_view);
+
+    double const pad = 24.0;
+    double y = static_cast<double>(state.height) - pad - 28.0;
+    CGRect title_frame{{pad, y}, {state.width - pad * 2.0, 24.0}};
+    id title = appkit_preferences_label(state.title, title_frame, true);
+    if (title)
+        objc_send<void>(state.content_view, sel("addSubview:"), title);
+    y -= 42.0;
+
+    for (auto const& section : state.sections) {
+        CGRect label_frame{{pad, y + 5.0}, {120.0, 20.0}};
+        id section_label =
+            appkit_preferences_label(section.title, label_frame, true);
+        if (section_label)
+            objc_send<void>(state.content_view, sel("addSubview:"), section_label);
+
+        CGRect segment_frame{{154.0, y}, {state.width - 178.0, 28.0}};
+        id segmented = objc_send<id>(
+            objc_send<id>(class_id("NSSegmentedControl"), sel("alloc")),
+            sel("initWithFrame:"),
+            segment_frame);
+        if (segmented) {
+            objc_send<void>(
+                segmented,
+                sel("setSegmentCount:"),
+                static_cast<long>(section.choices.size()));
+            for (std::size_t i = 0; i < section.choices.size(); ++i) {
+                objc_send<void>(
+                    segmented,
+                    sel("setLabel:forSegment:"),
+                    ns_string(section.choices[i].label.c_str()),
+                    static_cast<long>(i));
+            }
+            objc_send<void>(
+                segmented,
+                sel("setSelectedSegment:"),
+                static_cast<long>(selected_appkit_preferences_choice(section)));
+            objc_send<void>(segmented, sel("setTag:"), static_cast<long>(section.control_tag));
+            objc_send<void>(
+                segmented,
+                sel("setTarget:"),
+                create_appkit_preferences_delegate());
+            objc_send<void>(
+                segmented,
+                sel("setAction:"),
+                sel("phenotypePreferencesSegmentChanged:"));
+            objc_send<void>(state.content_view, sel("addSubview:"), segmented);
+        }
+
+        if (!section.subtitle.empty()) {
+            CGRect subtitle_frame{{154.0, y - 22.0}, {state.width - 178.0, 18.0}};
+            id subtitle =
+                appkit_preferences_label(section.subtitle, subtitle_frame, false);
+            if (subtitle)
+                objc_send<void>(state.content_view, sel("addSubview:"), subtitle);
+            y -= 76.0;
+        } else {
+            y -= 58.0;
+        }
+    }
+}
+
+inline void appkit_preferences_segment_changed(id, SEL, id sender) {
+    if (!sender)
+        return;
+    auto const tag = static_cast<int>(objc_send<long>(sender, sel("tag")));
+    auto const selected =
+        static_cast<int>(objc_send<long>(sender, sel("selectedSegment")));
+    AppKitPreferencesWindowState* owner = nullptr;
+    auto* section = find_appkit_preferences_section_by_tag(tag, &owner);
+    if (!section || !owner || selected < 0
+        || static_cast<std::size_t>(selected) >= section->choices.size()) {
+        return;
+    }
+    for (std::size_t i = 0; i < section->choices.size(); ++i)
+        section->choices[i].selected = static_cast<int>(i) == selected;
+    if (section->on_select)
+        section->on_select(section->choices[selected].value.c_str(),
+                           owner->user_data);
+    ::phenotype::detail::trigger_rebuild();
+}
+
+inline void appkit_preferences_window_will_close(id, SEL, id notification) {
+    id window = notification
+        ? objc_send<id>(notification, sel("object"))
+        : nullptr;
+    for (auto& state : g_appkit_preferences_windows) {
+        if (state.window != window)
+            continue;
+        bool const was_visible = state.visible;
+        state.visible = false;
+        if (was_visible && state.on_close)
+            state.on_close(state.user_data);
+        ::phenotype::detail::trigger_rebuild();
+        break;
+    }
+}
+
+inline id create_appkit_preferences_delegate() {
+    if (g_appkit_preferences_delegate)
+        return g_appkit_preferences_delegate;
+    static Class delegate_class = nullptr;
+    if (!delegate_class) {
+        Class base = reinterpret_cast<Class>(class_id("NSObject"));
+        delegate_class = objc_allocateClassPair(
+            base,
+            "PhenotypeAppKitPreferencesWindowDelegate",
+            0);
+        if (!delegate_class)
+            return nullptr;
+        class_addMethod(
+            delegate_class,
+            sel("phenotypePreferencesSegmentChanged:"),
+            reinterpret_cast<IMP>(appkit_preferences_segment_changed),
+            "v@:@");
+        class_addMethod(
+            delegate_class,
+            sel("windowWillClose:"),
+            reinterpret_cast<IMP>(appkit_preferences_window_will_close),
+            "v@:@");
+        objc_registerClassPair(delegate_class);
+    }
+    g_appkit_preferences_delegate = objc_send<id>(
+        objc_send<id>(reinterpret_cast<id>(delegate_class), sel("alloc")),
+        sel("init"));
+    return g_appkit_preferences_delegate;
+}
+
+inline bool show_appkit_preferences_window(
+        NativePreferencesWindowOptions const& options) {
+    auto identifier = safe_preferences_text(options.identifier, "preferences");
+    if (identifier.empty())
+        identifier = "preferences";
+    auto* state = find_appkit_preferences_window(identifier);
+    if (!state) {
+        g_appkit_preferences_windows.push_back(AppKitPreferencesWindowState{});
+        state = &g_appkit_preferences_windows.back();
+        state->identifier = identifier;
+    }
+    copy_appkit_preferences_options(*state, options);
+    if (!state->window) {
+        state->window = create_appkit_preferences_window(*state);
+        if (!state->window)
+            return false;
+        objc_send<void>(
+            state->window,
+            sel("setDelegate:"),
+            create_appkit_preferences_delegate());
+        objc_send<void>(state->window, sel("center"));
+    }
+    rebuild_appkit_preferences_content(*state);
+    state->visible = true;
+
+    id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
+    activate_current_running_application();
+    if (app) {
+        objc_send<void>(
+            app,
+            sel("activateIgnoringOtherApps:"),
+            static_cast<signed char>(1));
+    }
+    objc_send<void>(state->window, sel("makeKeyAndOrderFront:"), nullptr);
+    objc_send<void>(state->window, sel("orderFrontRegardless"));
+    return true;
+}
+
+inline bool is_appkit_preferences_window_visible(char const* identifier) {
+    auto* state = find_appkit_preferences_window(
+        safe_preferences_text(identifier, "preferences"));
+    return state && state->visible && appkit_window_is_visible(state->window);
+}
+
+inline void close_appkit_preferences_window(char const* identifier) {
+    auto* state = find_appkit_preferences_window(
+        safe_preferences_text(identifier, "preferences"));
+    if (!state || !state->window)
+        return;
+    state->visible = false;
+    objc_send<void>(state->window, sel("close"));
+}
+
+inline std::size_t appkit_preferences_window_count() {
+    return g_appkit_preferences_windows.size();
+}
+
+inline void raise_visible_appkit_preferences_windows() {
+    for (auto& state : g_appkit_preferences_windows) {
+        if (!state.visible || !appkit_window_is_visible(state.window))
+            continue;
+        objc_send<void>(state.window, sel("makeKeyAndOrderFront:"), nullptr);
+        objc_send<void>(state.window, sel("orderFrontRegardless"));
+    }
+}
+
 inline void request_appkit_window_front(id app, id window) {
     if (!window)
         return;
@@ -742,6 +1150,7 @@ inline void request_appkit_window_front(id app, id window) {
     }
     objc_send<void>(window, sel("makeKeyAndOrderFront:"), nullptr);
     objc_send<void>(window, sel("orderFrontRegardless"));
+    raise_visible_appkit_preferences_windows();
 }
 
 inline void schedule_appkit_window_front_request(id app,
@@ -1770,17 +2179,23 @@ int run_app_with_macos_platform(platform_api const& platform,
         if (event) {
             update_appkit_mouse_tracking_mode_before_send(event);
             update_appkit_close_button_candidate_before_send(event, surface);
+            bool const main_window_event =
+                appkit_event_targets_window(event, window);
             bool const close_button_fallback_event =
                 visible
+                && main_window_event
                 && (g_appkit_close_button_candidate
                     || appkit_event_hits_close_button_fallback(event, surface));
             if (close_button_fallback_event)
                 g_appkit_mouse_tracking_mode = false;
             bool const native_titlebar_control_event =
-                visible && appkit_event_hits_native_titlebar_control_reserve(
+                visible
+                && main_window_event
+                && appkit_event_hits_native_titlebar_control_reserve(
                     event,
                     surface);
             if (visible
+                && main_window_event
                 && !close_button_fallback_event
                 && !native_titlebar_control_event)
                 dispatch_appkit_event(event, surface);

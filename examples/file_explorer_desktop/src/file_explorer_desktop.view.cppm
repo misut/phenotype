@@ -89,7 +89,11 @@ void view(State const& state) {
                         finder_sidebar(state);
                 });
         });
+    // macOS uses a separate native preferences window; non-macOS targets keep
+    // the in-tree dialog fallback until they grow an equivalent window API.
+#if !defined(__APPLE__)
     if (state.settings_open)
         finder_settings_window(state);
+#endif
 }
 } // namespace file_explorer_desktop
