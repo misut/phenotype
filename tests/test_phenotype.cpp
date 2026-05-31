@@ -637,6 +637,69 @@ void test_render_surface_visibility_updates_bound_scene() {
     std::puts("PASS: render surface visibility updates bound scene");
 }
 
+void test_application_runtime_snapshot_tracks_process_owners() {
+    auto active_scene_before = runtime::active_scene_handle();
+    auto active_surface_before = runtime::active_render_surface_handle();
+    auto before = runtime::application_runtime();
+    assert(before.scene_count >= 1u);
+    assert(before.render_surface_count >= 1u);
+    assert(!before.active_scene_id.empty());
+    assert(!before.active_render_surface_id.empty());
+
+    auto scene = runtime::ensure_scene(SceneDescriptor{
+        .id = "application-runtime-settings-scene",
+        .title = "Application Runtime Settings",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+    auto with_scene = runtime::application_runtime();
+    assert(with_scene.scene_count == before.scene_count + 1u);
+    assert(with_scene.visible_scene_count == before.visible_scene_count + 1u);
+    assert(with_scene.active_scene_id == active_scene_before.id);
+    assert(with_scene.active_render_surface_id == active_surface_before.id);
+
+    auto surface = runtime::ensure_render_surface(RenderSurfaceDescriptor{
+        .id = "application-runtime-settings-surface",
+        .title = "Application Runtime Settings Surface",
+        .scene_id = "application-runtime-settings-scene",
+        .role = RenderSurfaceRole::Settings,
+        .visible = false,
+        .logical_width = 320,
+        .logical_height = 240,
+        .framebuffer_width = 640,
+        .framebuffer_height = 480,
+        .content_scale = 2.0f,
+    });
+    auto with_surface = runtime::application_runtime();
+    assert(with_surface.scene_count == before.scene_count + 1u);
+    assert(with_surface.visible_scene_count == before.visible_scene_count);
+    assert(with_surface.render_surface_count == before.render_surface_count + 1u);
+    assert(with_surface.visible_render_surface_count
+           == before.visible_render_surface_count);
+    assert(with_surface.active_scene_id == active_scene_before.id);
+    assert(with_surface.active_render_surface_id == active_surface_before.id);
+
+    {
+        auto activate = runtime::activate_render_surface(surface);
+        runtime::mark_active_render_surface_damaged();
+        auto active = runtime::application_runtime();
+        assert(active.active_scene_id == scene.id);
+        assert(active.active_scene_role == SceneRole::Settings);
+        assert(!active.active_scene_visible);
+        assert(active.active_render_surface_id == surface.id);
+        assert(active.active_render_surface_scene_id == scene.id);
+        assert(active.active_render_surface_role == RenderSurfaceRole::Settings);
+        assert(!active.active_render_surface_visible);
+        assert(active.damaged_render_surface_count
+               == with_surface.damaged_render_surface_count + 1u);
+    }
+
+    assert(runtime::active_scene_handle().id == active_scene_before.id);
+    assert(runtime::active_render_surface_handle().id == active_surface_before.id);
+
+    std::puts("PASS: application runtime snapshot tracks process owners");
+}
+
 void test_app_runner_uses_context_pointer() {
     struct RunnerContext {
         int rebuilds = 0;
@@ -3273,6 +3336,7 @@ int main() {
     test_scene_scheduler_clock_is_scene_local();
     test_render_surface_runtime_binds_scene_and_tracks_frames();
     test_render_surface_visibility_updates_bound_scene();
+    test_application_runtime_snapshot_tracks_process_owners();
     test_app_runner_uses_context_pointer();
     test_app_runner_can_own_context_pointer();
     test_runtime_run_scene_keeps_same_types_scene_local();

@@ -335,6 +335,7 @@ void test_snapshot_shape() {
     assert(runtime.at("backend").as_string() == "native");
 #endif
     assert(runtime.contains("viewport"));
+    assert(runtime.contains("application_runtime"));
     assert(runtime.contains("scenes"));
     assert(runtime.contains("render_surfaces"));
 
@@ -402,6 +403,31 @@ void test_snapshot_shape() {
                 && surface.at("active").as_bool());
     }
     assert(found_active_main_surface);
+
+    auto const& application_runtime =
+        runtime.at("application_runtime").as_object();
+    assert(application_runtime.at("active_scene_id").as_string() == "main");
+    assert(application_runtime.at("active_scene_role").as_string() == "main");
+    assert(application_runtime.at("active_scene_visible").as_bool() == true);
+    assert(application_runtime.at("active_render_surface_id").as_string()
+           == "main");
+    assert(application_runtime.at("active_render_surface_scene_id").as_string()
+           == "main");
+    assert(application_runtime.at("active_render_surface_role").as_string()
+           == "main_window");
+    assert(application_runtime.at("active_render_surface_visible").as_bool()
+           == true);
+    assert(application_runtime.at("scene_count").as_integer()
+           == static_cast<std::int64_t>(runtime_scenes.size()));
+    assert(application_runtime.at("visible_scene_count").as_integer() >= 1);
+    assert(application_runtime.at("scene_runner_count").as_integer() == 0);
+    assert(application_runtime.at("scheduled_scene_count").as_integer() == 0);
+    assert(application_runtime.at("render_surface_count").as_integer()
+           == static_cast<std::int64_t>(runtime_surfaces.size()));
+    assert(application_runtime.at("visible_render_surface_count").as_integer()
+           >= 1);
+    assert(application_runtime.at("damaged_render_surface_count").as_integer()
+           >= 0);
 
     // Resource carries service.name + service.version.
     auto const& resource = root.at("resource").as_object();

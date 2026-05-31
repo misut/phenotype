@@ -367,6 +367,23 @@ struct RenderSurfaceHandle {
     std::string id = "main";
 };
 
+struct ApplicationRuntimeSnapshot {
+    std::string active_scene_id = "main";
+    SceneRole active_scene_role = SceneRole::Main;
+    bool active_scene_visible = true;
+    std::string active_render_surface_id = "main";
+    std::string active_render_surface_scene_id = "main";
+    RenderSurfaceRole active_render_surface_role = RenderSurfaceRole::MainWindow;
+    bool active_render_surface_visible = true;
+    unsigned int scene_count = 0;
+    unsigned int visible_scene_count = 0;
+    unsigned int scene_runner_count = 0;
+    unsigned int scheduled_scene_count = 0;
+    unsigned int render_surface_count = 0;
+    unsigned int visible_render_surface_count = 0;
+    unsigned int damaged_render_surface_count = 0;
+};
+
 struct AppState {
     Theme theme;
     std::uint64_t theme_generation = 1;
@@ -1065,6 +1082,42 @@ namespace detail {
         return out;
     }
 
+    inline ApplicationRuntimeSnapshot application_runtime_snapshot() {
+        auto scene_items = scene_snapshots();
+        auto surface_items = render_surface_snapshots();
+        auto const active_scene = scene_snapshot(active_scene_runtime());
+        auto const active_surface =
+            render_surface_snapshot(active_render_surface_runtime());
+
+        ApplicationRuntimeSnapshot out{};
+        out.active_scene_id = active_scene.id;
+        out.active_scene_role = active_scene.role;
+        out.active_scene_visible = active_scene.visible;
+        out.active_render_surface_id = active_surface.id;
+        out.active_render_surface_scene_id = active_surface.scene_id;
+        out.active_render_surface_role = active_surface.role;
+        out.active_render_surface_visible = active_surface.visible;
+        out.scene_count = static_cast<unsigned int>(scene_items.size());
+        out.render_surface_count =
+            static_cast<unsigned int>(surface_items.size());
+
+        for (auto const& scene : scene_items) {
+            if (scene.visible)
+                ++out.visible_scene_count;
+            if (scene.schedule.runner_installed)
+                ++out.scene_runner_count;
+            if (scene.schedule.needs_scheduled_tick)
+                ++out.scheduled_scene_count;
+        }
+        for (auto const& surface : surface_items) {
+            if (surface.visible)
+                ++out.visible_render_surface_count;
+            if (surface.damage_generation > 0)
+                ++out.damaged_render_surface_count;
+        }
+        return out;
+    }
+
     template<typename Msg>
     void post(Msg msg) {
         auto* p = new Msg(std::move(msg));
@@ -1524,6 +1577,10 @@ inline SceneHandle main_scene() {
 
 inline SceneHandle active_scene_handle() {
     return SceneHandle{.id = detail::active_scene_runtime().descriptor.id};
+}
+
+inline ApplicationRuntimeSnapshot application_runtime() {
+    return detail::application_runtime_snapshot();
 }
 
 inline SceneHandle ensure_scene(SceneDescriptor descriptor) {
