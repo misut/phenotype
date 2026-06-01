@@ -66,12 +66,16 @@ providers are stored together in the application-runtime diagnostics owner
 instead of being separate hidden globals, so future scene/window APIs can
 inspect process services without accidentally treating them as scene-local
 state.
-The URL opener follows the same ownership rule. `widget::link` dispatches
-through an `ApplicationRuntime` opener service installed by the active backend,
-not through a raw widget-global function pointer. Diagnostics expose
-`open_url_handler_installed` next to the other application-runtime services, so
-CLI/debug tools can tell whether link activation is wired before synthesizing a
-click in a secondary scene.
+The URL opener and app settings-menu entry point follow the same ownership
+rule. `widget::link` dispatches through an `ApplicationRuntime` opener service
+installed by the active backend, not through a raw widget-global function
+pointer. macOS installs its Settings app-menu action into the same service
+owner instead of keeping the callback as an AppKit-global function pointer.
+Diagnostics expose `open_url_handler_installed` and
+`settings_menu_handler_installed` next to the other application-runtime
+services, so CLI/debug tools can tell whether link activation or the app-menu
+Settings command is wired before synthesizing an interaction in a secondary
+scene.
 Render surfaces also own the paint/flush cache key (`last_paint_hash`) and
 flush/skip counters. The legacy `AppState::last_paint_hash` remains mirrored for
 older tests and callers, but invalidation flows through the active render

@@ -383,6 +383,7 @@ struct ApplicationRuntimeSnapshot {
     unsigned int visible_render_surface_count = 0;
     unsigned int damaged_render_surface_count = 0;
     bool open_url_handler_installed = false;
+    bool settings_menu_handler_installed = false;
 };
 
 struct AppState {
@@ -681,9 +682,11 @@ namespace detail {
     };
 
     using OpenUrlHandler = void (*)(char const*, unsigned int);
+    using SettingsMenuHandler = void (*)();
 
     struct ApplicationRuntimeServices {
         OpenUrlHandler open_url_handler = nullptr;
+        SettingsMenuHandler settings_menu_handler = nullptr;
     };
 
     inline ApplicationRuntimeServices& application_runtime_services() {
@@ -707,6 +710,28 @@ namespace detail {
     inline bool open_application_url(char const* url, unsigned int len) {
         if (auto handler = current_application_open_url_handler()) {
             handler(url, len);
+            return true;
+        }
+        return false;
+    }
+
+    inline void set_application_settings_menu_handler(
+            SettingsMenuHandler handler) noexcept {
+        application_runtime_services().settings_menu_handler = handler;
+    }
+
+    inline SettingsMenuHandler
+    current_application_settings_menu_handler() noexcept {
+        return application_runtime_services().settings_menu_handler;
+    }
+
+    inline bool application_settings_menu_handler_installed() noexcept {
+        return current_application_settings_menu_handler() != nullptr;
+    }
+
+    inline bool invoke_application_settings_menu() {
+        if (auto handler = current_application_settings_menu_handler()) {
+            handler();
             return true;
         }
         return false;
@@ -1166,6 +1191,8 @@ namespace detail {
             static_cast<unsigned int>(surface_items.size());
         out.open_url_handler_installed =
             application_open_url_handler_installed();
+        out.settings_menu_handler_installed =
+            application_settings_menu_handler_installed();
 
         for (auto const& scene : scene_items) {
             if (scene.visible)

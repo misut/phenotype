@@ -622,7 +622,6 @@ inline bool g_appkit_mouse_tracking_mode = false;
 inline bool g_appkit_window_user_closed = false;
 inline bool g_appkit_close_button_candidate = false;
 inline int g_appkit_front_request_attempts = 0;
-inline void (*g_appkit_settings_menu_handler)() = nullptr;
 inline std::string g_appkit_application_name = "Phenotype";
 
 inline bool appkit_app_is_active(id app) {
@@ -1819,8 +1818,7 @@ inline void appkit_open_settings(id, SEL, id) {
     id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
     g_appkit_window_user_closed = false;
     schedule_appkit_window_front_request(app, active_appkit_window());
-    if (g_appkit_settings_menu_handler) {
-        g_appkit_settings_menu_handler();
+    if (::phenotype::detail::invoke_application_settings_menu()) {
         ::phenotype::detail::trigger_rebuild();
     }
 }
@@ -1839,7 +1837,7 @@ inline bool appkit_handle_standard_key_equivalent(id event) {
     auto const flags = objc_send<unsigned long>(event, sel("modifierFlags"));
     if (appkit_dispatch_debug_panel_shortcut_from_event(event))
         return true;
-    if (!g_appkit_settings_menu_handler)
+    if (!::phenotype::detail::application_settings_menu_handler_installed())
         return false;
     constexpr unsigned long command_modifier = 1ul << 20;
     if ((flags & command_modifier) == 0)
@@ -2777,7 +2775,8 @@ int run_app_with_macos_platform(platform_api const& platform,
     g_appkit_window_user_closed = false;
     g_appkit_close_button_candidate = false;
     g_appkit_front_request_attempts = 0;
-    g_appkit_settings_menu_handler = options.on_settings_menu;
+    ::phenotype::detail::set_application_settings_menu_handler(
+        options.on_settings_menu);
     g_appkit_application_name = options.application_name
         && options.application_name[0] != '\0'
             ? options.application_name
@@ -2794,6 +2793,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     if (!window) {
         std::fprintf(stderr, "[appkit] failed to create NSWindow\n");
         uninstall_appkit_debug_hot_key();
+        ::phenotype::detail::set_application_settings_menu_handler(nullptr);
         if (pool)
             objc_send<void>(pool, sel("drain"));
         return 1;
@@ -2859,6 +2859,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     if (artifact_requested && env_flag_enabled("PHENOTYPE_ARTIFACT_EXIT")) {
         shutdown_host(host);
         objc_send<void>(window, sel("close"));
+        ::phenotype::detail::set_application_settings_menu_handler(nullptr);
         if (pool)
             objc_send<void>(pool, sel("drain"));
         clear_active_appkit_binding();
@@ -2869,6 +2870,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     if (env_flag_enabled("PHENOTYPE_PERF_EXIT")) {
         shutdown_host(host);
         objc_send<void>(window, sel("close"));
+        ::phenotype::detail::set_application_settings_menu_handler(nullptr);
         if (pool)
             objc_send<void>(pool, sel("drain"));
         clear_active_appkit_binding();
@@ -2912,7 +2914,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     g_appkit_scene_windows.clear();
     shutdown_host(host);
     clear_active_appkit_binding();
-    g_appkit_settings_menu_handler = nullptr;
+    ::phenotype::detail::set_application_settings_menu_handler(nullptr);
     g_appkit_keep_running_after_last_window_closed = false;
     g_appkit_mouse_tracking_mode = false;
     g_appkit_window_user_closed = false;

@@ -811,7 +811,6 @@ static void test_macos_appkit_function_key_resolution() {
 
 static void test_macos_appkit_settings_key_equivalent_dispatch() {
     using phenotype::native::detail::appkit_handle_standard_key_equivalent;
-    using phenotype::native::detail::g_appkit_settings_menu_handler;
     constexpr unsigned long command = 1ul << 20;
     CGPoint point{};
     id comma = test_ns_string(",");
@@ -830,12 +829,16 @@ static void test_macos_appkit_settings_key_equivalent_dispatch() {
         static_cast<unsigned short>(43));
     assert(key_down_comma != nullptr);
 
-    auto* previous_handler = g_appkit_settings_menu_handler;
+    auto* previous_handler =
+        phenotype::detail::current_application_settings_menu_handler();
     g_appkit_settings_key_equivalent_called = false;
-    g_appkit_settings_menu_handler = appkit_settings_key_equivalent_test_handler;
+    phenotype::detail::set_application_settings_menu_handler(
+        appkit_settings_key_equivalent_test_handler);
+    assert(phenotype::runtime::application_runtime()
+               .settings_menu_handler_installed);
     assert(appkit_handle_standard_key_equivalent(key_down_comma));
     assert(g_appkit_settings_key_equivalent_called);
-    g_appkit_settings_menu_handler = previous_handler;
+    phenotype::detail::set_application_settings_menu_handler(previous_handler);
 
     std::puts("PASS: macOS AppKit settings key equivalent dispatches app menu handler");
 }
@@ -1395,6 +1398,8 @@ inline constexpr unsigned int text_field_id = 5;
 static void reset_core_state() {
     auto& app = phenotype::detail::g_app();
     phenotype::detail::install_app_runner(nullptr, nullptr);
+    phenotype::detail::set_application_open_url_handler(nullptr);
+    phenotype::detail::set_application_settings_menu_handler(nullptr);
     app.callbacks.clear();
     app.callback_roles.clear();
     app.key_commands.clear();
@@ -1619,11 +1624,15 @@ struct Harness {
         reset_core_state();
         assert(!phenotype::runtime::application_runtime()
                     .open_url_handler_installed);
+        assert(!phenotype::runtime::application_runtime()
+                    .settings_menu_handler_installed);
         platform.open_url = open_url;
         host.platform = &platform;
         phenotype::native::run<State, Msg>(host, view, update);
         assert(phenotype::runtime::application_runtime()
                    .open_url_handler_installed);
+        assert(!phenotype::runtime::application_runtime()
+                    .settings_menu_handler_installed);
         assert(phenotype::detail::g_app().callbacks.size() == 6);
         assert(phenotype::detail::g_app().focusable_ids.size() == 6);
     }
