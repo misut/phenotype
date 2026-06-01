@@ -1533,7 +1533,85 @@ struct RendererState {
     std::string last_failure_label;
 };
 
-static RendererState g_renderer;
+static RendererState g_default_renderer;
+
+struct ActiveRendererBinding {
+    RendererState* state = nullptr;
+};
+
+inline ActiveRendererBinding& active_renderer_binding() {
+    static ActiveRendererBinding& binding =
+        *new ActiveRendererBinding{&g_default_renderer};
+    return binding;
+}
+
+inline ActiveRendererBinding capture_active_renderer_binding() {
+    return active_renderer_binding();
+}
+
+inline RendererState& renderer_state() {
+    auto* state = active_renderer_binding().state;
+    return state ? *state : g_default_renderer;
+}
+
+inline std::vector<std::pair<NativeSurfaceDescriptor*, std::unique_ptr<RendererState>>>&
+renderer_registry() {
+    static auto& registry =
+        *new std::vector<std::pair<NativeSurfaceDescriptor*, std::unique_ptr<RendererState>>>();
+    return registry;
+}
+
+inline RendererState* find_renderer_state(NativeSurfaceDescriptor* surface) {
+    if (!surface)
+        return &g_default_renderer;
+    for (auto& entry : renderer_registry()) {
+        if (entry.first == surface)
+            return entry.second.get();
+    }
+    return nullptr;
+}
+
+inline RendererState& ensure_renderer_state(NativeSurfaceDescriptor* surface) {
+    if (!surface)
+        return g_default_renderer;
+    if (auto* existing = find_renderer_state(surface))
+        return *existing;
+    auto state = std::make_unique<RendererState>();
+    state->surface = surface;
+    auto* out = state.get();
+    renderer_registry().emplace_back(surface, std::move(state));
+    return *out;
+}
+
+inline void bind_renderer_state(RendererState& state) {
+    active_renderer_binding().state = &state;
+}
+
+inline void activate_renderer_state(NativeSurfaceDescriptor* surface) {
+    bind_renderer_state(ensure_renderer_state(surface));
+}
+
+inline void restore_active_renderer_binding(ActiveRendererBinding const& binding) {
+    active_renderer_binding() = binding;
+}
+
+struct ScopedRendererActivation {
+    ActiveRendererBinding previous{};
+
+    explicit ScopedRendererActivation(NativeSurfaceDescriptor* surface)
+        : previous(capture_active_renderer_binding()) {
+        activate_renderer_state(surface);
+    }
+
+    ~ScopedRendererActivation() {
+        restore_active_renderer_binding(previous);
+    }
+};
+
+inline void reset_active_renderer_state() {
+    bind_renderer_state(g_default_renderer);
+}
+
 constexpr UINT WM_PHENOTYPE_IMAGE_READY = WM_APP + 61;
 constexpr UINT IMAGE_SRV_SLOT = 0;
 constexpr UINT FIRST_TEXT_SRV_SLOT = 1;
@@ -1594,7 +1672,7 @@ inline bool running_under_tests() {
 }
 
 inline bool should_enable_dred() {
-    return g_renderer.debug_enabled || g_renderer.warp_enabled || running_under_tests();
+    return renderer_state().debug_enabled || renderer_state().warp_enabled || running_under_tests();
 }
 
 inline UINT frame_text_srv_slot(UINT frame_index) {
@@ -1683,18 +1761,18 @@ inline void dump_dred_allocation_list(
 }
 
 inline void dump_dred_diagnostics() {
-    if (!g_renderer.device)
+    if (!renderer_state().device)
         return;
 
     ComPtr<ID3D12DeviceRemovedExtendedData2> dred2;
-    if (SUCCEEDED(g_renderer.device.As(&dred2))) {
-        g_renderer.dred_device_state = dred2->GetDeviceState();
+    if (SUCCEEDED(renderer_state().device.As(&dred2))) {
+        renderer_state().dred_device_state = dred2->GetDeviceState();
     } else {
-        g_renderer.dred_device_state = D3D12_DRED_DEVICE_STATE_UNKNOWN;
+        renderer_state().dred_device_state = D3D12_DRED_DEVICE_STATE_UNKNOWN;
     }
 
     ComPtr<ID3D12DeviceRemovedExtendedData1> dred1;
-    if (FAILED(g_renderer.device.As(&dred1)))
+    if (FAILED(renderer_state().device.As(&dred1)))
         return;
 
     D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 breadcrumbs{};
@@ -1737,7 +1815,7 @@ inline void dump_dred_diagnostics() {
                 stderr,
                 "[dx12/dred] page_fault_va=0x%llx state=%u\n",
                 static_cast<unsigned long long>(page_fault.PageFaultVA),
-                static_cast<unsigned int>(g_renderer.dred_device_state));
+                static_cast<unsigned int>(renderer_state().dred_device_state));
         }
         dump_dred_allocation_list("existing", page_fault.pHeadExistingAllocationNode);
         dump_dred_allocation_list("recent_freed", page_fault.pHeadRecentFreedAllocationNode);
@@ -1749,18 +1827,18 @@ inline HRESULT mark_renderer_lost(char const* label, HRESULT hr) {
         return hr;
 
     log_hresult(label, hr);
-    g_renderer.lost = true;
-    g_renderer.last_failure_label = label ? label : "";
-    g_renderer.last_failure_hr = hr;
-    g_renderer.device_removed_reason =
-        g_renderer.device ? g_renderer.device->GetDeviceRemovedReason() : S_OK;
+    renderer_state().lost = true;
+    renderer_state().last_failure_label = label ? label : "";
+    renderer_state().last_failure_hr = hr;
+    renderer_state().device_removed_reason =
+        renderer_state().device ? renderer_state().device->GetDeviceRemovedReason() : S_OK;
 
-    if (FAILED(g_renderer.device_removed_reason)) {
+    if (FAILED(renderer_state().device_removed_reason)) {
         std::fprintf(
             stderr,
             "[dx12] device removed after %s (reason=0x%08lx)\n",
             label ? label : "<unknown>",
-            static_cast<unsigned long>(g_renderer.device_removed_reason));
+            static_cast<unsigned long>(renderer_state().device_removed_reason));
         dump_dred_diagnostics();
     }
     return hr;
@@ -2003,23 +2081,23 @@ inline void dump_runtime_diagnostics(char const* reason) {
         "device_removed=0x%08lx close_hr=0x%08lx present_hr=0x%08lx signal_hr=0x%08lx "
         "dred_enabled=%d initialized=%d debug=%d warp=%d current_tid=%lu ui_tid=%lu worker_tid=%lu\n",
         reason ? reason : "runtime diagnostics",
-        g_renderer.lost ? 1 : 0,
-        static_cast<unsigned long>(g_renderer.last_failure_hr),
-        static_cast<unsigned long>(g_renderer.device_removed_reason),
-        static_cast<unsigned long>(g_renderer.last_close_hr),
-        static_cast<unsigned long>(g_renderer.last_present_hr),
-        static_cast<unsigned long>(g_renderer.last_signal_hr),
-        g_renderer.dred_enabled ? 1 : 0,
-        g_renderer.initialized ? 1 : 0,
-        g_renderer.debug_enabled ? 1 : 0,
-        g_renderer.warp_enabled ? 1 : 0,
+        renderer_state().lost ? 1 : 0,
+        static_cast<unsigned long>(renderer_state().last_failure_hr),
+        static_cast<unsigned long>(renderer_state().device_removed_reason),
+        static_cast<unsigned long>(renderer_state().last_close_hr),
+        static_cast<unsigned long>(renderer_state().last_present_hr),
+        static_cast<unsigned long>(renderer_state().last_signal_hr),
+        renderer_state().dred_enabled ? 1 : 0,
+        renderer_state().initialized ? 1 : 0,
+        renderer_state().debug_enabled ? 1 : 0,
+        renderer_state().warp_enabled ? 1 : 0,
         static_cast<unsigned long>(GetCurrentThreadId()),
         static_cast<unsigned long>(g_ime.ui_thread_id),
         static_cast<unsigned long>(g_images.worker_thread_id.load()));
-    if (!g_renderer.last_failure_label.empty()) {
+    if (!renderer_state().last_failure_label.empty()) {
         std::fprintf(stderr,
                      "[phenotype-windows] last failure label: %s\n",
-                     g_renderer.last_failure_label.c_str());
+                     renderer_state().last_failure_label.c_str());
     }
     std::fflush(stderr);
 }
@@ -2439,13 +2517,13 @@ inline void transition_resource(ID3D12Resource* resource,
 inline std::pair<void*, UINT64> upload_alloc(UINT64 bytes, UINT64 alignment = 16);
 
 inline HRESULT ensure_readback_buffer(UINT64 bytes) {
-    if (!g_renderer.device || bytes == 0)
+    if (!renderer_state().device || bytes == 0)
         return E_FAIL;
-    if (g_renderer.readback.resource && g_renderer.readback.capacity >= bytes)
+    if (renderer_state().readback.resource && renderer_state().readback.capacity >= bytes)
         return S_OK;
 
-    g_renderer.readback.resource.Reset();
-    g_renderer.readback.capacity = 0;
+    renderer_state().readback.resource.Reset();
+    renderer_state().readback.capacity = 0;
 
     D3D12_HEAP_PROPERTIES heap{};
     heap.Type = D3D12_HEAP_TYPE_READBACK;
@@ -2459,35 +2537,35 @@ inline HRESULT ensure_readback_buffer(UINT64 bytes) {
     desc.SampleDesc.Count = 1;
     desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
-    auto hr = g_renderer.device->CreateCommittedResource(
+    auto hr = renderer_state().device->CreateCommittedResource(
         &heap,
         D3D12_HEAP_FLAG_NONE,
         &desc,
         D3D12_RESOURCE_STATE_COPY_DEST,
         nullptr,
-        IID_PPV_ARGS(&g_renderer.readback.resource));
+        IID_PPV_ARGS(&renderer_state().readback.resource));
     if (FAILED(hr))
         return mark_renderer_lost("CreateCommittedResource(frame readback)", hr);
 
-    g_renderer.readback.capacity = bytes;
-    set_debug_name(g_renderer.readback.resource, L"phenotype.frame_readback");
+    renderer_state().readback.capacity = bytes;
+    set_debug_name(renderer_state().readback.resource, L"phenotype.frame_readback");
     return S_OK;
 }
 
 inline void wait_for_all_frames() {
-    for (auto const& frame : g_renderer.frames)
+    for (auto const& frame : renderer_state().frames)
         wait_for_fence(frame.fence_value);
 }
 
 inline D3D12_CPU_DESCRIPTOR_HANDLE srv_cpu_handle(UINT slot) {
-    auto handle = g_renderer.srv_heap->GetCPUDescriptorHandleForHeapStart();
-    handle.ptr += static_cast<SIZE_T>(slot) * g_renderer.srv_descriptor_size;
+    auto handle = renderer_state().srv_heap->GetCPUDescriptorHandleForHeapStart();
+    handle.ptr += static_cast<SIZE_T>(slot) * renderer_state().srv_descriptor_size;
     return handle;
 }
 
 inline D3D12_GPU_DESCRIPTOR_HANDLE srv_gpu_handle(UINT slot) {
-    auto handle = g_renderer.srv_heap->GetGPUDescriptorHandleForHeapStart();
-    handle.ptr += static_cast<UINT64>(slot) * g_renderer.srv_descriptor_size;
+    auto handle = renderer_state().srv_heap->GetGPUDescriptorHandleForHeapStart();
+    handle.ptr += static_cast<UINT64>(slot) * renderer_state().srv_descriptor_size;
     return handle;
 }
 
@@ -4850,10 +4928,10 @@ inline void load_image_entry(std::string const& url) {
 }
 
 inline void wait_for_fence(UINT64 value) {
-    if (!g_renderer.fence || value == 0) return;
-    if (g_renderer.fence->GetCompletedValue() >= value) return;
-    g_renderer.fence->SetEventOnCompletion(value, g_renderer.fence_event);
-    WaitForSingleObject(g_renderer.fence_event, INFINITE);
+    if (!renderer_state().fence || value == 0) return;
+    if (renderer_state().fence->GetCompletedValue() >= value) return;
+    renderer_state().fence->SetEventOnCompletion(value, renderer_state().fence_event);
+    WaitForSingleObject(renderer_state().fence_event, INFINITE);
 }
 
 inline void transition_resource(ID3D12Resource* resource,
@@ -4866,18 +4944,18 @@ inline void transition_resource(ID3D12Resource* resource,
     barrier.Transition.StateBefore = before;
     barrier.Transition.StateAfter = after;
     barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    g_renderer.command_list->ResourceBarrier(1, &barrier);
+    renderer_state().command_list->ResourceBarrier(1, &barrier);
 }
 
 inline std::pair<void*, UINT64> upload_alloc(UINT64 bytes, UINT64 alignment) {
-    auto aligned = align_up(static_cast<UINT64>(g_renderer.upload.offset), alignment);
-    if (aligned + bytes > g_renderer.upload.capacity) {
+    auto aligned = align_up(static_cast<UINT64>(renderer_state().upload.offset), alignment);
+    if (aligned + bytes > renderer_state().upload.capacity) {
         std::fprintf(stderr, "[dx12] upload buffer exhausted (%llu bytes requested)\n",
                      static_cast<unsigned long long>(bytes));
         return {nullptr, 0};
     }
-    g_renderer.upload.offset = static_cast<std::size_t>(aligned + bytes);
-    return {g_renderer.upload.mapped + aligned, aligned};
+    renderer_state().upload.offset = static_cast<std::size_t>(aligned + bytes);
+    return {renderer_state().upload.mapped + aligned, aligned};
 }
 
 inline HRESULT compile_shader(
@@ -4885,7 +4963,7 @@ inline HRESULT compile_shader(
         char const* target,
         ComPtr<ID3DBlob>& blob) {
     UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
-    if (g_renderer.debug_enabled)
+    if (renderer_state().debug_enabled)
         flags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
     ComPtr<ID3DBlob> errors;
     auto hr = D3DCompile(
@@ -4964,11 +5042,11 @@ inline HRESULT create_root_signature() {
         }
         return hr;
     }
-    return g_renderer.device->CreateRootSignature(
+    return renderer_state().device->CreateRootSignature(
         0,
         serialized->GetBufferPointer(),
         serialized->GetBufferSize(),
-        IID_PPV_ARGS(&g_renderer.root_signature));
+        IID_PPV_ARGS(&renderer_state().root_signature));
 }
 
 inline HRESULT create_pipelines() {
@@ -5011,7 +5089,7 @@ inline HRESULT create_pipelines() {
     depth.StencilEnable = FALSE;
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC base{};
-    base.pRootSignature = g_renderer.root_signature.Get();
+    base.pRootSignature = renderer_state().root_signature.Get();
     base.BlendState = blend;
     base.RasterizerState = raster;
     base.DepthStencilState = depth;
@@ -5031,8 +5109,8 @@ inline HRESULT create_pipelines() {
     tri_desc.InputLayout = {tri_layout, static_cast<UINT>(std::size(tri_layout))};
     tri_desc.VS = {tri_vs->GetBufferPointer(), tri_vs->GetBufferSize()};
     tri_desc.PS = {tri_ps->GetBufferPointer(), tri_ps->GetBufferSize()};
-    auto hr = g_renderer.device->CreateGraphicsPipelineState(
-        &tri_desc, IID_PPV_ARGS(&g_renderer.tri_pipeline));
+    auto hr = renderer_state().device->CreateGraphicsPipelineState(
+        &tri_desc, IID_PPV_ARGS(&renderer_state().tri_pipeline));
     if (FAILED(hr)) return hr;
 
     D3D12_INPUT_ELEMENT_DESC color_layout[] = {
@@ -5047,8 +5125,8 @@ inline HRESULT create_pipelines() {
     color_desc.InputLayout = {color_layout, static_cast<UINT>(std::size(color_layout))};
     color_desc.VS = {color_vs->GetBufferPointer(), color_vs->GetBufferSize()};
     color_desc.PS = {color_ps->GetBufferPointer(), color_ps->GetBufferSize()};
-    hr = g_renderer.device->CreateGraphicsPipelineState(
-        &color_desc, IID_PPV_ARGS(&g_renderer.color_pipeline));
+    hr = renderer_state().device->CreateGraphicsPipelineState(
+        &color_desc, IID_PPV_ARGS(&renderer_state().color_pipeline));
     if (FAILED(hr)) return hr;
 
     D3D12_INPUT_ELEMENT_DESC text_layout[] = {
@@ -5061,14 +5139,14 @@ inline HRESULT create_pipelines() {
     image_desc.InputLayout = {text_layout, static_cast<UINT>(std::size(text_layout))};
     image_desc.VS = {text_vs->GetBufferPointer(), text_vs->GetBufferSize()};
     image_desc.PS = {image_ps->GetBufferPointer(), image_ps->GetBufferSize()};
-    hr = g_renderer.device->CreateGraphicsPipelineState(
-        &image_desc, IID_PPV_ARGS(&g_renderer.image_pipeline));
+    hr = renderer_state().device->CreateGraphicsPipelineState(
+        &image_desc, IID_PPV_ARGS(&renderer_state().image_pipeline));
     if (FAILED(hr)) return hr;
 
     auto text_desc = image_desc;
     text_desc.PS = {text_ps->GetBufferPointer(), text_ps->GetBufferSize()};
-    return g_renderer.device->CreateGraphicsPipelineState(
-        &text_desc, IID_PPV_ARGS(&g_renderer.text_pipeline));
+    return renderer_state().device->CreateGraphicsPipelineState(
+        &text_desc, IID_PPV_ARGS(&renderer_state().text_pipeline));
 }
 
 inline HRESULT create_upload_buffer() {
@@ -5089,22 +5167,22 @@ inline HRESULT create_upload_buffer() {
     desc.SampleDesc.Count = 1;
     desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
-    auto hr = g_renderer.device->CreateCommittedResource(
+    auto hr = renderer_state().device->CreateCommittedResource(
         &heap_props,
         D3D12_HEAP_FLAG_NONE,
         &desc,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         nullptr,
-        IID_PPV_ARGS(&g_renderer.upload.resource));
+        IID_PPV_ARGS(&renderer_state().upload.resource));
     if (FAILED(hr)) return hr;
-    set_debug_name(g_renderer.upload.resource, L"phenotype.upload_buffer");
+    set_debug_name(renderer_state().upload.resource, L"phenotype.upload_buffer");
 
-    hr = g_renderer.upload.resource->Map(0, nullptr,
-        reinterpret_cast<void**>(&g_renderer.upload.mapped));
+    hr = renderer_state().upload.resource->Map(0, nullptr,
+        reinterpret_cast<void**>(&renderer_state().upload.mapped));
     if (FAILED(hr)) return hr;
 
-    g_renderer.upload.capacity = static_cast<std::size_t>(upload_capacity);
-    g_renderer.upload.offset = 0;
+    renderer_state().upload.capacity = static_cast<std::size_t>(upload_capacity);
+    renderer_state().upload.offset = 0;
     return S_OK;
 }
 
@@ -5112,79 +5190,79 @@ inline HRESULT create_frame_resources() {
     D3D12_DESCRIPTOR_HEAP_DESC rtv_desc{};
     rtv_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
     rtv_desc.NumDescriptors = RendererState::frame_count;
-    auto hr = g_renderer.device->CreateDescriptorHeap(
-        &rtv_desc, IID_PPV_ARGS(&g_renderer.rtv_heap));
+    auto hr = renderer_state().device->CreateDescriptorHeap(
+        &rtv_desc, IID_PPV_ARGS(&renderer_state().rtv_heap));
     if (FAILED(hr)) return hr;
-    set_debug_name(g_renderer.rtv_heap, L"phenotype.rtv_heap");
+    set_debug_name(renderer_state().rtv_heap, L"phenotype.rtv_heap");
 
     D3D12_DESCRIPTOR_HEAP_DESC srv_desc{};
     srv_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     srv_desc.NumDescriptors = SRV_SLOT_COUNT;
     srv_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-    hr = g_renderer.device->CreateDescriptorHeap(
-        &srv_desc, IID_PPV_ARGS(&g_renderer.srv_heap));
+    hr = renderer_state().device->CreateDescriptorHeap(
+        &srv_desc, IID_PPV_ARGS(&renderer_state().srv_heap));
     if (FAILED(hr)) return hr;
-    set_debug_name(g_renderer.srv_heap, L"phenotype.srv_heap");
+    set_debug_name(renderer_state().srv_heap, L"phenotype.srv_heap");
 
-    g_renderer.rtv_descriptor_size =
-        g_renderer.device->GetDescriptorHandleIncrementSize(
+    renderer_state().rtv_descriptor_size =
+        renderer_state().device->GetDescriptorHandleIncrementSize(
             D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-    g_renderer.srv_descriptor_size =
-        g_renderer.device->GetDescriptorHandleIncrementSize(
+    renderer_state().srv_descriptor_size =
+        renderer_state().device->GetDescriptorHandleIncrementSize(
             D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-    auto handle = g_renderer.rtv_heap->GetCPUDescriptorHandleForHeapStart();
+    auto handle = renderer_state().rtv_heap->GetCPUDescriptorHandleForHeapStart();
     for (UINT i = 0; i < RendererState::frame_count; ++i) {
-        hr = g_renderer.swap_chain->GetBuffer(
-            i, IID_PPV_ARGS(&g_renderer.frames[i].render_target));
+        hr = renderer_state().swap_chain->GetBuffer(
+            i, IID_PPV_ARGS(&renderer_state().frames[i].render_target));
         if (FAILED(hr)) return hr;
-        g_renderer.frames[i].text_srv_slot = frame_text_srv_slot(i);
-        g_renderer.frames[i].rtv_handle = handle;
-        g_renderer.device->CreateRenderTargetView(
-            g_renderer.frames[i].render_target.Get(),
+        renderer_state().frames[i].text_srv_slot = frame_text_srv_slot(i);
+        renderer_state().frames[i].rtv_handle = handle;
+        renderer_state().device->CreateRenderTargetView(
+            renderer_state().frames[i].render_target.Get(),
             nullptr,
             handle);
         auto render_target_name = std::wstring(L"phenotype.backbuffer.frame")
             + std::to_wstring(i);
-        set_debug_name(g_renderer.frames[i].render_target, render_target_name.c_str());
-        handle.ptr += g_renderer.rtv_descriptor_size;
+        set_debug_name(renderer_state().frames[i].render_target, render_target_name.c_str());
+        handle.ptr += renderer_state().rtv_descriptor_size;
 
-        hr = g_renderer.device->CreateCommandAllocator(
+        hr = renderer_state().device->CreateCommandAllocator(
             D3D12_COMMAND_LIST_TYPE_DIRECT,
-            IID_PPV_ARGS(&g_renderer.frames[i].allocator));
+            IID_PPV_ARGS(&renderer_state().frames[i].allocator));
         if (FAILED(hr)) return hr;
         auto allocator_name = std::wstring(L"phenotype.command_allocator.frame")
             + std::to_wstring(i);
-        set_debug_name(g_renderer.frames[i].allocator, allocator_name.c_str());
+        set_debug_name(renderer_state().frames[i].allocator, allocator_name.c_str());
     }
 
-    hr = g_renderer.device->CreateCommandList(
+    hr = renderer_state().device->CreateCommandList(
         0,
         D3D12_COMMAND_LIST_TYPE_DIRECT,
-        g_renderer.frames[0].allocator.Get(),
+        renderer_state().frames[0].allocator.Get(),
         nullptr,
-        IID_PPV_ARGS(&g_renderer.command_list));
+        IID_PPV_ARGS(&renderer_state().command_list));
     if (FAILED(hr)) return hr;
-    set_debug_name(g_renderer.command_list, L"phenotype.command_list");
-    hr = g_renderer.command_list->Close();
+    set_debug_name(renderer_state().command_list, L"phenotype.command_list");
+    hr = renderer_state().command_list->Close();
     if (FAILED(hr)) return hr;
 
-    hr = g_renderer.device->CreateFence(
-        0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&g_renderer.fence));
+    hr = renderer_state().device->CreateFence(
+        0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&renderer_state().fence));
     if (FAILED(hr)) return hr;
-    set_debug_name(g_renderer.fence, L"phenotype.frame_fence");
+    set_debug_name(renderer_state().fence, L"phenotype.frame_fence");
 
-    g_renderer.fence_event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!g_renderer.fence_event) return HRESULT_FROM_WIN32(GetLastError());
+    renderer_state().fence_event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!renderer_state().fence_event) return HRESULT_FROM_WIN32(GetLastError());
 
     return create_upload_buffer();
 }
 
 inline HRESULT enable_debug_layers() {
-    g_renderer.dred_enabled = should_enable_dred();
-    g_renderer.gpu_validation_enabled = false;
+    renderer_state().dred_enabled = should_enable_dred();
+    renderer_state().gpu_validation_enabled = false;
 
-    if (g_renderer.debug_enabled) {
+    if (renderer_state().debug_enabled) {
         ComPtr<ID3D12Debug1> debug;
         auto hr = D3D12GetDebugInterface(IID_PPV_ARGS(&debug));
         if (FAILED(hr)) {
@@ -5192,11 +5270,11 @@ inline HRESULT enable_debug_layers() {
         } else {
             debug->EnableDebugLayer();
             debug->SetEnableGPUBasedValidation(TRUE);
-            g_renderer.gpu_validation_enabled = true;
+            renderer_state().gpu_validation_enabled = true;
         }
     }
 
-    if (g_renderer.dred_enabled) {
+    if (renderer_state().dred_enabled) {
         ComPtr<ID3D12DeviceRemovedExtendedDataSettings1> dred;
         if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dred)))) {
         dred->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
@@ -5211,18 +5289,18 @@ inline HRESULT enable_debug_layers() {
 }
 
 inline HRESULT create_factory_and_device() {
-    UINT factory_flags = g_renderer.debug_enabled ? DXGI_CREATE_FACTORY_DEBUG : 0;
+    UINT factory_flags = renderer_state().debug_enabled ? DXGI_CREATE_FACTORY_DEBUG : 0;
     auto hr = CreateDXGIFactory2(
-        factory_flags, IID_PPV_ARGS(&g_renderer.factory));
+        factory_flags, IID_PPV_ARGS(&renderer_state().factory));
     if (FAILED(hr)) return hr;
 
-    if (g_renderer.warp_enabled) {
-        hr = g_renderer.factory->EnumWarpAdapter(IID_PPV_ARGS(&g_renderer.adapter));
+    if (renderer_state().warp_enabled) {
+        hr = renderer_state().factory->EnumWarpAdapter(IID_PPV_ARGS(&renderer_state().adapter));
         if (FAILED(hr)) return hr;
     } else {
         for (UINT i = 0;; ++i) {
             ComPtr<IDXGIAdapter1> adapter;
-            if (g_renderer.factory->EnumAdapters1(i, &adapter) == DXGI_ERROR_NOT_FOUND)
+            if (renderer_state().factory->EnumAdapters1(i, &adapter) == DXGI_ERROR_NOT_FOUND)
                 break;
             auto desc = describe_adapter(adapter.Get());
             if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
@@ -5231,27 +5309,27 @@ inline HRESULT create_factory_and_device() {
                     D3D_FEATURE_LEVEL_11_0,
                     __uuidof(ID3D12Device),
                     nullptr))) {
-                g_renderer.adapter = adapter;
+                renderer_state().adapter = adapter;
                 break;
             }
         }
-        if (!g_renderer.adapter) {
-            g_renderer.warp_enabled = true;
-            hr = g_renderer.factory->EnumWarpAdapter(IID_PPV_ARGS(&g_renderer.adapter));
+        if (!renderer_state().adapter) {
+            renderer_state().warp_enabled = true;
+            hr = renderer_state().factory->EnumWarpAdapter(IID_PPV_ARGS(&renderer_state().adapter));
             if (FAILED(hr)) return hr;
         }
     }
 
     hr = D3D12CreateDevice(
-        g_renderer.adapter.Get(),
+        renderer_state().adapter.Get(),
         D3D_FEATURE_LEVEL_11_0,
-        IID_PPV_ARGS(&g_renderer.device));
+        IID_PPV_ARGS(&renderer_state().device));
     if (FAILED(hr)) return hr;
-    set_debug_name(g_renderer.device, L"phenotype.device");
+    set_debug_name(renderer_state().device, L"phenotype.device");
 
-    if (g_renderer.debug_enabled) {
+    if (renderer_state().debug_enabled) {
         ComPtr<ID3D12InfoQueue> info_queue;
-        if (SUCCEEDED(g_renderer.device.As(&info_queue))) {
+        if (SUCCEEDED(renderer_state().device.As(&info_queue))) {
             info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
             info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
         }
@@ -5259,10 +5337,10 @@ inline HRESULT create_factory_and_device() {
 
     D3D12_COMMAND_QUEUE_DESC queue_desc{};
     queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-    hr = g_renderer.device->CreateCommandQueue(
-        &queue_desc, IID_PPV_ARGS(&g_renderer.queue));
+    hr = renderer_state().device->CreateCommandQueue(
+        &queue_desc, IID_PPV_ARGS(&renderer_state().queue));
     if (FAILED(hr)) return hr;
-    set_debug_name(g_renderer.queue, L"phenotype.graphics_queue");
+    set_debug_name(renderer_state().queue, L"phenotype.graphics_queue");
 
     return S_OK;
 }
@@ -5289,8 +5367,8 @@ inline HRESULT create_swap_chain(NativeSurfaceDescriptor* surface) {
     desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
 
     ComPtr<IDXGISwapChain1> swap1;
-    auto hr = g_renderer.factory->CreateSwapChainForHwnd(
-        g_renderer.queue.Get(),
+    auto hr = renderer_state().factory->CreateSwapChainForHwnd(
+        renderer_state().queue.Get(),
         hwnd,
         &desc,
         nullptr,
@@ -5298,33 +5376,33 @@ inline HRESULT create_swap_chain(NativeSurfaceDescriptor* surface) {
         &swap1);
     if (FAILED(hr)) return hr;
 
-    g_renderer.factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
-    return swap1.As(&g_renderer.swap_chain);
+    renderer_state().factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
+    return swap1.As(&renderer_state().swap_chain);
 }
 
 inline void release_swap_chain_targets() {
-    for (auto& frame : g_renderer.frames) {
+    for (auto& frame : renderer_state().frames) {
         frame.render_target.Reset();
     }
-    g_renderer.last_frame_available = false;
-    g_renderer.last_render_width = 0;
-    g_renderer.last_render_height = 0;
+    renderer_state().last_frame_available = false;
+    renderer_state().last_render_width = 0;
+    renderer_state().last_render_height = 0;
 }
 
 inline HRESULT resize_swap_chain() {
-    if (!g_renderer.swap_chain || !g_renderer.device || !g_renderer.surface)
+    if (!renderer_state().swap_chain || !renderer_state().device || !renderer_state().surface)
         return E_FAIL;
 
-    for (auto& frame : g_renderer.frames)
+    for (auto& frame : renderer_state().frames)
         wait_for_fence(frame.fence_value);
 
     release_swap_chain_targets();
     int fbw = 0;
     int fbh = 0;
-    surface_framebuffer_size(g_renderer.surface, fbw, fbh);
+    surface_framebuffer_size(renderer_state().surface, fbw, fbh);
     if (fbw <= 0 || fbh <= 0) return S_OK;
 
-    auto hr = g_renderer.swap_chain->ResizeBuffers(
+    auto hr = renderer_state().swap_chain->ResizeBuffers(
         RendererState::frame_count,
         static_cast<UINT>(fbw),
         static_cast<UINT>(fbh),
@@ -5333,21 +5411,21 @@ inline HRESULT resize_swap_chain() {
     if (FAILED(hr))
         return mark_renderer_lost("IDXGISwapChain::ResizeBuffers", hr);
 
-    auto handle = g_renderer.rtv_heap->GetCPUDescriptorHandleForHeapStart();
+    auto handle = renderer_state().rtv_heap->GetCPUDescriptorHandleForHeapStart();
     for (UINT i = 0; i < RendererState::frame_count; ++i) {
-        hr = g_renderer.swap_chain->GetBuffer(
-            i, IID_PPV_ARGS(&g_renderer.frames[i].render_target));
+        hr = renderer_state().swap_chain->GetBuffer(
+            i, IID_PPV_ARGS(&renderer_state().frames[i].render_target));
         if (FAILED(hr))
             return mark_renderer_lost("IDXGISwapChain::GetBuffer", hr);
-        g_renderer.frames[i].rtv_handle = handle;
-        g_renderer.device->CreateRenderTargetView(
-            g_renderer.frames[i].render_target.Get(),
+        renderer_state().frames[i].rtv_handle = handle;
+        renderer_state().device->CreateRenderTargetView(
+            renderer_state().frames[i].render_target.Get(),
             nullptr,
             handle);
         auto render_target_name = std::wstring(L"phenotype.backbuffer.frame")
             + std::to_wstring(i);
-        set_debug_name(g_renderer.frames[i].render_target, render_target_name.c_str());
-        handle.ptr += g_renderer.rtv_descriptor_size;
+        set_debug_name(renderer_state().frames[i].render_target, render_target_name.c_str());
+        handle.ptr += renderer_state().rtv_descriptor_size;
     }
     return S_OK;
 }
@@ -5380,7 +5458,7 @@ inline HRESULT create_atlas_texture(
     auto hr = S_OK;
     if (recreate) {
         frame.atlas_texture.Reset();
-        hr = g_renderer.device->CreateCommittedResource(
+        hr = renderer_state().device->CreateCommittedResource(
             &default_heap,
             D3D12_HEAP_FLAG_NONE,
             &tex_desc,
@@ -5403,7 +5481,7 @@ inline HRESULT create_atlas_texture(
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
     UINT num_rows = 0;
     UINT64 row_size = 0;
-    g_renderer.device->GetCopyableFootprints(
+    renderer_state().device->GetCopyableFootprints(
         &tex_desc, 0, 1, 0,
         &footprint,
         &num_rows,
@@ -5425,12 +5503,12 @@ inline HRESULT create_atlas_texture(
     dst.SubresourceIndex = 0;
 
     D3D12_TEXTURE_COPY_LOCATION src{};
-    src.pResource = g_renderer.upload.resource.Get();
+    src.pResource = renderer_state().upload.resource.Get();
     src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     src.PlacedFootprint = footprint;
     src.PlacedFootprint.Offset = offset;
 
-    g_renderer.command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+    renderer_state().command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
     transition_resource(
         frame.atlas_texture.Get(),
         D3D12_RESOURCE_STATE_COPY_DEST,
@@ -5441,7 +5519,7 @@ inline HRESULT create_atlas_texture(
     srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     srv.Texture2D.MipLevels = 1;
-    g_renderer.device->CreateShaderResourceView(
+    renderer_state().device->CreateShaderResourceView(
         frame.atlas_texture.Get(),
         &srv,
         srv_cpu_handle(frame.text_srv_slot));
@@ -5470,7 +5548,7 @@ inline HRESULT ensure_image_atlas_texture() {
 
     D3D12_HEAP_PROPERTIES default_heap{};
     default_heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-    auto hr = g_renderer.device->CreateCommittedResource(
+    auto hr = renderer_state().device->CreateCommittedResource(
         &default_heap,
         D3D12_HEAP_FLAG_NONE,
         &tex_desc,
@@ -5486,7 +5564,7 @@ inline HRESULT ensure_image_atlas_texture() {
     srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     srv.Texture2D.MipLevels = 1;
-    g_renderer.device->CreateShaderResourceView(
+    renderer_state().device->CreateShaderResourceView(
         g_images.texture.Get(),
         &srv,
         srv_cpu_handle(IMAGE_SRV_SLOT));
@@ -5514,7 +5592,7 @@ inline HRESULT upload_image_atlas() {
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
     UINT num_rows = 0;
     UINT64 row_size = 0;
-    g_renderer.device->GetCopyableFootprints(
+    renderer_state().device->GetCopyableFootprints(
         &tex_desc, 0, 1, 0,
         &footprint,
         &num_rows,
@@ -5544,7 +5622,7 @@ inline HRESULT upload_image_atlas() {
     dst.SubresourceIndex = 0;
 
     D3D12_TEXTURE_COPY_LOCATION src{};
-    src.pResource = g_renderer.upload.resource.Get();
+    src.pResource = renderer_state().upload.resource.Get();
     src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     src.PlacedFootprint = footprint;
     src.PlacedFootprint.Offset = offset;
@@ -5553,7 +5631,7 @@ inline HRESULT upload_image_atlas() {
         g_images.texture.Get(),
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
         D3D12_RESOURCE_STATE_COPY_DEST);
-    g_renderer.command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+    renderer_state().command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
     transition_resource(
         g_images.texture.Get(),
         D3D12_RESOURCE_STATE_COPY_DEST,
@@ -5574,52 +5652,53 @@ inline void begin_frame(FrameContext& frame) {
         (void)mark_renderer_lost("ID3D12CommandAllocator::Reset", hr);
         return;
     }
-    hr = g_renderer.command_list->Reset(frame.allocator.Get(), nullptr);
+    hr = renderer_state().command_list->Reset(frame.allocator.Get(), nullptr);
     if (FAILED(hr)) {
         (void)mark_renderer_lost("ID3D12GraphicsCommandList::Reset", hr);
         return;
     }
-    g_renderer.upload.offset = 0;
+    renderer_state().upload.offset = 0;
 }
 
 inline void end_frame(FrameContext& frame) {
-    auto hr = g_renderer.command_list->Close();
-    g_renderer.last_close_hr = hr;
+    auto hr = renderer_state().command_list->Close();
+    renderer_state().last_close_hr = hr;
     if (FAILED(hr)) {
         (void)mark_renderer_lost("ID3D12GraphicsCommandList::Close", hr);
         return;
     }
-    ID3D12CommandList* lists[] = {g_renderer.command_list.Get()};
-    g_renderer.queue->ExecuteCommandLists(1, lists);
-    hr = g_renderer.swap_chain->Present(1, 0);
-    g_renderer.last_present_hr = hr;
+    ID3D12CommandList* lists[] = {renderer_state().command_list.Get()};
+    renderer_state().queue->ExecuteCommandLists(1, lists);
+    hr = renderer_state().swap_chain->Present(1, 0);
+    renderer_state().last_present_hr = hr;
     if (FAILED(hr)) {
         (void)mark_renderer_lost("IDXGISwapChain::Present", hr);
         return;
     }
-    frame.fence_value = g_renderer.next_fence_value++;
-    hr = g_renderer.queue->Signal(g_renderer.fence.Get(), frame.fence_value);
-    g_renderer.last_signal_hr = hr;
+    frame.fence_value = renderer_state().next_fence_value++;
+    hr = renderer_state().queue->Signal(renderer_state().fence.Get(), frame.fence_value);
+    renderer_state().last_signal_hr = hr;
     if (FAILED(hr)) {
         (void)mark_renderer_lost("ID3D12CommandQueue::Signal", hr);
     }
 }
 
 inline void renderer_init(native_surface_handle handle) {
-    install_process_diagnostics();
-    if (g_renderer.initialized) return;
     auto* surface = desktop_surface(handle);
-    g_renderer.surface = surface;
-    g_renderer.hwnd = surface_hwnd(surface);
-    if (!g_renderer.hwnd) {
+    activate_renderer_state(surface);
+    install_process_diagnostics();
+    if (renderer_state().initialized) return;
+    renderer_state().surface = surface;
+    renderer_state().hwnd = surface_hwnd(surface);
+    if (!renderer_state().hwnd) {
         std::fprintf(stderr, "[dx12] no HWND surface\n");
         return;
     }
-    g_renderer.debug_preset_enabled = env_enabled("PHENOTYPE_WINDOWS_DEBUG");
-    g_renderer.debug_enabled = g_renderer.debug_preset_enabled
+    renderer_state().debug_preset_enabled = env_enabled("PHENOTYPE_WINDOWS_DEBUG");
+    renderer_state().debug_enabled = renderer_state().debug_preset_enabled
         || env_enabled("PHENOTYPE_DX12_DEBUG");
-    g_renderer.warp_enabled = env_enabled("PHENOTYPE_DX12_WARP");
-    if (g_renderer.debug_preset_enabled
+    renderer_state().warp_enabled = env_enabled("PHENOTYPE_DX12_WARP");
+    if (renderer_state().debug_preset_enabled
         && static_cast<int>(::phenotype::log::current_level())
             > static_cast<int>(::phenotype::log::Severity::debug)) {
         ::phenotype::log::set_level(::phenotype::log::Severity::debug);
@@ -5629,7 +5708,7 @@ inline void renderer_init(native_surface_handle handle) {
         nullptr,
         COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     if (SUCCEEDED(co_hr)) {
-        g_renderer.com_initialized = true;
+        renderer_state().com_initialized = true;
     } else if (co_hr != RPC_E_CHANGED_MODE) {
         std::fprintf(stderr, "[windows] CoInitializeEx failed (hr=0x%08lx)\n",
                      static_cast<unsigned long>(co_hr));
@@ -5646,23 +5725,27 @@ inline void renderer_init(native_surface_handle handle) {
         return;
     }
 
-    auto desc = describe_adapter(g_renderer.adapter.Get());
+    auto desc = describe_adapter(renderer_state().adapter.Get());
     std::printf("[phenotype-native] Direct3D 12 initialized (%ls%s)\n",
                 desc.Description,
-                g_renderer.warp_enabled ? ", WARP" : "");
-    g_renderer.initialized = true;
+                renderer_state().warp_enabled ? ", WARP" : "");
+    renderer_state().initialized = true;
+}
+
+inline void renderer_activate(native_surface_handle handle) {
+    activate_renderer_state(desktop_surface(handle));
 }
 
 inline void renderer_flush(unsigned char const* buf, unsigned int len) {
-    if (len == 0 || !g_renderer.initialized || g_renderer.lost) return;
+    if (len == 0 || !renderer_state().initialized || renderer_state().lost) return;
 
     int fbw = 0;
     int fbh = 0;
-    surface_framebuffer_size(g_renderer.surface, fbw, fbh);
+    surface_framebuffer_size(renderer_state().surface, fbw, fbh);
     if (fbw <= 0 || fbh <= 0) return;
 
-    auto current_index = g_renderer.swap_chain->GetCurrentBackBufferIndex();
-    auto& frame = g_renderer.frames[current_index];
+    auto current_index = renderer_state().swap_chain->GetCurrentBackBufferIndex();
+    auto& frame = renderer_state().frames[current_index];
     if (frame.render_target == nullptr) {
         if (FAILED(resize_swap_chain())) return;
     } else {
@@ -5675,15 +5758,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         if (FAILED(resize_swap_chain())) return;
     }
 
-    float text_scale = surface_content_scale(g_renderer.surface);
+    float text_scale = surface_content_scale(renderer_state().surface);
     float line_height_ratio = ::phenotype::detail::g_app().theme.line_height_ratio;
     auto const accessibility = windows_accessibility_display_options();
-    g_renderer.accessibility_options = accessibility;
+    renderer_state().accessibility_options = accessibility;
     MaterialEnvironment material_env{};
     material_env.capabilities.material_surfaces = true;
     material_env.capabilities.material_backdrop_blur = false;
     material_env.capabilities.shader_blur = false;
-    material_env.capabilities.frame_history = g_renderer.last_frame_available;
+    material_env.capabilities.frame_history = renderer_state().last_frame_available;
     material_env.capabilities.reduce_transparency =
         accessibility.reduce_transparency;
     material_env.capabilities.increase_contrast =
@@ -5696,35 +5779,35 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_env.render_target.height = fbh;
     material_env.render_target.scale = text_scale;
     material_env.render_target.pixel_format = "bgra8unorm";
-    material_env.debug_seed.frame = ++g_renderer.material_frame_sequence;
+    material_env.debug_seed.frame = ++renderer_state().material_frame_sequence;
     material_env.quality = default_material_quality_policy();
     DecodedFrame decoded;
-    g_renderer.material_records.clear();
-    g_renderer.material_executor_summary = MaterialExecutorSummary{};
+    renderer_state().material_records.clear();
+    renderer_state().material_executor_summary = MaterialExecutorSummary{};
     if (!decode_frame_commands(
             buf, len, line_height_ratio, material_env, decoded)) {
-        if (g_renderer.debug_enabled) {
+        if (renderer_state().debug_enabled) {
             std::fprintf(stderr,
                          "[phenotype-native] dropped invalid draw command stream (%u bytes)\n",
                          len);
         }
         return;
     }
-    g_renderer.material_records = decoded.material_records;
+    renderer_state().material_records = decoded.material_records;
     MaterialExecutorSummary material_summary;
-    for (auto const& record : g_renderer.material_records) {
+    for (auto const& record : renderer_state().material_records) {
         accumulate_material_executor_plan_summary(
             material_summary,
             record.plan);
     }
     finalize_material_executor_summary(
         material_summary,
-        g_renderer.material_records);
+        renderer_state().material_records);
     material_summary.foreground_text_candidate_count =
         decoded.foreground_text_candidate_count;
     material_summary.foreground_text_remap_count =
         decoded.foreground_text_remap_count;
-    g_renderer.material_executor_summary = material_summary;
+    renderer_state().material_executor_summary = material_summary;
     suppress_focused_input_base_text_for_composition(decoded);
     (void)process_completed_images();
 
@@ -5907,7 +5990,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
 
     begin_frame(frame);
-    if (g_renderer.lost)
+    if (renderer_state().lost)
         return;
     auto upload_hr = upload_image_atlas();
     if (FAILED(upload_hr)) {
@@ -5926,28 +6009,28 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     viewport.MaxDepth = 1.0f;
     D3D12_RECT scissor{0, 0, fbw, fbh};
 
-    g_renderer.command_list->SetGraphicsRootSignature(g_renderer.root_signature.Get());
-    g_renderer.command_list->RSSetViewports(1, &viewport);
-    g_renderer.command_list->RSSetScissorRects(1, &scissor);
-    g_renderer.command_list->OMSetRenderTargets(1, &frame.rtv_handle, FALSE, nullptr);
+    renderer_state().command_list->SetGraphicsRootSignature(renderer_state().root_signature.Get());
+    renderer_state().command_list->RSSetViewports(1, &viewport);
+    renderer_state().command_list->RSSetScissorRects(1, &scissor);
+    renderer_state().command_list->OMSetRenderTargets(1, &frame.rtv_handle, FALSE, nullptr);
     float clear_color[4]{
         decoded.clear_a <= 0.0 ? 0.0f : static_cast<float>(decoded.clear_r),
         decoded.clear_a <= 0.0 ? 0.0f : static_cast<float>(decoded.clear_g),
         decoded.clear_a <= 0.0 ? 0.0f : static_cast<float>(decoded.clear_b),
         static_cast<float>(decoded.clear_a),
     };
-    g_renderer.command_list->ClearRenderTargetView(frame.rtv_handle, clear_color, 0, nullptr);
+    renderer_state().command_list->ClearRenderTargetView(frame.rtv_handle, clear_color, 0, nullptr);
 
     int winw = 0;
     int winh = 0;
-    surface_logical_size(g_renderer.surface, winw, winh);
+    surface_logical_size(renderer_state().surface, winw, winh);
     float uniforms[4]{
         static_cast<float>((winw > 0) ? winw : fbw),
         static_cast<float>((winh > 0) ? winh : fbh),
         0, 0,
     };
-    g_renderer.command_list->SetGraphicsRoot32BitConstants(0, 4, uniforms, 0);
-    g_renderer.command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    renderer_state().command_list->SetGraphicsRoot32BitConstants(0, 4, uniforms, 0);
+    renderer_state().command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     UINT tri_vertex_count = static_cast<UINT>(decoded.tri_data.size() / 6);
     if (tri_vertex_count > 0) {
@@ -5956,12 +6039,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         if (mapped) {
             std::memcpy(mapped, decoded.tri_data.data(), static_cast<std::size_t>(bytes));
             D3D12_VERTEX_BUFFER_VIEW vbv{};
-            vbv.BufferLocation = g_renderer.upload.resource->GetGPUVirtualAddress() + offset;
+            vbv.BufferLocation = renderer_state().upload.resource->GetGPUVirtualAddress() + offset;
             vbv.SizeInBytes = static_cast<UINT>(bytes);
             vbv.StrideInBytes = 24;
-            g_renderer.command_list->SetPipelineState(g_renderer.tri_pipeline.Get());
-            g_renderer.command_list->IASetVertexBuffers(0, 1, &vbv);
-            g_renderer.command_list->DrawInstanced(tri_vertex_count, 1, 0, 0);
+            renderer_state().command_list->SetPipelineState(renderer_state().tri_pipeline.Get());
+            renderer_state().command_list->IASetVertexBuffers(0, 1, &vbv);
+            renderer_state().command_list->DrawInstanced(tri_vertex_count, 1, 0, 0);
         }
     }
 
@@ -5972,12 +6055,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         if (mapped) {
             std::memcpy(mapped, decoded.color_data.data(), static_cast<std::size_t>(bytes));
             D3D12_VERTEX_BUFFER_VIEW vbv{};
-            vbv.BufferLocation = g_renderer.upload.resource->GetGPUVirtualAddress() + offset;
+            vbv.BufferLocation = renderer_state().upload.resource->GetGPUVirtualAddress() + offset;
             vbv.SizeInBytes = static_cast<UINT>(bytes);
             vbv.StrideInBytes = 48;
-            g_renderer.command_list->SetPipelineState(g_renderer.color_pipeline.Get());
-            g_renderer.command_list->IASetVertexBuffers(0, 1, &vbv);
-            g_renderer.command_list->DrawInstanced(6, color_count, 0, 0);
+            renderer_state().command_list->SetPipelineState(renderer_state().color_pipeline.Get());
+            renderer_state().command_list->IASetVertexBuffers(0, 1, &vbv);
+            renderer_state().command_list->DrawInstanced(6, color_count, 0, 0);
         }
     }
 
@@ -5987,16 +6070,16 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         if (mapped) {
             std::memcpy(mapped, decoded.image_data.data(), static_cast<std::size_t>(bytes));
             D3D12_VERTEX_BUFFER_VIEW vbv{};
-            vbv.BufferLocation = g_renderer.upload.resource->GetGPUVirtualAddress() + offset;
+            vbv.BufferLocation = renderer_state().upload.resource->GetGPUVirtualAddress() + offset;
             vbv.SizeInBytes = static_cast<UINT>(bytes);
             vbv.StrideInBytes = 32;
-            ID3D12DescriptorHeap* heaps[] = {g_renderer.srv_heap.Get()};
-            g_renderer.command_list->SetDescriptorHeaps(1, heaps);
-            g_renderer.command_list->SetGraphicsRootDescriptorTable(
+            ID3D12DescriptorHeap* heaps[] = {renderer_state().srv_heap.Get()};
+            renderer_state().command_list->SetDescriptorHeaps(1, heaps);
+            renderer_state().command_list->SetGraphicsRootDescriptorTable(
                 1, srv_gpu_handle(IMAGE_SRV_SLOT));
-            g_renderer.command_list->SetPipelineState(g_renderer.image_pipeline.Get());
-            g_renderer.command_list->IASetVertexBuffers(0, 1, &vbv);
-            g_renderer.command_list->DrawInstanced(
+            renderer_state().command_list->SetPipelineState(renderer_state().image_pipeline.Get());
+            renderer_state().command_list->IASetVertexBuffers(0, 1, &vbv);
+            renderer_state().command_list->DrawInstanced(
                 6, static_cast<UINT>(decoded.image_data.size() / 8), 0, 0);
         }
     }
@@ -6019,16 +6102,16 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             if (mapped) {
                 std::memcpy(mapped, text_data.data(), static_cast<std::size_t>(bytes));
                 D3D12_VERTEX_BUFFER_VIEW vbv{};
-                vbv.BufferLocation = g_renderer.upload.resource->GetGPUVirtualAddress() + offset;
+                vbv.BufferLocation = renderer_state().upload.resource->GetGPUVirtualAddress() + offset;
                 vbv.SizeInBytes = static_cast<UINT>(bytes);
                 vbv.StrideInBytes = 32;
-                ID3D12DescriptorHeap* heaps[] = {g_renderer.srv_heap.Get()};
-                g_renderer.command_list->SetDescriptorHeaps(1, heaps);
-                g_renderer.command_list->SetGraphicsRootDescriptorTable(
+                ID3D12DescriptorHeap* heaps[] = {renderer_state().srv_heap.Get()};
+                renderer_state().command_list->SetDescriptorHeaps(1, heaps);
+                renderer_state().command_list->SetGraphicsRootDescriptorTable(
                     1, srv_gpu_handle(frame.text_srv_slot));
-                g_renderer.command_list->SetPipelineState(g_renderer.text_pipeline.Get());
-                g_renderer.command_list->IASetVertexBuffers(0, 1, &vbv);
-                g_renderer.command_list->DrawInstanced(
+                renderer_state().command_list->SetPipelineState(renderer_state().text_pipeline.Get());
+                renderer_state().command_list->IASetVertexBuffers(0, 1, &vbv);
+                renderer_state().command_list->DrawInstanced(
                     6, static_cast<UINT>(atlas.quads.size()), 0, 0);
             }
         }
@@ -6041,12 +6124,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         if (mapped) {
             std::memcpy(mapped, decoded.overlay_color_data.data(), static_cast<std::size_t>(bytes));
             D3D12_VERTEX_BUFFER_VIEW vbv{};
-            vbv.BufferLocation = g_renderer.upload.resource->GetGPUVirtualAddress() + offset;
+            vbv.BufferLocation = renderer_state().upload.resource->GetGPUVirtualAddress() + offset;
             vbv.SizeInBytes = static_cast<UINT>(bytes);
             vbv.StrideInBytes = 48;
-            g_renderer.command_list->SetPipelineState(g_renderer.color_pipeline.Get());
-            g_renderer.command_list->IASetVertexBuffers(0, 1, &vbv);
-            g_renderer.command_list->DrawInstanced(6, overlay_color_count, 0, 0);
+            renderer_state().command_list->SetPipelineState(renderer_state().color_pipeline.Get());
+            renderer_state().command_list->IASetVertexBuffers(0, 1, &vbv);
+            renderer_state().command_list->DrawInstanced(6, overlay_color_count, 0, 0);
         }
     }
 
@@ -6055,19 +6138,18 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         D3D12_RESOURCE_STATE_RENDER_TARGET,
         D3D12_RESOURCE_STATE_PRESENT);
     end_frame(frame);
-    if (g_renderer.lost)
+    if (renderer_state().lost)
         return;
-    g_renderer.last_presented_frame_index = current_index;
-    g_renderer.last_render_width = static_cast<UINT>(fbw);
-    g_renderer.last_render_height = static_cast<UINT>(fbh);
-    g_renderer.last_frame_available = true;
-    g_renderer.hit_regions.swap(decoded.hit_regions);
+    renderer_state().last_presented_frame_index = current_index;
+    renderer_state().last_render_width = static_cast<UINT>(fbw);
+    renderer_state().last_render_height = static_cast<UINT>(fbh);
+    renderer_state().last_frame_available = true;
+    renderer_state().hit_regions.swap(decoded.hit_regions);
     if (auto* host = ::phenotype::native::detail::active_host())
         ::phenotype::native::detail::note_host_render_surface_frame(*host);
 }
 
-inline void renderer_shutdown() {
-    wait_for_all_frames();
+inline void shutdown_shared_image_state() {
     shutdown_image_worker();
     g_images.texture.Reset();
     if (!g_images.pixels.empty()) {
@@ -6088,16 +6170,34 @@ inline void renderer_shutdown() {
     g_images.cursor_y = 0;
     g_images.row_height = 0;
     g_ime.overlay = {};
-    if (g_renderer.upload.resource && g_renderer.upload.mapped) {
-        g_renderer.upload.resource->Unmap(0, nullptr);
+}
+
+inline void renderer_shutdown_active_state() {
+    wait_for_all_frames();
+    if (renderer_state().upload.resource && renderer_state().upload.mapped) {
+        renderer_state().upload.resource->Unmap(0, nullptr);
     }
-    if (g_renderer.fence_event) {
-        CloseHandle(g_renderer.fence_event);
-        g_renderer.fence_event = nullptr;
+    if (renderer_state().fence_event) {
+        CloseHandle(renderer_state().fence_event);
+        renderer_state().fence_event = nullptr;
     }
-    if (g_renderer.com_initialized)
+    if (renderer_state().com_initialized)
         CoUninitialize();
-    g_renderer = {};
+    renderer_state() = {};
+}
+
+inline void renderer_shutdown() {
+    shutdown_shared_image_state();
+    reset_active_renderer_state();
+    renderer_shutdown_active_state();
+    for (auto& entry : renderer_registry()) {
+        if (!entry.second)
+            continue;
+        bind_renderer_state(*entry.second);
+        renderer_shutdown_active_state();
+    }
+    renderer_registry().clear();
+    reset_active_renderer_state();
 }
 
 inline std::optional<unsigned int> renderer_hit_test(float x, float y,
@@ -6105,8 +6205,8 @@ inline std::optional<unsigned int> renderer_hit_test(float x, float y,
                                                      float scroll_y) {
     float wx = x + scroll_x;
     float wy = y + scroll_y;
-    for (int i = static_cast<int>(g_renderer.hit_regions.size()) - 1; i >= 0; --i) {
-        auto const& hr = g_renderer.hit_regions[static_cast<std::size_t>(i)];
+    for (int i = static_cast<int>(renderer_state().hit_regions.size()) - 1; i >= 0; --i) {
+        auto const& hr = renderer_state().hit_regions[static_cast<std::size_t>(i)];
         if (wx >= hr.x && wx <= hr.x + hr.w && wy >= hr.y && wy <= hr.y + hr.h)
             return hr.callback_id;
     }
@@ -6490,44 +6590,44 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot windows_debug_capabilitie
 
 inline json::Object windows_renderer_runtime_json() {
     json::Object renderer;
-    renderer.emplace("initialized", json::Value{g_renderer.initialized});
-    renderer.emplace("preset_enabled", json::Value{g_renderer.debug_preset_enabled});
-    renderer.emplace("debug_enabled", json::Value{g_renderer.debug_enabled});
+    renderer.emplace("initialized", json::Value{renderer_state().initialized});
+    renderer.emplace("preset_enabled", json::Value{renderer_state().debug_preset_enabled});
+    renderer.emplace("debug_enabled", json::Value{renderer_state().debug_enabled});
     renderer.emplace(
         "gpu_based_validation_enabled",
-        json::Value{g_renderer.gpu_validation_enabled});
-    renderer.emplace("warp_enabled", json::Value{g_renderer.warp_enabled});
-    renderer.emplace("dred_enabled", json::Value{g_renderer.dred_enabled});
-    renderer.emplace("lost", json::Value{g_renderer.lost});
-    renderer.emplace("last_frame_available", json::Value{g_renderer.last_frame_available});
+        json::Value{renderer_state().gpu_validation_enabled});
+    renderer.emplace("warp_enabled", json::Value{renderer_state().warp_enabled});
+    renderer.emplace("dred_enabled", json::Value{renderer_state().dred_enabled});
+    renderer.emplace("lost", json::Value{renderer_state().lost});
+    renderer.emplace("last_frame_available", json::Value{renderer_state().last_frame_available});
     renderer.emplace(
         "last_presented_frame_index",
-        json::Value{static_cast<std::int64_t>(g_renderer.last_presented_frame_index)});
+        json::Value{static_cast<std::int64_t>(renderer_state().last_presented_frame_index)});
     renderer.emplace(
         "last_render_width",
-        json::Value{static_cast<std::int64_t>(g_renderer.last_render_width)});
+        json::Value{static_cast<std::int64_t>(renderer_state().last_render_width)});
     renderer.emplace(
         "last_render_height",
-        json::Value{static_cast<std::int64_t>(g_renderer.last_render_height)});
+        json::Value{static_cast<std::int64_t>(renderer_state().last_render_height)});
     renderer.emplace(
         "last_failure_hr",
-        json::Value{static_cast<std::int64_t>(g_renderer.last_failure_hr)});
+        json::Value{static_cast<std::int64_t>(renderer_state().last_failure_hr)});
     renderer.emplace(
         "device_removed_reason",
-        json::Value{static_cast<std::int64_t>(g_renderer.device_removed_reason)});
+        json::Value{static_cast<std::int64_t>(renderer_state().device_removed_reason)});
     renderer.emplace(
         "last_close_hr",
-        json::Value{static_cast<std::int64_t>(g_renderer.last_close_hr)});
+        json::Value{static_cast<std::int64_t>(renderer_state().last_close_hr)});
     renderer.emplace(
         "last_present_hr",
-        json::Value{static_cast<std::int64_t>(g_renderer.last_present_hr)});
+        json::Value{static_cast<std::int64_t>(renderer_state().last_present_hr)});
     renderer.emplace(
         "last_signal_hr",
-        json::Value{static_cast<std::int64_t>(g_renderer.last_signal_hr)});
+        json::Value{static_cast<std::int64_t>(renderer_state().last_signal_hr)});
     renderer.emplace(
         "dred_device_state",
-        json::Value{static_cast<std::int64_t>(g_renderer.dred_device_state)});
-    renderer.emplace("failure_label", json::Value{g_renderer.last_failure_label});
+        json::Value{static_cast<std::int64_t>(renderer_state().dred_device_state)});
+    renderer.emplace("failure_label", json::Value{renderer_state().last_failure_label});
     renderer.emplace("material_pipeline_ready", json::Value{false});
     renderer.emplace("material_backdrop_source_ready", json::Value{false});
     json::Object luma_descriptor;
@@ -6557,7 +6657,7 @@ inline json::Object windows_renderer_runtime_json() {
     renderer.emplace(
         "accessibility_display_options",
         windows_accessibility_display_options_json(
-            g_renderer.accessibility_options));
+            renderer_state().accessibility_options));
     renderer.emplace(
         "material_plan_contract_version",
         json::Value{
@@ -6565,25 +6665,25 @@ inline json::Object windows_renderer_runtime_json() {
     renderer.emplace(
         "material_plan_count",
         json::Value{
-            static_cast<std::int64_t>(g_renderer.material_records.size())});
+            static_cast<std::int64_t>(renderer_state().material_records.size())});
     renderer.emplace(
         "material_plans",
         json::Value{
             ::phenotype::diag::detail::material_plans_runtime_json(
-                g_renderer.material_records)});
+                renderer_state().material_records)});
     renderer.emplace(
         "material_container_groups",
         json::Value{
             ::phenotype::diag::detail::material_container_group_details_json(
-                g_renderer.material_records)});
+                renderer_state().material_records)});
     renderer.emplace(
         "material_runtime_summary",
         ::phenotype::diag::detail::material_runtime_summary_json(
-            g_renderer.material_records));
+            renderer_state().material_records));
     renderer.emplace(
         "material_executor_summary",
         ::phenotype::diag::detail::material_executor_summary_json(
-            g_renderer.material_executor_summary));
+            renderer_state().material_executor_summary));
     renderer.emplace(
         "system_settings",
         ::phenotype::diag::system_settings_to_json(
@@ -6664,7 +6764,7 @@ inline json::Object windows_images_runtime_json() {
 }
 
 inline json::Object windows_window_runtime_json() {
-    auto const* surface = g_renderer.surface;
+    auto const* surface = renderer_state().surface;
     auto hwnd = surface ? static_cast<HWND>(surface->window) : nullptr;
     bool const has_options = surface && surface->window_options_valid;
     WindowChromeStyle const chrome =
@@ -6813,16 +6913,16 @@ inline std::string windows_snapshot_json() {
 
 inline std::optional<DebugFrameCapture> windows_capture_frame_rgba() {
 #ifdef _WIN32
-    if (!g_renderer.initialized || g_renderer.lost || !g_renderer.last_frame_available)
+    if (!renderer_state().initialized || renderer_state().lost || !renderer_state().last_frame_available)
         return std::nullopt;
-    if (!g_renderer.device || !g_renderer.queue || !g_renderer.command_list || !g_renderer.fence)
+    if (!renderer_state().device || !renderer_state().queue || !renderer_state().command_list || !renderer_state().fence)
         return std::nullopt;
 
-    auto frame_index = g_renderer.last_presented_frame_index;
+    auto frame_index = renderer_state().last_presented_frame_index;
     if (frame_index >= RendererState::frame_count)
         return std::nullopt;
 
-    auto& frame = g_renderer.frames[frame_index];
+    auto& frame = renderer_state().frames[frame_index];
     if (!frame.render_target || !frame.allocator)
         return std::nullopt;
 
@@ -6840,7 +6940,7 @@ inline std::optional<DebugFrameCapture> windows_capture_frame_rgba() {
     UINT num_rows = 0;
     UINT64 row_size = 0;
     UINT64 total_size = 0;
-    g_renderer.device->GetCopyableFootprints(
+    renderer_state().device->GetCopyableFootprints(
         &desc,
         0,
         1,
@@ -6861,7 +6961,7 @@ inline std::optional<DebugFrameCapture> windows_capture_frame_rgba() {
         (void)mark_renderer_lost("ID3D12CommandAllocator::Reset(frame capture)", hr);
         return std::nullopt;
     }
-    hr = g_renderer.command_list->Reset(frame.allocator.Get(), nullptr);
+    hr = renderer_state().command_list->Reset(frame.allocator.Get(), nullptr);
     if (FAILED(hr)) {
         (void)mark_renderer_lost("ID3D12GraphicsCommandList::Reset(frame capture)", hr);
         return std::nullopt;
@@ -6873,7 +6973,7 @@ inline std::optional<DebugFrameCapture> windows_capture_frame_rgba() {
         D3D12_RESOURCE_STATE_COPY_SOURCE);
 
     D3D12_TEXTURE_COPY_LOCATION dst{};
-    dst.pResource = g_renderer.readback.resource.Get();
+    dst.pResource = renderer_state().readback.resource.Get();
     dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     dst.PlacedFootprint = footprint;
 
@@ -6882,25 +6982,25 @@ inline std::optional<DebugFrameCapture> windows_capture_frame_rgba() {
     src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
     src.SubresourceIndex = 0;
 
-    g_renderer.command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+    renderer_state().command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
     transition_resource(
         frame.render_target.Get(),
         D3D12_RESOURCE_STATE_COPY_SOURCE,
         D3D12_RESOURCE_STATE_PRESENT);
 
-    hr = g_renderer.command_list->Close();
-    g_renderer.last_close_hr = hr;
+    hr = renderer_state().command_list->Close();
+    renderer_state().last_close_hr = hr;
     if (FAILED(hr)) {
         (void)mark_renderer_lost("ID3D12GraphicsCommandList::Close(frame capture)", hr);
         return std::nullopt;
     }
 
-    ID3D12CommandList* lists[] = {g_renderer.command_list.Get()};
-    g_renderer.queue->ExecuteCommandLists(1, lists);
+    ID3D12CommandList* lists[] = {renderer_state().command_list.Get()};
+    renderer_state().queue->ExecuteCommandLists(1, lists);
 
-    auto capture_fence_value = g_renderer.next_fence_value++;
-    hr = g_renderer.queue->Signal(g_renderer.fence.Get(), capture_fence_value);
-    g_renderer.last_signal_hr = hr;
+    auto capture_fence_value = renderer_state().next_fence_value++;
+    hr = renderer_state().queue->Signal(renderer_state().fence.Get(), capture_fence_value);
+    renderer_state().last_signal_hr = hr;
     if (FAILED(hr)) {
         (void)mark_renderer_lost("ID3D12CommandQueue::Signal(frame capture)", hr);
         return std::nullopt;
@@ -6913,7 +7013,7 @@ inline std::optional<DebugFrameCapture> windows_capture_frame_rgba() {
         static_cast<SIZE_T>(total_size),
     };
     std::uint8_t* mapped = nullptr;
-    hr = g_renderer.readback.resource->Map(
+    hr = renderer_state().readback.resource->Map(
         0,
         &read_range,
         reinterpret_cast<void**>(&mapped));
@@ -6946,7 +7046,7 @@ inline std::optional<DebugFrameCapture> windows_capture_frame_rgba() {
     }
 
     D3D12_RANGE write_range{0, 0};
-    g_renderer.readback.resource->Unmap(0, &write_range);
+    renderer_state().readback.resource->Unmap(0, &write_range);
     return capture;
 #else
     return std::nullopt;
@@ -7001,6 +7101,7 @@ inline platform_api const& windows_platform() {
             detail::renderer_flush,
             detail::renderer_shutdown,
             detail::renderer_hit_test,
+            detail::renderer_activate,
         },
         {
             detail::input_attach,
@@ -7086,6 +7187,32 @@ struct Dx12DiagnosticsDebug {
     int dred_device_state = static_cast<int>(D3D12_DRED_DEVICE_STATE_UNKNOWN);
     std::string failure_label;
 };
+
+inline void reset_renderer_surface_states() {
+    detail::renderer_shutdown();
+}
+
+inline void activate_renderer_surface_state(NativeSurfaceDescriptor* surface) {
+    detail::activate_renderer_state(surface);
+}
+
+inline bool active_renderer_surface_is(NativeSurfaceDescriptor* surface) {
+    return detail::renderer_state().surface == surface;
+}
+
+inline void* active_renderer_state_identity() {
+    return &detail::renderer_state();
+}
+
+inline std::size_t renderer_surface_state_count() {
+    return detail::renderer_registry().size();
+}
+
+template<typename Fn>
+inline void with_renderer_surface_state(NativeSurfaceDescriptor* surface, Fn&& fn) {
+    detail::ScopedRendererActivation activate(surface);
+    fn();
+}
 
 inline HWND attached_hwnd() {
     return detail::g_ime.hwnd;
@@ -7262,15 +7389,15 @@ inline RemoteImageDebug remote_image_debug(std::string const& url) {
 
 inline Dx12DiagnosticsDebug dx12_diagnostics_debug() {
     return {
-        detail::g_renderer.lost,
-        detail::g_renderer.dred_enabled,
-        detail::g_renderer.last_failure_hr,
-        detail::g_renderer.device_removed_reason,
-        detail::g_renderer.last_close_hr,
-        detail::g_renderer.last_present_hr,
-        detail::g_renderer.last_signal_hr,
-        static_cast<int>(detail::g_renderer.dred_device_state),
-        detail::g_renderer.last_failure_label,
+        detail::renderer_state().lost,
+        detail::renderer_state().dred_enabled,
+        detail::renderer_state().last_failure_hr,
+        detail::renderer_state().device_removed_reason,
+        detail::renderer_state().last_close_hr,
+        detail::renderer_state().last_present_hr,
+        detail::renderer_state().last_signal_hr,
+        static_cast<int>(detail::renderer_state().dred_device_state),
+        detail::renderer_state().last_failure_label,
     };
 }
 
