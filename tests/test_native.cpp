@@ -4680,6 +4680,8 @@ static void test_windows_common_debug_contract_entry_points() {
     assert(details.contains("ime"));
     assert(details.contains("images"));
     auto const& renderer_details = details.at("renderer").as_object();
+    assert(renderer_details.at("owner").as_string() == "WindowsRendererRuntime");
+    assert(renderer_details.at("renderer_surface_count").as_integer() >= 1);
     assert(renderer_details.at("last_frame_available").as_bool());
     assert(renderer_details.at("last_render_width").as_integer() > 0);
     assert(renderer_details.at("last_render_height").as_integer() > 0);

@@ -1535,16 +1535,32 @@ struct RendererState {
     std::string last_failure_label;
 };
 
-static RendererState g_default_renderer;
-
 struct ActiveRendererBinding {
     RendererState* state = nullptr;
 };
 
+struct WindowsRendererRuntime {
+    RendererState default_renderer{};
+    ActiveRendererBinding active{};
+    std::vector<std::pair<NativeSurfaceDescriptor*, std::unique_ptr<RendererState>>> registry{};
+
+    WindowsRendererRuntime()
+        : active{&default_renderer} {}
+};
+
+inline WindowsRendererRuntime& windows_renderer_runtime() {
+    static WindowsRendererRuntime& runtime = *new WindowsRendererRuntime();
+    if (!runtime.active.state)
+        runtime.active.state = &runtime.default_renderer;
+    return runtime;
+}
+
+inline RendererState& default_renderer_state() {
+    return windows_renderer_runtime().default_renderer;
+}
+
 inline ActiveRendererBinding& active_renderer_binding() {
-    static ActiveRendererBinding& binding =
-        *new ActiveRendererBinding{&g_default_renderer};
-    return binding;
+    return windows_renderer_runtime().active;
 }
 
 inline ActiveRendererBinding capture_active_renderer_binding() {
@@ -1553,19 +1569,17 @@ inline ActiveRendererBinding capture_active_renderer_binding() {
 
 inline RendererState& renderer_state() {
     auto* state = active_renderer_binding().state;
-    return state ? *state : g_default_renderer;
+    return state ? *state : default_renderer_state();
 }
 
 inline std::vector<std::pair<NativeSurfaceDescriptor*, std::unique_ptr<RendererState>>>&
 renderer_registry() {
-    static auto& registry =
-        *new std::vector<std::pair<NativeSurfaceDescriptor*, std::unique_ptr<RendererState>>>();
-    return registry;
+    return windows_renderer_runtime().registry;
 }
 
 inline RendererState* find_renderer_state(NativeSurfaceDescriptor* surface) {
     if (!surface)
-        return &g_default_renderer;
+        return &default_renderer_state();
     for (auto& entry : renderer_registry()) {
         if (entry.first == surface)
             return entry.second.get();
@@ -1575,7 +1589,7 @@ inline RendererState* find_renderer_state(NativeSurfaceDescriptor* surface) {
 
 inline RendererState& ensure_renderer_state(NativeSurfaceDescriptor* surface) {
     if (!surface)
-        return g_default_renderer;
+        return default_renderer_state();
     if (auto* existing = find_renderer_state(surface))
         return *existing;
     auto state = std::make_unique<RendererState>();
@@ -1611,7 +1625,7 @@ struct ScopedRendererActivation {
 };
 
 inline void reset_active_renderer_state() {
-    bind_renderer_state(g_default_renderer);
+    bind_renderer_state(default_renderer_state());
 }
 
 constexpr UINT WM_PHENOTYPE_IMAGE_READY = WM_APP + 61;
@@ -6878,6 +6892,10 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot windows_debug_capabilitie
 
 inline json::Object windows_renderer_runtime_json() {
     json::Object renderer;
+    renderer.emplace("owner", json::Value{"WindowsRendererRuntime"});
+    renderer.emplace(
+        "renderer_surface_count",
+        json::Value{static_cast<std::int64_t>(renderer_registry().size() + 1)});
     renderer.emplace("initialized", json::Value{renderer_state().initialized});
     renderer.emplace("preset_enabled", json::Value{renderer_state().debug_preset_enabled});
     renderer.emplace("debug_enabled", json::Value{renderer_state().debug_enabled});
