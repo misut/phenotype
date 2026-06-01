@@ -1378,17 +1378,39 @@ struct ImageAtlas {
     std::map<std::string, ImageCacheEntry> cache;
 };
 
-inline ImageAtlas    g_images{};
-inline AAssetManager* g_asset_mgr = nullptr;
+inline constexpr std::string_view android_image_runtime_owner_name() noexcept {
+    return "AndroidImageRuntime";
+}
+
+inline ImageAtlas android_image_runtime_atlas{};
+inline AAssetManager* android_image_runtime_asset_manager = nullptr;
+
+struct AndroidImageRuntime {
+    ImageAtlas* atlas = &android_image_runtime_atlas;
+    AAssetManager** asset_manager = &android_image_runtime_asset_manager;
+};
+
+inline AndroidImageRuntime& android_image_runtime() {
+    static AndroidImageRuntime runtime{};
+    return runtime;
+}
+
+inline ImageAtlas& android_images() {
+    return *android_image_runtime().atlas;
+}
+
+inline AAssetManager*& android_asset_manager() {
+    return *android_image_runtime().asset_manager;
+}
 
 inline void mark_image_atlas_dirty(std::uint32_t x, std::uint32_t y,
                                    std::uint32_t w, std::uint32_t h) {
     if (w == 0 || h == 0) return;
-    if (x < g_images.dirty_min_x) g_images.dirty_min_x = x;
-    if (y < g_images.dirty_min_y) g_images.dirty_min_y = y;
-    if (x + w > g_images.dirty_max_x) g_images.dirty_max_x = x + w;
-    if (y + h > g_images.dirty_max_y) g_images.dirty_max_y = y + h;
-    g_images.has_dirty = true;
+    if (x < android_images().dirty_min_x) android_images().dirty_min_x = x;
+    if (y < android_images().dirty_min_y) android_images().dirty_min_y = y;
+    if (x + w > android_images().dirty_max_x) android_images().dirty_max_x = x + w;
+    if (y + h > android_images().dirty_max_y) android_images().dirty_max_y = y + h;
+    android_images().has_dirty = true;
 }
 
 // URL resolver. Returns nullopt on reject (caller marks cache Failed).
@@ -1406,7 +1428,7 @@ inline std::optional<ResolvedImage> resolve_android_image(
     constexpr std::string_view https_prefix = "https://";
 
     if (url.starts_with(asset_prefix)) {
-        if (!g_asset_mgr) {
+        if (!android_asset_manager()) {
             reject_reason = "no asset manager bound";
             return std::nullopt;
         }
@@ -1479,8 +1501,8 @@ inline std::optional<DecodedImage> decode_with_decoder(AImageDecoder* dec) {
 
 inline std::optional<DecodedImage> decode_asset_image(
         std::string const& asset_path) {
-    if (!g_asset_mgr) return std::nullopt;
-    AAsset* asset = AAssetManager_open(g_asset_mgr, asset_path.c_str(),
+    if (!android_asset_manager()) return std::nullopt;
+    AAsset* asset = AAssetManager_open(android_asset_manager(), asset_path.c_str(),
                                        AASSET_MODE_BUFFER);
     if (!asset) return std::nullopt;
     struct AssetGuard {
@@ -1518,22 +1540,22 @@ inline std::optional<AtlasSlot> reserve_image_slot(std::uint32_t w,
                                                    std::uint32_t h) {
     if (w == 0 || h == 0) return std::nullopt;
     if (w > ImageAtlas::SIZE || h > ImageAtlas::SIZE) return std::nullopt;
-    if (g_images.cursor_x + w > ImageAtlas::SIZE) {
-        g_images.cursor_x = 0;
-        g_images.cursor_y += g_images.row_height;
-        g_images.row_height = 0;
+    if (android_images().cursor_x + w > ImageAtlas::SIZE) {
+        android_images().cursor_x = 0;
+        android_images().cursor_y += android_images().row_height;
+        android_images().row_height = 0;
     }
-    if (g_images.cursor_y + h > ImageAtlas::SIZE) return std::nullopt;
-    AtlasSlot s{g_images.cursor_x, g_images.cursor_y, w, h};
-    g_images.cursor_x += w;
-    if (h > g_images.row_height) g_images.row_height = h;
+    if (android_images().cursor_y + h > ImageAtlas::SIZE) return std::nullopt;
+    AtlasSlot s{android_images().cursor_x, android_images().cursor_y, w, h};
+    android_images().cursor_x += w;
+    if (h > android_images().row_height) android_images().row_height = h;
     return s;
 }
 
 inline void copy_into_image_atlas(DecodedImage const& img,
                                   AtlasSlot const& slot) {
-    if (g_images.pixels.empty()) {
-        g_images.pixels.assign(
+    if (android_images().pixels.empty()) {
+        android_images().pixels.assign(
             static_cast<std::size_t>(ImageAtlas::SIZE)
             * ImageAtlas::SIZE * ImageAtlas::BYTES_PER_PIXEL,
             0);
@@ -1542,7 +1564,7 @@ inline void copy_into_image_atlas(DecodedImage const& img,
     std::size_t const dst_row = static_cast<std::size_t>(ImageAtlas::SIZE) * 4;
     for (std::uint32_t y = 0; y < img.height; ++y) {
         auto const* src = img.pixels.data() + y * src_row;
-        auto* dst = g_images.pixels.data()
+        auto* dst = android_images().pixels.data()
                   + (static_cast<std::size_t>(slot.y + y) * dst_row)
                   + (static_cast<std::size_t>(slot.x) * 4);
         std::memcpy(dst, src, src_row);
@@ -1551,7 +1573,7 @@ inline void copy_into_image_atlas(DecodedImage const& img,
 }
 
 inline ImageCacheEntry const* ensure_image_cache_entry(std::string const& url) {
-    auto [it, inserted] = g_images.cache.try_emplace(url, ImageCacheEntry{});
+    auto [it, inserted] = android_images().cache.try_emplace(url, ImageCacheEntry{});
     ImageCacheEntry& entry = it->second;
     if (!inserted) return &entry;
 
@@ -3408,23 +3430,23 @@ inline bool create_image_resources() {
 // fragment shader can sample it. Must be called outside any render
 // pass.
 inline void record_image_atlas_upload(VkCommandBuffer cmd) {
-    if (!g_images.has_dirty) return;
-    if (g_images.dirty_min_x >= g_images.dirty_max_x
-        || g_images.dirty_min_y >= g_images.dirty_max_y) {
-        g_images.has_dirty = false;
+    if (!android_images().has_dirty) return;
+    if (android_images().dirty_min_x >= android_images().dirty_max_x
+        || android_images().dirty_min_y >= android_images().dirty_max_y) {
+        android_images().has_dirty = false;
         return;
     }
-    std::uint32_t const dx = g_images.dirty_min_x;
-    std::uint32_t const dy = g_images.dirty_min_y;
-    std::uint32_t const dw = g_images.dirty_max_x - g_images.dirty_min_x;
-    std::uint32_t const dh = g_images.dirty_max_y - g_images.dirty_min_y;
+    std::uint32_t const dx = android_images().dirty_min_x;
+    std::uint32_t const dy = android_images().dirty_min_y;
+    std::uint32_t const dw = android_images().dirty_max_x - android_images().dirty_min_x;
+    std::uint32_t const dh = android_images().dirty_max_y - android_images().dirty_min_y;
 
     // Pack the dirty rect tightly into the staging buffer so the
     // upload isn't 16 MiB when only a few KB changed.
     VkDeviceSize const needed = static_cast<VkDeviceSize>(dw)
                               * dh * ImageAtlas::BYTES_PER_PIXEL;
     if (!ensure_image_staging_capacity(needed)) {
-        g_images.has_dirty = false;
+        android_images().has_dirty = false;
         return;
     }
     auto* dst = static_cast<std::uint8_t*>(g_renderer.image_staging_mapped);
@@ -3433,7 +3455,7 @@ inline void record_image_atlas_upload(VkCommandBuffer cmd) {
     std::size_t const dst_row =
         static_cast<std::size_t>(dw) * ImageAtlas::BYTES_PER_PIXEL;
     for (std::uint32_t y = 0; y < dh; ++y) {
-        auto const* src = g_images.pixels.data()
+        auto const* src = android_images().pixels.data()
                         + static_cast<std::size_t>(dy + y) * src_row
                         + static_cast<std::size_t>(dx) * ImageAtlas::BYTES_PER_PIXEL;
         std::memcpy(dst + static_cast<std::size_t>(y) * dst_row, src, dst_row);
@@ -3489,11 +3511,11 @@ inline void record_image_atlas_upload(VkCommandBuffer cmd) {
         0, 0, nullptr, 0, nullptr, 1, &to_shader);
 
     g_renderer.image_atlas_initialised = true;
-    g_images.has_dirty = false;
-    g_images.dirty_min_x = ImageAtlas::SIZE;
-    g_images.dirty_min_y = ImageAtlas::SIZE;
-    g_images.dirty_max_x = 0;
-    g_images.dirty_max_y = 0;
+    android_images().has_dirty = false;
+    android_images().dirty_min_x = ImageAtlas::SIZE;
+    android_images().dirty_min_y = ImageAtlas::SIZE;
+    android_images().dirty_max_x = 0;
+    android_images().dirty_max_y = 0;
 }
 
 inline void destroy_image_pipeline_resources() {
@@ -3553,17 +3575,17 @@ inline void destroy_image_pipeline_resources() {
 }
 
 inline void reset_image_cache() {
-    g_images.cache.clear();
-    g_images.cursor_x = 0;
-    g_images.cursor_y = 0;
-    g_images.row_height = 0;
-    g_images.dirty_min_x = ImageAtlas::SIZE;
-    g_images.dirty_min_y = ImageAtlas::SIZE;
-    g_images.dirty_max_x = 0;
-    g_images.dirty_max_y = 0;
-    g_images.has_dirty = false;
-    g_images.pixels.clear();
-    g_images.pixels.shrink_to_fit();
+    android_images().cache.clear();
+    android_images().cursor_x = 0;
+    android_images().cursor_y = 0;
+    android_images().row_height = 0;
+    android_images().dirty_min_x = ImageAtlas::SIZE;
+    android_images().dirty_min_y = ImageAtlas::SIZE;
+    android_images().dirty_max_x = 0;
+    android_images().dirty_max_y = 0;
+    android_images().has_dirty = false;
+    android_images().pixels.clear();
+    android_images().pixels.shrink_to_fit();
 }
 
 // ---- Stage 7 debug-capture image -------------------------------------
@@ -6300,7 +6322,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         }
 
         // Image pipeline: upload the instance SSBO (atlas pixels already
-        // live in g_images.pixels; record_image_atlas_upload below flushes
+        // live in android_images().pixels; record_image_atlas_upload below flushes
         // any dirty region to the VkImage).
         have_images = !scratch.image_instances.empty();
         if (have_images) {
@@ -7458,6 +7480,40 @@ namespace touch {
 inline ::json::Object android_touch_runtime_json();
 }
 
+namespace image {
+inline ::json::Object android_image_runtime_json() {
+    auto& runtime = android_image_runtime();
+    auto& atlas = *runtime.atlas;
+    auto* asset_manager =
+        runtime.asset_manager ? *runtime.asset_manager : nullptr;
+    ::json::Object r;
+    r.emplace(
+        "owner",
+        ::json::Value{std::string{android_image_runtime_owner_name()}});
+    r.emplace("asset_manager_bound", ::json::Value{asset_manager != nullptr});
+    r.emplace(
+        "cache_size",
+        ::json::Value{static_cast<std::int64_t>(atlas.cache.size())});
+    r.emplace(
+        "pixels_allocated",
+        ::json::Value{!atlas.pixels.empty()});
+    r.emplace(
+        "pixel_bytes",
+        ::json::Value{static_cast<std::int64_t>(atlas.pixels.size())});
+    r.emplace("dirty", ::json::Value{atlas.has_dirty});
+    r.emplace(
+        "cursor_x",
+        ::json::Value{static_cast<std::int64_t>(atlas.cursor_x)});
+    r.emplace(
+        "cursor_y",
+        ::json::Value{static_cast<std::int64_t>(atlas.cursor_y)});
+    r.emplace(
+        "row_height",
+        ::json::Value{static_cast<std::int64_t>(atlas.row_height)});
+    return r;
+}
+}
+
 namespace jni {
 inline ::json::Object android_jni_runtime_json() {
     auto& runtime = android_jni_runtime();
@@ -7520,8 +7576,10 @@ inline ::json::Value android_platform_runtime_details_json_with_reason(
         ::json::Value{touch::android_touch_runtime_json()});
     root.emplace("jni",
         ::json::Value{jni::android_jni_runtime_json()});
+    root.emplace("image",
+        ::json::Value{image::android_image_runtime_json()});
     root.emplace("image_cache_size",
-        ::json::Value{static_cast<std::int64_t>(g_images.cache.size())});
+        ::json::Value{static_cast<std::int64_t>(android_images().cache.size())});
     root.emplace("text_jni_initialised",
         ::json::Value{android_jni_refs().initialised});
     if (!reason.empty())
@@ -8508,7 +8566,7 @@ void phenotype_android_bind_activity(void* activity) {
 __attribute__((visibility("default")))
 void phenotype_android_bind_assets(void* asset_manager) {
     namespace d = phenotype::native::detail;
-    d::g_asset_mgr = static_cast<AAssetManager*>(asset_manager);
+    d::android_asset_manager() = static_cast<AAssetManager*>(asset_manager);
 }
 
 __attribute__((visibility("default")))
