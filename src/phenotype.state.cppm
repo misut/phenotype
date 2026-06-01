@@ -368,6 +368,7 @@ struct RenderSurfaceHandle {
 };
 
 struct ApplicationRuntimeSnapshot {
+    std::string scene_runtime_owner = "ApplicationSceneRuntimeStore";
     std::string active_scene_id = "main";
     SceneRole active_scene_role = SceneRole::Main;
     bool active_scene_visible = true;
@@ -681,6 +682,30 @@ namespace detail {
         void (*runner)() = nullptr;
     };
 
+    struct RenderSurfaceRuntime;
+
+    struct ActiveRuntimeBinding {
+        SceneRuntime* scene = nullptr;
+        RenderSurfaceRuntime* render_surface = nullptr;
+    };
+
+    struct ApplicationSceneRuntimeStore {
+        SceneRuntime default_scene{};
+        std::vector<std::unique_ptr<SceneRuntime>> scenes{};
+        ActiveRuntimeBinding active{};
+    };
+
+    inline ApplicationSceneRuntimeStore& application_scene_runtime_store() {
+        static ApplicationSceneRuntimeStore& store =
+            *new ApplicationSceneRuntimeStore();
+        return store;
+    }
+
+    inline std::string_view application_scene_runtime_store_owner_name()
+            noexcept {
+        return "ApplicationSceneRuntimeStore";
+    }
+
     using OpenUrlHandler = void (*)(char const*, unsigned int);
     using SettingsMenuHandler = void (*)();
 
@@ -742,7 +767,7 @@ namespace detail {
     }
 
     inline SceneRuntime& default_scene_runtime() {
-        static SceneRuntime& scene = *new SceneRuntime();
+        auto& scene = application_scene_runtime_store().default_scene;
         if (!scene.app) {
             scene.descriptor = SceneDescriptor{
                 .id = "main",
@@ -756,22 +781,11 @@ namespace detail {
     }
 
     inline std::vector<std::unique_ptr<SceneRuntime>>& scene_registry() {
-        static std::vector<std::unique_ptr<SceneRuntime>>& scenes =
-            *new std::vector<std::unique_ptr<SceneRuntime>>();
-        return scenes;
+        return application_scene_runtime_store().scenes;
     }
 
-    struct RenderSurfaceRuntime;
-
-    struct ActiveRuntimeBinding {
-        SceneRuntime* scene = nullptr;
-        RenderSurfaceRuntime* render_surface = nullptr;
-    };
-
     inline ActiveRuntimeBinding& active_runtime_binding() {
-        static ActiveRuntimeBinding& binding = *new ActiveRuntimeBinding{
-            .scene = &default_scene_runtime(),
-        };
+        auto& binding = application_scene_runtime_store().active;
         if (!binding.scene)
             binding.scene = &default_scene_runtime();
         return binding;
@@ -1179,6 +1193,8 @@ namespace detail {
             render_surface_snapshot(active_render_surface_runtime());
 
         ApplicationRuntimeSnapshot out{};
+        out.scene_runtime_owner =
+            std::string{application_scene_runtime_store_owner_name()};
         out.active_scene_id = active_scene.id;
         out.active_scene_role = active_scene.role;
         out.active_scene_visible = active_scene.visible;
