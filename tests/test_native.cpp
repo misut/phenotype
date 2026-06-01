@@ -470,6 +470,43 @@ static void test_macos_renderer_state_tracks_surfaces() {
     std::puts("PASS: macOS renderer state tracks surfaces");
 }
 
+static void test_macos_image_atlas_upload_generation_is_surface_local() {
+    phenotype::native::macos_test::reset_renderer_surface_states();
+
+    NativeSurfaceDescriptor first{
+        .kind = NativeSurfaceKind::MacOSWindow,
+    };
+    NativeSurfaceDescriptor second{
+        .kind = NativeSurfaceKind::MacOSWindow,
+    };
+
+    phenotype::native::macos_test::activate_renderer_surface_state(&first);
+    assert(!phenotype::native::macos_test::active_renderer_needs_image_atlas_upload());
+
+    phenotype::native::macos_test::bump_image_cache_generation_for_tests();
+    auto generation = phenotype::native::macos_test::image_cache_generation();
+    assert(generation > 0);
+    assert(phenotype::native::macos_test::active_renderer_needs_image_atlas_upload());
+    phenotype::native::macos_test::mark_active_renderer_image_atlas_uploaded_for_tests();
+    assert(phenotype::native::macos_test::active_renderer_image_upload_generation()
+           == generation);
+    assert(!phenotype::native::macos_test::active_renderer_needs_image_atlas_upload());
+
+    phenotype::native::macos_test::activate_renderer_surface_state(&second);
+    assert(phenotype::native::macos_test::active_renderer_needs_image_atlas_upload());
+    assert(phenotype::native::macos_test::active_renderer_image_upload_generation()
+           == 0);
+    phenotype::native::macos_test::mark_active_renderer_image_atlas_uploaded_for_tests();
+    assert(!phenotype::native::macos_test::active_renderer_needs_image_atlas_upload());
+
+    phenotype::native::macos_test::activate_renderer_surface_state(&first);
+    assert(!phenotype::native::macos_test::active_renderer_needs_image_atlas_upload());
+
+    phenotype::native::macos_test::reset_renderer_surface_states();
+    phenotype::native::macos_test::reset_image_cache_for_tests();
+    std::puts("PASS: macOS image atlas upload generation is surface-local");
+}
+
 static void test_macos_appkit_active_binding_restores_window_and_surface() {
     auto previous =
         phenotype::native::detail::capture_active_appkit_binding();
@@ -1007,6 +1044,8 @@ static void assert_macos_runtime_sections(json::Object const& details) {
     assert(images.contains("pending_queue_count"));
     assert(images.contains("completed_queue_count"));
     assert(images.contains("worker_started"));
+    assert(images.contains("atlas_generation"));
+    assert(images.contains("active_surface_uploaded_generation"));
     assert(images.contains("remote_entry_count"));
     assert(images.contains("remote_entries"));
 
@@ -3057,6 +3096,8 @@ static void test_macos_common_debug_contract_entry_points() {
     auto const& images = details.at("images").as_object();
     assert(images.at("pending_queue_count").as_integer() == 0);
     assert(images.at("completed_queue_count").as_integer() == 0);
+    assert(images.at("atlas_generation").as_integer() >= 0);
+    assert(images.at("active_surface_uploaded_generation").as_integer() >= 0);
     assert(images.at("remote_entry_count").as_integer() == 0);
     auto const& text_input = details.at("text_input").as_object();
     auto const& system_caret = text_input.at("system_caret").as_object();
@@ -4138,6 +4179,42 @@ static void test_windows_renderer_state_tracks_surfaces() {
     std::puts("PASS: windows renderer state tracks surfaces");
 }
 
+static void test_windows_image_atlas_upload_generation_is_surface_local() {
+    phenotype::native::windows_test::reset_renderer_surface_states();
+
+    NativeSurfaceDescriptor first{
+        .kind = NativeSurfaceKind::Win32Window,
+    };
+    NativeSurfaceDescriptor second{
+        .kind = NativeSurfaceKind::Win32Window,
+    };
+
+    phenotype::native::windows_test::activate_renderer_surface_state(&first);
+    assert(!phenotype::native::windows_test::active_renderer_needs_image_atlas_upload());
+
+    phenotype::native::windows_test::bump_image_cache_generation_for_tests();
+    auto generation = phenotype::native::windows_test::image_cache_generation();
+    assert(generation > 0);
+    assert(phenotype::native::windows_test::active_renderer_needs_image_atlas_upload());
+    phenotype::native::windows_test::mark_active_renderer_image_atlas_uploaded_for_tests();
+    assert(phenotype::native::windows_test::active_renderer_image_upload_generation()
+           == generation);
+    assert(!phenotype::native::windows_test::active_renderer_needs_image_atlas_upload());
+
+    phenotype::native::windows_test::activate_renderer_surface_state(&second);
+    assert(phenotype::native::windows_test::active_renderer_needs_image_atlas_upload());
+    assert(phenotype::native::windows_test::active_renderer_image_upload_generation()
+           == 0);
+    phenotype::native::windows_test::mark_active_renderer_image_atlas_uploaded_for_tests();
+    assert(!phenotype::native::windows_test::active_renderer_needs_image_atlas_upload());
+
+    phenotype::native::windows_test::activate_renderer_surface_state(&first);
+    assert(!phenotype::native::windows_test::active_renderer_needs_image_atlas_upload());
+
+    phenotype::native::windows_test::reset_renderer_surface_states();
+    std::puts("PASS: windows image atlas upload generation is surface-local");
+}
+
 static void test_windows_aspect_ratio_sizing_helper() {
     RECT right_drag{0, 0, 400, 120};
     bool adjusted = phenotype::native::detail::adjust_win32_aspect_ratio_rect(
@@ -4285,6 +4362,8 @@ static void test_windows_common_debug_contract_entry_points() {
     auto const& images = details.at("images").as_object();
     assert(images.at("pending_queue_count").as_integer() == 0);
     assert(images.at("completed_queue_count").as_integer() == 0);
+    assert(images.at("atlas_generation").as_integer() >= 0);
+    assert(images.at("active_surface_uploaded_generation").as_integer() >= 0);
     assert(images.at("remote_entry_count").as_integer() == 0);
 
     auto frame = phenotype::native::debug::capture_frame_rgba();
@@ -5073,6 +5152,7 @@ int main() {
     test_shell_scroll_at_cursor_prefers_inner_scroll_view();
 #ifdef __APPLE__
     test_macos_renderer_state_tracks_surfaces();
+    test_macos_image_atlas_upload_generation_is_surface_local();
     test_macos_appkit_active_binding_restores_window_and_surface();
     test_macos_appkit_activation_slice_gate();
     test_macos_appkit_function_key_resolution();
@@ -5126,6 +5206,7 @@ int main() {
     test_windows_text_build_atlas_preserves_vertical_orientation();
     test_windows_surface_descriptor_scale_is_valid();
     test_windows_renderer_state_tracks_surfaces();
+    test_windows_image_atlas_upload_generation_is_surface_local();
     test_windows_aspect_ratio_sizing_helper();
     test_windows_active_shell_binding_restores_state();
     test_windows_text_build_atlas_empty();

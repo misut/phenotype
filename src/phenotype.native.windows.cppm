@@ -1504,6 +1504,8 @@ struct RendererState {
     FrameContext frames[frame_count];
     UploadBuffer upload{};
     ReadbackBuffer readback{};
+    ComPtr<ID3D12Resource> image_atlas_texture;
+    std::uint64_t image_atlas_uploaded_generation = 0;
     std::vector<HitRegionCmd> hit_regions;
     std::vector<MaterialRuntimeRecord> material_records;
     NativeSurfaceDescriptor* surface = nullptr;
@@ -1972,7 +1974,6 @@ struct CachedImageRecord {
 struct ImageAtlasState {
     static constexpr int atlas_size = 2048;
 
-    ComPtr<ID3D12Resource> texture;
     std::vector<unsigned char> pixels;
     std::vector<CachedImageRecord> cache;
     std::vector<std::string> pending_jobs;
@@ -1985,7 +1986,7 @@ struct ImageAtlasState {
     bool worker_started = false;
     bool queue_only_for_tests = false;
     bool stop_worker = false;
-    bool atlas_dirty = false;
+    std::uint64_t generation = 0;
     int cursor_x = 0;
     int cursor_y = 0;
     int row_height = 0;
@@ -4751,7 +4752,7 @@ inline void store_decoded_image(DecodedImage decoded) {
     g_images.cursor_x = static_cast<int>(next_cursor_x);
     g_images.cursor_y = slot_y;
     g_images.row_height = next_row_height;
-    g_images.atlas_dirty = true;
+    ++g_images.generation;
 }
 
 inline bool process_completed_images() {
@@ -5527,7 +5528,8 @@ inline HRESULT create_atlas_texture(
 }
 
 inline HRESULT ensure_image_atlas_texture() {
-    if (g_images.texture)
+    auto& state = renderer_state();
+    if (state.image_atlas_texture)
         return S_OK;
     constexpr std::size_t atlas_bytes =
         static_cast<std::size_t>(ImageAtlasState::atlas_size)
@@ -5554,25 +5556,31 @@ inline HRESULT ensure_image_atlas_texture() {
         &tex_desc,
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
         nullptr,
-        IID_PPV_ARGS(&g_images.texture));
+        IID_PPV_ARGS(&state.image_atlas_texture));
     if (FAILED(hr))
         return hr;
-    set_debug_name(g_images.texture, L"phenotype.image_atlas");
+    set_debug_name(state.image_atlas_texture, L"phenotype.image_atlas");
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
     srv.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     srv.Texture2D.MipLevels = 1;
-    renderer_state().device->CreateShaderResourceView(
-        g_images.texture.Get(),
+    state.device->CreateShaderResourceView(
+        state.image_atlas_texture.Get(),
         &srv,
         srv_cpu_handle(IMAGE_SRV_SLOT));
     return S_OK;
 }
 
+inline bool image_atlas_needs_upload() {
+    auto const generation = g_images.generation;
+    return generation != 0
+        && renderer_state().image_atlas_uploaded_generation != generation;
+}
+
 inline HRESULT upload_image_atlas() {
-    if (!g_images.atlas_dirty)
+    if (!image_atlas_needs_upload())
         return S_OK;
     auto hr = ensure_image_atlas_texture();
     if (FAILED(hr))
@@ -5617,7 +5625,7 @@ inline HRESULT upload_image_atlas() {
     }
 
     D3D12_TEXTURE_COPY_LOCATION dst{};
-    dst.pResource = g_images.texture.Get();
+    dst.pResource = renderer_state().image_atlas_texture.Get();
     dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
     dst.SubresourceIndex = 0;
 
@@ -5628,18 +5636,18 @@ inline HRESULT upload_image_atlas() {
     src.PlacedFootprint.Offset = offset;
 
     transition_resource(
-        g_images.texture.Get(),
+        renderer_state().image_atlas_texture.Get(),
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
         D3D12_RESOURCE_STATE_COPY_DEST);
     renderer_state().command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
     transition_resource(
-        g_images.texture.Get(),
+        renderer_state().image_atlas_texture.Get(),
         D3D12_RESOURCE_STATE_COPY_DEST,
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     metrics::inst::native_texture_upload_bytes.add(
         static_cast<std::uint64_t>(upload_size),
         native_platform_attrs());
-    g_images.atlas_dirty = false;
+    renderer_state().image_atlas_uploaded_generation = g_images.generation;
     return S_OK;
 }
 
@@ -6064,7 +6072,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         }
     }
 
-    if (!decoded.image_data.empty() && g_images.texture) {
+    if (!decoded.image_data.empty() && renderer_state().image_atlas_texture) {
         UINT64 bytes = static_cast<UINT64>(decoded.image_data.size() * sizeof(float));
         auto [mapped, offset] = upload_alloc(bytes, 16);
         if (mapped) {
@@ -6151,7 +6159,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
 inline void shutdown_shared_image_state() {
     shutdown_image_worker();
-    g_images.texture.Reset();
     if (!g_images.pixels.empty()) {
         std::fill(
             g_images.pixels.begin(),
@@ -6162,10 +6169,10 @@ inline void shutdown_shared_image_state() {
     std::vector<std::string>().swap(g_images.pending_jobs);
     g_images.pending_head = 0;
     std::vector<DecodedImage>().swap(g_images.completed_jobs);
-    g_images.atlas_dirty = false;
     g_images.worker_started = false;
     g_images.queue_only_for_tests = false;
     g_images.stop_worker = false;
+    g_images.generation = 0;
     g_images.cursor_x = 0;
     g_images.cursor_y = 0;
     g_images.row_height = 0;
@@ -6757,6 +6764,14 @@ inline json::Object windows_images_runtime_json() {
         json::Value{static_cast<std::int64_t>(completed_jobs)});
     images.emplace("worker_started", json::Value{worker_started});
     images.emplace(
+        "atlas_generation",
+        json::Value{static_cast<std::int64_t>(g_images.generation)});
+    images.emplace(
+        "active_surface_uploaded_generation",
+        json::Value{
+            static_cast<std::int64_t>(
+                renderer_state().image_atlas_uploaded_generation)});
+    images.emplace(
         "remote_entry_count",
         json::Value{static_cast<std::int64_t>(remote_entries.size())});
     images.emplace("remote_entries", json::Value{std::move(remote_entries)});
@@ -7315,6 +7330,27 @@ inline std::vector<TextEntry> composition_overlay_text_entries_for_tests() {
 inline void stop_image_worker() {
     detail::g_images.queue_only_for_tests = true;
     detail::shutdown_image_worker();
+}
+
+inline std::uint64_t image_cache_generation() {
+    return detail::g_images.generation;
+}
+
+inline std::uint64_t active_renderer_image_upload_generation() {
+    return detail::renderer_state().image_atlas_uploaded_generation;
+}
+
+inline bool active_renderer_needs_image_atlas_upload() {
+    return detail::image_atlas_needs_upload();
+}
+
+inline void bump_image_cache_generation_for_tests() {
+    ++detail::g_images.generation;
+}
+
+inline void mark_active_renderer_image_atlas_uploaded_for_tests() {
+    detail::renderer_state().image_atlas_uploaded_generation =
+        detail::g_images.generation;
 }
 
 inline bool has_pending_remote_image(std::string const& url) {
