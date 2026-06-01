@@ -748,6 +748,7 @@ void test_application_runtime_snapshot_tracks_process_owners() {
     auto active_scene_before = runtime::active_scene_handle();
     auto active_surface_before = runtime::active_render_surface_handle();
     auto before = runtime::application_runtime();
+    assert(before.scene_runtime_owner == "ApplicationSceneRuntimeStore");
     assert(before.scene_count >= 1u);
     assert(before.render_surface_count >= 1u);
     assert(!before.active_scene_id.empty());
