@@ -6742,18 +6742,29 @@ inline std::optional<unsigned int> renderer_hit_test(float x, float y,
 // the actual work; these functions return false to signal "platform
 // didn't consume, let the shell do its hit-test/focus/repaint dance".
 
-inline void (*g_android_request_repaint)() = nullptr;
+struct AndroidInputRuntime {
+    void (*request_repaint)() = nullptr;
+};
+
+inline constexpr std::string_view android_input_runtime_owner_name() noexcept {
+    return "AndroidInputRuntime";
+}
+
+inline AndroidInputRuntime& android_input_runtime() {
+    static AndroidInputRuntime runtime{};
+    return runtime;
+}
 
 inline void android_input_attach(native_surface_handle /*surface*/,
                                  void (*request_repaint)()) {
     // Stage 6: we render every tick from the Gradle driver's main loop,
     // so request_repaint is a notification signal rather than a trigger.
     // Stored for a future dirty-flag optimisation (Stage 7).
-    g_android_request_repaint = request_repaint;
+    android_input_runtime().request_repaint = request_repaint;
 }
 
 inline void android_input_detach() {
-    g_android_request_repaint = nullptr;
+    android_input_runtime().request_repaint = nullptr;
 }
 
 inline void android_input_sync() {
@@ -7480,6 +7491,20 @@ namespace touch {
 inline ::json::Object android_touch_runtime_json();
 }
 
+namespace input {
+inline ::json::Object android_input_runtime_json() {
+    auto& runtime = android_input_runtime();
+    ::json::Object r;
+    r.emplace(
+        "owner",
+        ::json::Value{std::string{android_input_runtime_owner_name()}});
+    r.emplace(
+        "request_repaint_hook_installed",
+        ::json::Value{runtime.request_repaint != nullptr});
+    return r;
+}
+}
+
 namespace image {
 inline ::json::Object android_image_runtime_json() {
     auto& runtime = android_image_runtime();
@@ -7574,6 +7599,8 @@ inline ::json::Value android_platform_runtime_details_json_with_reason(
         ::json::Value{dialog::android_dialog_runtime_json()});
     root.emplace("touch",
         ::json::Value{touch::android_touch_runtime_json()});
+    root.emplace("input",
+        ::json::Value{input::android_input_runtime_json()});
     root.emplace("jni",
         ::json::Value{jni::android_jni_runtime_json()});
     root.emplace("image",
