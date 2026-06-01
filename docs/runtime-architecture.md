@@ -156,6 +156,15 @@ still renders from the Gradle driver tick, but the `request_repaint` callback is
 kept as an installed hook for future dirty-frame scheduling. Runtime details
 publish `input.owner` and whether that hook is bound, separate from
 `AndroidTouchRuntime`'s pointer/gesture state.
+The remaining Android process/native bridge state now has explicit owners as
+well. `AndroidHostRuntime` owns the GameActivity-facing `native_host`, cached
+surface size, bound window, and downstream app-runner hook. `AndroidRendererRuntime`
+owns the Vulkan renderer state behind an accessor, keeping the existing single
+Android surface behavior while removing the raw renderer singleton from the
+public implementation path. Runtime details publish `host.owner`,
+`renderer.owner`, window/platform binding, app-runner installation, and
+renderer pipeline readiness so CLI/debug tools can reason about Android host
+and renderer lifecycle through owners.
 The desktop fallback backend follows the same rule with `StubNativeRuntime`,
 which owns the stub renderer hit-region cache and publishes the owner in
 runtime details. That keeps test/fallback behavior aligned with the native
