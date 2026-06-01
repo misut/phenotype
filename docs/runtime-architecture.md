@@ -145,6 +145,12 @@ Bitmap global refs, Paint cache, registered font aliases, and missing-family log
 dedupe now share one owner. Runtime details publish `jni.owner`, JVM/activity
 binding state, text initialisation, and cache sizes so Android shell, dialog,
 settings, and text code do not have to infer lifecycle from scattered globals.
+Android image loading follows with `AndroidImageRuntime`. The bound
+`AAssetManager`, decoded-image cache, persistent Vulkan atlas pixels,
+strip-pack cursor, and atlas dirty rectangle state are grouped under one owner.
+Runtime details publish `image.owner`, asset binding, cache size, allocation,
+and dirty state, preparing the Vulkan renderer to move image-resource uploads
+behind an explicit render-surface owner without losing resource diagnostics.
 The desktop fallback backend follows the same rule with `StubNativeRuntime`,
 which owns the stub renderer hit-region cache and publishes the owner in
 runtime details. That keeps test/fallback behavior aligned with the native
