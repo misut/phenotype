@@ -5,7 +5,7 @@
 // measure glyph runs + rasterize them to an R8 atlas via JNI-backed
 // android.graphics.Paint / Canvas / Bitmap.
 //
-// Vulkan state lives in `detail::g_renderer`; helpers in the detail
+// Vulkan state lives in `detail::android_renderer_state()`; helpers in the detail
 // namespace keep the module interface unit short so the Clang module
 // codegen path stays simple.
 
@@ -1809,7 +1809,24 @@ struct android_renderer {
     bool initialized;
 };
 
-inline android_renderer g_renderer{};
+inline constexpr std::string_view android_renderer_runtime_owner_name() noexcept {
+    return "AndroidRendererRuntime";
+}
+
+inline android_renderer android_renderer_runtime_state{};
+
+struct AndroidRendererRuntime {
+    android_renderer* state = &android_renderer_runtime_state;
+};
+
+inline AndroidRendererRuntime& android_renderer_runtime() {
+    static AndroidRendererRuntime runtime{};
+    return runtime;
+}
+
+inline android_renderer& android_renderer_state() {
+    return *android_renderer_runtime().state;
+}
 
 inline bool vk_ok(VkResult r, char const* label) {
     if (r == VK_SUCCESS) return true;
@@ -1821,7 +1838,7 @@ inline bool vk_ok(VkResult r, char const* label) {
 inline std::optional<std::uint32_t> find_memory_type(
         std::uint32_t type_filter, VkMemoryPropertyFlags flags) {
     VkPhysicalDeviceMemoryProperties props{};
-    vkGetPhysicalDeviceMemoryProperties(g_renderer.physical_device, &props);
+    vkGetPhysicalDeviceMemoryProperties(android_renderer_state().physical_device, &props);
     for (std::uint32_t i = 0; i < props.memoryTypeCount; ++i) {
         if ((type_filter & (1u << i))
             && (props.memoryTypes[i].propertyFlags & flags) == flags) {
@@ -1842,12 +1859,12 @@ inline bool create_host_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
     bi.size = size;
     bi.usage = usage;
     bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    if (!vk_ok(vkCreateBuffer(g_renderer.device, &bi, nullptr, &out_buffer),
+    if (!vk_ok(vkCreateBuffer(android_renderer_state().device, &bi, nullptr, &out_buffer),
               "vkCreateBuffer"))
         return false;
 
     VkMemoryRequirements req{};
-    vkGetBufferMemoryRequirements(g_renderer.device, out_buffer, &req);
+    vkGetBufferMemoryRequirements(android_renderer_state().device, out_buffer, &req);
     auto mt = find_memory_type(req.memoryTypeBits,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     if (!mt) {
@@ -1861,13 +1878,13 @@ inline bool create_host_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
     ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     ai.allocationSize = req.size;
     ai.memoryTypeIndex = *mt;
-    if (!vk_ok(vkAllocateMemory(g_renderer.device, &ai, nullptr, &out_memory),
+    if (!vk_ok(vkAllocateMemory(android_renderer_state().device, &ai, nullptr, &out_memory),
               "vkAllocateMemory"))
         return false;
-    if (!vk_ok(vkBindBufferMemory(g_renderer.device, out_buffer, out_memory, 0),
+    if (!vk_ok(vkBindBufferMemory(android_renderer_state().device, out_buffer, out_memory, 0),
               "vkBindBufferMemory"))
         return false;
-    if (!vk_ok(vkMapMemory(g_renderer.device, out_memory, 0, VK_WHOLE_SIZE, 0,
+    if (!vk_ok(vkMapMemory(android_renderer_state().device, out_memory, 0, VK_WHOLE_SIZE, 0,
                            &out_mapped),
               "vkMapMemory"))
         return false;
@@ -1877,15 +1894,15 @@ inline bool create_host_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
 inline void destroy_host_buffer(VkBuffer& buffer, VkDeviceMemory& memory,
                                 void*& mapped) {
     if (memory != VK_NULL_HANDLE && mapped != nullptr) {
-        vkUnmapMemory(g_renderer.device, memory);
+        vkUnmapMemory(android_renderer_state().device, memory);
         mapped = nullptr;
     }
     if (buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(g_renderer.device, buffer, nullptr);
+        vkDestroyBuffer(android_renderer_state().device, buffer, nullptr);
         buffer = VK_NULL_HANDLE;
     }
     if (memory != VK_NULL_HANDLE) {
-        vkFreeMemory(g_renderer.device, memory, nullptr);
+        vkFreeMemory(android_renderer_state().device, memory, nullptr);
         memory = VK_NULL_HANDLE;
     }
 }
@@ -1894,58 +1911,58 @@ inline void destroy_host_buffer(VkBuffer& buffer, VkDeviceMemory& memory,
 // + instance buffers. Called on device init and whenever the instance
 // buffer is reallocated after a capacity overflow.
 inline void write_color_descriptor_set() {
-    if (g_renderer.color_descriptor_set == VK_NULL_HANDLE) return;
+    if (android_renderer_state().color_descriptor_set == VK_NULL_HANDLE) return;
     VkDescriptorBufferInfo ubo{};
-    ubo.buffer = g_renderer.uniform_buffer;
+    ubo.buffer = android_renderer_state().uniform_buffer;
     ubo.offset = 0;
     ubo.range = sizeof(ColorUniforms);
 
     VkDescriptorBufferInfo ssbo{};
-    ssbo.buffer = g_renderer.instance_buffer;
+    ssbo.buffer = android_renderer_state().instance_buffer;
     ssbo.offset = 0;
     ssbo.range = VK_WHOLE_SIZE;
 
     VkWriteDescriptorSet writes[2]{};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[0].dstSet = g_renderer.color_descriptor_set;
+    writes[0].dstSet = android_renderer_state().color_descriptor_set;
     writes[0].dstBinding = 0;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[0].pBufferInfo = &ubo;
 
     writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[1].dstSet = g_renderer.color_descriptor_set;
+    writes[1].dstSet = android_renderer_state().color_descriptor_set;
     writes[1].dstBinding = 1;
     writes[1].descriptorCount = 1;
     writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writes[1].pBufferInfo = &ssbo;
 
-    vkUpdateDescriptorSets(g_renderer.device, 2, writes, 0, nullptr);
+    vkUpdateDescriptorSets(android_renderer_state().device, 2, writes, 0, nullptr);
 }
 
 // Ensures the instance buffer can hold at least `required` instances.
 // Grows by doubling. Rewrites the descriptor set when the underlying
 // buffer is reallocated. Returns false on allocation failure.
 inline bool ensure_instance_capacity(std::size_t required) {
-    if (required <= g_renderer.instance_capacity) return true;
-    std::size_t cap = g_renderer.instance_capacity == 0
+    if (required <= android_renderer_state().instance_capacity) return true;
+    std::size_t cap = android_renderer_state().instance_capacity == 0
                         ? INITIAL_INSTANCE_CAPACITY
-                        : g_renderer.instance_capacity;
+                        : android_renderer_state().instance_capacity;
     while (cap < required) cap *= 2;
 
     // GPU may still be consuming the old buffer; the caller guarantees
     // the in-flight fence has been waited on before calling this.
-    destroy_host_buffer(g_renderer.instance_buffer,
-                        g_renderer.instance_memory,
-                        g_renderer.instance_mapped);
+    destroy_host_buffer(android_renderer_state().instance_buffer,
+                        android_renderer_state().instance_memory,
+                        android_renderer_state().instance_mapped);
 
     if (!create_host_buffer(cap * sizeof(ColorInstanceGPU),
                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                            g_renderer.instance_buffer,
-                            g_renderer.instance_memory,
-                            g_renderer.instance_mapped))
+                            android_renderer_state().instance_buffer,
+                            android_renderer_state().instance_memory,
+                            android_renderer_state().instance_mapped))
         return false;
-    g_renderer.instance_capacity = cap;
+    android_renderer_state().instance_capacity = cap;
     write_color_descriptor_set();
     return true;
 }
@@ -1954,54 +1971,54 @@ inline bool ensure_instance_capacity(std::size_t required) {
 // SSBO. Same UBO at binding 0 (shared with color), arc instance buffer
 // at binding 1.
 inline void write_arc_descriptor_set() {
-    if (g_renderer.arc_descriptor_set == VK_NULL_HANDLE) return;
+    if (android_renderer_state().arc_descriptor_set == VK_NULL_HANDLE) return;
     VkDescriptorBufferInfo ubo{};
-    ubo.buffer = g_renderer.uniform_buffer;
+    ubo.buffer = android_renderer_state().uniform_buffer;
     ubo.offset = 0;
     ubo.range = sizeof(ColorUniforms);
 
     VkDescriptorBufferInfo ssbo{};
-    ssbo.buffer = g_renderer.arc_instance_buffer;
+    ssbo.buffer = android_renderer_state().arc_instance_buffer;
     ssbo.offset = 0;
     ssbo.range = VK_WHOLE_SIZE;
 
     VkWriteDescriptorSet writes[2]{};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[0].dstSet = g_renderer.arc_descriptor_set;
+    writes[0].dstSet = android_renderer_state().arc_descriptor_set;
     writes[0].dstBinding = 0;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[0].pBufferInfo = &ubo;
 
     writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[1].dstSet = g_renderer.arc_descriptor_set;
+    writes[1].dstSet = android_renderer_state().arc_descriptor_set;
     writes[1].dstBinding = 1;
     writes[1].descriptorCount = 1;
     writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writes[1].pBufferInfo = &ssbo;
 
-    vkUpdateDescriptorSets(g_renderer.device, 2, writes, 0, nullptr);
+    vkUpdateDescriptorSets(android_renderer_state().device, 2, writes, 0, nullptr);
 }
 
 // Mirror of ensure_instance_capacity for ArcInstanceGPU.
 inline bool ensure_arc_instance_capacity(std::size_t required) {
-    if (required <= g_renderer.arc_instance_capacity) return true;
-    std::size_t cap = g_renderer.arc_instance_capacity == 0
+    if (required <= android_renderer_state().arc_instance_capacity) return true;
+    std::size_t cap = android_renderer_state().arc_instance_capacity == 0
                         ? INITIAL_INSTANCE_CAPACITY
-                        : g_renderer.arc_instance_capacity;
+                        : android_renderer_state().arc_instance_capacity;
     while (cap < required) cap *= 2;
 
-    destroy_host_buffer(g_renderer.arc_instance_buffer,
-                        g_renderer.arc_instance_memory,
-                        g_renderer.arc_instance_mapped);
+    destroy_host_buffer(android_renderer_state().arc_instance_buffer,
+                        android_renderer_state().arc_instance_memory,
+                        android_renderer_state().arc_instance_mapped);
 
     if (!create_host_buffer(cap * sizeof(ArcInstanceGPU),
                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                            g_renderer.arc_instance_buffer,
-                            g_renderer.arc_instance_memory,
-                            g_renderer.arc_instance_mapped))
+                            android_renderer_state().arc_instance_buffer,
+                            android_renderer_state().arc_instance_memory,
+                            android_renderer_state().arc_instance_mapped))
         return false;
-    g_renderer.arc_instance_capacity = cap;
+    android_renderer_state().arc_instance_capacity = cap;
     write_arc_descriptor_set();
     return true;
 }
@@ -2013,16 +2030,16 @@ inline VkShaderModule create_shader_module(uint32_t const* code,
     ci.codeSize = size_bytes;
     ci.pCode = code;
     VkShaderModule mod = VK_NULL_HANDLE;
-    vk_ok(vkCreateShaderModule(g_renderer.device, &ci, nullptr, &mod),
+    vk_ok(vkCreateShaderModule(android_renderer_state().device, &ci, nullptr, &mod),
           "vkCreateShaderModule");
     return mod;
 }
 
 inline bool create_render_pass() {
-    if (g_renderer.render_pass != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().render_pass != VK_NULL_HANDLE) return true;
 
     VkAttachmentDescription att{};
-    att.format = g_renderer.swapchain_format;
+    att.format = android_renderer_state().swapchain_format;
     att.samples = VK_SAMPLE_COUNT_1_BIT;
     att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -2057,13 +2074,13 @@ inline bool create_render_pass() {
     ci.dependencyCount = 1;
     ci.pDependencies = &dep;
 
-    return vk_ok(vkCreateRenderPass(g_renderer.device, &ci, nullptr,
-                                    &g_renderer.render_pass),
+    return vk_ok(vkCreateRenderPass(android_renderer_state().device, &ci, nullptr,
+                                    &android_renderer_state().render_pass),
                 "vkCreateRenderPass");
 }
 
 inline bool create_color_pipeline() {
-    if (g_renderer.color_pipeline != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().color_pipeline != VK_NULL_HANDLE) return true;
 
     // Descriptor set layout: binding 0 = UBO (vertex), binding 1 = SSBO (vertex).
     VkDescriptorSetLayoutBinding bindings[2]{};
@@ -2081,17 +2098,17 @@ inline bool create_color_pipeline() {
     dslci.bindingCount = 2;
     dslci.pBindings = bindings;
     if (!vk_ok(vkCreateDescriptorSetLayout(
-                  g_renderer.device, &dslci, nullptr,
-                  &g_renderer.color_descriptor_set_layout),
+                  android_renderer_state().device, &dslci, nullptr,
+                  &android_renderer_state().color_descriptor_set_layout),
               "vkCreateDescriptorSetLayout"))
         return false;
 
     VkPipelineLayoutCreateInfo plci{};
     plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     plci.setLayoutCount = 1;
-    plci.pSetLayouts = &g_renderer.color_descriptor_set_layout;
-    if (!vk_ok(vkCreatePipelineLayout(g_renderer.device, &plci, nullptr,
-                                      &g_renderer.color_pipeline_layout),
+    plci.pSetLayouts = &android_renderer_state().color_descriptor_set_layout;
+    if (!vk_ok(vkCreatePipelineLayout(android_renderer_state().device, &plci, nullptr,
+                                      &android_renderer_state().color_pipeline_layout),
               "vkCreatePipelineLayout"))
         return false;
 
@@ -2171,22 +2188,22 @@ inline bool create_color_pipeline() {
     gci.pMultisampleState = &ms;
     gci.pColorBlendState = &cb;
     gci.pDynamicState = &ds;
-    gci.layout = g_renderer.color_pipeline_layout;
-    gci.renderPass = g_renderer.render_pass;
+    gci.layout = android_renderer_state().color_pipeline_layout;
+    gci.renderPass = android_renderer_state().render_pass;
     gci.subpass = 0;
 
     bool ok = vk_ok(vkCreateGraphicsPipelines(
-                        g_renderer.device, VK_NULL_HANDLE, 1, &gci, nullptr,
-                        &g_renderer.color_pipeline),
+                        android_renderer_state().device, VK_NULL_HANDLE, 1, &gci, nullptr,
+                        &android_renderer_state().color_pipeline),
                    "vkCreateGraphicsPipelines");
 
-    vkDestroyShaderModule(g_renderer.device, vs, nullptr);
-    vkDestroyShaderModule(g_renderer.device, fs, nullptr);
+    vkDestroyShaderModule(android_renderer_state().device, vs, nullptr);
+    vkDestroyShaderModule(android_renderer_state().device, fs, nullptr);
     return ok;
 }
 
 inline bool create_descriptor_pool_and_set() {
-    if (g_renderer.color_descriptor_set != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().color_descriptor_set != VK_NULL_HANDLE) return true;
 
     VkDescriptorPoolSize sizes[2]{};
     sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -2199,18 +2216,18 @@ inline bool create_descriptor_pool_and_set() {
     pci.maxSets = 1;
     pci.poolSizeCount = 2;
     pci.pPoolSizes = sizes;
-    if (!vk_ok(vkCreateDescriptorPool(g_renderer.device, &pci, nullptr,
-                                      &g_renderer.color_descriptor_pool),
+    if (!vk_ok(vkCreateDescriptorPool(android_renderer_state().device, &pci, nullptr,
+                                      &android_renderer_state().color_descriptor_pool),
               "vkCreateDescriptorPool"))
         return false;
 
     VkDescriptorSetAllocateInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    ai.descriptorPool = g_renderer.color_descriptor_pool;
+    ai.descriptorPool = android_renderer_state().color_descriptor_pool;
     ai.descriptorSetCount = 1;
-    ai.pSetLayouts = &g_renderer.color_descriptor_set_layout;
-    if (!vk_ok(vkAllocateDescriptorSets(g_renderer.device, &ai,
-                                        &g_renderer.color_descriptor_set),
+    ai.pSetLayouts = &android_renderer_state().color_descriptor_set_layout;
+    if (!vk_ok(vkAllocateDescriptorSets(android_renderer_state().device, &ai,
+                                        &android_renderer_state().color_descriptor_set),
               "vkAllocateDescriptorSets"))
         return false;
     write_color_descriptor_set();
@@ -2218,7 +2235,7 @@ inline bool create_descriptor_pool_and_set() {
 }
 
 inline bool create_arc_pipeline() {
-    if (g_renderer.arc_pipeline != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().arc_pipeline != VK_NULL_HANDLE) return true;
 
     auto vs = create_shader_module(shaders::SPIRV_ARC_VS,
                                    sizeof(shaders::SPIRV_ARC_VS));
@@ -2296,17 +2313,17 @@ inline bool create_arc_pipeline() {
     // UBO-binding-0 + SSBO-binding-1 signature. Only the SSBO contents
     // differ (ArcInstanceGPU vs ColorInstanceGPU), and that's bound at
     // descriptor-set time, not at pipeline-layout time.
-    gci.layout = g_renderer.color_pipeline_layout;
-    gci.renderPass = g_renderer.render_pass;
+    gci.layout = android_renderer_state().color_pipeline_layout;
+    gci.renderPass = android_renderer_state().render_pass;
     gci.subpass = 0;
 
     bool ok = vk_ok(vkCreateGraphicsPipelines(
-                        g_renderer.device, VK_NULL_HANDLE, 1, &gci, nullptr,
-                        &g_renderer.arc_pipeline),
+                        android_renderer_state().device, VK_NULL_HANDLE, 1, &gci, nullptr,
+                        &android_renderer_state().arc_pipeline),
                    "vkCreateGraphicsPipelines (arc)");
 
-    vkDestroyShaderModule(g_renderer.device, vs, nullptr);
-    vkDestroyShaderModule(g_renderer.device, fs, nullptr);
+    vkDestroyShaderModule(android_renderer_state().device, vs, nullptr);
+    vkDestroyShaderModule(android_renderer_state().device, fs, nullptr);
     return ok;
 }
 
@@ -2319,7 +2336,7 @@ inline bool create_arc_pipeline() {
 inline constexpr std::size_t INITIAL_TRI_VERTEX_CAPACITY = 4096;
 
 inline bool ensure_tri_vertex_capacity(std::size_t required) {
-    if (required <= g_renderer.tri_vertex_capacity) return true;
+    if (required <= android_renderer_state().tri_vertex_capacity) return true;
     // Hard upper bound: 64 MB worth of vertices ≈ 2.79M verts. Bail
     // gracefully rather than OOM the device on pathological content.
     constexpr std::size_t kHardCap =
@@ -2330,46 +2347,46 @@ inline bool ensure_tri_vertex_capacity(std::size_t required) {
                             required, kHardCap);
         return false;
     }
-    std::size_t cap = g_renderer.tri_vertex_capacity == 0
+    std::size_t cap = android_renderer_state().tri_vertex_capacity == 0
                         ? INITIAL_TRI_VERTEX_CAPACITY
-                        : g_renderer.tri_vertex_capacity;
+                        : android_renderer_state().tri_vertex_capacity;
     while (cap < required) cap *= 2;
     if (cap > kHardCap) cap = kHardCap;
 
-    destroy_host_buffer(g_renderer.tri_vertex_buffer,
-                        g_renderer.tri_vertex_memory,
-                        g_renderer.tri_vertex_mapped);
+    destroy_host_buffer(android_renderer_state().tri_vertex_buffer,
+                        android_renderer_state().tri_vertex_memory,
+                        android_renderer_state().tri_vertex_mapped);
     if (!create_host_buffer(cap * sizeof(TriVertexGPU),
                             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                            g_renderer.tri_vertex_buffer,
-                            g_renderer.tri_vertex_memory,
-                            g_renderer.tri_vertex_mapped))
+                            android_renderer_state().tri_vertex_buffer,
+                            android_renderer_state().tri_vertex_memory,
+                            android_renderer_state().tri_vertex_mapped))
         return false;
-    g_renderer.tri_vertex_capacity = cap;
+    android_renderer_state().tri_vertex_capacity = cap;
     // Vertex buffer is bound at draw time, not descriptor-set time —
     // no descriptor rewrite needed on grow.
     return true;
 }
 
 inline void write_tri_descriptor_set() {
-    if (g_renderer.tri_descriptor_set == VK_NULL_HANDLE) return;
+    if (android_renderer_state().tri_descriptor_set == VK_NULL_HANDLE) return;
     VkDescriptorBufferInfo ubo{};
-    ubo.buffer = g_renderer.uniform_buffer;
+    ubo.buffer = android_renderer_state().uniform_buffer;
     ubo.offset = 0;
     ubo.range = sizeof(ColorUniforms);
 
     VkWriteDescriptorSet write{};
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = g_renderer.tri_descriptor_set;
+    write.dstSet = android_renderer_state().tri_descriptor_set;
     write.dstBinding = 0;
     write.descriptorCount = 1;
     write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     write.pBufferInfo = &ubo;
-    vkUpdateDescriptorSets(g_renderer.device, 1, &write, 0, nullptr);
+    vkUpdateDescriptorSets(android_renderer_state().device, 1, &write, 0, nullptr);
 }
 
 inline bool create_tri_pipeline() {
-    if (g_renderer.tri_pipeline != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().tri_pipeline != VK_NULL_HANDLE) return true;
 
     // Dedicated descriptor set layout: UBO at binding 0 only. No SSBO,
     // no atlas — keeps validation clean and avoids tying the tri
@@ -2385,17 +2402,17 @@ inline bool create_tri_pipeline() {
     dslci.bindingCount = 1;
     dslci.pBindings = &binding;
     if (!vk_ok(vkCreateDescriptorSetLayout(
-                  g_renderer.device, &dslci, nullptr,
-                  &g_renderer.tri_descriptor_set_layout),
+                  android_renderer_state().device, &dslci, nullptr,
+                  &android_renderer_state().tri_descriptor_set_layout),
               "vkCreateDescriptorSetLayout(tri)"))
         return false;
 
     VkPipelineLayoutCreateInfo plci{};
     plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     plci.setLayoutCount = 1;
-    plci.pSetLayouts = &g_renderer.tri_descriptor_set_layout;
-    if (!vk_ok(vkCreatePipelineLayout(g_renderer.device, &plci, nullptr,
-                                      &g_renderer.tri_pipeline_layout),
+    plci.pSetLayouts = &android_renderer_state().tri_descriptor_set_layout;
+    if (!vk_ok(vkCreatePipelineLayout(android_renderer_state().device, &plci, nullptr,
+                                      &android_renderer_state().tri_pipeline_layout),
               "vkCreatePipelineLayout(tri)"))
         return false;
 
@@ -2490,22 +2507,22 @@ inline bool create_tri_pipeline() {
     gci.pMultisampleState = &ms;
     gci.pColorBlendState = &cb;
     gci.pDynamicState = &ds;
-    gci.layout = g_renderer.tri_pipeline_layout;
-    gci.renderPass = g_renderer.render_pass;
+    gci.layout = android_renderer_state().tri_pipeline_layout;
+    gci.renderPass = android_renderer_state().render_pass;
     gci.subpass = 0;
 
     bool ok = vk_ok(vkCreateGraphicsPipelines(
-                        g_renderer.device, VK_NULL_HANDLE, 1, &gci, nullptr,
-                        &g_renderer.tri_pipeline),
+                        android_renderer_state().device, VK_NULL_HANDLE, 1, &gci, nullptr,
+                        &android_renderer_state().tri_pipeline),
                    "vkCreateGraphicsPipelines (tri)");
 
-    vkDestroyShaderModule(g_renderer.device, vs, nullptr);
-    vkDestroyShaderModule(g_renderer.device, fs, nullptr);
+    vkDestroyShaderModule(android_renderer_state().device, vs, nullptr);
+    vkDestroyShaderModule(android_renderer_state().device, fs, nullptr);
     return ok;
 }
 
 inline bool create_tri_descriptor_pool_and_set() {
-    if (g_renderer.tri_descriptor_set != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().tri_descriptor_set != VK_NULL_HANDLE) return true;
 
     VkDescriptorPoolSize size{};
     size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -2516,18 +2533,18 @@ inline bool create_tri_descriptor_pool_and_set() {
     pci.maxSets = 1;
     pci.poolSizeCount = 1;
     pci.pPoolSizes = &size;
-    if (!vk_ok(vkCreateDescriptorPool(g_renderer.device, &pci, nullptr,
-                                      &g_renderer.tri_descriptor_pool),
+    if (!vk_ok(vkCreateDescriptorPool(android_renderer_state().device, &pci, nullptr,
+                                      &android_renderer_state().tri_descriptor_pool),
               "vkCreateDescriptorPool (tri)"))
         return false;
 
     VkDescriptorSetAllocateInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    ai.descriptorPool = g_renderer.tri_descriptor_pool;
+    ai.descriptorPool = android_renderer_state().tri_descriptor_pool;
     ai.descriptorSetCount = 1;
-    ai.pSetLayouts = &g_renderer.tri_descriptor_set_layout;
-    if (!vk_ok(vkAllocateDescriptorSets(g_renderer.device, &ai,
-                                        &g_renderer.tri_descriptor_set),
+    ai.pSetLayouts = &android_renderer_state().tri_descriptor_set_layout;
+    if (!vk_ok(vkAllocateDescriptorSets(android_renderer_state().device, &ai,
+                                        &android_renderer_state().tri_descriptor_set),
               "vkAllocateDescriptorSets (tri)"))
         return false;
     write_tri_descriptor_set();
@@ -2535,7 +2552,7 @@ inline bool create_tri_descriptor_pool_and_set() {
 }
 
 inline bool create_arc_descriptor_pool_and_set() {
-    if (g_renderer.arc_descriptor_set != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().arc_descriptor_set != VK_NULL_HANDLE) return true;
 
     VkDescriptorPoolSize sizes[2]{};
     sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -2548,18 +2565,18 @@ inline bool create_arc_descriptor_pool_and_set() {
     pci.maxSets = 1;
     pci.poolSizeCount = 2;
     pci.pPoolSizes = sizes;
-    if (!vk_ok(vkCreateDescriptorPool(g_renderer.device, &pci, nullptr,
-                                      &g_renderer.arc_descriptor_pool),
+    if (!vk_ok(vkCreateDescriptorPool(android_renderer_state().device, &pci, nullptr,
+                                      &android_renderer_state().arc_descriptor_pool),
               "vkCreateDescriptorPool (arc)"))
         return false;
 
     VkDescriptorSetAllocateInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    ai.descriptorPool = g_renderer.arc_descriptor_pool;
+    ai.descriptorPool = android_renderer_state().arc_descriptor_pool;
     ai.descriptorSetCount = 1;
-    ai.pSetLayouts = &g_renderer.color_descriptor_set_layout;
-    if (!vk_ok(vkAllocateDescriptorSets(g_renderer.device, &ai,
-                                        &g_renderer.arc_descriptor_set),
+    ai.pSetLayouts = &android_renderer_state().color_descriptor_set_layout;
+    if (!vk_ok(vkAllocateDescriptorSets(android_renderer_state().device, &ai,
+                                        &android_renderer_state().arc_descriptor_set),
               "vkAllocateDescriptorSets (arc)"))
         return false;
     write_arc_descriptor_set();
@@ -2575,43 +2592,43 @@ inline bool create_color_resources() {
     if (!create_arc_pipeline()) return false;
     if (!create_tri_pipeline()) return false;
 
-    if (g_renderer.uniform_buffer == VK_NULL_HANDLE) {
+    if (android_renderer_state().uniform_buffer == VK_NULL_HANDLE) {
         if (!create_host_buffer(sizeof(ColorUniforms),
                                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                g_renderer.uniform_buffer,
-                                g_renderer.uniform_memory,
-                                g_renderer.uniform_mapped))
+                                android_renderer_state().uniform_buffer,
+                                android_renderer_state().uniform_memory,
+                                android_renderer_state().uniform_mapped))
             return false;
     }
-    if (g_renderer.instance_buffer == VK_NULL_HANDLE) {
+    if (android_renderer_state().instance_buffer == VK_NULL_HANDLE) {
         if (!create_host_buffer(
                 INITIAL_INSTANCE_CAPACITY * sizeof(ColorInstanceGPU),
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                g_renderer.instance_buffer,
-                g_renderer.instance_memory,
-                g_renderer.instance_mapped))
+                android_renderer_state().instance_buffer,
+                android_renderer_state().instance_memory,
+                android_renderer_state().instance_mapped))
             return false;
-        g_renderer.instance_capacity = INITIAL_INSTANCE_CAPACITY;
+        android_renderer_state().instance_capacity = INITIAL_INSTANCE_CAPACITY;
     }
-    if (g_renderer.arc_instance_buffer == VK_NULL_HANDLE) {
+    if (android_renderer_state().arc_instance_buffer == VK_NULL_HANDLE) {
         if (!create_host_buffer(
                 INITIAL_INSTANCE_CAPACITY * sizeof(ArcInstanceGPU),
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                g_renderer.arc_instance_buffer,
-                g_renderer.arc_instance_memory,
-                g_renderer.arc_instance_mapped))
+                android_renderer_state().arc_instance_buffer,
+                android_renderer_state().arc_instance_memory,
+                android_renderer_state().arc_instance_mapped))
             return false;
-        g_renderer.arc_instance_capacity = INITIAL_INSTANCE_CAPACITY;
+        android_renderer_state().arc_instance_capacity = INITIAL_INSTANCE_CAPACITY;
     }
-    if (g_renderer.tri_vertex_buffer == VK_NULL_HANDLE) {
+    if (android_renderer_state().tri_vertex_buffer == VK_NULL_HANDLE) {
         if (!create_host_buffer(
                 INITIAL_TRI_VERTEX_CAPACITY * sizeof(TriVertexGPU),
                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                g_renderer.tri_vertex_buffer,
-                g_renderer.tri_vertex_memory,
-                g_renderer.tri_vertex_mapped))
+                android_renderer_state().tri_vertex_buffer,
+                android_renderer_state().tri_vertex_memory,
+                android_renderer_state().tri_vertex_mapped))
             return false;
-        g_renderer.tri_vertex_capacity = INITIAL_TRI_VERTEX_CAPACITY;
+        android_renderer_state().tri_vertex_capacity = INITIAL_TRI_VERTEX_CAPACITY;
     }
     if (!create_descriptor_pool_and_set()) return false;
     if (!create_arc_descriptor_pool_and_set()) return false;
@@ -2624,7 +2641,7 @@ inline bool create_color_resources() {
 inline constexpr std::size_t INITIAL_TEXT_INSTANCE_CAPACITY = 64;
 
 inline bool create_text_sampler() {
-    if (g_renderer.text_sampler != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().text_sampler != VK_NULL_HANDLE) return true;
     VkSamplerCreateInfo ci{};
     ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     ci.magFilter = VK_FILTER_LINEAR;
@@ -2637,13 +2654,13 @@ inline bool create_text_sampler() {
     ci.minLod = 0.0f;
     ci.maxLod = 0.0f;
     ci.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
-    return vk_ok(vkCreateSampler(g_renderer.device, &ci, nullptr,
-                                 &g_renderer.text_sampler),
+    return vk_ok(vkCreateSampler(android_renderer_state().device, &ci, nullptr,
+                                 &android_renderer_state().text_sampler),
                 "vkCreateSampler");
 }
 
 inline bool create_text_pipeline() {
-    if (g_renderer.text_pipeline != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().text_pipeline != VK_NULL_HANDLE) return true;
 
     VkDescriptorSetLayoutBinding bindings[3]{};
     bindings[0].binding = 0;
@@ -2664,17 +2681,17 @@ inline bool create_text_pipeline() {
     dslci.bindingCount = 3;
     dslci.pBindings = bindings;
     if (!vk_ok(vkCreateDescriptorSetLayout(
-                  g_renderer.device, &dslci, nullptr,
-                  &g_renderer.text_descriptor_set_layout),
+                  android_renderer_state().device, &dslci, nullptr,
+                  &android_renderer_state().text_descriptor_set_layout),
               "vkCreateDescriptorSetLayout(text)"))
         return false;
 
     VkPipelineLayoutCreateInfo plci{};
     plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     plci.setLayoutCount = 1;
-    plci.pSetLayouts = &g_renderer.text_descriptor_set_layout;
-    if (!vk_ok(vkCreatePipelineLayout(g_renderer.device, &plci, nullptr,
-                                      &g_renderer.text_pipeline_layout),
+    plci.pSetLayouts = &android_renderer_state().text_descriptor_set_layout;
+    if (!vk_ok(vkCreatePipelineLayout(android_renderer_state().device, &plci, nullptr,
+                                      &android_renderer_state().text_pipeline_layout),
               "vkCreatePipelineLayout(text)"))
         return false;
 
@@ -2750,22 +2767,22 @@ inline bool create_text_pipeline() {
     gci.pMultisampleState = &ms;
     gci.pColorBlendState = &cb;
     gci.pDynamicState = &ds;
-    gci.layout = g_renderer.text_pipeline_layout;
-    gci.renderPass = g_renderer.render_pass;
+    gci.layout = android_renderer_state().text_pipeline_layout;
+    gci.renderPass = android_renderer_state().render_pass;
     gci.subpass = 0;
 
     bool ok = vk_ok(vkCreateGraphicsPipelines(
-                        g_renderer.device, VK_NULL_HANDLE, 1, &gci, nullptr,
-                        &g_renderer.text_pipeline),
+                        android_renderer_state().device, VK_NULL_HANDLE, 1, &gci, nullptr,
+                        &android_renderer_state().text_pipeline),
                    "vkCreateGraphicsPipelines(text)");
 
-    vkDestroyShaderModule(g_renderer.device, vs, nullptr);
-    vkDestroyShaderModule(g_renderer.device, fs, nullptr);
+    vkDestroyShaderModule(android_renderer_state().device, vs, nullptr);
+    vkDestroyShaderModule(android_renderer_state().device, fs, nullptr);
     return ok;
 }
 
 inline bool create_text_descriptor_pool_and_set() {
-    if (g_renderer.text_descriptor_set != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().text_descriptor_set != VK_NULL_HANDLE) return true;
 
     VkDescriptorPoolSize sizes[3]{};
     sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -2780,47 +2797,47 @@ inline bool create_text_descriptor_pool_and_set() {
     pci.maxSets = 1;
     pci.poolSizeCount = 3;
     pci.pPoolSizes = sizes;
-    if (!vk_ok(vkCreateDescriptorPool(g_renderer.device, &pci, nullptr,
-                                      &g_renderer.text_descriptor_pool),
+    if (!vk_ok(vkCreateDescriptorPool(android_renderer_state().device, &pci, nullptr,
+                                      &android_renderer_state().text_descriptor_pool),
               "vkCreateDescriptorPool(text)"))
         return false;
 
     VkDescriptorSetAllocateInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    ai.descriptorPool = g_renderer.text_descriptor_pool;
+    ai.descriptorPool = android_renderer_state().text_descriptor_pool;
     ai.descriptorSetCount = 1;
-    ai.pSetLayouts = &g_renderer.text_descriptor_set_layout;
-    return vk_ok(vkAllocateDescriptorSets(g_renderer.device, &ai,
-                                          &g_renderer.text_descriptor_set),
+    ai.pSetLayouts = &android_renderer_state().text_descriptor_set_layout;
+    return vk_ok(vkAllocateDescriptorSets(android_renderer_state().device, &ai,
+                                          &android_renderer_state().text_descriptor_set),
                 "vkAllocateDescriptorSets(text)");
 }
 
 inline void destroy_text_atlas_image() {
-    if (g_renderer.text_atlas_view != VK_NULL_HANDLE) {
-        vkDestroyImageView(g_renderer.device, g_renderer.text_atlas_view,
+    if (android_renderer_state().text_atlas_view != VK_NULL_HANDLE) {
+        vkDestroyImageView(android_renderer_state().device, android_renderer_state().text_atlas_view,
                            nullptr);
-        g_renderer.text_atlas_view = VK_NULL_HANDLE;
+        android_renderer_state().text_atlas_view = VK_NULL_HANDLE;
     }
-    if (g_renderer.text_atlas_image != VK_NULL_HANDLE) {
-        vkDestroyImage(g_renderer.device, g_renderer.text_atlas_image,
+    if (android_renderer_state().text_atlas_image != VK_NULL_HANDLE) {
+        vkDestroyImage(android_renderer_state().device, android_renderer_state().text_atlas_image,
                        nullptr);
-        g_renderer.text_atlas_image = VK_NULL_HANDLE;
+        android_renderer_state().text_atlas_image = VK_NULL_HANDLE;
     }
-    if (g_renderer.text_atlas_memory != VK_NULL_HANDLE) {
-        vkFreeMemory(g_renderer.device, g_renderer.text_atlas_memory,
+    if (android_renderer_state().text_atlas_memory != VK_NULL_HANDLE) {
+        vkFreeMemory(android_renderer_state().device, android_renderer_state().text_atlas_memory,
                      nullptr);
-        g_renderer.text_atlas_memory = VK_NULL_HANDLE;
+        android_renderer_state().text_atlas_memory = VK_NULL_HANDLE;
     }
-    g_renderer.text_atlas_width = 0;
-    g_renderer.text_atlas_height = 0;
+    android_renderer_state().text_atlas_width = 0;
+    android_renderer_state().text_atlas_height = 0;
 }
 
 inline bool create_or_resize_text_atlas_image(std::uint32_t w,
                                               std::uint32_t h) {
     if (w == 0 || h == 0) return true;
-    if (w == g_renderer.text_atlas_width
-        && h == g_renderer.text_atlas_height
-        && g_renderer.text_atlas_image != VK_NULL_HANDLE) {
+    if (w == android_renderer_state().text_atlas_width
+        && h == android_renderer_state().text_atlas_height
+        && android_renderer_state().text_atlas_image != VK_NULL_HANDLE) {
         return true;
     }
     destroy_text_atlas_image();
@@ -2837,14 +2854,14 @@ inline bool create_or_resize_text_atlas_image(std::uint32_t w,
     ici.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    if (!vk_ok(vkCreateImage(g_renderer.device, &ici, nullptr,
-                             &g_renderer.text_atlas_image),
+    if (!vk_ok(vkCreateImage(android_renderer_state().device, &ici, nullptr,
+                             &android_renderer_state().text_atlas_image),
               "vkCreateImage(text_atlas)"))
         return false;
 
     VkMemoryRequirements req{};
-    vkGetImageMemoryRequirements(g_renderer.device,
-                                 g_renderer.text_atlas_image, &req);
+    vkGetImageMemoryRequirements(android_renderer_state().device,
+                                 android_renderer_state().text_atlas_image, &req);
     auto mt = find_memory_type(req.memoryTypeBits,
                                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if (!mt) return false;
@@ -2853,19 +2870,19 @@ inline bool create_or_resize_text_atlas_image(std::uint32_t w,
     mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     mai.allocationSize = req.size;
     mai.memoryTypeIndex = *mt;
-    if (!vk_ok(vkAllocateMemory(g_renderer.device, &mai, nullptr,
-                                &g_renderer.text_atlas_memory),
+    if (!vk_ok(vkAllocateMemory(android_renderer_state().device, &mai, nullptr,
+                                &android_renderer_state().text_atlas_memory),
               "vkAllocateMemory(text_atlas)"))
         return false;
-    if (!vk_ok(vkBindImageMemory(g_renderer.device,
-                                 g_renderer.text_atlas_image,
-                                 g_renderer.text_atlas_memory, 0),
+    if (!vk_ok(vkBindImageMemory(android_renderer_state().device,
+                                 android_renderer_state().text_atlas_image,
+                                 android_renderer_state().text_atlas_memory, 0),
               "vkBindImageMemory(text_atlas)"))
         return false;
 
     VkImageViewCreateInfo vci{};
     vci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    vci.image = g_renderer.text_atlas_image;
+    vci.image = android_renderer_state().text_atlas_image;
     vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
     vci.format = VK_FORMAT_R8_UNORM;
     vci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -2873,124 +2890,124 @@ inline bool create_or_resize_text_atlas_image(std::uint32_t w,
     vci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
     vci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
     vci.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-    if (!vk_ok(vkCreateImageView(g_renderer.device, &vci, nullptr,
-                                 &g_renderer.text_atlas_view),
+    if (!vk_ok(vkCreateImageView(android_renderer_state().device, &vci, nullptr,
+                                 &android_renderer_state().text_atlas_view),
               "vkCreateImageView(text_atlas)"))
         return false;
 
-    g_renderer.text_atlas_width = w;
-    g_renderer.text_atlas_height = h;
+    android_renderer_state().text_atlas_width = w;
+    android_renderer_state().text_atlas_height = h;
     return true;
 }
 
 inline void write_text_descriptor_set() {
-    if (g_renderer.text_descriptor_set == VK_NULL_HANDLE) return;
-    if (g_renderer.uniform_buffer == VK_NULL_HANDLE
-        || g_renderer.text_instance_buffer == VK_NULL_HANDLE
-        || g_renderer.text_atlas_view == VK_NULL_HANDLE
-        || g_renderer.text_sampler == VK_NULL_HANDLE)
+    if (android_renderer_state().text_descriptor_set == VK_NULL_HANDLE) return;
+    if (android_renderer_state().uniform_buffer == VK_NULL_HANDLE
+        || android_renderer_state().text_instance_buffer == VK_NULL_HANDLE
+        || android_renderer_state().text_atlas_view == VK_NULL_HANDLE
+        || android_renderer_state().text_sampler == VK_NULL_HANDLE)
         return;
 
     VkDescriptorBufferInfo ubo{};
-    ubo.buffer = g_renderer.uniform_buffer;
+    ubo.buffer = android_renderer_state().uniform_buffer;
     ubo.offset = 0;
     ubo.range = sizeof(ColorUniforms);
 
     VkDescriptorBufferInfo ssbo{};
-    ssbo.buffer = g_renderer.text_instance_buffer;
+    ssbo.buffer = android_renderer_state().text_instance_buffer;
     ssbo.offset = 0;
     ssbo.range = VK_WHOLE_SIZE;
 
     VkDescriptorImageInfo img{};
-    img.sampler = g_renderer.text_sampler;
-    img.imageView = g_renderer.text_atlas_view;
+    img.sampler = android_renderer_state().text_sampler;
+    img.imageView = android_renderer_state().text_atlas_view;
     img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkWriteDescriptorSet writes[3]{};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[0].dstSet = g_renderer.text_descriptor_set;
+    writes[0].dstSet = android_renderer_state().text_descriptor_set;
     writes[0].dstBinding = 0;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[0].pBufferInfo = &ubo;
 
     writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[1].dstSet = g_renderer.text_descriptor_set;
+    writes[1].dstSet = android_renderer_state().text_descriptor_set;
     writes[1].dstBinding = 1;
     writes[1].descriptorCount = 1;
     writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writes[1].pBufferInfo = &ssbo;
 
     writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[2].dstSet = g_renderer.text_descriptor_set;
+    writes[2].dstSet = android_renderer_state().text_descriptor_set;
     writes[2].dstBinding = 2;
     writes[2].descriptorCount = 1;
     writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     writes[2].pImageInfo = &img;
 
-    vkUpdateDescriptorSets(g_renderer.device, 3, writes, 0, nullptr);
+    vkUpdateDescriptorSets(android_renderer_state().device, 3, writes, 0, nullptr);
 }
 
 inline bool ensure_text_instance_capacity(std::size_t required) {
-    if (required <= g_renderer.text_instance_capacity) return true;
-    std::size_t cap = g_renderer.text_instance_capacity == 0
+    if (required <= android_renderer_state().text_instance_capacity) return true;
+    std::size_t cap = android_renderer_state().text_instance_capacity == 0
                         ? INITIAL_TEXT_INSTANCE_CAPACITY
-                        : g_renderer.text_instance_capacity;
+                        : android_renderer_state().text_instance_capacity;
     while (cap < required) cap *= 2;
 
-    destroy_host_buffer(g_renderer.text_instance_buffer,
-                        g_renderer.text_instance_memory,
-                        g_renderer.text_instance_mapped);
+    destroy_host_buffer(android_renderer_state().text_instance_buffer,
+                        android_renderer_state().text_instance_memory,
+                        android_renderer_state().text_instance_mapped);
     if (!create_host_buffer(cap * sizeof(TextInstanceGPU),
                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                            g_renderer.text_instance_buffer,
-                            g_renderer.text_instance_memory,
-                            g_renderer.text_instance_mapped))
+                            android_renderer_state().text_instance_buffer,
+                            android_renderer_state().text_instance_memory,
+                            android_renderer_state().text_instance_mapped))
         return false;
-    g_renderer.text_instance_capacity = cap;
+    android_renderer_state().text_instance_capacity = cap;
     write_text_descriptor_set();
     return true;
 }
 
 inline bool ensure_text_staging_capacity(VkDeviceSize bytes) {
-    if (bytes <= g_renderer.text_staging_capacity
-        && g_renderer.text_staging_buffer != VK_NULL_HANDLE)
+    if (bytes <= android_renderer_state().text_staging_capacity
+        && android_renderer_state().text_staging_buffer != VK_NULL_HANDLE)
         return true;
-    destroy_host_buffer(g_renderer.text_staging_buffer,
-                        g_renderer.text_staging_memory,
-                        g_renderer.text_staging_mapped);
-    VkDeviceSize cap = g_renderer.text_staging_capacity == 0
+    destroy_host_buffer(android_renderer_state().text_staging_buffer,
+                        android_renderer_state().text_staging_memory,
+                        android_renderer_state().text_staging_mapped);
+    VkDeviceSize cap = android_renderer_state().text_staging_capacity == 0
                            ? 4096
-                           : g_renderer.text_staging_capacity;
+                           : android_renderer_state().text_staging_capacity;
     while (cap < bytes) cap *= 2;
     if (!create_host_buffer(cap, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                            g_renderer.text_staging_buffer,
-                            g_renderer.text_staging_memory,
-                            g_renderer.text_staging_mapped))
+                            android_renderer_state().text_staging_buffer,
+                            android_renderer_state().text_staging_memory,
+                            android_renderer_state().text_staging_mapped))
         return false;
-    g_renderer.text_staging_capacity = cap;
+    android_renderer_state().text_staging_capacity = cap;
     return true;
 }
 
 inline bool create_text_resources() {
     if (!create_text_sampler()) return false;
     if (!create_text_pipeline()) return false;
-    if (g_renderer.text_instance_buffer == VK_NULL_HANDLE) {
+    if (android_renderer_state().text_instance_buffer == VK_NULL_HANDLE) {
         if (!create_host_buffer(
                 INITIAL_TEXT_INSTANCE_CAPACITY * sizeof(TextInstanceGPU),
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                g_renderer.text_instance_buffer,
-                g_renderer.text_instance_memory,
-                g_renderer.text_instance_mapped))
+                android_renderer_state().text_instance_buffer,
+                android_renderer_state().text_instance_memory,
+                android_renderer_state().text_instance_mapped))
             return false;
-        g_renderer.text_instance_capacity = INITIAL_TEXT_INSTANCE_CAPACITY;
+        android_renderer_state().text_instance_capacity = INITIAL_TEXT_INSTANCE_CAPACITY;
     }
     if (!create_text_descriptor_pool_and_set()) return false;
     // Placeholder 1x1 atlas so the descriptor set is valid before the
     // first real atlas upload. The sampler clamps to edge, so the
     // single sample never ends up inside a glyph quad (quads bind real
     // uv_rect values from build_atlas).
-    if (g_renderer.text_atlas_image == VK_NULL_HANDLE) {
+    if (android_renderer_state().text_atlas_image == VK_NULL_HANDLE) {
         if (!create_or_resize_text_atlas_image(1, 1)) return false;
     }
     write_text_descriptor_set();
@@ -3006,7 +3023,7 @@ inline void record_text_atlas_upload(VkCommandBuffer cmd,
     to_transfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     to_transfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     to_transfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    to_transfer.image = g_renderer.text_atlas_image;
+    to_transfer.image = android_renderer_state().text_atlas_image;
     to_transfer.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
     to_transfer.srcAccessMask = 0;
     to_transfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -3022,10 +3039,10 @@ inline void record_text_atlas_upload(VkCommandBuffer cmd,
     region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
     region.imageOffset = { 0, 0, 0 };
     region.imageExtent = { w, h, 1 };
-    std::memcpy(g_renderer.text_staging_mapped, pixels,
+    std::memcpy(android_renderer_state().text_staging_mapped, pixels,
                 static_cast<std::size_t>(w) * h);
-    vkCmdCopyBufferToImage(cmd, g_renderer.text_staging_buffer,
-                           g_renderer.text_atlas_image,
+    vkCmdCopyBufferToImage(cmd, android_renderer_state().text_staging_buffer,
+                           android_renderer_state().text_atlas_image,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                            1, &region);
 
@@ -3035,7 +3052,7 @@ inline void record_text_atlas_upload(VkCommandBuffer cmd,
     to_shader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     to_shader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     to_shader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    to_shader.image = g_renderer.text_atlas_image;
+    to_shader.image = android_renderer_state().text_atlas_image;
     to_shader.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
     to_shader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     to_shader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -3046,40 +3063,40 @@ inline void record_text_atlas_upload(VkCommandBuffer cmd,
 }
 
 inline void destroy_text_pipeline_resources() {
-    if (g_renderer.text_descriptor_pool != VK_NULL_HANDLE) {
-        vkDestroyDescriptorPool(g_renderer.device,
-                                g_renderer.text_descriptor_pool, nullptr);
-        g_renderer.text_descriptor_pool = VK_NULL_HANDLE;
-        g_renderer.text_descriptor_set = VK_NULL_HANDLE;
+    if (android_renderer_state().text_descriptor_pool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(android_renderer_state().device,
+                                android_renderer_state().text_descriptor_pool, nullptr);
+        android_renderer_state().text_descriptor_pool = VK_NULL_HANDLE;
+        android_renderer_state().text_descriptor_set = VK_NULL_HANDLE;
     }
-    destroy_host_buffer(g_renderer.text_staging_buffer,
-                        g_renderer.text_staging_memory,
-                        g_renderer.text_staging_mapped);
-    g_renderer.text_staging_capacity = 0;
-    destroy_host_buffer(g_renderer.text_instance_buffer,
-                        g_renderer.text_instance_memory,
-                        g_renderer.text_instance_mapped);
-    g_renderer.text_instance_capacity = 0;
+    destroy_host_buffer(android_renderer_state().text_staging_buffer,
+                        android_renderer_state().text_staging_memory,
+                        android_renderer_state().text_staging_mapped);
+    android_renderer_state().text_staging_capacity = 0;
+    destroy_host_buffer(android_renderer_state().text_instance_buffer,
+                        android_renderer_state().text_instance_memory,
+                        android_renderer_state().text_instance_mapped);
+    android_renderer_state().text_instance_capacity = 0;
     destroy_text_atlas_image();
-    if (g_renderer.text_sampler != VK_NULL_HANDLE) {
-        vkDestroySampler(g_renderer.device, g_renderer.text_sampler, nullptr);
-        g_renderer.text_sampler = VK_NULL_HANDLE;
+    if (android_renderer_state().text_sampler != VK_NULL_HANDLE) {
+        vkDestroySampler(android_renderer_state().device, android_renderer_state().text_sampler, nullptr);
+        android_renderer_state().text_sampler = VK_NULL_HANDLE;
     }
-    if (g_renderer.text_pipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(g_renderer.device, g_renderer.text_pipeline,
+    if (android_renderer_state().text_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(android_renderer_state().device, android_renderer_state().text_pipeline,
                           nullptr);
-        g_renderer.text_pipeline = VK_NULL_HANDLE;
+        android_renderer_state().text_pipeline = VK_NULL_HANDLE;
     }
-    if (g_renderer.text_pipeline_layout != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(g_renderer.device,
-                                g_renderer.text_pipeline_layout, nullptr);
-        g_renderer.text_pipeline_layout = VK_NULL_HANDLE;
+    if (android_renderer_state().text_pipeline_layout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(android_renderer_state().device,
+                                android_renderer_state().text_pipeline_layout, nullptr);
+        android_renderer_state().text_pipeline_layout = VK_NULL_HANDLE;
     }
-    if (g_renderer.text_descriptor_set_layout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(g_renderer.device,
-                                     g_renderer.text_descriptor_set_layout,
+    if (android_renderer_state().text_descriptor_set_layout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(android_renderer_state().device,
+                                     android_renderer_state().text_descriptor_set_layout,
                                      nullptr);
-        g_renderer.text_descriptor_set_layout = VK_NULL_HANDLE;
+        android_renderer_state().text_descriptor_set_layout = VK_NULL_HANDLE;
     }
 }
 
@@ -3088,7 +3105,7 @@ inline void destroy_text_pipeline_resources() {
 inline constexpr std::size_t INITIAL_IMAGE_INSTANCE_CAPACITY = 32;
 
 inline bool create_image_sampler() {
-    if (g_renderer.image_sampler != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().image_sampler != VK_NULL_HANDLE) return true;
     VkSamplerCreateInfo ci{};
     ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     ci.magFilter = VK_FILTER_LINEAR;
@@ -3101,13 +3118,13 @@ inline bool create_image_sampler() {
     ci.minLod = 0.0f;
     ci.maxLod = 0.0f;
     ci.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
-    return vk_ok(vkCreateSampler(g_renderer.device, &ci, nullptr,
-                                 &g_renderer.image_sampler),
+    return vk_ok(vkCreateSampler(android_renderer_state().device, &ci, nullptr,
+                                 &android_renderer_state().image_sampler),
                 "vkCreateSampler(image)");
 }
 
 inline bool create_image_pipeline() {
-    if (g_renderer.image_pipeline != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().image_pipeline != VK_NULL_HANDLE) return true;
 
     VkDescriptorSetLayoutBinding bindings[3]{};
     bindings[0].binding = 0;
@@ -3128,17 +3145,17 @@ inline bool create_image_pipeline() {
     dslci.bindingCount = 3;
     dslci.pBindings = bindings;
     if (!vk_ok(vkCreateDescriptorSetLayout(
-                  g_renderer.device, &dslci, nullptr,
-                  &g_renderer.image_descriptor_set_layout),
+                  android_renderer_state().device, &dslci, nullptr,
+                  &android_renderer_state().image_descriptor_set_layout),
               "vkCreateDescriptorSetLayout(image)"))
         return false;
 
     VkPipelineLayoutCreateInfo plci{};
     plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     plci.setLayoutCount = 1;
-    plci.pSetLayouts = &g_renderer.image_descriptor_set_layout;
-    if (!vk_ok(vkCreatePipelineLayout(g_renderer.device, &plci, nullptr,
-                                      &g_renderer.image_pipeline_layout),
+    plci.pSetLayouts = &android_renderer_state().image_descriptor_set_layout;
+    if (!vk_ok(vkCreatePipelineLayout(android_renderer_state().device, &plci, nullptr,
+                                      &android_renderer_state().image_pipeline_layout),
               "vkCreatePipelineLayout(image)"))
         return false;
 
@@ -3214,21 +3231,21 @@ inline bool create_image_pipeline() {
     gci.pMultisampleState = &ms;
     gci.pColorBlendState = &cb;
     gci.pDynamicState = &ds;
-    gci.layout = g_renderer.image_pipeline_layout;
-    gci.renderPass = g_renderer.render_pass;
+    gci.layout = android_renderer_state().image_pipeline_layout;
+    gci.renderPass = android_renderer_state().render_pass;
     gci.subpass = 0;
 
     bool ok = vk_ok(vkCreateGraphicsPipelines(
-                        g_renderer.device, VK_NULL_HANDLE, 1, &gci, nullptr,
-                        &g_renderer.image_pipeline),
+                        android_renderer_state().device, VK_NULL_HANDLE, 1, &gci, nullptr,
+                        &android_renderer_state().image_pipeline),
                    "vkCreateGraphicsPipelines(image)");
-    vkDestroyShaderModule(g_renderer.device, vs, nullptr);
-    vkDestroyShaderModule(g_renderer.device, fs, nullptr);
+    vkDestroyShaderModule(android_renderer_state().device, vs, nullptr);
+    vkDestroyShaderModule(android_renderer_state().device, fs, nullptr);
     return ok;
 }
 
 inline bool create_image_descriptor_pool_and_set() {
-    if (g_renderer.image_descriptor_set != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().image_descriptor_set != VK_NULL_HANDLE) return true;
 
     VkDescriptorPoolSize sizes[3]{};
     sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -3243,23 +3260,23 @@ inline bool create_image_descriptor_pool_and_set() {
     pci.maxSets = 1;
     pci.poolSizeCount = 3;
     pci.pPoolSizes = sizes;
-    if (!vk_ok(vkCreateDescriptorPool(g_renderer.device, &pci, nullptr,
-                                      &g_renderer.image_descriptor_pool),
+    if (!vk_ok(vkCreateDescriptorPool(android_renderer_state().device, &pci, nullptr,
+                                      &android_renderer_state().image_descriptor_pool),
               "vkCreateDescriptorPool(image)"))
         return false;
 
     VkDescriptorSetAllocateInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    ai.descriptorPool = g_renderer.image_descriptor_pool;
+    ai.descriptorPool = android_renderer_state().image_descriptor_pool;
     ai.descriptorSetCount = 1;
-    ai.pSetLayouts = &g_renderer.image_descriptor_set_layout;
-    return vk_ok(vkAllocateDescriptorSets(g_renderer.device, &ai,
-                                          &g_renderer.image_descriptor_set),
+    ai.pSetLayouts = &android_renderer_state().image_descriptor_set_layout;
+    return vk_ok(vkAllocateDescriptorSets(android_renderer_state().device, &ai,
+                                          &android_renderer_state().image_descriptor_set),
                 "vkAllocateDescriptorSets(image)");
 }
 
 inline bool create_image_atlas_image() {
-    if (g_renderer.image_atlas_image != VK_NULL_HANDLE) return true;
+    if (android_renderer_state().image_atlas_image != VK_NULL_HANDLE) return true;
 
     VkImageCreateInfo ici{};
     ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -3273,14 +3290,14 @@ inline bool create_image_atlas_image() {
     ici.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    if (!vk_ok(vkCreateImage(g_renderer.device, &ici, nullptr,
-                             &g_renderer.image_atlas_image),
+    if (!vk_ok(vkCreateImage(android_renderer_state().device, &ici, nullptr,
+                             &android_renderer_state().image_atlas_image),
               "vkCreateImage(image_atlas)"))
         return false;
 
     VkMemoryRequirements req{};
-    vkGetImageMemoryRequirements(g_renderer.device,
-                                 g_renderer.image_atlas_image, &req);
+    vkGetImageMemoryRequirements(android_renderer_state().device,
+                                 android_renderer_state().image_atlas_image, &req);
     auto mt = find_memory_type(req.memoryTypeBits,
                                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if (!mt) return false;
@@ -3289,19 +3306,19 @@ inline bool create_image_atlas_image() {
     mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     mai.allocationSize = req.size;
     mai.memoryTypeIndex = *mt;
-    if (!vk_ok(vkAllocateMemory(g_renderer.device, &mai, nullptr,
-                                &g_renderer.image_atlas_memory),
+    if (!vk_ok(vkAllocateMemory(android_renderer_state().device, &mai, nullptr,
+                                &android_renderer_state().image_atlas_memory),
               "vkAllocateMemory(image_atlas)"))
         return false;
-    if (!vk_ok(vkBindImageMemory(g_renderer.device,
-                                 g_renderer.image_atlas_image,
-                                 g_renderer.image_atlas_memory, 0),
+    if (!vk_ok(vkBindImageMemory(android_renderer_state().device,
+                                 android_renderer_state().image_atlas_image,
+                                 android_renderer_state().image_atlas_memory, 0),
               "vkBindImageMemory(image_atlas)"))
         return false;
 
     VkImageViewCreateInfo vci{};
     vci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    vci.image = g_renderer.image_atlas_image;
+    vci.image = android_renderer_state().image_atlas_image;
     vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
     vci.format = VK_FORMAT_R8G8B8A8_UNORM;
     vci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -3309,113 +3326,113 @@ inline bool create_image_atlas_image() {
     vci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
     vci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
     vci.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-    if (!vk_ok(vkCreateImageView(g_renderer.device, &vci, nullptr,
-                                 &g_renderer.image_atlas_view),
+    if (!vk_ok(vkCreateImageView(android_renderer_state().device, &vci, nullptr,
+                                 &android_renderer_state().image_atlas_view),
               "vkCreateImageView(image_atlas)"))
         return false;
-    g_renderer.image_atlas_initialised = false; // needs first upload
+    android_renderer_state().image_atlas_initialised = false; // needs first upload
     return true;
 }
 
 inline void write_image_descriptor_set() {
-    if (g_renderer.image_descriptor_set == VK_NULL_HANDLE) return;
-    if (g_renderer.uniform_buffer == VK_NULL_HANDLE
-        || g_renderer.image_instance_buffer == VK_NULL_HANDLE
-        || g_renderer.image_atlas_view == VK_NULL_HANDLE
-        || g_renderer.image_sampler == VK_NULL_HANDLE)
+    if (android_renderer_state().image_descriptor_set == VK_NULL_HANDLE) return;
+    if (android_renderer_state().uniform_buffer == VK_NULL_HANDLE
+        || android_renderer_state().image_instance_buffer == VK_NULL_HANDLE
+        || android_renderer_state().image_atlas_view == VK_NULL_HANDLE
+        || android_renderer_state().image_sampler == VK_NULL_HANDLE)
         return;
 
     VkDescriptorBufferInfo ubo{};
-    ubo.buffer = g_renderer.uniform_buffer;
+    ubo.buffer = android_renderer_state().uniform_buffer;
     ubo.offset = 0;
     ubo.range = sizeof(ColorUniforms);
 
     VkDescriptorBufferInfo ssbo{};
-    ssbo.buffer = g_renderer.image_instance_buffer;
+    ssbo.buffer = android_renderer_state().image_instance_buffer;
     ssbo.offset = 0;
     ssbo.range = VK_WHOLE_SIZE;
 
     VkDescriptorImageInfo img{};
-    img.sampler = g_renderer.image_sampler;
-    img.imageView = g_renderer.image_atlas_view;
+    img.sampler = android_renderer_state().image_sampler;
+    img.imageView = android_renderer_state().image_atlas_view;
     img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkWriteDescriptorSet writes[3]{};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[0].dstSet = g_renderer.image_descriptor_set;
+    writes[0].dstSet = android_renderer_state().image_descriptor_set;
     writes[0].dstBinding = 0;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[0].pBufferInfo = &ubo;
     writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[1].dstSet = g_renderer.image_descriptor_set;
+    writes[1].dstSet = android_renderer_state().image_descriptor_set;
     writes[1].dstBinding = 1;
     writes[1].descriptorCount = 1;
     writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writes[1].pBufferInfo = &ssbo;
     writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[2].dstSet = g_renderer.image_descriptor_set;
+    writes[2].dstSet = android_renderer_state().image_descriptor_set;
     writes[2].dstBinding = 2;
     writes[2].descriptorCount = 1;
     writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     writes[2].pImageInfo = &img;
 
-    vkUpdateDescriptorSets(g_renderer.device, 3, writes, 0, nullptr);
+    vkUpdateDescriptorSets(android_renderer_state().device, 3, writes, 0, nullptr);
 }
 
 inline bool ensure_image_instance_capacity(std::size_t required) {
-    if (required <= g_renderer.image_instance_capacity) return true;
-    std::size_t cap = g_renderer.image_instance_capacity == 0
+    if (required <= android_renderer_state().image_instance_capacity) return true;
+    std::size_t cap = android_renderer_state().image_instance_capacity == 0
                         ? INITIAL_IMAGE_INSTANCE_CAPACITY
-                        : g_renderer.image_instance_capacity;
+                        : android_renderer_state().image_instance_capacity;
     while (cap < required) cap *= 2;
 
-    destroy_host_buffer(g_renderer.image_instance_buffer,
-                        g_renderer.image_instance_memory,
-                        g_renderer.image_instance_mapped);
+    destroy_host_buffer(android_renderer_state().image_instance_buffer,
+                        android_renderer_state().image_instance_memory,
+                        android_renderer_state().image_instance_mapped);
     if (!create_host_buffer(cap * sizeof(ImageInstanceGPU),
                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                            g_renderer.image_instance_buffer,
-                            g_renderer.image_instance_memory,
-                            g_renderer.image_instance_mapped))
+                            android_renderer_state().image_instance_buffer,
+                            android_renderer_state().image_instance_memory,
+                            android_renderer_state().image_instance_mapped))
         return false;
-    g_renderer.image_instance_capacity = cap;
+    android_renderer_state().image_instance_capacity = cap;
     write_image_descriptor_set();
     return true;
 }
 
 inline bool ensure_image_staging_capacity(VkDeviceSize bytes) {
-    if (bytes <= g_renderer.image_staging_capacity
-        && g_renderer.image_staging_buffer != VK_NULL_HANDLE)
+    if (bytes <= android_renderer_state().image_staging_capacity
+        && android_renderer_state().image_staging_buffer != VK_NULL_HANDLE)
         return true;
-    destroy_host_buffer(g_renderer.image_staging_buffer,
-                        g_renderer.image_staging_memory,
-                        g_renderer.image_staging_mapped);
-    VkDeviceSize cap = g_renderer.image_staging_capacity == 0
+    destroy_host_buffer(android_renderer_state().image_staging_buffer,
+                        android_renderer_state().image_staging_memory,
+                        android_renderer_state().image_staging_mapped);
+    VkDeviceSize cap = android_renderer_state().image_staging_capacity == 0
                            ? 64 * 1024
-                           : g_renderer.image_staging_capacity;
+                           : android_renderer_state().image_staging_capacity;
     while (cap < bytes) cap *= 2;
     if (!create_host_buffer(cap, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                            g_renderer.image_staging_buffer,
-                            g_renderer.image_staging_memory,
-                            g_renderer.image_staging_mapped))
+                            android_renderer_state().image_staging_buffer,
+                            android_renderer_state().image_staging_memory,
+                            android_renderer_state().image_staging_mapped))
         return false;
-    g_renderer.image_staging_capacity = cap;
+    android_renderer_state().image_staging_capacity = cap;
     return true;
 }
 
 inline bool create_image_resources() {
     if (!create_image_sampler()) return false;
     if (!create_image_pipeline()) return false;
-    if (g_renderer.image_instance_buffer == VK_NULL_HANDLE) {
+    if (android_renderer_state().image_instance_buffer == VK_NULL_HANDLE) {
         if (!create_host_buffer(
                 INITIAL_IMAGE_INSTANCE_CAPACITY * sizeof(ImageInstanceGPU),
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                g_renderer.image_instance_buffer,
-                g_renderer.image_instance_memory,
-                g_renderer.image_instance_mapped))
+                android_renderer_state().image_instance_buffer,
+                android_renderer_state().image_instance_memory,
+                android_renderer_state().image_instance_mapped))
             return false;
-        g_renderer.image_instance_capacity = INITIAL_IMAGE_INSTANCE_CAPACITY;
+        android_renderer_state().image_instance_capacity = INITIAL_IMAGE_INSTANCE_CAPACITY;
     }
     if (!create_image_descriptor_pool_and_set()) return false;
     if (!create_image_atlas_image()) return false;
@@ -3449,7 +3466,7 @@ inline void record_image_atlas_upload(VkCommandBuffer cmd) {
         android_images().has_dirty = false;
         return;
     }
-    auto* dst = static_cast<std::uint8_t*>(g_renderer.image_staging_mapped);
+    auto* dst = static_cast<std::uint8_t*>(android_renderer_state().image_staging_mapped);
     std::size_t const src_row =
         static_cast<std::size_t>(ImageAtlas::SIZE) * ImageAtlas::BYTES_PER_PIXEL;
     std::size_t const dst_row =
@@ -3463,20 +3480,20 @@ inline void record_image_atlas_upload(VkCommandBuffer cmd) {
 
     VkImageMemoryBarrier to_transfer{};
     to_transfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    to_transfer.oldLayout = g_renderer.image_atlas_initialised
+    to_transfer.oldLayout = android_renderer_state().image_atlas_initialised
                               ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                               : VK_IMAGE_LAYOUT_UNDEFINED;
     to_transfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     to_transfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     to_transfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    to_transfer.image = g_renderer.image_atlas_image;
+    to_transfer.image = android_renderer_state().image_atlas_image;
     to_transfer.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-    to_transfer.srcAccessMask = g_renderer.image_atlas_initialised
+    to_transfer.srcAccessMask = android_renderer_state().image_atlas_initialised
                                   ? VK_ACCESS_SHADER_READ_BIT
                                   : 0;
     to_transfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     vkCmdPipelineBarrier(cmd,
-        g_renderer.image_atlas_initialised
+        android_renderer_state().image_atlas_initialised
             ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
             : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -3490,8 +3507,8 @@ inline void record_image_atlas_upload(VkCommandBuffer cmd) {
     region.imageOffset = { static_cast<std::int32_t>(dx),
                            static_cast<std::int32_t>(dy), 0 };
     region.imageExtent = { dw, dh, 1 };
-    vkCmdCopyBufferToImage(cmd, g_renderer.image_staging_buffer,
-                           g_renderer.image_atlas_image,
+    vkCmdCopyBufferToImage(cmd, android_renderer_state().image_staging_buffer,
+                           android_renderer_state().image_atlas_image,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                            1, &region);
 
@@ -3501,7 +3518,7 @@ inline void record_image_atlas_upload(VkCommandBuffer cmd) {
     to_shader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     to_shader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     to_shader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    to_shader.image = g_renderer.image_atlas_image;
+    to_shader.image = android_renderer_state().image_atlas_image;
     to_shader.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
     to_shader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     to_shader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -3510,7 +3527,7 @@ inline void record_image_atlas_upload(VkCommandBuffer cmd) {
         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
         0, 0, nullptr, 0, nullptr, 1, &to_shader);
 
-    g_renderer.image_atlas_initialised = true;
+    android_renderer_state().image_atlas_initialised = true;
     android_images().has_dirty = false;
     android_images().dirty_min_x = ImageAtlas::SIZE;
     android_images().dirty_min_y = ImageAtlas::SIZE;
@@ -3519,55 +3536,55 @@ inline void record_image_atlas_upload(VkCommandBuffer cmd) {
 }
 
 inline void destroy_image_pipeline_resources() {
-    if (g_renderer.image_descriptor_pool != VK_NULL_HANDLE) {
-        vkDestroyDescriptorPool(g_renderer.device,
-                                g_renderer.image_descriptor_pool, nullptr);
-        g_renderer.image_descriptor_pool = VK_NULL_HANDLE;
-        g_renderer.image_descriptor_set = VK_NULL_HANDLE;
+    if (android_renderer_state().image_descriptor_pool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(android_renderer_state().device,
+                                android_renderer_state().image_descriptor_pool, nullptr);
+        android_renderer_state().image_descriptor_pool = VK_NULL_HANDLE;
+        android_renderer_state().image_descriptor_set = VK_NULL_HANDLE;
     }
-    destroy_host_buffer(g_renderer.image_staging_buffer,
-                        g_renderer.image_staging_memory,
-                        g_renderer.image_staging_mapped);
-    g_renderer.image_staging_capacity = 0;
-    destroy_host_buffer(g_renderer.image_instance_buffer,
-                        g_renderer.image_instance_memory,
-                        g_renderer.image_instance_mapped);
-    g_renderer.image_instance_capacity = 0;
-    if (g_renderer.image_atlas_view != VK_NULL_HANDLE) {
-        vkDestroyImageView(g_renderer.device, g_renderer.image_atlas_view,
+    destroy_host_buffer(android_renderer_state().image_staging_buffer,
+                        android_renderer_state().image_staging_memory,
+                        android_renderer_state().image_staging_mapped);
+    android_renderer_state().image_staging_capacity = 0;
+    destroy_host_buffer(android_renderer_state().image_instance_buffer,
+                        android_renderer_state().image_instance_memory,
+                        android_renderer_state().image_instance_mapped);
+    android_renderer_state().image_instance_capacity = 0;
+    if (android_renderer_state().image_atlas_view != VK_NULL_HANDLE) {
+        vkDestroyImageView(android_renderer_state().device, android_renderer_state().image_atlas_view,
                            nullptr);
-        g_renderer.image_atlas_view = VK_NULL_HANDLE;
+        android_renderer_state().image_atlas_view = VK_NULL_HANDLE;
     }
-    if (g_renderer.image_atlas_image != VK_NULL_HANDLE) {
-        vkDestroyImage(g_renderer.device, g_renderer.image_atlas_image,
+    if (android_renderer_state().image_atlas_image != VK_NULL_HANDLE) {
+        vkDestroyImage(android_renderer_state().device, android_renderer_state().image_atlas_image,
                        nullptr);
-        g_renderer.image_atlas_image = VK_NULL_HANDLE;
+        android_renderer_state().image_atlas_image = VK_NULL_HANDLE;
     }
-    if (g_renderer.image_atlas_memory != VK_NULL_HANDLE) {
-        vkFreeMemory(g_renderer.device, g_renderer.image_atlas_memory,
+    if (android_renderer_state().image_atlas_memory != VK_NULL_HANDLE) {
+        vkFreeMemory(android_renderer_state().device, android_renderer_state().image_atlas_memory,
                      nullptr);
-        g_renderer.image_atlas_memory = VK_NULL_HANDLE;
+        android_renderer_state().image_atlas_memory = VK_NULL_HANDLE;
     }
-    g_renderer.image_atlas_initialised = false;
-    if (g_renderer.image_sampler != VK_NULL_HANDLE) {
-        vkDestroySampler(g_renderer.device, g_renderer.image_sampler, nullptr);
-        g_renderer.image_sampler = VK_NULL_HANDLE;
+    android_renderer_state().image_atlas_initialised = false;
+    if (android_renderer_state().image_sampler != VK_NULL_HANDLE) {
+        vkDestroySampler(android_renderer_state().device, android_renderer_state().image_sampler, nullptr);
+        android_renderer_state().image_sampler = VK_NULL_HANDLE;
     }
-    if (g_renderer.image_pipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(g_renderer.device, g_renderer.image_pipeline,
+    if (android_renderer_state().image_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(android_renderer_state().device, android_renderer_state().image_pipeline,
                           nullptr);
-        g_renderer.image_pipeline = VK_NULL_HANDLE;
+        android_renderer_state().image_pipeline = VK_NULL_HANDLE;
     }
-    if (g_renderer.image_pipeline_layout != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(g_renderer.device,
-                                g_renderer.image_pipeline_layout, nullptr);
-        g_renderer.image_pipeline_layout = VK_NULL_HANDLE;
+    if (android_renderer_state().image_pipeline_layout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(android_renderer_state().device,
+                                android_renderer_state().image_pipeline_layout, nullptr);
+        android_renderer_state().image_pipeline_layout = VK_NULL_HANDLE;
     }
-    if (g_renderer.image_descriptor_set_layout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(g_renderer.device,
-                                     g_renderer.image_descriptor_set_layout,
+    if (android_renderer_state().image_descriptor_set_layout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(android_renderer_state().device,
+                                     android_renderer_state().image_descriptor_set_layout,
                                      nullptr);
-        g_renderer.image_descriptor_set_layout = VK_NULL_HANDLE;
+        android_renderer_state().image_descriptor_set_layout = VK_NULL_HANDLE;
     }
     // The CPU-side atlas survives shutdown so repeat attach_surface
     // calls don't re-decode cached images; cache is drained on
@@ -3598,27 +3615,27 @@ inline void reset_image_cache() {
 // staging buffer.
 
 inline void destroy_debug_capture_image() {
-    if (g_renderer.debug_capture_view != VK_NULL_HANDLE) {
-        vkDestroyImageView(g_renderer.device, g_renderer.debug_capture_view,
+    if (android_renderer_state().debug_capture_view != VK_NULL_HANDLE) {
+        vkDestroyImageView(android_renderer_state().device, android_renderer_state().debug_capture_view,
                            nullptr);
-        g_renderer.debug_capture_view = VK_NULL_HANDLE;
+        android_renderer_state().debug_capture_view = VK_NULL_HANDLE;
     }
-    if (g_renderer.debug_capture_image != VK_NULL_HANDLE) {
-        vkDestroyImage(g_renderer.device, g_renderer.debug_capture_image,
+    if (android_renderer_state().debug_capture_image != VK_NULL_HANDLE) {
+        vkDestroyImage(android_renderer_state().device, android_renderer_state().debug_capture_image,
                        nullptr);
-        g_renderer.debug_capture_image = VK_NULL_HANDLE;
+        android_renderer_state().debug_capture_image = VK_NULL_HANDLE;
     }
-    if (g_renderer.debug_capture_memory != VK_NULL_HANDLE) {
-        vkFreeMemory(g_renderer.device, g_renderer.debug_capture_memory,
+    if (android_renderer_state().debug_capture_memory != VK_NULL_HANDLE) {
+        vkFreeMemory(android_renderer_state().device, android_renderer_state().debug_capture_memory,
                      nullptr);
-        g_renderer.debug_capture_memory = VK_NULL_HANDLE;
+        android_renderer_state().debug_capture_memory = VK_NULL_HANDLE;
     }
-    g_renderer.debug_capture_ready = false;
+    android_renderer_state().debug_capture_ready = false;
 }
 
 inline bool create_debug_capture_image() {
     destroy_debug_capture_image();
-    auto const& ext = g_renderer.swapchain_extent;
+    auto const& ext = android_renderer_state().swapchain_extent;
     if (ext.width == 0 || ext.height == 0) return true;
 
     VkImageCreateInfo ici{};
@@ -3627,7 +3644,7 @@ inline bool create_debug_capture_image() {
     // Match the swapchain format so vkCmdCopyImage is valid (no
     // conversion required). swapchain_format is set in create_swapchain
     // to VK_FORMAT_R8G8B8A8_UNORM when available.
-    ici.format = g_renderer.swapchain_format;
+    ici.format = android_renderer_state().swapchain_format;
     ici.extent = { ext.width, ext.height, 1 };
     ici.mipLevels = 1;
     ici.arrayLayers = 1;
@@ -3637,14 +3654,14 @@ inline bool create_debug_capture_image() {
               | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    if (!vk_ok(vkCreateImage(g_renderer.device, &ici, nullptr,
-                             &g_renderer.debug_capture_image),
+    if (!vk_ok(vkCreateImage(android_renderer_state().device, &ici, nullptr,
+                             &android_renderer_state().debug_capture_image),
               "vkCreateImage(debug_capture)"))
         return false;
 
     VkMemoryRequirements req{};
-    vkGetImageMemoryRequirements(g_renderer.device,
-                                 g_renderer.debug_capture_image, &req);
+    vkGetImageMemoryRequirements(android_renderer_state().device,
+                                 android_renderer_state().debug_capture_image, &req);
     auto mt = find_memory_type(req.memoryTypeBits,
                                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if (!mt) return false;
@@ -3653,56 +3670,56 @@ inline bool create_debug_capture_image() {
     mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     mai.allocationSize = req.size;
     mai.memoryTypeIndex = *mt;
-    if (!vk_ok(vkAllocateMemory(g_renderer.device, &mai, nullptr,
-                                &g_renderer.debug_capture_memory),
+    if (!vk_ok(vkAllocateMemory(android_renderer_state().device, &mai, nullptr,
+                                &android_renderer_state().debug_capture_memory),
               "vkAllocateMemory(debug_capture)"))
         return false;
-    if (!vk_ok(vkBindImageMemory(g_renderer.device,
-                                 g_renderer.debug_capture_image,
-                                 g_renderer.debug_capture_memory, 0),
+    if (!vk_ok(vkBindImageMemory(android_renderer_state().device,
+                                 android_renderer_state().debug_capture_image,
+                                 android_renderer_state().debug_capture_memory, 0),
               "vkBindImageMemory(debug_capture)"))
         return false;
 
     VkImageViewCreateInfo vci{};
     vci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    vci.image = g_renderer.debug_capture_image;
+    vci.image = android_renderer_state().debug_capture_image;
     vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    vci.format = g_renderer.swapchain_format;
+    vci.format = android_renderer_state().swapchain_format;
     vci.components = { VK_COMPONENT_SWIZZLE_IDENTITY,
                        VK_COMPONENT_SWIZZLE_IDENTITY,
                        VK_COMPONENT_SWIZZLE_IDENTITY,
                        VK_COMPONENT_SWIZZLE_IDENTITY };
     vci.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-    return vk_ok(vkCreateImageView(g_renderer.device, &vci, nullptr,
-                                   &g_renderer.debug_capture_view),
+    return vk_ok(vkCreateImageView(android_renderer_state().device, &vci, nullptr,
+                                   &android_renderer_state().debug_capture_view),
                 "vkCreateImageView(debug_capture)");
 }
 
 inline bool ensure_debug_readback_capacity(VkDeviceSize bytes) {
-    if (bytes <= g_renderer.debug_readback_capacity
-        && g_renderer.debug_readback_buffer != VK_NULL_HANDLE)
+    if (bytes <= android_renderer_state().debug_readback_capacity
+        && android_renderer_state().debug_readback_buffer != VK_NULL_HANDLE)
         return true;
-    destroy_host_buffer(g_renderer.debug_readback_buffer,
-                        g_renderer.debug_readback_memory,
-                        g_renderer.debug_readback_mapped);
-    VkDeviceSize cap = g_renderer.debug_readback_capacity == 0
+    destroy_host_buffer(android_renderer_state().debug_readback_buffer,
+                        android_renderer_state().debug_readback_memory,
+                        android_renderer_state().debug_readback_mapped);
+    VkDeviceSize cap = android_renderer_state().debug_readback_capacity == 0
                            ? 1024 * 1024 // 1 MiB starter
-                           : g_renderer.debug_readback_capacity;
+                           : android_renderer_state().debug_readback_capacity;
     while (cap < bytes) cap *= 2;
     if (!create_host_buffer(cap, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                            g_renderer.debug_readback_buffer,
-                            g_renderer.debug_readback_memory,
-                            g_renderer.debug_readback_mapped))
+                            android_renderer_state().debug_readback_buffer,
+                            android_renderer_state().debug_readback_memory,
+                            android_renderer_state().debug_readback_mapped))
         return false;
-    g_renderer.debug_readback_capacity = cap;
+    android_renderer_state().debug_readback_capacity = cap;
     return true;
 }
 
 inline void destroy_debug_readback_buffer() {
-    destroy_host_buffer(g_renderer.debug_readback_buffer,
-                        g_renderer.debug_readback_memory,
-                        g_renderer.debug_readback_mapped);
-    g_renderer.debug_readback_capacity = 0;
+    destroy_host_buffer(android_renderer_state().debug_readback_buffer,
+                        android_renderer_state().debug_readback_memory,
+                        android_renderer_state().debug_readback_mapped);
+    android_renderer_state().debug_readback_capacity = 0;
 }
 
 // Records the per-frame copy from the just-presented swapchain image
@@ -3712,8 +3729,8 @@ inline void destroy_debug_readback_buffer() {
 // submit path can transition it to TRANSFER_SRC on demand.
 inline void record_debug_capture_copy(VkCommandBuffer cmd,
                                       std::uint32_t swapchain_index) {
-    if (g_renderer.debug_capture_image == VK_NULL_HANDLE) return;
-    auto const& ext = g_renderer.swapchain_extent;
+    if (android_renderer_state().debug_capture_image == VK_NULL_HANDLE) return;
+    auto const& ext = android_renderer_state().swapchain_extent;
     if (ext.width == 0 || ext.height == 0) return;
 
     VkImageMemoryBarrier pre[2]{};
@@ -3723,21 +3740,21 @@ inline void record_debug_capture_copy(VkCommandBuffer cmd,
     pre[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     pre[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     pre[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    pre[0].image = g_renderer.swapchain_images[swapchain_index];
+    pre[0].image = android_renderer_state().swapchain_images[swapchain_index];
     pre[0].subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
     pre[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     pre[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     // capture GENERAL/UNDEFINED -> TRANSFER_DST
     pre[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    pre[1].oldLayout = g_renderer.debug_capture_ready
+    pre[1].oldLayout = android_renderer_state().debug_capture_ready
                         ? VK_IMAGE_LAYOUT_GENERAL
                         : VK_IMAGE_LAYOUT_UNDEFINED;
     pre[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     pre[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     pre[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    pre[1].image = g_renderer.debug_capture_image;
+    pre[1].image = android_renderer_state().debug_capture_image;
     pre[1].subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-    pre[1].srcAccessMask = g_renderer.debug_capture_ready
+    pre[1].srcAccessMask = android_renderer_state().debug_capture_ready
                             ? VK_ACCESS_TRANSFER_READ_BIT
                             : 0;
     pre[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -3751,9 +3768,9 @@ inline void record_debug_capture_copy(VkCommandBuffer cmd,
     region.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
     region.extent = { ext.width, ext.height, 1 };
     vkCmdCopyImage(cmd,
-        g_renderer.swapchain_images[swapchain_index],
+        android_renderer_state().swapchain_images[swapchain_index],
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        g_renderer.debug_capture_image,
+        android_renderer_state().debug_capture_image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         1, &region);
 
@@ -3764,7 +3781,7 @@ inline void record_debug_capture_copy(VkCommandBuffer cmd,
     post[0].newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     post[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     post[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    post[0].image = g_renderer.swapchain_images[swapchain_index];
+    post[0].image = android_renderer_state().swapchain_images[swapchain_index];
     post[0].subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
     post[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     post[0].dstAccessMask = 0;
@@ -3774,7 +3791,7 @@ inline void record_debug_capture_copy(VkCommandBuffer cmd,
     post[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
     post[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     post[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    post[1].image = g_renderer.debug_capture_image;
+    post[1].image = android_renderer_state().debug_capture_image;
     post[1].subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
     post[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     post[1].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
@@ -3783,41 +3800,41 @@ inline void record_debug_capture_copy(VkCommandBuffer cmd,
         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
         0, 0, nullptr, 0, nullptr, 2, post);
 
-    g_renderer.debug_capture_ready = true;
-    g_renderer.last_render_width  = ext.width;
-    g_renderer.last_render_height = ext.height;
-    g_renderer.last_frame_available = true;
+    android_renderer_state().debug_capture_ready = true;
+    android_renderer_state().last_render_width  = ext.width;
+    android_renderer_state().last_render_height = ext.height;
+    android_renderer_state().last_frame_available = true;
 }
 
 inline bool create_image_views_and_framebuffers() {
-    g_renderer.swapchain_image_views.resize(g_renderer.swapchain_images.size());
-    for (std::size_t i = 0; i < g_renderer.swapchain_images.size(); ++i) {
+    android_renderer_state().swapchain_image_views.resize(android_renderer_state().swapchain_images.size());
+    for (std::size_t i = 0; i < android_renderer_state().swapchain_images.size(); ++i) {
         VkImageViewCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        ci.image = g_renderer.swapchain_images[i];
+        ci.image = android_renderer_state().swapchain_images[i];
         ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        ci.format = g_renderer.swapchain_format;
+        ci.format = android_renderer_state().swapchain_format;
         ci.components = { VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
                           VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
         ci.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-        if (!vk_ok(vkCreateImageView(g_renderer.device, &ci, nullptr,
-                                     &g_renderer.swapchain_image_views[i]),
+        if (!vk_ok(vkCreateImageView(android_renderer_state().device, &ci, nullptr,
+                                     &android_renderer_state().swapchain_image_views[i]),
                   "vkCreateImageView"))
             return false;
     }
 
-    g_renderer.framebuffers.resize(g_renderer.swapchain_images.size());
-    for (std::size_t i = 0; i < g_renderer.swapchain_images.size(); ++i) {
+    android_renderer_state().framebuffers.resize(android_renderer_state().swapchain_images.size());
+    for (std::size_t i = 0; i < android_renderer_state().swapchain_images.size(); ++i) {
         VkFramebufferCreateInfo fi{};
         fi.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fi.renderPass = g_renderer.render_pass;
+        fi.renderPass = android_renderer_state().render_pass;
         fi.attachmentCount = 1;
-        fi.pAttachments = &g_renderer.swapchain_image_views[i];
-        fi.width = g_renderer.swapchain_extent.width;
-        fi.height = g_renderer.swapchain_extent.height;
+        fi.pAttachments = &android_renderer_state().swapchain_image_views[i];
+        fi.width = android_renderer_state().swapchain_extent.width;
+        fi.height = android_renderer_state().swapchain_extent.height;
         fi.layers = 1;
-        if (!vk_ok(vkCreateFramebuffer(g_renderer.device, &fi, nullptr,
-                                       &g_renderer.framebuffers[i]),
+        if (!vk_ok(vkCreateFramebuffer(android_renderer_state().device, &fi, nullptr,
+                                       &android_renderer_state().framebuffers[i]),
                   "vkCreateFramebuffer"))
             return false;
     }
@@ -3825,54 +3842,54 @@ inline bool create_image_views_and_framebuffers() {
 }
 
 inline void destroy_swapchain_resources() {
-    if (g_renderer.device == VK_NULL_HANDLE) return;
-    if (g_renderer.in_flight != VK_NULL_HANDLE)
-        vkWaitForFences(g_renderer.device, 1, &g_renderer.in_flight, VK_TRUE, UINT64_MAX);
+    if (android_renderer_state().device == VK_NULL_HANDLE) return;
+    if (android_renderer_state().in_flight != VK_NULL_HANDLE)
+        vkWaitForFences(android_renderer_state().device, 1, &android_renderer_state().in_flight, VK_TRUE, UINT64_MAX);
 
     // Stage 7: the debug capture image is sized to the current
     // swapchain extent, so its lifetime follows the swapchain.
     destroy_debug_capture_image();
 
-    for (auto fb : g_renderer.framebuffers) {
+    for (auto fb : android_renderer_state().framebuffers) {
         if (fb != VK_NULL_HANDLE)
-            vkDestroyFramebuffer(g_renderer.device, fb, nullptr);
+            vkDestroyFramebuffer(android_renderer_state().device, fb, nullptr);
     }
-    g_renderer.framebuffers.clear();
+    android_renderer_state().framebuffers.clear();
 
-    for (auto iv : g_renderer.swapchain_image_views) {
+    for (auto iv : android_renderer_state().swapchain_image_views) {
         if (iv != VK_NULL_HANDLE)
-            vkDestroyImageView(g_renderer.device, iv, nullptr);
+            vkDestroyImageView(android_renderer_state().device, iv, nullptr);
     }
-    g_renderer.swapchain_image_views.clear();
+    android_renderer_state().swapchain_image_views.clear();
 
-    if (g_renderer.command_pool != VK_NULL_HANDLE
-        && g_renderer.command_buffer != VK_NULL_HANDLE) {
-        vkFreeCommandBuffers(g_renderer.device, g_renderer.command_pool,
-                             1, &g_renderer.command_buffer);
-        g_renderer.command_buffer = VK_NULL_HANDLE;
+    if (android_renderer_state().command_pool != VK_NULL_HANDLE
+        && android_renderer_state().command_buffer != VK_NULL_HANDLE) {
+        vkFreeCommandBuffers(android_renderer_state().device, android_renderer_state().command_pool,
+                             1, &android_renderer_state().command_buffer);
+        android_renderer_state().command_buffer = VK_NULL_HANDLE;
     }
-    if (g_renderer.swapchain != VK_NULL_HANDLE) {
-        vkDestroySwapchainKHR(g_renderer.device, g_renderer.swapchain, nullptr);
-        g_renderer.swapchain = VK_NULL_HANDLE;
+    if (android_renderer_state().swapchain != VK_NULL_HANDLE) {
+        vkDestroySwapchainKHR(android_renderer_state().device, android_renderer_state().swapchain, nullptr);
+        android_renderer_state().swapchain = VK_NULL_HANDLE;
     }
-    g_renderer.swapchain_images.clear();
-    g_renderer.last_frame_available = false;
+    android_renderer_state().swapchain_images.clear();
+    android_renderer_state().last_frame_available = false;
 }
 
 inline bool create_swapchain() {
     VkSurfaceCapabilitiesKHR caps{};
     if (!vk_ok(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-                  g_renderer.physical_device, g_renderer.surface, &caps),
+                  android_renderer_state().physical_device, android_renderer_state().surface, &caps),
               "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"))
         return false;
 
     std::uint32_t format_count = 0;
     vkGetPhysicalDeviceSurfaceFormatsKHR(
-        g_renderer.physical_device, g_renderer.surface, &format_count, nullptr);
+        android_renderer_state().physical_device, android_renderer_state().surface, &format_count, nullptr);
     if (format_count == 0) return false;
     std::vector<VkSurfaceFormatKHR> formats(format_count);
     vkGetPhysicalDeviceSurfaceFormatsKHR(
-        g_renderer.physical_device, g_renderer.surface, &format_count, formats.data());
+        android_renderer_state().physical_device, android_renderer_state().surface, &format_count, formats.data());
 
     VkSurfaceFormatKHR picked = formats[0];
     for (auto const& f : formats) {
@@ -3886,9 +3903,9 @@ inline bool create_swapchain() {
     VkExtent2D extent = caps.currentExtent;
     if (extent.width == UINT32_MAX) {
         extent.width = static_cast<std::uint32_t>(
-            ANativeWindow_getWidth(g_renderer.window));
+            ANativeWindow_getWidth(android_renderer_state().window));
         extent.height = static_cast<std::uint32_t>(
-            ANativeWindow_getHeight(g_renderer.window));
+            ANativeWindow_getHeight(android_renderer_state().window));
     }
 
     std::uint32_t image_count = caps.minImageCount + 1;
@@ -3897,7 +3914,7 @@ inline bool create_swapchain() {
 
     VkSwapchainCreateInfoKHR ci{};
     ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    ci.surface = g_renderer.surface;
+    ci.surface = android_renderer_state().surface;
     ci.minImageCount = image_count;
     ci.imageFormat = picked.format;
     ci.imageColorSpace = picked.colorSpace;
@@ -3912,27 +3929,27 @@ inline bool create_swapchain() {
     ci.presentMode = VK_PRESENT_MODE_FIFO_KHR;
     ci.clipped = VK_TRUE;
 
-    if (!vk_ok(vkCreateSwapchainKHR(g_renderer.device, &ci, nullptr,
-                                    &g_renderer.swapchain),
+    if (!vk_ok(vkCreateSwapchainKHR(android_renderer_state().device, &ci, nullptr,
+                                    &android_renderer_state().swapchain),
               "vkCreateSwapchainKHR"))
         return false;
 
-    g_renderer.swapchain_format = picked.format;
-    g_renderer.swapchain_extent = extent;
+    android_renderer_state().swapchain_format = picked.format;
+    android_renderer_state().swapchain_extent = extent;
 
     std::uint32_t n = 0;
-    vkGetSwapchainImagesKHR(g_renderer.device, g_renderer.swapchain, &n, nullptr);
-    g_renderer.swapchain_images.resize(n);
-    vkGetSwapchainImagesKHR(g_renderer.device, g_renderer.swapchain, &n,
-                            g_renderer.swapchain_images.data());
+    vkGetSwapchainImagesKHR(android_renderer_state().device, android_renderer_state().swapchain, &n, nullptr);
+    android_renderer_state().swapchain_images.resize(n);
+    vkGetSwapchainImagesKHR(android_renderer_state().device, android_renderer_state().swapchain, &n,
+                            android_renderer_state().swapchain_images.data());
 
     VkCommandBufferAllocateInfo alloc{};
     alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    alloc.commandPool = g_renderer.command_pool;
+    alloc.commandPool = android_renderer_state().command_pool;
     alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     alloc.commandBufferCount = 1;
-    if (!vk_ok(vkAllocateCommandBuffers(g_renderer.device, &alloc,
-                                        &g_renderer.command_buffer),
+    if (!vk_ok(vkAllocateCommandBuffers(android_renderer_state().device, &alloc,
+                                        &android_renderer_state().command_buffer),
               "vkAllocateCommandBuffers"))
         return false;
 
@@ -3946,12 +3963,12 @@ inline bool create_swapchain() {
 
 inline void renderer_init(native_surface_handle handle) {
     auto* window = static_cast<ANativeWindow*>(handle);
-    if (g_renderer.initialized && g_renderer.window == window) return;
-    if (g_renderer.initialized) destroy_swapchain_resources();
-    g_renderer.window = window;
+    if (android_renderer_state().initialized && android_renderer_state().window == window) return;
+    if (android_renderer_state().initialized) destroy_swapchain_resources();
+    android_renderer_state().window = window;
     if (!window) return;
 
-    if (g_renderer.instance == VK_NULL_HANDLE) {
+    if (android_renderer_state().instance == VK_NULL_HANDLE) {
         VkApplicationInfo app{};
         app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         app.pApplicationName = "phenotype";
@@ -3965,45 +3982,45 @@ inline void renderer_init(native_surface_handle handle) {
         ici.pApplicationInfo = &app;
         ici.enabledExtensionCount = 2;
         ici.ppEnabledExtensionNames = exts;
-        if (!vk_ok(vkCreateInstance(&ici, nullptr, &g_renderer.instance),
+        if (!vk_ok(vkCreateInstance(&ici, nullptr, &android_renderer_state().instance),
                   "vkCreateInstance"))
             return;
     }
 
-    if (g_renderer.surface != VK_NULL_HANDLE) {
-        vkDestroySurfaceKHR(g_renderer.instance, g_renderer.surface, nullptr);
-        g_renderer.surface = VK_NULL_HANDLE;
+    if (android_renderer_state().surface != VK_NULL_HANDLE) {
+        vkDestroySurfaceKHR(android_renderer_state().instance, android_renderer_state().surface, nullptr);
+        android_renderer_state().surface = VK_NULL_HANDLE;
     }
 
     VkAndroidSurfaceCreateInfoKHR sci{};
     sci.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
     sci.window = window;
-    if (!vk_ok(vkCreateAndroidSurfaceKHR(g_renderer.instance, &sci, nullptr,
-                                         &g_renderer.surface),
+    if (!vk_ok(vkCreateAndroidSurfaceKHR(android_renderer_state().instance, &sci, nullptr,
+                                         &android_renderer_state().surface),
               "vkCreateAndroidSurfaceKHR"))
         return;
 
-    if (g_renderer.device == VK_NULL_HANDLE) {
+    if (android_renderer_state().device == VK_NULL_HANDLE) {
         std::uint32_t n = 0;
-        vkEnumeratePhysicalDevices(g_renderer.instance, &n, nullptr);
+        vkEnumeratePhysicalDevices(android_renderer_state().instance, &n, nullptr);
         if (n == 0) return;
         std::vector<VkPhysicalDevice> devs(n);
-        vkEnumeratePhysicalDevices(g_renderer.instance, &n, devs.data());
-        g_renderer.physical_device = devs[0];
+        vkEnumeratePhysicalDevices(android_renderer_state().instance, &n, devs.data());
+        android_renderer_state().physical_device = devs[0];
 
         std::uint32_t q = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(g_renderer.physical_device, &q, nullptr);
+        vkGetPhysicalDeviceQueueFamilyProperties(android_renderer_state().physical_device, &q, nullptr);
         std::vector<VkQueueFamilyProperties> fams(q);
         vkGetPhysicalDeviceQueueFamilyProperties(
-            g_renderer.physical_device, &q, fams.data());
+            android_renderer_state().physical_device, &q, fams.data());
         bool found = false;
         for (std::uint32_t i = 0; i < q; ++i) {
             if (fams[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 VkBool32 present = VK_FALSE;
                 vkGetPhysicalDeviceSurfaceSupportKHR(
-                    g_renderer.physical_device, i, g_renderer.surface, &present);
+                    android_renderer_state().physical_device, i, android_renderer_state().surface, &present);
                 if (present) {
-                    g_renderer.queue_family_index = i;
+                    android_renderer_state().queue_family_index = i;
                     found = true;
                     break;
                 }
@@ -4014,7 +4031,7 @@ inline void renderer_init(native_surface_handle handle) {
         float priority = 1.0f;
         VkDeviceQueueCreateInfo qci{};
         qci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        qci.queueFamilyIndex = g_renderer.queue_family_index;
+        qci.queueFamilyIndex = android_renderer_state().queue_family_index;
         qci.queueCount = 1;
         qci.pQueuePriorities = &priority;
 
@@ -4025,43 +4042,43 @@ inline void renderer_init(native_surface_handle handle) {
         dci.pQueueCreateInfos = &qci;
         dci.enabledExtensionCount = 1;
         dci.ppEnabledExtensionNames = dev_exts;
-        if (!vk_ok(vkCreateDevice(g_renderer.physical_device, &dci, nullptr,
-                                  &g_renderer.device),
+        if (!vk_ok(vkCreateDevice(android_renderer_state().physical_device, &dci, nullptr,
+                                  &android_renderer_state().device),
                   "vkCreateDevice"))
             return;
-        vkGetDeviceQueue(g_renderer.device, g_renderer.queue_family_index, 0,
-                         &g_renderer.queue);
+        vkGetDeviceQueue(android_renderer_state().device, android_renderer_state().queue_family_index, 0,
+                         &android_renderer_state().queue);
 
         VkCommandPoolCreateInfo pci{};
         pci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         pci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        pci.queueFamilyIndex = g_renderer.queue_family_index;
-        vk_ok(vkCreateCommandPool(g_renderer.device, &pci, nullptr,
-                                  &g_renderer.command_pool),
+        pci.queueFamilyIndex = android_renderer_state().queue_family_index;
+        vk_ok(vkCreateCommandPool(android_renderer_state().device, &pci, nullptr,
+                                  &android_renderer_state().command_pool),
               "vkCreateCommandPool");
 
         VkSemaphoreCreateInfo semi{};
         semi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        vk_ok(vkCreateSemaphore(g_renderer.device, &semi, nullptr,
-                                &g_renderer.image_available),
+        vk_ok(vkCreateSemaphore(android_renderer_state().device, &semi, nullptr,
+                                &android_renderer_state().image_available),
               "vkCreateSemaphore");
-        vk_ok(vkCreateSemaphore(g_renderer.device, &semi, nullptr,
-                                &g_renderer.render_finished),
+        vk_ok(vkCreateSemaphore(android_renderer_state().device, &semi, nullptr,
+                                &android_renderer_state().render_finished),
               "vkCreateSemaphore");
 
         VkFenceCreateInfo fi{};
         fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fi.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-        vk_ok(vkCreateFence(g_renderer.device, &fi, nullptr, &g_renderer.in_flight),
+        vk_ok(vkCreateFence(android_renderer_state().device, &fi, nullptr, &android_renderer_state().in_flight),
               "vkCreateFence");
     }
 
     if (!create_swapchain()) return;
-    g_renderer.initialized = true;
+    android_renderer_state().initialized = true;
     __android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG,
                         "Vulkan renderer ready (%ux%u)",
-                        g_renderer.swapchain_extent.width,
-                        g_renderer.swapchain_extent.height);
+                        android_renderer_state().swapchain_extent.width,
+                        android_renderer_state().swapchain_extent.height);
 }
 
 // Normalises the 0..255 Color channels into the 0..1 RGBA linear
@@ -6118,21 +6135,21 @@ inline json::Value android_accessibility_display_options_json(
 }
 
 inline void renderer_flush(unsigned char const* buf, unsigned int len) {
-    if (!g_renderer.initialized) return;
+    if (!android_renderer_state().initialized) return;
     if (buf == nullptr || len == 0) {
-        g_renderer.last_frame_buf.clear();
-        g_renderer.last_buf_hash = 0;
-        g_renderer.last_scratch_valid = false;
-        g_renderer.material_executor_summary = MaterialExecutorSummary{};
+        android_renderer_state().last_frame_buf.clear();
+        android_renderer_state().last_buf_hash = 0;
+        android_renderer_state().last_scratch_valid = false;
+        android_renderer_state().material_executor_summary = MaterialExecutorSummary{};
         return;
     }
 
     auto const t_start = std::chrono::steady_clock::now();
-    g_renderer.material_executor_summary = MaterialExecutorSummary{};
+    android_renderer_state().material_executor_summary = MaterialExecutorSummary{};
 
     // Snapshot the caller's buffer so hit_test can replay it later
     // without forcing another view() pass.
-    g_renderer.last_frame_buf.assign(buf, buf + len);
+    android_renderer_state().last_frame_buf.assign(buf, buf + len);
 
     // Decode-skip path: if the binary cmd buffer matches the previous
     // frame's bit-for-bit, the decoded FrameScratch + GPU SSBOs +
@@ -6144,28 +6161,28 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     // hundred microseconds of vkCmd recording.
     std::uint64_t const cur_hash = fnv1a_hash(buf, len);
     bool const command_stream_changed =
-        !g_renderer.last_scratch_valid
-        || g_renderer.last_buf_hash == 0
-        || g_renderer.last_buf_hash != cur_hash;
-    auto accessibility = g_renderer.accessibility_options;
+        !android_renderer_state().last_scratch_valid
+        || android_renderer_state().last_buf_hash == 0
+        || android_renderer_state().last_buf_hash != cur_hash;
+    auto accessibility = android_renderer_state().accessibility_options;
     auto accessibility_signature =
-        g_renderer.last_material_accessibility_signature;
+        android_renderer_state().last_material_accessibility_signature;
     if (command_stream_changed) {
         accessibility = android_accessibility_display_options();
         accessibility_signature = android_accessibility_signature(accessibility);
-        g_renderer.accessibility_options = accessibility;
+        android_renderer_state().accessibility_options = accessibility;
     }
     bool const can_skip_decode =
-        g_renderer.last_scratch_valid
-        && g_renderer.last_buf_hash != 0
-        && g_renderer.last_buf_hash == cur_hash
-        && g_renderer.last_material_accessibility_signature
+        android_renderer_state().last_scratch_valid
+        && android_renderer_state().last_buf_hash != 0
+        && android_renderer_state().last_buf_hash == cur_hash
+        && android_renderer_state().last_material_accessibility_signature
             == accessibility_signature;
 
     auto t_decode_end = t_start;
     FrameScratch local_scratch;
     FrameScratch& scratch =
-        can_skip_decode ? g_renderer.last_scratch : local_scratch;
+        can_skip_decode ? android_renderer_state().last_scratch : local_scratch;
     ::phenotype::native::TextAtlas atlas{};
 
     if (!can_skip_decode) {
@@ -6173,7 +6190,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         material_env.capabilities.material_surfaces = true;
         material_env.capabilities.material_backdrop_blur = false;
         material_env.capabilities.shader_blur = false;
-        material_env.capabilities.frame_history = g_renderer.last_frame_available;
+        material_env.capabilities.frame_history = android_renderer_state().last_frame_available;
         material_env.capabilities.reduce_transparency =
             accessibility.reduce_transparency;
         material_env.capabilities.increase_contrast =
@@ -6184,12 +6201,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         material_env.backdrop.stable = false;
         material_env.backdrop.source = "android-vulkan-fallback";
         material_env.render_target.width =
-            static_cast<int>(g_renderer.swapchain_extent.width);
+            static_cast<int>(android_renderer_state().swapchain_extent.width);
         material_env.render_target.height =
-            static_cast<int>(g_renderer.swapchain_extent.height);
+            static_cast<int>(android_renderer_state().swapchain_extent.height);
         material_env.render_target.scale = 1.0f;
         material_env.render_target.pixel_format = "rgba8unorm";
-        material_env.debug_seed.frame = ++g_renderer.material_frame_sequence;
+        material_env.debug_seed.frame = ++android_renderer_state().material_frame_sequence;
         material_env.quality = default_material_quality_policy();
         decode_android_color_commands(buf, len, material_env, scratch);
         if (!scratch.has_clear) {
@@ -6199,7 +6216,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
     t_decode_end = std::chrono::steady_clock::now();
 
-    vkWaitForFences(g_renderer.device, 1, &g_renderer.in_flight, VK_TRUE, UINT64_MAX);
+    vkWaitForFences(android_renderer_state().device, 1, &android_renderer_state().in_flight, VK_TRUE, UINT64_MAX);
 
     // Build the text atlas on CPU (JNI) before acquiring the swapchain
     // image so the Paint calls can take as long as they need without
@@ -6207,7 +6224,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     // waited on, so the persistently-mapped text buffers are safe to
     // touch once we start staging data below.
     if (can_skip_decode) {
-        atlas = g_renderer.last_atlas;
+        atlas = android_renderer_state().last_atlas;
     } else if (!scratch.text_entries.empty()) {
         atlas = text_build_atlas(scratch.text_entries, 1.0f);
         for (std::size_t i = 0;
@@ -6251,20 +6268,20 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     std::uint32_t idx = 0;
     auto r = vkAcquireNextImageKHR(
-        g_renderer.device, g_renderer.swapchain, UINT64_MAX,
-        g_renderer.image_available, VK_NULL_HANDLE, &idx);
+        android_renderer_state().device, android_renderer_state().swapchain, UINT64_MAX,
+        android_renderer_state().image_available, VK_NULL_HANDLE, &idx);
     if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) {
         destroy_swapchain_resources();
         create_swapchain();
         // Swapchain rebuild invalidates the cached scratch — next
         // frame must re-decode.
-        g_renderer.last_buf_hash = 0;
-        g_renderer.last_scratch_valid = false;
+        android_renderer_state().last_buf_hash = 0;
+        android_renderer_state().last_scratch_valid = false;
         return;
     }
     if (!vk_ok(r, "vkAcquireNextImageKHR")) return;
 
-    vkResetFences(g_renderer.device, 1, &g_renderer.in_flight);
+    vkResetFences(android_renderer_state().device, 1, &android_renderer_state().in_flight);
 
     auto const t_upload_start = std::chrono::steady_clock::now();
     bool have_text = false;
@@ -6274,27 +6291,27 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         // the cached have_text / have_images flags. The image atlas
         // dirty region may still need a flush for async-loaded
         // images — record_image_atlas_upload below handles that.
-        have_text = g_renderer.last_have_text;
-        have_images = g_renderer.last_have_images;
+        have_text = android_renderer_state().last_have_text;
+        have_images = android_renderer_state().last_have_images;
     } else {
         // Upload per-frame data — the fence wait above guarantees the
         // previous frame is no longer reading these persistently-mapped
         // buffers.
         if (!scratch.color_instances.empty()) {
             if (!ensure_instance_capacity(scratch.color_instances.size())) return;
-            std::memcpy(g_renderer.instance_mapped,
+            std::memcpy(android_renderer_state().instance_mapped,
                         scratch.color_instances.data(),
                         scratch.color_instances.size() * sizeof(ColorInstanceGPU));
         }
         if (!scratch.arc_instances.empty()) {
             if (!ensure_arc_instance_capacity(scratch.arc_instances.size())) return;
-            std::memcpy(g_renderer.arc_instance_mapped,
+            std::memcpy(android_renderer_state().arc_instance_mapped,
                         scratch.arc_instances.data(),
                         scratch.arc_instances.size() * sizeof(ArcInstanceGPU));
         }
         if (!scratch.tri_vertices.empty()) {
             if (!ensure_tri_vertex_capacity(scratch.tri_vertices.size())) return;
-            std::memcpy(g_renderer.tri_vertex_mapped,
+            std::memcpy(android_renderer_state().tri_vertex_mapped,
                         scratch.tri_vertices.data(),
                         scratch.tri_vertices.size() * sizeof(TriVertexGPU));
         }
@@ -6311,7 +6328,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                        static_cast<std::uint32_t>(atlas.height))) {
                 have_text = false;
             } else {
-                std::memcpy(g_renderer.text_instance_mapped,
+                std::memcpy(android_renderer_state().text_instance_mapped,
                             scratch.text_instances.data(),
                             scratch.text_instances.size() * sizeof(TextInstanceGPU));
                 // Atlas view may have been recreated; refresh all three
@@ -6329,7 +6346,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             if (!ensure_image_instance_capacity(scratch.image_instances.size())) {
                 have_images = false;
             } else {
-                std::memcpy(g_renderer.image_instance_mapped,
+                std::memcpy(android_renderer_state().image_instance_mapped,
                             scratch.image_instances.data(),
                             scratch.image_instances.size()
                                 * sizeof(ImageInstanceGPU));
@@ -6339,51 +6356,51 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     auto const t_upload_end = std::chrono::steady_clock::now();
 
     ColorUniforms uniforms{};
-    uniforms.viewport[0] = static_cast<float>(g_renderer.swapchain_extent.width);
-    uniforms.viewport[1] = static_cast<float>(g_renderer.swapchain_extent.height);
-    std::memcpy(g_renderer.uniform_mapped, &uniforms, sizeof uniforms);
+    uniforms.viewport[0] = static_cast<float>(android_renderer_state().swapchain_extent.width);
+    uniforms.viewport[1] = static_cast<float>(android_renderer_state().swapchain_extent.height);
+    std::memcpy(android_renderer_state().uniform_mapped, &uniforms, sizeof uniforms);
 
     auto const t_record_start = std::chrono::steady_clock::now();
 
     // Record the render pass.
-    vkResetCommandBuffer(g_renderer.command_buffer, 0);
+    vkResetCommandBuffer(android_renderer_state().command_buffer, 0);
     VkCommandBufferBeginInfo bi{};
     bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(g_renderer.command_buffer, &bi);
+    vkBeginCommandBuffer(android_renderer_state().command_buffer, &bi);
 
     // Atlas staging → VkImage copy must happen outside the render pass;
     // layout transitions aren't legal while a render pass is active.
     if (have_text) {
-        record_text_atlas_upload(g_renderer.command_buffer,
+        record_text_atlas_upload(android_renderer_state().command_buffer,
                                  atlas.pixels.data(),
                                  static_cast<std::uint32_t>(atlas.width),
                                  static_cast<std::uint32_t>(atlas.height));
     }
     // Image atlas dirty-region upload: no-op if no images were decoded
     // or the atlas view is already up to date.
-    record_image_atlas_upload(g_renderer.command_buffer);
+    record_image_atlas_upload(android_renderer_state().command_buffer);
 
     VkClearValue clear{};
     std::memcpy(clear.color.float32, scratch.clear_color, sizeof scratch.clear_color);
 
     VkRenderPassBeginInfo rp{};
     rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rp.renderPass = g_renderer.render_pass;
-    rp.framebuffer = g_renderer.framebuffers[idx];
+    rp.renderPass = android_renderer_state().render_pass;
+    rp.framebuffer = android_renderer_state().framebuffers[idx];
     rp.renderArea.offset = {0, 0};
-    rp.renderArea.extent = g_renderer.swapchain_extent;
+    rp.renderArea.extent = android_renderer_state().swapchain_extent;
     rp.clearValueCount = 1;
     rp.pClearValues = &clear;
-    vkCmdBeginRenderPass(g_renderer.command_buffer, &rp,
+    vkCmdBeginRenderPass(android_renderer_state().command_buffer, &rp,
                          VK_SUBPASS_CONTENTS_INLINE);
 
     VkViewport vp{};
     vp.x = 0.0f; vp.y = 0.0f;
-    vp.width = static_cast<float>(g_renderer.swapchain_extent.width);
-    vp.height = static_cast<float>(g_renderer.swapchain_extent.height);
+    vp.width = static_cast<float>(android_renderer_state().swapchain_extent.width);
+    vp.height = static_cast<float>(android_renderer_state().swapchain_extent.height);
     vp.minDepth = 0.0f; vp.maxDepth = 1.0f;
-    vkCmdSetViewport(g_renderer.command_buffer, 0, 1, &vp);
+    vkCmdSetViewport(android_renderer_state().command_buffer, 0, 1, &vp);
 
     // Per-batch scissor + draws. Each batch's instance ranges live
     // contiguously in the flat *_instances vectors thanks to
@@ -6403,10 +6420,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             + batch_image_count + batch_text_count == 0)
             continue;
         VkRect2D scissor =
-            compute_vk_scissor(batch, g_renderer.swapchain_extent);
+            compute_vk_scissor(batch, android_renderer_state().swapchain_extent);
         if (scissor.extent.width == 0 || scissor.extent.height == 0)
             continue;
-        vkCmdSetScissor(g_renderer.command_buffer, 0, 1, &scissor);
+        vkCmdSetScissor(android_renderer_state().command_buffer, 0, 1, &scissor);
 
         // Triangles paint first within a batch so colors / arcs / text
         // overlay them naturally, matching macOS draw order at
@@ -6416,107 +6433,107 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         // is correct even when a triangle primitive arrives after a
         // color in the command stream within the same scissor.
         if (batch_tri_count > 0) {
-            vkCmdBindPipeline(g_renderer.command_buffer,
+            vkCmdBindPipeline(android_renderer_state().command_buffer,
                               VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              g_renderer.tri_pipeline);
-            vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                              android_renderer_state().tri_pipeline);
+            vkCmdBindDescriptorSets(android_renderer_state().command_buffer,
                                     VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    g_renderer.tri_pipeline_layout,
-                                    0, 1, &g_renderer.tri_descriptor_set,
+                                    android_renderer_state().tri_pipeline_layout,
+                                    0, 1, &android_renderer_state().tri_descriptor_set,
                                     0, nullptr);
             VkDeviceSize const tri_offset =
                 static_cast<VkDeviceSize>(batch.tri_first)
                 * sizeof(TriVertexGPU);
-            vkCmdBindVertexBuffers(g_renderer.command_buffer, 0, 1,
-                                   &g_renderer.tri_vertex_buffer,
+            vkCmdBindVertexBuffers(android_renderer_state().command_buffer, 0, 1,
+                                   &android_renderer_state().tri_vertex_buffer,
                                    &tri_offset);
-            vkCmdDraw(g_renderer.command_buffer,
+            vkCmdDraw(android_renderer_state().command_buffer,
                       batch_tri_count, 1, 0, 0);
         }
         if (batch_color_count > 0) {
-            vkCmdBindPipeline(g_renderer.command_buffer,
+            vkCmdBindPipeline(android_renderer_state().command_buffer,
                               VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              g_renderer.color_pipeline);
-            vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                              android_renderer_state().color_pipeline);
+            vkCmdBindDescriptorSets(android_renderer_state().command_buffer,
                                     VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    g_renderer.color_pipeline_layout,
-                                    0, 1, &g_renderer.color_descriptor_set,
+                                    android_renderer_state().color_pipeline_layout,
+                                    0, 1, &android_renderer_state().color_descriptor_set,
                                     0, nullptr);
-            vkCmdDraw(g_renderer.command_buffer, 6,
+            vkCmdDraw(android_renderer_state().command_buffer, 6,
                       batch_color_count, 0, batch.color_first);
         }
         if (batch_arc_count > 0) {
-            vkCmdBindPipeline(g_renderer.command_buffer,
+            vkCmdBindPipeline(android_renderer_state().command_buffer,
                               VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              g_renderer.arc_pipeline);
-            vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                              android_renderer_state().arc_pipeline);
+            vkCmdBindDescriptorSets(android_renderer_state().command_buffer,
                                     VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    g_renderer.color_pipeline_layout,
-                                    0, 1, &g_renderer.arc_descriptor_set,
+                                    android_renderer_state().color_pipeline_layout,
+                                    0, 1, &android_renderer_state().arc_descriptor_set,
                                     0, nullptr);
-            vkCmdDraw(g_renderer.command_buffer, 6,
+            vkCmdDraw(android_renderer_state().command_buffer, 6,
                       batch_arc_count, 0, batch.arc_first);
         }
         if (have_text && batch_text_count > 0) {
-            vkCmdBindPipeline(g_renderer.command_buffer,
+            vkCmdBindPipeline(android_renderer_state().command_buffer,
                               VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              g_renderer.text_pipeline);
-            vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                              android_renderer_state().text_pipeline);
+            vkCmdBindDescriptorSets(android_renderer_state().command_buffer,
                                     VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    g_renderer.text_pipeline_layout,
-                                    0, 1, &g_renderer.text_descriptor_set,
+                                    android_renderer_state().text_pipeline_layout,
+                                    0, 1, &android_renderer_state().text_descriptor_set,
                                     0, nullptr);
-            vkCmdDraw(g_renderer.command_buffer, 6,
+            vkCmdDraw(android_renderer_state().command_buffer, 6,
                       batch_text_count, 0, batch.text_first);
         }
-        if (have_images && g_renderer.image_atlas_initialised
+        if (have_images && android_renderer_state().image_atlas_initialised
             && batch_image_count > 0) {
-            vkCmdBindPipeline(g_renderer.command_buffer,
+            vkCmdBindPipeline(android_renderer_state().command_buffer,
                               VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              g_renderer.image_pipeline);
-            vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                              android_renderer_state().image_pipeline);
+            vkCmdBindDescriptorSets(android_renderer_state().command_buffer,
                                     VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    g_renderer.image_pipeline_layout,
-                                    0, 1, &g_renderer.image_descriptor_set,
+                                    android_renderer_state().image_pipeline_layout,
+                                    0, 1, &android_renderer_state().image_descriptor_set,
                                     0, nullptr);
-            vkCmdDraw(g_renderer.command_buffer, 6,
+            vkCmdDraw(android_renderer_state().command_buffer, 6,
                       batch_image_count, 0, batch.image_first);
         }
     }
 
-    vkCmdEndRenderPass(g_renderer.command_buffer);
+    vkCmdEndRenderPass(android_renderer_state().command_buffer);
 
     // Stage 7: snapshot the presented frame into debug_capture_image
     // so capture_frame_rgba() has a fresh copy without re-rendering.
-    record_debug_capture_copy(g_renderer.command_buffer, idx);
+    record_debug_capture_copy(android_renderer_state().command_buffer, idx);
 
-    vkEndCommandBuffer(g_renderer.command_buffer);
+    vkEndCommandBuffer(android_renderer_state().command_buffer);
 
     VkPipelineStageFlags wait = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo si{};
     si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     si.waitSemaphoreCount = 1;
-    si.pWaitSemaphores = &g_renderer.image_available;
+    si.pWaitSemaphores = &android_renderer_state().image_available;
     si.pWaitDstStageMask = &wait;
     si.commandBufferCount = 1;
-    si.pCommandBuffers = &g_renderer.command_buffer;
+    si.pCommandBuffers = &android_renderer_state().command_buffer;
     si.signalSemaphoreCount = 1;
-    si.pSignalSemaphores = &g_renderer.render_finished;
-    vkQueueSubmit(g_renderer.queue, 1, &si, g_renderer.in_flight);
+    si.pSignalSemaphores = &android_renderer_state().render_finished;
+    vkQueueSubmit(android_renderer_state().queue, 1, &si, android_renderer_state().in_flight);
 
     VkPresentInfoKHR pi{};
     pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     pi.waitSemaphoreCount = 1;
-    pi.pWaitSemaphores = &g_renderer.render_finished;
+    pi.pWaitSemaphores = &android_renderer_state().render_finished;
     pi.swapchainCount = 1;
-    pi.pSwapchains = &g_renderer.swapchain;
+    pi.pSwapchains = &android_renderer_state().swapchain;
     pi.pImageIndices = &idx;
-    auto pr = vkQueuePresentKHR(g_renderer.queue, &pi);
+    auto pr = vkQueuePresentKHR(android_renderer_state().queue, &pi);
     if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR) {
         destroy_swapchain_resources();
         create_swapchain();
-        g_renderer.last_buf_hash = 0;
-        g_renderer.last_scratch_valid = false;
+        android_renderer_state().last_buf_hash = 0;
+        android_renderer_state().last_scratch_valid = false;
     }
 
     auto const t_end = std::chrono::steady_clock::now();
@@ -6539,58 +6556,58 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_summary.cpu_total_ns =
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             t_end - t_start).count();
-    g_renderer.material_executor_summary = material_summary;
+    android_renderer_state().material_executor_summary = material_summary;
 
     // Save scratch + atlas for next frame's potential decode-skip. We
     // do this only on the heavy path (decode actually ran) — the skip
     // path leaves last_* untouched since they already match cur_hash.
     if (!can_skip_decode) {
         // Move local scratch into the persistent slot. The next frame
-        // sees `&g_renderer.last_scratch` aliased to `scratch`, so any
+        // sees `&android_renderer_state().last_scratch` aliased to `scratch`, so any
         // accumulated batches/instances live across frames as long as
         // the hash matches. local_scratch is destroyed on return.
-        g_renderer.last_scratch = std::move(local_scratch);
-        g_renderer.last_atlas = std::move(atlas);
-        g_renderer.last_have_text = have_text;
-        g_renderer.last_have_images = have_images;
-        g_renderer.last_scratch_valid = true;
-        g_renderer.last_material_accessibility_signature =
+        android_renderer_state().last_scratch = std::move(local_scratch);
+        android_renderer_state().last_atlas = std::move(atlas);
+        android_renderer_state().last_have_text = have_text;
+        android_renderer_state().last_have_images = have_images;
+        android_renderer_state().last_scratch_valid = true;
+        android_renderer_state().last_material_accessibility_signature =
             accessibility_signature;
     }
-    g_renderer.last_buf_hash = cur_hash;
+    android_renderer_state().last_buf_hash = cur_hash;
 
     // Per-frame timings, averaged + emitted to logcat every kPerfFrames.
     using ms = std::chrono::duration<double, std::milli>;
     constexpr unsigned long long kPerfFrames = 60;
-    g_renderer.perf_decode_ms_sum +=
+    android_renderer_state().perf_decode_ms_sum +=
         ms(t_decode_end - t_start).count();
-    g_renderer.perf_upload_ms_sum +=
+    android_renderer_state().perf_upload_ms_sum +=
         ms(t_upload_end - t_upload_start).count();
-    g_renderer.perf_record_ms_sum +=
+    android_renderer_state().perf_record_ms_sum +=
         ms(t_end - t_record_start).count();
-    g_renderer.perf_total_ms_sum +=
+    android_renderer_state().perf_total_ms_sum +=
         ms(t_end - t_start).count();
-    if (can_skip_decode) ++g_renderer.perf_skip_count;
-    if (++g_renderer.perf_frame_count >= kPerfFrames) {
+    if (can_skip_decode) ++android_renderer_state().perf_skip_count;
+    if (++android_renderer_state().perf_frame_count >= kPerfFrames) {
         double const f =
-            static_cast<double>(g_renderer.perf_frame_count);
+            static_cast<double>(android_renderer_state().perf_frame_count);
         __android_log_print(
             ANDROID_LOG_INFO, ANDROID_LOG_TAG,
             "[perf] avg decode=%.2fms upload=%.2fms record=%.2fms "
             "total=%.2fms skip=%llu/%llu over %llu frames",
-            g_renderer.perf_decode_ms_sum / f,
-            g_renderer.perf_upload_ms_sum / f,
-            g_renderer.perf_record_ms_sum / f,
-            g_renderer.perf_total_ms_sum / f,
-            g_renderer.perf_skip_count,
-            g_renderer.perf_frame_count,
-            g_renderer.perf_frame_count);
-        g_renderer.perf_decode_ms_sum = 0;
-        g_renderer.perf_upload_ms_sum = 0;
-        g_renderer.perf_record_ms_sum = 0;
-        g_renderer.perf_total_ms_sum  = 0;
-        g_renderer.perf_skip_count = 0;
-        g_renderer.perf_frame_count = 0;
+            android_renderer_state().perf_decode_ms_sum / f,
+            android_renderer_state().perf_upload_ms_sum / f,
+            android_renderer_state().perf_record_ms_sum / f,
+            android_renderer_state().perf_total_ms_sum / f,
+            android_renderer_state().perf_skip_count,
+            android_renderer_state().perf_frame_count,
+            android_renderer_state().perf_frame_count);
+        android_renderer_state().perf_decode_ms_sum = 0;
+        android_renderer_state().perf_upload_ms_sum = 0;
+        android_renderer_state().perf_record_ms_sum = 0;
+        android_renderer_state().perf_total_ms_sum  = 0;
+        android_renderer_state().perf_skip_count = 0;
+        android_renderer_state().perf_frame_count = 0;
     }
 }
 
@@ -6598,127 +6615,127 @@ inline void destroy_color_resources() {
     // Tri pipeline: own descriptor pool + set layout + pipeline layout
     // (no shared layout with color/arc), plus its host-visible vertex
     // buffer. Tear down before color/arc since the tri pipeline depends
-    // on g_renderer.uniform_buffer remaining valid.
-    if (g_renderer.tri_descriptor_pool != VK_NULL_HANDLE) {
-        vkDestroyDescriptorPool(g_renderer.device,
-                                g_renderer.tri_descriptor_pool, nullptr);
-        g_renderer.tri_descriptor_pool = VK_NULL_HANDLE;
-        g_renderer.tri_descriptor_set = VK_NULL_HANDLE;
+    // on android_renderer_state().uniform_buffer remaining valid.
+    if (android_renderer_state().tri_descriptor_pool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(android_renderer_state().device,
+                                android_renderer_state().tri_descriptor_pool, nullptr);
+        android_renderer_state().tri_descriptor_pool = VK_NULL_HANDLE;
+        android_renderer_state().tri_descriptor_set = VK_NULL_HANDLE;
     }
-    destroy_host_buffer(g_renderer.tri_vertex_buffer,
-                        g_renderer.tri_vertex_memory,
-                        g_renderer.tri_vertex_mapped);
-    g_renderer.tri_vertex_capacity = 0;
-    if (g_renderer.tri_pipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(g_renderer.device, g_renderer.tri_pipeline, nullptr);
-        g_renderer.tri_pipeline = VK_NULL_HANDLE;
+    destroy_host_buffer(android_renderer_state().tri_vertex_buffer,
+                        android_renderer_state().tri_vertex_memory,
+                        android_renderer_state().tri_vertex_mapped);
+    android_renderer_state().tri_vertex_capacity = 0;
+    if (android_renderer_state().tri_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(android_renderer_state().device, android_renderer_state().tri_pipeline, nullptr);
+        android_renderer_state().tri_pipeline = VK_NULL_HANDLE;
     }
-    if (g_renderer.tri_pipeline_layout != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(g_renderer.device,
-                                g_renderer.tri_pipeline_layout, nullptr);
-        g_renderer.tri_pipeline_layout = VK_NULL_HANDLE;
+    if (android_renderer_state().tri_pipeline_layout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(android_renderer_state().device,
+                                android_renderer_state().tri_pipeline_layout, nullptr);
+        android_renderer_state().tri_pipeline_layout = VK_NULL_HANDLE;
     }
-    if (g_renderer.tri_descriptor_set_layout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(g_renderer.device,
-                                     g_renderer.tri_descriptor_set_layout,
+    if (android_renderer_state().tri_descriptor_set_layout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(android_renderer_state().device,
+                                     android_renderer_state().tri_descriptor_set_layout,
                                      nullptr);
-        g_renderer.tri_descriptor_set_layout = VK_NULL_HANDLE;
+        android_renderer_state().tri_descriptor_set_layout = VK_NULL_HANDLE;
     }
-    if (g_renderer.arc_descriptor_pool != VK_NULL_HANDLE) {
-        vkDestroyDescriptorPool(g_renderer.device,
-                                g_renderer.arc_descriptor_pool, nullptr);
-        g_renderer.arc_descriptor_pool = VK_NULL_HANDLE;
-        g_renderer.arc_descriptor_set = VK_NULL_HANDLE;
+    if (android_renderer_state().arc_descriptor_pool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(android_renderer_state().device,
+                                android_renderer_state().arc_descriptor_pool, nullptr);
+        android_renderer_state().arc_descriptor_pool = VK_NULL_HANDLE;
+        android_renderer_state().arc_descriptor_set = VK_NULL_HANDLE;
     }
-    destroy_host_buffer(g_renderer.arc_instance_buffer,
-                        g_renderer.arc_instance_memory,
-                        g_renderer.arc_instance_mapped);
-    g_renderer.arc_instance_capacity = 0;
-    if (g_renderer.arc_pipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(g_renderer.device, g_renderer.arc_pipeline, nullptr);
-        g_renderer.arc_pipeline = VK_NULL_HANDLE;
+    destroy_host_buffer(android_renderer_state().arc_instance_buffer,
+                        android_renderer_state().arc_instance_memory,
+                        android_renderer_state().arc_instance_mapped);
+    android_renderer_state().arc_instance_capacity = 0;
+    if (android_renderer_state().arc_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(android_renderer_state().device, android_renderer_state().arc_pipeline, nullptr);
+        android_renderer_state().arc_pipeline = VK_NULL_HANDLE;
     }
-    if (g_renderer.color_descriptor_pool != VK_NULL_HANDLE) {
-        vkDestroyDescriptorPool(g_renderer.device,
-                                g_renderer.color_descriptor_pool, nullptr);
-        g_renderer.color_descriptor_pool = VK_NULL_HANDLE;
-        g_renderer.color_descriptor_set = VK_NULL_HANDLE;
+    if (android_renderer_state().color_descriptor_pool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(android_renderer_state().device,
+                                android_renderer_state().color_descriptor_pool, nullptr);
+        android_renderer_state().color_descriptor_pool = VK_NULL_HANDLE;
+        android_renderer_state().color_descriptor_set = VK_NULL_HANDLE;
     }
-    destroy_host_buffer(g_renderer.instance_buffer,
-                        g_renderer.instance_memory,
-                        g_renderer.instance_mapped);
-    g_renderer.instance_capacity = 0;
-    destroy_host_buffer(g_renderer.uniform_buffer,
-                        g_renderer.uniform_memory,
-                        g_renderer.uniform_mapped);
-    if (g_renderer.color_pipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(g_renderer.device, g_renderer.color_pipeline, nullptr);
-        g_renderer.color_pipeline = VK_NULL_HANDLE;
+    destroy_host_buffer(android_renderer_state().instance_buffer,
+                        android_renderer_state().instance_memory,
+                        android_renderer_state().instance_mapped);
+    android_renderer_state().instance_capacity = 0;
+    destroy_host_buffer(android_renderer_state().uniform_buffer,
+                        android_renderer_state().uniform_memory,
+                        android_renderer_state().uniform_mapped);
+    if (android_renderer_state().color_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(android_renderer_state().device, android_renderer_state().color_pipeline, nullptr);
+        android_renderer_state().color_pipeline = VK_NULL_HANDLE;
     }
-    if (g_renderer.color_pipeline_layout != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(g_renderer.device,
-                                g_renderer.color_pipeline_layout, nullptr);
-        g_renderer.color_pipeline_layout = VK_NULL_HANDLE;
+    if (android_renderer_state().color_pipeline_layout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(android_renderer_state().device,
+                                android_renderer_state().color_pipeline_layout, nullptr);
+        android_renderer_state().color_pipeline_layout = VK_NULL_HANDLE;
     }
-    if (g_renderer.color_descriptor_set_layout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(g_renderer.device,
-                                     g_renderer.color_descriptor_set_layout,
+    if (android_renderer_state().color_descriptor_set_layout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(android_renderer_state().device,
+                                     android_renderer_state().color_descriptor_set_layout,
                                      nullptr);
-        g_renderer.color_descriptor_set_layout = VK_NULL_HANDLE;
+        android_renderer_state().color_descriptor_set_layout = VK_NULL_HANDLE;
     }
-    if (g_renderer.render_pass != VK_NULL_HANDLE) {
-        vkDestroyRenderPass(g_renderer.device, g_renderer.render_pass, nullptr);
-        g_renderer.render_pass = VK_NULL_HANDLE;
+    if (android_renderer_state().render_pass != VK_NULL_HANDLE) {
+        vkDestroyRenderPass(android_renderer_state().device, android_renderer_state().render_pass, nullptr);
+        android_renderer_state().render_pass = VK_NULL_HANDLE;
     }
 }
 
 inline void renderer_shutdown() {
-    if (g_renderer.device != VK_NULL_HANDLE) vkDeviceWaitIdle(g_renderer.device);
+    if (android_renderer_state().device != VK_NULL_HANDLE) vkDeviceWaitIdle(android_renderer_state().device);
     destroy_swapchain_resources();
     destroy_debug_readback_buffer();
     destroy_image_pipeline_resources();
     reset_image_cache();
     destroy_text_pipeline_resources();
     destroy_color_resources();
-    if (g_renderer.in_flight != VK_NULL_HANDLE) {
-        vkDestroyFence(g_renderer.device, g_renderer.in_flight, nullptr);
-        g_renderer.in_flight = VK_NULL_HANDLE;
+    if (android_renderer_state().in_flight != VK_NULL_HANDLE) {
+        vkDestroyFence(android_renderer_state().device, android_renderer_state().in_flight, nullptr);
+        android_renderer_state().in_flight = VK_NULL_HANDLE;
     }
-    if (g_renderer.render_finished != VK_NULL_HANDLE) {
-        vkDestroySemaphore(g_renderer.device, g_renderer.render_finished, nullptr);
-        g_renderer.render_finished = VK_NULL_HANDLE;
+    if (android_renderer_state().render_finished != VK_NULL_HANDLE) {
+        vkDestroySemaphore(android_renderer_state().device, android_renderer_state().render_finished, nullptr);
+        android_renderer_state().render_finished = VK_NULL_HANDLE;
     }
-    if (g_renderer.image_available != VK_NULL_HANDLE) {
-        vkDestroySemaphore(g_renderer.device, g_renderer.image_available, nullptr);
-        g_renderer.image_available = VK_NULL_HANDLE;
+    if (android_renderer_state().image_available != VK_NULL_HANDLE) {
+        vkDestroySemaphore(android_renderer_state().device, android_renderer_state().image_available, nullptr);
+        android_renderer_state().image_available = VK_NULL_HANDLE;
     }
-    if (g_renderer.command_pool != VK_NULL_HANDLE) {
-        vkDestroyCommandPool(g_renderer.device, g_renderer.command_pool, nullptr);
-        g_renderer.command_pool = VK_NULL_HANDLE;
+    if (android_renderer_state().command_pool != VK_NULL_HANDLE) {
+        vkDestroyCommandPool(android_renderer_state().device, android_renderer_state().command_pool, nullptr);
+        android_renderer_state().command_pool = VK_NULL_HANDLE;
     }
-    if (g_renderer.device != VK_NULL_HANDLE) {
-        vkDestroyDevice(g_renderer.device, nullptr);
-        g_renderer.device = VK_NULL_HANDLE;
+    if (android_renderer_state().device != VK_NULL_HANDLE) {
+        vkDestroyDevice(android_renderer_state().device, nullptr);
+        android_renderer_state().device = VK_NULL_HANDLE;
     }
-    if (g_renderer.surface != VK_NULL_HANDLE) {
-        vkDestroySurfaceKHR(g_renderer.instance, g_renderer.surface, nullptr);
-        g_renderer.surface = VK_NULL_HANDLE;
+    if (android_renderer_state().surface != VK_NULL_HANDLE) {
+        vkDestroySurfaceKHR(android_renderer_state().instance, android_renderer_state().surface, nullptr);
+        android_renderer_state().surface = VK_NULL_HANDLE;
     }
-    if (g_renderer.instance != VK_NULL_HANDLE) {
-        vkDestroyInstance(g_renderer.instance, nullptr);
-        g_renderer.instance = VK_NULL_HANDLE;
+    if (android_renderer_state().instance != VK_NULL_HANDLE) {
+        vkDestroyInstance(android_renderer_state().instance, nullptr);
+        android_renderer_state().instance = VK_NULL_HANDLE;
     }
-    g_renderer.window = nullptr;
-    g_renderer.initialized = false;
+    android_renderer_state().window = nullptr;
+    android_renderer_state().initialized = false;
 }
 
 inline std::optional<unsigned int> renderer_hit_test(float x, float y,
                                                      float scroll_x,
                                                      float scroll_y) {
-    if (g_renderer.last_frame_buf.empty()) return std::nullopt;
+    if (android_renderer_state().last_frame_buf.empty()) return std::nullopt;
     auto commands = ::phenotype::parse_commands(
-        g_renderer.last_frame_buf.data(),
-        static_cast<unsigned int>(g_renderer.last_frame_buf.size()));
+        android_renderer_state().last_frame_buf.data(),
+        static_cast<unsigned int>(android_renderer_state().last_frame_buf.size()));
     // Walk in reverse — last drawn = topmost in macOS / Windows model.
     for (auto it = commands.rbegin(); it != commands.rend(); ++it) {
         if (auto const* hr =
@@ -7374,27 +7391,30 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot android_debug_capabilitie
 
 inline ::json::Object android_renderer_runtime_json() {
     ::json::Object r;
-    r.emplace("initialized", ::json::Value{g_renderer.initialized});
+    r.emplace(
+        "owner",
+        ::json::Value{std::string{android_renderer_runtime_owner_name()}});
+    r.emplace("initialized", ::json::Value{android_renderer_state().initialized});
     r.emplace("swapchain_width",
-        ::json::Value{static_cast<std::int64_t>(g_renderer.swapchain_extent.width)});
+        ::json::Value{static_cast<std::int64_t>(android_renderer_state().swapchain_extent.width)});
     r.emplace("swapchain_height",
-        ::json::Value{static_cast<std::int64_t>(g_renderer.swapchain_extent.height)});
+        ::json::Value{static_cast<std::int64_t>(android_renderer_state().swapchain_extent.height)});
     r.emplace("last_render_width",
-        ::json::Value{static_cast<std::int64_t>(g_renderer.last_render_width)});
+        ::json::Value{static_cast<std::int64_t>(android_renderer_state().last_render_width)});
     r.emplace("last_render_height",
-        ::json::Value{static_cast<std::int64_t>(g_renderer.last_render_height)});
+        ::json::Value{static_cast<std::int64_t>(android_renderer_state().last_render_height)});
     r.emplace("last_frame_available",
-        ::json::Value{g_renderer.last_frame_available});
+        ::json::Value{android_renderer_state().last_frame_available});
     r.emplace("debug_capture_ready",
-        ::json::Value{g_renderer.debug_capture_ready});
+        ::json::Value{android_renderer_state().debug_capture_ready});
     r.emplace("text_pipeline_ready",
-        ::json::Value{g_renderer.text_pipeline != VK_NULL_HANDLE});
+        ::json::Value{android_renderer_state().text_pipeline != VK_NULL_HANDLE});
     r.emplace("image_pipeline_ready",
-        ::json::Value{g_renderer.image_pipeline != VK_NULL_HANDLE});
+        ::json::Value{android_renderer_state().image_pipeline != VK_NULL_HANDLE});
     r.emplace("color_pipeline_ready",
-        ::json::Value{g_renderer.color_pipeline != VK_NULL_HANDLE});
+        ::json::Value{android_renderer_state().color_pipeline != VK_NULL_HANDLE});
     r.emplace("tri_pipeline_ready",
-        ::json::Value{g_renderer.tri_pipeline != VK_NULL_HANDLE});
+        ::json::Value{android_renderer_state().tri_pipeline != VK_NULL_HANDLE});
     r.emplace("material_pipeline_ready", ::json::Value{false});
     r.emplace("material_backdrop_source_ready", ::json::Value{false});
     ::json::Object luma_descriptor;
@@ -7430,32 +7450,32 @@ inline ::json::Object android_renderer_runtime_json() {
     r.emplace(
         "accessibility_display_options",
         android_accessibility_display_options_json(
-            g_renderer.accessibility_options));
+            android_renderer_state().accessibility_options));
     r.emplace(
         "material_plan_contract_version",
         ::json::Value{
             static_cast<std::int64_t>(material_plan_contract_version)});
-    auto const material_plan_count = g_renderer.last_scratch_valid
-        ? g_renderer.last_scratch.material_records.size()
+    auto const material_plan_count = android_renderer_state().last_scratch_valid
+        ? android_renderer_state().last_scratch.material_records.size()
         : std::size_t{0};
     r.emplace(
         "material_plan_count",
         ::json::Value{static_cast<std::int64_t>(material_plan_count)});
-    if (g_renderer.last_scratch_valid) {
+    if (android_renderer_state().last_scratch_valid) {
         r.emplace(
             "material_plans",
             ::json::Value{
                 ::phenotype::diag::detail::material_plans_runtime_json(
-                    g_renderer.last_scratch.material_records)});
+                    android_renderer_state().last_scratch.material_records)});
         r.emplace(
             "material_container_groups",
             ::json::Value{
                 ::phenotype::diag::detail::material_container_group_details_json(
-                    g_renderer.last_scratch.material_records)});
+                    android_renderer_state().last_scratch.material_records)});
         r.emplace(
             "material_runtime_summary",
             ::phenotype::diag::detail::material_runtime_summary_json(
-                g_renderer.last_scratch.material_records));
+                android_renderer_state().last_scratch.material_records));
     } else {
         r.emplace("material_plans", ::json::Value{::json::Array{}});
         r.emplace(
@@ -7466,8 +7486,8 @@ inline ::json::Object android_renderer_runtime_json() {
             ::phenotype::diag::detail::material_runtime_summary_json(
                 ::phenotype::MaterialRuntimeSummary{}));
     }
-    auto const executor_summary = g_renderer.last_scratch_valid
-        ? g_renderer.material_executor_summary
+    auto const executor_summary = android_renderer_state().last_scratch_valid
+        ? android_renderer_state().material_executor_summary
         : ::phenotype::MaterialExecutorSummary{};
     r.emplace(
         "material_executor_summary",
@@ -7489,6 +7509,10 @@ inline ::json::Object android_dialog_runtime_json();
 
 namespace touch {
 inline ::json::Object android_touch_runtime_json();
+}
+
+namespace host {
+inline ::json::Object android_host_runtime_json();
 }
 
 namespace input {
@@ -7592,6 +7616,8 @@ inline ::json::Value android_platform_runtime_details_json_with_reason(
     shell.emplace("scroll_x", ::json::Value{shell_snapshot.scroll_x});
     shell.emplace("scroll_y", ::json::Value{shell_snapshot.scroll_y});
     root.emplace("shell", ::json::Value{std::move(shell)});
+    root.emplace("host",
+        ::json::Value{host::android_host_runtime_json()});
     root.emplace("backend", ::json::Value{std::string("vulkan")});
     root.emplace("renderer",
         ::json::Value{android_renderer_runtime_json()});
@@ -7629,18 +7655,18 @@ inline std::string android_snapshot_json() {
 // No re-render — relies on the per-frame copy that renderer_flush runs
 // right after each render pass.
 inline std::optional<DebugFrameCapture> android_capture_frame_rgba() {
-    if (!g_renderer.initialized
-        || !g_renderer.last_frame_available
-        || !g_renderer.debug_capture_ready
-        || g_renderer.last_render_width == 0
-        || g_renderer.last_render_height == 0
-        || g_renderer.device == VK_NULL_HANDLE
-        || g_renderer.queue == VK_NULL_HANDLE
-        || g_renderer.command_pool == VK_NULL_HANDLE)
+    if (!android_renderer_state().initialized
+        || !android_renderer_state().last_frame_available
+        || !android_renderer_state().debug_capture_ready
+        || android_renderer_state().last_render_width == 0
+        || android_renderer_state().last_render_height == 0
+        || android_renderer_state().device == VK_NULL_HANDLE
+        || android_renderer_state().queue == VK_NULL_HANDLE
+        || android_renderer_state().command_pool == VK_NULL_HANDLE)
         return std::nullopt;
 
-    auto width  = g_renderer.last_render_width;
-    auto height = g_renderer.last_render_height;
+    auto width  = android_renderer_state().last_render_width;
+    auto height = android_renderer_state().last_render_height;
     VkDeviceSize const bytes_per_row =
         static_cast<VkDeviceSize>(width) * 4;
     VkDeviceSize const total = bytes_per_row * static_cast<VkDeviceSize>(height);
@@ -7648,17 +7674,17 @@ inline std::optional<DebugFrameCapture> android_capture_frame_rgba() {
 
     // Ensure any pending frame submission has completed so the copy
     // below sees the most recent debug_capture_image contents.
-    if (g_renderer.in_flight != VK_NULL_HANDLE)
-        vkWaitForFences(g_renderer.device, 1, &g_renderer.in_flight,
+    if (android_renderer_state().in_flight != VK_NULL_HANDLE)
+        vkWaitForFences(android_renderer_state().device, 1, &android_renderer_state().in_flight,
                         VK_TRUE, UINT64_MAX);
 
     VkCommandBufferAllocateInfo alloc{};
     alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    alloc.commandPool = g_renderer.command_pool;
+    alloc.commandPool = android_renderer_state().command_pool;
     alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     alloc.commandBufferCount = 1;
     VkCommandBuffer cmd = VK_NULL_HANDLE;
-    if (!vk_ok(vkAllocateCommandBuffers(g_renderer.device, &alloc, &cmd),
+    if (!vk_ok(vkAllocateCommandBuffers(android_renderer_state().device, &alloc, &cmd),
               "vkAllocateCommandBuffers(debug_capture)"))
         return std::nullopt;
 
@@ -7673,7 +7699,7 @@ inline std::optional<DebugFrameCapture> android_capture_frame_rgba() {
     to_src.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     to_src.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     to_src.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    to_src.image = g_renderer.debug_capture_image;
+    to_src.image = android_renderer_state().debug_capture_image;
     to_src.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
     to_src.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     to_src.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
@@ -7689,9 +7715,9 @@ inline std::optional<DebugFrameCapture> android_capture_frame_rgba() {
     region.imageOffset = { 0, 0, 0 };
     region.imageExtent = { width, height, 1 };
     vkCmdCopyImageToBuffer(cmd,
-        g_renderer.debug_capture_image,
+        android_renderer_state().debug_capture_image,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        g_renderer.debug_readback_buffer,
+        android_renderer_state().debug_readback_buffer,
         1, &region);
 
     VkImageMemoryBarrier to_general{};
@@ -7709,9 +7735,9 @@ inline std::optional<DebugFrameCapture> android_capture_frame_rgba() {
     VkFence once = VK_NULL_HANDLE;
     VkFenceCreateInfo fi{};
     fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    if (!vk_ok(vkCreateFence(g_renderer.device, &fi, nullptr, &once),
+    if (!vk_ok(vkCreateFence(android_renderer_state().device, &fi, nullptr, &once),
               "vkCreateFence(debug_capture)")) {
-        vkFreeCommandBuffers(g_renderer.device, g_renderer.command_pool,
+        vkFreeCommandBuffers(android_renderer_state().device, android_renderer_state().command_pool,
                              1, &cmd);
         return std::nullopt;
     }
@@ -7720,17 +7746,17 @@ inline std::optional<DebugFrameCapture> android_capture_frame_rgba() {
     si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     si.commandBufferCount = 1;
     si.pCommandBuffers = &cmd;
-    vkQueueSubmit(g_renderer.queue, 1, &si, once);
-    vkWaitForFences(g_renderer.device, 1, &once, VK_TRUE, UINT64_MAX);
-    vkDestroyFence(g_renderer.device, once, nullptr);
-    vkFreeCommandBuffers(g_renderer.device, g_renderer.command_pool,
+    vkQueueSubmit(android_renderer_state().queue, 1, &si, once);
+    vkWaitForFences(android_renderer_state().device, 1, &once, VK_TRUE, UINT64_MAX);
+    vkDestroyFence(android_renderer_state().device, once, nullptr);
+    vkFreeCommandBuffers(android_renderer_state().device, android_renderer_state().command_pool,
                          1, &cmd);
 
     DebugFrameCapture cap{};
     cap.width = width;
     cap.height = height;
     cap.rgba.resize(static_cast<std::size_t>(total));
-    std::memcpy(cap.rgba.data(), g_renderer.debug_readback_mapped,
+    std::memcpy(cap.rgba.data(), android_renderer_state().debug_readback_mapped,
                 static_cast<std::size_t>(total));
     return cap;
 }
@@ -8487,11 +8513,59 @@ inline platform_api const& android_platform() {
 
 namespace phenotype::native::detail {
 
-inline native_host g_android_host{};
+inline constexpr std::string_view android_host_runtime_owner_name() noexcept {
+    return "AndroidHostRuntime";
+}
+
+inline native_host android_host_runtime_host{};
+inline void (*android_host_runtime_app_runner)() = nullptr;
+
+struct AndroidHostRuntime {
+    native_host* host = &android_host_runtime_host;
+    void (**app_runner)() = &android_host_runtime_app_runner;
+};
+
+inline AndroidHostRuntime& android_host_runtime() {
+    static AndroidHostRuntime runtime{};
+    return runtime;
+}
+
+inline native_host& android_host() {
+    return *android_host_runtime().host;
+}
+
+inline auto& android_app_runner() {
+    return *android_host_runtime().app_runner;
+}
+
+namespace host {
+inline ::json::Object android_host_runtime_json() {
+    auto& runtime = android_host_runtime();
+    auto& host = *runtime.host;
+    auto const runner =
+        runtime.app_runner ? *runtime.app_runner : nullptr;
+    ::json::Object r;
+    r.emplace(
+        "owner",
+        ::json::Value{std::string{android_host_runtime_owner_name()}});
+    r.emplace("platform_bound", ::json::Value{host.platform != nullptr});
+    r.emplace("window_bound", ::json::Value{host.window != nullptr});
+    r.emplace(
+        "app_runner_installed",
+        ::json::Value{runner != nullptr});
+    r.emplace(
+        "cached_width_px",
+        ::json::Value{static_cast<std::int64_t>(host.cached_width_px)});
+    r.emplace(
+        "cached_height_px",
+        ::json::Value{static_cast<std::int64_t>(host.cached_height_px)});
+    return r;
+}
+}
 
 inline void bind_platform_once() {
-    if (!g_android_host.platform)
-        g_android_host.platform = &android_platform();
+    if (!android_host().platform)
+        android_host().platform = &android_platform();
 }
 
 // ---- Stage 6 input dispatch helpers ---------------------------------
@@ -8564,7 +8638,7 @@ template<typename State, typename Msg, typename View, typename Update>
 inline void run_app(View view, Update update) {
     namespace d = phenotype::native::detail;
     d::bind_platform_once();
-    d::run_host<State, Msg>(d::g_android_host,
+    d::run_host<State, Msg>(d::android_host(),
                             std::move(view), std::move(update));
 }
 
@@ -8600,13 +8674,13 @@ __attribute__((visibility("default")))
 void phenotype_android_attach_surface(void* native_window) {
     namespace d = phenotype::native::detail;
     d::bind_platform_once();
-    d::g_android_host.window = native_window;
-    if (d::g_android_host.platform->text.init)
-        d::g_android_host.platform->text.init();
-    if (d::g_android_host.platform->renderer.init)
-        d::g_android_host.platform->renderer.init(d::g_android_host.window);
-    if (d::g_android_host.platform->input.attach)
-        d::g_android_host.platform->input.attach(d::g_android_host.window, nullptr);
+    d::android_host().window = native_window;
+    if (d::android_host().platform->text.init)
+        d::android_host().platform->text.init();
+    if (d::android_host().platform->renderer.init)
+        d::android_host().platform->renderer.init(d::android_host().window);
+    if (d::android_host().platform->input.attach)
+        d::android_host().platform->input.attach(d::android_host().window, nullptr);
 
     // Stage 6: keep the native_host's cached framebuffer size in sync
     // with the real surface so layout + hit-testing use pixel-accurate
@@ -8614,8 +8688,8 @@ void phenotype_android_attach_surface(void* native_window) {
     if (auto* w = static_cast<ANativeWindow*>(native_window)) {
         auto pw = ANativeWindow_getWidth(w);
         auto ph = ANativeWindow_getHeight(w);
-        if (pw > 0) d::g_android_host.cached_width_px = pw;
-        if (ph > 0) d::g_android_host.cached_height_px = ph;
+        if (pw > 0) d::android_host().cached_width_px = pw;
+        if (ph > 0) d::android_host().cached_height_px = ph;
     }
 
     // Stage 7: force a fresh view rebuild + full flush on every
@@ -8635,20 +8709,20 @@ void phenotype_android_attach_surface(void* native_window) {
 __attribute__((visibility("default")))
 void phenotype_android_detach_surface(void) {
     namespace d = phenotype::native::detail;
-    if (!d::g_android_host.platform) return;
-    if (d::g_android_host.platform->input.detach)
-        d::g_android_host.platform->input.detach();
-    if (d::g_android_host.platform->renderer.shutdown)
-        d::g_android_host.platform->renderer.shutdown();
-    if (d::g_android_host.platform->text.shutdown)
-        d::g_android_host.platform->text.shutdown();
-    d::g_android_host.window = nullptr;
+    if (!d::android_host().platform) return;
+    if (d::android_host().platform->input.detach)
+        d::android_host().platform->input.detach();
+    if (d::android_host().platform->renderer.shutdown)
+        d::android_host().platform->renderer.shutdown();
+    if (d::android_host().platform->text.shutdown)
+        d::android_host().platform->text.shutdown();
+    d::android_host().window = nullptr;
 }
 
 __attribute__((visibility("default")))
 void phenotype_android_draw_frame(void) {
     namespace d = phenotype::native::detail;
-    if (!d::g_android_host.platform || !d::g_android_host.window) return;
+    if (!d::android_host().platform || !d::android_host().window) return;
     // Stage 6: driver ticks call here every frame. Drive the standard
     // caret-blink / IME-sync / repaint sequence the desktop shell uses
     // between native event-pump iterations. repaint_current is a no-op until
@@ -8684,23 +8758,19 @@ __attribute__((visibility("default")))
 char const* phenotype_android_startup_message(void) {
     namespace d = phenotype::native::detail;
     d::bind_platform_once();
-    return d::g_android_host.platform->startup_message;
+    return d::android_host().platform->startup_message;
 }
 
 // ---- Stage 6: app bootstrap + input dispatch ------------------------
 //
-// `g_android_app_runner` is a downstream-app customisation hook. When
+// `AndroidHostRuntime::app_runner` is a downstream-app customisation hook. When
 // non-null, `phenotype_android_start_app` calls it in place of the
 // bundled demo6 counter. The runner is installed via the C ABI
 // `phenotype_android_install_runner` (declared further down inside the
 // same extern "C" block as the other phenotype_android_* exports).
-namespace phenotype::native::detail {
-inline void (*g_android_app_runner)() = nullptr;
-}
-
 __attribute__((visibility("default")))
 void phenotype_android_install_runner(void (*runner)(void)) {
-    phenotype::native::detail::g_android_app_runner = runner;
+    phenotype::native::detail::android_app_runner() = runner;
 }
 
 // JNI native bound by `phenotype_android_install_file_dialog_handler`
@@ -8829,9 +8899,9 @@ __attribute__((visibility("default")))
 void phenotype_android_start_app(void) {
     namespace d = phenotype::native::detail;
     d::bind_platform_once();
-    if (d::g_android_app_runner) {
+    if (d::android_app_runner()) {
         // Downstream app installed its own runner — yields control to it.
-        d::g_android_app_runner();
+        d::android_app_runner()();
         return;
     }
     // No runner installed → fall back to the bundled demo6 counter.
@@ -8839,7 +8909,7 @@ void phenotype_android_start_app(void) {
     // view/update closures into global state and trigger an initial
     // repaint.
     d::run_host<d::demo6::State, d::demo6::Msg>(
-        d::g_android_host, d::demo6::view, d::demo6::update);
+        d::android_host(), d::demo6::view, d::demo6::update);
 }
 
 __attribute__((visibility("default")))
@@ -8910,8 +8980,8 @@ void phenotype_android_dispatch_scroll(double dy) {
     // attach_surface.
     namespace d = phenotype::native::detail;
     if (dy == 0.0) return;
-    float vh = (d::g_android_host.cached_height_px > 0)
-                 ? static_cast<float>(d::g_android_host.cached_height_px)
+    float vh = (d::android_host().cached_height_px > 0)
+                 ? static_cast<float>(d::android_host().cached_height_px)
                  : 800.0f;
     d::dispatch_scroll(dy, false, vh);
 }
