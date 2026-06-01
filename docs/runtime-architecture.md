@@ -126,6 +126,11 @@ still a process/host ABI detail, but the rest of the framework talks to it
 through explicit runtime owners instead of raw globals. WASI runtime artifacts
 publish those owner names and command-buffer capacity so browser/CLI adapters
 can verify the bridge they are driving.
+The desktop fallback backend follows the same rule with `StubNativeRuntime`,
+which owns the stub renderer hit-region cache and publishes the owner in
+runtime details. That keeps test/fallback behavior aligned with the native
+backend architecture instead of leaving the lightweight backend as a hidden
+exception.
 
 Framework and example code should use the public `runtime::SceneHandle`,
 `runtime::ensure_scene`, `runtime::SceneActivation`, `runtime::post`,

@@ -153,6 +153,21 @@ static void test_window_options_integrated_titlebar_contract() {
     std::puts("PASS: window options integrated titlebar contract");
 }
 
+static void test_stub_native_runtime_details_owner() {
+    auto platform = make_stub_platform("test-stub-owner", nullptr);
+    assert(platform.debug.snapshot_json != nullptr);
+    auto snapshot = json::parse(platform.debug.snapshot_json());
+    auto const& details = snapshot.as_object()
+        .at("debug").as_object()
+        .at("platform_runtime").as_object()
+        .at("details").as_object();
+    assert(details.at("native_runtime_owner").as_string()
+           == "StubNativeRuntime");
+    assert(details.at("hit_region_count").as_integer() >= 0);
+    assert(details.contains("renderer"));
+    std::puts("PASS: stub native runtime details owner");
+}
+
 static void test_native_shell_state_is_host_local() {
     native_host first{};
     native_host second{};
@@ -5472,6 +5487,7 @@ int main() {
 #endif
 
     test_window_options_integrated_titlebar_contract();
+    test_stub_native_runtime_details_owner();
     test_native_shell_state_is_host_local();
     test_native_run_scene_targets_host_surface_scene();
     test_native_backdrop_composition_plan_contract();
