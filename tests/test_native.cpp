@@ -443,14 +443,28 @@ static void test_macos_renderer_state_tracks_surfaces() {
     phenotype::native::macos_test::activate_renderer_surface_state(&first);
     assert(phenotype::native::macos_test::renderer_surface_state_count() == 1);
     assert(phenotype::native::macos_test::active_renderer_surface_is(&first));
+    auto* first_state =
+        phenotype::native::macos_test::active_renderer_state_identity();
 
     phenotype::native::macos_test::activate_renderer_surface_state(&second);
     assert(phenotype::native::macos_test::renderer_surface_state_count() == 2);
     assert(phenotype::native::macos_test::active_renderer_surface_is(&second));
+    auto* second_state =
+        phenotype::native::macos_test::active_renderer_state_identity();
+    assert(first_state != second_state);
 
     phenotype::native::macos_test::activate_renderer_surface_state(&first);
     assert(phenotype::native::macos_test::renderer_surface_state_count() == 2);
     assert(phenotype::native::macos_test::active_renderer_surface_is(&first));
+
+    phenotype::native::macos_test::with_renderer_surface_state(&second, [&] {
+        assert(phenotype::native::macos_test::active_renderer_surface_is(&second));
+        assert(phenotype::native::macos_test::active_renderer_state_identity()
+               == second_state);
+    });
+    assert(phenotype::native::macos_test::active_renderer_surface_is(&first));
+    assert(phenotype::native::macos_test::active_renderer_state_identity()
+           == first_state);
 
     phenotype::native::macos_test::reset_renderer_surface_states();
     std::puts("PASS: macOS renderer state tracks surfaces");
