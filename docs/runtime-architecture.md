@@ -139,6 +139,12 @@ pinch baseline, and synthetic single-pointer mouse-press bridge together.
 Runtime details publish `touch.owner` and the current touch tracker state, so
 debug tooling can distinguish Android gesture state from scene-local hover or
 focus state while the rest of the Android shell state migrates into owners.
+Android JNI state is grouped under `AndroidJniRuntime`. The JavaVM binding,
+current Activity global reference, Android text class/method IDs, Typeface and
+Bitmap global refs, Paint cache, registered font aliases, and missing-family log
+dedupe now share one owner. Runtime details publish `jni.owner`, JVM/activity
+binding state, text initialisation, and cache sizes so Android shell, dialog,
+settings, and text code do not have to infer lifecycle from scattered globals.
 The desktop fallback backend follows the same rule with `StubNativeRuntime`,
 which owns the stub renderer hit-region cache and publishes the owner in
 runtime details. That keeps test/fallback behavior aligned with the native

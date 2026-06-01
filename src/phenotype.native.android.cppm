@@ -403,12 +403,12 @@ struct jni_refs {
     jobject shared_rect        = nullptr;
 
     // Paint cache keyed on (family, weight, style, mono). Each value
-    // is a global ref owned by g_jni; cleared in text_shutdown.
+    // is a global ref owned by AndroidJniRuntime; cleared in text_shutdown.
     // Single-threaded (render thread only) — no locking needed.
     std::map<FontPaintKey, jobject, FontPaintKeyLess> paints;
 
     // Registered font files: alias → Typeface global ref. Each value
-    // is a global ref owned by g_jni; DeleteGlobalRef'd in
+    // is a global ref owned by AndroidJniRuntime; DeleteGlobalRef'd in
     // text_shutdown. Render-thread only; no locking.
     std::map<std::string, jobject> registered_aliases;
 
@@ -420,8 +420,30 @@ struct jni_refs {
     bool initialised = false;
 };
 
-inline jni_refs g_jni{};
-inline jobject g_android_activity = nullptr;
+inline constexpr std::string_view android_jni_runtime_owner_name() noexcept {
+    return "AndroidJniRuntime";
+}
+
+inline jni_refs android_jni_runtime_refs{};
+inline jobject android_jni_runtime_activity = nullptr;
+
+struct AndroidJniRuntime {
+    jni_refs* refs = &android_jni_runtime_refs;
+    jobject* activity = &android_jni_runtime_activity;
+};
+
+inline AndroidJniRuntime& android_jni_runtime() {
+    static AndroidJniRuntime runtime{};
+    return runtime;
+}
+
+inline jni_refs& android_jni_refs() {
+    return *android_jni_runtime().refs;
+}
+
+inline jobject& android_activity_ref() {
+    return *android_jni_runtime().activity;
+}
 
 // Scoped JNIEnv helper. On a thread that's already attached (the
 // GameActivity render thread is) `attached` stays false and Detach is
@@ -445,8 +467,8 @@ struct ScopedEnv {
     }
 
     ~ScopedEnv() {
-        if (attached && g_jni.vm)
-            g_jni.vm->DetachCurrentThread();
+        if (attached && android_jni_refs().vm)
+            android_jni_refs().vm->DetachCurrentThread();
     }
 
     ScopedEnv(ScopedEnv const&) = delete;
@@ -525,114 +547,114 @@ inline bool init_jni_refs(JNIEnv* env) {
         return g;
     };
 
-    g_jni.paint_class         = find_global("android/graphics/Paint");
-    g_jni.typeface_class      = find_global("android/graphics/Typeface");
-    g_jni.bitmap_class        = find_global("android/graphics/Bitmap");
-    g_jni.canvas_class        = find_global("android/graphics/Canvas");
-    g_jni.bitmap_config_class = find_global("android/graphics/Bitmap$Config");
-    g_jni.rect_class          = find_global("android/graphics/Rect");
-    if (!g_jni.paint_class || !g_jni.typeface_class || !g_jni.bitmap_class
-        || !g_jni.canvas_class || !g_jni.bitmap_config_class
-        || !g_jni.rect_class) {
+    android_jni_refs().paint_class         = find_global("android/graphics/Paint");
+    android_jni_refs().typeface_class      = find_global("android/graphics/Typeface");
+    android_jni_refs().bitmap_class        = find_global("android/graphics/Bitmap");
+    android_jni_refs().canvas_class        = find_global("android/graphics/Canvas");
+    android_jni_refs().bitmap_config_class = find_global("android/graphics/Bitmap$Config");
+    android_jni_refs().rect_class          = find_global("android/graphics/Rect");
+    if (!android_jni_refs().paint_class || !android_jni_refs().typeface_class || !android_jni_refs().bitmap_class
+        || !android_jni_refs().canvas_class || !android_jni_refs().bitmap_config_class
+        || !android_jni_refs().rect_class) {
         return false;
     }
 
-    g_jni.paint_ctor = env->GetMethodID(g_jni.paint_class, "<init>", "()V");
-    g_jni.paint_set_textsize = env->GetMethodID(
-        g_jni.paint_class, "setTextSize", "(F)V");
-    g_jni.paint_set_typeface = env->GetMethodID(
-        g_jni.paint_class, "setTypeface",
+    android_jni_refs().paint_ctor = env->GetMethodID(android_jni_refs().paint_class, "<init>", "()V");
+    android_jni_refs().paint_set_textsize = env->GetMethodID(
+        android_jni_refs().paint_class, "setTextSize", "(F)V");
+    android_jni_refs().paint_set_typeface = env->GetMethodID(
+        android_jni_refs().paint_class, "setTypeface",
         "(Landroid/graphics/Typeface;)Landroid/graphics/Typeface;");
-    g_jni.paint_set_color = env->GetMethodID(
-        g_jni.paint_class, "setColor", "(I)V");
-    g_jni.paint_set_antialias = env->GetMethodID(
-        g_jni.paint_class, "setAntiAlias", "(Z)V");
-    g_jni.paint_measure_text = env->GetMethodID(
-        g_jni.paint_class, "measureText", "(Ljava/lang/String;)F");
-    g_jni.paint_ascent = env->GetMethodID(
-        g_jni.paint_class, "ascent", "()F");
-    g_jni.paint_descent = env->GetMethodID(
-        g_jni.paint_class, "descent", "()F");
-    g_jni.paint_get_text_bounds = env->GetMethodID(
-        g_jni.paint_class, "getTextBounds",
+    android_jni_refs().paint_set_color = env->GetMethodID(
+        android_jni_refs().paint_class, "setColor", "(I)V");
+    android_jni_refs().paint_set_antialias = env->GetMethodID(
+        android_jni_refs().paint_class, "setAntiAlias", "(Z)V");
+    android_jni_refs().paint_measure_text = env->GetMethodID(
+        android_jni_refs().paint_class, "measureText", "(Ljava/lang/String;)F");
+    android_jni_refs().paint_ascent = env->GetMethodID(
+        android_jni_refs().paint_class, "ascent", "()F");
+    android_jni_refs().paint_descent = env->GetMethodID(
+        android_jni_refs().paint_class, "descent", "()F");
+    android_jni_refs().paint_get_text_bounds = env->GetMethodID(
+        android_jni_refs().paint_class, "getTextBounds",
         "(Ljava/lang/String;IILandroid/graphics/Rect;)V");
-    g_jni.paint_set_text_scale_x = env->GetMethodID(
-        g_jni.paint_class, "setTextScaleX", "(F)V");
+    android_jni_refs().paint_set_text_scale_x = env->GetMethodID(
+        android_jni_refs().paint_class, "setTextScaleX", "(F)V");
 
-    g_jni.bitmap_create = env->GetStaticMethodID(
-        g_jni.bitmap_class, "createBitmap",
+    android_jni_refs().bitmap_create = env->GetStaticMethodID(
+        android_jni_refs().bitmap_class, "createBitmap",
         "(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;");
-    g_jni.bitmap_erase_color = env->GetMethodID(
-        g_jni.bitmap_class, "eraseColor", "(I)V");
+    android_jni_refs().bitmap_erase_color = env->GetMethodID(
+        android_jni_refs().bitmap_class, "eraseColor", "(I)V");
 
-    g_jni.canvas_ctor = env->GetMethodID(
-        g_jni.canvas_class, "<init>", "(Landroid/graphics/Bitmap;)V");
-    g_jni.canvas_draw_text = env->GetMethodID(
-        g_jni.canvas_class, "drawText",
+    android_jni_refs().canvas_ctor = env->GetMethodID(
+        android_jni_refs().canvas_class, "<init>", "(Landroid/graphics/Bitmap;)V");
+    android_jni_refs().canvas_draw_text = env->GetMethodID(
+        android_jni_refs().canvas_class, "drawText",
         "(Ljava/lang/String;FFLandroid/graphics/Paint;)V");
 
-    g_jni.rect_ctor = env->GetMethodID(g_jni.rect_class, "<init>", "()V");
-    g_jni.rect_top_field = env->GetFieldID(g_jni.rect_class, "top", "I");
+    android_jni_refs().rect_ctor = env->GetMethodID(android_jni_refs().rect_class, "<init>", "()V");
+    android_jni_refs().rect_top_field = env->GetFieldID(android_jni_refs().rect_class, "top", "I");
 
-    g_jni.typeface_create_string = env->GetStaticMethodID(
-        g_jni.typeface_class, "create",
+    android_jni_refs().typeface_create_string = env->GetStaticMethodID(
+        android_jni_refs().typeface_class, "create",
         "(Ljava/lang/String;I)Landroid/graphics/Typeface;");
-    g_jni.typeface_create_typeface = env->GetStaticMethodID(
-        g_jni.typeface_class, "create",
+    android_jni_refs().typeface_create_typeface = env->GetStaticMethodID(
+        android_jni_refs().typeface_class, "create",
         "(Landroid/graphics/Typeface;I)Landroid/graphics/Typeface;");
-    g_jni.typeface_create_from_file = env->GetStaticMethodID(
-        g_jni.typeface_class, "createFromFile",
+    android_jni_refs().typeface_create_from_file = env->GetStaticMethodID(
+        android_jni_refs().typeface_class, "createFromFile",
         "(Ljava/lang/String;)Landroid/graphics/Typeface;");
 
     auto load_typeface_int = [&](char const* name, int fallback) -> int {
-        jfieldID id = env->GetStaticFieldID(g_jni.typeface_class, name, "I");
+        jfieldID id = env->GetStaticFieldID(android_jni_refs().typeface_class, name, "I");
         if (!id) { check_and_clear_exception(env); return fallback; }
-        return env->GetStaticIntField(g_jni.typeface_class, id);
+        return env->GetStaticIntField(android_jni_refs().typeface_class, id);
     };
-    g_jni.typeface_normal      = load_typeface_int("NORMAL", 0);
-    g_jni.typeface_bold        = load_typeface_int("BOLD", 1);
-    g_jni.typeface_italic      = load_typeface_int("ITALIC", 2);
-    g_jni.typeface_bold_italic = load_typeface_int("BOLD_ITALIC", 3);
+    android_jni_refs().typeface_normal      = load_typeface_int("NORMAL", 0);
+    android_jni_refs().typeface_bold        = load_typeface_int("BOLD", 1);
+    android_jni_refs().typeface_italic      = load_typeface_int("ITALIC", 2);
+    android_jni_refs().typeface_bold_italic = load_typeface_int("BOLD_ITALIC", 3);
 
     if (check_and_clear_exception(env)) return false;
-    if (!g_jni.paint_ctor || !g_jni.paint_set_textsize
-        || !g_jni.paint_set_typeface || !g_jni.paint_set_color
-        || !g_jni.paint_set_antialias || !g_jni.paint_measure_text
-        || !g_jni.paint_ascent || !g_jni.paint_descent
-        || !g_jni.paint_get_text_bounds
-        || !g_jni.paint_set_text_scale_x
-        || !g_jni.bitmap_create || !g_jni.bitmap_erase_color
-        || !g_jni.canvas_ctor || !g_jni.canvas_draw_text
-        || !g_jni.rect_ctor || !g_jni.rect_top_field
-        || !g_jni.typeface_create_string || !g_jni.typeface_create_typeface
-        || !g_jni.typeface_create_from_file)
+    if (!android_jni_refs().paint_ctor || !android_jni_refs().paint_set_textsize
+        || !android_jni_refs().paint_set_typeface || !android_jni_refs().paint_set_color
+        || !android_jni_refs().paint_set_antialias || !android_jni_refs().paint_measure_text
+        || !android_jni_refs().paint_ascent || !android_jni_refs().paint_descent
+        || !android_jni_refs().paint_get_text_bounds
+        || !android_jni_refs().paint_set_text_scale_x
+        || !android_jni_refs().bitmap_create || !android_jni_refs().bitmap_erase_color
+        || !android_jni_refs().canvas_ctor || !android_jni_refs().canvas_draw_text
+        || !android_jni_refs().rect_ctor || !android_jni_refs().rect_top_field
+        || !android_jni_refs().typeface_create_string || !android_jni_refs().typeface_create_typeface
+        || !android_jni_refs().typeface_create_from_file)
         return false;
 
     // Cache Typeface.DEFAULT / Typeface.MONOSPACE as global refs.
     auto load_typeface = [&](char const* name) -> jobject {
         jfieldID id = env->GetStaticFieldID(
-            g_jni.typeface_class, name, "Landroid/graphics/Typeface;");
+            android_jni_refs().typeface_class, name, "Landroid/graphics/Typeface;");
         if (!id) { check_and_clear_exception(env); return nullptr; }
-        jobject local = env->GetStaticObjectField(g_jni.typeface_class, id);
+        jobject local = env->GetStaticObjectField(android_jni_refs().typeface_class, id);
         if (!local) { check_and_clear_exception(env); return nullptr; }
         jobject g = env->NewGlobalRef(local);
         env->DeleteLocalRef(local);
         return g;
     };
-    g_jni.typeface_default   = load_typeface("DEFAULT");
-    g_jni.typeface_monospace = load_typeface("MONOSPACE");
-    if (!g_jni.typeface_default || !g_jni.typeface_monospace) return false;
+    android_jni_refs().typeface_default   = load_typeface("DEFAULT");
+    android_jni_refs().typeface_monospace = load_typeface("MONOSPACE");
+    if (!android_jni_refs().typeface_default || !android_jni_refs().typeface_monospace) return false;
 
     // Bitmap.Config.ARGB_8888 — static final enum instance.
     {
         jfieldID id = env->GetStaticFieldID(
-            g_jni.bitmap_config_class, "ARGB_8888",
+            android_jni_refs().bitmap_config_class, "ARGB_8888",
             "Landroid/graphics/Bitmap$Config;");
         if (!id) { check_and_clear_exception(env); return false; }
         jobject local = env->GetStaticObjectField(
-            g_jni.bitmap_config_class, id);
+            android_jni_refs().bitmap_config_class, id);
         if (!local) { check_and_clear_exception(env); return false; }
-        g_jni.config_argb8888 = env->NewGlobalRef(local);
+        android_jni_refs().config_argb8888 = env->NewGlobalRef(local);
         env->DeleteLocalRef(local);
     }
 
@@ -641,14 +663,14 @@ inline bool init_jni_refs(JNIEnv* env) {
     // query — the framework overwrites all four int fields per call,
     // so there's no cross-call leakage on the single render thread.
     {
-        jobject local = env->NewObject(g_jni.rect_class, g_jni.rect_ctor);
+        jobject local = env->NewObject(android_jni_refs().rect_class, android_jni_refs().rect_ctor);
         if (check_and_clear_exception(env) || !local) {
             if (local) env->DeleteLocalRef(local);
             return false;
         }
-        g_jni.shared_rect = env->NewGlobalRef(local);
+        android_jni_refs().shared_rect = env->NewGlobalRef(local);
         env->DeleteLocalRef(local);
-        if (!g_jni.shared_rect) return false;
+        if (!android_jni_refs().shared_rect) return false;
     }
 
     return true;
@@ -658,19 +680,20 @@ inline bool init_jni_refs(JNIEnv* env) {
 inline int typeface_style_for(FontPaintKey const& key) {
     bool bold = (key.weight == ::phenotype::FontWeight::Bold);
     bool italic = (key.style  == ::phenotype::FontStyle::Italic);
-    if (bold && italic) return g_jni.typeface_bold_italic;
-    if (bold)           return g_jni.typeface_bold;
-    if (italic)         return g_jni.typeface_italic;
-    return g_jni.typeface_normal;
+    if (bold && italic) return android_jni_refs().typeface_bold_italic;
+    if (bold)           return android_jni_refs().typeface_bold;
+    if (italic)         return android_jni_refs().typeface_italic;
+    return android_jni_refs().typeface_normal;
 }
 
 // Resolve and cache a Paint for `key`. Caller must hold a JNIEnv;
-// returned jobject is a global ref owned by g_jni.paints — caller must
-// NOT DeleteGlobalRef. Single render-thread access pattern, no locking.
+// returned jobject is a global ref owned by AndroidJniRuntime::refs.paints.
+// Caller must NOT DeleteGlobalRef. Single render-thread access pattern,
+// no locking.
 inline jobject acquire_paint(JNIEnv* env, FontPaintKey const& key) {
-    if (!g_jni.initialised) return nullptr;
-    auto it = g_jni.paints.find(key);
-    if (it != g_jni.paints.end()) return it->second;
+    if (!android_jni_refs().initialised) return nullptr;
+    auto it = android_jni_refs().paints.find(key);
+    if (it != android_jni_refs().paints.end()) return it->second;
 
     int style_bits = typeface_style_for(key);
     jobject typeface_local = nullptr;
@@ -684,8 +707,8 @@ inline jobject acquire_paint(JNIEnv* env, FontPaintKey const& key) {
                 env, preferred, static_cast<unsigned int>(sizeof(preferred) - 1));
             if (jname) {
                 typeface_local = env->CallStaticObjectMethod(
-                    g_jni.typeface_class,
-                    g_jni.typeface_create_string,
+                    android_jni_refs().typeface_class,
+                    android_jni_refs().typeface_create_string,
                     jname, style_bits);
                 env->DeleteLocalRef(jname);
                 if (check_and_clear_exception(env))
@@ -694,15 +717,15 @@ inline jobject acquire_paint(JNIEnv* env, FontPaintKey const& key) {
         }
         // Empty family → default sans (typeface_default) or default mono
         // (typeface_monospace) as the base; apply BOLD/ITALIC bits.
-        jobject base = key.mono ? g_jni.typeface_monospace
-                                : g_jni.typeface_default;
+        jobject base = key.mono ? android_jni_refs().typeface_monospace
+                                : android_jni_refs().typeface_default;
         if (!typeface_local) {
-            if (style_bits == g_jni.typeface_normal) {
+            if (style_bits == android_jni_refs().typeface_normal) {
                 typeface_local = env->NewLocalRef(base);
             } else {
                 typeface_local = env->CallStaticObjectMethod(
-                    g_jni.typeface_class,
-                    g_jni.typeface_create_typeface,
+                    android_jni_refs().typeface_class,
+                    android_jni_refs().typeface_create_typeface,
                     base, style_bits);
                 if (check_and_clear_exception(env))
                     typeface_local = nullptr;
@@ -713,15 +736,15 @@ inline jobject acquire_paint(JNIEnv* env, FontPaintKey const& key) {
         // registered_aliases with a Typeface global per alias. Apply
         // BOLD/ITALIC bits via Typeface.create(Typeface, int) — same
         // shape as the empty-family branch above.
-        auto reg_it = g_jni.registered_aliases.find(key.family);
-        if (reg_it != g_jni.registered_aliases.end()) {
+        auto reg_it = android_jni_refs().registered_aliases.find(key.family);
+        if (reg_it != android_jni_refs().registered_aliases.end()) {
             jobject base = reg_it->second;
-            if (style_bits == g_jni.typeface_normal) {
+            if (style_bits == android_jni_refs().typeface_normal) {
                 typeface_local = env->NewLocalRef(base);
             } else {
                 typeface_local = env->CallStaticObjectMethod(
-                    g_jni.typeface_class,
-                    g_jni.typeface_create_typeface,
+                    android_jni_refs().typeface_class,
+                    android_jni_refs().typeface_create_typeface,
                     base, style_bits);
                 if (check_and_clear_exception(env))
                     typeface_local = nullptr;
@@ -731,8 +754,8 @@ inline jobject acquire_paint(JNIEnv* env, FontPaintKey const& key) {
                 static_cast<unsigned int>(key.family.size()));
             if (jname) {
                 typeface_local = env->CallStaticObjectMethod(
-                    g_jni.typeface_class,
-                    g_jni.typeface_create_string,
+                    android_jni_refs().typeface_class,
+                    android_jni_refs().typeface_create_string,
                     jname, style_bits);
                 env->DeleteLocalRef(jname);
                 if (check_and_clear_exception(env))
@@ -741,7 +764,7 @@ inline jobject acquire_paint(JNIEnv* env, FontPaintKey const& key) {
                 // the family cannot be resolved — that's the
                 // platform's silent fallback policy. Log once per
                 // family.
-                if (g_jni.missing_logged.insert(key.family).second) {
+                if (android_jni_refs().missing_logged.insert(key.family).second) {
                     __android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG,
                         "text: requested font family '%s'; using Typeface.create result",
                         key.family.c_str());
@@ -751,17 +774,17 @@ inline jobject acquire_paint(JNIEnv* env, FontPaintKey const& key) {
     }
     if (!typeface_local) {
         // Last-resort fallback to default.
-        typeface_local = env->NewLocalRef(g_jni.typeface_default);
+        typeface_local = env->NewLocalRef(android_jni_refs().typeface_default);
     }
 
-    jobject paint_local = env->NewObject(g_jni.paint_class, g_jni.paint_ctor);
+    jobject paint_local = env->NewObject(android_jni_refs().paint_class, android_jni_refs().paint_ctor);
     if (!paint_local) {
         check_and_clear_exception(env);
         env->DeleteLocalRef(typeface_local);
         return nullptr;
     }
-    env->CallVoidMethod(paint_local, g_jni.paint_set_antialias, JNI_TRUE);
-    env->CallObjectMethod(paint_local, g_jni.paint_set_typeface, typeface_local);
+    env->CallVoidMethod(paint_local, android_jni_refs().paint_set_antialias, JNI_TRUE);
+    env->CallObjectMethod(paint_local, android_jni_refs().paint_set_typeface, typeface_local);
     check_and_clear_exception(env);
 
     jobject paint_global = env->NewGlobalRef(paint_local);
@@ -769,7 +792,7 @@ inline jobject acquire_paint(JNIEnv* env, FontPaintKey const& key) {
     env->DeleteLocalRef(typeface_local);
     if (!paint_global) return nullptr;
 
-    g_jni.paints.emplace(key, paint_global);
+    android_jni_refs().paints.emplace(key, paint_global);
     return paint_global;
 }
 
@@ -783,21 +806,21 @@ inline jobject acquire_paint(JNIEnv* env, ::phenotype::FontSpec const& font) {
 }
 
 inline void text_init() {
-    if (g_jni.initialised) return;
-    if (!g_jni.vm) {
+    if (android_jni_refs().initialised) return;
+    if (!android_jni_refs().vm) {
         __android_log_print(
             ANDROID_LOG_WARN, ANDROID_LOG_TAG,
             "text_init skipped — phenotype_android_bind_jvm not called yet");
         return;
     }
-    ScopedEnv e(g_jni.vm);
+    ScopedEnv e(android_jni_refs().vm);
     if (!e) {
         __android_log_print(ANDROID_LOG_ERROR, ANDROID_LOG_TAG,
                             "text_init: could not attach JNIEnv");
         return;
     }
     if (init_jni_refs(e.env)) {
-        g_jni.initialised = true;
+        android_jni_refs().initialised = true;
     } else {
         __android_log_print(ANDROID_LOG_ERROR, ANDROID_LOG_TAG,
                             "text_init: JNI ref setup failed");
@@ -806,67 +829,67 @@ inline void text_init() {
 }
 
 inline void text_shutdown() {
-    if (!g_jni.vm) {
-        g_jni.paints.clear();
+    if (!android_jni_refs().vm) {
+        android_jni_refs().paints.clear();
         // No JVM to DeleteGlobalRef against — Typeface globals leak,
         // matching the existing paints-leak behaviour on JVM teardown.
-        g_jni.registered_aliases.clear();
-        g_jni.missing_logged.clear();
-        g_jni.initialised = false;
+        android_jni_refs().registered_aliases.clear();
+        android_jni_refs().missing_logged.clear();
+        android_jni_refs().initialised = false;
         return;
     }
-    ScopedEnv e(g_jni.vm);
+    ScopedEnv e(android_jni_refs().vm);
     if (!e) {
-        g_jni.paints.clear();
-        g_jni.registered_aliases.clear();
-        g_jni.missing_logged.clear();
-        g_jni.initialised = false;
+        android_jni_refs().paints.clear();
+        android_jni_refs().registered_aliases.clear();
+        android_jni_refs().missing_logged.clear();
+        android_jni_refs().initialised = false;
         return;
     }
     auto* env = e.env;
     auto drop = [&](jobject& ref) {
         if (ref) { env->DeleteGlobalRef(ref); ref = nullptr; }
     };
-    for (auto& [_, ref] : g_jni.paints) {
+    for (auto& [_, ref] : android_jni_refs().paints) {
         if (ref) env->DeleteGlobalRef(ref);
     }
-    g_jni.paints.clear();
-    for (auto& [_, ref] : g_jni.registered_aliases) {
+    android_jni_refs().paints.clear();
+    for (auto& [_, ref] : android_jni_refs().registered_aliases) {
         if (ref) env->DeleteGlobalRef(ref);
     }
-    g_jni.registered_aliases.clear();
-    g_jni.missing_logged.clear();
-    drop(reinterpret_cast<jobject&>(g_jni.paint_class));
-    drop(reinterpret_cast<jobject&>(g_jni.typeface_class));
-    drop(reinterpret_cast<jobject&>(g_jni.bitmap_class));
-    drop(reinterpret_cast<jobject&>(g_jni.canvas_class));
-    drop(reinterpret_cast<jobject&>(g_jni.bitmap_config_class));
-    drop(reinterpret_cast<jobject&>(g_jni.rect_class));
-    drop(g_jni.typeface_default);
-    drop(g_jni.typeface_monospace);
-    drop(g_jni.config_argb8888);
-    drop(g_jni.shared_rect);
+    android_jni_refs().registered_aliases.clear();
+    android_jni_refs().missing_logged.clear();
+    drop(reinterpret_cast<jobject&>(android_jni_refs().paint_class));
+    drop(reinterpret_cast<jobject&>(android_jni_refs().typeface_class));
+    drop(reinterpret_cast<jobject&>(android_jni_refs().bitmap_class));
+    drop(reinterpret_cast<jobject&>(android_jni_refs().canvas_class));
+    drop(reinterpret_cast<jobject&>(android_jni_refs().bitmap_config_class));
+    drop(reinterpret_cast<jobject&>(android_jni_refs().rect_class));
+    drop(android_jni_refs().typeface_default);
+    drop(android_jni_refs().typeface_monospace);
+    drop(android_jni_refs().config_argb8888);
+    drop(android_jni_refs().shared_rect);
     // Method / field IDs don't need cleanup — they die with the class ref.
-    g_jni.paint_ctor = nullptr;
-    g_jni.paint_set_textsize = nullptr;
-    g_jni.paint_set_typeface = nullptr;
-    g_jni.paint_set_color = nullptr;
-    g_jni.paint_set_antialias = nullptr;
-    g_jni.paint_measure_text = nullptr;
-    g_jni.paint_ascent = nullptr;
-    g_jni.paint_descent = nullptr;
-    g_jni.paint_get_text_bounds = nullptr;
-    g_jni.paint_set_text_scale_x = nullptr;
-    g_jni.bitmap_create = nullptr;
-    g_jni.bitmap_erase_color = nullptr;
-    g_jni.canvas_ctor = nullptr;
-    g_jni.canvas_draw_text = nullptr;
-    g_jni.rect_ctor = nullptr;
-    g_jni.rect_top_field = nullptr;
-    g_jni.typeface_create_string = nullptr;
-    g_jni.typeface_create_typeface = nullptr;
-    g_jni.typeface_create_from_file = nullptr;
-    g_jni.initialised = false;
+    android_jni_refs().paint_ctor = nullptr;
+    android_jni_refs().paint_set_textsize = nullptr;
+    android_jni_refs().paint_set_typeface = nullptr;
+    android_jni_refs().paint_set_color = nullptr;
+    android_jni_refs().paint_set_antialias = nullptr;
+    android_jni_refs().paint_measure_text = nullptr;
+    android_jni_refs().paint_ascent = nullptr;
+    android_jni_refs().paint_descent = nullptr;
+    android_jni_refs().paint_get_text_bounds = nullptr;
+    android_jni_refs().paint_set_text_scale_x = nullptr;
+    android_jni_refs().bitmap_create = nullptr;
+    android_jni_refs().bitmap_erase_color = nullptr;
+    android_jni_refs().canvas_ctor = nullptr;
+    android_jni_refs().canvas_draw_text = nullptr;
+    android_jni_refs().rect_ctor = nullptr;
+    android_jni_refs().rect_top_field = nullptr;
+    android_jni_refs().typeface_create_string = nullptr;
+    android_jni_refs().typeface_create_typeface = nullptr;
+    android_jni_refs().typeface_create_from_file = nullptr;
+    android_jni_refs().initialised = false;
 }
 
 // platform_api::text.register_font_file entry. Binds `path` to
@@ -880,12 +903,12 @@ inline bool text_register_font_file(char const* family_alias,
                                     unsigned int alias_len,
                                     char const* path,
                                     unsigned int path_len) {
-    if (!g_jni.initialised) text_init();
-    if (!g_jni.initialised) return false;
+    if (!android_jni_refs().initialised) text_init();
+    if (!android_jni_refs().initialised) return false;
     if (family_alias == nullptr || alias_len == 0
         || path == nullptr || path_len == 0) return false;
 
-    ScopedEnv e(g_jni.vm);
+    ScopedEnv e(android_jni_refs().vm);
     if (!e) return false;
     auto* env = e.env;
 
@@ -896,8 +919,8 @@ inline bool text_register_font_file(char const* family_alias,
     }
 
     jobject tf_local = env->CallStaticObjectMethod(
-        g_jni.typeface_class,
-        g_jni.typeface_create_from_file,
+        android_jni_refs().typeface_class,
+        android_jni_refs().typeface_create_from_file,
         jpath);
     env->DeleteLocalRef(jpath);
     if (check_and_clear_exception(env) || tf_local == nullptr) {
@@ -913,43 +936,43 @@ inline bool text_register_font_file(char const* family_alias,
     }
 
     std::string alias{family_alias, alias_len};
-    if (auto it = g_jni.registered_aliases.find(alias);
-        it != g_jni.registered_aliases.end()) {
+    if (auto it = android_jni_refs().registered_aliases.find(alias);
+        it != android_jni_refs().registered_aliases.end()) {
         if (it->second) env->DeleteGlobalRef(it->second);
         it->second = tf_global;
     } else {
-        g_jni.registered_aliases.emplace(alias, tf_global);
+        android_jni_refs().registered_aliases.emplace(alias, tf_global);
     }
 
     // Evict any cached Paint built against the old (alias unresolved)
     // typeface so the next acquire_paint re-resolves through the new
     // mapping. Mirrors the macos backend's cache invalidation.
-    for (auto cit = g_jni.paints.begin(); cit != g_jni.paints.end(); ) {
+    for (auto cit = android_jni_refs().paints.begin(); cit != android_jni_refs().paints.end(); ) {
         if (cit->first.family == alias) {
             if (cit->second) env->DeleteGlobalRef(cit->second);
-            cit = g_jni.paints.erase(cit);
+            cit = android_jni_refs().paints.erase(cit);
         } else {
             ++cit;
         }
     }
-    g_jni.missing_logged.erase(alias);
+    android_jni_refs().missing_logged.erase(alias);
     return true;
 }
 
 inline float text_measure(float font_size, FontPaintKey const& key,
                           char const* text_ptr, unsigned int len) {
-    if (!g_jni.initialised || len == 0 || text_ptr == nullptr) return 0.0f;
-    ScopedEnv e(g_jni.vm);
+    if (!android_jni_refs().initialised || len == 0 || text_ptr == nullptr) return 0.0f;
+    ScopedEnv e(android_jni_refs().vm);
     if (!e) return 0.0f;
     auto* env = e.env;
     jobject paint = acquire_paint(env, key);
     if (!paint) return 0.0f;
-    env->CallVoidMethod(paint, g_jni.paint_set_textsize,
+    env->CallVoidMethod(paint, android_jni_refs().paint_set_textsize,
                         static_cast<jfloat>(font_size));
     if (check_and_clear_exception(env)) return 0.0f;
     jstring s = make_jstring_utf8(env, text_ptr, len);
     if (!s) return 0.0f;
-    jfloat w = env->CallFloatMethod(paint, g_jni.paint_measure_text, s);
+    jfloat w = env->CallFloatMethod(paint, android_jni_refs().paint_measure_text, s);
     env->DeleteLocalRef(s);
     if (check_and_clear_exception(env)) return 0.0f;
     return static_cast<float>(w);
@@ -1008,28 +1031,28 @@ inline bool text_metrics(float font_size, FontPaintKey const& key,
     out_descent    = 0.0f;
     out_leading    = 0.0f;
     out_cap_height = 0.0f;
-    if (!g_jni.initialised) return false;
+    if (!android_jni_refs().initialised) return false;
 
     if (!key.family.empty()
-        && g_jni.registered_aliases.find(key.family)
-            == g_jni.registered_aliases.end()) {
+        && android_jni_refs().registered_aliases.find(key.family)
+            == android_jni_refs().registered_aliases.end()) {
         return false;
     }
 
-    ScopedEnv e(g_jni.vm);
+    ScopedEnv e(android_jni_refs().vm);
     if (!e) return false;
     auto* env = e.env;
 
     jobject paint = acquire_paint(env, key);
     if (!paint) return false;
 
-    env->CallVoidMethod(paint, g_jni.paint_set_textsize,
+    env->CallVoidMethod(paint, android_jni_refs().paint_set_textsize,
                         static_cast<jfloat>(font_size));
     if (check_and_clear_exception(env)) return false;
 
-    jfloat a = env->CallFloatMethod(paint, g_jni.paint_ascent);
+    jfloat a = env->CallFloatMethod(paint, android_jni_refs().paint_ascent);
     if (check_and_clear_exception(env)) return false;
-    jfloat d = env->CallFloatMethod(paint, g_jni.paint_descent);
+    jfloat d = env->CallFloatMethod(paint, android_jni_refs().paint_descent);
     if (check_and_clear_exception(env)) return false;
 
     // cap-height via tight bounds of capital 'H'. Latin / Bitstream
@@ -1039,12 +1062,12 @@ inline bool text_metrics(float font_size, FontPaintKey const& key,
     jstring h = make_jstring_utf8(env, "H", 1);
     jint top = 0;
     if (h) {
-        env->CallVoidMethod(paint, g_jni.paint_get_text_bounds,
-                            h, jint{0}, jint{1}, g_jni.shared_rect);
+        env->CallVoidMethod(paint, android_jni_refs().paint_get_text_bounds,
+                            h, jint{0}, jint{1}, android_jni_refs().shared_rect);
         env->DeleteLocalRef(h);
         if (!check_and_clear_exception(env)) {
-            top = env->GetIntField(g_jni.shared_rect,
-                                   g_jni.rect_top_field);
+            top = env->GetIntField(android_jni_refs().shared_rect,
+                                   android_jni_refs().rect_top_field);
             (void)check_and_clear_exception(env);
         }
     }
@@ -1116,9 +1139,9 @@ inline ::phenotype::native::TextAtlas text_build_atlas(
         float backing_scale) {
     using ::phenotype::native::TextAtlas;
     using ::phenotype::native::TextQuad;
-    if (!g_jni.initialised || entries.empty()) return {};
+    if (!android_jni_refs().initialised || entries.empty()) return {};
 
-    ScopedEnv e(g_jni.vm);
+    ScopedEnv e(android_jni_refs().vm);
     if (!e) return {};
     auto* env = e.env;
 
@@ -1142,7 +1165,7 @@ inline ::phenotype::native::TextAtlas text_build_atlas(
         key.mono   = te.mono;
         jobject paint = acquire_paint(env, key);
         if (!paint) { slot.skipped = true; continue; }
-        env->CallVoidMethod(paint, g_jni.paint_set_textsize,
+        env->CallVoidMethod(paint, android_jni_refs().paint_set_textsize,
                             static_cast<jfloat>(te.font_size * scale));
         if (check_and_clear_exception(env)) { slot.skipped = true; continue; }
 
@@ -1152,12 +1175,12 @@ inline ::phenotype::native::TextAtlas text_build_atlas(
         // pre-stretched. Always set — covers width_factor == 1.0f
         // entries following a non-1.0 entry that shared the cached
         // Paint instance.
-        env->CallVoidMethod(paint, g_jni.paint_set_text_scale_x,
+        env->CallVoidMethod(paint, android_jni_refs().paint_set_text_scale_x,
                             static_cast<jfloat>(te.width_factor));
         if (check_and_clear_exception(env)) { slot.skipped = true; continue; }
 
-        slot.ascent  = env->CallFloatMethod(paint, g_jni.paint_ascent);
-        slot.descent = env->CallFloatMethod(paint, g_jni.paint_descent);
+        slot.ascent  = env->CallFloatMethod(paint, android_jni_refs().paint_ascent);
+        slot.descent = env->CallFloatMethod(paint, android_jni_refs().paint_descent);
         if (check_and_clear_exception(env)) { slot.skipped = true; continue; }
 
         jstring s = make_jstring_utf8(env, te.text.data(),
@@ -1165,7 +1188,7 @@ inline ::phenotype::native::TextAtlas text_build_atlas(
         jfloat measured = 0.0f;
         if (s) {
             measured = env->CallFloatMethod(
-                paint, g_jni.paint_measure_text, s);
+                paint, android_jni_refs().paint_measure_text, s);
             env->DeleteLocalRef(s);
             if (check_and_clear_exception(env)) measured = 0.0f;
         }
@@ -1210,13 +1233,13 @@ inline ::phenotype::native::TextAtlas text_build_atlas(
 
     // ---- pass 2: rasterize ----
     jobject bitmap = env->CallStaticObjectMethod(
-        g_jni.bitmap_class, g_jni.bitmap_create,
-        atlas_w, atlas_h, g_jni.config_argb8888);
+        android_jni_refs().bitmap_class, android_jni_refs().bitmap_create,
+        atlas_w, atlas_h, android_jni_refs().config_argb8888);
     if (check_and_clear_exception(env) || !bitmap) return {};
-    env->CallVoidMethod(bitmap, g_jni.bitmap_erase_color, static_cast<jint>(0));
+    env->CallVoidMethod(bitmap, android_jni_refs().bitmap_erase_color, static_cast<jint>(0));
 
-    jobject canvas = env->NewObject(g_jni.canvas_class,
-                                    g_jni.canvas_ctor, bitmap);
+    jobject canvas = env->NewObject(android_jni_refs().canvas_class,
+                                    android_jni_refs().canvas_ctor, bitmap);
     if (check_and_clear_exception(env) || !canvas) {
         env->DeleteLocalRef(bitmap);
         return {};
@@ -1235,11 +1258,11 @@ inline ::phenotype::native::TextAtlas text_build_atlas(
         key.mono   = te.mono;
         jobject paint = acquire_paint(env, key);
         if (!paint) continue;
-        env->CallVoidMethod(paint, g_jni.paint_set_textsize,
+        env->CallVoidMethod(paint, android_jni_refs().paint_set_textsize,
                             static_cast<jfloat>(te.font_size * scale));
-        env->CallVoidMethod(paint, g_jni.paint_set_text_scale_x,
+        env->CallVoidMethod(paint, android_jni_refs().paint_set_text_scale_x,
                             static_cast<jfloat>(te.width_factor));
-        env->CallVoidMethod(paint, g_jni.paint_set_color,
+        env->CallVoidMethod(paint, android_jni_refs().paint_set_color,
                             pack_android_color(te.r, te.g, te.b, te.a));
         if (check_and_clear_exception(env)) continue;
 
@@ -1250,7 +1273,7 @@ inline ::phenotype::native::TextAtlas text_build_atlas(
         float baseline_y = static_cast<float>(slot.slot_y)
                          + 1.0f                  // top padding
                          + (-slot.ascent);       // ascent is negative
-        env->CallVoidMethod(canvas, g_jni.canvas_draw_text, s,
+        env->CallVoidMethod(canvas, android_jni_refs().canvas_draw_text, s,
                             static_cast<jfloat>(slot.slot_x + 1),
                             baseline_y, paint);
         env->DeleteLocalRef(s);
@@ -5830,15 +5853,15 @@ inline bool accessibility_env_token_enabled(std::string_view config,
 inline std::optional<float> android_global_float_setting(
         char const* setting_name,
         float default_value) {
-    ScopedEnv senv(g_jni.vm);
-    if (!senv || !g_android_activity) return std::nullopt;
+    ScopedEnv senv(android_jni_refs().vm);
+    if (!senv || !android_activity_ref()) return std::nullopt;
 
     JNIEnv* env = senv.env;
     auto drop = [&](jobject ref) {
         if (ref) env->DeleteLocalRef(ref);
     };
 
-    jclass activity_cls = env->GetObjectClass(g_android_activity);
+    jclass activity_cls = env->GetObjectClass(android_activity_ref());
     if (!activity_cls || check_and_clear_exception(env)) {
         drop(activity_cls);
         return std::nullopt;
@@ -5853,7 +5876,7 @@ inline std::optional<float> android_global_float_setting(
         return std::nullopt;
 
     jobject resolver = env->CallObjectMethod(
-        g_android_activity,
+        android_activity_ref(),
         get_content_resolver);
     if (!resolver || check_and_clear_exception(env)) {
         drop(resolver);
@@ -5904,8 +5927,8 @@ inline std::optional<float> android_ui_contrast() {
     if (android_get_device_api_level() < 34)
         return std::nullopt;
 
-    ScopedEnv senv(g_jni.vm);
-    if (!senv || !g_android_activity) return std::nullopt;
+    ScopedEnv senv(android_jni_refs().vm);
+    if (!senv || !android_activity_ref()) return std::nullopt;
 
     JNIEnv* env = senv.env;
     auto drop = [&](jobject ref) {
@@ -5935,7 +5958,7 @@ inline std::optional<float> android_ui_contrast() {
         return std::nullopt;
     }
 
-    jclass activity_cls = env->GetObjectClass(g_android_activity);
+    jclass activity_cls = env->GetObjectClass(android_activity_ref());
     if (!activity_cls || check_and_clear_exception(env)) {
         drop(activity_cls);
         drop(service_name);
@@ -5953,7 +5976,7 @@ inline std::optional<float> android_ui_contrast() {
     }
 
     jobject service = env->CallObjectMethod(
-        g_android_activity,
+        android_activity_ref(),
         get_system_service,
         service_name);
     drop(service_name);
@@ -6765,15 +6788,15 @@ struct AndroidConfigurationPreferences {
 
 inline std::optional<AndroidConfigurationPreferences>
 android_configuration_preferences() {
-    ScopedEnv senv(g_jni.vm);
-    if (!senv || !g_android_activity) return std::nullopt;
+    ScopedEnv senv(android_jni_refs().vm);
+    if (!senv || !android_activity_ref()) return std::nullopt;
 
     JNIEnv* env = senv.env;
     auto drop = [&](jobject ref) {
         if (ref) env->DeleteLocalRef(ref);
     };
 
-    jclass activity_cls = env->GetObjectClass(g_android_activity);
+    jclass activity_cls = env->GetObjectClass(android_activity_ref());
     if (!activity_cls || check_and_clear_exception(env)) {
         drop(activity_cls);
         return std::nullopt;
@@ -6788,7 +6811,7 @@ android_configuration_preferences() {
         return std::nullopt;
 
     jobject resources = env->CallObjectMethod(
-        g_android_activity,
+        android_activity_ref(),
         get_resources);
     if (!resources || check_and_clear_exception(env)) {
         drop(resources);
@@ -6912,15 +6935,15 @@ android_configuration_preferences() {
 }
 
 inline std::optional<::phenotype::Color> android_system_accent_color() {
-    ScopedEnv senv(g_jni.vm);
-    if (!senv || !g_android_activity) return std::nullopt;
+    ScopedEnv senv(android_jni_refs().vm);
+    if (!senv || !android_activity_ref()) return std::nullopt;
 
     JNIEnv* env = senv.env;
     auto drop = [&](jobject ref) {
         if (ref) env->DeleteLocalRef(ref);
     };
 
-    jclass activity_cls = env->GetObjectClass(g_android_activity);
+    jclass activity_cls = env->GetObjectClass(android_activity_ref());
     if (!activity_cls || check_and_clear_exception(env)) {
         drop(activity_cls);
         return std::nullopt;
@@ -6934,7 +6957,7 @@ inline std::optional<::phenotype::Color> android_system_accent_color() {
         return std::nullopt;
 
     jobject resources = env->CallObjectMethod(
-        g_android_activity,
+        android_activity_ref(),
         get_resources);
     if (!resources || check_and_clear_exception(env)) {
         drop(resources);
@@ -7025,8 +7048,8 @@ struct AndroidViewConfigurationMetrics {
 
 inline std::optional<AndroidViewConfigurationMetrics>
 android_view_configuration_metrics() {
-    ScopedEnv senv(g_jni.vm);
-    if (!senv || !g_android_activity) return std::nullopt;
+    ScopedEnv senv(android_jni_refs().vm);
+    if (!senv || !android_activity_ref()) return std::nullopt;
 
     JNIEnv* env = senv.env;
     auto drop = [&](jobject ref) {
@@ -7051,7 +7074,7 @@ android_view_configuration_metrics() {
     jobject config = env->CallStaticObjectMethod(
         view_config_cls,
         get_config,
-        g_android_activity);
+        android_activity_ref());
     if (!config || check_and_clear_exception(env)) {
         drop(config);
         drop(view_config_cls);
@@ -7435,6 +7458,41 @@ namespace touch {
 inline ::json::Object android_touch_runtime_json();
 }
 
+namespace jni {
+inline ::json::Object android_jni_runtime_json() {
+    auto& runtime = android_jni_runtime();
+    auto& refs = *runtime.refs;
+    ::json::Object r;
+    r.emplace(
+        "owner",
+        ::json::Value{std::string{android_jni_runtime_owner_name()}});
+    r.emplace("vm_bound", ::json::Value{refs.vm != nullptr});
+    r.emplace(
+        "activity_bound",
+        ::json::Value{runtime.activity != nullptr && *runtime.activity != nullptr});
+    r.emplace("text_initialised", ::json::Value{refs.initialised});
+    r.emplace("paint_class_ready", ::json::Value{refs.paint_class != nullptr});
+    r.emplace(
+        "typeface_class_ready",
+        ::json::Value{refs.typeface_class != nullptr});
+    r.emplace(
+        "bitmap_class_ready",
+        ::json::Value{refs.bitmap_class != nullptr});
+    r.emplace(
+        "paint_cache_size",
+        ::json::Value{static_cast<std::int64_t>(refs.paints.size())});
+    r.emplace(
+        "registered_alias_count",
+        ::json::Value{
+            static_cast<std::int64_t>(refs.registered_aliases.size())});
+    r.emplace(
+        "missing_family_log_count",
+        ::json::Value{
+            static_cast<std::int64_t>(refs.missing_logged.size())});
+    return r;
+}
+}
+
 inline ::json::Value android_platform_runtime_details_json_with_reason(
         std::string_view reason) {
     ::json::Object root;
@@ -7460,10 +7518,12 @@ inline ::json::Value android_platform_runtime_details_json_with_reason(
         ::json::Value{dialog::android_dialog_runtime_json()});
     root.emplace("touch",
         ::json::Value{touch::android_touch_runtime_json()});
+    root.emplace("jni",
+        ::json::Value{jni::android_jni_runtime_json()});
     root.emplace("image_cache_size",
         ::json::Value{static_cast<std::int64_t>(g_images.cache.size())});
     root.emplace("text_jni_initialised",
-        ::json::Value{g_jni.initialised});
+        ::json::Value{android_jni_refs().initialised});
     if (!reason.empty())
         root.emplace("reason", ::json::Value{std::string(reason)});
     return ::json::Value{std::move(root)};
@@ -7885,7 +7945,7 @@ inline void open_file(char const* filter_extensions,
     pending_locked().push_back(PendingCallback{cookie, callback});
     pthread_mutex_unlock(&runtime.pending_mutex);
 
-    ScopedEnv senv(g_jni.vm);
+    ScopedEnv senv(android_jni_refs().vm);
     if (!senv) {
         drop_pending(cookie);
         callback(nullptr);
@@ -8430,17 +8490,17 @@ extern "C" {
 __attribute__((visibility("default")))
 void phenotype_android_bind_jvm(void* jvm) {
     namespace d = phenotype::native::detail;
-    d::g_jni.vm = static_cast<JavaVM*>(jvm);
+    d::android_jni_refs().vm = static_cast<JavaVM*>(jvm);
 }
 
 __attribute__((visibility("default")))
 void phenotype_android_bind_activity(void* activity) {
     namespace d = phenotype::native::detail;
-    d::ScopedEnv senv(d::g_jni.vm);
+    d::ScopedEnv senv(d::android_jni_refs().vm);
     if (!senv) return;
-    d::delete_global_ref(senv.env, d::g_android_activity);
+    d::delete_global_ref(senv.env, d::android_activity_ref());
     if (!activity) return;
-    d::g_android_activity = senv.env->NewGlobalRef(
+    d::android_activity_ref() = senv.env->NewGlobalRef(
         static_cast<jobject>(activity));
     d::check_and_clear_exception(senv.env);
 }
@@ -8607,9 +8667,9 @@ void phenotype_android_install_file_dialog_handler(
         char const* result_method) {
     namespace d = phenotype::native::detail;
     if (!jactivity_raw || !class_name || !request_method || !result_method) return;
-    if (!d::g_jni.vm) return;
+    if (!d::android_jni_refs().vm) return;
 
-    d::ScopedEnv senv(d::g_jni.vm);
+    d::ScopedEnv senv(d::android_jni_refs().vm);
     if (!senv) return;
     JNIEnv* env = senv.env;
 
