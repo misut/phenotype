@@ -7370,6 +7370,20 @@ inline void append_application_runtime_provider_snapshot(json::Value& value) {
     auto providers = diag::detail::application_runtime_provider_snapshot();
     auto& out = value.as_object();
     out.emplace(
+        "diagnostic_log_runtime_owner",
+        json::Value{std::string{
+            log::detail::diagnostic_log_runtime_owner_name()}});
+    out.emplace(
+        "diagnostic_log_level",
+        json::Value{std::string{log::severity_text(log::current_level())}});
+    out.emplace(
+        "diagnostic_log_level_number",
+        json::Value{static_cast<std::int64_t>(log::current_level())});
+    out.emplace(
+        "application_runtime_diagnostics_owner",
+        json::Value{std::string{
+            diag::detail::application_runtime_diagnostics_owner_name()}});
+    out.emplace(
         "debug_payload_builder_installed",
         json::Value{providers.debug_payload_builder_installed});
     out.emplace(

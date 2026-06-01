@@ -79,8 +79,6 @@ struct Record {
 };
 
 namespace detail {
-    inline Severity g_level = Severity::info;
-
     constexpr std::size_t LOG_RING_CAPACITY = 256;
 
     struct LogRing {
@@ -89,21 +87,39 @@ namespace detail {
         std::size_t                            count = 0;  // current size, capped
     };
 
+    struct DiagnosticLogRuntime {
+        Severity level = Severity::info;
+        LogRing ring{};
+    };
+
+    inline DiagnosticLogRuntime& diagnostic_log_runtime() {
+        // Heap-bound reference: the diagnostic log runtime has
+        // dynamic-storage duration so wasi-sdk's crt1-command.o never
+        // destroys it after _start() returns. Same intent as the
+        // placement-new trick g_app() uses in phenotype_state.cppm;
+        // standard C++ so it stays portable to MSVC when the Direct3D
+        // backend lands.
+        static DiagnosticLogRuntime& runtime = *new DiagnosticLogRuntime();
+        return runtime;
+    }
+
+    inline std::string_view diagnostic_log_runtime_owner_name() noexcept {
+        return "DiagnosticLogRuntime";
+    }
+
+    inline Severity& level_ref() noexcept {
+        return diagnostic_log_runtime().level;
+    }
+
     inline LogRing& ring() {
-        // Heap-bound reference: the LogRing has dynamic-storage duration so
-        // wasi-sdk's crt1-command.o never destroys it after _start() returns.
-        // Same intent as the placement-new trick g_app() uses in
-        // phenotype_state.cppm; standard C++ so it stays portable to MSVC
-        // when the Direct3D backend lands.
-        static LogRing& r = *new LogRing();
-        return r;
+        return diagnostic_log_runtime().ring;
     }
 
     void emit_formatted(Severity sev, char const* scope, std::string body) noexcept;
 } // namespace detail
 
-inline Severity current_level() noexcept { return detail::g_level; }
-inline void set_level(Severity s) noexcept { detail::g_level = s; }
+inline Severity current_level() noexcept { return detail::level_ref(); }
+inline void set_level(Severity s) noexcept { detail::level_ref() = s; }
 
 inline std::vector<Record> recent_records(std::size_t limit = detail::LOG_RING_CAPACITY) {
     std::vector<Record> out;
@@ -738,6 +754,10 @@ namespace detail {
         PlatformRuntimeDetailsProvider platform_runtime_details_provider = nullptr;
     };
 
+    struct ApplicationRuntimeDiagnostics {
+        ApplicationRuntimeProviders providers{};
+    };
+
     struct ApplicationRuntimeProviderSnapshot {
         bool debug_payload_builder_installed = false;
         bool application_debug_provider_installed = false;
@@ -745,10 +765,18 @@ namespace detail {
         bool platform_runtime_details_provider_installed = false;
     };
 
+    ApplicationRuntimeDiagnostics& application_runtime_diagnostics() noexcept {
+        static ApplicationRuntimeDiagnostics& runtime =
+            *new ApplicationRuntimeDiagnostics();
+        return runtime;
+    }
+
+    inline std::string_view application_runtime_diagnostics_owner_name() noexcept {
+        return "ApplicationRuntimeDiagnostics";
+    }
+
     ApplicationRuntimeProviders& application_runtime_providers() noexcept {
-        static ApplicationRuntimeProviders& providers =
-            *new ApplicationRuntimeProviders();
-        return providers;
+        return application_runtime_diagnostics().providers;
     }
 
     ApplicationRuntimeProviderSnapshot
