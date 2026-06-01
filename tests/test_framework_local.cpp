@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <string>
 #include <utility>
 import phenotype;
 
@@ -225,7 +226,7 @@ void test_scene_local_storage_isolation() {
         detail::ScopedSceneActivation activate(main_scene);
         next_frame([&] { scene_slot() = 7; });
         auto snapshot = runtime::active_scene();
-        assert(snapshot.id == "main");
+        assert(snapshot.id == std::string{"main"});
         assert(snapshot.framework_local_entries == 1u);
     }
 
@@ -236,7 +237,7 @@ void test_scene_local_storage_isolation() {
             scene_slot() = 42;
         });
         auto snapshot = runtime::active_scene();
-        assert(snapshot.id == "framework-local-settings");
+        assert(snapshot.id == std::string{"framework-local-settings"});
         assert(snapshot.framework_local_entries == 1u);
     }
 

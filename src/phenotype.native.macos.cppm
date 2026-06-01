@@ -5219,6 +5219,7 @@ inline void macos_dialog_open_file(char const* filter_extensions,
 
 export namespace phenotype::native {
 
+#ifdef __APPLE__
 namespace detail {
 
 inline float macos_shell_scroll_delta_y(
@@ -5244,6 +5245,7 @@ inline float macos_shell_scroll_delta_x(
 }
 
 } // namespace detail
+#endif
 
 inline platform_api const& macos_platform() {
 #ifdef __APPLE__

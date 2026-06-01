@@ -243,6 +243,9 @@ scene's runner, queue, and framework-local storage for a later reopen.
 - Keep renderer state surface-local before enabling multiple native phenotype
   windows. A second Metal layer must not reuse the first window's renderer
   singleton.
+- Keep CI coverage aligned with ownership moves. Windows-native backend,
+  renderer, shell, toolchain, and native-contract test changes must run the
+  real Windows native build/test path instead of only the PR fast-path stub.
 - Prefer small, testable ownership moves over one large rewrite. Each migration
   should preserve the existing examples and artifact contracts.
 

@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       code_tests: ${{ steps.classify.outputs.code_tests }}
+      windows_code_tests: ${{ steps.classify.outputs.windows_code_tests }}
       docs_build: ${{ steps.classify.outputs.docs_build }}
       tools_check: ${{ steps.classify.outputs.tools_check }}
       cli_check: ${{ steps.classify.outputs.cli_check }}
@@ -41,6 +42,7 @@ jobs:
           fi
 
           code_tests=false
+          windows_code_tests=false
           docs_build=false
           tools_check=false
           cli_check=false
@@ -55,6 +57,7 @@ jobs:
                 tools_check=true
                 cli_check=true
                 package_resource_check=true
+                windows_code_tests=true
                 continue
                 ;;
             esac
@@ -174,6 +177,13 @@ jobs:
             esac
 
             case "$path" in
+              src/phenotype.native.cppm|src/phenotype.native.platform.cppm|src/phenotype.native.shell.cppm|src/phenotype.native.windows.cppm|src/phenotype.native.shell.windows.cppm|tests/test_native.cpp|examples/native/*|exon.toml|exon.lock|mise.toml|.intron.toml)
+                code_tests=true
+                windows_code_tests=true
+                ;;
+            esac
+
+            case "$path" in
               src/*|tests/*|examples/*|exon.toml|exon.lock|mise.toml|.intron.toml)
                 code_tests=true
                 ;;
@@ -183,6 +193,7 @@ jobs:
 
           {
             echo "code_tests=$code_tests"
+            echo "windows_code_tests=$windows_code_tests"
             echo "docs_build=$docs_build"
             echo "tools_check=$tools_check"
             echo "cli_check=$cli_check"
@@ -197,8 +208,8 @@ jobs:
           else
             printf '  %s\n' "${files[@]}"
           fi
-          printf 'code_tests=%s docs_build=%s tools_check=%s cli_check=%s package_resource_check=%s file_explorer_examples=%s glass_showcase_examples=%s\n' \
-            "$code_tests" "$docs_build" "$tools_check" "$cli_check" "$package_resource_check" "$file_explorer_examples" "$glass_showcase_examples"
+          printf 'code_tests=%s windows_code_tests=%s docs_build=%s tools_check=%s cli_check=%s package_resource_check=%s file_explorer_examples=%s glass_showcase_examples=%s\n' \
+            "$code_tests" "$windows_code_tests" "$docs_build" "$tools_check" "$cli_check" "$package_resource_check" "$file_explorer_examples" "$glass_showcase_examples"
 
   test:
     name: test (macos-15, native)
@@ -335,15 +346,115 @@ jobs:
   windows-native:
     name: test (windows-2022, native)
     needs: changes
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.changes.outputs.windows_code_tests == 'true' && 'windows-2022' || 'ubuntu-24.04' }}
     steps:
-      - name: Defer Windows native matrix
-        if: needs.changes.outputs.code_tests == 'true'
-        run: echo "Windows native validation is covered by scheduled/manual full CI; PR fast path keeps this required check lightweight."
-
       - name: Skip code tests
-        if: needs.changes.outputs.code_tests != 'true'
+        if: needs.changes.outputs.code_tests != 'true' && needs.changes.outputs.windows_code_tests != 'true'
         run: echo "No root code-test paths changed; required check passes without allocating a Windows runner."
+
+      - name: Skip Windows native paths
+        if: needs.changes.outputs.code_tests == 'true' && needs.changes.outputs.windows_code_tests != 'true'
+        run: echo "No Windows native paths changed; required check passes without allocating a Windows runner."
+
+      - uses: actions/checkout@v6
+        if: needs.changes.outputs.windows_code_tests == 'true'
+
+      - name: Resolve tool versions
+        if: needs.changes.outputs.windows_code_tests == 'true'
+        id: windows-tool-versions
+        shell: pwsh
+        run: |
+          $mise = Get-Content mise.toml -Raw
+          if ($mise -match '"vfox:misut/mise-intron"\s*=\s*"([^"]+)"') {
+            "intron=$($Matches[1])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
+          if ($mise -match '"vfox:misut/mise-exon"\s*=\s*"([^"]+)"') {
+            "exon=$($Matches[1])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
+
+      - name: Restore toolchains
+        if: needs.changes.outputs.windows_code_tests == 'true'
+        id: windows-toolchain-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.intron/toolchains
+          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
+
+      - name: Restore build artifacts
+        if: needs.changes.outputs.windows_code_tests == 'true'
+        id: windows-build-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            .exon
+            ~/.exon/cache
+          key: build-windows-2022-native-${{ hashFiles('mise.toml', 'exon.toml', 'exon.lock') }}
+          restore-keys: |
+            build-windows-2022-native-
+
+      - name: Install intron
+        if: needs.changes.outputs.windows_code_tests == 'true'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\phenotype-bin" | Out-Null
+          gh release download "v${{ steps.windows-tool-versions.outputs.intron }}" -R misut/intron -p "intron-*-x86_64-pc-windows-msvc.zip"
+          $archive = Get-Item "intron-*-x86_64-pc-windows-msvc.zip"
+          Expand-Archive -Path $archive.FullName -DestinationPath "$env:RUNNER_TEMP\intron" -Force
+          Move-Item -Path "$env:RUNNER_TEMP\intron\intron.exe" -Destination "$env:RUNNER_TEMP\phenotype-bin\intron.exe" -Force
+          "$env:RUNNER_TEMP\phenotype-bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Remove-Item $archive.FullName
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install toolchains
+        if: needs.changes.outputs.windows_code_tests == 'true'
+        shell: pwsh
+        run: |
+          intron install msvc 2022
+          intron install cmake 4.3.1
+          intron install ninja 1.13.2
+
+      - name: Save toolchains
+        if: needs.changes.outputs.windows_code_tests == 'true' && github.ref == 'refs/heads/main' && steps.windows-toolchain-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.intron/toolchains
+          key: ${{ steps.windows-toolchain-cache.outputs.cache-primary-key }}
+
+      - name: Install exon
+        if: needs.changes.outputs.windows_code_tests == 'true'
+        shell: pwsh
+        run: |
+          gh release download "v${{ steps.windows-tool-versions.outputs.exon }}" -R misut/exon -p "exon-*-x86_64-pc-windows-msvc.zip"
+          $archive = Get-Item "exon-*-x86_64-pc-windows-msvc.zip"
+          Expand-Archive -Path $archive.FullName -DestinationPath "$env:RUNNER_TEMP\exon" -Force
+          Move-Item -Path "$env:RUNNER_TEMP\exon\exon.exe" -Destination "$env:RUNNER_TEMP\phenotype-bin\exon.exe" -Force
+          Remove-Item $archive.FullName
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build
+        if: needs.changes.outputs.windows_code_tests == 'true'
+        shell: pwsh
+        run: |
+          Invoke-Expression (& intron env | Out-String)
+          exon build
+
+      - name: Test
+        if: needs.changes.outputs.windows_code_tests == 'true'
+        shell: pwsh
+        run: |
+          Invoke-Expression (& intron env | Out-String)
+          exon test --timeout 120 --show-output failed
+
+      - name: Save build artifacts
+        if: needs.changes.outputs.windows_code_tests == 'true' && github.ref == 'refs/heads/main' && steps.windows-build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            .exon
+            ~/.exon/cache
+          key: ${{ steps.windows-build-cache.outputs.cache-primary-key }}
 
   wasm32-wasi:
     name: test (ubuntu-24.04, wasm32-wasi)

@@ -1289,8 +1289,8 @@ void test_material_surface_fixed_outer_height_accounts_for_padding() {
         layout::MaterialSurfaceOptions{
             .kind = MaterialKind::None,
             .padding = SpaceToken::Lg,
-            .fixed_outer_height = 120.0f,
             .gap_px = 0.0f,
+            .fixed_outer_height = 120.0f,
         },
         [] {
             widget::text("Padding-box fixed height");
