@@ -1626,7 +1626,8 @@ void run_host_scene(native_host& host,
                     Update update) {
     host.render_scene_id = scene.id;
     bind_host(host, host.shell.scroll_x, host.shell.scroll_y);
-    ::phenotype::detail::g_open_url = detail::open_url_bridge;
+    ::phenotype::detail::set_application_open_url_handler(
+        detail::open_url_bridge);
     if (host.platform && host.platform->input.attach)
         host.platform->input.attach(host.window, detail::repaint_current);
     if (host.platform && host.platform->text.init)
@@ -1661,7 +1662,8 @@ void run_host_scene_with_state(native_host& host,
                                Update update) {
     host.render_scene_id = scene.id;
     bind_host(host, host.shell.scroll_x, host.shell.scroll_y);
-    ::phenotype::detail::g_open_url = detail::open_url_bridge;
+    ::phenotype::detail::set_application_open_url_handler(
+        detail::open_url_bridge);
     if (host.platform && host.platform->input.attach)
         host.platform->input.attach(host.window, detail::repaint_current);
     if (host.platform && host.platform->text.init)
@@ -1742,7 +1744,7 @@ inline void shutdown_host(native_host& host) {
         host.platform->renderer.shutdown();
     if (host.platform && host.platform->text.shutdown)
         host.platform->text.shutdown();
-    ::phenotype::detail::g_open_url = nullptr;
+    ::phenotype::detail::set_application_open_url_handler(nullptr);
     ::phenotype::diag::set_application_debug_provider(nullptr);
     host.shell = {};
     if (detail::is_active_host(host))

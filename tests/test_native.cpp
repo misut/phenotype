@@ -1617,9 +1617,13 @@ struct Harness {
 
     Harness() {
         reset_core_state();
+        assert(!phenotype::runtime::application_runtime()
+                    .open_url_handler_installed);
         platform.open_url = open_url;
         host.platform = &platform;
         phenotype::native::run<State, Msg>(host, view, update);
+        assert(phenotype::runtime::application_runtime()
+                   .open_url_handler_installed);
         assert(phenotype::detail::g_app().callbacks.size() == 6);
         assert(phenotype::detail::g_app().focusable_ids.size() == 6);
     }

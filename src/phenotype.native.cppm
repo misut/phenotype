@@ -427,7 +427,7 @@ inline void open_file(char const* filter_extensions,
 inline void shutdown() {
     renderer::shutdown();
     text::shutdown();
-    ::phenotype::detail::g_open_url = nullptr;
+    ::phenotype::detail::set_application_open_url_handler(nullptr);
 }
 
 template<typename State, typename Msg, typename View, typename Update>
