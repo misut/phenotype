@@ -565,8 +565,57 @@ inline id create_appkit_window(int width,
     return window;
 }
 
-inline id g_active_appkit_window = nullptr;
-inline NativeSurfaceDescriptor* g_active_appkit_surface = nullptr;
+struct ActiveAppKitBinding {
+    id window = nullptr;
+    NativeSurfaceDescriptor* surface = nullptr;
+};
+
+inline ActiveAppKitBinding& active_appkit_binding() {
+    static ActiveAppKitBinding& binding = *new ActiveAppKitBinding();
+    return binding;
+}
+
+inline ActiveAppKitBinding capture_active_appkit_binding() {
+    return active_appkit_binding();
+}
+
+inline id active_appkit_window() {
+    return active_appkit_binding().window;
+}
+
+inline NativeSurfaceDescriptor* active_appkit_surface() {
+    return active_appkit_binding().surface;
+}
+
+inline void bind_active_appkit_window(id window,
+                                      NativeSurfaceDescriptor* surface) {
+    active_appkit_binding() = ActiveAppKitBinding{
+        .window = window,
+        .surface = surface,
+    };
+}
+
+inline void clear_active_appkit_binding() {
+    bind_active_appkit_window(nullptr, nullptr);
+}
+
+inline void restore_active_appkit_binding(ActiveAppKitBinding const& binding) {
+    active_appkit_binding() = binding;
+}
+
+struct ScopedAppKitActivation {
+    ActiveAppKitBinding previous{};
+
+    ScopedAppKitActivation(id window, NativeSurfaceDescriptor* surface)
+        : previous(capture_active_appkit_binding()) {
+        bind_active_appkit_window(window, surface);
+    }
+
+    ~ScopedAppKitActivation() {
+        restore_active_appkit_binding(previous);
+    }
+};
+
 inline bool g_appkit_keep_running_after_last_window_closed = false;
 inline bool g_appkit_should_terminate = false;
 inline bool g_appkit_mouse_tracking_mode = false;
@@ -1753,7 +1802,7 @@ inline void appkit_window_will_close(id, SEL, id) {
 
 inline signed char appkit_should_handle_reopen(id, SEL, id app, signed char) {
     g_appkit_window_user_closed = false;
-    schedule_appkit_window_front_request(app, g_active_appkit_window);
+    schedule_appkit_window_front_request(app, active_appkit_window());
     if (app)
         objc_send<void>(app, sel("stop:"), nullptr);
     return static_cast<signed char>(1);
@@ -1763,13 +1812,13 @@ inline void appkit_did_become_active(id, SEL, id) {
     if (g_appkit_window_user_closed)
         return;
     id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
-    schedule_appkit_window_front_request(app, g_active_appkit_window, 8);
+    schedule_appkit_window_front_request(app, active_appkit_window(), 8);
 }
 
 inline void appkit_open_settings(id, SEL, id) {
     id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
     g_appkit_window_user_closed = false;
-    schedule_appkit_window_front_request(app, g_active_appkit_window);
+    schedule_appkit_window_front_request(app, active_appkit_window());
     if (g_appkit_settings_menu_handler) {
         g_appkit_settings_menu_handler();
         ::phenotype::detail::trigger_rebuild();
@@ -2770,8 +2819,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     host.set_hover_cursor = &appkit_set_hover_cursor;
     host.on_viewport_changed = std::move(on_viewport);
     sync_appkit_surface(host, surface, window, false);
-    g_active_appkit_window = window;
-    g_active_appkit_surface = &surface;
+    bind_active_appkit_window(window, &surface);
 
     if (platform.window.configure)
         platform.window.configure(&surface, &options);
@@ -2813,8 +2861,7 @@ int run_app_with_macos_platform(platform_api const& platform,
         objc_send<void>(window, sel("close"));
         if (pool)
             objc_send<void>(pool, sel("drain"));
-        g_active_appkit_window = nullptr;
-        g_active_appkit_surface = nullptr;
+        clear_active_appkit_binding();
         return artifact_ok ? 0 : 1;
     }
 
@@ -2824,8 +2871,7 @@ int run_app_with_macos_platform(platform_api const& platform,
         objc_send<void>(window, sel("close"));
         if (pool)
             objc_send<void>(pool, sel("drain"));
-        g_active_appkit_window = nullptr;
-        g_active_appkit_surface = nullptr;
+        clear_active_appkit_binding();
         return perf_ok ? 0 : 1;
     }
 
@@ -2865,8 +2911,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     }
     g_appkit_scene_windows.clear();
     shutdown_host(host);
-    g_active_appkit_window = nullptr;
-    g_active_appkit_surface = nullptr;
+    clear_active_appkit_binding();
     g_appkit_settings_menu_handler = nullptr;
     g_appkit_keep_running_after_last_window_closed = false;
     g_appkit_mouse_tracking_mode = false;
@@ -2885,14 +2930,15 @@ inline constexpr int window_unbounded = -1;
 
 inline void set_window_size_limits(int min_w, int min_h,
                                    int max_w, int max_h) {
-    if (!detail::g_active_appkit_window)
+    auto window = detail::active_appkit_window();
+    if (!window)
         return;
     CGSize min_size{
         static_cast<double>(min_w > 0 ? min_w : 0),
         static_cast<double>(min_h > 0 ? min_h : 0),
     };
     detail::objc_send<void>(
-        detail::g_active_appkit_window,
+        window,
         detail::sel("setContentMinSize:"),
         min_size);
     if (max_w > 0 || max_h > 0) {
@@ -2901,31 +2947,33 @@ inline void set_window_size_limits(int min_w, int min_h,
             static_cast<double>(max_h > 0 ? max_h : 1000000),
         };
         detail::objc_send<void>(
-            detail::g_active_appkit_window,
+            window,
             detail::sel("setContentMaxSize:"),
             max_size);
     }
 }
 
 inline void set_window_aspect_ratio(int numerator, int denominator) {
-    if (!detail::g_active_appkit_window || numerator <= 0 || denominator <= 0)
+    auto window = detail::active_appkit_window();
+    if (!window || numerator <= 0 || denominator <= 0)
         return;
     CGSize ratio{
         static_cast<double>(numerator),
         static_cast<double>(denominator),
     };
     detail::objc_send<void>(
-        detail::g_active_appkit_window,
+        window,
         detail::sel("setAspectRatio:"),
         ratio);
 }
 
 inline void clear_window_aspect_ratio() {
-    if (!detail::g_active_appkit_window)
+    auto window = detail::active_appkit_window();
+    if (!window)
         return;
     CGSize ratio{0.0, 0.0};
     detail::objc_send<void>(
-        detail::g_active_appkit_window,
+        window,
         detail::sel("setAspectRatio:"),
         ratio);
 }
