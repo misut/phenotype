@@ -4137,6 +4137,34 @@ static void test_windows_aspect_ratio_sizing_helper() {
     std::puts("PASS: windows native aspect ratio sizing helper");
 }
 
+static void test_windows_active_shell_binding_restores_state() {
+    auto previous =
+        phenotype::native::detail::capture_active_win32_shell_binding();
+    phenotype::native::detail::Win32ShellState first{};
+    phenotype::native::detail::Win32ShellState second{};
+
+    phenotype::native::detail::bind_active_win32_shell(&first);
+    assert(phenotype::native::detail::active_win32_shell() == &first);
+
+    {
+        phenotype::native::detail::ScopedWin32ShellActivation activate(second);
+        assert(phenotype::native::detail::active_win32_shell() == &second);
+        phenotype::native::set_window_size_limits(120, 80, 640, 480);
+        phenotype::native::set_window_aspect_ratio(16, 9);
+        assert(second.min_w == 120);
+        assert(second.min_h == 80);
+        assert(second.max_w == 640);
+        assert(second.max_h == 480);
+        assert(second.aspect_w == 16);
+        assert(second.aspect_h == 9);
+    }
+
+    assert(phenotype::native::detail::active_win32_shell() == &first);
+    assert(first.min_w == 0);
+    phenotype::native::detail::restore_active_win32_shell_binding(previous);
+    std::puts("PASS: windows active shell binding restores state");
+}
+
 static void test_windows_text_build_atlas_empty() {
     text::init();
     std::vector<text::TextEntry> entries;
@@ -5058,6 +5086,7 @@ int main() {
     test_windows_text_build_atlas_preserves_vertical_orientation();
     test_windows_surface_descriptor_scale_is_valid();
     test_windows_aspect_ratio_sizing_helper();
+    test_windows_active_shell_binding_restores_state();
     test_windows_text_build_atlas_empty();
     test_renderer_flush_empty();
     test_windows_renderer_reinit_cycle();

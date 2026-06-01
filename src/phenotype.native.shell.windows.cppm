@@ -56,7 +56,51 @@ struct Win32ShellState {
     bool running = false;
 };
 
-inline Win32ShellState* g_active_win32_shell = nullptr;
+struct Win32ShellBinding {
+    Win32ShellState* state = nullptr;
+};
+
+inline Win32ShellBinding& active_win32_shell_binding() {
+    static Win32ShellBinding binding;
+    return binding;
+}
+
+inline Win32ShellBinding capture_active_win32_shell_binding() {
+    return active_win32_shell_binding();
+}
+
+inline Win32ShellState* active_win32_shell() {
+    return active_win32_shell_binding().state;
+}
+
+inline void bind_active_win32_shell(Win32ShellState* state) {
+    active_win32_shell_binding().state = state;
+}
+
+inline void clear_active_win32_shell() {
+    bind_active_win32_shell(nullptr);
+}
+
+inline void restore_active_win32_shell_binding(Win32ShellBinding const& binding) {
+    active_win32_shell_binding() = binding;
+}
+
+struct ScopedWin32ShellActivation {
+    Win32ShellBinding previous;
+
+    explicit ScopedWin32ShellActivation(Win32ShellState* state)
+        : previous(capture_active_win32_shell_binding()) {
+        bind_active_win32_shell(state);
+    }
+
+    explicit ScopedWin32ShellActivation(Win32ShellState& state)
+        : ScopedWin32ShellActivation(&state) {}
+
+    ~ScopedWin32ShellActivation() {
+        restore_active_win32_shell_binding(previous);
+    }
+};
+
 constexpr unsigned int win32_cursor_arrow_id = 32512;
 constexpr unsigned int win32_cursor_hand_id = 32649;
 constexpr unsigned int win32_icon_application_id = 32512;
@@ -675,7 +719,7 @@ inline HWND create_win32_window(int width,
 }
 
 inline void win32_set_hover_cursor(bool pointing) {
-    auto* state = g_active_win32_shell;
+    auto* state = active_win32_shell();
     if (!state)
         return;
     state->active_cursor = pointing ? state->hand_cursor : state->arrow_cursor;
@@ -767,7 +811,7 @@ int run_app_with_windows_platform(platform_api const& platform,
     host.on_viewport_changed = std::move(on_viewport);
     shell.surface = &surface;
     shell.host = &host;
-    g_active_win32_shell = &shell;
+    ScopedWin32ShellActivation activate_shell(shell);
     sync_win32_surface(host, surface, hwnd, false);
 
     if (platform.window.configure)
@@ -798,7 +842,6 @@ int run_app_with_windows_platform(platform_api const& platform,
     if (artifact_requested && env_flag_enabled("PHENOTYPE_ARTIFACT_EXIT")) {
         shutdown_host(host);
         DestroyWindow(hwnd);
-        g_active_win32_shell = nullptr;
         return artifact_ok ? 0 : 1;
     }
 
@@ -826,7 +869,6 @@ int run_app_with_windows_platform(platform_api const& platform,
     shutdown_host(host);
     if (IsWindow(hwnd))
         DestroyWindow(hwnd);
-    g_active_win32_shell = nullptr;
     return 0;
 }
 
@@ -836,7 +878,7 @@ inline constexpr int window_unbounded = -1;
 
 inline void set_window_size_limits(int min_w, int min_h,
                                    int max_w, int max_h) {
-    auto* state = detail::g_active_win32_shell;
+    auto* state = detail::active_win32_shell();
     if (!state)
         return;
     state->min_w = min_w > 0 ? min_w : 0;
@@ -854,7 +896,7 @@ inline void set_window_size_limits(int min_w, int min_h,
 }
 
 inline void set_window_aspect_ratio(int numerator, int denominator) {
-    auto* state = detail::g_active_win32_shell;
+    auto* state = detail::active_win32_shell();
     if (!state || numerator <= 0 || denominator <= 0)
         return;
     state->aspect_w = numerator;
@@ -862,7 +904,7 @@ inline void set_window_aspect_ratio(int numerator, int denominator) {
 }
 
 inline void clear_window_aspect_ratio() {
-    auto* state = detail::g_active_win32_shell;
+    auto* state = detail::active_win32_shell();
     if (!state)
         return;
     state->aspect_w = 0;
