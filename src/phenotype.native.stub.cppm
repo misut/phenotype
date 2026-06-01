@@ -18,9 +18,21 @@ import json;
 
 namespace phenotype::native::detail {
 
+struct StubNativeRuntime {
+    std::vector<HitRegionCmd> hit_regions;
+};
+
+inline StubNativeRuntime& stub_native_runtime() {
+    static StubNativeRuntime& runtime = *new StubNativeRuntime();
+    return runtime;
+}
+
+inline char const* stub_native_runtime_owner_name() noexcept {
+    return "StubNativeRuntime";
+}
+
 inline std::vector<HitRegionCmd>& stub_hit_regions() {
-    static std::vector<HitRegionCmd>& regions = *new std::vector<HitRegionCmd>();
-    return regions;
+    return stub_native_runtime().hit_regions;
 }
 
 inline void stub_text_init() {}
@@ -172,6 +184,13 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot stub_debug_capabilities()
 
 inline json::Value stub_platform_runtime_details_json() {
     json::Object runtime;
+    runtime.emplace(
+        "native_runtime_owner",
+        json::Value{std::string{stub_native_runtime_owner_name()}});
+    runtime.emplace(
+        "hit_region_count",
+        json::Value{static_cast<std::int64_t>(
+            stub_native_runtime().hit_regions.size())});
     runtime.emplace(
         "renderer",
         json::Value{
