@@ -735,16 +735,32 @@ struct RendererState {
     bool initialized = false;
 };
 
-inline RendererState g_default_renderer;
-
 struct ActiveRendererBinding {
-    RendererState* state = &g_default_renderer;
+    RendererState* state = nullptr;
 };
 
+struct MacOSRendererRuntime {
+    RendererState default_renderer{};
+    ActiveRendererBinding active{};
+    std::vector<std::unique_ptr<RendererState>> registry{};
+
+    MacOSRendererRuntime()
+        : active{&default_renderer} {}
+};
+
+inline MacOSRendererRuntime& macos_renderer_runtime() {
+    static MacOSRendererRuntime& runtime = *new MacOSRendererRuntime();
+    if (!runtime.active.state)
+        runtime.active.state = &runtime.default_renderer;
+    return runtime;
+}
+
+inline RendererState& default_renderer_state() {
+    return macos_renderer_runtime().default_renderer;
+}
+
 inline ActiveRendererBinding& active_renderer_binding() {
-    static ActiveRendererBinding& binding =
-        *new ActiveRendererBinding{&g_default_renderer};
-    return binding;
+    return macos_renderer_runtime().active;
 }
 
 inline ActiveRendererBinding capture_active_renderer_binding() {
@@ -752,23 +768,21 @@ inline ActiveRendererBinding capture_active_renderer_binding() {
 }
 
 inline std::vector<std::unique_ptr<RendererState>>& renderer_registry() {
-    static std::vector<std::unique_ptr<RendererState>>& states =
-        *new std::vector<std::unique_ptr<RendererState>>();
-    return states;
+    return macos_renderer_runtime().registry;
 }
 
 inline RendererState& renderer_state() {
     auto& binding = active_renderer_binding();
     if (!binding.state)
-        binding.state = &g_default_renderer;
+        binding.state = &default_renderer_state();
     return *binding.state;
 }
 
 inline RendererState* find_renderer_state(NativeSurfaceDescriptor* surface) {
     if (!surface)
-        return &g_default_renderer;
-    if (g_default_renderer.surface == surface)
-        return &g_default_renderer;
+        return &default_renderer_state();
+    if (default_renderer_state().surface == surface)
+        return &default_renderer_state();
     for (auto& state : renderer_registry()) {
         if (state && state->surface == surface)
             return state.get();
@@ -778,10 +792,11 @@ inline RendererState* find_renderer_state(NativeSurfaceDescriptor* surface) {
 
 inline RendererState& ensure_renderer_state(NativeSurfaceDescriptor* surface) {
     if (!surface)
-        return g_default_renderer;
-    if (!g_default_renderer.initialized && !g_default_renderer.surface) {
-        g_default_renderer.surface = surface;
-        return g_default_renderer;
+        return default_renderer_state();
+    auto& fallback = default_renderer_state();
+    if (!fallback.initialized && !fallback.surface) {
+        fallback.surface = surface;
+        return fallback;
     }
     if (auto* existing = find_renderer_state(surface))
         return *existing;
@@ -807,7 +822,7 @@ inline bool all_renderer_surfaces_uploaded_image_generation(
             return true;
         return state.image_atlas_uploaded_generation == generation;
     };
-    if (!state_is_current(g_default_renderer))
+    if (!state_is_current(default_renderer_state()))
         return false;
     for (auto const& state : renderer_registry()) {
         if (state && !state_is_current(*state))
@@ -820,7 +835,7 @@ inline void restore_active_renderer_binding(
         ActiveRendererBinding const& binding) {
     active_renderer_binding() = binding;
     if (!active_renderer_binding().state)
-        active_renderer_binding().state = &g_default_renderer;
+        active_renderer_binding().state = &default_renderer_state();
 }
 
 struct ScopedRendererActivation {
@@ -837,7 +852,7 @@ struct ScopedRendererActivation {
 };
 
 inline void reset_active_renderer_state() {
-    bind_renderer_state(g_default_renderer);
+    bind_renderer_state(default_renderer_state());
 }
 
 inline MTL::RenderPipelineState* create_pipeline(
