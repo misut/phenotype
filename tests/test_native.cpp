@@ -470,6 +470,44 @@ static void test_macos_renderer_state_tracks_surfaces() {
     std::puts("PASS: macOS renderer state tracks surfaces");
 }
 
+static void test_macos_appkit_active_binding_restores_window_and_surface() {
+    auto previous =
+        phenotype::native::detail::capture_active_appkit_binding();
+    NativeSurfaceDescriptor first{
+        .kind = NativeSurfaceKind::MacOSWindow,
+    };
+    NativeSurfaceDescriptor second{
+        .kind = NativeSurfaceKind::MacOSWindow,
+    };
+    auto first_window = reinterpret_cast<id>(&first);
+    auto second_window = reinterpret_cast<id>(&second);
+
+    phenotype::native::detail::bind_active_appkit_window(
+        first_window,
+        &first);
+    assert(phenotype::native::detail::active_appkit_window()
+           == first_window);
+    assert(phenotype::native::detail::active_appkit_surface()
+           == &first);
+
+    {
+        phenotype::native::detail::ScopedAppKitActivation activate(
+            second_window,
+            &second);
+        assert(phenotype::native::detail::active_appkit_window()
+               == second_window);
+        assert(phenotype::native::detail::active_appkit_surface()
+               == &second);
+    }
+
+    assert(phenotype::native::detail::active_appkit_window()
+           == first_window);
+    assert(phenotype::native::detail::active_appkit_surface()
+           == &first);
+    phenotype::native::detail::restore_active_appkit_binding(previous);
+    std::puts("PASS: macOS AppKit active binding restores window and surface");
+}
+
 template<typename R, typename... Args>
 static R test_objc_send(id object, SEL selector, Args... args) {
     return reinterpret_cast<R (*)(id, SEL, Args...)>(objc_msgSend)(
@@ -4967,6 +5005,7 @@ int main() {
     test_shell_scroll_at_cursor_prefers_inner_scroll_view();
 #ifdef __APPLE__
     test_macos_renderer_state_tracks_surfaces();
+    test_macos_appkit_active_binding_restores_window_and_surface();
     test_macos_appkit_activation_slice_gate();
     test_macos_appkit_function_key_resolution();
     test_macos_appkit_scene_window_registry_targets_scene();
