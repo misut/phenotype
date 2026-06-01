@@ -151,9 +151,11 @@ restore path during nested scene or render-surface activation and makes stale
 queue ownership harder to reintroduce as more windows are added.
 The default scene, secondary scene registry, and active scene/render-surface
 cursor live together in `ApplicationSceneRuntimeStore`. That keeps scene lookup
-and activation from drifting across three hidden statics while still leaving
-render-surface storage in its own owner until backend resources are migrated
-fully into per-surface runtime objects.
+and activation from drifting across three hidden statics. The default render
+surface and secondary surface registry live in
+`ApplicationRenderSurfaceRuntimeStore`, so drawing-target lookup follows the
+same owner pattern while backend resources continue migrating into
+per-surface runtime objects.
 The active `AppState` follows the same rule. Compatibility helpers such as
 `detail::g_app()` resolve through the active scene instead of a parallel active
 app pointer, so the scene activation stack has one owner to restore and

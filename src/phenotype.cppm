@@ -7317,6 +7317,9 @@ inline json::Value application_runtime_snapshot_to_json(
     out.emplace(
         "scene_runtime_owner",
         json::Value{snapshot.scene_runtime_owner});
+    out.emplace(
+        "render_surface_runtime_owner",
+        json::Value{snapshot.render_surface_runtime_owner});
     out.emplace("active_scene_id", json::Value{snapshot.active_scene_id});
     out.emplace(
         "active_scene_role",
