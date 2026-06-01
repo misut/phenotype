@@ -1408,7 +1408,7 @@ inline bool upload_text_cache() {
 }
 
 inline bool upload_image_cache() {
-    auto& cache = g_images;
+    auto& cache = image_atlas_cache();
     if (cache.generation == 0
         || renderer_state().image_atlas_uploaded_generation == cache.generation) {
         return true;
@@ -3362,29 +3362,30 @@ inline void request_image_repaint_targets_for_tests() {
 }
 
 inline void set_image_queue_only_for_tests(bool enabled) {
-    detail::g_images.queue_only_for_tests = enabled;
+    detail::image_atlas_cache().queue_only_for_tests = enabled;
     if (enabled)
         detail::shutdown_image_worker();
 }
 
 inline RemoteImageDebug remote_image_debug(std::string const& url) {
     RemoteImageDebug debug{};
-    if (auto it = detail::g_images.cache.find(url); it != detail::g_images.cache.end()) {
+    auto& images = detail::image_atlas_cache();
+    if (auto it = images.cache.find(url); it != images.cache.end()) {
         debug.entry_exists = true;
         debug.entry_state = static_cast<int>(it->second.state);
         debug.failure_reason = it->second.failure_reason;
     }
     {
-        std::lock_guard lock(detail::g_images.mutex);
-        debug.pending_jobs = detail::g_images.pending_jobs.size();
-        debug.completed_jobs = detail::g_images.completed_jobs.size();
-        debug.worker_started = detail::g_images.worker_started;
+        std::lock_guard lock(images.mutex);
+        debug.pending_jobs = images.pending_jobs.size();
+        debug.completed_jobs = images.completed_jobs.size();
+        debug.worker_started = images.worker_started;
     }
     return debug;
 }
 
 inline std::uint64_t image_cache_generation() {
-    return detail::g_images.generation;
+    return detail::image_atlas_cache().generation;
 }
 
 inline std::uint64_t active_renderer_image_upload_generation() {
@@ -3392,19 +3393,19 @@ inline std::uint64_t active_renderer_image_upload_generation() {
 }
 
 inline bool active_renderer_needs_image_atlas_upload() {
-    auto const generation = detail::g_images.generation;
+    auto const generation = detail::image_atlas_cache().generation;
     return generation != 0
         && detail::renderer_state().image_atlas_uploaded_generation
             != generation;
 }
 
 inline void bump_image_cache_generation_for_tests() {
-    ++detail::g_images.generation;
+    ++detail::image_atlas_cache().generation;
 }
 
 inline void mark_active_renderer_image_atlas_uploaded_for_tests() {
     detail::renderer_state().image_atlas_uploaded_generation =
-        detail::g_images.generation;
+        detail::image_atlas_cache().generation;
 }
 
 inline RasterizedTextRunDebug rasterized_text_run_debug(std::string const& text,
@@ -4060,18 +4061,19 @@ inline json::Object macos_renderer_runtime_json() {
 }
 
 inline json::Object macos_images_runtime_json() {
+    auto& images_runtime = image_atlas_cache();
     std::size_t pending_jobs = 0;
     std::size_t completed_jobs = 0;
     bool worker_started = false;
     {
-        std::lock_guard lock(g_images.mutex);
-        pending_jobs = g_images.pending_jobs.size();
-        completed_jobs = g_images.completed_jobs.size();
-        worker_started = g_images.worker_started;
+        std::lock_guard lock(images_runtime.mutex);
+        pending_jobs = images_runtime.pending_jobs.size();
+        completed_jobs = images_runtime.completed_jobs.size();
+        worker_started = images_runtime.worker_started;
     }
 
     json::Array remote_entries;
-    for (auto const& record : g_images.cache) {
+    for (auto const& record : images_runtime.cache) {
         if (!is_http_url(record.first))
             continue;
         json::Object entry;
@@ -4095,7 +4097,7 @@ inline json::Object macos_images_runtime_json() {
     images.emplace("worker_started", json::Value{worker_started});
     images.emplace(
         "atlas_generation",
-        json::Value{static_cast<std::int64_t>(g_images.generation)});
+        json::Value{static_cast<std::int64_t>(images_runtime.generation)});
     images.emplace(
         "active_surface_uploaded_generation",
         json::Value{

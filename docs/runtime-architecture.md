@@ -228,11 +228,12 @@ aliases behind `MacOSTextRuntime`. The cache is still process-wide service
 state, because registered fonts and base-face resolution are Core Text
 process-scope concerns, but renderer scenes reach it through one explicit owner
 instead of a raw font-cache global.
-Shared decoded image pixels remain process-wide resource-cache data, but each
-renderer surface now tracks the image-atlas generation it has uploaded into its
-own GPU texture. A secondary window can therefore reuse decoded image metadata
-without inheriting the first window's Metal/D3D texture, descriptor state, or
-dirty/upload cursor.
+Shared decoded image pixels remain process-wide resource-cache data. On macOS,
+`MacOSImageRuntime` owns the decoded-image atlas, worker queues, and repaint
+target registry, while each renderer surface still tracks the image-atlas
+generation it has uploaded into its own GPU texture. A secondary window can
+therefore reuse decoded image metadata without inheriting the first window's
+Metal/D3D texture, descriptor state, or dirty/upload cursor.
 Remote-image repaint delivery follows the same split. Worker completion and
 decoded pixels remain process-wide cache activity, while each attached native
 surface registers its own repaint target. macOS fans image-completion repaint
