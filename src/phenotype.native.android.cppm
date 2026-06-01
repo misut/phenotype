@@ -7431,6 +7431,10 @@ namespace dialog {
 inline ::json::Object android_dialog_runtime_json();
 }
 
+namespace touch {
+inline ::json::Object android_touch_runtime_json();
+}
+
 inline ::json::Value android_platform_runtime_details_json_with_reason(
         std::string_view reason) {
     ::json::Object root;
@@ -7454,6 +7458,8 @@ inline ::json::Value android_platform_runtime_details_json_with_reason(
         ::json::Value{android_renderer_runtime_json()});
     root.emplace("dialog",
         ::json::Value{dialog::android_dialog_runtime_json()});
+    root.emplace("touch",
+        ::json::Value{touch::android_touch_runtime_json()});
     root.emplace("image_cache_size",
         ::json::Value{static_cast<std::int64_t>(g_images.cache.size())});
     root.emplace("text_jni_initialised",
@@ -7932,9 +7938,6 @@ struct Pointer {
     float prev_y = 0.0f;
 };
 
-inline Pointer g_pointers[kMaxSlots];
-inline int     g_active_count = 0;
-
 // Frame-coalesce dispatch_after_move. The Android driver hands us
 // each pointer in a multi-pointer MotionEvent with a separate
 // `phenotype_android_dispatch_touch` call; running the gesture
@@ -7946,25 +7949,104 @@ inline int     g_active_count = 0;
 // pointer positions; the actual gesture dispatch happens once
 // per frame from `phenotype_android_draw_frame` via
 // `process_pending_touch_dispatch`.
-inline bool g_touch_dispatch_pending = false;
-
-// Two-finger pinch baseline distance. Persists across MOVE events so a
+//
+// Two-finger pinch baseline distance persists across MOVE events so a
 // slow steady pinch accumulates spread ratio across frames instead of
 // measuring each frame's sub-pixel delta against the dead-zone (which
 // reads as a "stepped" zoom on the device — thanks Galaxy S25 Ultra).
-// Reset to 0 whenever the active pointer count changes (rebase_previous
-// is called there), then snapped to the current inter-pointer distance
-// on the first dispatch_after_move that observes it as 0.
-inline float g_pinch_baseline_d = 0.0f;
+// It resets to 0 whenever the active pointer count changes
+// (rebase_previous is called there), then snaps to the current
+// inter-pointer distance on the first dispatch_after_move that observes
+// it as 0.
+//
+// The single-pointer press flag tracks whether a synthetic mouse press is
+// currently in flight on the mouse pipeline. on_touch_event drives the
+// mouse pipeline only while exactly one finger is down so widget hit-tests
+// (button, checkbox, link, ...) fire on tap; a second finger arriving
+// cancels the pending press before pinch/pan takes over.
+struct AndroidTouchRuntime {
+    Pointer pointer0{};
+    Pointer pointer1{};
+    Pointer pointer2{};
+    Pointer pointer3{};
+    int active_count = 0;
+    bool dispatch_pending = false;
+    float pinch_baseline_d = 0.0f;
+    bool single_pointer_press = false;
+};
+
+inline AndroidTouchRuntime& android_touch_runtime() {
+    static AndroidTouchRuntime& runtime = *new AndroidTouchRuntime();
+    return runtime;
+}
+
+inline std::string_view android_touch_runtime_owner_name() noexcept {
+    return "AndroidTouchRuntime";
+}
+
+inline Pointer& pointer_slot(AndroidTouchRuntime& runtime,
+                             std::size_t index) noexcept {
+    switch (index) {
+        case 0: return runtime.pointer0;
+        case 1: return runtime.pointer1;
+        case 2: return runtime.pointer2;
+        default: return runtime.pointer3;
+    }
+}
+
+inline Pointer const& pointer_slot(AndroidTouchRuntime const& runtime,
+                                   std::size_t index) noexcept {
+    switch (index) {
+        case 0: return runtime.pointer0;
+        case 1: return runtime.pointer1;
+        case 2: return runtime.pointer2;
+        default: return runtime.pointer3;
+    }
+}
+
+inline ::json::Object android_touch_runtime_json() {
+    auto& runtime = android_touch_runtime();
+    std::int64_t occupied_slots = 0;
+    for (std::size_t i = 0; i < kMaxSlots; ++i) {
+        auto const& pointer = pointer_slot(runtime, i);
+        if (pointer.id != -1)
+            ++occupied_slots;
+    }
+    ::json::Object root;
+    root.emplace(
+        "owner",
+        ::json::Value{std::string{android_touch_runtime_owner_name()}});
+    root.emplace(
+        "active_count",
+        ::json::Value{static_cast<std::int64_t>(runtime.active_count)});
+    root.emplace(
+        "occupied_slots",
+        ::json::Value{occupied_slots});
+    root.emplace(
+        "dispatch_pending",
+        ::json::Value{runtime.dispatch_pending});
+    root.emplace(
+        "pinch_baseline_d",
+        ::json::Value{static_cast<double>(runtime.pinch_baseline_d)});
+    root.emplace(
+        "single_pointer_press",
+        ::json::Value{runtime.single_pointer_press});
+    return root;
+}
 
 inline Pointer* find_slot(int pointer_id) {
-    for (auto& p : g_pointers)
+    auto& runtime = android_touch_runtime();
+    for (std::size_t i = 0; i < kMaxSlots; ++i) {
+        auto& p = pointer_slot(runtime, i);
         if (p.id == pointer_id) return &p;
+    }
     return nullptr;
 }
 
 inline Pointer* alloc_slot(int pointer_id) {
-    for (auto& p : g_pointers) {
+    auto& runtime = android_touch_runtime();
+    for (std::size_t i = 0; i < kMaxSlots; ++i) {
+        auto& p = pointer_slot(runtime, i);
         if (p.id == -1) {
             p.id = pointer_id;
             return &p;
@@ -7983,7 +8065,9 @@ inline void free_slot(Pointer* p) {
 // a delta starting from the rebound state instead of jumping by the
 // position of the (now-removed) finger.
 inline void rebase_previous() {
-    for (auto& p : g_pointers) {
+    auto& runtime = android_touch_runtime();
+    for (std::size_t i = 0; i < kMaxSlots; ++i) {
+        auto& p = pointer_slot(runtime, i);
         if (p.id != -1) {
             p.prev_x = p.x;
             p.prev_y = p.y;
@@ -7993,7 +8077,7 @@ inline void rebase_previous() {
     // CANCEL) — drop the cached pinch baseline so the next two-finger
     // dispatch_after_move re-snaps it to the new inter-pointer
     // distance instead of measuring against a stale anchor.
-    g_pinch_baseline_d = 0.0f;
+    runtime.pinch_baseline_d = 0.0f;
 }
 
 inline float distance(Pointer const& a, Pointer const& b) {
@@ -8008,10 +8092,12 @@ inline float distance(Pointer const& a, Pointer const& b) {
 }
 
 inline void dispatch_after_move() {
-    if (g_active_count == 1) {
+    auto& runtime = android_touch_runtime();
+    if (runtime.active_count == 1) {
         // Single pointer drag → Pan gesture.
         Pointer* p = nullptr;
-        for (auto& slot : g_pointers) {
+        for (std::size_t i = 0; i < kMaxSlots; ++i) {
+            auto& slot = pointer_slot(runtime, i);
             if (slot.id != -1) { p = &slot; break; }
         }
         if (!p) return;
@@ -8027,7 +8113,7 @@ inline void dispatch_after_move() {
         ::phenotype::native::detail::dispatch_gesture(ev);
         p->prev_x = p->x;
         p->prev_y = p->y;
-    } else if (g_active_count >= 2) {
+    } else if (runtime.active_count >= 2) {
         // Two-finger gesture. Pan (midpoint translation) and Pinch
         // (spread ratio) are folded into a single `GestureEvent` with
         // kind = Pinch — `dx/dy` carry the midpoint pan, `pinch_scale`
@@ -8035,7 +8121,8 @@ inline void dispatch_after_move() {
         // dispatching one event per MOVE rather than two cuts the
         // view-rebuild rate in half on multi-pointer scrolls.
         Pointer *a = nullptr, *b = nullptr;
-        for (auto& slot : g_pointers) {
+        for (std::size_t i = 0; i < kMaxSlots; ++i) {
+            auto& slot = pointer_slot(runtime, i);
             if (slot.id == -1) continue;
             if (!a) { a = &slot; continue; }
             if (!b) { b = &slot; break; }
@@ -8056,18 +8143,19 @@ inline void dispatch_after_move() {
             return d2 > 0.0f ? __builtin_sqrtf(d2) : 0.0f;
         };
         float cur_d = dist_xy(a->x, a->y, b->x, b->y);
-        if (g_pinch_baseline_d <= 0.0f) g_pinch_baseline_d = cur_d;
+        if (runtime.pinch_baseline_d <= 0.0f)
+            runtime.pinch_baseline_d = cur_d;
 
         float pinch_scale = 1.0f;  // sentinel: no zoom this frame
-        if (cur_d > 0.0f && g_pinch_baseline_d > 0.0f) {
-            float ratio = cur_d / g_pinch_baseline_d;
+        if (cur_d > 0.0f && runtime.pinch_baseline_d > 0.0f) {
+            float ratio = cur_d / runtime.pinch_baseline_d;
             // ±0.5% dead-zone. Steady two-finger drag jitter sits
             // well under this, so a non-zoom drag stays at scale = 1.
             constexpr float kPinchDeadZone = 0.005f;
             float diff = ratio > 1.0f ? ratio - 1.0f : 1.0f - ratio;
             if (diff > kPinchDeadZone) {
                 pinch_scale = ratio;
-                g_pinch_baseline_d = cur_d;  // re-anchor
+                runtime.pinch_baseline_d = cur_d;  // re-anchor
             }
         }
 
@@ -8093,19 +8181,11 @@ inline void dispatch_after_move() {
 // into a single dispatch_after_move per frame instead of one per
 // pointer.
 inline void process_pending_touch_dispatch() {
-    if (!g_touch_dispatch_pending) return;
-    g_touch_dispatch_pending = false;
+    auto& runtime = android_touch_runtime();
+    if (!runtime.dispatch_pending) return;
+    runtime.dispatch_pending = false;
     dispatch_after_move();
 }
-
-// Tracks whether a single-pointer "press" is currently in flight on
-// the mouse pipeline. on_touch_event drives the mouse pipeline only
-// while exactly one finger is down so widget hit-tests (button,
-// checkbox, link, ...) fire on tap; a second finger arriving cancels
-// the pending press by emitting a synthetic Release at off-screen
-// coords so any armed widget de-arms cleanly before pinch/pan takes
-// over.
-inline bool g_single_pointer_press = false;
 
 // Action codes match the consumer-facing C ABI exactly:
 //   0 = DOWN / POINTER_DOWN
@@ -8115,6 +8195,7 @@ inline void on_touch_event(int pointer_id, int action, float x, float y) {
     using ::phenotype::native::MouseButton;
     using ::phenotype::native::KeyAction;
     namespace d = ::phenotype::native::detail;
+    auto& runtime = android_touch_runtime();
 
     switch (action) {
     case 0: {  // DOWN
@@ -8126,23 +8207,23 @@ inline void on_touch_event(int pointer_id, int action, float x, float y) {
         if (auto* slot = alloc_slot(pointer_id)) {
             slot->x = x;       slot->y = y;
             slot->prev_x = x;  slot->prev_y = y;
-            ++g_active_count;
+            ++runtime.active_count;
             rebase_previous();
-            if (g_active_count == 1) {
+            if (runtime.active_count == 1) {
                 // First finger: drive the cursor + mouse-button pipeline
                 // so widget hit-tests fire. The touch pipeline by itself
                 // only handles canvas pan / pinch.
                 d::dispatch_cursor_pos(x, y);
                 d::dispatch_mouse_button(x, y, MouseButton::Left,
                                          KeyAction::Press, 0);
-                g_single_pointer_press = true;
-            } else if (g_single_pointer_press) {
+                runtime.single_pointer_press = true;
+            } else if (runtime.single_pointer_press) {
                 // Second finger joined; cancel the pending click before
                 // the gesture state machine takes over so a button
                 // doesn't fire when the user actually meant to pinch.
                 d::dispatch_mouse_button(-1.0f, -1.0f, MouseButton::Left,
                                          KeyAction::Release, 0);
-                g_single_pointer_press = false;
+                runtime.single_pointer_press = false;
             }
         }
         break;
@@ -8152,7 +8233,7 @@ inline void on_touch_event(int pointer_id, int action, float x, float y) {
             slot->x = x;
             slot->y = y;
         }
-        if (g_single_pointer_press && g_active_count == 1) {
+        if (runtime.single_pointer_press && runtime.active_count == 1) {
             // Track cursor position so widgets can de-arm on drag.
             d::dispatch_cursor_pos(x, y);
         }
@@ -8161,7 +8242,7 @@ inline void on_touch_event(int pointer_id, int action, float x, float y) {
         // (invoked from phenotype_android_draw_frame) runs the
         // dispatcher exactly once per frame regardless of pointer
         // count, halving the view-rebuild rate for two-finger pinch.
-        g_touch_dispatch_pending = true;
+        runtime.dispatch_pending = true;
         break;
     }
     case 2: {  // UP / CANCEL
@@ -8172,19 +8253,19 @@ inline void on_touch_event(int pointer_id, int action, float x, float y) {
             slot->x = x;
             slot->y = y;
             if (slot->x != slot->prev_x || slot->y != slot->prev_y)
-                g_touch_dispatch_pending = true;
+                runtime.dispatch_pending = true;
             process_pending_touch_dispatch();
             free_slot(slot);
-            --g_active_count;
-            if (g_active_count < 0) g_active_count = 0;
+            --runtime.active_count;
+            if (runtime.active_count < 0) runtime.active_count = 0;
             rebase_previous();
-            if (g_active_count == 0 && g_single_pointer_press) {
+            if (runtime.active_count == 0 && runtime.single_pointer_press) {
                 // Last finger released while still in single-pointer
                 // mode — fire the matching mouse Release so the widget
                 // sees a proper click pair and runs its callback.
                 d::dispatch_mouse_button(x, y, MouseButton::Left,
                                          KeyAction::Release, 0);
-                g_single_pointer_press = false;
+                runtime.single_pointer_press = false;
             }
         }
         break;
