@@ -179,6 +179,10 @@ The Win32 shell mirrors that shape with `Win32ShellBinding`. Cursor updates,
 window size limits, aspect-ratio constraints, and the Windows message loop
 resolve through one captured/restored active shell binding instead of mutating a
 raw process-level pointer.
+The Windows D3D renderer mirrors macOS with `WindowsRendererRuntime`: the
+default renderer, active renderer binding, and secondary surface registry share
+one owner, so nested render-surface activation cannot restore a stale renderer
+without the registry it points into.
 
 Scene runners follow the same rule. `runtime::install_scene_runner`,
 `runtime::trigger_scene_rebuild`, `runtime::clear_scene_runner`, and their
