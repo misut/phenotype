@@ -125,6 +125,10 @@ The active message queue is not tracked by a separate process-global pointer;
 it is always derived from the active `SceneRuntime`. That avoids a second
 restore path during nested scene or render-surface activation and makes stale
 queue ownership harder to reintroduce as more windows are added.
+The active `AppState` follows the same rule. Compatibility helpers such as
+`detail::g_app()` resolve through the active scene instead of a parallel active
+app pointer, so the scene activation stack has one owner to restore and
+secondary windows cannot accidentally keep drawing against a stale app state.
 
 Scene runners follow the same rule. `runtime::install_scene_runner`,
 `runtime::trigger_scene_rebuild`, `runtime::clear_scene_runner`, and their
