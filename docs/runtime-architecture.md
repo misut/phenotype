@@ -151,6 +151,11 @@ strip-pack cursor, and atlas dirty rectangle state are grouped under one owner.
 Runtime details publish `image.owner`, asset binding, cache size, allocation,
 and dirty state, preparing the Vulkan renderer to move image-resource uploads
 behind an explicit render-surface owner without losing resource diagnostics.
+Android's platform input hook is grouped under `AndroidInputRuntime`. Stage 6
+still renders from the Gradle driver tick, but the `request_repaint` callback is
+kept as an installed hook for future dirty-frame scheduling. Runtime details
+publish `input.owner` and whether that hook is bound, separate from
+`AndroidTouchRuntime`'s pointer/gesture state.
 The desktop fallback backend follows the same rule with `StubNativeRuntime`,
 which owns the stub renderer hit-region cache and publishes the owner in
 runtime details. That keeps test/fallback behavior aligned with the native
