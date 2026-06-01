@@ -62,10 +62,12 @@ visibility, damage, and frame counters before relying on platform-specific
 renderer diagnostics.
 The same object reports whether process-wide debug payload, application debug,
 platform capability, and platform runtime-details providers are installed. Those
-providers are stored together in the application-runtime diagnostics owner
-instead of being separate hidden globals, so future scene/window APIs can
-inspect process services without accidentally treating them as scene-local
-state.
+providers are stored together in the `ApplicationRuntimeDiagnostics` owner
+instead of being separate hidden globals. The log threshold and ring buffer
+follow the same rule through `DiagnosticLogRuntime`, and the application-runtime
+snapshot publishes both owner names plus the current log threshold. Future
+scene/window APIs can inspect process diagnostics without accidentally treating
+them as scene-local state.
 The URL opener and app settings-menu entry point follow the same ownership
 rule. `widget::link` dispatches through an `ApplicationRuntime` opener service
 installed by the active backend, not through a raw widget-global function

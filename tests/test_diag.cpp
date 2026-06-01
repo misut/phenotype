@@ -216,7 +216,10 @@ void test_histogram_record_buckets() {
 
 void test_log_level_filter() {
     metrics::reset_all();
+    assert(log::detail::diagnostic_log_runtime_owner_name()
+           == std::string_view{"DiagnosticLogRuntime"});
     log::set_level(log::Severity::warn);
+    assert(log::current_level() == log::Severity::warn);
     log::info("test", "info should be filtered");
 
     auto& ring = log::detail::ring();
@@ -455,6 +458,15 @@ void test_snapshot_shape() {
            >= 0);
     assert(!application_runtime.at("open_url_handler_installed").as_bool());
     assert(!application_runtime.at("settings_menu_handler_installed").as_bool());
+    assert(application_runtime.at("diagnostic_log_runtime_owner").as_string()
+           == "DiagnosticLogRuntime");
+    assert(application_runtime.at("diagnostic_log_level").as_string()
+           == "INFO");
+    assert(application_runtime.at("diagnostic_log_level_number").as_integer()
+           == static_cast<std::int64_t>(log::Severity::info));
+    assert(application_runtime.at("application_runtime_diagnostics_owner")
+               .as_string()
+           == "ApplicationRuntimeDiagnostics");
     assert(!application_runtime.at("debug_payload_builder_installed").as_bool());
     assert(!application_runtime.at("application_debug_provider_installed").as_bool());
     assert(!application_runtime.at("platform_capabilities_provider_installed").as_bool());
@@ -559,6 +571,11 @@ void test_application_runtime_owns_debug_providers() {
         .at("platform_runtime").as_object();
     auto const& application_runtime =
         runtime.at("application_runtime").as_object();
+    assert(diag::detail::application_runtime_diagnostics_owner_name()
+           == std::string_view{"ApplicationRuntimeDiagnostics"});
+    assert(application_runtime.at("application_runtime_diagnostics_owner")
+               .as_string()
+           == "ApplicationRuntimeDiagnostics");
     assert(application_runtime.at("debug_payload_builder_installed").as_bool());
     assert(application_runtime.at("application_debug_provider_installed").as_bool());
     assert(application_runtime.at("platform_capabilities_provider_installed").as_bool());
