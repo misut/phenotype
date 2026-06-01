@@ -376,6 +376,7 @@ void test_snapshot_shape() {
         assert(scene.at("title").is_string());
         assert(scene.at("role").is_string());
         assert(scene.at("visible").is_bool());
+        assert(scene.at("app_state_owned").is_bool());
         assert(scene.contains("hovered_callback_id"));
         assert(scene.contains("focused_callback_id"));
         (void)scene.at("queued_messages").as_integer();
@@ -400,6 +401,7 @@ void test_snapshot_shape() {
         found_active_main_scene = found_active_main_scene
             || (scene.at("id").as_string() == "main"
                 && scene.at("role").as_string() == "main"
+                && scene.at("app_state_owned").as_bool()
                 && scene.at("active").as_bool());
     }
     assert(found_active_main_scene);

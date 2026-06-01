@@ -95,10 +95,9 @@ namespace detail {
     inline DiagnosticLogRuntime& diagnostic_log_runtime() {
         // Heap-bound reference: the diagnostic log runtime has
         // dynamic-storage duration so wasi-sdk's crt1-command.o never
-        // destroys it after _start() returns. Same intent as the
-        // placement-new trick g_app() uses in phenotype_state.cppm;
-        // standard C++ so it stays portable to MSVC when the Direct3D
-        // backend lands.
+        // destroys it after _start() returns. Same intent as the leaked
+        // runtime stores in phenotype_state.cppm, but plain standard C++
+        // so it stays portable to MSVC when the Direct3D backend lands.
         static DiagnosticLogRuntime& runtime = *new DiagnosticLogRuntime();
         return runtime;
     }
@@ -299,13 +298,13 @@ private:
 // so callers can refer to them as `metrics::inst::rebuilds.add()` etc.
 //
 // Every instrument is a static reference bound to a heap-allocated instance
-// (`inline T& foo = *new T{...}`) for the same reason g_app() uses
-// placement-new in phenotype_state.cppm: wasi-sdk's crt1-command.o runs
-// __cxa_finalize after _start() returns, which would otherwise destroy
-// these vectors out from under any JS callback (click, key, hover, scroll)
-// that fires after main() exits, leaving every post-main entry point
-// reading from a destroyed std::vector and trapping with "memory access
-// out of bounds". The reference variable itself is trivially destructible
+// (`inline T& foo = *new T{...}`) for the same reason phenotype_state.cppm
+// keeps scene/application stores heap-bound: wasi-sdk's crt1-command.o runs
+// __cxa_finalize after _start() returns, which would otherwise destroy these
+// vectors out from under any JS callback (click, key, hover, scroll) that
+// fires after main() exits, leaving every post-main entry point reading from
+// a destroyed std::vector and trapping with "memory access out of bounds".
+// The reference variable itself is trivially destructible
 // so it doesn't register with __cxa_atexit; the underlying T lives on the
 // heap and is reclaimed wholesale when the wasm instance is torn down by
 // the JS GC at page unload. The pattern is portable standard C++, so the
