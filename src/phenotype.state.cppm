@@ -310,6 +310,7 @@ struct SceneSnapshot {
     SceneRole role = SceneRole::Window;
     bool active = false;
     bool visible = false;
+    bool app_state_owned = false;
     unsigned int hovered_id = 0xFFFFFFFFu;
     unsigned int focused_id = 0xFFFFFFFFu;
     unsigned int queued_messages = 0;
@@ -568,17 +569,6 @@ struct AppState {
 };
 
 namespace detail {
-    // Placement-new into static storage to avoid global destructor.
-    // wasi-sdk's crt1-command.o calls __cxa_atexit on exit, which destroys
-    // global C++ objects. Without this trick, the default AppState destructor
-    // runs after _start() and clears the callbacks vector, breaking event
-    // handling.
-    alignas(AppState) inline unsigned char g_app_storage[sizeof(AppState)];
-    inline AppState& default_app_state() {
-        static AppState* app = new (&g_app_storage) AppState();
-        return *app;
-    }
-
     // ============================================================
     // Message dispatcher — type-erased message queue for the new DSL
     // ============================================================
@@ -777,7 +767,7 @@ namespace detail {
                 .role = SceneRole::Main,
                 .visible = true,
             };
-            scene.app = &default_app_state();
+            (void)scene.app_state();
         }
         return scene;
     }
@@ -937,6 +927,8 @@ namespace detail {
             .role = scene.descriptor.role,
             .active = &scene == active_scene_runtime_ptr(),
             .visible = scene.descriptor.visible,
+            .app_state_owned =
+                scene.owned_app && scene.app == scene.owned_app.get(),
             .hovered_id = app ? app->hovered_id : 0xFFFFFFFFu,
             .focused_id = app ? app->focused_id : 0xFFFFFFFFu,
             .queued_messages = static_cast<unsigned int>(scene.messages.size()),

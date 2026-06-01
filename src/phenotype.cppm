@@ -7237,6 +7237,7 @@ inline json::Value scene_snapshot_to_json(SceneSnapshot const& snapshot) {
     out.emplace("role", json::Value{scene_role_name(snapshot.role)});
     out.emplace("active", json::Value{snapshot.active});
     out.emplace("visible", json::Value{snapshot.visible});
+    out.emplace("app_state_owned", json::Value{snapshot.app_state_owned});
     out.emplace(
         "hovered_callback_id",
         diag::callback_id_to_json(optional_callback_id(snapshot.hovered_id)));

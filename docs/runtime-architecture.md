@@ -160,6 +160,9 @@ The active `AppState` follows the same rule. Compatibility helpers such as
 `detail::g_app()` resolve through the active scene instead of a parallel active
 app pointer, so the scene activation stack has one owner to restore and
 secondary windows cannot accidentally keep drawing against a stale app state.
+The compatibility main scene now uses the same `SceneRuntime::owned_app` path
+as secondary scenes; there is no separate default-AppState storage path hidden
+beside the scene store.
 The remaining active scene/render-surface cursor is stored as one
 `ActiveRuntimeBinding` value. Scene-only activation restores only the scene
 cursor, while render-surface activation captures and restores the scene and
