@@ -133,6 +133,12 @@ their pthread guards live together in that runtime owner. Android platform
 runtime details publish `dialog.owner`, handler installation state, and queue
 depths so debug tooling can verify that a SAF request/result path is bound
 without treating it as process-global scene state.
+Android touch input now has an explicit owner as well. `AndroidTouchRuntime`
+holds the active pointer slots, pointer count, frame-coalesced dispatch flag,
+pinch baseline, and synthetic single-pointer mouse-press bridge together.
+Runtime details publish `touch.owner` and the current touch tracker state, so
+debug tooling can distinguish Android gesture state from scene-local hover or
+focus state while the rest of the Android shell state migrates into owners.
 The desktop fallback backend follows the same rule with `StubNativeRuntime`,
 which owns the stub renderer hit-region cache and publishes the owner in
 runtime details. That keeps test/fallback behavior aligned with the native
