@@ -200,6 +200,11 @@ The current renderer entry points still look like the old single-window API, but
 state selection now follows host activation and gives future settings/debug
 windows a place to keep independent Metal layers, hit regions, debug captures,
 and transient renderer caches.
+Shared decoded image pixels remain process-wide resource-cache data, but each
+renderer surface now tracks the image-atlas generation it has uploaded into its
+own GPU texture. A secondary window can therefore reuse decoded image metadata
+without inheriting the first window's Metal/D3D texture, descriptor state, or
+dirty/upload cursor.
 AppKit event handling follows the same boundary: surface synchronization,
 native event dispatch, and frame ticks now activate the `native_host` they are
 servicing before touching shell, scene, renderer, or input state. The current

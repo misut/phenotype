@@ -80,6 +80,8 @@ struct ImageAtlasCache {
     int cursor_y = 0;
     int row_height = 0;
     bool dirty = false;
+    std::uint64_t generation = 0;
+    std::uint64_t dirty_base_generation = 0;
     int dirty_min_x = atlas_size;
     int dirty_min_y = atlas_size;
     int dirty_max_x = 0;
@@ -100,7 +102,10 @@ inline std::filesystem::path resolve_image_path(std::string const& url) {
 
 inline void mark_image_cache_dirty(ImageAtlasCache& cache,
                                    int x, int y, int w, int h) {
+    if (!cache.dirty)
+        cache.dirty_base_generation = cache.generation;
     cache.dirty = true;
+    ++cache.generation;
     if (x < cache.dirty_min_x) cache.dirty_min_x = x;
     if (y < cache.dirty_min_y) cache.dirty_min_y = y;
     if (x + w > cache.dirty_max_x) cache.dirty_max_x = x + w;
@@ -417,6 +422,8 @@ inline void reset_image_cache(bool preserve_request_repaint = false) {
     g_images.cursor_y = 0;
     g_images.row_height = 0;
     g_images.dirty = false;
+    g_images.generation = 0;
+    g_images.dirty_base_generation = 0;
     g_images.dirty_min_x = ImageAtlasCache::atlas_size;
     g_images.dirty_min_y = ImageAtlasCache::atlas_size;
     g_images.dirty_max_x = 0;

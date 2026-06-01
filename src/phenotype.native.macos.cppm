@@ -693,6 +693,7 @@ struct RendererState {
     MTL::Buffer* frame_readback_buf = nullptr;
     std::size_t frame_readback_capacity = 0;
     MTL::Texture* image_atlas_texture = nullptr;
+    std::uint64_t image_atlas_uploaded_generation = 0;
     MTL::Texture* text_atlas_texture = nullptr;
     MTL::SamplerState* sampler = nullptr;
     std::vector<HitRegionCmd> hit_regions;
@@ -797,6 +798,22 @@ inline void bind_renderer_state(RendererState& state) {
 
 inline void activate_renderer_state(NativeSurfaceDescriptor* surface) {
     bind_renderer_state(ensure_renderer_state(surface));
+}
+
+inline bool all_renderer_surfaces_uploaded_image_generation(
+        std::uint64_t generation) {
+    auto state_is_current = [generation](RendererState const& state) {
+        if (!state.surface && !state.initialized)
+            return true;
+        return state.image_atlas_uploaded_generation == generation;
+    };
+    if (!state_is_current(g_default_renderer))
+        return false;
+    for (auto const& state : renderer_registry()) {
+        if (state && !state_is_current(*state))
+            return false;
+    }
+    return true;
 }
 
 inline void restore_active_renderer_binding(
@@ -1392,30 +1409,44 @@ inline bool upload_text_cache() {
 
 inline bool upload_image_cache() {
     auto& cache = g_images;
-    if (!cache.dirty)
+    if (cache.generation == 0
+        || renderer_state().image_atlas_uploaded_generation == cache.generation) {
         return true;
+    }
     if (!ensure_image_atlas_texture())
         return false;
 
-    auto width = cache.dirty_max_x - cache.dirty_min_x;
-    auto height = cache.dirty_max_y - cache.dirty_min_y;
-    if (width <= 0 || height <= 0) {
-        cache.dirty = false;
-        cache.dirty_min_x = ImageAtlasCache::atlas_size;
-        cache.dirty_min_y = ImageAtlasCache::atlas_size;
-        cache.dirty_max_x = 0;
-        cache.dirty_max_y = 0;
-        return true;
+    bool const can_upload_dirty_region =
+        cache.dirty
+        && renderer_state().image_atlas_uploaded_generation
+            == cache.dirty_base_generation;
+    int x = 0;
+    int y = 0;
+    int width = ImageAtlasCache::atlas_size;
+    int height = ImageAtlasCache::atlas_size;
+    if (can_upload_dirty_region) {
+        width = cache.dirty_max_x - cache.dirty_min_x;
+        height = cache.dirty_max_y - cache.dirty_min_y;
+        if (width <= 0 || height <= 0) {
+            renderer_state().image_atlas_uploaded_generation = cache.generation;
+            if (all_renderer_surfaces_uploaded_image_generation(cache.generation)) {
+                cache.dirty = false;
+                cache.dirty_base_generation = cache.generation;
+                cache.dirty_min_x = ImageAtlasCache::atlas_size;
+                cache.dirty_min_y = ImageAtlasCache::atlas_size;
+                cache.dirty_max_x = 0;
+                cache.dirty_max_y = 0;
+            }
+            return true;
+        }
+        x = cache.dirty_min_x;
+        y = cache.dirty_min_y;
     }
 
-    MTL::Region region = MTL::Region::Make2D(
-        cache.dirty_min_x,
-        cache.dirty_min_y,
-        width,
-        height);
+    MTL::Region region = MTL::Region::Make2D(x, y, width, height);
     auto const* src = cache.pixels.data()
         + static_cast<std::size_t>(
-            (cache.dirty_min_y * ImageAtlasCache::atlas_size + cache.dirty_min_x) * 4);
+            (y * ImageAtlasCache::atlas_size + x) * 4);
     renderer_state().image_atlas_texture->replaceRegion(
         region,
         0,
@@ -1425,11 +1456,15 @@ inline bool upload_image_cache() {
         static_cast<std::uint64_t>(width * height * 4),
         native_platform_attrs());
 
-    cache.dirty = false;
-    cache.dirty_min_x = ImageAtlasCache::atlas_size;
-    cache.dirty_min_y = ImageAtlasCache::atlas_size;
-    cache.dirty_max_x = 0;
-    cache.dirty_max_y = 0;
+    renderer_state().image_atlas_uploaded_generation = cache.generation;
+    if (all_renderer_surfaces_uploaded_image_generation(cache.generation)) {
+        cache.dirty = false;
+        cache.dirty_base_generation = cache.generation;
+        cache.dirty_min_x = ImageAtlasCache::atlas_size;
+        cache.dirty_min_y = ImageAtlasCache::atlas_size;
+        cache.dirty_max_x = 0;
+        cache.dirty_max_y = 0;
+    }
     return true;
 }
 
@@ -3009,6 +3044,7 @@ inline void renderer_shutdown_active_state() {
     renderer_state().overlay_color_instances_capacity = 0;
     renderer_state().image_instances_capacity = 0;
     renderer_state().text_instances_capacity = 0;
+    renderer_state().image_atlas_uploaded_generation = 0;
     renderer_state().frame_readback_capacity = 0;
     renderer_state().material_backdrop_luma_sample_capacity = 0;
     renderer_state().drawable_width = 0;
@@ -3307,6 +3343,30 @@ inline RemoteImageDebug remote_image_debug(std::string const& url) {
         debug.worker_started = detail::g_images.worker_started;
     }
     return debug;
+}
+
+inline std::uint64_t image_cache_generation() {
+    return detail::g_images.generation;
+}
+
+inline std::uint64_t active_renderer_image_upload_generation() {
+    return detail::renderer_state().image_atlas_uploaded_generation;
+}
+
+inline bool active_renderer_needs_image_atlas_upload() {
+    auto const generation = detail::g_images.generation;
+    return generation != 0
+        && detail::renderer_state().image_atlas_uploaded_generation
+            != generation;
+}
+
+inline void bump_image_cache_generation_for_tests() {
+    ++detail::g_images.generation;
+}
+
+inline void mark_active_renderer_image_atlas_uploaded_for_tests() {
+    detail::renderer_state().image_atlas_uploaded_generation =
+        detail::g_images.generation;
 }
 
 inline RasterizedTextRunDebug rasterized_text_run_debug(std::string const& text,
@@ -3995,6 +4055,14 @@ inline json::Object macos_images_runtime_json() {
         "completed_queue_count",
         json::Value{static_cast<std::int64_t>(completed_jobs)});
     images.emplace("worker_started", json::Value{worker_started});
+    images.emplace(
+        "atlas_generation",
+        json::Value{static_cast<std::int64_t>(g_images.generation)});
+    images.emplace(
+        "active_surface_uploaded_generation",
+        json::Value{
+            static_cast<std::int64_t>(
+                renderer_state().image_atlas_uploaded_generation)});
     images.emplace(
         "remote_entry_count",
         json::Value{static_cast<std::int64_t>(remote_entries.size())});
