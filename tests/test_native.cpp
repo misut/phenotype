@@ -592,6 +592,11 @@ static void test_macos_image_repaint_targets_are_surface_local() {
 }
 
 static void test_macos_appkit_active_binding_restores_window_and_surface() {
+    auto& appkit_runtime = phenotype::native::detail::appkit_shell_runtime();
+    assert(phenotype::native::detail::appkit_shell_runtime_owner_name()
+           == std::string_view{"AppKitShellRuntime"});
+    assert(&phenotype::native::detail::active_appkit_binding()
+           == &appkit_runtime.active_binding);
     auto previous =
         phenotype::native::detail::capture_active_appkit_binding();
     NativeSurfaceDescriptor first{
@@ -626,6 +631,8 @@ static void test_macos_appkit_active_binding_restores_window_and_surface() {
     assert(phenotype::native::detail::active_appkit_surface()
            == &first);
     phenotype::native::detail::restore_active_appkit_binding(previous);
+    assert(phenotype::native::detail::active_appkit_window()
+           == appkit_runtime.active_binding.window);
     std::puts("PASS: macOS AppKit active binding restores window and surface");
 }
 

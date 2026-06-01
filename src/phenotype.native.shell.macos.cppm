@@ -570,9 +570,34 @@ struct ActiveAppKitBinding {
     NativeSurfaceDescriptor* surface = nullptr;
 };
 
+struct AppKitShellRuntime {
+    ActiveAppKitBinding active_binding{};
+    bool keep_running_after_last_window_closed = false;
+    bool should_terminate = false;
+    bool mouse_tracking_mode = false;
+    bool window_user_closed = false;
+    bool close_button_candidate = false;
+    int front_request_attempts = 0;
+    std::string application_name = "Phenotype";
+    id delegate = nullptr;
+#ifndef NDEBUG
+    EventHotKeyRef debug_hot_key_ref = nullptr;
+    EventHandlerRef debug_hot_key_handler_ref = nullptr;
+    EventHandlerUPP debug_hot_key_handler_upp = nullptr;
+#endif
+};
+
+inline AppKitShellRuntime& appkit_shell_runtime() {
+    static AppKitShellRuntime& runtime = *new AppKitShellRuntime();
+    return runtime;
+}
+
+inline std::string_view appkit_shell_runtime_owner_name() noexcept {
+    return "AppKitShellRuntime";
+}
+
 inline ActiveAppKitBinding& active_appkit_binding() {
-    static ActiveAppKitBinding& binding = *new ActiveAppKitBinding();
-    return binding;
+    return appkit_shell_runtime().active_binding;
 }
 
 inline ActiveAppKitBinding capture_active_appkit_binding() {
@@ -615,27 +640,6 @@ struct ScopedAppKitActivation {
         restore_active_appkit_binding(previous);
     }
 };
-
-struct AppKitShellRuntime {
-    bool keep_running_after_last_window_closed = false;
-    bool should_terminate = false;
-    bool mouse_tracking_mode = false;
-    bool window_user_closed = false;
-    bool close_button_candidate = false;
-    int front_request_attempts = 0;
-    std::string application_name = "Phenotype";
-    id delegate = nullptr;
-#ifndef NDEBUG
-    EventHotKeyRef debug_hot_key_ref = nullptr;
-    EventHandlerRef debug_hot_key_handler_ref = nullptr;
-    EventHandlerUPP debug_hot_key_handler_upp = nullptr;
-#endif
-};
-
-inline AppKitShellRuntime& appkit_shell_runtime() {
-    static AppKitShellRuntime& runtime = *new AppKitShellRuntime();
-    return runtime;
-}
 
 inline bool appkit_app_is_active(id app) {
     return app && objc_send<signed char>(app, sel("isActive")) != 0;

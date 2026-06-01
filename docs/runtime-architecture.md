@@ -187,12 +187,12 @@ the IME surface registry and caret-system override live together, so future
 scene windows can attach input state by native surface without leaving a
 separate process-global test or policy switch behind.
 The AppKit shell keeps the foreground native window and surface together in
-`ActiveAppKitBinding`. Window-level APIs such as size limits, aspect ratio,
-settings-menu focus, and dock reopen focus resolve through that pair instead of
-reading independent raw globals.
-AppKit app-level shell state is grouped in `AppKitShellRuntime`: lifecycle
-flags, close-button tracking, front-request retry counts, menu application
-name, the shell delegate, and debug hot-key resources live behind one owner
+`ActiveAppKitBinding`, and that cursor now lives inside `AppKitShellRuntime`.
+Window-level APIs such as size limits, aspect ratio, settings-menu focus, and
+dock reopen focus resolve through that pair instead of reading independent raw
+globals. AppKit app-level shell state is grouped in the same runtime owner:
+lifecycle flags, close-button tracking, front-request retry counts, menu
+application name, the shell delegate, and debug hot-key resources live together
 instead of separate globals. That keeps process-level AppKit integration
 separate from scene/window-local state while still making the app-level owner
 explicit.
