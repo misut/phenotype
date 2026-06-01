@@ -223,6 +223,11 @@ The current renderer entry points still look like the old single-window API, but
 state selection now follows host activation and gives future settings/debug
 windows a place to keep independent Metal layers, hit regions, debug captures,
 and transient renderer caches.
+macOS text measurement keeps its Core Text font cache and registered font
+aliases behind `MacOSTextRuntime`. The cache is still process-wide service
+state, because registered fonts and base-face resolution are Core Text
+process-scope concerns, but renderer scenes reach it through one explicit owner
+instead of a raw font-cache global.
 Shared decoded image pixels remain process-wide resource-cache data, but each
 renderer surface now tracks the image-atlas generation it has uploaded into its
 own GPU texture. A secondary window can therefore reuse decoded image metadata

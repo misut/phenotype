@@ -95,7 +95,22 @@ struct TextState {
     bool initialized = false;
 };
 
-inline TextState g_text;
+struct MacOSTextRuntime {
+    TextState state{};
+};
+
+inline MacOSTextRuntime& macos_text_runtime() {
+    static MacOSTextRuntime& runtime = *new MacOSTextRuntime();
+    return runtime;
+}
+
+inline TextState& text_state() {
+    return macos_text_runtime().state;
+}
+
+inline bool text_runtime_initialized() noexcept {
+    return text_state().initialized;
+}
 
 inline FontCacheKey font_key_from_spec(::phenotype::FontSpec const& font) {
     return FontCacheKey{
@@ -258,29 +273,31 @@ inline CTFontRef create_preferred_sans_font() {
 }
 
 inline void text_init() {
-    if (g_text.initialized) return;
-    g_text.sans = create_preferred_sans_font();
-    if (!g_text.sans)
-        g_text.sans = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 16.0, nullptr);
-    g_text.mono = CTFontCreateUIFontForLanguage(kCTFontUIFontUserFixedPitch, 16.0, nullptr);
-    if (!g_text.sans) {
+    auto& text = text_state();
+    if (text.initialized) return;
+    text.sans = create_preferred_sans_font();
+    if (!text.sans)
+        text.sans = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 16.0, nullptr);
+    text.mono = CTFontCreateUIFontForLanguage(kCTFontUIFontUserFixedPitch, 16.0, nullptr);
+    if (!text.sans) {
         std::fprintf(stderr, "[text] failed to create system font\n");
         return;
     }
-    if (!g_text.mono)
-        g_text.mono = static_cast<CTFontRef>(CFRetain(g_text.sans));
-    g_text.initialized = true;
+    if (!text.mono)
+        text.mono = static_cast<CTFontRef>(CFRetain(text.sans));
+    text.initialized = true;
 }
 
 inline void text_shutdown() {
-    if (g_text.sans) { CFRelease(g_text.sans); g_text.sans = nullptr; }
-    if (g_text.mono) { CFRelease(g_text.mono); g_text.mono = nullptr; }
-    for (auto& [_, ref] : g_text.cache) {
+    auto& text = text_state();
+    if (text.sans) { CFRelease(text.sans); text.sans = nullptr; }
+    if (text.mono) { CFRelease(text.mono); text.mono = nullptr; }
+    for (auto& [_, ref] : text.cache) {
         if (ref) CFRelease(ref);
     }
-    g_text.cache.clear();
-    g_text.missing_logged.clear();
-    g_text.initialized = false;
+    text.cache.clear();
+    text.missing_logged.clear();
+    text.initialized = false;
 }
 
 // Resolve a base 16pt CTFontRef for `key`. Empty family resolves to
@@ -289,29 +306,30 @@ inline void text_shutdown() {
 // CTFontCreateCopyWithSymbolicTraits. Failures fall back to the
 // system default with a one-shot stderr log keyed on family name.
 //
-// The returned reference is owned by `g_text.cache`; callers must NOT
+// The returned reference is owned by `text_state().cache`; callers must NOT
 // CFRelease it. Pass to CTFontCreateCopyWithAttributes() to obtain a
 // per-call sized copy (which the caller does own).
 inline CTFontRef acquire_base_font(FontCacheKey const& key) {
-    if (!g_text.initialized) text_init();
-    auto it = g_text.cache.find(key);
-    if (it != g_text.cache.end()) return it->second;
+    auto& text = text_state();
+    if (!text.initialized) text_init();
+    auto it = text.cache.find(key);
+    if (it != text.cache.end()) return it->second;
 
     auto fallback = [&](char const* reason) -> CTFontRef {
         if (!key.family.empty()
-            && g_text.missing_logged.insert(key.family).second) {
+            && text.missing_logged.insert(key.family).second) {
             std::fprintf(stderr,
                 "[text] font '%s' (%s) not resolved (%s); using system default\n",
                 key.family.c_str(),
                 key.weight == ::phenotype::FontWeight::Bold ? "Bold" : "Regular",
                 reason);
         }
-        return key.mono ? g_text.mono : g_text.sans;
+        return key.mono ? text.mono : text.sans;
     };
 
     CTFontRef base = nullptr;
     if (key.family.empty()) {
-        base = key.mono ? g_text.mono : g_text.sans;
+        base = key.mono ? text.mono : text.sans;
         if (base) base = static_cast<CTFontRef>(CFRetain(base));
     } else {
         // Look up via process-registered alias first — a caller that
@@ -321,12 +339,12 @@ inline CTFontRef acquire_base_font(FontCacheKey const& key) {
         // CTFontCreateWithName actually accepts after the registration
         // step).
         std::string lookup_name = key.family;
-        if (auto it = g_text.registered_aliases.find(key.family);
-            it != g_text.registered_aliases.end()) {
+        if (auto it = text.registered_aliases.find(key.family);
+            it != text.registered_aliases.end()) {
             lookup_name = it->second;
         } else if (!key.mono && key.family == "Pretendard") {
-            base = g_text.sans
-                ? static_cast<CTFontRef>(CFRetain(g_text.sans))
+            base = text.sans
+                ? static_cast<CTFontRef>(CFRetain(text.sans))
                 : nullptr;
         }
         if (!base) {
@@ -338,7 +356,7 @@ inline CTFontRef acquire_base_font(FontCacheKey const& key) {
                 false));
             if (!cf_name) {
                 CTFontRef fb = fallback("CFString create failed");
-                if (fb) g_text.cache.emplace(key, static_cast<CTFontRef>(CFRetain(fb)));
+                if (fb) text.cache.emplace(key, static_cast<CTFontRef>(CFRetain(fb)));
                 return fb;
             }
             base = CTFontCreateWithName(cf_name, 16.0, nullptr);
@@ -346,7 +364,7 @@ inline CTFontRef acquire_base_font(FontCacheKey const& key) {
     }
     if (!base) {
         CTFontRef fb = fallback("CTFontCreateWithName returned null");
-        if (fb) g_text.cache.emplace(key, static_cast<CTFontRef>(CFRetain(fb)));
+        if (fb) text.cache.emplace(key, static_cast<CTFontRef>(CFRetain(fb)));
         return fb;
     }
 
@@ -363,7 +381,7 @@ inline CTFontRef acquire_base_font(FontCacheKey const& key) {
             base = styled;
         }
     }
-    g_text.cache.emplace(key, base);
+    text.cache.emplace(key, base);
     return base;
 }
 
@@ -379,7 +397,8 @@ inline bool text_register_font_file(char const* family_alias,
                                     unsigned int alias_len,
                                     char const* path,
                                     unsigned int path_len) {
-    if (!g_text.initialized) text_init();
+    auto& text = text_state();
+    if (!text.initialized) text_init();
     if (family_alias == nullptr || alias_len == 0
         || path == nullptr || path_len == 0) return false;
 
@@ -436,21 +455,21 @@ inline bool text_register_font_file(char const* family_alias,
     ps_name.resize(std::strlen(ps_name.c_str()));
 
     std::string const alias{family_alias, alias_len};
-    auto [it, inserted] = g_text.registered_aliases.insert_or_assign(
+    auto [it, inserted] = text.registered_aliases.insert_or_assign(
         alias, std::move(ps_name));
     (void)it; (void)inserted;
 
     // Drop any cached base-font entries that match this alias so the
     // next acquire_base_font re-resolves through the new mapping.
-    for (auto cit = g_text.cache.begin(); cit != g_text.cache.end(); ) {
+    for (auto cit = text.cache.begin(); cit != text.cache.end(); ) {
         if (cit->first.family == alias) {
             if (cit->second) CFRelease(cit->second);
-            cit = g_text.cache.erase(cit);
+            cit = text.cache.erase(cit);
         } else {
             ++cit;
         }
     }
-    g_text.missing_logged.erase(alias);
+    text.missing_logged.erase(alias);
     return true;
 }
 
@@ -673,8 +692,9 @@ inline bool rasterize_line_alpha(CTLineRef line,
 inline float text_measure(float font_size, FontCacheKey const& key,
                           char const* text_ptr, unsigned int len) {
     if (len == 0) return 0.0f;
-    if (!g_text.initialized) text_init();
-    if (!g_text.initialized) return 0.0f;
+    auto& text = text_state();
+    if (!text.initialized) text_init();
+    if (!text.initialized) return 0.0f;
 
     auto font = copy_text_font(font_size, key);
     if (!font)
@@ -715,8 +735,9 @@ inline bool text_metrics(float font_size, FontCacheKey const& key,
     out_descent = 0.0f;
     out_leading = 0.0f;
     out_cap_height = 0.0f;
-    if (!g_text.initialized) text_init();
-    if (!g_text.initialized) return false;
+    auto& text = text_state();
+    if (!text.initialized) text_init();
+    if (!text.initialized) return false;
     auto font = copy_text_font(font_size, key);
     if (!font) return false;
     out_ascent     = static_cast<float>(CTFontGetAscent(font.ref));

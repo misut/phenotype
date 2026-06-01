@@ -200,7 +200,7 @@ inline bool rasterize_text_run(char const* text_ptr, unsigned int len,
                                float width_factor,
                                RasterizedTextRun& out) {
     out = {};
-    if (!g_text.initialized || len == 0)
+    if (!text_runtime_initialized() || len == 0)
         return false;
 
     auto font = copy_text_font(font_size, font_key, width_factor);
