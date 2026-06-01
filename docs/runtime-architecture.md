@@ -135,6 +135,11 @@ cursor, while render-surface activation captures and restores the scene and
 surface together. This makes nested settings/debug window work explicit: a
 temporary scene build can leave the caller's drawing target alone, and a
 temporary drawing-target build cannot restore only half of the active context.
+Native hosts mirror that pattern with an `ActiveHostBinding` cursor. Host
+activation captures and restores the previous host through one helper, and the
+host-to-render-surface bridge uses the active host predicate instead of
+mutating a raw host singleton directly. This keeps native event/tick handling
+aligned with the scene/render-surface runtime contract.
 
 Scene runners follow the same rule. `runtime::install_scene_runner`,
 `runtime::trigger_scene_rebuild`, `runtime::clear_scene_runner`, and their
