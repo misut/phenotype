@@ -942,10 +942,16 @@ void test_material_build_context_is_scene_local() {
     auto identity_effect = [] {
         return layout::current_material_glass_identity().effect_id;
     };
+    void* scene_a_context_owner = nullptr;
+    void* scene_b_context_owner = nullptr;
 
     {
         auto activate_a = runtime::activate_scene(scene_a);
+        assert(!detail::active_scene_runtime().material_build_context_owner);
         layout::glass_effect_union(101u, [&] {
+            scene_a_context_owner =
+                detail::active_scene_runtime().material_build_context_owner.get();
+            assert(scene_a_context_owner);
             assert(container_union() == 101u);
             layout::glass_effect_transition(
                 layout::glass_matched_geometry_transition(0.25f),
@@ -959,17 +965,28 @@ void test_material_build_context_is_scene_local() {
 
                         {
                             auto activate_b = runtime::activate_scene(scene_b);
+                            assert(!detail::active_scene_runtime()
+                                        .material_build_context_owner);
                             assert(container_union() == 0u);
                             assert(transition_kind()
                                    == MaterialGlassTransitionKind::Identity);
                             assert(identity_effect() == 0u);
                             layout::glass_effect_union(202u, [&] {
+                                scene_b_context_owner =
+                                    detail::active_scene_runtime()
+                                        .material_build_context_owner.get();
+                                assert(scene_b_context_owner);
+                                assert(scene_b_context_owner
+                                       != scene_a_context_owner);
                                 assert(container_union() == 202u);
                             });
                             assert(container_union() == 0u);
                         }
 
                         assert(runtime::active_scene_handle().id == scene_a.id);
+                        assert(detail::active_scene_runtime()
+                                   .material_build_context_owner.get()
+                               == scene_a_context_owner);
                         assert(container_union() == 101u);
                         assert(transition_kind()
                                == MaterialGlassTransitionKind::MatchedGeometry);
@@ -983,6 +1000,8 @@ void test_material_build_context_is_scene_local() {
     }
 
     assert(runtime::active_scene_handle().id == active_before.id);
+    assert(scene_a_context_owner);
+    assert(scene_b_context_owner);
 
     std::puts("PASS: material build context is scene-local");
 }
