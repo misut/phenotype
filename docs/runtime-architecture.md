@@ -117,6 +117,13 @@ small backend adapters provide the native or WASI canvas operations. This keeps
 Compose/SwiftUI-style scene execution as one framework contract instead of two
 platform copies, and it gives future settings or debug windows a single place
 to hook scene-local scheduling, diagnostics, and render-surface flushing.
+The WASI canvas bridge follows the same owner shape at the platform boundary:
+`WasiPaintRuntime` owns the command-buffer-backed paint host, and
+`WasiLayoutRuntime` owns the text-measurement host. The shared command buffer is
+still a process/host ABI detail, but the rest of the framework talks to it
+through explicit runtime owners instead of raw globals. WASI runtime artifacts
+publish those owner names and command-buffer capacity so browser/CLI adapters
+can verify the bridge they are driving.
 
 Framework and example code should use the public `runtime::SceneHandle`,
 `runtime::ensure_scene`, `runtime::SceneActivation`, `runtime::post`,

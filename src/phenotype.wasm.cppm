@@ -1,4 +1,5 @@
 module;
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -7,6 +8,8 @@ export module phenotype.wasm;
 #ifdef __wasi__
 import json;
 import phenotype.diag;
+import phenotype.layout;
+import phenotype.paint;
 import phenotype.types;
 #endif
 
@@ -60,6 +63,18 @@ inline json::Value platform_runtime_details_json_with_reason(
         std::string_view artifact_reason) {
     json::Object runtime;
     runtime.emplace("host_model", json::Value{"wasi"});
+    runtime.emplace(
+        "paint_runtime_owner",
+        json::Value{
+            std::string(::phenotype::detail::wasi_paint_runtime_owner_name())});
+    runtime.emplace(
+        "layout_runtime_owner",
+        json::Value{
+            std::string(::phenotype::detail::wasi_layout_runtime_owner_name())});
+    runtime.emplace(
+        "command_buffer_size",
+        json::Value{static_cast<std::int64_t>(
+            ::phenotype::detail::wasi_paint_runtime_command_buffer_size())});
     runtime.emplace("frame_capture_supported", json::Value{false});
     runtime.emplace("artifact_bundle_support", json::Value{"snapshot-only"});
     runtime.emplace(

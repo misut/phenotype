@@ -769,19 +769,36 @@ namespace phenotype::detail {
             return {};
         }
     };
-    inline wasi_measurer g_wasi_measurer;
+
+    struct WasiLayoutRuntime {
+        wasi_measurer measurer{};
+    };
+
+    inline WasiLayoutRuntime& wasi_layout_runtime() {
+        static WasiLayoutRuntime& runtime = *new WasiLayoutRuntime();
+        return runtime;
+    }
+
+    inline wasi_measurer& active_wasi_measurer() {
+        return wasi_layout_runtime().measurer;
+    }
+
 }
 
 export namespace phenotype::detail {
 
+inline std::string_view wasi_layout_runtime_owner_name() noexcept {
+    return "WasiLayoutRuntime";
+}
+
 inline float measure(str text, float font_size, bool mono) {
     FontSpec const font = default_text_font(mono);
-    return measure_text_cached(g_wasi_measurer, font_size, font,
+    return measure_text_cached(active_wasi_measurer(), font_size, font,
                                text.data, text.len);
 }
 
 inline void layout_node(NodeHandle h, float w) {
-    layout_node(g_wasi_measurer, h, w);
+    layout_node(active_wasi_measurer(), h, w);
 }
 
 } // namespace phenotype::detail
