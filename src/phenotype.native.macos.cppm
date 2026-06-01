@@ -3327,7 +3327,7 @@ inline CompositionVisualDebug build_visual_text(std::string const& committed,
 }
 
 inline void force_disable_system_caret(bool disabled) {
-    detail::g_force_disable_system_caret_for_tests = disabled;
+    detail::macos_input_runtime().force_disable_system_caret_for_tests = disabled;
 }
 
 inline std::size_t input_surface_state_count_for_tests() {
@@ -4205,6 +4205,7 @@ inline json::Object macos_text_input_runtime_json() {
 }
 
 inline json::Object macos_input_runtime_json() {
+    auto const& input_runtime = macos_input_runtime();
     auto const& scroll = active_ime().last_scroll_event;
     json::Object scroll_json;
     scroll_json.emplace("available", json::Value{scroll.available});
@@ -4242,6 +4243,13 @@ inline json::Object macos_input_runtime_json() {
     scroll_json.emplace("handled_y", json::Value{scroll.handled_y});
 
     json::Object input;
+    input.emplace("owner", json::Value{"MacOSInputRuntime"});
+    input.emplace(
+        "ime_surface_count",
+        json::Value{static_cast<std::int64_t>(input_runtime.ime.live_count())});
+    input.emplace(
+        "system_caret_forced_disabled",
+        json::Value{input_runtime.force_disable_system_caret_for_tests});
     input.emplace(
         "scroll_contract",
         json::Value{
