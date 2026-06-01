@@ -213,6 +213,13 @@ requests out through that surface registry during input sync, and Windows posts
 the current IME window as a hidden singleton. Runtime diagnostics expose the
 target count so secondary-window tests can catch a regression back to one
 process-wide callback.
+Windows text input follows the same window-owner rule. The Win32 IME adapter
+keeps a fixed registry of `ImeState` records keyed by `NativeSurfaceDescriptor`
+and resolves `WM_IME_*` messages from the receiving `HWND` before touching
+composition text, candidate overlays, deferred repaint flags, or the subclassed
+previous window procedure. This matches the platform API shape: IME composition
+messages and `HIMC` lookup are window-handle based, so a settings or debug
+window must not inherit the main window's composition/candidate overlay state.
 AppKit event handling follows the same boundary: surface synchronization,
 native event dispatch, and frame ticks now activate the `native_host` they are
 servicing before touching shell, scene, renderer, or input state. The current
@@ -260,7 +267,10 @@ scene's runner, queue, and framework-local storage for a later reopen.
   `NSTextInputClient` methods on a concrete editor view, so composition text,
   selected ranges, scroll tracking, caret host views, and system insertion
   indicators should be resolved from that view/window instead of one global
-  transient bucket.
+  transient bucket. Win32 dispatches IME messages and `ImmGetContext` through
+  the receiving `HWND`, so subclassed WndProc state, composition/candidate
+  overlays, and deferred repaint flags must be keyed by that window's native
+  surface.
 - Keep CI coverage aligned with ownership moves. Windows-native backend,
   renderer, shell, toolchain, and native-contract test changes must run the
   real Windows native build/test path instead of only the PR fast-path stub.

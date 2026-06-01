@@ -1929,6 +1929,172 @@ struct ImeState {
     std::size_t deferred_repaint_count = 0;
 };
 
+inline constexpr std::size_t max_windows_input_surfaces = 16;
+
+struct ImeRegistry {
+    std::array<ImeState, max_windows_input_surfaces> states{};
+    std::array<bool, max_windows_input_surfaces> live{};
+    ImeState fallback{};
+    ImeState* active = &fallback;
+
+    ImeState& active_state() {
+        return active ? *active : fallback;
+    }
+
+    ImeState* find(NativeSurfaceDescriptor* surface) {
+        if (!surface)
+            return nullptr;
+        for (std::size_t i = 0; i < states.size(); ++i) {
+            if (live[i] && states[i].surface == surface)
+                return &states[i];
+        }
+        return fallback.surface == surface ? &fallback : nullptr;
+    }
+
+    ImeState* find_by_hwnd(HWND hwnd) {
+        if (!hwnd)
+            return nullptr;
+        for (std::size_t i = 0; i < states.size(); ++i) {
+            if (live[i] && states[i].hwnd == hwnd)
+                return &states[i];
+        }
+        return fallback.hwnd == hwnd ? &fallback : nullptr;
+    }
+
+    ImeState& ensure(NativeSurfaceDescriptor* surface) {
+        if (!surface) {
+            active = &fallback;
+            return fallback;
+        }
+        if (auto* existing = find(surface)) {
+            active = existing;
+            return *existing;
+        }
+        for (std::size_t i = 0; i < states.size(); ++i) {
+            if (!live[i]) {
+                live[i] = true;
+                states[i] = ImeState{};
+                states[i].surface = surface;
+                active = &states[i];
+                return states[i];
+            }
+        }
+
+        fallback = ImeState{};
+        fallback.surface = surface;
+        active = &fallback;
+        return fallback;
+    }
+
+    void release(NativeSurfaceDescriptor* surface) {
+        if (!surface)
+            return;
+        for (std::size_t i = 0; i < states.size(); ++i) {
+            if (live[i] && states[i].surface == surface) {
+                if (active == &states[i])
+                    active = nullptr;
+                states[i] = ImeState{};
+                live[i] = false;
+                if (!active)
+                    active = &fallback;
+                return;
+            }
+        }
+        if (fallback.surface == surface) {
+            fallback = ImeState{};
+            if (active == &fallback)
+                active = &fallback;
+        }
+    }
+
+    std::size_t live_count() const {
+        std::size_t count = 0;
+        for (bool value : live) {
+            if (value)
+                ++count;
+        }
+        if (fallback.surface)
+            ++count;
+        return count;
+    }
+
+    bool contains(ImeState const* state) const {
+        if (!state)
+            return false;
+        if (state == &fallback)
+            return true;
+        for (std::size_t i = 0; i < states.size(); ++i) {
+            if (live[i] && state == &states[i])
+                return true;
+        }
+        return false;
+    }
+};
+
+inline ImeRegistry& ime_registry() {
+    static ImeRegistry registry;
+    return registry;
+}
+
+inline ImeState& active_ime() {
+    return ime_registry().active_state();
+}
+
+inline void activate_ime(ImeState& state) {
+    ime_registry().active = &state;
+}
+
+struct ScopedImeActivation {
+    ImeState* previous = nullptr;
+
+    explicit ScopedImeActivation(ImeState& state)
+        : previous(ime_registry().active) {
+        activate_ime(state);
+    }
+
+    ~ScopedImeActivation() {
+        auto& registry = ime_registry();
+        registry.active = registry.contains(previous)
+            ? previous
+            : &registry.fallback;
+    }
+};
+
+inline NativeSurfaceDescriptor* active_host_surface() {
+    auto* host = active_host();
+    if (!host)
+        return nullptr;
+    if (host->surface_descriptor)
+        return host->surface_descriptor;
+    return static_cast<NativeSurfaceDescriptor*>(host->window);
+}
+
+inline ImeState* active_host_ime_state() {
+    if (auto* surface = active_host_surface())
+        return ime_registry().find(surface);
+    return nullptr;
+}
+
+inline ImeState& active_host_or_current_ime() {
+    if (auto* state = active_host_ime_state())
+        return *state;
+    return active_ime();
+}
+
+inline ImeState& surface_or_current_ime(NativeSurfaceDescriptor* surface) {
+    if (auto* state = ime_registry().find(surface))
+        return *state;
+    return active_ime();
+}
+
+inline ImeState* ime_state_for_hwnd(HWND hwnd) {
+    if (auto* state = ime_registry().find_by_hwnd(hwnd))
+        return state;
+    if (active_ime().hwnd == hwnd)
+        return &active_ime();
+    return nullptr;
+}
+
 struct DecodedImage {
     std::string url;
     int width = 0;
@@ -2003,7 +2169,6 @@ struct ImageAtlasState {
     int row_height = 0;
 };
 
-static ImeState g_ime;
 static ImageAtlasState g_images;
 static ImageRepaintTargetRegistry g_image_repaint_targets;
 
@@ -2187,7 +2352,7 @@ inline void dump_runtime_diagnostics(char const* reason) {
         renderer_state().debug_enabled ? 1 : 0,
         renderer_state().warp_enabled ? 1 : 0,
         static_cast<unsigned long>(GetCurrentThreadId()),
-        static_cast<unsigned long>(g_ime.ui_thread_id),
+        static_cast<unsigned long>(active_ime().ui_thread_id),
         static_cast<unsigned long>(g_images.worker_thread_id.load()));
     if (!renderer_state().last_failure_label.empty()) {
         std::fprintf(stderr,
@@ -2250,36 +2415,36 @@ inline void install_process_diagnostics() {
 }
 
 inline void invalidate_ime_window_positions() {
-    g_ime.composition_window = {};
-    g_ime.candidate_window = {};
+    active_ime().composition_window = {};
+    active_ime().candidate_window = {};
 }
 
 inline bool should_defer_window_repaint() {
-    return g_ime.in_wndproc
-        || g_ime.sync_in_progress
-        || g_ime.repaint_dispatch_in_progress;
+    return active_ime().in_wndproc
+        || active_ime().sync_in_progress
+        || active_ime().repaint_dispatch_in_progress;
 }
 
 inline void request_window_repaint() {
-    ++g_ime.repaint_request_count;
+    ++active_ime().repaint_request_count;
     if (should_defer_window_repaint()) {
-        g_ime.repaint_pending = true;
-        ++g_ime.deferred_repaint_count;
+        active_ime().repaint_pending = true;
+        ++active_ime().deferred_repaint_count;
         return;
     }
-    if (g_ime.request_repaint)
-        g_ime.request_repaint();
+    if (active_ime().request_repaint)
+        active_ime().request_repaint();
 }
 
 inline void drain_deferred_window_repaint() {
-    if (!g_ime.repaint_pending || !g_ime.request_repaint)
+    if (!active_ime().repaint_pending || !active_ime().request_repaint)
         return;
     if (should_defer_window_repaint())
         return;
-    g_ime.repaint_pending = false;
-    g_ime.repaint_dispatch_in_progress = true;
-    g_ime.request_repaint();
-    g_ime.repaint_dispatch_in_progress = false;
+    active_ime().repaint_pending = false;
+    active_ime().repaint_dispatch_in_progress = true;
+    active_ime().request_repaint();
+    active_ime().repaint_dispatch_in_progress = false;
 }
 
 inline std::vector<metrics::Attribute> native_platform_attrs() {
@@ -2414,11 +2579,11 @@ inline float measure_utf8_prefix(float font_size,
 
 inline unsigned int composition_cursor_bytes() {
     auto cursor_units = static_cast<std::size_t>(
-        (g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor);
-    if (cursor_units > g_ime.composition_text.size())
-        cursor_units = g_ime.composition_text.size();
+        (active_ime().composition_cursor < 0) ? 0 : active_ime().composition_cursor);
+    if (cursor_units > active_ime().composition_text.size())
+        cursor_units = active_ime().composition_text.size();
     auto prefix = cppx::unicode::wide_to_utf8(
-        std::wstring_view(g_ime.composition_text.data(), cursor_units))
+        std::wstring_view(active_ime().composition_text.data(), cursor_units))
                       .value_or(std::string{});
     return static_cast<unsigned int>(prefix.size());
 }
@@ -2431,10 +2596,10 @@ inline std::size_t resolved_composition_caret_bytes(std::string const& compositi
 }
 
 inline void sync_input_debug_composition_state() {
-    auto composition = cppx::unicode::wide_to_utf8(g_ime.composition_text)
+    auto composition = cppx::unicode::wide_to_utf8(active_ime().composition_text)
                            .value_or(std::string{});
     ::phenotype::detail::set_input_composition_state(
-        g_ime.composition_active && !composition.empty(),
+        active_ime().composition_active && !composition.empty(),
         composition,
         composition_cursor_bytes());
 }
@@ -2470,20 +2635,20 @@ inline CompositionVisualState current_composition_visual_state(
         ::phenotype::FocusedInputSnapshot snapshot =
             ::phenotype::detail::focused_input_snapshot()) {
     CompositionVisualState visual{};
-    if (!snapshot.valid || !g_ime.composition_active || g_ime.composition_text.empty())
+    if (!snapshot.valid || !active_ime().composition_active || active_ime().composition_text.empty())
         return visual;
 
-    auto composition = cppx::unicode::wide_to_utf8(g_ime.composition_text)
+    auto composition = cppx::unicode::wide_to_utf8(active_ime().composition_text)
                            .value_or(std::string{});
     if (composition.empty())
         return visual;
 
     auto anchor = ::phenotype::detail::clamp_utf8_boundary(
         snapshot.value,
-        g_ime.replacement_start);
+        active_ime().replacement_start);
     auto replacement_end = ::phenotype::detail::clamp_utf8_boundary(
         snapshot.value,
-        g_ime.replacement_end);
+        active_ime().replacement_end);
     if (replacement_end < anchor)
         replacement_end = anchor;
     auto prefix = snapshot.value.substr(0, anchor);
@@ -2542,7 +2707,7 @@ inline WindowsCaretLayout current_windows_caret_layout(
     auto base_snapshot = snapshot;
     bool composition_active = composition.valid;
     if (composition_active)
-        base_snapshot.caret_pos = static_cast<unsigned int>(g_ime.composition_anchor);
+        base_snapshot.caret_pos = static_cast<unsigned int>(active_ime().composition_anchor);
     layout.base = ::phenotype::detail::compute_single_line_caret_layout(
         base_snapshot,
         ::phenotype::detail::get_scroll_y(),
@@ -2587,12 +2752,12 @@ inline void capture_composition_anchor() {
     auto snapshot = ::phenotype::detail::focused_input_snapshot();
     if (!snapshot.valid)
         return;
-    g_ime.composition_anchor = snapshot.selection_start;
-    g_ime.replacement_start = snapshot.selection_start;
-    g_ime.replacement_end = snapshot.selection_end;
+    active_ime().composition_anchor = snapshot.selection_start;
+    active_ime().replacement_start = snapshot.selection_start;
+    active_ime().replacement_end = snapshot.selection_end;
     ::phenotype::detail::set_focused_input_selection(
-        g_ime.composition_anchor,
-        g_ime.composition_anchor);
+        active_ime().composition_anchor,
+        active_ime().composition_anchor);
 }
 
 inline bool is_http_url(std::string const& url) {
@@ -4089,7 +4254,7 @@ inline std::vector<TextEntry> composition_overlay_text_entries() {
 }
 
 inline std::optional<CandidateHit> find_candidate_hit(float x, float y) {
-    for (auto const& hit : g_ime.overlay.hits) {
+    for (auto const& hit : active_ime().overlay.hits) {
         if (hit.contains(x, y))
             return hit;
     }
@@ -4112,36 +4277,36 @@ inline std::vector<std::wstring> load_candidate_strings(HIMC himc) {
         auto const* text = reinterpret_cast<wchar_t const*>(storage.data() + offset);
         out.emplace_back(text ? text : L"");
     }
-    g_ime.candidate_selection = list->dwSelection;
-    g_ime.candidate_page_start = list->dwPageStart;
-    g_ime.candidate_page_size = list->dwPageSize;
+    active_ime().candidate_selection = list->dwSelection;
+    active_ime().candidate_page_start = list->dwPageStart;
+    active_ime().candidate_page_size = list->dwPageSize;
     return out;
 }
 
 inline void update_candidate_state(HIMC himc) {
-    g_ime.candidates = load_candidate_strings(himc);
-    g_ime.candidate_open = !g_ime.candidates.empty();
-    if (!g_ime.candidate_open) {
-        g_ime.hovered_candidate = -1;
-        g_ime.hovered_kind = CandidateHitKind::none;
+    active_ime().candidates = load_candidate_strings(himc);
+    active_ime().candidate_open = !active_ime().candidates.empty();
+    if (!active_ime().candidate_open) {
+        active_ime().hovered_candidate = -1;
+        active_ime().hovered_kind = CandidateHitKind::none;
     }
 }
 
 inline void clear_ime_state() {
-    g_ime.composition_active = false;
-    g_ime.composition_text.clear();
-    g_ime.composition_cursor = 0;
-    g_ime.composition_anchor = 0;
-    g_ime.replacement_start = 0;
-    g_ime.replacement_end = 0;
-    g_ime.candidate_open = false;
-    g_ime.candidates.clear();
-    g_ime.candidate_selection = 0;
-    g_ime.candidate_page_start = 0;
-    g_ime.candidate_page_size = 0;
-    g_ime.hovered_candidate = -1;
-    g_ime.hovered_kind = CandidateHitKind::none;
-    g_ime.overlay = {};
+    active_ime().composition_active = false;
+    active_ime().composition_text.clear();
+    active_ime().composition_cursor = 0;
+    active_ime().composition_anchor = 0;
+    active_ime().replacement_start = 0;
+    active_ime().replacement_end = 0;
+    active_ime().candidate_open = false;
+    active_ime().candidates.clear();
+    active_ime().candidate_selection = 0;
+    active_ime().candidate_page_start = 0;
+    active_ime().candidate_page_size = 0;
+    active_ime().hovered_candidate = -1;
+    active_ime().hovered_kind = CandidateHitKind::none;
+    active_ime().overlay = {};
     invalidate_ime_window_positions();
     ::phenotype::detail::clear_input_composition_state();
 }
@@ -4151,13 +4316,13 @@ inline void commit_result_string(std::wstring_view result) {
     if (suffix.empty())
         return;
     if (!::phenotype::detail::replace_focused_input_text(
-            g_ime.replacement_start,
-            g_ime.replacement_end,
+            active_ime().replacement_start,
+            active_ime().replacement_end,
             suffix))
         return;
-    g_ime.composition_anchor = g_ime.replacement_start + suffix.size();
-    g_ime.replacement_start = g_ime.composition_anchor;
-    g_ime.replacement_end = g_ime.composition_anchor;
+    active_ime().composition_anchor = active_ime().replacement_start + suffix.size();
+    active_ime().replacement_start = active_ime().composition_anchor;
+    active_ime().replacement_end = active_ime().composition_anchor;
 }
 
 inline void update_composition_state(HWND hwnd, LPARAM lparam) {
@@ -4165,7 +4330,7 @@ inline void update_composition_state(HWND hwnd, LPARAM lparam) {
     if (!himc)
         return;
 
-    if ((lparam & (GCS_RESULTSTR | GCS_COMPSTR)) && !g_ime.composition_active)
+    if ((lparam & (GCS_RESULTSTR | GCS_COMPSTR)) && !active_ime().composition_active)
         capture_composition_anchor();
 
     if (lparam & GCS_RESULTSTR) {
@@ -4184,24 +4349,24 @@ inline void update_composition_state(HWND hwnd, LPARAM lparam) {
     if (lparam & GCS_COMPSTR) {
         auto bytes = ImmGetCompositionStringW(himc, GCS_COMPSTR, nullptr, 0);
         if (bytes > 0) {
-            g_ime.composition_text.assign(static_cast<std::size_t>(bytes / sizeof(wchar_t)), L'\0');
+            active_ime().composition_text.assign(static_cast<std::size_t>(bytes / sizeof(wchar_t)), L'\0');
             ImmGetCompositionStringW(
                 himc,
                 GCS_COMPSTR,
-                g_ime.composition_text.data(),
+                active_ime().composition_text.data(),
                 bytes);
-            g_ime.composition_active = true;
+            active_ime().composition_active = true;
         } else {
-            g_ime.composition_text.clear();
-            g_ime.composition_active = false;
+            active_ime().composition_text.clear();
+            active_ime().composition_active = false;
         }
     }
 
     if (lparam & GCS_CURSORPOS) {
         auto pos = ImmGetCompositionStringW(himc, GCS_CURSORPOS, nullptr, 0);
-        g_ime.composition_cursor = (pos >= 0) ? pos : 0;
-    } else if (g_ime.composition_cursor > static_cast<LONG>(g_ime.composition_text.size())) {
-        g_ime.composition_cursor = static_cast<LONG>(g_ime.composition_text.size());
+        active_ime().composition_cursor = (pos >= 0) ? pos : 0;
+    } else if (active_ime().composition_cursor > static_cast<LONG>(active_ime().composition_text.size())) {
+        active_ime().composition_cursor = static_cast<LONG>(active_ime().composition_text.size());
     }
 
     update_candidate_state(himc);
@@ -4210,14 +4375,15 @@ inline void update_composition_state(HWND hwnd, LPARAM lparam) {
 }
 
 inline void sync_ime_windows() {
-    if (!g_ime.hwnd)
+    activate_ime(active_host_or_current_ime());
+    if (!active_ime().hwnd)
         return;
-    ++g_ime.sync_call_count;
-    if (g_ime.sync_in_progress)
+    ++active_ime().sync_call_count;
+    if (active_ime().sync_in_progress)
         return;
 
     {
-        FlagGuard sync_guard{g_ime.sync_in_progress};
+        FlagGuard sync_guard{active_ime().sync_in_progress};
 
         auto layout = current_windows_caret_layout();
         if (!layout.valid) {
@@ -4226,74 +4392,74 @@ inline void sync_ime_windows() {
         } else {
             auto const& snapshot = layout.snapshot;
 
-            g_ime.overlay = {};
+            active_ime().overlay = {};
 
-            auto himc = ImmGetContext(g_ime.hwnd);
+            auto himc = ImmGetContext(active_ime().hwnd);
             if (!himc) {
                 sync_windows_debug_caret_presentation();
             } else {
                 LONG composition_x = static_cast<LONG>(std::lround(layout.content_x));
                 LONG composition_y = static_cast<LONG>(std::lround(layout.content_y));
-                if (!g_ime.composition_window.valid
-                    || g_ime.composition_window.x != composition_x
-                    || g_ime.composition_window.y != composition_y) {
+                if (!active_ime().composition_window.valid
+                    || active_ime().composition_window.x != composition_x
+                    || active_ime().composition_window.y != composition_y) {
                     COMPOSITIONFORM comp{};
                     comp.dwStyle = CFS_FORCE_POSITION;
                     comp.ptCurrentPos.x = composition_x;
                     comp.ptCurrentPos.y = composition_y;
                     if (ImmSetCompositionWindow(himc, &comp)) {
-                        g_ime.composition_window = {
+                        active_ime().composition_window = {
                             true,
                             composition_x,
                             composition_y,
                         };
                     } else {
-                        g_ime.composition_window = {};
+                        active_ime().composition_window = {};
                     }
                 }
 
                 LONG candidate_x = static_cast<LONG>(std::lround(layout.content_x));
                 LONG candidate_y = static_cast<LONG>(std::lround(layout.draw_y + snapshot.height));
-                if (!g_ime.candidate_window.valid
-                    || g_ime.candidate_window.x != candidate_x
-                    || g_ime.candidate_window.y != candidate_y) {
+                if (!active_ime().candidate_window.valid
+                    || active_ime().candidate_window.x != candidate_x
+                    || active_ime().candidate_window.y != candidate_y) {
                     CANDIDATEFORM cand{};
                     cand.dwIndex = 0;
                     cand.dwStyle = CFS_CANDIDATEPOS;
                     cand.ptCurrentPos.x = candidate_x;
                     cand.ptCurrentPos.y = candidate_y;
                     if (ImmSetCandidateWindow(himc, &cand)) {
-                        g_ime.candidate_window = {
+                        active_ime().candidate_window = {
                             true,
                             candidate_x,
                             candidate_y,
                         };
                     } else {
-                        g_ime.candidate_window = {};
+                        active_ime().candidate_window = {};
                     }
                 }
 
-                ImmReleaseContext(g_ime.hwnd, himc);
+                ImmReleaseContext(active_ime().hwnd, himc);
                 sync_input_debug_composition_state();
                 sync_windows_debug_caret_presentation();
 
-                if (!g_ime.candidate_open || g_ime.candidates.empty()) {
-                    g_ime.hovered_candidate = -1;
-                    g_ime.hovered_kind = CandidateHitKind::none;
+                if (!active_ime().candidate_open || active_ime().candidates.empty()) {
+                    active_ime().hovered_candidate = -1;
+                    active_ime().hovered_kind = CandidateHitKind::none;
                 } else {
                     int winw = 0;
                     int winh = 0;
-                    surface_logical_size(g_ime.surface, winw, winh);
+                    surface_logical_size(active_ime().surface, winw, winh);
                     if (winw <= 0) winw = 1;
                     if (winh <= 0) winh = 1;
 
-                    auto total = static_cast<unsigned int>(g_ime.candidates.size());
-                    auto page_size = (g_ime.candidate_page_size > 0)
-                        ? static_cast<unsigned int>(g_ime.candidate_page_size)
+                    auto total = static_cast<unsigned int>(active_ime().candidates.size());
+                    auto page_size = (active_ime().candidate_page_size > 0)
+                        ? static_cast<unsigned int>(active_ime().candidate_page_size)
                         : static_cast<unsigned int>((total > 8u) ? 8u : total);
                     if (page_size == 0)
                         page_size = 1;
-                    auto page_start = static_cast<unsigned int>(g_ime.candidate_page_start);
+                    auto page_start = static_cast<unsigned int>(active_ime().candidate_page_start);
                     if (page_start >= total)
                         page_start = 0;
                     auto page_end = (page_start + page_size < total)
@@ -4309,7 +4475,7 @@ inline void sync_ime_windows() {
 
                     float content_width = snapshot.width;
                     for (unsigned int index = page_start; index < page_end; ++index) {
-                        auto utf8 = cppx::unicode::wide_to_utf8(g_ime.candidates[index])
+                        auto utf8 = cppx::unicode::wide_to_utf8(active_ime().candidates[index])
                                         .value_or(std::string{});
                         if (utf8.empty())
                             continue;
@@ -4342,20 +4508,20 @@ inline void sync_ime_windows() {
                     if (panel_y < 8.0f)
                         panel_y = 8.0f;
 
-                    g_ime.overlay.visible = true;
-                    g_ime.overlay.x = panel_x;
-                    g_ime.overlay.y = panel_y;
-                    g_ime.overlay.w = panel_width;
-                    g_ime.overlay.h = panel_height;
-                    g_ime.overlay.row_height = row_height;
-                    g_ime.overlay.hits.clear();
-                    g_ime.overlay.hits.reserve(
+                    active_ime().overlay.visible = true;
+                    active_ime().overlay.x = panel_x;
+                    active_ime().overlay.y = panel_y;
+                    active_ime().overlay.w = panel_width;
+                    active_ime().overlay.h = panel_height;
+                    active_ime().overlay.row_height = row_height;
+                    active_ime().overlay.hits.clear();
+                    active_ime().overlay.hits.reserve(
                         static_cast<std::size_t>(visible_count)
                             + (has_prev ? 1u : 0u)
                             + (has_next ? 1u : 0u));
 
                     for (unsigned int row = 0; row < visible_count; ++row) {
-                        g_ime.overlay.hits.push_back({
+                        active_ime().overlay.hits.push_back({
                             CandidateHitKind::item,
                             page_start + row,
                             panel_x,
@@ -4371,7 +4537,7 @@ inline void sync_ime_windows() {
                         if (button_width < 56.0f)
                             button_width = 56.0f;
                         if (has_prev) {
-                            g_ime.overlay.hits.push_back({
+                            active_ime().overlay.hits.push_back({
                                 CandidateHitKind::prev_page,
                                 0,
                                 panel_x + 8.0f,
@@ -4381,7 +4547,7 @@ inline void sync_ime_windows() {
                             });
                         }
                         if (has_next) {
-                            g_ime.overlay.hits.push_back({
+                            active_ime().overlay.hits.push_back({
                                 CandidateHitKind::next_page,
                                 0,
                                 panel_x + panel_width - button_width - 8.0f,
@@ -4392,16 +4558,16 @@ inline void sync_ime_windows() {
                         }
                     }
 
-                    if (g_ime.hovered_kind == CandidateHitKind::item) {
-                        if (g_ime.hovered_candidate < static_cast<int>(page_start)
-                            || g_ime.hovered_candidate >= static_cast<int>(page_end)) {
-                            g_ime.hovered_candidate = -1;
-                            g_ime.hovered_kind = CandidateHitKind::none;
+                    if (active_ime().hovered_kind == CandidateHitKind::item) {
+                        if (active_ime().hovered_candidate < static_cast<int>(page_start)
+                            || active_ime().hovered_candidate >= static_cast<int>(page_end)) {
+                            active_ime().hovered_candidate = -1;
+                            active_ime().hovered_kind = CandidateHitKind::none;
                         }
                     } else if (
-                        (g_ime.hovered_kind == CandidateHitKind::prev_page && !has_prev)
-                        || (g_ime.hovered_kind == CandidateHitKind::next_page && !has_next)) {
-                        g_ime.hovered_kind = CandidateHitKind::none;
+                        (active_ime().hovered_kind == CandidateHitKind::prev_page && !has_prev)
+                        || (active_ime().hovered_kind == CandidateHitKind::next_page && !has_next)) {
+                        active_ime().hovered_kind = CandidateHitKind::none;
                     }
                 }
             }
@@ -4412,9 +4578,9 @@ inline void sync_ime_windows() {
 }
 
 inline bool handle_candidate_click(CandidateHit const& hit) {
-    if (!g_ime.hwnd)
+    if (!active_ime().hwnd)
         return false;
-    auto himc = ImmGetContext(g_ime.hwnd);
+    auto himc = ImmGetContext(active_ime().hwnd);
     if (!himc)
         return false;
 
@@ -4422,15 +4588,15 @@ inline bool handle_candidate_click(CandidateHit const& hit) {
     if (hit.kind == CandidateHitKind::item) {
         ok = ImmNotifyIME(himc, NI_SELECTCANDIDATESTR, 0, hit.index);
     } else if (hit.kind == CandidateHitKind::prev_page) {
-        auto next = (g_ime.candidate_page_start > g_ime.candidate_page_size)
-            ? (g_ime.candidate_page_start - g_ime.candidate_page_size)
+        auto next = (active_ime().candidate_page_start > active_ime().candidate_page_size)
+            ? (active_ime().candidate_page_start - active_ime().candidate_page_size)
             : 0;
         ok = ImmNotifyIME(himc, NI_SETCANDIDATE_PAGESTART, 0, next);
     } else if (hit.kind == CandidateHitKind::next_page) {
-        auto next = g_ime.candidate_page_start + g_ime.candidate_page_size;
+        auto next = active_ime().candidate_page_start + active_ime().candidate_page_size;
         ok = ImmNotifyIME(himc, NI_SETCANDIDATE_PAGESTART, 0, next);
     }
-    ImmReleaseContext(g_ime.hwnd, himc);
+    ImmReleaseContext(active_ime().hwnd, himc);
     return ok != FALSE;
 }
 
@@ -4444,7 +4610,12 @@ inline bool ime_notify_needs_repaint(WPARAM command) {
 }
 
 inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
-    FlagGuard wndproc_guard{g_ime.in_wndproc};
+    auto* state = ime_state_for_hwnd(hwnd);
+    if (!state || !state->prev_wndproc)
+        return DefWindowProcW(hwnd, msg, wparam, lparam);
+
+    ScopedImeActivation activate{*state};
+    FlagGuard wndproc_guard{active_ime().in_wndproc};
 
     switch (msg) {
     case WM_IME_SETCONTEXT: {
@@ -4454,13 +4625,13 @@ inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
         filtered &= ~static_cast<LPARAM>(ISC_SHOWUICANDIDATEWINDOW << 1);
         filtered &= ~static_cast<LPARAM>(ISC_SHOWUICANDIDATEWINDOW << 2);
         filtered &= ~static_cast<LPARAM>(ISC_SHOWUICANDIDATEWINDOW << 3);
-        return CallWindowProcW(g_ime.prev_wndproc, hwnd, msg, wparam, filtered);
+        return CallWindowProcW(active_ime().prev_wndproc, hwnd, msg, wparam, filtered);
     }
     case WM_IME_STARTCOMPOSITION:
         capture_composition_anchor();
-        g_ime.composition_active = true;
-        g_ime.composition_text.clear();
-        g_ime.composition_cursor = 0;
+        active_ime().composition_active = true;
+        active_ime().composition_text.clear();
+        active_ime().composition_cursor = 0;
         request_window_repaint();
         return 0;
     case WM_IME_COMPOSITION:
@@ -4477,9 +4648,9 @@ inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
             if (ime_notify_updates_candidates(wparam)) {
                 update_candidate_state(himc);
             } else if (wparam == IMN_CLOSECANDIDATE) {
-                g_ime.candidate_open = false;
-                g_ime.candidates.clear();
-                g_ime.overlay = {};
+                active_ime().candidate_open = false;
+                active_ime().candidates.clear();
+                active_ime().overlay = {};
             }
             ImmReleaseContext(hwnd, himc);
         }
@@ -4496,50 +4667,61 @@ inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
     default:
         break;
     }
-    return CallWindowProcW(g_ime.prev_wndproc, hwnd, msg, wparam, lparam);
+    return CallWindowProcW(active_ime().prev_wndproc, hwnd, msg, wparam, lparam);
 }
 
 inline void input_attach(native_surface_handle handle, void (*request_repaint)()) {
     auto* surface = desktop_surface(handle);
-    g_ime.surface = surface;
-    g_ime.request_repaint = request_repaint;
-    g_ime.hwnd = surface_hwnd(surface);
-    register_image_repaint_target(surface, g_ime.hwnd);
-    g_ime.ui_thread_id = GetCurrentThreadId();
-    g_ime.in_wndproc = false;
-    g_ime.sync_in_progress = false;
-    g_ime.repaint_pending = false;
-    g_ime.repaint_dispatch_in_progress = false;
+    auto& state = ime_registry().ensure(surface);
+    ScopedImeActivation activate{state};
+    auto hwnd = surface_hwnd(surface);
+
+    if (active_ime().attached && active_ime().hwnd && active_ime().hwnd != hwnd
+        && active_ime().prev_wndproc) {
+        SetWindowLongPtrW(active_ime().hwnd, GWLP_WNDPROC,
+                          reinterpret_cast<LONG_PTR>(active_ime().prev_wndproc));
+        clear_ime_state();
+        active_ime().attached = false;
+        active_ime().prev_wndproc = nullptr;
+    }
+
+    active_ime().surface = surface;
+    active_ime().request_repaint = request_repaint;
+    active_ime().hwnd = hwnd;
+    register_image_repaint_target(surface, active_ime().hwnd);
+    active_ime().ui_thread_id = GetCurrentThreadId();
+    active_ime().in_wndproc = false;
+    active_ime().sync_in_progress = false;
+    active_ime().repaint_pending = false;
+    active_ime().repaint_dispatch_in_progress = false;
     invalidate_ime_window_positions();
-    if (!g_ime.hwnd || g_ime.attached)
+    if (!active_ime().hwnd || active_ime().attached)
         return;
-    g_ime.prev_wndproc = reinterpret_cast<WNDPROC>(
-        SetWindowLongPtrW(g_ime.hwnd, GWLP_WNDPROC,
+    active_ime().prev_wndproc = reinterpret_cast<WNDPROC>(
+        SetWindowLongPtrW(active_ime().hwnd, GWLP_WNDPROC,
                           reinterpret_cast<LONG_PTR>(ime_wndproc)));
-    g_ime.attached = (g_ime.prev_wndproc != nullptr);
+    active_ime().attached = (active_ime().prev_wndproc != nullptr);
 }
 
 inline void input_detach() {
-    unregister_image_repaint_target(g_ime.surface);
-    if (g_ime.hwnd && g_ime.prev_wndproc) {
-        SetWindowLongPtrW(g_ime.hwnd, GWLP_WNDPROC,
-                          reinterpret_cast<LONG_PTR>(g_ime.prev_wndproc));
+    auto* state = active_host_ime_state();
+    if (!state)
+        state = &active_ime();
+    ScopedImeActivation activate{*state};
+    auto* surface = active_ime().surface;
+
+    unregister_image_repaint_target(active_ime().surface);
+    if (active_ime().hwnd && active_ime().prev_wndproc) {
+        SetWindowLongPtrW(active_ime().hwnd, GWLP_WNDPROC,
+                          reinterpret_cast<LONG_PTR>(active_ime().prev_wndproc));
     }
     clear_ime_state();
-    g_ime.surface = nullptr;
-    g_ime.hwnd = nullptr;
-    g_ime.prev_wndproc = nullptr;
-    g_ime.request_repaint = nullptr;
-    g_ime.ui_thread_id = 0;
-    g_ime.in_wndproc = false;
-    g_ime.sync_in_progress = false;
-    g_ime.repaint_pending = false;
-    g_ime.repaint_dispatch_in_progress = false;
-    g_ime.attached = false;
+    ime_registry().release(surface);
 }
 
 inline bool input_handle_cursor_pos(float x, float y) {
-    if (!g_ime.overlay.visible)
+    activate_ime(active_host_or_current_ime());
+    if (!active_ime().overlay.visible)
         return false;
     auto hit = find_candidate_hit(x, y);
     int next_hover = -1;
@@ -4550,11 +4732,11 @@ inline bool input_handle_cursor_pos(float x, float y) {
             next_hover = static_cast<int>(hit->index);
     }
     bool inside_panel = hit.has_value()
-        || (x >= g_ime.overlay.x && x <= g_ime.overlay.x + g_ime.overlay.w
-            && y >= g_ime.overlay.y && y <= g_ime.overlay.y + g_ime.overlay.h);
-    if (next_hover != g_ime.hovered_candidate || next_kind != g_ime.hovered_kind) {
-        g_ime.hovered_candidate = next_hover;
-        g_ime.hovered_kind = next_kind;
+        || (x >= active_ime().overlay.x && x <= active_ime().overlay.x + active_ime().overlay.w
+            && y >= active_ime().overlay.y && y <= active_ime().overlay.y + active_ime().overlay.h);
+    if (next_hover != active_ime().hovered_candidate || next_kind != active_ime().hovered_kind) {
+        active_ime().hovered_candidate = next_hover;
+        active_ime().hovered_kind = next_kind;
         request_window_repaint();
     }
     return inside_panel;
@@ -4562,13 +4744,14 @@ inline bool input_handle_cursor_pos(float x, float y) {
 
 inline bool input_handle_mouse_button(float x, float y,
                                       int button, int action, int) {
+    activate_ime(active_host_or_current_ime());
     if (button != static_cast<int>(MouseButton::Left)
         || action != static_cast<int>(KeyAction::Press))
         return false;
     auto hit = find_candidate_hit(x, y);
-    bool inside_panel = g_ime.overlay.visible
-        && x >= g_ime.overlay.x && x <= g_ime.overlay.x + g_ime.overlay.w
-        && y >= g_ime.overlay.y && y <= g_ime.overlay.y + g_ime.overlay.h;
+    bool inside_panel = active_ime().overlay.visible
+        && x >= active_ime().overlay.x && x <= active_ime().overlay.x + active_ime().overlay.w
+        && y >= active_ime().overlay.y && y <= active_ime().overlay.y + active_ime().overlay.h;
     if (!hit.has_value())
         return inside_panel;
     auto ok = handle_candidate_click(*hit);
@@ -4577,11 +4760,12 @@ inline bool input_handle_mouse_button(float x, float y,
 }
 
 inline bool input_dismiss_transient() {
-    bool had_transient = g_ime.composition_active
-        || !g_ime.composition_text.empty()
-        || g_ime.candidate_open
-        || !g_ime.candidates.empty()
-        || g_ime.overlay.visible;
+    activate_ime(active_host_or_current_ime());
+    bool had_transient = active_ime().composition_active
+        || !active_ime().composition_text.empty()
+        || active_ime().candidate_open
+        || !active_ime().candidates.empty()
+        || active_ime().overlay.visible;
     if (!had_transient)
         return false;
     clear_ime_state();
@@ -5840,6 +6024,8 @@ inline void renderer_activate(native_surface_handle handle) {
 
 inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (len == 0 || !renderer_state().initialized || renderer_state().lost) return;
+    ScopedImeActivation input_activate{
+        surface_or_current_ime(renderer_state().surface)};
 
     int fbw = 0;
     int fbh = 0;
@@ -6019,22 +6205,22 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 1.0f);
         }
 
-        if (g_ime.overlay.visible) {
+        if (active_ime().overlay.visible) {
             append_color_instance(
                 decoded.color_data,
-                g_ime.overlay.x, g_ime.overlay.y, g_ime.overlay.w, g_ime.overlay.h,
+                active_ime().overlay.x, active_ime().overlay.y, active_ime().overlay.w, active_ime().overlay.h,
                 1.0f, 1.0f, 1.0f, 0.98f,
                 8.0f, 0.0f, 2.0f);
             append_color_instance(
                 decoded.color_data,
-                g_ime.overlay.x, g_ime.overlay.y, g_ime.overlay.w, g_ime.overlay.h,
+                active_ime().overlay.x, active_ime().overlay.y, active_ime().overlay.w, active_ime().overlay.h,
                 0.80f, 0.84f, 0.90f, 1.0f,
                 0.0f, 1.0f, 1.0f);
 
-            for (auto const& hit : g_ime.overlay.hits) {
+            for (auto const& hit : active_ime().overlay.hits) {
                 if (hit.kind == CandidateHitKind::item) {
-                    bool selected = hit.index == g_ime.candidate_selection;
-                    bool hovered = static_cast<int>(hit.index) == g_ime.hovered_candidate;
+                    bool selected = hit.index == active_ime().candidate_selection;
+                    bool hovered = static_cast<int>(hit.index) == active_ime().hovered_candidate;
                     if (selected || hovered) {
                         float alpha = selected ? 0.22f : 0.12f;
                         append_color_instance(
@@ -6046,20 +6232,20 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                             alpha,
                             6.0f, 0.0f, 2.0f);
                     }
-                    if (hit.index < g_ime.candidates.size()) {
+                    if (hit.index < active_ime().candidates.size()) {
                         append_overlay_text(
                             hit.x + 10.0f,
                             hit.y + (hit.h - snapshot.line_height) * 0.5f,
                             snapshot.font_size,
                             snapshot.mono,
                             snapshot.foreground,
-                            cppx::unicode::wide_to_utf8(g_ime.candidates[hit.index])
+                            cppx::unicode::wide_to_utf8(active_ime().candidates[hit.index])
                                 .value_or(std::string{}),
                             snapshot.line_height);
                     }
                 } else if (hit.kind == CandidateHitKind::prev_page
                            || hit.kind == CandidateHitKind::next_page) {
-                    bool hovered = g_ime.hovered_kind == hit.kind;
+                    bool hovered = active_ime().hovered_kind == hit.kind;
                     float fill = hovered ? 0.90f : 0.95f;
                     append_color_instance(
                         decoded.color_data,
@@ -6271,7 +6457,7 @@ inline void shutdown_shared_image_state() {
     g_images.cursor_y = 0;
     g_images.row_height = 0;
     clear_image_repaint_targets();
-    g_ime.overlay = {};
+    active_ime().overlay = {};
 }
 
 inline void renderer_shutdown_active_state() {
@@ -6798,29 +6984,35 @@ inline json::Object windows_renderer_runtime_json() {
 
 inline json::Object windows_ime_runtime_json() {
     json::Object ime;
-    ime.emplace("hwnd_attached", json::Value{g_ime.hwnd != nullptr});
-    ime.emplace("composition_active", json::Value{g_ime.composition_active});
+    ime.emplace("hwnd_attached", json::Value{active_ime().hwnd != nullptr});
+    ime.emplace(
+        "surface_state_count",
+        json::Value{static_cast<std::int64_t>(ime_registry().live_count())});
+    ime.emplace(
+        "active_surface_attached",
+        json::Value{active_ime().surface != nullptr});
+    ime.emplace("composition_active", json::Value{active_ime().composition_active});
     ime.emplace(
         "composition_text",
         json::Value{
-            cppx::unicode::wide_to_utf8(g_ime.composition_text).value_or(std::string{})});
+            cppx::unicode::wide_to_utf8(active_ime().composition_text).value_or(std::string{})});
     ime.emplace(
         "composition_cursor",
-        json::Value{static_cast<std::int64_t>(g_ime.composition_cursor)});
+        json::Value{static_cast<std::int64_t>(active_ime().composition_cursor)});
     ime.emplace(
         "composition_anchor",
-        json::Value{static_cast<std::int64_t>(g_ime.composition_anchor)});
-    ime.emplace("overlay_visible", json::Value{g_ime.overlay.visible});
+        json::Value{static_cast<std::int64_t>(active_ime().composition_anchor)});
+    ime.emplace("overlay_visible", json::Value{active_ime().overlay.visible});
     ime.emplace(
         "sync_call_count",
-        json::Value{static_cast<std::int64_t>(g_ime.sync_call_count)});
+        json::Value{static_cast<std::int64_t>(active_ime().sync_call_count)});
     ime.emplace(
         "repaint_request_count",
-        json::Value{static_cast<std::int64_t>(g_ime.repaint_request_count)});
+        json::Value{static_cast<std::int64_t>(active_ime().repaint_request_count)});
     ime.emplace(
         "deferred_repaint_count",
-        json::Value{static_cast<std::int64_t>(g_ime.deferred_repaint_count)});
-    ime.emplace("repaint_pending", json::Value{g_ime.repaint_pending});
+        json::Value{static_cast<std::int64_t>(active_ime().deferred_repaint_count)});
+    ime.emplace("repaint_pending", json::Value{active_ime().repaint_pending});
     return ime;
 }
 
@@ -7329,34 +7521,54 @@ inline void with_renderer_surface_state(NativeSurfaceDescriptor* surface, Fn&& f
 }
 
 inline HWND attached_hwnd() {
-    return detail::g_ime.hwnd;
+    return detail::active_ime().hwnd;
+}
+
+inline std::size_t input_surface_state_count_for_tests() {
+    return detail::ime_registry().live_count();
+}
+
+inline bool input_surface_registered_for_tests(
+        NativeSurfaceDescriptor* surface) {
+    return detail::ime_registry().find(surface) != nullptr;
+}
+
+inline bool active_input_surface_is_for_tests(
+        NativeSurfaceDescriptor* surface) {
+    return detail::active_ime().surface == surface;
+}
+
+inline void activate_input_surface_for_tests(
+        NativeSurfaceDescriptor* surface) {
+    if (auto* state = detail::ime_registry().find(surface))
+        detail::activate_ime(*state);
 }
 
 inline void reset_input_debug_counters() {
-    detail::g_ime.sync_call_count = 0;
-    detail::g_ime.repaint_request_count = 0;
-    detail::g_ime.deferred_repaint_count = 0;
-    detail::g_ime.repaint_pending = false;
+    detail::active_ime().sync_call_count = 0;
+    detail::active_ime().repaint_request_count = 0;
+    detail::active_ime().deferred_repaint_count = 0;
+    detail::active_ime().repaint_pending = false;
 }
 
 inline std::size_t sync_call_count() {
-    return detail::g_ime.sync_call_count;
+    return detail::active_ime().sync_call_count;
 }
 
 inline std::size_t repaint_request_count() {
-    return detail::g_ime.repaint_request_count;
+    return detail::active_ime().repaint_request_count;
 }
 
 inline std::size_t deferred_repaint_count() {
-    return detail::g_ime.deferred_repaint_count;
+    return detail::active_ime().deferred_repaint_count;
 }
 
 inline bool repaint_pending() {
-    return detail::g_ime.repaint_pending;
+    return detail::active_ime().repaint_pending;
 }
 
 inline std::size_t composition_anchor() {
-    return detail::g_ime.composition_anchor;
+    return detail::active_ime().composition_anchor;
 }
 
 inline void set_composition_for_tests(
@@ -7379,25 +7591,25 @@ inline void set_composition_for_tests(
     } else if (replacement_end == static_cast<std::size_t>(-1)) {
         replacement_end = anchor;
     }
-    detail::g_ime.composition_text = cppx::unicode::utf8_to_wide(
+    detail::active_ime().composition_text = cppx::unicode::utf8_to_wide(
         std::string_view{text ? text : "",
                          text ? std::strlen(text) : 0u})
                                          .value_or(std::wstring{});
-    detail::g_ime.composition_active = !detail::g_ime.composition_text.empty();
-    detail::g_ime.composition_anchor = anchor;
-    detail::g_ime.replacement_start = anchor;
-    detail::g_ime.replacement_end = replacement_end;
-    detail::g_ime.composition_cursor = cursor_units;
+    detail::active_ime().composition_active = !detail::active_ime().composition_text.empty();
+    detail::active_ime().composition_anchor = anchor;
+    detail::active_ime().replacement_start = anchor;
+    detail::active_ime().replacement_end = replacement_end;
+    detail::active_ime().composition_cursor = cursor_units;
     detail::sync_input_debug_composition_state();
 }
 
 inline void clear_composition_for_tests() {
-    detail::g_ime.composition_active = false;
-    detail::g_ime.composition_text.clear();
-    detail::g_ime.composition_cursor = 0;
-    detail::g_ime.composition_anchor = 0;
-    detail::g_ime.replacement_start = 0;
-    detail::g_ime.replacement_end = 0;
+    detail::active_ime().composition_active = false;
+    detail::active_ime().composition_text.clear();
+    detail::active_ime().composition_cursor = 0;
+    detail::active_ime().composition_anchor = 0;
+    detail::active_ime().replacement_start = 0;
+    detail::active_ime().replacement_end = 0;
     detail::sync_input_debug_composition_state();
 }
 
@@ -7405,7 +7617,7 @@ inline CompositionVisualDebug composition_visual_debug() {
     auto visual = detail::current_composition_visual_state();
     return {
         visual.valid,
-        detail::g_ime.composition_anchor,
+        detail::active_ime().composition_anchor,
         std::move(visual.erase_text),
         std::move(visual.visible_text),
         visual.caret_bytes,
