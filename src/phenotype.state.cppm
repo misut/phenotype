@@ -660,6 +660,7 @@ namespace detail {
         std::shared_ptr<void> runner_context_owner{};
         std::map<std::size_t, LocalEntry> framework_local_store{};
         std::uint32_t framework_local_gen = 1;
+        std::shared_ptr<void> material_build_context_owner{};
         void* current_build_scope = nullptr;
         std::uint32_t pending_child_key = LayoutNode::unkeyed_key;
         std::uint64_t last_scheduled_tick_ns = 0;

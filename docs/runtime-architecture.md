@@ -139,13 +139,14 @@ settings or debug-window code attach one runner per scene root without poking
 caller's previous active scene after running.
 View-build context follows the same boundary. Material/glass container,
 transition, identity, and active-surface scopes are transient stacks on the
-active scene rather than process-wide globals. A settings or debug scene can
-build a glass button, matched-geometry transition, or material surface while
-the main scene is in the middle of a rebuild without inheriting the main
-scene's current material union or popping its stack. This keeps composable
-helpers close to React root isolation and Compose state-holder rules: implicit
-context is available during a rebuild, but the owner is still the scene root
-that is actively building.
+active scene rather than process-wide globals. Their storage is owned by
+`SceneRuntime` through a type-erased extension slot, so a settings or debug
+scene can build a glass button, matched-geometry transition, or material
+surface while the main scene is in the middle of a rebuild without inheriting
+the main scene's current material union or popping its stack. This keeps
+composable helpers close to React root isolation and Compose state-holder
+rules: implicit context is available during a rebuild, but the owner is still
+the scene root that is actively building.
 The lower-level DSL build scope is scene-owned too: `Scope::current()` and the
 pending keyed-child marker live on `SceneRuntime`. A nested builder can
 temporarily activate another scene without inheriting the caller's implicit

@@ -3200,36 +3200,20 @@ inline MaterialContainerDescriptor glass_effect_union_descriptor(
 }
 
 struct MaterialBuildContext {
-    std::string scene_id{};
     std::vector<MaterialContainerDescriptor> container_stack{};
     std::vector<MaterialTransitionDescriptor> transition_stack{};
     std::vector<MaterialGlassIdentityDescriptor> glass_identity_stack{};
     unsigned int surface_scope_depth = 0;
 };
 
-inline std::vector<std::unique_ptr<MaterialBuildContext>>&
-material_build_contexts() {
-    static std::vector<std::unique_ptr<MaterialBuildContext>>& contexts =
-        *new std::vector<std::unique_ptr<MaterialBuildContext>>();
-    return contexts;
-}
-
-inline std::string active_material_context_scene_id() {
-    auto const& id = detail::active_scene_runtime().descriptor.id;
-    return id.empty() ? std::string{"main"} : id;
-}
-
 inline MaterialBuildContext& active_material_build_context() {
-    auto id = active_material_context_scene_id();
-    auto& contexts = material_build_contexts();
-    for (auto& context : contexts) {
-        if (context && context->scene_id == id)
-            return *context;
+    auto& scene = detail::active_scene_runtime();
+    if (!scene.material_build_context_owner) {
+        scene.material_build_context_owner =
+            std::make_shared<MaterialBuildContext>();
     }
-    auto context = std::make_unique<MaterialBuildContext>();
-    context->scene_id = std::move(id);
-    contexts.push_back(std::move(context));
-    return *contexts.back();
+    return *static_cast<MaterialBuildContext*>(
+        scene.material_build_context_owner.get());
 }
 
 inline std::vector<MaterialContainerDescriptor>& material_container_stack() {
