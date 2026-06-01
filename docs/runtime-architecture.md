@@ -169,11 +169,15 @@ cursor, while render-surface activation captures and restores the scene and
 surface together. This makes nested settings/debug window work explicit: a
 temporary scene build can leave the caller's drawing target alone, and a
 temporary drawing-target build cannot restore only half of the active context.
-Native hosts mirror that pattern with an `ActiveHostBinding` cursor. Host
-activation captures and restores the previous host through one helper, and the
-host-to-render-surface bridge uses the active host predicate instead of
-mutating a raw host singleton directly. This keeps native event/tick handling
-aligned with the scene/render-surface runtime contract.
+Native hosts mirror that pattern with `NativeShellRuntime`. It owns the
+`ActiveHostBinding` cursor plus the fallback shell state used before a host is
+bound. Host activation captures and restores the previous host through one
+helper, and the host-to-render-surface bridge uses the active host predicate
+instead of mutating a raw host singleton directly. This keeps native event/tick
+handling aligned with the scene/render-surface runtime contract. Native runtime
+snapshots publish this under `platform_runtime.details.shell`, so artifact and
+CLI tools can tell whether event dispatch is using a bound host or the fallback
+shell state.
 The macOS Metal renderer mirrors the same cursor shape with
 `ActiveRendererBinding`. Each native surface keeps an isolated renderer state,
 and scoped renderer activation restores the previous surface state after nested

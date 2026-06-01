@@ -333,9 +333,30 @@ struct ActiveHostBinding {
     native_host* host = nullptr;
 };
 
+struct NativeShellRuntime {
+    ActiveHostBinding active_host{};
+    ShellState fallback_shell{};
+};
+
+struct NativeShellRuntimeSnapshot {
+    std::string_view owner{};
+    bool active_host_bound = false;
+    bool using_fallback_shell = false;
+    float scroll_x = 0.0f;
+    float scroll_y = 0.0f;
+};
+
+inline std::string_view native_shell_runtime_owner_name() noexcept {
+    return "NativeShellRuntime";
+}
+
+inline NativeShellRuntime& native_shell_runtime() {
+    static NativeShellRuntime& runtime = *new NativeShellRuntime();
+    return runtime;
+}
+
 inline ActiveHostBinding& active_host_binding() {
-    static ActiveHostBinding& binding = *new ActiveHostBinding();
-    return binding;
+    return native_shell_runtime().active_host;
 }
 
 inline ActiveHostBinding capture_active_host_binding() {
@@ -355,13 +376,24 @@ inline void bind_active_host(native_host* host) {
 }
 
 inline ShellState& fallback_shell_state() {
-    static ShellState& state = *new ShellState();
-    return state;
+    return native_shell_runtime().fallback_shell;
 }
 
 inline ShellState& shell_state() {
     auto* host = active_host();
     return host ? host->shell : fallback_shell_state();
+}
+
+inline NativeShellRuntimeSnapshot native_shell_runtime_snapshot() {
+    auto* host = active_host();
+    auto const& shell = host ? host->shell : fallback_shell_state();
+    return NativeShellRuntimeSnapshot{
+        .owner = native_shell_runtime_owner_name(),
+        .active_host_bound = host != nullptr,
+        .using_fallback_shell = host == nullptr,
+        .scroll_x = shell.scroll_x,
+        .scroll_y = shell.scroll_y,
+    };
 }
 
 inline ::phenotype::RenderSurfaceDescriptor

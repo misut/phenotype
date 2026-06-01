@@ -7274,6 +7274,21 @@ inline json::Value windows_platform_runtime_details_json_with_reason(
         std::string_view artifact_reason) {
 #ifdef _WIN32
     json::Object runtime;
+    auto const shell_snapshot =
+        ::phenotype::native::detail::native_shell_runtime_snapshot();
+    json::Object shell;
+    shell.emplace(
+        "owner",
+        json::Value{std::string{shell_snapshot.owner}});
+    shell.emplace(
+        "active_host_bound",
+        json::Value{shell_snapshot.active_host_bound});
+    shell.emplace(
+        "using_fallback_shell",
+        json::Value{shell_snapshot.using_fallback_shell});
+    shell.emplace("scroll_x", json::Value{shell_snapshot.scroll_x});
+    shell.emplace("scroll_y", json::Value{shell_snapshot.scroll_y});
+    runtime.emplace("shell", json::Value{std::move(shell)});
     runtime.emplace("renderer", json::Value{windows_renderer_runtime_json()});
     runtime.emplace("ime", json::Value{windows_ime_runtime_json()});
     runtime.emplace("text", json::Value{windows_text_runtime_json()});
