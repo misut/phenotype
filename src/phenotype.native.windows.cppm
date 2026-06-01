@@ -2183,16 +2183,31 @@ struct ImageAtlasState {
     int row_height = 0;
 };
 
-static ImageAtlasState g_images;
-static ImageRepaintTargetRegistry g_image_repaint_targets;
+struct WindowsImageRuntime {
+    ImageAtlasState atlas{};
+    ImageRepaintTargetRegistry repaint_targets{};
+};
+
+inline WindowsImageRuntime& windows_image_runtime() {
+    static WindowsImageRuntime& runtime = *new WindowsImageRuntime();
+    return runtime;
+}
+
+inline ImageAtlasState& image_atlas_state() {
+    return windows_image_runtime().atlas;
+}
+
+inline ImageRepaintTargetRegistry& image_repaint_targets() {
+    return windows_image_runtime().repaint_targets;
+}
 
 inline void register_image_repaint_target(NativeSurfaceDescriptor* surface,
                                           HWND hwnd) {
     if (!surface || !hwnd)
         return;
-    std::lock_guard lock(g_image_repaint_targets.mutex);
+    std::lock_guard lock(image_repaint_targets().mutex);
     ImageRepaintTarget* reusable = nullptr;
-    for (auto& target : g_image_repaint_targets.targets) {
+    for (auto& target : image_repaint_targets().targets) {
         if (target.surface == surface) {
             target.hwnd = hwnd;
             return;
@@ -2207,8 +2222,8 @@ inline void register_image_repaint_target(NativeSurfaceDescriptor* surface,
 inline void unregister_image_repaint_target(NativeSurfaceDescriptor* surface) {
     if (!surface)
         return;
-    std::lock_guard lock(g_image_repaint_targets.mutex);
-    for (auto& target : g_image_repaint_targets.targets) {
+    std::lock_guard lock(image_repaint_targets().mutex);
+    for (auto& target : image_repaint_targets().targets) {
         if (target.surface != surface)
             continue;
         target.surface = nullptr;
@@ -2217,15 +2232,15 @@ inline void unregister_image_repaint_target(NativeSurfaceDescriptor* surface) {
 }
 
 inline void clear_image_repaint_targets() {
-    std::lock_guard lock(g_image_repaint_targets.mutex);
-    for (auto& target : g_image_repaint_targets.targets)
+    std::lock_guard lock(image_repaint_targets().mutex);
+    for (auto& target : image_repaint_targets().targets)
         target = {};
 }
 
 inline std::size_t image_repaint_target_count() {
-    std::lock_guard lock(g_image_repaint_targets.mutex);
+    std::lock_guard lock(image_repaint_targets().mutex);
     std::size_t count = 0;
-    for (auto const& target : g_image_repaint_targets.targets) {
+    for (auto const& target : image_repaint_targets().targets) {
         if (target.surface && target.hwnd)
             ++count;
     }
@@ -2235,8 +2250,8 @@ inline std::size_t image_repaint_target_count() {
 inline bool image_repaint_target_registered(NativeSurfaceDescriptor* surface) {
     if (!surface)
         return false;
-    std::lock_guard lock(g_image_repaint_targets.mutex);
-    for (auto const& target : g_image_repaint_targets.targets) {
+    std::lock_guard lock(image_repaint_targets().mutex);
+    for (auto const& target : image_repaint_targets().targets) {
         if (target.surface == surface && target.hwnd)
             return true;
     }
@@ -2245,8 +2260,8 @@ inline bool image_repaint_target_registered(NativeSurfaceDescriptor* surface) {
 
 inline std::vector<HWND> image_repaint_target_hwnds_snapshot() {
     std::vector<HWND> hwnds;
-    std::lock_guard lock(g_image_repaint_targets.mutex);
-    for (auto const& target : g_image_repaint_targets.targets) {
+    std::lock_guard lock(image_repaint_targets().mutex);
+    for (auto const& target : image_repaint_targets().targets) {
         if (!target.surface || !target.hwnd)
             continue;
         bool duplicate = false;
@@ -2367,7 +2382,7 @@ inline void dump_runtime_diagnostics(char const* reason) {
         renderer_state().warp_enabled ? 1 : 0,
         static_cast<unsigned long>(GetCurrentThreadId()),
         static_cast<unsigned long>(active_ime().ui_thread_id),
-        static_cast<unsigned long>(g_images.worker_thread_id.load()));
+        static_cast<unsigned long>(image_atlas_state().worker_thread_id.load()));
     if (!renderer_state().last_failure_label.empty()) {
         std::fprintf(stderr,
                      "[phenotype-windows] last failure label: %s\n",
@@ -2527,7 +2542,7 @@ inline void mark_image_entry_failed(ImageCacheEntry& entry,
 }
 
 inline ImageCacheEntry* find_image_entry(std::string_view url) {
-    for (auto& record : g_images.cache) {
+    for (auto& record : image_atlas_state().cache) {
         if (record.url == url)
             return &record.entry;
     }
@@ -2537,14 +2552,14 @@ inline ImageCacheEntry* find_image_entry(std::string_view url) {
 inline ImageCacheEntry& ensure_image_entry(std::string const& url) {
     if (auto* entry = find_image_entry(url))
         return *entry;
-    g_images.cache.push_back({url, {}});
-    return g_images.cache.back().entry;
+    image_atlas_state().cache.push_back({url, {}});
+    return image_atlas_state().cache.back().entry;
 }
 
 inline std::size_t pending_job_count_unlocked() {
-    if (g_images.pending_head >= g_images.pending_jobs.size())
+    if (image_atlas_state().pending_head >= image_atlas_state().pending_jobs.size())
         return 0;
-    return g_images.pending_jobs.size() - g_images.pending_head;
+    return image_atlas_state().pending_jobs.size() - image_atlas_state().pending_head;
 }
 
 inline bool pending_jobs_empty_unlocked() {
@@ -2552,19 +2567,19 @@ inline bool pending_jobs_empty_unlocked() {
 }
 
 inline std::string pop_pending_job_unlocked() {
-    auto index = g_images.pending_head;
-    auto url = std::move(g_images.pending_jobs[index]);
-    ++g_images.pending_head;
-    if (g_images.pending_head >= g_images.pending_jobs.size()) {
-        g_images.pending_jobs.clear();
-        g_images.pending_head = 0;
+    auto index = image_atlas_state().pending_head;
+    auto url = std::move(image_atlas_state().pending_jobs[index]);
+    ++image_atlas_state().pending_head;
+    if (image_atlas_state().pending_head >= image_atlas_state().pending_jobs.size()) {
+        image_atlas_state().pending_jobs.clear();
+        image_atlas_state().pending_head = 0;
     }
     return url;
 }
 
 inline bool is_remote_image_queued_unlocked(std::string const& url) {
-    for (auto index = g_images.pending_head; index < g_images.pending_jobs.size(); ++index) {
-        if (g_images.pending_jobs[index] == url)
+    for (auto index = image_atlas_state().pending_head; index < image_atlas_state().pending_jobs.size(); ++index) {
+        if (image_atlas_state().pending_jobs[index] == url)
             return true;
     }
     return false;
@@ -4992,16 +5007,16 @@ inline void store_decoded_image(DecodedImage decoded) {
         return;
     }
 
-    if (g_images.pixels.empty()) {
-        g_images.pixels.resize(image_atlas_byte_size(), 0);
-    } else if (g_images.pixels.size() != image_atlas_byte_size()) {
+    if (image_atlas_state().pixels.empty()) {
+        image_atlas_state().pixels.resize(image_atlas_byte_size(), 0);
+    } else if (image_atlas_state().pixels.size() != image_atlas_byte_size()) {
         mark_image_entry_failed(entry, decoded.url, "Image atlas backing store has an unexpected size");
         return;
     }
 
-    auto slot_x = g_images.cursor_x;
-    auto slot_y = g_images.cursor_y;
-    auto row_height = g_images.row_height;
+    auto slot_x = image_atlas_state().cursor_x;
+    auto slot_y = image_atlas_state().cursor_y;
+    auto row_height = image_atlas_state().row_height;
     if (slot_x < 0 || slot_y < 0 || row_height < 0) {
         mark_image_entry_failed(entry, decoded.url, "Image atlas packing state is invalid");
         return;
@@ -5031,7 +5046,7 @@ inline void store_decoded_image(DecodedImage decoded) {
     auto next_row_height = (std::max)(row_height, decoded.height + 1);
 
     for (int row = 0; row < decoded.height; ++row) {
-        auto* dst = g_images.pixels.data()
+        auto* dst = image_atlas_state().pixels.data()
             + static_cast<std::size_t>(((slot_y + row) * ImageAtlasState::atlas_size + slot_x) * 4);
         auto const* src = decoded.pixels.data()
             + static_cast<std::size_t>(row * decoded.width * 4);
@@ -5043,19 +5058,19 @@ inline void store_decoded_image(DecodedImage decoded) {
     entry.v = static_cast<float>(slot_y) / ImageAtlasState::atlas_size;
     entry.uw = static_cast<float>(decoded.width) / ImageAtlasState::atlas_size;
     entry.vh = static_cast<float>(decoded.height) / ImageAtlasState::atlas_size;
-    g_images.cursor_x = static_cast<int>(next_cursor_x);
-    g_images.cursor_y = slot_y;
-    g_images.row_height = next_row_height;
-    ++g_images.generation;
+    image_atlas_state().cursor_x = static_cast<int>(next_cursor_x);
+    image_atlas_state().cursor_y = slot_y;
+    image_atlas_state().row_height = next_row_height;
+    ++image_atlas_state().generation;
 }
 
 inline bool process_completed_images() {
     std::vector<DecodedImage> completed;
     {
-        std::lock_guard lock(g_images.mutex);
-        if (g_images.completed_jobs.empty())
+        std::lock_guard lock(image_atlas_state().mutex);
+        if (image_atlas_state().completed_jobs.empty())
             return false;
-        completed.swap(g_images.completed_jobs);
+        completed.swap(image_atlas_state().completed_jobs);
     }
 
     bool changed = false;
@@ -5067,7 +5082,7 @@ inline bool process_completed_images() {
 }
 
 inline void image_worker_main() {
-    g_images.worker_thread_id = GetCurrentThreadId();
+    image_atlas_state().worker_thread_id = GetCurrentThreadId();
     auto co_hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(co_hr) && co_hr != RPC_E_CHANGED_MODE) {
         std::fprintf(stderr, "[windows] image worker CoInitializeEx failed (hr=0x%08lx)\n",
@@ -5077,12 +5092,12 @@ inline void image_worker_main() {
     for (;;) {
         std::string url;
         {
-            std::unique_lock lock(g_images.mutex);
-            g_images.cv.wait(lock, [] {
-                return g_images.stop_worker || !pending_jobs_empty_unlocked();
+            std::unique_lock lock(image_atlas_state().mutex);
+            image_atlas_state().cv.wait(lock, [] {
+                return image_atlas_state().stop_worker || !pending_jobs_empty_unlocked();
             });
             if (pending_jobs_empty_unlocked()) {
-                if (g_images.stop_worker)
+                if (image_atlas_state().stop_worker)
                     break;
                 continue;
             }
@@ -5143,8 +5158,8 @@ inline void image_worker_main() {
             std::fflush(stderr);
 
         {
-            std::lock_guard lock(g_images.mutex);
-            g_images.completed_jobs.push_back(std::move(decoded));
+            std::lock_guard lock(image_atlas_state().mutex);
+            image_atlas_state().completed_jobs.push_back(std::move(decoded));
         }
 
         post_image_ready_to_repaint_targets();
@@ -5152,47 +5167,47 @@ inline void image_worker_main() {
 
     if (SUCCEEDED(co_hr))
         CoUninitialize();
-    g_images.worker_thread_id = 0;
+    image_atlas_state().worker_thread_id = 0;
 }
 
 inline void ensure_image_worker() {
-    std::lock_guard lock(g_images.mutex);
-    if (g_images.worker_started || g_images.queue_only_for_tests)
+    std::lock_guard lock(image_atlas_state().mutex);
+    if (image_atlas_state().worker_started || image_atlas_state().queue_only_for_tests)
         return;
-    g_images.stop_worker = false;
-    g_images.worker = std::thread(image_worker_main);
-    g_images.worker_started = true;
+    image_atlas_state().stop_worker = false;
+    image_atlas_state().worker = std::thread(image_worker_main);
+    image_atlas_state().worker_started = true;
 }
 
 inline void shutdown_image_worker() {
     std::thread worker;
     {
-        std::lock_guard lock(g_images.mutex);
-        if (!g_images.worker_started) {
-            g_images.stop_worker = true;
-            g_images.pending_jobs.clear();
-            g_images.pending_head = 0;
+        std::lock_guard lock(image_atlas_state().mutex);
+        if (!image_atlas_state().worker_started) {
+            image_atlas_state().stop_worker = true;
+            image_atlas_state().pending_jobs.clear();
+            image_atlas_state().pending_head = 0;
             return;
         }
-        g_images.stop_worker = true;
-        g_images.pending_jobs.clear();
-        g_images.pending_head = 0;
-        worker = std::move(g_images.worker);
-        g_images.worker_started = false;
+        image_atlas_state().stop_worker = true;
+        image_atlas_state().pending_jobs.clear();
+        image_atlas_state().pending_head = 0;
+        worker = std::move(image_atlas_state().worker);
+        image_atlas_state().worker_started = false;
     }
-    g_images.cv.notify_all();
+    image_atlas_state().cv.notify_all();
     if (worker.joinable())
         worker.join();
 }
 
 inline void queue_remote_image_load(std::string const& url) {
     {
-        std::lock_guard lock(g_images.mutex);
+        std::lock_guard lock(image_atlas_state().mutex);
         if (!is_remote_image_queued_unlocked(url))
-            g_images.pending_jobs.push_back(url);
+            image_atlas_state().pending_jobs.push_back(url);
     }
     ensure_image_worker();
-    g_images.cv.notify_one();
+    image_atlas_state().cv.notify_one();
 }
 
 inline void load_image_entry(std::string const& url) {
@@ -5826,8 +5841,8 @@ inline HRESULT ensure_image_atlas_texture() {
     constexpr std::size_t atlas_bytes =
         static_cast<std::size_t>(ImageAtlasState::atlas_size)
         * ImageAtlasState::atlas_size * 4;
-    if (g_images.pixels.empty()) {
-        g_images.pixels.resize(atlas_bytes, 0);
+    if (image_atlas_state().pixels.empty()) {
+        image_atlas_state().pixels.resize(atlas_bytes, 0);
     }
 
     D3D12_RESOURCE_DESC tex_desc{};
@@ -5866,7 +5881,7 @@ inline HRESULT ensure_image_atlas_texture() {
 }
 
 inline bool image_atlas_needs_upload() {
-    auto const generation = g_images.generation;
+    auto const generation = image_atlas_state().generation;
     return generation != 0
         && renderer_state().image_atlas_uploaded_generation != generation;
 }
@@ -5908,7 +5923,7 @@ inline HRESULT upload_image_atlas() {
     for (UINT row = 0; row < num_rows; ++row) {
         auto* dst = static_cast<unsigned char*>(mapped)
             + row * footprint.Footprint.RowPitch;
-        auto const* src = g_images.pixels.data()
+        auto const* src = image_atlas_state().pixels.data()
             + static_cast<std::size_t>(row) * ImageAtlasState::atlas_size * 4;
         std::memcpy(
             dst,
@@ -5939,7 +5954,7 @@ inline HRESULT upload_image_atlas() {
     metrics::inst::native_texture_upload_bytes.add(
         static_cast<std::uint64_t>(upload_size),
         native_platform_attrs());
-    renderer_state().image_atlas_uploaded_generation = g_images.generation;
+    renderer_state().image_atlas_uploaded_generation = image_atlas_state().generation;
     return S_OK;
 }
 
@@ -6453,23 +6468,23 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
 inline void shutdown_shared_image_state() {
     shutdown_image_worker();
-    if (!g_images.pixels.empty()) {
+    if (!image_atlas_state().pixels.empty()) {
         std::fill(
-            g_images.pixels.begin(),
-            g_images.pixels.end(),
+            image_atlas_state().pixels.begin(),
+            image_atlas_state().pixels.end(),
             static_cast<unsigned char>(0));
     }
-    std::vector<CachedImageRecord>().swap(g_images.cache);
-    std::vector<std::string>().swap(g_images.pending_jobs);
-    g_images.pending_head = 0;
-    std::vector<DecodedImage>().swap(g_images.completed_jobs);
-    g_images.worker_started = false;
-    g_images.queue_only_for_tests = false;
-    g_images.stop_worker = false;
-    g_images.generation = 0;
-    g_images.cursor_x = 0;
-    g_images.cursor_y = 0;
-    g_images.row_height = 0;
+    std::vector<CachedImageRecord>().swap(image_atlas_state().cache);
+    std::vector<std::string>().swap(image_atlas_state().pending_jobs);
+    image_atlas_state().pending_head = 0;
+    std::vector<DecodedImage>().swap(image_atlas_state().completed_jobs);
+    image_atlas_state().worker_started = false;
+    image_atlas_state().queue_only_for_tests = false;
+    image_atlas_state().stop_worker = false;
+    image_atlas_state().generation = 0;
+    image_atlas_state().cursor_x = 0;
+    image_atlas_state().cursor_y = 0;
+    image_atlas_state().row_height = 0;
     clear_image_repaint_targets();
     active_ime().overlay = {};
 }
@@ -7039,14 +7054,14 @@ inline json::Object windows_images_runtime_json() {
     std::size_t completed_jobs = 0;
     bool worker_started = false;
     {
-        std::lock_guard lock(g_images.mutex);
+        std::lock_guard lock(image_atlas_state().mutex);
         pending_jobs = pending_job_count_unlocked();
-        completed_jobs = g_images.completed_jobs.size();
-        worker_started = g_images.worker_started;
+        completed_jobs = image_atlas_state().completed_jobs.size();
+        worker_started = image_atlas_state().worker_started;
     }
 
     json::Array remote_entries;
-    for (auto const& record : g_images.cache) {
+    for (auto const& record : image_atlas_state().cache) {
         if (!is_http_url(record.url))
             continue;
         json::Object entry;
@@ -7061,6 +7076,7 @@ inline json::Object windows_images_runtime_json() {
     }
 
     json::Object images;
+    images.emplace("owner", json::Value{"WindowsImageRuntime"});
     images.emplace(
         "pending_queue_count",
         json::Value{static_cast<std::int64_t>(pending_jobs)});
@@ -7070,7 +7086,7 @@ inline json::Object windows_images_runtime_json() {
     images.emplace("worker_started", json::Value{worker_started});
     images.emplace(
         "atlas_generation",
-        json::Value{static_cast<std::int64_t>(g_images.generation)});
+        json::Value{static_cast<std::int64_t>(image_atlas_state().generation)});
     images.emplace(
         "active_surface_uploaded_generation",
         json::Value{
@@ -7657,7 +7673,7 @@ inline std::vector<TextEntry> composition_overlay_text_entries_for_tests() {
 }
 
 inline void stop_image_worker() {
-    detail::g_images.queue_only_for_tests = true;
+    detail::image_atlas_state().queue_only_for_tests = true;
     detail::shutdown_image_worker();
 }
 
@@ -7690,7 +7706,7 @@ inline std::vector<HWND> image_repaint_target_hwnds_for_tests() {
 }
 
 inline std::uint64_t image_cache_generation() {
-    return detail::g_images.generation;
+    return detail::image_atlas_state().generation;
 }
 
 inline std::uint64_t active_renderer_image_upload_generation() {
@@ -7702,12 +7718,12 @@ inline bool active_renderer_needs_image_atlas_upload() {
 }
 
 inline void bump_image_cache_generation_for_tests() {
-    ++detail::g_images.generation;
+    ++detail::image_atlas_state().generation;
 }
 
 inline void mark_active_renderer_image_atlas_uploaded_for_tests() {
     detail::renderer_state().image_atlas_uploaded_generation =
-        detail::g_images.generation;
+        detail::image_atlas_state().generation;
 }
 
 inline bool has_pending_remote_image(std::string const& url) {
@@ -7715,11 +7731,11 @@ inline bool has_pending_remote_image(std::string const& url) {
         entry && entry->state != detail::ImageEntryState::pending) {
         return false;
     }
-    std::lock_guard lock(detail::g_images.mutex);
-    for (auto index = detail::g_images.pending_head;
-         index < detail::g_images.pending_jobs.size();
+    std::lock_guard lock(detail::image_atlas_state().mutex);
+    for (auto index = detail::image_atlas_state().pending_head;
+         index < detail::image_atlas_state().pending_jobs.size();
          ++index) {
-        if (detail::g_images.pending_jobs[index] == url)
+        if (detail::image_atlas_state().pending_jobs[index] == url)
             return true;
     }
     return false;
@@ -7749,14 +7765,14 @@ inline void inject_completed_image(
             }
         }
     }
-    if (detail::g_images.queue_only_for_tests) {
-        std::vector<std::string>().swap(detail::g_images.pending_jobs);
-        detail::g_images.pending_head = 0;
+    if (detail::image_atlas_state().queue_only_for_tests) {
+        std::vector<std::string>().swap(detail::image_atlas_state().pending_jobs);
+        detail::image_atlas_state().pending_head = 0;
         detail::store_decoded_image(std::move(decoded));
         return;
     }
-    std::lock_guard lock(detail::g_images.mutex);
-    detail::g_images.completed_jobs.push_back(std::move(decoded));
+    std::lock_guard lock(detail::image_atlas_state().mutex);
+    detail::image_atlas_state().completed_jobs.push_back(std::move(decoded));
 }
 
 inline RemoteImageDebug remote_image_debug(std::string const& url) {
@@ -7767,12 +7783,12 @@ inline RemoteImageDebug remote_image_debug(std::string const& url) {
         debug.failure_reason = entry->failure_reason;
     }
     {
-        std::lock_guard lock(detail::g_images.mutex);
+        std::lock_guard lock(detail::image_atlas_state().mutex);
         debug.pending_jobs = detail::pending_job_count_unlocked();
-        debug.completed_jobs = detail::g_images.completed_jobs.size();
-        debug.worker_started = detail::g_images.worker_started;
+        debug.completed_jobs = detail::image_atlas_state().completed_jobs.size();
+        debug.worker_started = detail::image_atlas_state().worker_started;
     }
-    if (detail::g_images.queue_only_for_tests
+    if (detail::image_atlas_state().queue_only_for_tests
         && debug.entry_exists
         && debug.entry_state != static_cast<int>(detail::ImageEntryState::pending)) {
         debug.pending_jobs = 0;

@@ -4686,6 +4686,7 @@ static void test_windows_common_debug_contract_entry_points() {
     assert(renderer_details.at("last_render_width").as_integer() > 0);
     assert(renderer_details.at("last_render_height").as_integer() > 0);
     auto const& images = details.at("images").as_object();
+    assert(images.at("owner").as_string() == "WindowsImageRuntime");
     assert(images.at("pending_queue_count").as_integer() == 0);
     assert(images.at("completed_queue_count").as_integer() == 0);
     assert(images.at("atlas_generation").as_integer() >= 0);
