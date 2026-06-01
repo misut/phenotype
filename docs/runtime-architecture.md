@@ -126,6 +126,13 @@ still a process/host ABI detail, but the rest of the framework talks to it
 through explicit runtime owners instead of raw globals. WASI runtime artifacts
 publish those owner names and command-buffer capacity so browser/CLI adapters
 can verify the bridge they are driving.
+Android's asynchronous file dialog bridge follows the same rule with
+`AndroidDialogRuntime`. The JNI handler global reference, request method,
+cookie counter, pending callback queue, deferred UI-thread result queue, and
+their pthread guards live together in that runtime owner. Android platform
+runtime details publish `dialog.owner`, handler installation state, and queue
+depths so debug tooling can verify that a SAF request/result path is bound
+without treating it as process-global scene state.
 The desktop fallback backend follows the same rule with `StubNativeRuntime`,
 which owns the stub renderer hit-region cache and publishes the owner in
 runtime details. That keeps test/fallback behavior aligned with the native
