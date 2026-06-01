@@ -7427,6 +7427,10 @@ inline ::json::Object android_renderer_runtime_json() {
     return r;
 }
 
+namespace dialog {
+inline ::json::Object android_dialog_runtime_json();
+}
+
 inline ::json::Value android_platform_runtime_details_json_with_reason(
         std::string_view reason) {
     ::json::Object root;
@@ -7448,6 +7452,8 @@ inline ::json::Value android_platform_runtime_details_json_with_reason(
     root.emplace("backend", ::json::Value{std::string("vulkan")});
     root.emplace("renderer",
         ::json::Value{android_renderer_runtime_json()});
+    root.emplace("dialog",
+        ::json::Value{dialog::android_dialog_runtime_json()});
     root.emplace("image_cache_size",
         ::json::Value{static_cast<std::int64_t>(g_images.cache.size())});
     root.emplace("text_jni_initialised",
@@ -7715,8 +7721,6 @@ struct HandlerState {
     jmethodID request_method = nullptr;   // openFileDialog(I, String)V
 };
 
-inline HandlerState g_handler{};
-
 // Synchronisation uses raw pthread primitives instead of `std::mutex`
 // / `std::atomic` because dropping either of those into this module
 // unit currently crashes the Android NDK clang-21 PCM emitter at
@@ -7724,20 +7728,45 @@ inline HandlerState g_handler{};
 // guarantees for the modest amount of state involved, and never need
 // dynamic destruction (PTHREAD_MUTEX_INITIALIZER is constexpr-init).
 
-inline pthread_mutex_t g_pending_mutex  = PTHREAD_MUTEX_INITIALIZER;
-inline pthread_mutex_t g_deferred_mutex = PTHREAD_MUTEX_INITIALIZER;
+struct AndroidDialogRuntime {
+    HandlerState handler{};
+    pthread_mutex_t pending_mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_t deferred_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-// Cookie counter is read/incremented under g_pending_mutex so the
-// rare contention case is correct without pulling in std::atomic.
-inline int g_next_cookie = 1;
+    // Cookie counter is read/incremented under pending_mutex so the
+    // rare contention case is correct without pulling in std::atomic.
+    int next_cookie = 1;
+    std::vector<PendingCallback> pending{};
+    std::vector<DeferredResult> deferred{};
+};
+
+inline AndroidDialogRuntime& android_dialog_runtime() {
+    static AndroidDialogRuntime& runtime = *new AndroidDialogRuntime();
+    return runtime;
+}
+
+inline std::string_view android_dialog_runtime_owner_name() noexcept {
+    return "AndroidDialogRuntime";
+}
+
+inline HandlerState& handler_state() {
+    return android_dialog_runtime().handler;
+}
+
+inline pthread_mutex_t& pending_mutex() {
+    return android_dialog_runtime().pending_mutex;
+}
+
+inline pthread_mutex_t& deferred_mutex() {
+    return android_dialog_runtime().deferred_mutex;
+}
 
 inline std::vector<PendingCallback>& pending_locked() {
-    static std::vector<PendingCallback> v;
-    return v;
+    return android_dialog_runtime().pending;
 }
+
 inline std::vector<DeferredResult>& deferred_locked() {
-    static std::vector<DeferredResult> v;
-    return v;
+    return android_dialog_runtime().deferred;
 }
 
 inline void enqueue_deferred(int cookie, char const* path) {
@@ -7745,9 +7774,9 @@ inline void enqueue_deferred(int cookie, char const* path) {
     r.cookie = cookie;
     r.has_path = (path != nullptr);
     if (r.has_path) r.path = path;
-    pthread_mutex_lock(&g_deferred_mutex);
+    pthread_mutex_lock(&deferred_mutex());
     deferred_locked().push_back(std::move(r));
-    pthread_mutex_unlock(&g_deferred_mutex);
+    pthread_mutex_unlock(&deferred_mutex());
 }
 
 // Called from the render thread (phenotype_android_draw_frame) every
@@ -7757,17 +7786,17 @@ inline void enqueue_deferred(int cookie, char const* path) {
 // the result paths.
 inline void drain_deferred_results() {
     std::vector<DeferredResult> snapshot;
-    pthread_mutex_lock(&g_deferred_mutex);
+    pthread_mutex_lock(&deferred_mutex());
     {
         auto& q = deferred_locked();
         if (!q.empty()) snapshot.swap(q);
     }
-    pthread_mutex_unlock(&g_deferred_mutex);
+    pthread_mutex_unlock(&deferred_mutex());
     if (snapshot.empty()) return;
 
     for (auto& r : snapshot) {
         void (*cb)(char const*) = nullptr;
-        pthread_mutex_lock(&g_pending_mutex);
+        pthread_mutex_lock(&pending_mutex());
         {
             auto& p = pending_locked();
             for (auto it = p.begin(); it != p.end(); ++it) {
@@ -7778,18 +7807,56 @@ inline void drain_deferred_results() {
                 }
             }
         }
-        pthread_mutex_unlock(&g_pending_mutex);
+        pthread_mutex_unlock(&pending_mutex());
         if (cb) cb(r.has_path ? r.path.c_str() : nullptr);
     }
 }
 
 inline void drop_pending(int cookie) {
-    pthread_mutex_lock(&g_pending_mutex);
+    pthread_mutex_lock(&pending_mutex());
     auto& p = pending_locked();
     for (auto it = p.begin(); it != p.end(); ++it) {
         if (it->cookie == cookie) { p.erase(it); break; }
     }
-    pthread_mutex_unlock(&g_pending_mutex);
+    pthread_mutex_unlock(&pending_mutex());
+}
+
+inline void clear_handler(JNIEnv* env) {
+    auto& handler = handler_state();
+    if (env && handler.handler_class) {
+        env->DeleteGlobalRef(handler.handler_class);
+    }
+    handler.handler_class = nullptr;
+    handler.request_method = nullptr;
+}
+
+inline ::json::Object android_dialog_runtime_json() {
+    auto& runtime = android_dialog_runtime();
+    ::json::Object root;
+    root.emplace(
+        "owner",
+        ::json::Value{std::string{android_dialog_runtime_owner_name()}});
+    root.emplace(
+        "handler_installed",
+        ::json::Value{runtime.handler.handler_class != nullptr
+                      && runtime.handler.request_method != nullptr});
+    pthread_mutex_lock(&runtime.pending_mutex);
+    auto const pending_count = runtime.pending.size();
+    auto const next_cookie = runtime.next_cookie;
+    pthread_mutex_unlock(&runtime.pending_mutex);
+    pthread_mutex_lock(&runtime.deferred_mutex);
+    auto const deferred_count = runtime.deferred.size();
+    pthread_mutex_unlock(&runtime.deferred_mutex);
+    root.emplace(
+        "pending_count",
+        ::json::Value{static_cast<std::int64_t>(pending_count)});
+    root.emplace(
+        "deferred_count",
+        ::json::Value{static_cast<std::int64_t>(deferred_count)});
+    root.emplace(
+        "next_cookie",
+        ::json::Value{static_cast<std::int64_t>(next_cookie)});
+    return root;
 }
 
 // platform_api::dialog::open_file implementation. Returns synchronously
@@ -7798,17 +7865,19 @@ inline void drop_pending(int cookie) {
 inline void open_file(char const* filter_extensions,
                       void (*callback)(char const* path)) {
     if (!callback) return;
-    if (g_handler.handler_class == nullptr ||
-        g_handler.request_method == nullptr) {
+    auto& handler = handler_state();
+    if (handler.handler_class == nullptr ||
+        handler.request_method == nullptr) {
         callback(nullptr);
         return;
     }
 
     int cookie;
-    pthread_mutex_lock(&g_pending_mutex);
-    cookie = g_next_cookie++;
+    auto& runtime = android_dialog_runtime();
+    pthread_mutex_lock(&runtime.pending_mutex);
+    cookie = runtime.next_cookie++;
     pending_locked().push_back(PendingCallback{cookie, callback});
-    pthread_mutex_unlock(&g_pending_mutex);
+    pthread_mutex_unlock(&runtime.pending_mutex);
 
     ScopedEnv senv(g_jni.vm);
     if (!senv) {
@@ -7821,8 +7890,8 @@ inline void open_file(char const* filter_extensions,
     jstring filter_jstr = env->NewStringUTF(
         filter_extensions ? filter_extensions : "");
     env->CallStaticVoidMethod(
-        g_handler.handler_class,
-        g_handler.request_method,
+        handler.handler_class,
+        handler.request_method,
         static_cast<jint>(cookie),
         filter_jstr);
     if (filter_jstr) env->DeleteLocalRef(filter_jstr);
@@ -8510,13 +8579,11 @@ void phenotype_android_install_file_dialog_handler(
         return;
     }
 
-    if (d::dialog::g_handler.handler_class) {
-        env->DeleteGlobalRef(d::dialog::g_handler.handler_class);
-        d::dialog::g_handler.handler_class = nullptr;
-    }
-    d::dialog::g_handler.handler_class =
+    d::dialog::clear_handler(env);
+    auto& handler = d::dialog::handler_state();
+    handler.handler_class =
         static_cast<jclass>(env->NewGlobalRef(local));
-    d::dialog::g_handler.request_method = env->GetStaticMethodID(
+    handler.request_method = env->GetStaticMethodID(
         local, request_method, "(ILjava/lang/String;)V");
     d::check_and_clear_exception(env);
 
