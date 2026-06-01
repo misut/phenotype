@@ -3259,23 +3259,23 @@ inline void record_scroll_runtime_event_for_tests(
 }
 
 inline bool last_scroll_event_available_for_tests() {
-    return detail::g_ime.last_scroll_event.available;
+    return detail::active_ime().last_scroll_event.available;
 }
 
 inline std::string last_scroll_event_source_for_tests() {
-    return detail::g_ime.last_scroll_event.source;
+    return detail::active_ime().last_scroll_event.source;
 }
 
 inline float last_scroll_event_normalized_y_for_tests() {
-    return detail::g_ime.last_scroll_event.normalized_delta_y;
+    return detail::active_ime().last_scroll_event.normalized_delta_y;
 }
 
 inline float last_scroll_event_vertical_multiplier_for_tests() {
-    return detail::g_ime.last_scroll_event.app_vertical_multiplier;
+    return detail::active_ime().last_scroll_event.app_vertical_multiplier;
 }
 
 inline bool last_scroll_event_handled_y_for_tests() {
-    return detail::g_ime.last_scroll_event.handled_y;
+    return detail::active_ime().last_scroll_event.handled_y;
 }
 
 inline double renderer_layer_contents_scale_for_tests() {
@@ -3315,8 +3315,20 @@ inline void force_disable_system_caret(bool disabled) {
     detail::g_force_disable_system_caret_for_tests = disabled;
 }
 
+inline std::size_t input_surface_state_count_for_tests() {
+    return detail::ime_registry().live_count();
+}
+
+inline bool input_surface_registered_for_tests(NativeSurfaceDescriptor* surface) {
+    return detail::ime_registry().find(surface) != nullptr;
+}
+
+inline bool active_input_surface_is_for_tests(NativeSurfaceDescriptor* surface) {
+    return detail::active_ime().surface == surface;
+}
+
 inline void set_scroll_tracking_for_tests(bool active) {
-    detail::g_ime.scroll_tracking_active = active;
+    detail::active_ime().scroll_tracking_active = active;
 }
 
 inline void reset_image_cache_for_tests() {
@@ -3530,21 +3542,21 @@ inline bool perform_key_equivalent_for_tests(
 inline SystemCaretDebug system_caret_debug() {
     SystemCaretDebug debug{};
     debug.supported = detail::system_caret_supported();
-    debug.attached = detail::g_ime.insertion_indicator != nullptr;
-    debug.scroll_tracking_active = detail::g_ime.scroll_tracking_active;
+    debug.attached = detail::active_ime().insertion_indicator != nullptr;
+    debug.scroll_tracking_active = detail::active_ime().scroll_tracking_active;
     debug.host_flipped = detail::caret_host_view_is_flipped();
-    debug.draw_rect = detail::rect_snapshot(detail::g_ime.last_character_rect_draw);
-    debug.host_rect = detail::rect_snapshot(detail::g_ime.last_character_rect_host);
+    debug.draw_rect = detail::rect_snapshot(detail::active_ime().last_character_rect_draw);
+    debug.host_rect = detail::rect_snapshot(detail::active_ime().last_character_rect_host);
     debug.host_bounds = detail::rect_snapshot(detail::current_caret_host_bounds());
-    if (detail::g_ime.insertion_indicator) {
+    if (detail::active_ime().insertion_indicator) {
         auto frame = detail::objc_send<CGRect>(
-            detail::g_ime.insertion_indicator,
+            detail::active_ime().insertion_indicator,
             detail::sel_frame());
         debug.display_mode = detail::objc_send<long long>(
-            detail::g_ime.insertion_indicator,
+            detail::active_ime().insertion_indicator,
             detail::sel_display_mode());
         debug.automatic_mode_options = detail::objc_send<long long>(
-            detail::g_ime.insertion_indicator,
+            detail::active_ime().insertion_indicator,
             detail::sel_automatic_mode_options());
         if (!CGRectIsNull(frame)) {
             debug.frame = {
@@ -3596,20 +3608,20 @@ inline void set_composition_for_tests(std::string marked_text,
     replacement_end = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, replacement_end);
     if (replacement_end < replacement_start)
         replacement_end = replacement_start;
-    detail::g_ime.marked_text = std::move(marked_text);
-    detail::g_ime.composition_active = !detail::g_ime.marked_text.empty();
-    detail::g_ime.composition_anchor = replacement_start;
-    detail::g_ime.replacement_start = replacement_start;
-    detail::g_ime.replacement_end = replacement_end;
-    detail::g_ime.marked_selection = {
+    detail::active_ime().marked_text = std::move(marked_text);
+    detail::active_ime().composition_active = !detail::active_ime().marked_text.empty();
+    detail::active_ime().composition_anchor = replacement_start;
+    detail::active_ime().replacement_start = replacement_start;
+    detail::active_ime().replacement_end = replacement_end;
+    detail::active_ime().marked_selection = {
         selected_location_utf16,
         0,
     };
     ::phenotype::detail::set_input_composition_state(
-        detail::g_ime.composition_active,
-        detail::g_ime.marked_text,
+        detail::active_ime().composition_active,
+        detail::active_ime().marked_text,
         static_cast<unsigned int>(
-            detail::utf16_offset_to_utf8(detail::g_ime.marked_text, selected_location_utf16)));
+            detail::utf16_offset_to_utf8(detail::active_ime().marked_text, selected_location_utf16)));
 }
 
 inline void clear_composition_for_tests() {
@@ -4103,7 +4115,7 @@ inline json::Object macos_images_runtime_json() {
 inline json::Object macos_text_input_runtime_json() {
     auto caret = ::phenotype::native::macos_test::system_caret_debug();
     auto input_debug = ::phenotype::diag::input_debug_snapshot();
-    auto composition_active = g_ime.composition_active && !g_ime.marked_text.empty();
+    auto composition_active = active_ime().composition_active && !active_ime().marked_text.empty();
 
     json::Object system_caret;
     system_caret.emplace("supported", json::Value{caret.supported});
@@ -4140,24 +4152,30 @@ inline json::Object macos_text_input_runtime_json() {
             composition_active ? composition_cursor_bytes() : 0)});
     composition.emplace(
         "anchor",
-        json::Value{static_cast<std::int64_t>(g_ime.composition_anchor)});
+        json::Value{static_cast<std::int64_t>(active_ime().composition_anchor)});
     composition.emplace(
         "replacement_start",
-        json::Value{static_cast<std::int64_t>(g_ime.replacement_start)});
+        json::Value{static_cast<std::int64_t>(active_ime().replacement_start)});
     composition.emplace(
         "replacement_end",
-        json::Value{static_cast<std::int64_t>(g_ime.replacement_end)});
+        json::Value{static_cast<std::int64_t>(active_ime().replacement_end)});
     composition.emplace(
         "marked_selection_location_utf16",
-        json::Value{static_cast<std::int64_t>(g_ime.marked_selection.location)});
+        json::Value{static_cast<std::int64_t>(active_ime().marked_selection.location)});
     composition.emplace(
         "marked_selection_length_utf16",
-        json::Value{static_cast<std::int64_t>(g_ime.marked_selection.length)});
+        json::Value{static_cast<std::int64_t>(active_ime().marked_selection.length)});
 
     json::Object text_input;
     text_input.emplace(
+        "surface_state_count",
+        json::Value{static_cast<std::int64_t>(ime_registry().live_count())});
+    text_input.emplace(
+        "active_surface_attached",
+        json::Value{active_ime().surface != nullptr});
+    text_input.emplace(
         "scroll_tracking_active",
-        json::Value{g_ime.scroll_tracking_active});
+        json::Value{active_ime().scroll_tracking_active});
     text_input.emplace(
         "caret_renderer",
         json::Value{input_debug.caret_renderer});
@@ -4170,7 +4188,7 @@ inline json::Object macos_text_input_runtime_json() {
 }
 
 inline json::Object macos_input_runtime_json() {
-    auto const& scroll = g_ime.last_scroll_event;
+    auto const& scroll = active_ime().last_scroll_event;
     json::Object scroll_json;
     scroll_json.emplace("available", json::Value{scroll.available});
     scroll_json.emplace("source", json::Value{std::string{scroll.source}});
