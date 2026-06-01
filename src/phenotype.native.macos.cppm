@@ -5065,6 +5065,21 @@ inline json::Value macos_platform_runtime_details_json_with_reason(
         std::string_view artifact_reason) {
 #ifdef __APPLE__
     json::Object runtime;
+    auto const shell_snapshot =
+        ::phenotype::native::detail::native_shell_runtime_snapshot();
+    json::Object shell;
+    shell.emplace(
+        "owner",
+        json::Value{std::string{shell_snapshot.owner}});
+    shell.emplace(
+        "active_host_bound",
+        json::Value{shell_snapshot.active_host_bound});
+    shell.emplace(
+        "using_fallback_shell",
+        json::Value{shell_snapshot.using_fallback_shell});
+    shell.emplace("scroll_x", json::Value{shell_snapshot.scroll_x});
+    shell.emplace("scroll_y", json::Value{shell_snapshot.scroll_y});
+    runtime.emplace("shell", json::Value{std::move(shell)});
     runtime.emplace("renderer", json::Value{macos_renderer_runtime_json()});
     runtime.emplace("images", json::Value{macos_images_runtime_json()});
     runtime.emplace("text_input", json::Value{macos_text_input_runtime_json()});

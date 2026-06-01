@@ -169,6 +169,14 @@ static void test_stub_native_runtime_details_owner() {
 }
 
 static void test_native_shell_state_is_host_local() {
+    auto& shell_runtime = phenotype::native::detail::native_shell_runtime();
+    assert(phenotype::native::detail::native_shell_runtime_owner_name()
+           == std::string_view{"NativeShellRuntime"});
+    assert(&phenotype::native::detail::fallback_shell_state()
+           == &shell_runtime.fallback_shell);
+    assert(phenotype::native::detail::active_host()
+           == shell_runtime.active_host.host);
+
     native_host first{};
     native_host second{};
     NativeSurfaceDescriptor first_surface{
@@ -268,6 +276,7 @@ static void test_native_shell_state_is_host_local() {
 
     phenotype::native::detail::shutdown_host(first);
     assert(first.shell.host == nullptr);
+    assert(shell_runtime.active_host.host == nullptr);
 
     std::puts("PASS: native shell state is host-local");
 }
@@ -1112,10 +1121,18 @@ static bool remote_image_entry_matches(
 }
 
 static void assert_macos_runtime_sections(json::Object const& details) {
+    assert(details.contains("shell"));
     assert(details.contains("renderer"));
     assert(details.contains("images"));
     assert(details.contains("text_input"));
     assert(details.contains("input"));
+
+    auto const& shell = details.at("shell").as_object();
+    assert(shell.at("owner").as_string() == "NativeShellRuntime");
+    assert(shell.contains("active_host_bound"));
+    assert(shell.contains("using_fallback_shell"));
+    assert(shell.contains("scroll_x"));
+    assert(shell.contains("scroll_y"));
 
     auto const& renderer = details.at("renderer").as_object();
     assert(renderer.contains("initialized"));
@@ -4691,10 +4708,15 @@ static void test_windows_common_debug_contract_entry_points() {
     auto const& runtime = debug_payload.at("platform_runtime").as_object();
     assert(runtime.at("platform").as_string() == "windows");
     auto const& details = runtime.at("details").as_object();
+    assert(details.contains("shell"));
     assert(details.contains("renderer"));
     assert(details.contains("ime"));
     assert(details.contains("text"));
     assert(details.contains("images"));
+    auto const& shell = details.at("shell").as_object();
+    assert(shell.at("owner").as_string() == "NativeShellRuntime");
+    assert(shell.contains("active_host_bound"));
+    assert(shell.contains("using_fallback_shell"));
     auto const& renderer_details = details.at("renderer").as_object();
     assert(renderer_details.at("owner").as_string() == "WindowsRendererRuntime");
     assert(renderer_details.at("renderer_surface_count").as_integer() >= 1);
