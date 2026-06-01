@@ -4419,6 +4419,97 @@ static void test_windows_image_repaint_targets_are_surface_local() {
     std::puts("PASS: windows image repaint targets are surface-local");
 }
 
+static int g_windows_input_surface_repaint_one = 0;
+static int g_windows_input_surface_repaint_two = 0;
+
+static void windows_input_surface_repaint_one() {
+    ++g_windows_input_surface_repaint_one;
+}
+
+static void windows_input_surface_repaint_two() {
+    ++g_windows_input_surface_repaint_two;
+}
+
+static void test_windows_input_state_tracks_multiple_surfaces() {
+    using phenotype::native::windows_test::active_input_surface_is_for_tests;
+    using phenotype::native::windows_test::input_surface_registered_for_tests;
+    using phenotype::native::windows_test::input_surface_state_count_for_tests;
+
+    input_regression::reset_core_state();
+    auto window_one = create_hidden_win32_window(240, 180, L"phenotype-input-one");
+    auto window_two = create_hidden_win32_window(260, 190, L"phenotype-input-two");
+    auto surface_one = make_win32_surface(window_one);
+    auto surface_two = make_win32_surface(window_two);
+    native_host host_one{};
+    native_host host_two{};
+    host_one.window = &surface_one;
+    host_one.surface_descriptor = &surface_one;
+    host_one.platform = &current_platform();
+    host_two.window = &surface_two;
+    host_two.surface_descriptor = &surface_two;
+    host_two.platform = &current_platform();
+
+    auto const& platform = current_platform();
+    g_windows_input_surface_repaint_one = 0;
+    g_windows_input_surface_repaint_two = 0;
+
+    phenotype::native::detail::bind_host(host_one, 0.0f, 0.0f);
+    platform.input.attach(&surface_one, windows_input_surface_repaint_one);
+    assert(input_surface_state_count_for_tests() == 1);
+    assert(input_surface_registered_for_tests(&surface_one));
+    assert(active_input_surface_is_for_tests(&surface_one));
+
+    phenotype::native::detail::bind_host(host_two, 0.0f, 0.0f);
+    platform.input.attach(&surface_two, windows_input_surface_repaint_two);
+    assert(input_surface_state_count_for_tests() == 2);
+    assert(input_surface_registered_for_tests(&surface_one));
+    assert(input_surface_registered_for_tests(&surface_two));
+    assert(active_input_surface_is_for_tests(&surface_two));
+
+    {
+        phenotype::native::detail::ScopedHostActivation activate(host_one);
+        platform.input.sync();
+        assert(active_input_surface_is_for_tests(&surface_one));
+        phenotype::native::windows_test::reset_input_debug_counters();
+        SendMessageW(window_one, WM_IME_STARTCOMPOSITION, 0, 0);
+        assert(phenotype::native::windows_test::repaint_request_count() == 1);
+        assert(phenotype::native::windows_test::deferred_repaint_count() == 1);
+        assert(phenotype::native::windows_test::repaint_pending());
+    }
+    {
+        phenotype::native::detail::ScopedHostActivation activate(host_two);
+        platform.input.sync();
+        assert(active_input_surface_is_for_tests(&surface_two));
+        assert(phenotype::native::windows_test::repaint_request_count() == 0);
+        phenotype::native::windows_test::reset_input_debug_counters();
+        SendMessageW(window_two, WM_IME_STARTCOMPOSITION, 0, 0);
+        assert(phenotype::native::windows_test::repaint_request_count() == 1);
+        assert(phenotype::native::windows_test::deferred_repaint_count() == 1);
+        assert(phenotype::native::windows_test::repaint_pending());
+    }
+
+    {
+        phenotype::native::detail::ScopedHostActivation activate(host_one);
+        platform.input.detach();
+    }
+    assert(input_surface_state_count_for_tests() == 1);
+    assert(!input_surface_registered_for_tests(&surface_one));
+    assert(input_surface_registered_for_tests(&surface_two));
+
+    {
+        phenotype::native::detail::ScopedHostActivation activate(host_two);
+        platform.input.detach();
+    }
+    assert(input_surface_state_count_for_tests() == 0);
+    assert(!input_surface_registered_for_tests(&surface_two));
+
+    DestroyWindow(window_one);
+    DestroyWindow(window_two);
+    phenotype::native::detail::clear_active_host();
+    input_regression::reset_core_state();
+    std::puts("PASS: windows input state tracks multiple surfaces");
+}
+
 static void test_windows_aspect_ratio_sizing_helper() {
     RECT right_drag{0, 0, 400, 120};
     bool adjusted = phenotype::native::detail::adjust_win32_aspect_ratio_rect(
@@ -5424,6 +5515,7 @@ int main() {
     test_windows_renderer_state_tracks_surfaces();
     test_windows_image_atlas_upload_generation_is_surface_local();
     test_windows_image_repaint_targets_are_surface_local();
+    test_windows_input_state_tracks_multiple_surfaces();
     test_windows_aspect_ratio_sizing_helper();
     test_windows_active_shell_binding_restores_state();
     test_windows_text_build_atlas_empty();
