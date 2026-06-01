@@ -248,8 +248,8 @@ inline void text(str content,
     detail::attach_to_scope(h);
 }
 
-// link — clickable hyperlink. URL opening is dispatched via
-// detail::g_open_url, a function pointer set by the backend module.
+// link — clickable hyperlink. URL opening is dispatched through the
+// application runtime opener service installed by the backend module.
 inline void link(str label, str href) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
@@ -285,13 +285,13 @@ inline void link(str label, str href) {
         is_focused ? t.state_focus_ring : ring_off, focus_ms);
 
     detail::g_app().callbacks.push_back([url_copy] {
-    #ifdef __wasi__
+#ifdef __wasi__
         phenotype_open_url(url_copy.c_str(),
                            static_cast<unsigned int>(url_copy.size()));
 #else
-        if (detail::g_open_url)
-            detail::g_open_url(url_copy.c_str(),
-                               static_cast<unsigned int>(url_copy.size()));
+        detail::open_application_url(
+            url_copy.c_str(),
+            static_cast<unsigned int>(url_copy.size()));
 #endif
     });
     detail::g_app().callback_roles.push_back(InteractionRole::Link);
@@ -7357,6 +7357,9 @@ inline json::Value application_runtime_snapshot_to_json(
         "damaged_render_surface_count",
         json::Value{static_cast<std::int64_t>(
             snapshot.damaged_render_surface_count)});
+    out.emplace(
+        "open_url_handler_installed",
+        json::Value{snapshot.open_url_handler_installed});
     return json::Value{std::move(out)};
 }
 

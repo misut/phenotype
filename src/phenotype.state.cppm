@@ -382,6 +382,7 @@ struct ApplicationRuntimeSnapshot {
     unsigned int render_surface_count = 0;
     unsigned int visible_render_surface_count = 0;
     unsigned int damaged_render_surface_count = 0;
+    bool open_url_handler_installed = false;
 };
 
 struct AppState {
@@ -678,6 +679,38 @@ namespace detail {
     struct LegacyRunnerContext {
         void (*runner)() = nullptr;
     };
+
+    using OpenUrlHandler = void (*)(char const*, unsigned int);
+
+    struct ApplicationRuntimeServices {
+        OpenUrlHandler open_url_handler = nullptr;
+    };
+
+    inline ApplicationRuntimeServices& application_runtime_services() {
+        static ApplicationRuntimeServices& services =
+            *new ApplicationRuntimeServices();
+        return services;
+    }
+
+    inline void set_application_open_url_handler(OpenUrlHandler handler) noexcept {
+        application_runtime_services().open_url_handler = handler;
+    }
+
+    inline OpenUrlHandler current_application_open_url_handler() noexcept {
+        return application_runtime_services().open_url_handler;
+    }
+
+    inline bool application_open_url_handler_installed() noexcept {
+        return current_application_open_url_handler() != nullptr;
+    }
+
+    inline bool open_application_url(char const* url, unsigned int len) {
+        if (auto handler = current_application_open_url_handler()) {
+            handler(url, len);
+            return true;
+        }
+        return false;
+    }
 
     inline std::string normalize_scene_id(std::string id) {
         return id.empty() ? std::string{"main"} : std::move(id);
@@ -1131,6 +1164,8 @@ namespace detail {
         out.scene_count = static_cast<unsigned int>(scene_items.size());
         out.render_surface_count =
             static_cast<unsigned int>(surface_items.size());
+        out.open_url_handler_installed =
+            application_open_url_handler_installed();
 
         for (auto const& scene : scene_items) {
             if (scene.visible)
@@ -1348,11 +1383,6 @@ namespace detail {
         static char tag = 0;
         return &tag;
     }
-
-    // Function pointer for URL opening — set by the backend module
-    // (phenotype.wasm or phenotype.native) at initialization time.
-    // Keeps widget::link non-templated.
-    inline void (*g_open_url)(char const*, unsigned int) = nullptr;
 
     inline FocusedInputSnapshot focused_input_snapshot() {
         FocusedInputSnapshot snapshot{};

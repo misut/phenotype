@@ -44,6 +44,16 @@ extern "C" {
 #define CMD_LEN                          phenotype_cmd_len
 #endif
 
+static int g_application_runtime_open_url_calls = 0;
+static std::string g_application_runtime_open_url_value;
+
+static void application_runtime_open_url_probe(
+        char const* url,
+        unsigned int len) {
+    ++g_application_runtime_open_url_calls;
+    g_application_runtime_open_url_value.assign(url, url + len);
+}
+
 // ============================================================
 // Layout tests
 // ============================================================
@@ -732,6 +742,22 @@ void test_application_runtime_snapshot_tracks_process_owners() {
     assert(before.render_surface_count >= 1u);
     assert(!before.active_scene_id.empty());
     assert(!before.active_render_surface_id.empty());
+    assert(!before.open_url_handler_installed);
+
+    detail::set_application_open_url_handler(
+        application_runtime_open_url_probe);
+    auto with_opener = runtime::application_runtime();
+    assert(with_opener.open_url_handler_installed);
+    std::string_view const runtime_url =
+        "https://example.com/runtime-open-url";
+    assert(detail::open_application_url(
+        runtime_url.data(),
+        static_cast<unsigned int>(runtime_url.size())));
+    assert(g_application_runtime_open_url_calls == 1);
+    assert(g_application_runtime_open_url_value == runtime_url);
+    detail::set_application_open_url_handler(nullptr);
+    auto after_opener_reset = runtime::application_runtime();
+    assert(!after_opener_reset.open_url_handler_installed);
 
     auto scene = runtime::ensure_scene(SceneDescriptor{
         .id = "application-runtime-settings-scene",
