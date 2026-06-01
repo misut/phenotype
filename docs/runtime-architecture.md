@@ -158,6 +158,12 @@ The AppKit shell keeps the foreground native window and surface together in
 `ActiveAppKitBinding`. Window-level APIs such as size limits, aspect ratio,
 settings-menu focus, and dock reopen focus resolve through that pair instead of
 reading independent raw globals.
+AppKit app-level shell state is grouped in `AppKitShellRuntime`: lifecycle
+flags, close-button tracking, front-request retry counts, menu application
+name, the shell delegate, and debug hot-key resources live behind one owner
+instead of separate globals. That keeps process-level AppKit integration
+separate from scene/window-local state while still making the app-level owner
+explicit.
 The Win32 shell mirrors that shape with `Win32ShellBinding`. Cursor updates,
 window size limits, aspect-ratio constraints, and the Windows message loop
 resolve through one captured/restored active shell binding instead of mutating a
