@@ -78,6 +78,7 @@ struct MacOSScrollRuntimeEvent {
 };
 
 struct ImeState {
+    NativeSurfaceDescriptor* surface = nullptr;
     id ns_window = nullptr;
     id content_view = nullptr;
     id editor_view = nullptr;
@@ -1679,7 +1680,8 @@ inline void remove_local_scroll_monitor() {
 
 inline void input_attach(native_surface_handle handle, void (*request_repaint)()) {
     auto* surface = desktop_surface(handle);
-    g_images.request_repaint = request_repaint;
+    register_image_repaint_target(surface, request_repaint);
+    g_ime.surface = surface;
     g_ime.request_repaint = request_repaint;
     g_ime.ns_window = surface_ns_window(surface);
     g_ime.content_view = surface_content_view(surface);
@@ -1701,6 +1703,7 @@ inline void input_attach(native_surface_handle handle, void (*request_repaint)()
 }
 
 inline void input_detach() {
+    unregister_image_repaint_target(g_ime.surface);
     remove_local_magnify_monitor();
     remove_local_scroll_monitor();
     discard_marked_text_from_system();
@@ -1717,7 +1720,7 @@ inline void input_detach() {
         objc_send<void>(g_ime.editor_view, sel_remove_from_superview());
         objc_send<void>(g_ime.editor_view, sel_release());
     }
-    g_images.request_repaint = nullptr;
+    g_ime.surface = nullptr;
     g_ime.ns_window = nullptr;
     g_ime.content_view = nullptr;
     g_ime.editor_view = nullptr;
@@ -1736,14 +1739,15 @@ inline void input_detach() {
 }
 
 inline void input_sync() {
-    bool needs_repaint = process_completed_images() && g_images.request_repaint;
+    bool image_repaint_needed = process_completed_images();
+    bool input_repaint_needed = false;
     auto snapshot = ::phenotype::detail::focused_input_snapshot();
 
     if (!snapshot.valid) {
         if (g_ime.composition_active || !g_ime.marked_text.empty()) {
             discard_marked_text_from_system();
             clear_ime_state();
-            needs_repaint = true;
+            input_repaint_needed = true;
         }
         g_ime.focused_callback_id = ::phenotype::native::invalid_callback_id;
         auto presentation_changed = sync_caret_presentation(snapshot);
@@ -1751,8 +1755,10 @@ inline void input_sync() {
             restore_content_view_first_responder();
         if (presentation_changed)
             sync_input_context_geometry();
-        if (needs_repaint && g_images.request_repaint)
-            g_images.request_repaint();
+        if (image_repaint_needed)
+            request_image_repaint_for_all_targets();
+        if (input_repaint_needed && !image_repaint_needed)
+            request_window_repaint();
         return;
     }
 
@@ -1762,7 +1768,7 @@ inline void input_sync() {
     if (focus_changed && (g_ime.composition_active || !g_ime.marked_text.empty())) {
         discard_marked_text_from_system();
         clear_ime_state();
-        needs_repaint = true;
+        input_repaint_needed = true;
     }
 
     g_ime.focused_callback_id = snapshot.callback_id;
@@ -1772,8 +1778,10 @@ inline void input_sync() {
     if (focus_changed || g_ime.composition_active || presentation_changed)
         sync_input_context_geometry();
 
-    if (needs_repaint && g_images.request_repaint)
-        g_images.request_repaint();
+    if (image_repaint_needed)
+        request_image_repaint_for_all_targets();
+    if (input_repaint_needed && !image_repaint_needed)
+        request_window_repaint();
 }
 
 inline bool input_dismiss_transient() {

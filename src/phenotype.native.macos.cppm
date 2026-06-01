@@ -3323,6 +3323,32 @@ inline void reset_image_cache_for_tests() {
     detail::reset_image_cache(true);
 }
 
+inline void reset_image_repaint_targets_for_tests() {
+    detail::clear_image_repaint_targets();
+}
+
+inline void register_image_repaint_target_for_tests(
+        void* surface,
+        void (*request_repaint)()) {
+    detail::register_image_repaint_target(surface, request_repaint);
+}
+
+inline void unregister_image_repaint_target_for_tests(void* surface) {
+    detail::unregister_image_repaint_target(surface);
+}
+
+inline std::size_t image_repaint_target_count_for_tests() {
+    return detail::image_repaint_target_count();
+}
+
+inline bool image_repaint_target_registered_for_tests(void* surface) {
+    return detail::image_repaint_target_registered(surface);
+}
+
+inline void request_image_repaint_targets_for_tests() {
+    detail::request_image_repaint_for_all_targets();
+}
+
 inline void set_image_queue_only_for_tests(bool enabled) {
     detail::g_images.queue_only_for_tests = enabled;
     if (enabled)
@@ -4063,6 +4089,10 @@ inline json::Object macos_images_runtime_json() {
         json::Value{
             static_cast<std::int64_t>(
                 renderer_state().image_atlas_uploaded_generation)});
+    images.emplace(
+        "repaint_target_count",
+        json::Value{
+            static_cast<std::int64_t>(image_repaint_target_count())});
     images.emplace(
         "remote_entry_count",
         json::Value{static_cast<std::int64_t>(remote_entries.size())});
