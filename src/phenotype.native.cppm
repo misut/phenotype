@@ -428,6 +428,7 @@ inline void shutdown() {
     renderer::shutdown();
     text::shutdown();
     ::phenotype::detail::set_application_open_url_handler(nullptr);
+    ::phenotype::detail::set_application_settings_menu_handler(nullptr);
 }
 
 template<typename State, typename Msg, typename View, typename Update>

@@ -46,12 +46,17 @@ extern "C" {
 
 static int g_application_runtime_open_url_calls = 0;
 static std::string g_application_runtime_open_url_value;
+static int g_application_runtime_settings_menu_calls = 0;
 
 static void application_runtime_open_url_probe(
         char const* url,
         unsigned int len) {
     ++g_application_runtime_open_url_calls;
     g_application_runtime_open_url_value.assign(url, url + len);
+}
+
+static void application_runtime_settings_menu_probe() {
+    ++g_application_runtime_settings_menu_calls;
 }
 
 // ============================================================
@@ -735,6 +740,11 @@ void test_render_surface_visibility_updates_bound_scene() {
 }
 
 void test_application_runtime_snapshot_tracks_process_owners() {
+    detail::set_application_open_url_handler(nullptr);
+    detail::set_application_settings_menu_handler(nullptr);
+    g_application_runtime_open_url_calls = 0;
+    g_application_runtime_settings_menu_calls = 0;
+
     auto active_scene_before = runtime::active_scene_handle();
     auto active_surface_before = runtime::active_render_surface_handle();
     auto before = runtime::application_runtime();
@@ -743,6 +753,7 @@ void test_application_runtime_snapshot_tracks_process_owners() {
     assert(!before.active_scene_id.empty());
     assert(!before.active_render_surface_id.empty());
     assert(!before.open_url_handler_installed);
+    assert(!before.settings_menu_handler_installed);
 
     detail::set_application_open_url_handler(
         application_runtime_open_url_probe);
@@ -758,6 +769,16 @@ void test_application_runtime_snapshot_tracks_process_owners() {
     detail::set_application_open_url_handler(nullptr);
     auto after_opener_reset = runtime::application_runtime();
     assert(!after_opener_reset.open_url_handler_installed);
+
+    detail::set_application_settings_menu_handler(
+        application_runtime_settings_menu_probe);
+    auto with_settings_menu = runtime::application_runtime();
+    assert(with_settings_menu.settings_menu_handler_installed);
+    assert(detail::invoke_application_settings_menu());
+    assert(g_application_runtime_settings_menu_calls == 1);
+    detail::set_application_settings_menu_handler(nullptr);
+    auto after_settings_menu_reset = runtime::application_runtime();
+    assert(!after_settings_menu_reset.settings_menu_handler_installed);
 
     auto scene = runtime::ensure_scene(SceneDescriptor{
         .id = "application-runtime-settings-scene",

@@ -7360,6 +7360,9 @@ inline json::Value application_runtime_snapshot_to_json(
     out.emplace(
         "open_url_handler_installed",
         json::Value{snapshot.open_url_handler_installed});
+    out.emplace(
+        "settings_menu_handler_installed",
+        json::Value{snapshot.settings_menu_handler_installed});
     return json::Value{std::move(out)};
 }
 

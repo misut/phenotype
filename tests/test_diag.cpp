@@ -454,6 +454,7 @@ void test_snapshot_shape() {
     assert(application_runtime.at("damaged_render_surface_count").as_integer()
            >= 0);
     assert(!application_runtime.at("open_url_handler_installed").as_bool());
+    assert(!application_runtime.at("settings_menu_handler_installed").as_bool());
     assert(!application_runtime.at("debug_payload_builder_installed").as_bool());
     assert(!application_runtime.at("application_debug_provider_installed").as_bool());
     assert(!application_runtime.at("platform_capabilities_provider_installed").as_bool());
