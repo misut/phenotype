@@ -4740,9 +4740,9 @@ static void test_windows_scroll_delta_uses_system_settings() {
         expected = static_cast<float>(lines) * line_height;
     }
 
-    float zero = scroll_delta(0.0, line_height, viewport_height);
-    float forward = scroll_delta(1.0, line_height, viewport_height);
-    float backward = scroll_delta(-1.0, line_height, viewport_height);
+    float zero = scroll_delta(0.0, false, line_height, viewport_height);
+    float forward = scroll_delta(1.0, false, line_height, viewport_height);
+    float backward = scroll_delta(-1.0, false, line_height, viewport_height);
 
     assert(zero == 0.0f);
     assert(std::fabs(forward - expected) < 0.001f);
@@ -4770,9 +4770,9 @@ static void test_windows_horizontal_scroll_delta_uses_system_settings() {
         expected = static_cast<float>(chars) * line_height * 0.5f;
     }
 
-    float zero = scroll_delta(0.0, line_height, viewport_width);
-    float forward = scroll_delta(1.0, line_height, viewport_width);
-    float backward = scroll_delta(-1.0, line_height, viewport_width);
+    float zero = scroll_delta(0.0, false, line_height, viewport_width);
+    float forward = scroll_delta(1.0, false, line_height, viewport_width);
+    float backward = scroll_delta(-1.0, false, line_height, viewport_width);
 
     assert(zero == 0.0f);
     assert(std::fabs(forward - expected) < 0.001f);
