@@ -243,7 +243,8 @@ desktop runner still registers one main window, but the event-loop structure is
 ready to dispatch each event to the host/window that owns it and to leave
 unrelated windows' hover, focus, animation, and frame-timeline state untouched.
 macOS also has an internal scene-window registry for secondary phenotype
-windows. A registered AppKit scene window owns a stable `native_host`,
+windows. `AppKitSceneWindowRuntime` owns the registry and delegate, and each
+registered AppKit scene window owns a stable `native_host`,
 `NativeSurfaceDescriptor`, scene id, render-surface id, visibility flag, and
 animation tick clock; the AppKit loop services those windows beside the main
 window instead of treating settings/debug windows as global side effects.

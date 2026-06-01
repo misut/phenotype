@@ -1797,6 +1797,7 @@ static void test_macos_appkit_scene_window_registry_targets_scene() {
     input_regression::reset_core_state();
     reset_observed_state();
     phenotype::native::detail::reset_appkit_scene_windows_for_tests();
+    assert(phenotype::native::detail::appkit_scene_window_count() == 0);
 
     auto app = test_objc_send<id>(
         test_class_id("NSApplication"),
@@ -1870,6 +1871,7 @@ static void test_macos_appkit_scene_window_registry_targets_scene() {
             view,
             update);
     assert(callback_opened);
+    assert(phenotype::native::detail::appkit_scene_window_count() == 2);
     assert(close_count == 0);
     auto missing_artifact =
         phenotype::native::scene_window::write_artifact_bundle(
@@ -1897,6 +1899,7 @@ static void test_macos_appkit_scene_window_registry_targets_scene() {
         "test-settings-surface-callback").visible);
     assert(!phenotype::runtime::scene("test-settings-scene-callback").visible);
     phenotype::native::detail::reset_appkit_scene_windows_for_tests();
+    assert(phenotype::native::detail::appkit_scene_window_count() == 0);
     input_regression::reset_core_state();
     std::puts("PASS: macOS AppKit scene window registry targets scene");
 }
