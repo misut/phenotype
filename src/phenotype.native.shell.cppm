@@ -329,10 +329,29 @@ static_assert(host_platform<native_host>);
 
 namespace detail {
 
-inline native_host* g_active_host = nullptr;
+struct ActiveHostBinding {
+    native_host* host = nullptr;
+};
+
+inline ActiveHostBinding& active_host_binding() {
+    static ActiveHostBinding& binding = *new ActiveHostBinding();
+    return binding;
+}
+
+inline ActiveHostBinding capture_active_host_binding() {
+    return active_host_binding();
+}
 
 inline native_host* active_host() {
-    return g_active_host;
+    return active_host_binding().host;
+}
+
+inline bool is_active_host(native_host const& host) {
+    return active_host() == &host;
+}
+
+inline void bind_active_host(native_host* host) {
+    active_host_binding().host = host;
 }
 
 inline ShellState& fallback_shell_state() {
@@ -341,7 +360,8 @@ inline ShellState& fallback_shell_state() {
 }
 
 inline ShellState& shell_state() {
-    return g_active_host ? g_active_host->shell : fallback_shell_state();
+    auto* host = active_host();
+    return host ? host->shell : fallback_shell_state();
 }
 
 inline ::phenotype::RenderSurfaceDescriptor
@@ -393,7 +413,7 @@ ensure_host_render_surface(native_host& host) {
 
 inline void sync_host_render_surface(native_host& host, bool damaged) {
     auto& surface = ensure_host_render_surface(host);
-    if (&host == g_active_host)
+    if (is_active_host(host))
         ::phenotype::detail::bind_render_surface_runtime(surface);
     if (damaged) {
         ::phenotype::detail::ScopedRenderSurfaceActivation activate(surface);
@@ -408,28 +428,37 @@ inline void note_host_render_surface_frame(native_host& host) {
 }
 
 inline native_host* activate_host(native_host& host) {
-    auto* previous = g_active_host;
-    g_active_host = &host;
+    auto* previous = active_host();
+    bind_active_host(&host);
     if (host.platform && host.platform->renderer.activate)
         host.platform->renderer.activate(host.window);
     sync_host_render_surface(host);
     return previous;
 }
 
+inline void clear_active_host() {
+    bind_active_host(nullptr);
+    ::phenotype::detail::bind_render_surface_runtime(
+        ::phenotype::detail::default_render_surface_runtime());
+}
+
+inline void restore_active_host_binding(ActiveHostBinding const& binding) {
+    if (binding.host)
+        activate_host(*binding.host);
+    else
+        clear_active_host();
+}
+
 struct ScopedHostActivation {
-    native_host* previous = nullptr;
+    ActiveHostBinding previous{};
 
     explicit ScopedHostActivation(native_host& host)
-        : previous(activate_host(host)) {}
+        : previous(capture_active_host_binding()) {
+        activate_host(host);
+    }
 
     ~ScopedHostActivation() {
-        if (previous) {
-            activate_host(*previous);
-        } else {
-            g_active_host = nullptr;
-            ::phenotype::detail::bind_render_surface_runtime(
-                ::phenotype::detail::default_render_surface_runtime());
-        }
+        restore_active_host_binding(previous);
     }
 };
 
@@ -441,8 +470,8 @@ inline void notify_viewport_changed(native_host* host,
 }
 
 inline void open_url_bridge(char const* url, unsigned int len) {
-    if (g_active_host)
-        g_active_host->open_url(url, len);
+    if (auto* host = active_host())
+        host->open_url(url, len);
 }
 
 inline void sync_platform_input() {
@@ -1716,11 +1745,8 @@ inline void shutdown_host(native_host& host) {
     ::phenotype::detail::g_open_url = nullptr;
     ::phenotype::diag::set_application_debug_provider(nullptr);
     host.shell = {};
-    if (detail::g_active_host == &host) {
-        detail::g_active_host = nullptr;
-        ::phenotype::detail::bind_render_surface_runtime(
-            ::phenotype::detail::default_render_surface_runtime());
-    }
+    if (detail::is_active_host(host))
+        detail::clear_active_host();
 }
 
 } // namespace detail
