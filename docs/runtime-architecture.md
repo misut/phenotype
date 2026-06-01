@@ -193,8 +193,9 @@ binds the host's render surface to the requested scene, then installs the same
 scene-local runner, so window creation code can keep native surface ownership
 and declarative scene identity aligned.
 Native renderer backends can now expose an optional surface activation hook.
-macOS uses that hook to select a `RendererState` for the active
-`NativeSurfaceDescriptor` instead of assuming one process-global Metal layer.
+macOS and Windows use that hook to select a `RendererState` for the active
+`NativeSurfaceDescriptor` instead of assuming one process-global Metal or D3D
+surface owner.
 The current renderer entry points still look like the old single-window API, but
 state selection now follows host activation and gives future settings/debug
 windows a place to keep independent Metal layers, hit regions, debug captures,

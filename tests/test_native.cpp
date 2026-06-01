@@ -4098,6 +4098,46 @@ static void test_windows_surface_descriptor_scale_is_valid() {
     std::puts("PASS: windows native surface descriptor scale is valid");
 }
 
+static void test_windows_renderer_state_tracks_surfaces() {
+    phenotype::native::windows_test::reset_renderer_surface_states();
+
+    NativeSurfaceDescriptor first{
+        .kind = NativeSurfaceKind::Win32Window,
+    };
+    NativeSurfaceDescriptor second{
+        .kind = NativeSurfaceKind::Win32Window,
+    };
+
+    phenotype::native::windows_test::activate_renderer_surface_state(&first);
+    assert(phenotype::native::windows_test::renderer_surface_state_count() == 1);
+    assert(phenotype::native::windows_test::active_renderer_surface_is(&first));
+    auto* first_state =
+        phenotype::native::windows_test::active_renderer_state_identity();
+
+    phenotype::native::windows_test::activate_renderer_surface_state(&second);
+    assert(phenotype::native::windows_test::renderer_surface_state_count() == 2);
+    assert(phenotype::native::windows_test::active_renderer_surface_is(&second));
+    auto* second_state =
+        phenotype::native::windows_test::active_renderer_state_identity();
+    assert(first_state != second_state);
+
+    phenotype::native::windows_test::activate_renderer_surface_state(&first);
+    assert(phenotype::native::windows_test::renderer_surface_state_count() == 2);
+    assert(phenotype::native::windows_test::active_renderer_surface_is(&first));
+
+    phenotype::native::windows_test::with_renderer_surface_state(&second, [&] {
+        assert(phenotype::native::windows_test::active_renderer_surface_is(&second));
+        assert(phenotype::native::windows_test::active_renderer_state_identity()
+               == second_state);
+    });
+    assert(phenotype::native::windows_test::active_renderer_surface_is(&first));
+    assert(phenotype::native::windows_test::active_renderer_state_identity()
+           == first_state);
+
+    phenotype::native::windows_test::reset_renderer_surface_states();
+    std::puts("PASS: windows renderer state tracks surfaces");
+}
+
 static void test_windows_aspect_ratio_sizing_helper() {
     RECT right_drag{0, 0, 400, 120};
     bool adjusted = phenotype::native::detail::adjust_win32_aspect_ratio_rect(
@@ -5085,6 +5125,7 @@ int main() {
     test_windows_text_build_atlas_scale_preserves_bounds();
     test_windows_text_build_atlas_preserves_vertical_orientation();
     test_windows_surface_descriptor_scale_is_valid();
+    test_windows_renderer_state_tracks_surfaces();
     test_windows_aspect_ratio_sizing_helper();
     test_windows_active_shell_binding_restores_state();
     test_windows_text_build_atlas_empty();
