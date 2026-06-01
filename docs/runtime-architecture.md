@@ -129,6 +129,12 @@ The active `AppState` follows the same rule. Compatibility helpers such as
 `detail::g_app()` resolve through the active scene instead of a parallel active
 app pointer, so the scene activation stack has one owner to restore and
 secondary windows cannot accidentally keep drawing against a stale app state.
+The remaining active scene/render-surface cursor is stored as one
+`ActiveRuntimeBinding` value. Scene-only activation restores only the scene
+cursor, while render-surface activation captures and restores the scene and
+surface together. This makes nested settings/debug window work explicit: a
+temporary scene build can leave the caller's drawing target alone, and a
+temporary drawing-target build cannot restore only half of the active context.
 
 Scene runners follow the same rule. `runtime::install_scene_runner`,
 `runtime::trigger_scene_rebuild`, `runtime::clear_scene_runner`, and their
