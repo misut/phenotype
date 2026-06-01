@@ -1971,6 +1971,17 @@ struct CachedImageRecord {
     ImageCacheEntry entry;
 };
 
+struct ImageRepaintTarget {
+    NativeSurfaceDescriptor* surface = nullptr;
+    HWND hwnd = nullptr;
+};
+
+struct ImageRepaintTargetRegistry {
+    static constexpr std::size_t capacity = 64;
+    ImageRepaintTarget targets[capacity] = {};
+    std::mutex mutex;
+};
+
 struct ImageAtlasState {
     static constexpr int atlas_size = 2048;
 
@@ -1994,6 +2005,89 @@ struct ImageAtlasState {
 
 static ImeState g_ime;
 static ImageAtlasState g_images;
+static ImageRepaintTargetRegistry g_image_repaint_targets;
+
+inline void register_image_repaint_target(NativeSurfaceDescriptor* surface,
+                                          HWND hwnd) {
+    if (!surface || !hwnd)
+        return;
+    std::lock_guard lock(g_image_repaint_targets.mutex);
+    ImageRepaintTarget* reusable = nullptr;
+    for (auto& target : g_image_repaint_targets.targets) {
+        if (target.surface == surface) {
+            target.hwnd = hwnd;
+            return;
+        }
+        if (!reusable && !target.surface && !target.hwnd)
+            reusable = &target;
+    }
+    if (reusable)
+        *reusable = ImageRepaintTarget{surface, hwnd};
+}
+
+inline void unregister_image_repaint_target(NativeSurfaceDescriptor* surface) {
+    if (!surface)
+        return;
+    std::lock_guard lock(g_image_repaint_targets.mutex);
+    for (auto& target : g_image_repaint_targets.targets) {
+        if (target.surface != surface)
+            continue;
+        target.surface = nullptr;
+        target.hwnd = nullptr;
+    }
+}
+
+inline void clear_image_repaint_targets() {
+    std::lock_guard lock(g_image_repaint_targets.mutex);
+    for (auto& target : g_image_repaint_targets.targets)
+        target = {};
+}
+
+inline std::size_t image_repaint_target_count() {
+    std::lock_guard lock(g_image_repaint_targets.mutex);
+    std::size_t count = 0;
+    for (auto const& target : g_image_repaint_targets.targets) {
+        if (target.surface && target.hwnd)
+            ++count;
+    }
+    return count;
+}
+
+inline bool image_repaint_target_registered(NativeSurfaceDescriptor* surface) {
+    if (!surface)
+        return false;
+    std::lock_guard lock(g_image_repaint_targets.mutex);
+    for (auto const& target : g_image_repaint_targets.targets) {
+        if (target.surface == surface && target.hwnd)
+            return true;
+    }
+    return false;
+}
+
+inline std::vector<HWND> image_repaint_target_hwnds_snapshot() {
+    std::vector<HWND> hwnds;
+    std::lock_guard lock(g_image_repaint_targets.mutex);
+    for (auto const& target : g_image_repaint_targets.targets) {
+        if (!target.surface || !target.hwnd)
+            continue;
+        bool duplicate = false;
+        for (auto hwnd : hwnds) {
+            if (hwnd == target.hwnd) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate)
+            hwnds.push_back(target.hwnd);
+    }
+    return hwnds;
+}
+
+inline void post_image_ready_to_repaint_targets() {
+    for (auto hwnd : image_repaint_target_hwnds_snapshot()) {
+        PostMessageW(hwnd, WM_PHENOTYPE_IMAGE_READY, 0, 0);
+    }
+}
 
 struct AddressDescription {
     std::uintptr_t relative = 0;
@@ -4410,6 +4504,7 @@ inline void input_attach(native_surface_handle handle, void (*request_repaint)()
     g_ime.surface = surface;
     g_ime.request_repaint = request_repaint;
     g_ime.hwnd = surface_hwnd(surface);
+    register_image_repaint_target(surface, g_ime.hwnd);
     g_ime.ui_thread_id = GetCurrentThreadId();
     g_ime.in_wndproc = false;
     g_ime.sync_in_progress = false;
@@ -4425,6 +4520,7 @@ inline void input_attach(native_surface_handle handle, void (*request_repaint)()
 }
 
 inline void input_detach() {
+    unregister_image_repaint_target(g_ime.surface);
     if (g_ime.hwnd && g_ime.prev_wndproc) {
         SetWindowLongPtrW(g_ime.hwnd, GWLP_WNDPROC,
                           reinterpret_cast<LONG_PTR>(g_ime.prev_wndproc));
@@ -4853,9 +4949,7 @@ inline void image_worker_main() {
             g_images.completed_jobs.push_back(std::move(decoded));
         }
 
-        auto hwnd = g_ime.hwnd;
-        if (hwnd)
-            PostMessageW(hwnd, WM_PHENOTYPE_IMAGE_READY, 0, 0);
+        post_image_ready_to_repaint_targets();
     }
 
     if (SUCCEEDED(co_hr))
@@ -6176,6 +6270,7 @@ inline void shutdown_shared_image_state() {
     g_images.cursor_x = 0;
     g_images.cursor_y = 0;
     g_images.row_height = 0;
+    clear_image_repaint_targets();
     g_ime.overlay = {};
 }
 
@@ -6772,6 +6867,10 @@ inline json::Object windows_images_runtime_json() {
             static_cast<std::int64_t>(
                 renderer_state().image_atlas_uploaded_generation)});
     images.emplace(
+        "repaint_target_count",
+        json::Value{
+            static_cast<std::int64_t>(image_repaint_target_count())});
+    images.emplace(
         "remote_entry_count",
         json::Value{static_cast<std::int64_t>(remote_entries.size())});
     images.emplace("remote_entries", json::Value{std::move(remote_entries)});
@@ -7330,6 +7429,34 @@ inline std::vector<TextEntry> composition_overlay_text_entries_for_tests() {
 inline void stop_image_worker() {
     detail::g_images.queue_only_for_tests = true;
     detail::shutdown_image_worker();
+}
+
+inline void reset_image_repaint_targets_for_tests() {
+    detail::clear_image_repaint_targets();
+}
+
+inline void register_image_repaint_target_for_tests(
+        NativeSurfaceDescriptor* surface,
+        HWND hwnd) {
+    detail::register_image_repaint_target(surface, hwnd);
+}
+
+inline void unregister_image_repaint_target_for_tests(
+        NativeSurfaceDescriptor* surface) {
+    detail::unregister_image_repaint_target(surface);
+}
+
+inline std::size_t image_repaint_target_count_for_tests() {
+    return detail::image_repaint_target_count();
+}
+
+inline bool image_repaint_target_registered_for_tests(
+        NativeSurfaceDescriptor* surface) {
+    return detail::image_repaint_target_registered(surface);
+}
+
+inline std::vector<HWND> image_repaint_target_hwnds_for_tests() {
+    return detail::image_repaint_target_hwnds_snapshot();
 }
 
 inline std::uint64_t image_cache_generation() {

@@ -62,6 +62,11 @@ struct ImageCacheEntry {
     std::string failure_reason;
 };
 
+struct ImageRepaintTarget {
+    void* surface = nullptr;
+    void (*request_repaint)() = nullptr;
+};
+
 struct ImageAtlasCache {
     static constexpr int atlas_size = 2048;
 
@@ -72,7 +77,7 @@ struct ImageAtlasCache {
     std::mutex mutex;
     std::condition_variable cv;
     std::thread worker;
-    void (*request_repaint)() = nullptr;
+    std::vector<ImageRepaintTarget> repaint_targets;
     bool worker_started = false;
     bool queue_only_for_tests = false;
     bool stop_worker = false;
@@ -89,6 +94,66 @@ struct ImageAtlasCache {
 };
 
 inline ImageAtlasCache g_images;
+
+inline void register_image_repaint_target(void* surface,
+                                          void (*request_repaint)()) {
+    if (!surface || !request_repaint)
+        return;
+    for (auto& target : g_images.repaint_targets) {
+        if (target.surface == surface) {
+            target.request_repaint = request_repaint;
+            return;
+        }
+        if (!target.surface && !target.request_repaint) {
+            target.surface = surface;
+            target.request_repaint = request_repaint;
+            return;
+        }
+    }
+    g_images.repaint_targets.push_back({surface, request_repaint});
+}
+
+inline void unregister_image_repaint_target(void* surface) {
+    if (!surface)
+        return;
+    for (auto& target : g_images.repaint_targets) {
+        if (target.surface != surface)
+            continue;
+        target.surface = nullptr;
+        target.request_repaint = nullptr;
+    }
+}
+
+inline void clear_image_repaint_targets() {
+    g_images.repaint_targets.clear();
+}
+
+inline std::size_t image_repaint_target_count() {
+    std::size_t count = 0;
+    for (auto const& target : g_images.repaint_targets) {
+        if (target.surface && target.request_repaint)
+            ++count;
+    }
+    return count;
+}
+
+inline bool image_repaint_target_registered(void* surface) {
+    if (!surface)
+        return false;
+    for (auto const& target : g_images.repaint_targets) {
+        if (target.surface == surface && target.request_repaint)
+            return true;
+    }
+    return false;
+}
+
+inline void request_image_repaint_for_all_targets() {
+    auto targets = g_images.repaint_targets;
+    for (auto const& target : targets) {
+        if (target.surface && target.request_repaint)
+            target.request_repaint();
+    }
+}
 
 inline bool is_http_url(std::string const& url) {
     return cppx::resource::is_remote(url);
@@ -409,7 +474,7 @@ inline void shutdown_image_worker() {
     g_images.worker_started = false;
 }
 
-inline void reset_image_cache(bool preserve_request_repaint = false) {
+inline void reset_image_cache(bool preserve_repaint_targets = false) {
     shutdown_image_worker();
     {
         std::lock_guard lock(g_images.mutex);
@@ -430,8 +495,8 @@ inline void reset_image_cache(bool preserve_request_repaint = false) {
     g_images.dirty_max_y = 0;
     g_images.queue_only_for_tests = false;
     g_images.stop_worker = false;
-    if (!preserve_request_repaint)
-        g_images.request_repaint = nullptr;
+    if (!preserve_repaint_targets)
+        clear_image_repaint_targets();
 }
 
 } // namespace phenotype::native::detail

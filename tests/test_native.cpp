@@ -5,6 +5,7 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
@@ -28,6 +29,7 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
+#include <crtdbg.h>
 #include <windows.h>
 
 #ifdef DrawText
@@ -81,6 +83,19 @@ static constexpr int LEGACY_KEY_F12 = static_cast<int>(Key::F12);
 
 static constexpr char kLocalExampleImageAsset[] = "showcase-local.bmp";
 static constexpr char kRemoteExampleImageAsset[] = "showcase.bmp";
+
+#ifdef __APPLE__
+static int g_macos_image_repaint_first_calls = 0;
+static int g_macos_image_repaint_second_calls = 0;
+
+static void macos_image_repaint_first() {
+    ++g_macos_image_repaint_first_calls;
+}
+
+static void macos_image_repaint_second() {
+    ++g_macos_image_repaint_second_calls;
+}
+#endif
 
 static void test_window_options_integrated_titlebar_contract() {
     WindowOptions defaults{};
@@ -505,6 +520,51 @@ static void test_macos_image_atlas_upload_generation_is_surface_local() {
     phenotype::native::macos_test::reset_renderer_surface_states();
     phenotype::native::macos_test::reset_image_cache_for_tests();
     std::puts("PASS: macOS image atlas upload generation is surface-local");
+}
+
+static void test_macos_image_repaint_targets_are_surface_local() {
+    phenotype::native::macos_test::reset_image_repaint_targets_for_tests();
+    g_macos_image_repaint_first_calls = 0;
+    g_macos_image_repaint_second_calls = 0;
+
+    NativeSurfaceDescriptor first{
+        .kind = NativeSurfaceKind::MacOSWindow,
+    };
+    NativeSurfaceDescriptor second{
+        .kind = NativeSurfaceKind::MacOSWindow,
+    };
+
+    phenotype::native::macos_test::register_image_repaint_target_for_tests(
+        &first,
+        macos_image_repaint_first);
+    phenotype::native::macos_test::register_image_repaint_target_for_tests(
+        &second,
+        macos_image_repaint_second);
+
+    assert(phenotype::native::macos_test::image_repaint_target_count_for_tests()
+           == 2);
+    assert(phenotype::native::macos_test::image_repaint_target_registered_for_tests(
+        &first));
+    assert(phenotype::native::macos_test::image_repaint_target_registered_for_tests(
+        &second));
+
+    phenotype::native::macos_test::request_image_repaint_targets_for_tests();
+    assert(g_macos_image_repaint_first_calls == 1);
+    assert(g_macos_image_repaint_second_calls == 1);
+
+    phenotype::native::macos_test::unregister_image_repaint_target_for_tests(
+        &first);
+    assert(phenotype::native::macos_test::image_repaint_target_count_for_tests()
+           == 1);
+    assert(!phenotype::native::macos_test::image_repaint_target_registered_for_tests(
+        &first));
+
+    phenotype::native::macos_test::request_image_repaint_targets_for_tests();
+    assert(g_macos_image_repaint_first_calls == 1);
+    assert(g_macos_image_repaint_second_calls == 2);
+
+    phenotype::native::macos_test::reset_image_repaint_targets_for_tests();
+    std::puts("PASS: macOS image repaint targets are surface-local");
 }
 
 static void test_macos_appkit_active_binding_restores_window_and_surface() {
@@ -1046,6 +1106,7 @@ static void assert_macos_runtime_sections(json::Object const& details) {
     assert(images.contains("worker_started"));
     assert(images.contains("atlas_generation"));
     assert(images.contains("active_surface_uploaded_generation"));
+    assert(images.contains("repaint_target_count"));
     assert(images.contains("remote_entry_count"));
     assert(images.contains("remote_entries"));
 
@@ -3098,6 +3159,7 @@ static void test_macos_common_debug_contract_entry_points() {
     assert(images.at("completed_queue_count").as_integer() == 0);
     assert(images.at("atlas_generation").as_integer() >= 0);
     assert(images.at("active_surface_uploaded_generation").as_integer() >= 0);
+    assert(images.at("repaint_target_count").as_integer() >= 0);
     assert(images.at("remote_entry_count").as_integer() == 0);
     auto const& text_input = details.at("text_input").as_object();
     auto const& system_caret = text_input.at("system_caret").as_object();
@@ -4215,6 +4277,61 @@ static void test_windows_image_atlas_upload_generation_is_surface_local() {
     std::puts("PASS: windows image atlas upload generation is surface-local");
 }
 
+static void test_windows_image_repaint_targets_are_surface_local() {
+    phenotype::native::windows_test::reset_image_repaint_targets_for_tests();
+    auto first_window = reinterpret_cast<HWND>(static_cast<std::uintptr_t>(0x1001));
+    auto second_window = reinterpret_cast<HWND>(static_cast<std::uintptr_t>(0x1002));
+    NativeSurfaceDescriptor first{
+        .kind = NativeSurfaceKind::Win32Window,
+        .window = first_window,
+        .logical_width = 320,
+        .logical_height = 240,
+        .framebuffer_width = 320,
+        .framebuffer_height = 240,
+        .content_scale = 1.0f,
+    };
+    NativeSurfaceDescriptor second{
+        .kind = NativeSurfaceKind::Win32Window,
+        .window = second_window,
+        .logical_width = 320,
+        .logical_height = 240,
+        .framebuffer_width = 320,
+        .framebuffer_height = 240,
+        .content_scale = 1.0f,
+    };
+
+    phenotype::native::windows_test::register_image_repaint_target_for_tests(
+        &first,
+        first_window);
+    phenotype::native::windows_test::register_image_repaint_target_for_tests(
+        &second,
+        second_window);
+
+    assert(phenotype::native::windows_test::image_repaint_target_count_for_tests()
+           == 2);
+    assert(phenotype::native::windows_test::image_repaint_target_registered_for_tests(
+        &first));
+    assert(phenotype::native::windows_test::image_repaint_target_registered_for_tests(
+        &second));
+
+    auto hwnds = phenotype::native::windows_test::image_repaint_target_hwnds_for_tests();
+    assert(hwnds.size() == 2);
+    assert((hwnds[0] == first_window || hwnds[1] == first_window));
+    assert((hwnds[0] == second_window || hwnds[1] == second_window));
+
+    phenotype::native::windows_test::unregister_image_repaint_target_for_tests(
+        &first);
+    assert(phenotype::native::windows_test::image_repaint_target_count_for_tests()
+           == 1);
+    assert(!phenotype::native::windows_test::image_repaint_target_registered_for_tests(
+        &first));
+    assert(phenotype::native::windows_test::image_repaint_target_registered_for_tests(
+        &second));
+
+    phenotype::native::windows_test::reset_image_repaint_targets_for_tests();
+    std::puts("PASS: windows image repaint targets are surface-local");
+}
+
 static void test_windows_aspect_ratio_sizing_helper() {
     RECT right_drag{0, 0, 400, 120};
     bool adjusted = phenotype::native::detail::adjust_win32_aspect_ratio_rect(
@@ -4364,6 +4481,7 @@ static void test_windows_common_debug_contract_entry_points() {
     assert(images.at("completed_queue_count").as_integer() == 0);
     assert(images.at("atlas_generation").as_integer() >= 0);
     assert(images.at("active_surface_uploaded_generation").as_integer() >= 0);
+    assert(images.at("repaint_target_count").as_integer() >= 0);
     assert(images.at("remote_entry_count").as_integer() == 0);
 
     auto frame = phenotype::native::debug::capture_frame_rgba();
@@ -5129,6 +5247,15 @@ static void test_stub_renderer_hit_test() {
 #endif // __APPLE__ / _WIN32
 
 int main() {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    std::setvbuf(stderr, nullptr, _IONBF, 0);
+#ifdef _WIN32
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+#endif
+
     test_window_options_integrated_titlebar_contract();
     test_native_shell_state_is_host_local();
     test_native_run_scene_targets_host_surface_scene();
@@ -5153,6 +5280,7 @@ int main() {
 #ifdef __APPLE__
     test_macos_renderer_state_tracks_surfaces();
     test_macos_image_atlas_upload_generation_is_surface_local();
+    test_macos_image_repaint_targets_are_surface_local();
     test_macos_appkit_active_binding_restores_window_and_surface();
     test_macos_appkit_activation_slice_gate();
     test_macos_appkit_function_key_resolution();
@@ -5207,6 +5335,7 @@ int main() {
     test_windows_surface_descriptor_scale_is_valid();
     test_windows_renderer_state_tracks_surfaces();
     test_windows_image_atlas_upload_generation_is_surface_local();
+    test_windows_image_repaint_targets_are_surface_local();
     test_windows_aspect_ratio_sizing_helper();
     test_windows_active_shell_binding_restores_state();
     test_windows_text_build_atlas_empty();

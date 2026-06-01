@@ -205,6 +205,14 @@ renderer surface now tracks the image-atlas generation it has uploaded into its
 own GPU texture. A secondary window can therefore reuse decoded image metadata
 without inheriting the first window's Metal/D3D texture, descriptor state, or
 dirty/upload cursor.
+Remote-image repaint delivery follows the same split. Worker completion and
+decoded pixels remain process-wide cache activity, while each attached native
+surface registers its own repaint target. macOS fans image-completion repaint
+requests out through that surface registry during input sync, and Windows posts
+`WM_PHENOTYPE_IMAGE_READY` to every registered surface window instead of using
+the current IME window as a hidden singleton. Runtime diagnostics expose the
+target count so secondary-window tests can catch a regression back to one
+process-wide callback.
 AppKit event handling follows the same boundary: surface synchronization,
 native event dispatch, and frame ticks now activate the `native_host` they are
 servicing before touching shell, scene, renderer, or input state. The current
