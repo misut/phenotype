@@ -283,10 +283,35 @@ struct wasi_paint_host {
     float canvas_height() const { return phenotype_get_canvas_height(); }
     void open_url(char const* u, unsigned int l) { phenotype_open_url(u, l); }
 };
-inline wasi_paint_host g_wasi;
+
+struct WasiPaintRuntime {
+    wasi_paint_host host{};
+};
+
+inline WasiPaintRuntime& wasi_paint_runtime() {
+    static WasiPaintRuntime& runtime = *new WasiPaintRuntime();
+    return runtime;
+}
+
+inline wasi_paint_host& active_wasi_paint_host() {
+    return wasi_paint_runtime().host;
+}
+
 #endif
 
 } // namespace phenotype::detail
+
+#ifdef __wasi__
+export namespace phenotype::detail {
+inline std::string_view wasi_paint_runtime_owner_name() noexcept {
+    return "WasiPaintRuntime";
+}
+
+inline unsigned int wasi_paint_runtime_command_buffer_size() noexcept {
+    return BUF_SIZE;
+}
+}
+#endif
 
 export namespace phenotype {
 
@@ -720,8 +745,12 @@ void flush_if_changed(R& r) {
 
 // ---- WASM non-template overloads ----
 #ifdef __wasi__
-inline void emit_clear(Color c) { emit_clear(detail::g_wasi, c); }
-inline void flush_if_changed() { flush_if_changed(detail::g_wasi); }
+inline void emit_clear(Color c) {
+    emit_clear(detail::active_wasi_paint_host(), c);
+}
+inline void flush_if_changed() {
+    flush_if_changed(detail::active_wasi_paint_host());
+}
 #endif
 
 } // namespace phenotype
@@ -2043,17 +2072,22 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
 
 #ifdef __wasi__
 export namespace phenotype::detail {
-inline void wasi_emit_clear(Color c) { emit_clear(g_wasi, c); }
-inline void wasi_flush_if_changed() { flush_if_changed(g_wasi); }
+inline void wasi_emit_clear(Color c) {
+    emit_clear(active_wasi_paint_host(), c);
+}
+inline void wasi_flush_if_changed() {
+    flush_if_changed(active_wasi_paint_host());
+}
 inline void wasi_reset_paint_scissor_boundary() {
-    reset_paint_scissor_boundary(g_wasi);
+    reset_paint_scissor_boundary(active_wasi_paint_host());
 }
 inline void wasi_paint_node(NodeHandle h, float ox, float oy,
                             float sx, float sy, float vw, float vh) {
-    paint_node(g_wasi, g_wasi, h, ox, oy, sx, sy, vw, vh);
+    auto& host = active_wasi_paint_host();
+    paint_node(host, host, h, ox, oy, sx, sy, vw, vh);
 }
 inline void wasi_paint_root_vertical_scroll_bar(float vw, float vh) {
-    paint_root_vertical_scroll_bar(g_wasi, vw, vh);
+    paint_root_vertical_scroll_bar(active_wasi_paint_host(), vw, vh);
 }
 }
 #endif

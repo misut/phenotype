@@ -2086,6 +2086,11 @@ void test_wasi_debug_artifact_bundle_contract() {
         read_text_file(bundle_dir / "platform" / "wasi-runtime.json"));
     auto const& runtime_obj = runtime_file.as_object();
     assert(runtime_obj.at("host_model").as_string() == "wasi");
+    assert(runtime_obj.at("paint_runtime_owner").as_string()
+           == "WasiPaintRuntime");
+    assert(runtime_obj.at("layout_runtime_owner").as_string()
+           == "WasiLayoutRuntime");
+    assert(runtime_obj.at("command_buffer_size").as_integer() == 65536);
     assert(runtime_obj.at("frame_capture_supported").as_bool() == false);
     auto const& renderer = runtime_obj.at("renderer").as_object();
     assert(renderer.at("material_pipeline_ready").as_bool() == false);
