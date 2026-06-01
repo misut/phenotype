@@ -787,6 +787,87 @@ void test_application_runtime_snapshot_tracks_process_owners() {
     std::puts("PASS: application runtime snapshot tracks process owners");
 }
 
+void test_active_runtime_binding_restores_scene_and_surface() {
+    auto active_scene_before = runtime::active_scene_handle();
+    auto active_surface_before = runtime::active_render_surface_handle();
+    auto scene_a = runtime::ensure_scene(SceneDescriptor{
+        .id = "active-binding-scene-a",
+        .title = "Active Binding Scene A",
+        .role = SceneRole::Settings,
+        .visible = true,
+    });
+    auto scene_b = runtime::ensure_scene(SceneDescriptor{
+        .id = "active-binding-scene-b",
+        .title = "Active Binding Scene B",
+        .role = SceneRole::Debug,
+        .visible = true,
+    });
+    auto surface_a = runtime::ensure_render_surface(RenderSurfaceDescriptor{
+        .id = "active-binding-surface-a",
+        .title = "Active Binding Surface A",
+        .scene_id = "active-binding-scene-a",
+        .role = RenderSurfaceRole::Settings,
+        .visible = true,
+        .logical_width = 320,
+        .logical_height = 240,
+        .framebuffer_width = 640,
+        .framebuffer_height = 480,
+        .content_scale = 2.0f,
+    });
+    auto surface_b = runtime::ensure_render_surface(RenderSurfaceDescriptor{
+        .id = "active-binding-surface-b",
+        .title = "Active Binding Surface B",
+        .scene_id = "active-binding-scene-b",
+        .role = RenderSurfaceRole::Debug,
+        .visible = true,
+        .logical_width = 480,
+        .logical_height = 320,
+        .framebuffer_width = 960,
+        .framebuffer_height = 640,
+        .content_scale = 2.0f,
+    });
+
+    {
+        auto activate_surface_a = runtime::activate_render_surface(surface_a);
+        assert(runtime::active_scene_handle().id == scene_a.id);
+        assert(runtime::active_render_surface_handle().id == surface_a.id);
+        assert(runtime::scene(scene_a).active);
+        assert(runtime::render_surface(surface_a).active);
+
+        {
+            auto activate_scene_b = runtime::activate_scene(scene_b);
+            assert(runtime::active_scene_handle().id == scene_b.id);
+            assert(runtime::active_render_surface_handle().id == surface_a.id);
+            assert(runtime::scene(scene_b).active);
+            assert(runtime::render_surface(surface_a).active);
+
+            {
+                auto activate_surface_b =
+                    runtime::activate_render_surface(surface_b);
+                assert(runtime::active_scene_handle().id == scene_b.id);
+                assert(runtime::active_render_surface_handle().id
+                       == surface_b.id);
+                assert(runtime::scene(scene_b).active);
+                assert(runtime::render_surface(surface_b).active);
+            }
+
+            assert(runtime::active_scene_handle().id == scene_b.id);
+            assert(runtime::active_render_surface_handle().id == surface_a.id);
+            assert(runtime::scene(scene_b).active);
+            assert(runtime::render_surface(surface_a).active);
+        }
+
+        assert(runtime::active_scene_handle().id == scene_a.id);
+        assert(runtime::active_render_surface_handle().id == surface_a.id);
+        assert(runtime::scene(scene_a).active);
+        assert(runtime::render_surface(surface_a).active);
+    }
+
+    assert(runtime::active_scene_handle().id == active_scene_before.id);
+    assert(runtime::active_render_surface_handle().id == active_surface_before.id);
+    std::puts("PASS: active runtime binding restores scene and surface");
+}
+
 void test_app_runner_uses_context_pointer() {
     struct RunnerContext {
         int rebuilds = 0;
@@ -3632,6 +3713,7 @@ int main() {
     test_render_surface_runtime_binds_scene_and_tracks_frames();
     test_render_surface_visibility_updates_bound_scene();
     test_application_runtime_snapshot_tracks_process_owners();
+    test_active_runtime_binding_restores_scene_and_surface();
     test_app_runner_uses_context_pointer();
     test_app_runner_can_own_context_pointer();
     test_legacy_app_runner_context_is_scene_local();

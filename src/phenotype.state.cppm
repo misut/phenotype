@@ -703,12 +703,35 @@ namespace detail {
         return scenes;
     }
 
-    inline SceneRuntime* g_active_scene = &default_scene_runtime();
+    struct RenderSurfaceRuntime;
+
+    struct ActiveRuntimeBinding {
+        SceneRuntime* scene = nullptr;
+        RenderSurfaceRuntime* render_surface = nullptr;
+    };
+
+    inline ActiveRuntimeBinding& active_runtime_binding() {
+        static ActiveRuntimeBinding& binding = *new ActiveRuntimeBinding{
+            .scene = &default_scene_runtime(),
+        };
+        if (!binding.scene)
+            binding.scene = &default_scene_runtime();
+        return binding;
+    }
+
+    inline ActiveRuntimeBinding capture_active_runtime_binding() {
+        return active_runtime_binding();
+    }
+
+    inline SceneRuntime* active_scene_runtime_ptr() {
+        auto& binding = active_runtime_binding();
+        if (!binding.scene)
+            binding.scene = &default_scene_runtime();
+        return binding.scene;
+    }
 
     inline SceneRuntime& active_scene_runtime() {
-        if (!g_active_scene)
-            g_active_scene = &default_scene_runtime();
-        return *g_active_scene;
+        return *active_scene_runtime_ptr();
     }
 
     inline AppState& g_app() {
@@ -750,19 +773,24 @@ namespace detail {
     }
 
     inline void bind_scene_runtime(SceneRuntime& scene) {
-        g_active_scene = &scene;
+        active_runtime_binding().scene = &scene;
+    }
+
+    inline void restore_active_scene(ActiveRuntimeBinding const& binding) {
+        active_runtime_binding().scene =
+            binding.scene ? binding.scene : &default_scene_runtime();
     }
 
     struct ScopedSceneActivation {
-        SceneRuntime* previous_scene = nullptr;
+        ActiveRuntimeBinding previous{};
 
         explicit ScopedSceneActivation(SceneRuntime& scene)
-            : previous_scene(g_active_scene) {
+            : previous(capture_active_runtime_binding()) {
             bind_scene_runtime(scene);
         }
 
         ~ScopedSceneActivation() {
-            g_active_scene = previous_scene ? previous_scene : &default_scene_runtime();
+            restore_active_scene(previous);
         }
     };
 
@@ -833,7 +861,7 @@ namespace detail {
             .id = scene.descriptor.id,
             .title = scene.descriptor.title,
             .role = scene.descriptor.role,
-            .active = &scene == g_active_scene,
+            .active = &scene == active_scene_runtime_ptr(),
             .visible = scene.descriptor.visible,
             .hovered_id = app ? app->hovered_id : 0xFFFFFFFFu,
             .focused_id = app ? app->focused_id : 0xFFFFFFFFu,
@@ -934,13 +962,15 @@ namespace detail {
         return surfaces;
     }
 
-    inline RenderSurfaceRuntime* g_active_render_surface =
-        &default_render_surface_runtime();
+    inline RenderSurfaceRuntime* active_render_surface_runtime_ptr() {
+        auto& binding = active_runtime_binding();
+        if (!binding.render_surface)
+            binding.render_surface = &default_render_surface_runtime();
+        return binding.render_surface;
+    }
 
     inline RenderSurfaceRuntime& active_render_surface_runtime() {
-        if (!g_active_render_surface)
-            g_active_render_surface = &default_render_surface_runtime();
-        return *g_active_render_surface;
+        return *active_render_surface_runtime_ptr();
     }
 
     inline RenderSurfaceRuntime* find_render_surface_runtime(
@@ -983,29 +1013,32 @@ namespace detail {
     }
 
     inline void bind_render_surface_runtime(RenderSurfaceRuntime& surface) {
-        g_active_render_surface = &surface;
+        auto& binding = active_runtime_binding();
+        binding.render_surface = &surface;
         if (!surface.scene)
             surface.scene = &scene_for_render_surface(surface.descriptor);
-        bind_scene_runtime(*surface.scene);
+        binding.scene = surface.scene;
+    }
+
+    inline void restore_active_runtime_binding(
+        ActiveRuntimeBinding const& binding) {
+        auto& active = active_runtime_binding();
+        active.scene = binding.scene ? binding.scene : &default_scene_runtime();
+        active.render_surface = binding.render_surface
+            ? binding.render_surface
+            : &default_render_surface_runtime();
     }
 
     struct ScopedRenderSurfaceActivation {
-        RenderSurfaceRuntime* previous_surface = nullptr;
-        SceneRuntime* previous_scene = nullptr;
+        ActiveRuntimeBinding previous{};
 
         explicit ScopedRenderSurfaceActivation(RenderSurfaceRuntime& surface)
-            : previous_surface(g_active_render_surface),
-              previous_scene(g_active_scene) {
+            : previous(capture_active_runtime_binding()) {
             bind_render_surface_runtime(surface);
         }
 
         ~ScopedRenderSurfaceActivation() {
-            g_active_render_surface = previous_surface
-                ? previous_surface
-                : &default_render_surface_runtime();
-            g_active_scene = previous_scene
-                ? previous_scene
-                : &default_scene_runtime();
+            restore_active_runtime_binding(previous);
         }
     };
 
@@ -1055,7 +1088,7 @@ namespace detail {
             .title = surface.descriptor.title,
             .scene_id = surface.descriptor.scene_id,
             .role = surface.descriptor.role,
-            .active = &surface == g_active_render_surface,
+            .active = &surface == active_render_surface_runtime_ptr(),
             .visible = surface.descriptor.visible,
             .logical_width = surface.descriptor.logical_width,
             .logical_height = surface.descriptor.logical_height,
@@ -1617,7 +1650,7 @@ inline SceneSnapshot scene(std::string_view id) {
 }
 
 class SceneActivation {
-    void* previous_scene_ = nullptr;
+    detail::ActiveRuntimeBinding previous_{};
     bool active_ = false;
 
     void activate(std::string_view id) {
@@ -1628,7 +1661,7 @@ class SceneActivation {
                 id);
             std::abort();
         }
-        previous_scene_ = detail::g_active_scene;
+        previous_ = detail::capture_active_runtime_binding();
         detail::bind_scene_runtime(*scene);
         active_ = true;
     }
@@ -1636,9 +1669,7 @@ class SceneActivation {
     void reset() {
         if (!active_)
             return;
-        detail::g_active_scene = previous_scene_
-            ? static_cast<detail::SceneRuntime*>(previous_scene_)
-            : &detail::default_scene_runtime();
+        detail::restore_active_scene(previous_);
         active_ = false;
     }
 
@@ -1655,9 +1686,9 @@ public:
     SceneActivation& operator=(SceneActivation const&) = delete;
 
     SceneActivation(SceneActivation&& other) noexcept
-        : previous_scene_(other.previous_scene_),
+        : previous_(other.previous_),
           active_(other.active_) {
-        other.previous_scene_ = nullptr;
+        other.previous_ = {};
         other.active_ = false;
     }
 
@@ -1828,8 +1859,7 @@ inline RenderSurfaceSnapshot render_surface(std::string_view id) {
 }
 
 class RenderSurfaceActivation {
-    void* previous_surface_ = nullptr;
-    void* previous_scene_ = nullptr;
+    detail::ActiveRuntimeBinding previous_{};
     bool active_ = false;
 
     void activate(std::string_view id) {
@@ -1841,8 +1871,7 @@ class RenderSurfaceActivation {
                 id);
             std::abort();
         }
-        previous_surface_ = detail::g_active_render_surface;
-        previous_scene_ = detail::g_active_scene;
+        previous_ = detail::capture_active_runtime_binding();
         detail::bind_render_surface_runtime(*surface);
         active_ = true;
     }
@@ -1850,12 +1879,7 @@ class RenderSurfaceActivation {
     void reset() {
         if (!active_)
             return;
-        detail::g_active_render_surface = previous_surface_
-            ? static_cast<detail::RenderSurfaceRuntime*>(previous_surface_)
-            : &detail::default_render_surface_runtime();
-        detail::g_active_scene = previous_scene_
-            ? static_cast<detail::SceneRuntime*>(previous_scene_)
-            : &detail::default_scene_runtime();
+        detail::restore_active_runtime_binding(previous_);
         active_ = false;
     }
 
@@ -1872,11 +1896,9 @@ public:
     RenderSurfaceActivation& operator=(RenderSurfaceActivation const&) = delete;
 
     RenderSurfaceActivation(RenderSurfaceActivation&& other) noexcept
-        : previous_surface_(other.previous_surface_),
-          previous_scene_(other.previous_scene_),
+        : previous_(other.previous_),
           active_(other.active_) {
-        other.previous_surface_ = nullptr;
-        other.previous_scene_ = nullptr;
+        other.previous_ = {};
         other.active_ = false;
     }
 
