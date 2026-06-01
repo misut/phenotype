@@ -246,6 +246,12 @@ first public native window API for shared-state secondary scenes. The
 file-explorer settings window now uses it to render a real phenotype
 `SceneRole::Settings` scene in a separate AppKit window instead of mirroring the
 state into one-off native controls.
+The older AppKit-only preferences window remains as a compatibility path, but
+its lifecycle state is grouped behind an `AppKitPreferencesRuntime` registry
+instead of parallel globals for the window list, delegate, and control-tag
+allocator. New settings/debug surfaces should prefer scene windows; the legacy
+registry exists so old callers still have one owner to close during application
+shutdown.
 `phenotype::native::scene_window::write_artifact_bundle` temporarily activates a
 registered scene window's host and writes the same debug artifact bundle used by
 the main window. This keeps visual verification and renderer diagnostics

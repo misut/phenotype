@@ -907,6 +907,12 @@ static void test_macos_appkit_preferences_window_lifecycle() {
         "test-native-preferences");
     assert(!phenotype::native::detail::is_appkit_preferences_window_visible(
         "test-native-preferences"));
+    assert(phenotype::native::detail::show_appkit_preferences_window(options));
+    assert(phenotype::native::detail::is_appkit_preferences_window_visible(
+        "test-native-preferences"));
+    phenotype::native::detail::close_all_appkit_preferences_windows();
+    assert(!phenotype::native::detail::is_appkit_preferences_window_visible(
+        "test-native-preferences"));
 
     std::puts("PASS: macOS AppKit preferences window lifecycle");
 }

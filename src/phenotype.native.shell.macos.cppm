@@ -817,9 +817,25 @@ struct AppKitPreferencesWindowState {
     unsigned long long content_rebuild_count = 0;
 };
 
-inline std::vector<AppKitPreferencesWindowState> g_appkit_preferences_windows;
-inline id g_appkit_preferences_delegate = nullptr;
-inline int g_appkit_preferences_next_tag = 7000;
+struct AppKitPreferencesRuntime {
+    std::vector<AppKitPreferencesWindowState> windows;
+    id delegate = nullptr;
+    int next_tag = 7000;
+};
+
+inline AppKitPreferencesRuntime& appkit_preferences_runtime() {
+    static AppKitPreferencesRuntime& runtime =
+        *new AppKitPreferencesRuntime();
+    return runtime;
+}
+
+inline std::vector<AppKitPreferencesWindowState>& appkit_preferences_windows() {
+    return appkit_preferences_runtime().windows;
+}
+
+inline int next_appkit_preferences_control_tag() {
+    return appkit_preferences_runtime().next_tag++;
+}
 
 inline std::string safe_preferences_text(char const* value,
                                          char const* fallback = "") {
@@ -1223,7 +1239,7 @@ inline void raise_visible_appkit_scene_windows() {
 
 inline AppKitPreferencesWindowState* find_appkit_preferences_window(
         std::string_view identifier) {
-    for (auto& state : g_appkit_preferences_windows) {
+    for (auto& state : appkit_preferences_windows()) {
         if (state.identifier == identifier)
             return &state;
     }
@@ -1233,7 +1249,7 @@ inline AppKitPreferencesWindowState* find_appkit_preferences_window(
 inline AppKitPreferencesSectionState* find_appkit_preferences_section_by_tag(
         int tag,
         AppKitPreferencesWindowState** owner = nullptr) {
-    for (auto& window : g_appkit_preferences_windows) {
+    for (auto& window : appkit_preferences_windows()) {
         for (auto& section : window.sections) {
             if (section.control_tag == tag) {
                 if (owner)
@@ -1262,7 +1278,7 @@ inline void copy_appkit_preferences_options(
         section.title = safe_preferences_text(input.title);
         section.subtitle = safe_preferences_text(input.subtitle);
         section.on_select = input.on_select;
-        section.control_tag = g_appkit_preferences_next_tag++;
+        section.control_tag = next_appkit_preferences_control_tag();
         for (std::size_t c = 0; c < input.choice_count; ++c) {
             auto const& choice = input.choices[c];
             section.choices.push_back(AppKitPreferencesChoiceState{
@@ -1571,7 +1587,7 @@ inline void appkit_preferences_window_will_close(id, SEL, id notification) {
     id window = notification
         ? objc_send<id>(notification, sel("object"))
         : nullptr;
-    for (auto& state : g_appkit_preferences_windows) {
+    for (auto& state : appkit_preferences_windows()) {
         if (state.window != window)
             continue;
         bool const was_visible = state.visible;
@@ -1584,8 +1600,9 @@ inline void appkit_preferences_window_will_close(id, SEL, id notification) {
 }
 
 inline id create_appkit_preferences_delegate() {
-    if (g_appkit_preferences_delegate)
-        return g_appkit_preferences_delegate;
+    auto& runtime = appkit_preferences_runtime();
+    if (runtime.delegate)
+        return runtime.delegate;
     static Class delegate_class = nullptr;
     if (!delegate_class) {
         Class base = reinterpret_cast<Class>(class_id("NSObject"));
@@ -1607,10 +1624,10 @@ inline id create_appkit_preferences_delegate() {
             "v@:@");
         objc_registerClassPair(delegate_class);
     }
-    g_appkit_preferences_delegate = objc_send<id>(
+    runtime.delegate = objc_send<id>(
         objc_send<id>(reinterpret_cast<id>(delegate_class), sel("alloc")),
         sel("init"));
-    return g_appkit_preferences_delegate;
+    return runtime.delegate;
 }
 
 inline bool apply_appkit_preferences_window_options(
@@ -1623,8 +1640,8 @@ inline bool apply_appkit_preferences_window_options(
         identifier = "preferences";
     auto* state = find_appkit_preferences_window(identifier);
     if (!state) {
-        g_appkit_preferences_windows.push_back(AppKitPreferencesWindowState{});
-        state = &g_appkit_preferences_windows.back();
+        appkit_preferences_windows().push_back(AppKitPreferencesWindowState{});
+        state = &appkit_preferences_windows().back();
         state->identifier = identifier;
     }
     bool const reuse_content = state->window
@@ -1710,7 +1727,7 @@ inline void close_appkit_preferences_window(char const* identifier) {
 }
 
 inline std::size_t appkit_preferences_window_count() {
-    return g_appkit_preferences_windows.size();
+    return appkit_preferences_windows().size();
 }
 
 inline unsigned long long appkit_preferences_content_rebuild_count(
@@ -1721,7 +1738,7 @@ inline unsigned long long appkit_preferences_content_rebuild_count(
 }
 
 inline bool visible_appkit_preferences_window_is_front() {
-    for (auto& state : g_appkit_preferences_windows) {
+    for (auto& state : appkit_preferences_windows()) {
         if (state.visible
             && appkit_window_is_visible(state.window)
             && (appkit_window_is_key(state.window)
@@ -1733,7 +1750,7 @@ inline bool visible_appkit_preferences_window_is_front() {
 }
 
 inline void raise_visible_appkit_preferences_windows() {
-    for (auto& state : g_appkit_preferences_windows) {
+    for (auto& state : appkit_preferences_windows()) {
         if (!state.visible || !appkit_window_is_visible(state.window))
             continue;
         if (appkit_window_is_key(state.window)
@@ -1741,6 +1758,15 @@ inline void raise_visible_appkit_preferences_windows() {
             continue;
         objc_send<void>(state.window, sel("makeKeyAndOrderFront:"), nullptr);
         objc_send<void>(state.window, sel("orderFrontRegardless"));
+    }
+}
+
+inline void close_all_appkit_preferences_windows() {
+    for (auto& state : appkit_preferences_windows()) {
+        if (!state.window)
+            continue;
+        state.visible = false;
+        objc_send<void>(state.window, sel("close"));
     }
 }
 
@@ -2906,6 +2932,7 @@ int run_app_with_macos_platform(platform_api const& platform,
         service_host_tick(host);
     }
 
+    close_all_appkit_preferences_windows();
     close_all_appkit_scene_windows();
     for (auto& state : g_appkit_scene_windows) {
         if (state)
