@@ -161,6 +161,10 @@ The macOS Metal renderer mirrors the same cursor shape with
 `ActiveRendererBinding`. Each native surface keeps an isolated renderer state,
 and scoped renderer activation restores the previous surface state after nested
 work such as secondary-window rendering or renderer shutdown.
+macOS text input follows the same native-owner rule with `MacOSInputRuntime`:
+the IME surface registry and caret-system override live together, so future
+scene windows can attach input state by native surface without leaving a
+separate process-global test or policy switch behind.
 The AppKit shell keeps the foreground native window and surface together in
 `ActiveAppKitBinding`. Window-level APIs such as size limits, aspect ratio,
 settings-menu focus, and dock reopen focus resolve through that pair instead of

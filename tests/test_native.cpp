@@ -1100,6 +1100,7 @@ static void assert_macos_runtime_sections(json::Object const& details) {
     assert(details.contains("renderer"));
     assert(details.contains("images"));
     assert(details.contains("text_input"));
+    assert(details.contains("input"));
 
     auto const& renderer = details.at("renderer").as_object();
     assert(renderer.contains("initialized"));
@@ -1122,6 +1123,12 @@ static void assert_macos_runtime_sections(json::Object const& details) {
     auto const& text_input = details.at("text_input").as_object();
     assert(text_input.contains("system_caret"));
     assert(text_input.contains("composition"));
+
+    auto const& input = details.at("input").as_object();
+    assert(input.at("owner").as_string() == "MacOSInputRuntime");
+    assert(input.contains("ime_surface_count"));
+    assert(input.contains("system_caret_forced_disabled"));
+    assert(input.contains("scroll_contract"));
 }
 
 #ifdef _WIN32

@@ -56,8 +56,6 @@ inline constexpr unsigned long long ns_event_phase_ended = 1ull << 3;
 inline constexpr unsigned long long ns_event_phase_cancelled = 1ull << 4;
 inline constexpr unsigned long long ns_event_phase_may_begin = 1ull << 5;
 
-inline bool g_force_disable_system_caret_for_tests = false;
-
 struct MacOSScrollRuntimeEvent {
     bool available = false;
     char const* source = "none";
@@ -211,9 +209,18 @@ struct ImeRegistry {
     }
 };
 
+struct MacOSInputRuntime {
+    ImeRegistry ime{};
+    bool force_disable_system_caret_for_tests = false;
+};
+
+inline MacOSInputRuntime& macos_input_runtime() {
+    static MacOSInputRuntime runtime;
+    return runtime;
+}
+
 inline ImeRegistry& ime_registry() {
-    static ImeRegistry registry;
-    return registry;
+    return macos_input_runtime().ime;
 }
 
 inline ImeState& active_ime() {
@@ -460,7 +467,7 @@ struct CaretVisualState {
 };
 
 inline bool system_caret_supported() {
-    return !g_force_disable_system_caret_for_tests
+    return !macos_input_runtime().force_disable_system_caret_for_tests
         && objc_lookUpClass("NSTextInsertionIndicator") != Nil;
 }
 
