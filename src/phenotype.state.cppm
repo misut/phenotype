@@ -369,6 +369,8 @@ struct RenderSurfaceHandle {
 
 struct ApplicationRuntimeSnapshot {
     std::string scene_runtime_owner = "ApplicationSceneRuntimeStore";
+    std::string render_surface_runtime_owner =
+        "ApplicationRenderSurfaceRuntimeStore";
     std::string active_scene_id = "main";
     SceneRole active_scene_role = SceneRole::Main;
     bool active_scene_visible = true;
@@ -965,6 +967,23 @@ namespace detail {
         std::uint64_t paint_skip_count = 0;
     };
 
+    struct ApplicationRenderSurfaceRuntimeStore {
+        RenderSurfaceRuntime default_surface{};
+        std::vector<std::unique_ptr<RenderSurfaceRuntime>> surfaces{};
+    };
+
+    inline ApplicationRenderSurfaceRuntimeStore&
+    application_render_surface_runtime_store() {
+        static ApplicationRenderSurfaceRuntimeStore& store =
+            *new ApplicationRenderSurfaceRuntimeStore();
+        return store;
+    }
+
+    inline std::string_view application_render_surface_runtime_store_owner_name()
+            noexcept {
+        return "ApplicationRenderSurfaceRuntimeStore";
+    }
+
     inline std::string normalize_render_surface_id(std::string id) {
         return id.empty() ? std::string{"main"} : std::move(id);
     }
@@ -1013,7 +1032,8 @@ namespace detail {
     }
 
     inline RenderSurfaceRuntime& default_render_surface_runtime() {
-        static RenderSurfaceRuntime& surface = *new RenderSurfaceRuntime();
+        auto& surface =
+            application_render_surface_runtime_store().default_surface;
         if (!surface.scene) {
             surface.descriptor = RenderSurfaceDescriptor{
                 .id = "main",
@@ -1029,9 +1049,7 @@ namespace detail {
 
     inline std::vector<std::unique_ptr<RenderSurfaceRuntime>>&
     render_surface_registry() {
-        static std::vector<std::unique_ptr<RenderSurfaceRuntime>>& surfaces =
-            *new std::vector<std::unique_ptr<RenderSurfaceRuntime>>();
-        return surfaces;
+        return application_render_surface_runtime_store().surfaces;
     }
 
     inline RenderSurfaceRuntime* active_render_surface_runtime_ptr() {
@@ -1195,6 +1213,9 @@ namespace detail {
         ApplicationRuntimeSnapshot out{};
         out.scene_runtime_owner =
             std::string{application_scene_runtime_store_owner_name()};
+        out.render_surface_runtime_owner =
+            std::string{
+                application_render_surface_runtime_store_owner_name()};
         out.active_scene_id = active_scene.id;
         out.active_scene_role = active_scene.role;
         out.active_scene_visible = active_scene.visible;

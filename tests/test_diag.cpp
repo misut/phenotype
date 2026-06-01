@@ -436,6 +436,8 @@ void test_snapshot_shape() {
         runtime.at("application_runtime").as_object();
     assert(application_runtime.at("scene_runtime_owner").as_string()
            == "ApplicationSceneRuntimeStore");
+    assert(application_runtime.at("render_surface_runtime_owner").as_string()
+           == "ApplicationRenderSurfaceRuntimeStore");
     assert(application_runtime.at("active_scene_id").as_string() == "main");
     assert(application_runtime.at("active_scene_role").as_string() == "main");
     assert(application_runtime.at("active_scene_visible").as_bool() == true);
