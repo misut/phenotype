@@ -735,7 +735,20 @@ struct RendererState {
 };
 
 inline RendererState g_default_renderer;
-inline RendererState* g_active_renderer = &g_default_renderer;
+
+struct ActiveRendererBinding {
+    RendererState* state = &g_default_renderer;
+};
+
+inline ActiveRendererBinding& active_renderer_binding() {
+    static ActiveRendererBinding& binding =
+        *new ActiveRendererBinding{&g_default_renderer};
+    return binding;
+}
+
+inline ActiveRendererBinding capture_active_renderer_binding() {
+    return active_renderer_binding();
+}
 
 inline std::vector<std::unique_ptr<RendererState>>& renderer_registry() {
     static std::vector<std::unique_ptr<RendererState>>& states =
@@ -744,9 +757,10 @@ inline std::vector<std::unique_ptr<RendererState>>& renderer_registry() {
 }
 
 inline RendererState& renderer_state() {
-    if (!g_active_renderer)
-        g_active_renderer = &g_default_renderer;
-    return *g_active_renderer;
+    auto& binding = active_renderer_binding();
+    if (!binding.state)
+        binding.state = &g_default_renderer;
+    return *binding.state;
 }
 
 inline RendererState* find_renderer_state(NativeSurfaceDescriptor* surface) {
@@ -777,8 +791,36 @@ inline RendererState& ensure_renderer_state(NativeSurfaceDescriptor* surface) {
     return *ptr;
 }
 
+inline void bind_renderer_state(RendererState& state) {
+    active_renderer_binding().state = &state;
+}
+
 inline void activate_renderer_state(NativeSurfaceDescriptor* surface) {
-    g_active_renderer = &ensure_renderer_state(surface);
+    bind_renderer_state(ensure_renderer_state(surface));
+}
+
+inline void restore_active_renderer_binding(
+        ActiveRendererBinding const& binding) {
+    active_renderer_binding() = binding;
+    if (!active_renderer_binding().state)
+        active_renderer_binding().state = &g_default_renderer;
+}
+
+struct ScopedRendererActivation {
+    ActiveRendererBinding previous{};
+
+    explicit ScopedRendererActivation(NativeSurfaceDescriptor* surface)
+        : previous(capture_active_renderer_binding()) {
+        activate_renderer_state(surface);
+    }
+
+    ~ScopedRendererActivation() {
+        restore_active_renderer_binding(previous);
+    }
+};
+
+inline void reset_active_renderer_state() {
+    bind_renderer_state(g_default_renderer);
 }
 
 inline MTL::RenderPipelineState* create_pipeline(
@@ -2999,16 +3041,16 @@ inline void renderer_shutdown_active_state() {
 }
 
 inline void renderer_shutdown() {
-    g_active_renderer = &g_default_renderer;
+    reset_active_renderer_state();
     renderer_shutdown_active_state();
     for (auto& state : renderer_registry()) {
         if (!state)
             continue;
-        g_active_renderer = state.get();
+        bind_renderer_state(*state);
         renderer_shutdown_active_state();
     }
     renderer_registry().clear();
-    g_active_renderer = &g_default_renderer;
+    reset_active_renderer_state();
 }
 
 inline std::optional<unsigned int> renderer_hit_test(float x, float y,
@@ -3043,6 +3085,16 @@ inline std::size_t renderer_surface_state_count() {
 
 inline bool active_renderer_surface_is(NativeSurfaceDescriptor* surface) {
     return detail::renderer_state().surface == surface;
+}
+
+template<typename F>
+inline void with_renderer_surface_state(NativeSurfaceDescriptor* surface, F&& fn) {
+    detail::ScopedRendererActivation activate(surface);
+    fn();
+}
+
+inline void* active_renderer_state_identity() {
+    return &detail::renderer_state();
 }
 
 struct Utf8Range {
