@@ -236,13 +236,11 @@ struct TextState {
     bool initialized = false;
 };
 
-static TextState g_text;
-
-// Custom font collection plumbing. The single virtual collection
-// rebuilt on each `register_font_file` call lives in
-// `g_fonts.collection` — DirectWrite caches collections by key bytes,
-// so bumping `g_fonts.generation` is what forces a rebuild from
-// `g_fonts.paths`. The loaders are held by their DirectWrite interface
+// Custom font collection plumbing. The single virtual collection rebuilt on
+// each `register_font_file` call lives in the Windows text runtime's font
+// registry. DirectWrite caches collections by key bytes, so bumping the
+// registry generation forces a rebuild from the registered paths. The loaders
+// are held by their DirectWrite interface
 // type rather than the concrete CustomFontFileLoader /
 // CustomFontCollectionLoader (which are defined later, alongside the
 // other COM helpers below GlyphBitmapRenderer) so the ComPtr
@@ -267,7 +265,23 @@ struct FontRegistry {
     bool                               loaders_registered = false;
 };
 
-static FontRegistry g_fonts;
+struct WindowsTextRuntime {
+    TextState text{};
+    FontRegistry fonts{};
+};
+
+inline WindowsTextRuntime& windows_text_runtime() {
+    static WindowsTextRuntime& runtime = *new WindowsTextRuntime();
+    return runtime;
+}
+
+inline TextState& text_state() {
+    return windows_text_runtime().text;
+}
+
+inline FontRegistry& font_registry() {
+    return windows_text_runtime().fonts;
+}
 
 inline HRESULT create_text_format(
         wchar_t const* family_name,
@@ -275,7 +289,7 @@ inline HRESULT create_text_format(
         DWRITE_FONT_WEIGHT weight,
         DWRITE_FONT_STYLE  style,
         ComPtr<IDWriteTextFormat>& format) {
-    auto hr = g_text.factory->CreateTextFormat(
+    auto hr = text_state().factory->CreateTextFormat(
         family_name,
         collection,
         weight,
@@ -310,8 +324,8 @@ inline DWriteCacheKey dwrite_key_from(::phenotype::FontSpec const& font) {
 }
 
 inline IDWriteTextFormat* acquire_text_format(DWriteCacheKey const& key) {
-    if (!g_text.initialized) return nullptr;
-    for (auto const& slot : g_text.formats) {
+    if (!text_state().initialized) return nullptr;
+    for (auto const& slot : text_state().formats) {
         if (slot.first == key) return slot.second.Get();
     }
 
@@ -322,10 +336,10 @@ inline IDWriteTextFormat* acquire_text_format(DWriteCacheKey const& key) {
     IDWriteFontCollection* collection = nullptr;
     wchar_t const* family = nullptr;
     if (!key.family.empty()) {
-        for (auto const& a : g_fonts.aliases) {
+        for (auto const& a : font_registry().aliases) {
             if (a.alias == key.family) {
                 family     = a.family_name.c_str();
-                collection = g_fonts.collection.Get();
+                collection = font_registry().collection.Get();
                 break;
             }
         }
@@ -346,37 +360,37 @@ inline IDWriteTextFormat* acquire_text_format(DWriteCacheKey const& key) {
     }
     if (FAILED(hr)) return nullptr;
     auto* raw = format.Get();
-    g_text.formats.emplace_back(key, std::move(format));
+    text_state().formats.emplace_back(key, std::move(format));
     return raw;
 }
 
 inline void text_init() {
-    if (g_text.initialized) return;
+    if (text_state().initialized) return;
 
     auto hr = DWriteCreateFactory(
         DWRITE_FACTORY_TYPE_SHARED,
         __uuidof(IDWriteFactory),
-        reinterpret_cast<IUnknown**>(g_text.factory.ReleaseAndGetAddressOf()));
+        reinterpret_cast<IUnknown**>(text_state().factory.ReleaseAndGetAddressOf()));
     if (FAILED(hr)) {
         log_hresult("DWriteCreateFactory", hr);
         return;
     }
 
-    hr = g_text.factory->GetGdiInterop(&g_text.gdi_interop);
+    hr = text_state().factory->GetGdiInterop(&text_state().gdi_interop);
     if (FAILED(hr)) {
         log_hresult("IDWriteFactory::GetGdiInterop", hr);
-        g_text = {};
+        text_state() = {};
         return;
     }
 
-    hr = g_text.factory->CreateRenderingParams(&g_text.rendering_params);
+    hr = text_state().factory->CreateRenderingParams(&text_state().rendering_params);
     if (FAILED(hr)) {
         log_hresult("IDWriteFactory::CreateRenderingParams", hr);
-        g_text = {};
+        text_state() = {};
         return;
     }
 
-    g_text.initialized = true;
+    text_state().initialized = true;
 
     // Pre-warm the two platform defaults — the empty-family /
     // empty-family+mono fast path. Named families resolve lazily on
@@ -386,7 +400,7 @@ inline void text_init() {
         DWriteCacheKey mono{}; mono.mono = true;
         if (!acquire_text_format(sans) || !acquire_text_format(mono)) {
             log_hresult("CreateTextFormat(default)", E_FAIL);
-            g_text = {};
+            text_state() = {};
             return;
         }
     }
@@ -394,21 +408,21 @@ inline void text_init() {
 
 inline void text_shutdown() {
     // Unregister the custom DirectWrite loaders before tearing down the
-    // factory. ComPtr Release in g_fonts runs after the unregister calls
-    // so any IDWriteFontCollection still held elsewhere keeps the
-    // loaders alive via COM ref count for its remaining lifetime.
-    if (g_fonts.loaders_registered && g_text.factory) {
-        if (g_fonts.collection_loader) {
-            g_text.factory->UnregisterFontCollectionLoader(
-                g_fonts.collection_loader.Get());
+    // factory. Font registry ComPtr release runs after the unregister calls, so
+    // any IDWriteFontCollection still held elsewhere keeps the loaders alive
+    // via COM ref count for its remaining lifetime.
+    if (font_registry().loaders_registered && text_state().factory) {
+        if (font_registry().collection_loader) {
+            text_state().factory->UnregisterFontCollectionLoader(
+                font_registry().collection_loader.Get());
         }
-        if (g_fonts.file_loader) {
-            g_text.factory->UnregisterFontFileLoader(
-                g_fonts.file_loader.Get());
+        if (font_registry().file_loader) {
+            text_state().factory->UnregisterFontFileLoader(
+                font_registry().file_loader.Get());
         }
     }
-    g_fonts = {};
-    g_text  = {};
+    font_registry() = {};
+    text_state() = {};
 }
 
 inline HRESULT make_text_layout(
@@ -418,10 +432,10 @@ inline HRESULT make_text_layout(
         float max_width,
         float max_height,
         ComPtr<IDWriteTextLayout>& layout) {
-    if (!g_text.initialized) return E_FAIL;
+    if (!text_state().initialized) return E_FAIL;
     auto* format = acquire_text_format(key);
     if (!format) return E_FAIL;
-    auto hr = g_text.factory->CreateTextLayout(
+    auto hr = text_state().factory->CreateTextLayout(
         text.c_str(),
         static_cast<UINT32>(text.size()),
         format,
@@ -449,7 +463,7 @@ inline HRESULT make_text_layout(
 
 inline float text_measure(float font_size, DWriteCacheKey const& key,
                           char const* text_ptr, unsigned int len) {
-    if (!g_text.initialized || len == 0) return 0.0f;
+    if (!text_state().initialized || len == 0) return 0.0f;
 
     auto wide = cppx::unicode::utf8_to_wide(
         std::string_view{text_ptr, len}).value_or(std::wstring{});
@@ -638,15 +652,16 @@ private:
 
 // ---- Custom DirectWrite font collection plumbing -----------------------
 //
-// Pairs with `g_fonts` and `text_register_font_file` to expose runtime-
+// Pairs with the Windows text runtime font registry and `text_register_font_file`
+// to expose runtime-
 // loaded TTF / OTF / TTC files through DirectWrite's
 // IDWriteFontCollection abstraction. Mirrors the macOS backend's
 // process-scope CTFontManagerRegisterFontsForURL contract.
 //
 // Key shape across the loaders: the UTF-16 path bytes act as the file-
-// loader key. The collection-loader's key is the `g_fonts.generation`
-// counter — its value isn't read, only used by DirectWrite's collection
-// cache to dedupe by-key, so bumping the counter forces a fresh build.
+// loader key. The collection-loader's key is the registry generation counter —
+// its value isn't read, only used by DirectWrite's collection cache to dedupe
+// by-key, so bumping the counter forces a fresh build.
 
 class CustomFontFileStream final : public IDWriteFontFileStream {
 public:
@@ -853,7 +868,7 @@ public:
         return factory_->CreateCustomFontFileReference(
             path.data(),
             static_cast<UINT32>(path.size() * sizeof(wchar_t)),
-            g_fonts.file_loader.Get(),
+            font_registry().file_loader.Get(),
             out);
     }
 
@@ -902,14 +917,13 @@ public:
         if (!factory || key_size != sizeof(std::uint64_t))
             return E_INVALIDARG;
         // The key value isn't read — DirectWrite caches collections by
-        // key bytes, so bumping g_fonts.generation is what produces a
-        // fresh collection. Snapshot g_fonts.paths by value into the
-        // enumerator so a concurrent registration doesn't disturb
-        // iteration.
+        // key bytes, so bumping the registry generation is what produces a
+        // fresh collection. Snapshot registered paths by value into the
+        // enumerator so a concurrent registration doesn't disturb iteration.
         (void)key;
         ComPtr<IDWriteFactory> factory_ptr(factory);
         auto* enumerator = new MasterEnumerator(
-            std::move(factory_ptr), g_fonts.paths);
+            std::move(factory_ptr), font_registry().paths);
         *out = enumerator;
         return S_OK;
     }
@@ -930,8 +944,8 @@ inline bool text_register_font_file(char const* family_alias,
                                     unsigned int alias_len,
                                     char const* path,
                                     unsigned int path_len) {
-    if (!g_text.initialized) text_init();
-    if (!g_text.factory) return false;
+    if (!text_state().initialized) text_init();
+    if (!text_state().factory) return false;
     if (family_alias == nullptr || alias_len == 0
         || path == nullptr || path_len == 0) return false;
 
@@ -943,39 +957,39 @@ inline bool text_register_font_file(char const* family_alias,
             .value_or(std::wstring{});
     if (wide_alias.empty()) return false;
 
-    if (!g_fonts.loaders_registered) {
+    if (!font_registry().loaders_registered) {
         ComPtr<IDWriteFontFileLoader> file_loader;
         ComPtr<IDWriteFontCollectionLoader> coll_loader;
         file_loader.Attach(new CustomFontFileLoader{});
         coll_loader.Attach(new CustomFontCollectionLoader{});
 
-        HRESULT hr = g_text.factory->RegisterFontFileLoader(
+        HRESULT hr = text_state().factory->RegisterFontFileLoader(
             file_loader.Get());
         if (FAILED(hr)) {
             log_hresult("RegisterFontFileLoader", hr);
             return false;
         }
-        hr = g_text.factory->RegisterFontCollectionLoader(
+        hr = text_state().factory->RegisterFontCollectionLoader(
             coll_loader.Get());
         if (FAILED(hr)) {
             log_hresult("RegisterFontCollectionLoader", hr);
-            g_text.factory->UnregisterFontFileLoader(file_loader.Get());
+            text_state().factory->UnregisterFontFileLoader(file_loader.Get());
             return false;
         }
-        g_fonts.file_loader        = std::move(file_loader);
-        g_fonts.collection_loader  = std::move(coll_loader);
-        g_fonts.loaders_registered = true;
+        font_registry().file_loader        = std::move(file_loader);
+        font_registry().collection_loader  = std::move(coll_loader);
+        font_registry().loaders_registered = true;
     }
 
     UINT32 const path_bytes =
         static_cast<UINT32>(wide_path.size() * sizeof(wchar_t));
 
-    // Probe the file before mutating g_fonts.paths so a bad input
+    // Probe the file before mutating registry paths so a bad input
     // doesn't leave a phantom path in the master collection.
     ComPtr<IDWriteFontFile> probe;
-    HRESULT hr = g_text.factory->CreateCustomFontFileReference(
+    HRESULT hr = text_state().factory->CreateCustomFontFileReference(
         wide_path.data(), path_bytes,
-        g_fonts.file_loader.Get(),
+        font_registry().file_loader.Get(),
         &probe);
     if (FAILED(hr)) return false;
     BOOL supported = FALSE;
@@ -986,20 +1000,20 @@ inline bool text_register_font_file(char const* family_alias,
     if (FAILED(hr) || !supported) return false;
 
     bool path_was_new = true;
-    for (auto const& p : g_fonts.paths) {
+    for (auto const& p : font_registry().paths) {
         if (p == wide_path) { path_was_new = false; break; }
     }
-    if (path_was_new) g_fonts.paths.push_back(wide_path);
+    if (path_was_new) font_registry().paths.push_back(wide_path);
 
-    ++g_fonts.generation;
+    ++font_registry().generation;
     ComPtr<IDWriteFontCollection> new_collection;
-    hr = g_text.factory->CreateCustomFontCollection(
-        g_fonts.collection_loader.Get(),
-        &g_fonts.generation,
-        sizeof(g_fonts.generation),
+    hr = text_state().factory->CreateCustomFontCollection(
+        font_registry().collection_loader.Get(),
+        &font_registry().generation,
+        sizeof(font_registry().generation),
         &new_collection);
     if (FAILED(hr) || !new_collection) {
-        if (path_was_new) g_fonts.paths.pop_back();
+        if (path_was_new) font_registry().paths.pop_back();
         return false;
     }
 
@@ -1055,12 +1069,12 @@ inline bool text_register_font_file(char const* family_alias,
         }
     }
     if (family_name.empty()) {
-        if (path_was_new) g_fonts.paths.pop_back();
+        if (path_was_new) font_registry().paths.pop_back();
         return false;
     }
 
     bool replaced = false;
-    for (auto& slot : g_fonts.aliases) {
+    for (auto& slot : font_registry().aliases) {
         if (slot.alias == wide_alias) {
             slot.family_name = family_name;
             replaced = true;
@@ -1068,19 +1082,19 @@ inline bool text_register_font_file(char const* family_alias,
         }
     }
     if (!replaced) {
-        g_fonts.aliases.push_back({ wide_alias, family_name });
+        font_registry().aliases.push_back({ wide_alias, family_name });
     }
 
-    g_fonts.collection = std::move(new_collection);
+    font_registry().collection = std::move(new_collection);
 
     // Drop cached IDWriteTextFormats keyed on this alias so the next
     // acquire_text_format re-resolves through the new binding.
-    g_text.formats.erase(
-        std::remove_if(g_text.formats.begin(), g_text.formats.end(),
+    text_state().formats.erase(
+        std::remove_if(text_state().formats.begin(), text_state().formats.end(),
             [&](auto const& slot) {
                 return slot.first.family == wide_alias;
             }),
-        g_text.formats.end());
+        text_state().formats.end());
 
     return true;
 }
@@ -1127,7 +1141,7 @@ inline std::uint32_t bitmap_section_pixel(
 
 inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
                                   float backing_scale) {
-    if (!g_text.initialized || entries.empty()) return {};
+    if (!text_state().initialized || entries.empty()) return {};
 
     float scale = sanitize_scale(backing_scale);
     static constexpr int ATLAS_SIZE = 2048;
@@ -1216,7 +1230,7 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
         if (FAILED(hr)) continue;
 
         ComPtr<IDWriteBitmapRenderTarget> target;
-        hr = g_text.gdi_interop->CreateBitmapRenderTarget(
+        hr = text_state().gdi_interop->CreateBitmapRenderTarget(
             nullptr,
             box.slot_width,
             box.slot_height,
@@ -1242,7 +1256,7 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
 
         auto* renderer = new GlyphBitmapRenderer(
             target.Get(),
-            g_text.rendering_params.Get(),
+            text_state().rendering_params.Get(),
             RGB(255, 255, 255),
             scale);
         hr = draw_layout->Draw(
@@ -6401,7 +6415,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         }
     }
 
-    if (!decoded.text_entries.empty() && g_text.initialized) {
+    if (!decoded.text_entries.empty() && text_state().initialized) {
         auto atlas = text_build_atlas(decoded.text_entries, text_scale);
         if (!atlas.quads.empty() && !atlas.pixels.empty()
             && SUCCEEDED(create_atlas_texture(atlas, frame))) {
@@ -7049,6 +7063,41 @@ inline json::Object windows_ime_runtime_json() {
     return ime;
 }
 
+inline json::Object windows_text_runtime_json() {
+    auto const& text = text_state();
+    auto const& fonts = font_registry();
+
+    json::Object text_runtime;
+    text_runtime.emplace("owner", json::Value{"WindowsTextRuntime"});
+    text_runtime.emplace("initialized", json::Value{text.initialized});
+    text_runtime.emplace("factory_present", json::Value{text.factory.Get() != nullptr});
+    text_runtime.emplace(
+        "gdi_interop_present",
+        json::Value{text.gdi_interop.Get() != nullptr});
+    text_runtime.emplace(
+        "rendering_params_present",
+        json::Value{text.rendering_params.Get() != nullptr});
+    text_runtime.emplace(
+        "format_cache_count",
+        json::Value{static_cast<std::int64_t>(text.formats.size())});
+    text_runtime.emplace(
+        "custom_font_alias_count",
+        json::Value{static_cast<std::int64_t>(fonts.aliases.size())});
+    text_runtime.emplace(
+        "custom_font_path_count",
+        json::Value{static_cast<std::int64_t>(fonts.paths.size())});
+    text_runtime.emplace(
+        "custom_font_generation",
+        json::Value{static_cast<std::int64_t>(fonts.generation)});
+    text_runtime.emplace(
+        "custom_font_loaders_registered",
+        json::Value{fonts.loaders_registered});
+    text_runtime.emplace(
+        "custom_font_collection_present",
+        json::Value{fonts.collection.Get() != nullptr});
+    return text_runtime;
+}
+
 inline json::Object windows_images_runtime_json() {
     std::size_t pending_jobs = 0;
     std::size_t completed_jobs = 0;
@@ -7227,6 +7276,7 @@ inline json::Value windows_platform_runtime_details_json_with_reason(
     json::Object runtime;
     runtime.emplace("renderer", json::Value{windows_renderer_runtime_json()});
     runtime.emplace("ime", json::Value{windows_ime_runtime_json()});
+    runtime.emplace("text", json::Value{windows_text_runtime_json()});
     runtime.emplace("images", json::Value{windows_images_runtime_json()});
     runtime.emplace("window", json::Value{windows_window_runtime_json()});
     if (!artifact_reason.empty()) {

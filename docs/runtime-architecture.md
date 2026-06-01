@@ -240,6 +240,10 @@ aliases behind `MacOSTextRuntime`. The cache is still process-wide service
 state, because registered fonts and base-face resolution are Core Text
 process-scope concerns, but renderer scenes reach it through one explicit owner
 instead of a raw font-cache global.
+Windows text measurement now follows the same boundary with
+`WindowsTextRuntime`: the DirectWrite factory, format cache, rendering
+parameters, and custom font registry are process-wide text services, while
+renderer surfaces continue to own their GPU text atlas upload state.
 Shared decoded image pixels remain process-wide resource-cache data. On macOS,
 `MacOSImageRuntime` owns the decoded-image atlas, worker queues, and repaint
 target registry; Windows mirrors that split with `WindowsImageRuntime`. Each

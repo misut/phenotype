@@ -4678,6 +4678,7 @@ static void test_windows_common_debug_contract_entry_points() {
     auto const& details = runtime.at("details").as_object();
     assert(details.contains("renderer"));
     assert(details.contains("ime"));
+    assert(details.contains("text"));
     assert(details.contains("images"));
     auto const& renderer_details = details.at("renderer").as_object();
     assert(renderer_details.at("owner").as_string() == "WindowsRendererRuntime");
@@ -4685,6 +4686,10 @@ static void test_windows_common_debug_contract_entry_points() {
     assert(renderer_details.at("last_frame_available").as_bool());
     assert(renderer_details.at("last_render_width").as_integer() > 0);
     assert(renderer_details.at("last_render_height").as_integer() > 0);
+    auto const& text_details = details.at("text").as_object();
+    assert(text_details.at("owner").as_string() == "WindowsTextRuntime");
+    assert(text_details.at("format_cache_count").as_integer() >= 0);
+    assert(text_details.at("custom_font_alias_count").as_integer() >= 0);
     auto const& images = details.at("images").as_object();
     assert(images.at("owner").as_string() == "WindowsImageRuntime");
     assert(images.at("pending_queue_count").as_integer() == 0);
