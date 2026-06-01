@@ -219,6 +219,10 @@ Native renderer backends can now expose an optional surface activation hook.
 macOS and Windows use that hook to select a `RendererState` for the active
 `NativeSurfaceDescriptor` instead of assuming one process-global Metal or D3D
 surface owner.
+On macOS, `MacOSRendererRuntime` owns the default renderer, active renderer
+binding, and secondary renderer registry together. That keeps the temporary
+active renderer pointer tied to the registry it points into, and gives future
+multi-window teardown code one explicit owner for Metal layer state.
 The current renderer entry points still look like the old single-window API, but
 state selection now follows host activation and gives future settings/debug
 windows a place to keep independent Metal layers, hit regions, debug captures,
