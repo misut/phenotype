@@ -3097,6 +3097,93 @@ struct MacInputHarness {
     }
 };
 
+static int g_macos_input_surface_repaint_one = 0;
+static int g_macos_input_surface_repaint_two = 0;
+
+static void macos_input_surface_repaint_one() {
+    ++g_macos_input_surface_repaint_one;
+}
+
+static void macos_input_surface_repaint_two() {
+    ++g_macos_input_surface_repaint_two;
+}
+
+static void test_macos_input_state_tracks_multiple_surfaces() {
+    using phenotype::native::macos_test::active_input_surface_is_for_tests;
+    using phenotype::native::macos_test::input_surface_registered_for_tests;
+    using phenotype::native::macos_test::input_surface_state_count_for_tests;
+    using phenotype::native::macos_test::set_scroll_tracking_for_tests;
+    using phenotype::native::macos_test::system_caret_debug;
+
+    input_regression::reset_core_state();
+    auto window_one = create_hidden_macos_window(240, 180, "phenotype-input-one");
+    auto window_two = create_hidden_macos_window(260, 190, "phenotype-input-two");
+    auto surface_one = make_macos_surface(window_one);
+    auto surface_two = make_macos_surface(window_two);
+    native_host host_one{};
+    native_host host_two{};
+    host_one.window = &surface_one;
+    host_one.surface_descriptor = &surface_one;
+    host_one.platform = &current_platform();
+    host_two.window = &surface_two;
+    host_two.surface_descriptor = &surface_two;
+    host_two.platform = &current_platform();
+
+    auto const& platform = current_platform();
+    g_macos_input_surface_repaint_one = 0;
+    g_macos_input_surface_repaint_two = 0;
+
+    phenotype::native::detail::bind_host(host_one, 0.0f, 0.0f);
+    platform.input.attach(&surface_one, macos_input_surface_repaint_one);
+    assert(input_surface_state_count_for_tests() == 1);
+    assert(input_surface_registered_for_tests(&surface_one));
+    assert(active_input_surface_is_for_tests(&surface_one));
+
+    phenotype::native::detail::bind_host(host_two, 0.0f, 0.0f);
+    platform.input.attach(&surface_two, macos_input_surface_repaint_two);
+    assert(input_surface_state_count_for_tests() == 2);
+    assert(input_surface_registered_for_tests(&surface_one));
+    assert(input_surface_registered_for_tests(&surface_two));
+    assert(active_input_surface_is_for_tests(&surface_two));
+
+    {
+        phenotype::native::detail::ScopedHostActivation activate(host_one);
+        platform.input.sync();
+        assert(active_input_surface_is_for_tests(&surface_one));
+        set_scroll_tracking_for_tests(true);
+        assert(system_caret_debug().scroll_tracking_active);
+    }
+    {
+        phenotype::native::detail::ScopedHostActivation activate(host_two);
+        platform.input.sync();
+        assert(active_input_surface_is_for_tests(&surface_two));
+        assert(!system_caret_debug().scroll_tracking_active);
+    }
+
+    {
+        phenotype::native::detail::ScopedHostActivation activate(host_one);
+        platform.input.detach();
+    }
+    assert(input_surface_state_count_for_tests() == 1);
+    assert(!input_surface_registered_for_tests(&surface_one));
+    assert(input_surface_registered_for_tests(&surface_two));
+
+    {
+        phenotype::native::detail::ScopedHostActivation activate(host_two);
+        platform.input.detach();
+    }
+    assert(input_surface_state_count_for_tests() == 0);
+    assert(!input_surface_registered_for_tests(&surface_two));
+
+    test_objc_send<void>(window_one, test_sel("close"));
+    test_objc_send<void>(window_one, test_sel("release"));
+    test_objc_send<void>(window_two, test_sel("close"));
+    test_objc_send<void>(window_two, test_sel("release"));
+    phenotype::native::detail::clear_active_host();
+    input_regression::reset_core_state();
+    std::puts("PASS: macOS input state tracks multiple surfaces");
+}
+
 static void test_macos_common_debug_contract_entry_points() {
     using namespace input_regression;
     using phenotype::native::macos_test::clear_composition_for_tests;
@@ -5281,6 +5368,7 @@ int main() {
     test_macos_renderer_state_tracks_surfaces();
     test_macos_image_atlas_upload_generation_is_surface_local();
     test_macos_image_repaint_targets_are_surface_local();
+    test_macos_input_state_tracks_multiple_surfaces();
     test_macos_appkit_active_binding_restores_window_and_surface();
     test_macos_appkit_activation_slice_gate();
     test_macos_appkit_function_key_resolution();

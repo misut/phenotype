@@ -256,6 +256,11 @@ scene's runner, queue, and framework-local storage for a later reopen.
 - Keep renderer state surface-local before enabling multiple native phenotype
   windows. A second Metal layer must not reuse the first window's renderer
   singleton.
+- Keep native text-input/IME state surface-local as well. AppKit calls
+  `NSTextInputClient` methods on a concrete editor view, so composition text,
+  selected ranges, scroll tracking, caret host views, and system insertion
+  indicators should be resolved from that view/window instead of one global
+  transient bucket.
 - Keep CI coverage aligned with ownership moves. Windows-native backend,
   renderer, shell, toolchain, and native-contract test changes must run the
   real Windows native build/test path instead of only the PR fast-path stub.
