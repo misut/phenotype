@@ -908,9 +908,21 @@ struct AppKitSceneWindowState {
     bool runner_installed = false;
 };
 
-inline std::vector<std::unique_ptr<AppKitSceneWindowState>>
-    g_appkit_scene_windows;
-inline id g_appkit_scene_window_delegate = nullptr;
+struct AppKitSceneWindowRuntime {
+    std::vector<std::unique_ptr<AppKitSceneWindowState>> windows;
+    id delegate = nullptr;
+};
+
+inline AppKitSceneWindowRuntime& appkit_scene_window_runtime() {
+    static AppKitSceneWindowRuntime& runtime =
+        *new AppKitSceneWindowRuntime();
+    return runtime;
+}
+
+inline std::vector<std::unique_ptr<AppKitSceneWindowState>>&
+appkit_scene_windows() {
+    return appkit_scene_window_runtime().windows;
+}
 
 inline std::string scene_window_identifier_or_default(char const* value) {
     auto identifier = safe_preferences_text(value, "scene-window");
@@ -919,7 +931,7 @@ inline std::string scene_window_identifier_or_default(char const* value) {
 
 inline AppKitSceneWindowState* find_appkit_scene_window(
         std::string_view identifier) {
-    for (auto& state : g_appkit_scene_windows) {
+    for (auto& state : appkit_scene_windows()) {
         if (state && state->identifier == identifier)
             return state.get();
     }
@@ -929,7 +941,7 @@ inline AppKitSceneWindowState* find_appkit_scene_window(
 inline AppKitSceneWindowState* find_appkit_scene_window_by_window(id window) {
     if (!window)
         return nullptr;
-    for (auto& state : g_appkit_scene_windows) {
+    for (auto& state : appkit_scene_windows()) {
         if (state && state->window == window)
             return state.get();
     }
@@ -975,8 +987,9 @@ inline void appkit_scene_window_will_close(id, SEL, id notification) {
 }
 
 inline id create_appkit_scene_window_delegate() {
-    if (g_appkit_scene_window_delegate)
-        return g_appkit_scene_window_delegate;
+    auto& runtime = appkit_scene_window_runtime();
+    if (runtime.delegate)
+        return runtime.delegate;
     static Class delegate_class = nullptr;
     if (!delegate_class) {
         Class base = reinterpret_cast<Class>(class_id("NSObject"));
@@ -993,10 +1006,10 @@ inline id create_appkit_scene_window_delegate() {
             "v@:@");
         objc_registerClassPair(delegate_class);
     }
-    g_appkit_scene_window_delegate = objc_send<id>(
+    runtime.delegate = objc_send<id>(
         objc_send<id>(reinterpret_cast<id>(delegate_class), sel("alloc")),
         sel("init"));
-    return g_appkit_scene_window_delegate;
+    return runtime.delegate;
 }
 
 inline void configure_appkit_scene_window_host(
@@ -1061,9 +1074,9 @@ inline AppKitSceneWindowState* ensure_appkit_scene_window(
     auto identifier = scene_window_identifier_or_default(options.identifier);
     auto* state = find_appkit_scene_window(identifier);
     if (!state) {
-        g_appkit_scene_windows.push_back(
-            std::make_unique<AppKitSceneWindowState>());
-        state = g_appkit_scene_windows.back().get();
+        auto& windows = appkit_scene_windows();
+        windows.push_back(std::make_unique<AppKitSceneWindowState>());
+        state = windows.back().get();
         state->identifier = identifier;
     }
 
@@ -1198,7 +1211,7 @@ inline void close_appkit_scene_window(char const* identifier) {
 }
 
 inline void close_all_appkit_scene_windows() {
-    for (auto& state : g_appkit_scene_windows) {
+    for (auto& state : appkit_scene_windows()) {
         if (!state || !state->window)
             continue;
         mark_appkit_scene_window_visibility(*state, false);
@@ -1207,20 +1220,24 @@ inline void close_all_appkit_scene_windows() {
 }
 
 inline std::size_t appkit_scene_window_count() {
-    return g_appkit_scene_windows.size();
+    return appkit_scene_windows().size();
+}
+
+inline void shutdown_all_appkit_scene_window_hosts() {
+    for (auto& state : appkit_scene_windows()) {
+        if (state)
+            shutdown_host(state->host);
+    }
 }
 
 inline void reset_appkit_scene_windows_for_tests() {
     close_all_appkit_scene_windows();
-    for (auto& state : g_appkit_scene_windows) {
-        if (state)
-            shutdown_host(state->host);
-    }
-    g_appkit_scene_windows.clear();
+    shutdown_all_appkit_scene_window_hosts();
+    appkit_scene_windows().clear();
 }
 
 inline bool visible_appkit_scene_window_is_front() {
-    for (auto& state : g_appkit_scene_windows) {
+    for (auto& state : appkit_scene_windows()) {
         if (!state || !state->visible
             || !appkit_window_is_visible(state->window)) {
             continue;
@@ -1233,7 +1250,7 @@ inline bool visible_appkit_scene_window_is_front() {
 }
 
 inline void raise_visible_appkit_scene_windows() {
-    for (auto& state : g_appkit_scene_windows) {
+    for (auto& state : appkit_scene_windows()) {
         if (!state || !state->visible
             || !appkit_window_is_visible(state->window)) {
             continue;
@@ -2250,7 +2267,7 @@ inline bool service_appkit_host_event(id app,
 inline bool service_appkit_scene_window_event(id app, id event) {
     if (!event)
         return false;
-    for (auto& state : g_appkit_scene_windows) {
+    for (auto& state : appkit_scene_windows()) {
         if (!state || !state->visible
             || !appkit_window_is_visible(state->window)) {
             continue;
@@ -2269,7 +2286,7 @@ inline bool service_appkit_scene_window_event(id app, id event) {
 }
 
 inline void service_appkit_scene_windows() {
-    for (auto& state : g_appkit_scene_windows) {
+    for (auto& state : appkit_scene_windows()) {
         if (!state || !state->visible)
             continue;
         bool const visible = appkit_window_is_visible(state->window);
@@ -2941,11 +2958,8 @@ int run_app_with_macos_platform(platform_api const& platform,
 
     close_all_appkit_preferences_windows();
     close_all_appkit_scene_windows();
-    for (auto& state : g_appkit_scene_windows) {
-        if (state)
-            shutdown_host(state->host);
-    }
-    g_appkit_scene_windows.clear();
+    shutdown_all_appkit_scene_window_hosts();
+    appkit_scene_windows().clear();
     shutdown_host(host);
     clear_active_appkit_binding();
     ::phenotype::detail::set_application_settings_menu_handler(nullptr);
