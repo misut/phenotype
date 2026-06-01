@@ -148,6 +148,10 @@ The AppKit shell keeps the foreground native window and surface together in
 `ActiveAppKitBinding`. Window-level APIs such as size limits, aspect ratio,
 settings-menu focus, and dock reopen focus resolve through that pair instead of
 reading independent raw globals.
+The Win32 shell mirrors that shape with `Win32ShellBinding`. Cursor updates,
+window size limits, aspect-ratio constraints, and the Windows message loop
+resolve through one captured/restored active shell binding instead of mutating a
+raw process-level pointer.
 
 Scene runners follow the same rule. `runtime::install_scene_runner`,
 `runtime::trigger_scene_rebuild`, `runtime::clear_scene_runner`, and their
