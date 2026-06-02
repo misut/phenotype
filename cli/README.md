@@ -1,6 +1,6 @@
-# phenotype-cli
+# phenotype
 
-`phenotype-cli` is a local development helper for the WASI documentation app.
+`phenotype` is a local development helper for the WASI documentation app.
 It wraps the common loop into one native C++23 executable:
 
 1. Build `docs` with `exon build --target wasm32-wasi`.
@@ -18,9 +18,9 @@ mise exec -- exon build
 ## Commands
 
 ```sh
-.exon/debug/phenotype-cli build
-.exon/debug/phenotype-cli test
-.exon/debug/phenotype-cli serve --open
+.exon/debug/phenotype build
+.exon/debug/phenotype test
+.exon/debug/phenotype serve --open
 ```
 
 The default staged directory is:

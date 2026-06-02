@@ -159,4 +159,4 @@ jobs:
           exon test
           exon build
           cd ..
-          cli/.exon/debug/phenotype-cli test --no-build --no-mise --exon exon
+          cli/.exon/debug/phenotype test --no-build --no-mise --exon exon

@@ -1,6 +1,6 @@
 [package]
-name = "phenotype-cli"
-version = "0.15.0"
+name = "phenotype"
+version = "0.16.0"
 description = "Local WASI build and preview CLI for phenotype"
 type = "bin"
 standard = 23
