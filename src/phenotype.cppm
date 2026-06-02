@@ -9334,6 +9334,768 @@ inline void input_commit(unsigned char const* buf, unsigned int len) {
 
 } // namespace detail
 
+namespace ui {
+
+inline std::uint32_t stable_id(std::string_view value) noexcept {
+    auto hash = std::uint32_t{2166136261u};
+    for (auto ch : value) {
+        hash ^= static_cast<unsigned char>(ch);
+        hash *= 16777619u;
+    }
+    return hash == 0u ? 1u : hash;
+}
+
+inline std::uint32_t stable_id(std::uint32_t value) noexcept {
+    return value == 0u ? 1u : value;
+}
+
+inline std::uint32_t stable_id(std::uint64_t value) noexcept {
+    auto hash = std::uint32_t{2166136261u};
+    for (int i = 0; i < 8; ++i) {
+        hash ^= static_cast<unsigned char>((value >> (i * 8)) & 0xFFu);
+        hash *= 16777619u;
+    }
+    return hash == 0u ? 1u : hash;
+}
+
+inline std::uint32_t stable_id(int value) noexcept {
+    return stable_id(static_cast<std::uint64_t>(
+        static_cast<std::uint32_t>(value)));
+}
+
+template <typename T>
+class Binding;
+
+template <typename T>
+class State {
+    T* value_ = nullptr;
+
+public:
+    explicit State(T& value) noexcept : value_(&value) {}
+
+    T const& get() const noexcept { return *value_; }
+    T& get() noexcept { return *value_; }
+
+    void set(T value) const {
+        *value_ = std::move(value);
+        detail::trigger_rebuild();
+    }
+
+    template <typename F>
+        requires std::invocable<F&, T&>
+    void update(F&& fn) const {
+        std::forward<F>(fn)(*value_);
+        detail::trigger_rebuild();
+    }
+
+    Binding<T> binding() const noexcept;
+};
+
+template <typename T>
+class Binding {
+    T* value_ = nullptr;
+
+public:
+    Binding() = default;
+    explicit Binding(T& value) noexcept : value_(&value) {}
+    explicit Binding(State<T> state) noexcept : value_(&state.get()) {}
+
+    bool valid() const noexcept { return value_ != nullptr; }
+    T const& get() const noexcept { return *value_; }
+    T& get() noexcept { return *value_; }
+
+    void set(T value) const {
+        *value_ = std::move(value);
+        detail::trigger_rebuild();
+    }
+
+    template <typename F>
+        requires std::invocable<F&, T&>
+    void update(F&& fn) const {
+        std::forward<F>(fn)(*value_);
+        detail::trigger_rebuild();
+    }
+};
+
+template <typename T>
+Binding<T> State<T>::binding() const noexcept {
+    return Binding<T>{*value_};
+}
+
+class Context {
+public:
+    template <typename T>
+    State<T> state(std::string_view key,
+                   T initial = T{},
+                   std::source_location loc =
+                       std::source_location::current()) const {
+        return State<T>{
+            framework_local<T>(
+                std::move(initial),
+                stable_id(key),
+                loc)};
+    }
+
+    void invalidate() const {
+        detail::trigger_rebuild();
+    }
+};
+
+struct Frame {
+    float max_width = 0.0f;
+    float height = -1.0f;
+};
+
+class View {
+    std::function<void()> build_{};
+
+public:
+    View() = default;
+
+    template <typename F>
+        requires std::invocable<F&>
+              && (!std::same_as<std::decay_t<F>, View>)
+    explicit View(F&& build)
+        : build_(std::forward<F>(build)) {}
+
+    void render() const {
+        if (build_)
+            build_();
+    }
+
+    View key(std::uint32_t id) const {
+        auto child = *this;
+        return View{[child = std::move(child), id] {
+            keyed(id, [&] { child.render(); });
+        }};
+    }
+
+    View key(std::string_view id) const {
+        return key(stable_id(id));
+    }
+
+    View padding(SpaceToken token) const {
+        auto child = *this;
+        return View{[child = std::move(child), token] {
+            layout::padded(token, [&] { child.render(); });
+        }};
+    }
+
+    View frame(Frame options) const {
+        auto child = *this;
+        return View{[child = std::move(child), options] {
+            auto h = detail::alloc_node();
+            auto& node = detail::node_at(h);
+            node.style.max_width = options.max_width;
+            node.style.fixed_height = options.height;
+            detail::open_container(h, [&] {
+                child.render();
+            });
+        }};
+    }
+
+    View material(MaterialKind kind,
+                  MaterialSurfaceRole role = MaterialSurfaceRole::Surface)
+            const {
+        auto child = *this;
+        return View{[child = std::move(child), kind, role] {
+            layout::material_surface(
+                layout::MaterialSurfaceOptions{
+                    .kind = kind,
+                    .role = role,
+                },
+                [&] { child.render(); });
+        }};
+    }
+
+    View glass(layout::GlassEffectStyle style = layout::glass_regular()) const {
+        auto child = *this;
+        return View{[child = std::move(child), style] {
+            layout::glass_effect(style, [&] { child.render(); });
+        }};
+    }
+};
+
+inline View as_view(View view) {
+    return view;
+}
+
+template <typename T>
+concept Renderable = requires(T const& value) {
+    value.render();
+};
+
+template <Renderable T>
+inline View as_view(T value) {
+    return View{[value = std::move(value)] {
+        value.render();
+    }};
+}
+
+enum class Font {
+    body,
+    title,
+    caption,
+    code,
+    hero_title,
+    hero_subtitle,
+};
+
+inline TextSize text_size(Font font) noexcept {
+    switch (font) {
+        case Font::title:
+            return TextSize::Heading;
+        case Font::caption:
+            return TextSize::Small;
+        case Font::code:
+            return TextSize::Code;
+        case Font::hero_title:
+            return TextSize::HeroTitle;
+        case Font::hero_subtitle:
+            return TextSize::HeroSubtitle;
+        case Font::body:
+        default:
+            return TextSize::Body;
+    }
+}
+
+struct Text {
+    std::string value;
+    TextSize size = TextSize::Body;
+    TextColor text_color = TextColor::Default;
+
+    explicit Text(std::string text) : value(std::move(text)) {}
+    explicit Text(char const* text) : value(text ? text : "") {}
+
+    Text font(Font font_value) const {
+        auto copy = *this;
+        copy.size = text_size(font_value);
+        return copy;
+    }
+
+    Text color(TextColor color_value) const {
+        auto copy = *this;
+        copy.text_color = color_value;
+        return copy;
+    }
+
+    void render() const {
+        widget::text(str(value), size, text_color);
+    }
+};
+
+struct Spacer {
+    unsigned int height = 0;
+
+    explicit Spacer(unsigned int height_px) : height(height_px) {}
+
+    void render() const {
+        layout::spacer(height);
+    }
+};
+
+struct Divider {
+    void render() const {
+        layout::divider();
+    }
+};
+
+struct Code {
+    std::string value;
+
+    explicit Code(std::string text) : value(std::move(text)) {}
+    explicit Code(char const* text) : value(text ? text : "") {}
+
+    void render() const {
+        widget::code(str(value));
+    }
+};
+
+struct Link {
+    std::string label;
+    std::string href;
+
+    Link(std::string label_text, std::string href_value)
+        : label(std::move(label_text)),
+          href(std::move(href_value)) {}
+
+    void render() const {
+        widget::link(str(label), str(href));
+    }
+};
+
+struct Image {
+    std::string url;
+    float width = 0.0f;
+    float height = 0.0f;
+
+    Image(std::string image_url, float image_width, float image_height)
+        : url(std::move(image_url)),
+          width(image_width),
+          height(image_height) {}
+
+    void render() const {
+        widget::image(str(url), width, height);
+    }
+};
+
+enum class AxisAlignment {
+    start,
+    center,
+    end,
+    space_between,
+};
+
+inline CrossAxisAlignment cross_axis(AxisAlignment alignment) noexcept {
+    switch (alignment) {
+        case AxisAlignment::center:
+            return CrossAxisAlignment::Center;
+        case AxisAlignment::end:
+            return CrossAxisAlignment::End;
+        case AxisAlignment::start:
+        case AxisAlignment::space_between:
+        default:
+            return CrossAxisAlignment::Start;
+    }
+}
+
+inline MainAxisAlignment main_axis(AxisAlignment alignment) noexcept {
+    switch (alignment) {
+        case AxisAlignment::center:
+            return MainAxisAlignment::Center;
+        case AxisAlignment::end:
+            return MainAxisAlignment::End;
+        case AxisAlignment::space_between:
+            return MainAxisAlignment::SpaceBetween;
+        case AxisAlignment::start:
+        default:
+            return MainAxisAlignment::Start;
+    }
+}
+
+struct StackOptions {
+    SpaceToken spacing = SpaceToken::Md;
+    AxisAlignment cross = AxisAlignment::start;
+    AxisAlignment main = AxisAlignment::start;
+};
+
+template <typename... Children>
+View VStack(Children... children) {
+    auto views = std::vector<View>{as_view(std::move(children))...};
+    return View{[views = std::move(views)] {
+        layout::column(
+            [&] {
+                for (auto const& view : views)
+                    view.render();
+            },
+            SpaceToken::Md,
+            CrossAxisAlignment::Start,
+            MainAxisAlignment::Start);
+    }};
+}
+
+template <typename... Children>
+View VStack(StackOptions options, Children... children) {
+    auto views = std::vector<View>{as_view(std::move(children))...};
+    return View{[views = std::move(views), options] {
+        layout::column(
+            [&] {
+                for (auto const& view : views)
+                    view.render();
+            },
+            options.spacing,
+            cross_axis(options.cross),
+            main_axis(options.main));
+    }};
+}
+
+template <typename... Children>
+View HStack(Children... children) {
+    auto views = std::vector<View>{as_view(std::move(children))...};
+    return View{[views = std::move(views)] {
+        layout::row(
+            [&] {
+                for (auto const& view : views)
+                    view.render();
+            },
+            SpaceToken::Sm,
+            CrossAxisAlignment::Center,
+            MainAxisAlignment::Start);
+    }};
+}
+
+template <typename... Children>
+View HStack(StackOptions options, Children... children) {
+    auto views = std::vector<View>{as_view(std::move(children))...};
+    return View{[views = std::move(views), options] {
+        layout::row(
+            [&] {
+                for (auto const& view : views)
+                    view.render();
+            },
+            options.spacing,
+            cross_axis(options.cross),
+            main_axis(options.main));
+    }};
+}
+
+template <typename Child>
+View Weighted(float grow, Child child) {
+    auto view = as_view(std::move(child));
+    return View{[view = std::move(view), grow] {
+        layout::weighted(grow, [&] { view.render(); });
+    }};
+}
+
+template <typename... Children>
+View Box(Children... children) {
+    auto views = std::vector<View>{as_view(std::move(children))...};
+    return View{[views = std::move(views)] {
+        layout::box([&] {
+            for (auto const& view : views)
+                view.render();
+        });
+    }};
+}
+
+template <typename Child>
+View Card(Child child) {
+    auto view = as_view(std::move(child));
+    return View{[view = std::move(view)] {
+        layout::card([&] { view.render(); });
+    }};
+}
+
+template <typename Child>
+View ScrollView(float height, Child child) {
+    auto view = as_view(std::move(child));
+    return View{[view = std::move(view), height] {
+        layout::scroll_view(height, [&] { view.render(); });
+    }};
+}
+
+template <typename Child>
+View Overlay(Child child) {
+    auto view = as_view(std::move(child));
+    return View{[view = std::move(view)] {
+        layout::overlay([&] { view.render(); });
+    }};
+}
+
+enum class ButtonRole {
+    normal,
+    primary,
+};
+
+struct Button {
+    std::string label;
+    ButtonStyleOptions options{};
+    std::function<void()> action{};
+
+    explicit Button(std::string text) : label(std::move(text)) {}
+    explicit Button(char const* text) : label(text ? text : "") {}
+
+    Button role(ButtonRole role_value) const {
+        auto copy = *this;
+        copy.options.variant = role_value == ButtonRole::primary
+            ? ButtonVariant::Primary
+            : ButtonVariant::Default;
+        return copy;
+    }
+
+    Button disabled(bool disabled_value = true) const {
+        auto copy = *this;
+        copy.options.disabled = disabled_value;
+        return copy;
+    }
+
+    Button width(float width_value) const {
+        auto copy = *this;
+        copy.options.max_width = width_value;
+        return copy;
+    }
+
+    Button height(float height_value) const {
+        auto copy = *this;
+        copy.options.fixed_height = height_value;
+        return copy;
+    }
+
+    Button on_click(std::function<void()> callback) const {
+        auto copy = *this;
+        copy.action = std::move(callback);
+        return copy;
+    }
+
+    void render() const {
+        auto callback = action;
+        widget::_impl::action_button(
+            str(label),
+            options,
+            [callback = std::move(callback)] {
+                if (callback)
+                    callback();
+            });
+    }
+};
+
+struct TextField {
+    std::string placeholder;
+    Binding<std::string> text;
+    TextFieldStyleOptions options{};
+
+    TextField(std::string placeholder_text, Binding<std::string> text_binding)
+        : placeholder(std::move(placeholder_text)),
+          text(text_binding) {}
+
+    TextField disabled(bool disabled_value = true) const {
+        auto copy = *this;
+        copy.options.disabled = disabled_value;
+        return copy;
+    }
+
+    TextField error(bool error_value = true) const {
+        auto copy = *this;
+        copy.options.error = error_value;
+        return copy;
+    }
+
+    TextField width(float width_value) const {
+        auto copy = *this;
+        copy.options.max_width = width_value;
+        return copy;
+    }
+
+    TextField semantic_label(char const* label) const {
+        auto copy = *this;
+        copy.options.semantic_label = label;
+        return copy;
+    }
+
+    void render() const {
+        auto h = detail::alloc_node();
+        auto& node = detail::node_at(h);
+        auto const& t = detail::g_app().theme;
+        auto const current = text.valid() ? text.get() : std::string{};
+        node.interaction_role = InteractionRole::TextField;
+        node.placeholder = placeholder;
+        node.text = current.empty() ? node.placeholder : current;
+        node.debug_semantic_label = options.semantic_label
+            ? options.semantic_label
+            : node.placeholder;
+        node.font_size = options.font_size > 0.0f
+            ? options.font_size
+            : t.body_font_size;
+        node.border_radius = options.border_radius >= 0.0f
+            ? options.border_radius
+            : t.radius_sm;
+        float default_padding[4] = {
+            t.space_sm,
+            t.space_md,
+            t.space_sm,
+            t.space_md,
+        };
+        float option_padding[4] = {
+            options.padding_top,
+            options.padding_right,
+            options.padding_bottom,
+            options.padding_left,
+        };
+        for (int i = 0; i < 4; ++i) {
+            node.style.padding[i] = option_padding[i] >= 0.0f
+                ? option_padding[i]
+                : default_padding[i];
+        }
+        node.style.max_width = options.max_width;
+        node.style.fixed_height = options.fixed_height;
+
+        if (options.disabled || !text.valid()) {
+            node.is_input = false;
+            node.background = options.has_background
+                ? options.background
+                : t.state_disabled_bg;
+            node.text_color = options.has_text_color
+                ? options.text_color
+                : t.state_disabled_fg;
+            node.border_color = options.has_border_color
+                ? options.border_color
+                : t.state_disabled_border;
+            node.border_width = options.border_width >= 0.0f
+                ? options.border_width
+                : 1.0f;
+            widget::apply_text_field_material(node, options);
+            node.cursor_type = 0;
+            node.focusable = false;
+            node.debug_semantic_enabled = false;
+            detail::attach_to_scope(h);
+            return;
+        }
+
+        node.is_input = true;
+        Color resting_border;
+        if (options.error) {
+            node.background = t.state_error_bg;
+            node.text_color = current.empty() ? t.muted : t.state_error_fg;
+            resting_border = t.state_error_border;
+        } else {
+            node.background = options.has_background
+                ? options.background
+                : t.surface;
+            node.text_color = current.empty() ? t.muted : t.foreground;
+            resting_border = options.has_border_color
+                ? options.border_color
+                : t.border;
+        }
+        if (options.has_text_color)
+            node.text_color = options.text_color;
+        node.cursor_type = 1;
+
+        auto id = static_cast<unsigned int>(detail::g_app().callbacks.size());
+        bool const is_hovered = id == detail::g_app().hovered_id;
+        bool const is_focused = detail::focus_ring_visible(id);
+        bool const is_pressed = id == detail::g_app().pressed_id;
+        float const base_border_width = options.border_width >= 0.0f
+            ? options.border_width
+            : 1.0f;
+        int const focus_ms = detail::focus_ring_transition_ms(id, 150);
+        node.border_width = animate_float(
+            is_focused ? t.state_focus_ring_width : base_border_width,
+            focus_ms);
+        node.border_color = animate_color(
+            is_focused ? t.state_focus_ring : resting_border,
+            focus_ms);
+        widget::apply_text_field_material(node, options);
+        widget::apply_material_interaction_state(
+            node,
+            is_hovered,
+            is_pressed,
+            is_focused);
+        detail::g_app().callbacks.push_back([] {});
+        detail::g_app().callback_roles.push_back(InteractionRole::TextField);
+        auto* binding_storage = new Binding<std::string>(text);
+        detail::g_app().input_handlers.push_back({
+            id,
+            InputHandler{
+                current,
+                binding_storage,
+                [](void* state, std::string value) {
+                    auto binding = *static_cast<Binding<std::string>*>(state);
+                    binding.set(std::move(value));
+                },
+                [](void* state) {
+                    delete static_cast<Binding<std::string>*>(state);
+                }
+            }
+        });
+        node.callback_id = id;
+        detail::g_app().input_nodes.push_back({id, h});
+        detail::attach_to_scope(h);
+    }
+};
+
+template <typename Item, typename Key, typename Builder>
+View ForEach(std::vector<Item> items, Key key, Builder builder) {
+    return View{[
+        items = std::move(items),
+        key = std::move(key),
+        builder = std::move(builder)] {
+        for (auto const& item : items) {
+            keyed(stable_id(key(item)), [&] {
+                as_view(builder(item)).render();
+            });
+        }
+    }};
+}
+
+namespace _impl {
+
+template <typename App>
+void render_app(App& app, Context& context) {
+    as_view(app.body(context)).render();
+}
+
+#ifndef __wasi__
+template <typename App, host_platform Host>
+void install_native_run_context(Host& host, App app) {
+    struct RunContext {
+        Host* host = nullptr;
+        App app;
+        Context context{};
+    };
+    auto context = std::make_shared<RunContext>(RunContext{
+        .host = &host,
+        .app = std::move(app),
+        .context = Context{},
+    });
+    detail::reset_active_scene_runner_inputs();
+
+    auto* raw_context = context.get();
+    detail::install_app_runner([](void* raw) {
+        auto& context = *static_cast<RunContext*>(raw);
+        detail::NativeFrameBackend<Host> backend{context.host};
+        detail::run_scene_rebuild_frame(
+            [] {},
+            [&] { render_app(context.app, context.context); },
+            backend);
+    }, raw_context, std::move(context));
+    detail::trigger_rebuild();
+}
+#else
+template <typename App>
+void install_wasi_run_context(App app) {
+    struct RunContext {
+        App app;
+        Context context{};
+    };
+    auto context = std::make_shared<RunContext>(RunContext{
+        .app = std::move(app),
+        .context = Context{},
+    });
+    detail::reset_active_scene_runner_inputs();
+
+    auto* raw_context = context.get();
+    detail::install_app_runner([](void* raw) {
+        auto& context = *static_cast<RunContext*>(raw);
+        detail::WasiFrameBackend backend{};
+        detail::run_scene_rebuild_frame(
+            [] {},
+            [&] { render_app(context.app, context.context); },
+            backend);
+    }, raw_context, std::move(context));
+    detail::trigger_rebuild();
+}
+#endif
+
+} // namespace _impl
+
+#ifndef __wasi__
+template <typename App, host_platform Host>
+void run(Host& host, App app = App{}) {
+    detail::bind_scene_runtime(detail::default_scene_runtime());
+    detail::configure_active_scene(SceneDescriptor{
+        .id = "main",
+        .title = "Main",
+        .role = SceneRole::Main,
+        .visible = true,
+    });
+    _impl::install_native_run_context(host, std::move(app));
+}
+#else
+template <typename App>
+void run(App app = App{}) {
+    detail::bind_scene_runtime(detail::default_scene_runtime());
+    detail::configure_active_scene(SceneDescriptor{
+        .id = "main",
+        .title = "Main",
+        .role = SceneRole::Main,
+        .visible = true,
+    });
+    _impl::install_wasi_run_context(std::move(app));
+}
+#endif
+
+} // namespace ui
+
 namespace diag {
 
 inline InputDebugSnapshot input_debug_snapshot() {
