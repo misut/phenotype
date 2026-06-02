@@ -1,63 +1,76 @@
-name: Main Artifacts
+name: Pages
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  docs:
-    name: docs build (wasm32-wasi)
+  build:
+    name: docs build (phenotype-cli)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 
-      - name: Resolve tool versions
-        id: tool-versions
-        shell: bash
-        run: |
-          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
-          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
 
-      - name: Install intron
+      - name: Install mise
+        uses: jdx/mise-action@v4
+        with:
+          install: false
+          github_token: ${{ github.token }}
+
+      - name: Install mise-managed tools
         run: |
-          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-x86_64-linux-gnu.tar.gz"
-          tar xzf intron-*.tar.gz
-          sudo mv intron /usr/local/bin/
+          mise install \
+            "vfox:misut/mise-intron" \
+            "vfox:misut/mise-exon" \
+            "vfox:misut/mise-phenotype"
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Install toolchains
         run: |
-          intron install llvm 22.1.2
-          intron install cmake 4.3.1
-          intron install ninja 1.13.2
-          intron install wasi-sdk 32
-          intron install wasmtime 43.0.1
-          intron default wasmtime 43.0.1
+          mise exec -- intron install llvm 22.1.2
+          mise exec -- intron install cmake 4.3.1
+          mise exec -- intron install ninja 1.13.2
+          mise exec -- intron install wasi-sdk 32
+          mise exec -- intron install wasmtime 43.0.1
+          mise exec -- intron default wasmtime 43.0.1
 
-      - name: Install exon
+      - name: Build docs with phenotype-cli
         run: |
-          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-x86_64-linux-gnu.tar.gz"
-          tar xzf exon-*.tar.gz
-          sudo mv exon /usr/local/bin/
-        env:
-          GH_TOKEN: ${{ github.token }}
+          eval "$(mise exec -- intron env)"
+          mise exec -- phenotype-cli build --release --out-dir .phenotype/pages
 
-      - name: Build docs
+      - name: Smoke test staged docs
         run: |
-          eval "$(intron env)"
-          cd docs
-          exon build --target wasm32-wasi
+          eval "$(mise exec -- intron env)"
+          mise exec -- phenotype-cli test --release --no-build --out-dir .phenotype/pages
 
-      - name: Verify CLI preview
-        run: |
-          eval "$(intron env)"
-          cd cli
-          exon test
-          exon build
-          cd ..
-          cli/.exon/debug/phenotype-cli test --no-build --no-mise --exon exon
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: .phenotype/pages
+
+  deploy:
+    name: docs deploy
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
