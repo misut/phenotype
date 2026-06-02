@@ -46,10 +46,12 @@
 # Build
 build/
 .exon/
+.phenotype/
 .venv/
 __pycache__/
 exon.lock
 !/exon.lock
+!/cli/exon.lock
 !/docs/exon.lock
 /examples/*/exon.lock
 /libs/*/exon.lock
