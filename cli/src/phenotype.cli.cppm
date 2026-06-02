@@ -880,7 +880,7 @@ auto main(int argc, char** argv) -> int {
     if (args.size() == 1 && (args[0] == "--help" || args[0] == "-h"))
         return print_help(root);
     if (args.size() == 1 && (args[0] == "--version" || args[0] == "-v")) {
-        std::println("phenotype-cli 0.1.0");
+        std::println("phenotype-cli {}", EXON_PKG_VERSION);
         return 0;
     }
 

@@ -1,0 +1,177 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: aarch64-apple-darwin
+          - os: ubuntu-24.04
+            platform: x86_64-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve tool versions
+        id: tool-versions
+        shell: bash
+        run: |
+          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+
+      - name: Install intron
+        run: |
+          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-${{ matrix.platform }}.tar.gz"
+          tar xzf intron-*.tar.gz && rm intron-*.tar.gz
+          mkdir -p "$HOME/.intron/bin" && mv intron "$HOME/.intron/bin/"
+          echo "$HOME/.intron/bin" >> "$GITHUB_PATH"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install toolchains
+        run: |
+          intron install llvm 22.1.2
+          intron install cmake 4.3.1
+          intron install ninja 1.13.2
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            intron install wasi-sdk 32
+            intron install wasmtime 43.0.1
+            intron default wasmtime 43.0.1
+          fi
+
+      - name: Install exon
+        run: |
+          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-${{ matrix.platform }}.tar.gz"
+          tar xzf exon-*.tar.gz && rm exon-*.tar.gz
+          mkdir -p "$HOME/.exon/bin" && mv exon "$HOME/.exon/bin/"
+          echo "$HOME/.exon/bin" >> "$GITHUB_PATH"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build release CLI
+        run: |
+          eval "$(intron env)"
+          cd cli
+          exon build --release
+          ./.exon/release/phenotype-cli --version
+
+      - name: Verify Linux preview workflow
+        if: runner.os == 'Linux'
+        run: |
+          eval "$(intron env)"
+          cd docs
+          exon build --target wasm32-wasi
+          cd ../cli
+          ./.exon/release/phenotype-cli test --no-build --no-mise --exon exon
+
+      - name: Package
+        run: |
+          tar -czf phenotype-cli-${{ github.ref_name }}-${{ matrix.platform }}.tar.gz \
+            -C cli/.exon/release phenotype-cli
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: phenotype-cli-${{ matrix.platform }}
+          path: phenotype-cli-*.tar.gz
+          retention-days: 1
+          compression-level: 0
+
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve tool versions
+        id: tool-versions
+        shell: pwsh
+        run: |
+          $mise = Get-Content mise.toml -Raw
+          if ($mise -match '"vfox:misut/mise-intron"\s*=\s*"([^"]+)"') {
+            "intron=$($Matches[1])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
+          if ($mise -match '"vfox:misut/mise-exon"\s*=\s*"([^"]+)"') {
+            "exon=$($Matches[1])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
+
+      - name: Install intron
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\phenotype-bin" | Out-Null
+          gh release download "v${{ steps.tool-versions.outputs.intron }}" -R misut/intron -p "intron-*-x86_64-pc-windows-msvc.zip"
+          $archive = Get-Item "intron-*-x86_64-pc-windows-msvc.zip"
+          Expand-Archive -Path $archive.FullName -DestinationPath "$env:RUNNER_TEMP\intron" -Force
+          Move-Item -Path "$env:RUNNER_TEMP\intron\intron.exe" -Destination "$env:RUNNER_TEMP\phenotype-bin\intron.exe" -Force
+          "$env:RUNNER_TEMP\phenotype-bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Remove-Item $archive.FullName
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install toolchains
+        shell: pwsh
+        run: |
+          intron install msvc 2022
+          intron install cmake 4.3.1
+          intron install ninja 1.13.2
+          echo "$env:USERPROFILE\.intron\toolchains\cmake\4.3.1\bin" >> $env:GITHUB_PATH
+          echo "$env:USERPROFILE\.intron\toolchains\ninja\1.13.2" >> $env:GITHUB_PATH
+
+      - name: Install exon
+        shell: pwsh
+        run: |
+          gh release download "v${{ steps.tool-versions.outputs.exon }}" -R misut/exon -p "exon-*-x86_64-pc-windows-msvc.zip"
+          $archive = Get-Item "exon-*-x86_64-pc-windows-msvc.zip"
+          Expand-Archive -Path $archive.FullName -DestinationPath "$env:RUNNER_TEMP\exon" -Force
+          Move-Item -Path "$env:RUNNER_TEMP\exon\exon.exe" -Destination "$env:RUNNER_TEMP\phenotype-bin\exon.exe" -Force
+          Remove-Item $archive.FullName
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build release CLI
+        shell: pwsh
+        run: |
+          Invoke-Expression (& intron env | Out-String)
+          Set-Location cli
+          exon build --release
+          .\.exon\release\phenotype-cli.exe --version
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path cli\.exon\release\phenotype-cli.exe `
+            -DestinationPath phenotype-cli-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: phenotype-cli-x86_64-pc-windows-msvc
+          path: phenotype-cli-*.zip
+          retention-days: 1
+          compression-level: 0
+
+  release:
+    needs: [build, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+
+      - name: Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            phenotype-cli-*.tar.gz
+            phenotype-cli-*.zip
+          generate_release_notes: true
