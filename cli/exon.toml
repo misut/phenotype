@@ -1,0 +1,23 @@
+[package]
+name = "phenotype-cli"
+version = "0.1.0"
+description = "Local WASI build and preview CLI for phenotype"
+type = "bin"
+standard = 23
+platforms = [
+    { os = "macos", arch = "aarch64" },
+    { os = "linux", arch = "x86_64" },
+    { os = "windows", arch = "x86_64" },
+]
+
+[dependencies]
+"github.com/misut/cppx" = "1.13.0"
+
+[target.'cfg(os = "linux")'.build]
+ldflags = ["-lssl", "-lcrypto"]
+
+[target.'cfg(os = "macos")'.build]
+ldflags = ["-framework", "Security", "-Wl,-framework,CoreFoundation"]
+
+[sync]
+cmake-in-root = false

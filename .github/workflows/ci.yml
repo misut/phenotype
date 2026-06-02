@@ -48,6 +48,8 @@ jobs:
         run: |
           eval "$(intron env)"
           exon test
+          cd cli
+          exon test
 
   windows-native:
     name: test (windows-2022, native)
@@ -103,6 +105,8 @@ jobs:
         run: |
           Invoke-Expression (& intron env | Out-String)
           exon test --timeout 120 --show-output failed
+          Set-Location cli
+          exon test --timeout 120 --show-output failed
 
   wasm32-wasi:
     name: test (ubuntu-24.04, wasm32-wasi)
@@ -147,3 +151,12 @@ jobs:
           eval "$(intron env)"
           cd docs
           exon build --target wasm32-wasi
+
+      - name: Test CLI preview workflow
+        run: |
+          eval "$(intron env)"
+          cd cli
+          exon test
+          exon build
+          cd ..
+          cli/.exon/debug/phenotype-cli test --no-build --no-mise --exon exon
