@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   build:
-    name: docs build (phenotype-cli)
+    name: docs build (phenotype)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -48,15 +48,15 @@ jobs:
           mise exec -- intron install wasmtime 43.0.1
           mise exec -- intron default wasmtime 43.0.1
 
-      - name: Build docs with phenotype-cli
+      - name: Build docs with phenotype
         run: |
           eval "$(mise exec -- intron env)"
-          mise exec -- phenotype-cli build --release --out-dir .phenotype/pages
+          mise exec -- phenotype build --release --out-dir .phenotype/pages
 
       - name: Smoke test staged docs
         run: |
           eval "$(mise exec -- intron env)"
-          mise exec -- phenotype-cli test --release --no-build --out-dir .phenotype/pages
+          mise exec -- phenotype test --release --no-build --out-dir .phenotype/pages
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
