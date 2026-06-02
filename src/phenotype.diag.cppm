@@ -325,13 +325,6 @@ inline Gauge&   live_nodes = *new Gauge{
 inline Gauge&   max_nodes_seen = *new Gauge{
     "phenotype.arena.max_nodes_seen", "Max node_count seen across epochs", "{node}"};
 
-inline Counter& messages_posted = *new Counter{
-    "phenotype.dispatch.messages_posted", "Messages posted by detail::post", "{msg}"};
-inline Counter& messages_drained = *new Counter{
-    "phenotype.dispatch.messages_drained", "Messages drained by the runner", "{msg}"};
-inline Gauge&   max_queue_depth = *new Gauge{
-    "phenotype.dispatch.max_queue_depth", "Max message queue depth seen", "{msg}"};
-
 inline Counter& input_events = *new Counter{
     "phenotype.input.events",
     "Input events observed by core and native shells (attributes: event, source, detail, result, callback_id, role)",
@@ -554,9 +547,6 @@ inline void reset_all() noexcept {
     inst::arena_resets.reset();
     inst::live_nodes.reset();
     inst::max_nodes_seen.reset();
-    inst::messages_posted.reset();
-    inst::messages_drained.reset();
-    inst::max_queue_depth.reset();
     inst::input_events.reset();
     inst::flush_calls.reset();
     inst::frames_skipped.reset();
@@ -5722,8 +5712,6 @@ inline json::Value build_snapshot() {
     counters.push_back(counter_to_json(inst::rebuilds, now));
     counters.push_back(counter_to_json(inst::alloc_nodes, now));
     counters.push_back(counter_to_json(inst::arena_resets, now));
-    counters.push_back(counter_to_json(inst::messages_posted, now));
-    counters.push_back(counter_to_json(inst::messages_drained, now));
     counters.push_back(counter_to_json(inst::input_events, now));
     counters.push_back(counter_to_json(inst::flush_calls, now));
     counters.push_back(counter_to_json(inst::frames_skipped, now));
@@ -5746,7 +5734,6 @@ inline json::Value build_snapshot() {
     json::Array gauges;
     gauges.push_back(gauge_to_json(inst::live_nodes, now));
     gauges.push_back(gauge_to_json(inst::max_nodes_seen, now));
-    gauges.push_back(gauge_to_json(inst::max_queue_depth, now));
 
     json::Array histograms;
     histograms.push_back(histogram_to_json(inst::frame_duration, now));

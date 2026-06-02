@@ -49,12 +49,7 @@ NodeHandle build(View&& view) {
 // three items and `selected = 1`, the second button paints with the
 // accent background and the others stay transparent.
 void test_tabs_renders_one_button_per_item() {
-    enum class Msg { Pick0, Pick1, Pick2 };
-    auto on_select = [](std::size_t i) -> Msg {
-        switch (i) { case 0: return Msg::Pick0;
-                     case 1: return Msg::Pick1;
-                     default: return Msg::Pick2; }
-    };
+    auto on_select = [](std::size_t) {};
 
     auto root_h = build([&] {
         // Use the runtime (ptr, len) ctor — MSVC rejects calling the
@@ -65,7 +60,7 @@ void test_tabs_renders_one_button_per_item() {
         items.emplace_back("Home", 4u);
         items.emplace_back("Posts", 5u);
         items.emplace_back("About", 5u);
-        widget::tabs<Msg>(items, /*selected=*/1, on_select);
+        widget::tabs(items, /*selected=*/1, on_select);
     });
     LAYOUT_NODE(root_h, 600.0f);
 
@@ -116,16 +111,13 @@ void test_tabs_renders_one_button_per_item() {
 // Each tab registers a click callback wired to `on_select(i)`. The
 // callback list ends up in click order.
 void test_tabs_registers_per_tab_callback() {
-    enum class Msg { Tag0, Tag1 };
-    auto on_select = [](std::size_t i) -> Msg {
-        return i == 0 ? Msg::Tag0 : Msg::Tag1;
-    };
+    auto on_select = [](std::size_t) {};
 
     build([&] {
         std::vector<str> items;
         items.emplace_back("a", 1u);
         items.emplace_back("b", 1u);
-        widget::tabs<Msg>(items, /*selected=*/0, on_select);
+        widget::tabs(items, /*selected=*/0, on_select);
     });
     auto& app = detail::g_app();
     assert(app.callbacks.size() == 2);
@@ -137,15 +129,14 @@ void test_tabs_registers_per_tab_callback() {
 // Tabs items are focusable, so Tab navigation lands on each one in
 // declaration order.
 void test_tabs_focusable_in_order() {
-    enum class Msg { Sel };
-    auto on_select = [](std::size_t) -> Msg { return Msg::Sel; };
+    auto on_select = [](std::size_t) {};
 
     auto root_h = build([&] {
         std::vector<str> items;
         items.emplace_back("a", 1u);
         items.emplace_back("b", 1u);
         items.emplace_back("c", 1u);
-        widget::tabs<Msg>(items, 0, on_select);
+        widget::tabs(items, 0, on_select);
     });
 
     auto& app = detail::g_app();

@@ -309,7 +309,7 @@ struct Resized {
 };
 struct Reset {};
 
-using Msg = std::variant<
+using Action = std::variant<
     ToggleBackdrop,
     SetBackdropContrast,
     ToggleInspector,
@@ -910,19 +910,19 @@ inline std::vector<std::string> public_material_kinds() {
     return {"clear", "thin", "regular", "thick"};
 }
 
-inline Msg note_changed(std::string text) {
+inline Action note_changed(std::string text) {
     return NoteChanged{std::move(text)};
 }
 
-inline Msg select_density(std::size_t value) {
+inline Action select_density(std::size_t value) {
     return SelectDensity{value};
 }
 
-inline Msg resized(int width, int height, float scale) {
+inline Action resized(int width, int height, float scale) {
     return Resized{width, height, scale};
 }
 
-inline void update(State& state, Msg msg) {
+inline void apply_action(State& state, Action action) {
     std::visit([&](auto const& m) {
         using T = std::decay_t<decltype(m)>;
         if constexpr (std::is_same_v<T, ToggleBackdrop>) {
@@ -944,7 +944,7 @@ inline void update(State& state, Msg msg) {
         } else if constexpr (std::is_same_v<T, Reset>) {
             state = State{};
         }
-    }, std::move(msg));
+    }, std::move(action));
 }
 
 inline std::string glass_input_kind_name(GlassInputKind kind) {
@@ -985,32 +985,32 @@ inline void apply_glass_input(State& state, GlassInput const& input) {
         case GlassInputKind::Noop:
             return;
         case GlassInputKind::ToggleBackdrop:
-            update(state, ToggleBackdrop{});
+            apply_action(state, ToggleBackdrop{});
             return;
         case GlassInputKind::SetBackdrop:
-            update(state, SetBackdropContrast{.high_contrast = input.flag});
+            apply_action(state, SetBackdropContrast{.high_contrast = input.flag});
             return;
         case GlassInputKind::ToggleInspector:
-            update(state, ToggleInspector{});
+            apply_action(state, ToggleInspector{});
             return;
         case GlassInputKind::SetInspector:
-            update(state, SetInspector{.open = input.flag});
+            apply_action(state, SetInspector{.open = input.flag});
             return;
         case GlassInputKind::SelectDensity:
-            update(state, SelectDensity{.value = input.density});
+            apply_action(state, SelectDensity{.value = input.density});
             return;
         case GlassInputKind::Note:
-            update(state, NoteChanged{.text = input.value});
+            apply_action(state, NoteChanged{.text = input.value});
             return;
         case GlassInputKind::Viewport:
-            update(state, Resized{
+            apply_action(state, Resized{
                 .width = input.viewport_width,
                 .height = input.viewport_height,
                 .scale = input.viewport_scale,
             });
             return;
         case GlassInputKind::Reset:
-            update(state, Reset{});
+            apply_action(state, Reset{});
             return;
     }
 }

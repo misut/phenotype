@@ -32,11 +32,10 @@ extern "C" {
 // ============================================================
 //
 // These tests exercise the primitive that backs widget-local state
-// (scroll offsets, open/close flags, animation progress) without
-// requiring the user's State/Msg cycle to carry it. Each test wraps
-// view-equivalent code inside next_frame() so framework_local entries
-// receive a fresh generation tag and unused entries get pruned at the
-// boundary, mirroring what the runner does between rebuilds.
+// (scroll offsets, open/close flags, animation progress). Each test
+// wraps view-equivalent code inside next_frame() so framework_local
+// entries receive a fresh generation tag and unused entries get pruned
+// at the boundary, mirroring what the runner does between rebuilds.
 //
 // Many tests rely on free helper functions (e.g. `slot_a`) rather than
 // inline framework_local calls. That's deliberate and reflects how

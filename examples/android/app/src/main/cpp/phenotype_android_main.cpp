@@ -2,7 +2,7 @@
 // the C ABI (`phenotype_android_*`) that phenotype.native.android exposes,
 // so this file does not need to import the phenotype C++ modules. Stage 2
 // scope: clear background per frame, survive the INIT_WINDOW / TERM_WINDOW
-// lifecycle. Stage 6 adds touch event routing on top.
+// lifecycle, and route touch/key/scroll input into the active app runner.
 
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 
@@ -17,7 +17,7 @@ extern "C" {
 // exposes it at app->activity->vm.
 // Stage 5 adds an AAssetManager-backed image loader for `asset://`
 // URLs; GameActivity exposes the manager at app->activity->assetManager.
-// Stage 6 adds the view/update loop + input dispatch.
+// The library owns the component runner and input dispatch.
 void phenotype_android_bind_jvm(void* jvm);
 void phenotype_android_bind_activity(void* activity);
 void phenotype_android_bind_assets(void* asset_manager);
@@ -101,9 +101,8 @@ void handle_cmd(android_app* app, int32_t cmd) {
         if (app->window) {
             phenotype_android_attach_surface(app->window);
             if (!g_app_started) {
-                // Stage 6: phenotype_android_start_app calls the shell's
-                // run_host<demo6::State, demo6::Msg>. Once-per-process:
-                // subsequent INIT_WINDOW cycles reuse the same app state.
+                // Once-per-process: subsequent INIT_WINDOW cycles reuse the
+                // same app runner state.
                 phenotype_android_start_app();
                 g_app_started = true;
             }

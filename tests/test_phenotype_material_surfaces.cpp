@@ -19,7 +19,6 @@ using namespace phenotype;
 
 #if !defined(__wasi__) && !defined(__ANDROID__)
 static null_host host;
-#define RUN_APP(S, M, V, U)              run<S, M>(host, V, U)
 #define LAYOUT_NODE(h, w)                detail::layout_node(host, h, w)
 #define PAINT_NODE(h, ox, oy, sy, vh)    detail::paint_node(host, host, h, ox, oy, 0.0f, sy, 800.0f, vh)
 #define CMD_BUF                          host.buf()
@@ -39,7 +38,6 @@ extern "C" {
     float phenotype_get_canvas_height() { return 600.0f; }
     void phenotype_open_url(char const*, unsigned int) {}
 }
-#define RUN_APP(S, M, V, U)              run<S, M>(V, U)
 #define LAYOUT_NODE(h, w)                detail::layout_node(h, w)
 #define PAINT_NODE(h, ox, oy, sy, vh)    detail::wasi_paint_node(h, ox, oy, 0.0f, sy, 800.0f, vh)
 #define CMD_BUF                          phenotype_cmd_buf
@@ -1540,9 +1538,6 @@ void test_material_surface_style_override_emits_explicit_material_contract() {
     std::puts("PASS: material surface style override emits explicit material contract");
 }
 
-struct MaterialInteractionClick {};
-using MaterialInteractionMsg = std::variant<MaterialInteractionClick>;
-
 MaterialRectCmd const& first_material_command(
         std::vector<DrawCommand> const& commands) {
     for (auto const& cmd : commands) {
@@ -1644,9 +1639,9 @@ void test_interaction_glass_button_uses_plain_idle_material() {
         detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
         Scope scope(root_h);
         Scope::set_current(&scope);
-        widget::button<MaterialInteractionMsg>(
+        widget::button(
             "State",
-            MaterialInteractionClick{},
+            [] {},
             widget::interaction_glass_control_button_style(
                 GlassControlStyleOptions{
                     .kind = MaterialKind::Clear,
@@ -1719,7 +1714,6 @@ void test_material_surface_resolves_live_input_interaction() {
     detail::g_app().prev_arena.reset();
     detail::g_app().callbacks.clear();
     detail::g_app().callback_roles.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
     detail::g_app().hovered_id = 0u;
@@ -1756,9 +1750,9 @@ void test_material_surface_resolves_live_input_interaction() {
                     .semantic_label = "Interactive Glass",
                 },
                 [] {
-                    widget::button<MaterialInteractionMsg>(
+                    widget::button(
                         "Action",
-                        MaterialInteractionClick{},
+                        [] {},
                         ButtonVariant::Default,
                         false);
                 });
@@ -1809,7 +1803,6 @@ void test_capture_only_surface_ignores_live_hover_material_interaction() {
     detail::g_app().prev_arena.reset();
     detail::g_app().callbacks.clear();
     detail::g_app().callback_roles.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
     detail::g_app().hovered_id = 0u;

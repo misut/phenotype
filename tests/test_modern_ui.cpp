@@ -50,7 +50,7 @@ struct CounterApp {
             ui::Button("+")
                 .role(ui::ButtonRole::primary)
                 .on_click([count] {
-                    count.update([](int& value) { ++value; });
+                    count.mutate([](int& value) { ++value; });
                 }));
     }
 };

@@ -53,7 +53,7 @@ The common snapshot schema remains the source of truth for all platforms:
 - `platform_runtime` always includes the shared viewport, scroll, focus,
   `focus_visible`, `input_modality`, `focus_visibility_reason`, hover, and
   press state. It also reports `scenes[]` and `render_surfaces[]` so the CLI and
-  side panel can identify active scene ownership, queued messages,
+  side panel can identify active scene ownership, scheduled rebuilds,
   framework-local entries, surface size, damage generation, and frame counters
   without scraping platform-specific `details`.
   Each `render_surfaces[]` entry includes the surface-local paint cache hash
@@ -888,7 +888,7 @@ For text input feel, inspect `double_click_interval_ms`,
 and `input_timing_source`; native shells consume the caret interval only at the
 input edge, while pure theme planning remains unaffected.
 The file explorer examples refresh their native system-settings snapshot at
-update-boundary theme sync. If an artifact disagrees with the current OS
+state-sync boundary theme refresh. If an artifact disagrees with the current OS
 settings, first check `application.file_explorer.preferences.system_refresh_policy`
 and compare `debug.platform_capabilities.system_settings` with
 `application.file_explorer.preferences.system_settings` before changing theme
@@ -2090,8 +2090,7 @@ manifest summary, a one-line material budget coverage summary, a one-line
 material budget bounds summary, resource-bound and quality-policy bound summaries,
 the nearest or failed bound comparison, direct tightest-bound and positive
 headroom lines, and compact verifier failure summaries for failed parsed reports.
-The legacy
-`tools/verify_glass_showcase_artifact.sh` wrapper delegates to the same CLI
+The `tools/verify_glass_showcase_artifact.sh` compatibility wrapper delegates to the same CLI
 command for local compatibility.
 
 To validate the accessibility downgrade contract end to end, run the companion

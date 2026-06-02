@@ -978,7 +978,7 @@ inline float text_measure(float font_size, FontPaintKey const& key,
     return static_cast<float>(w);
 }
 
-// Convenience overload covering the legacy bool-mono call sites.
+// Convenience overload covering the bool-mono call sites.
 inline float text_measure(float font_size, bool mono,
                           char const* text_ptr, unsigned int len) {
     FontPaintKey key{};
@@ -5217,10 +5217,10 @@ inline void decode_android_color_commands(unsigned char const* buf,
     }
 }
 
-// Legacy variant-based decoder retained so any non-render-loop callers
+// Variant-based decoder retained so any non-render-loop callers
 // (e.g. one-off command-stream tests) can still depend on the typed
 // dispatch shape. The render loop uses the streaming version above.
-inline void decode_android_color_commands_legacy(unsigned char const* buf,
+inline void decode_android_color_commands_variant(unsigned char const* buf,
                                                  unsigned int len,
                                                  FrameScratch& out) {
     out.batches.push_back(ScissorBatch{});
@@ -5847,15 +5847,11 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
 // two DrawText labels + one DrawImage against the APK-bundled
 // `stage5-demo.png` asset. Exercises the decoder + atlas build +
 // image-pipeline render path end-to-end through the public
-// phenotype::emit_* API. Stage 6 replaces this with a real View /
-// Update loop bound to the example driver's State.
-// Stage 6: the static build_stage5_demo path is retired. The render
-// loop is now driven by phenotype's view/update via `repaint_current`,
-// which lands a real command buffer in `host.buffer` before the shell
-// calls our renderer_flush(buf, len). The demo6::view function below
-// fills in for the static scene and pulls in color + text + image all
-// through the public `phenotype::widget::*` / `phenotype::layout::*`
-// API.
+// phenotype::emit_* API. The render loop is driven by the component runner via
+// `repaint_current`, which lands a real command buffer in `host.buffer` before
+// the shell calls our renderer_flush(buf, len). The bundled demo pulls in color
+// + text + image through the public `phenotype::widget::*` /
+// `phenotype::layout::*` API.
 
 inline std::uint64_t fnv1a_hash(unsigned char const* data,
                                 unsigned int len) noexcept {
@@ -7783,68 +7779,62 @@ inline void install_android_debug_providers() {
         android_platform_runtime_details_json);
 }
 
-// ---- Stage 6 demo app ------------------------------------------------
+// ---- Bundled demo app ------------------------------------------------
 //
-// Bakes a minimal counter app (State + Msg + view + update) into the
-// phenotype library so the example driver can start a live view/update
-// loop via a C ABI hook. Stage 6 scope is interaction plumbing, not
-// app-level configurability — Stage 7+ will expose a generic
-// `phenotype_android_run<T, U>` mechanism once the template
-// instantiation story settles.
+// Bakes a minimal counter app into the phenotype library so the example
+// driver can start a live component tree through a C ABI hook.
 
 namespace demo6 {
 
-struct Increment {};
-struct Decrement {};
-using Msg = std::variant<Increment, Decrement>;
+struct App {
+    int count = 0;
 
-struct State { int count = 0; };
-
-inline void update(State& s, Msg m) {
-    std::visit([&](auto const& msg) {
-        using T = std::decay_t<decltype(msg)>;
-        if constexpr (std::same_as<T, Increment>) s.count += 1;
-        else if constexpr (std::same_as<T, Decrement>) s.count -= 1;
-    }, m);
-}
-
-inline void view(State const& s) {
-    ::phenotype::layout::scaffold(
-        [] {
-            ::phenotype::widget::text("phenotype · stage 7");
-            ::phenotype::widget::text("touch + keyboard demo");
-        },
-        [&] {
-            ::phenotype::layout::card([&] {
-                ::phenotype::widget::text("Core Widgets");
-                ::phenotype::layout::spacer(8);
-                ::phenotype::widget::text(
-                    std::string("Count: ") + std::to_string(s.count));
-                ::phenotype::layout::spacer(12);
-                ::phenotype::layout::row(
-                    [&] { ::phenotype::widget::button<Msg>("−", Decrement{}); },
-                    [&] { ::phenotype::widget::button<Msg>("+", Increment{}); }
-                );
-                ::phenotype::layout::spacer(12);
-                ::phenotype::widget::text(
-                    "Tap the buttons, or Tab to focus and press Enter / Space.");
-            });
-            ::phenotype::layout::spacer(12);
-            ::phenotype::layout::material_surface(
-                ::phenotype::MaterialKind::Regular,
-                [&] {
-                    ::phenotype::widget::text("Android Material Fallback");
+    ::phenotype::ui::View body(::phenotype::ui::Context&) {
+        return ::phenotype::ui::View{[this] {
+            ::phenotype::layout::scaffold(
+                [] {
+                    ::phenotype::widget::text("phenotype · stage 7");
+                    ::phenotype::widget::text("touch + keyboard demo");
+                },
+                [this] {
+                    ::phenotype::layout::card([this] {
+                        ::phenotype::widget::text("Core Widgets");
+                        ::phenotype::layout::spacer(8);
+                        ::phenotype::widget::text(
+                            std::string("Count: ") + std::to_string(count));
+                        ::phenotype::layout::spacer(12);
+                        ::phenotype::layout::row(
+                            [this] {
+                                ::phenotype::widget::button(
+                                    "−",
+                                    [this] { --count; });
+                            },
+                            [this] {
+                                ::phenotype::widget::button(
+                                    "+",
+                                    [this] { ++count; });
+                            });
+                        ::phenotype::layout::spacer(12);
+                        ::phenotype::widget::text(
+                            "Tap the buttons, or Tab to focus and press Enter / Space.");
+                    });
+                    ::phenotype::layout::spacer(12);
+                    ::phenotype::layout::material_surface(
+                        ::phenotype::MaterialKind::Regular,
+                        [] {
+                            ::phenotype::widget::text("Android Material Fallback");
+                            ::phenotype::widget::text(
+                                "Vulkan records the resolved material plan and "
+                                "uses the deterministic translucent fallback pass.");
+                        });
+                },
+                [] {
                     ::phenotype::widget::text(
-                        "Vulkan records the resolved material plan and "
-                        "uses the deterministic translucent fallback pass.");
+                        "Stage 7: debug plane + resume + scroll.");
                 });
-        },
-        [] {
-            ::phenotype::widget::text(
-                "Stage 7: debug plane + resume + scroll.");
-        }
-    );
-}
+        }};
+    }
+};
 
 } // namespace demo6
 
@@ -7877,8 +7867,8 @@ inline void view(State const& s) {
 //      (under a mutex) and returns. `phenotype_android_draw_frame`
 //      drains the deferred queue every tick, looks up the matching
 //      cookie's saved C callback, and invokes it on the render thread.
-//      Consumers see the same "callback runs on the view/update
-//      thread" contract the macOS backend already guarantees.
+//      Consumers see the same "callback runs on the component thread"
+//      contract the macOS backend already guarantees.
 
 namespace dialog {
 
@@ -8619,27 +8609,24 @@ inline int translate_android_mods(int android_meta) {
 
 } // namespace phenotype::native::detail
 
-// Public templated entry for Android consumers that link in their own
-// State / Msg / view / update via a static archive. Counterpart to
-// `phenotype::native::run_app` for the desktop shell.
+// Public templated entry for Android consumers that link in their own App via
+// a static archive. Counterpart to `phenotype::native::run_app` for the
+// desktop shell.
 //
 // Apps that build their own `lib<app>-modules.a` (via exon for
 // aarch64-linux-android) and link it into the GameActivity NDK target
 // can declare a small `extern "C" void <app>_android_run()` wrapper
 // that calls this template, then install the wrapper from the NDK
-// glue via `phenotype_android_install_runner` so the Stage 6
-// `phenotype_android_start_app` calls into the user's State/Msg
-// instead of the bundled demo.
+// glue via `phenotype_android_install_runner` so
+// `phenotype_android_start_app` calls into the app instead of the bundled
+// demo.
 export namespace phenotype::native::android {
 
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-inline void run_app(View view, Update update) {
+template<typename App>
+inline void run_app(App app) {
     namespace d = phenotype::native::detail;
     d::bind_platform_once();
-    d::run_host<State, Msg>(d::android_host(),
-                            std::move(view), std::move(update));
+    d::run_host(d::android_host(), std::move(app));
 }
 
 } // namespace phenotype::native::android
@@ -8726,7 +8713,7 @@ void phenotype_android_draw_frame(void) {
     // Stage 6: driver ticks call here every frame. Drive the standard
     // caret-blink / IME-sync / repaint sequence the desktop shell uses
     // between native event-pump iterations. repaint_current is a no-op until
-    // phenotype_android_start_app wires the view/update loop; before
+    // phenotype_android_start_app wires the component runner; before
     // that, the screen will simply not re-present (first frame after
     // start_app will paint).
     //
@@ -8734,7 +8721,7 @@ void phenotype_android_draw_frame(void) {
     // results parked by the JNI native callback (which runs on the
     // UI thread) over to this render thread, so the dialog::open_file
     // contract — "callback runs on the same thread that pumps the
-    // view/update loop" — holds on Android too.
+    // component tree" — holds on Android too.
     // Coalesce any MOVE events that landed since the last frame into
     // a single gesture dispatch. on_touch_event MOVE only marks the
     // pending flag; multi-pointer MotionEvents call dispatch_touch
@@ -8904,12 +8891,8 @@ void phenotype_android_start_app(void) {
         d::android_app_runner()();
         return;
     }
-    // No runner installed → fall back to the bundled demo6 counter.
-    // The shell's bind_host + phenotype::run<State, Msg> wire the
-    // view/update closures into global state and trigger an initial
-    // repaint.
-    d::run_host<d::demo6::State, d::demo6::Msg>(
-        d::android_host(), d::demo6::view, d::demo6::update);
+    // No runner installed: fall back to the bundled counter demo.
+    d::run_host(d::android_host(), d::demo6::App{});
 }
 
 __attribute__((visibility("default")))

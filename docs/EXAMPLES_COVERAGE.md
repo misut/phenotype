@@ -103,7 +103,7 @@ preferred locale as the startup language when the package declares a matching
 locale and no app locale override is present. Native examples apply those app
 overrides after the platform system-settings snapshot is captured, so artifacts
 can distinguish OS defaults from user-selected theme changes. Desktop and mobile
-refresh that native snapshot at update-boundary theme sync, which keeps
+refresh that native snapshot at state-sync boundary theme refresh, which keeps
 appearance/font/accent/scroll changes observable after the next input. The
 desktop More menu and mobile Create tab both call the same shared preference
 inputs, including system/package font-size policy buttons, which keeps

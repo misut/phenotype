@@ -92,7 +92,7 @@ struct null_host {
     }
 
     // render_backend — growable command stream. Initial capacity
-    // matches the legacy fixed-size buffer (65 536 bytes) so any
+    // matches the original fixed-size buffer (65 536 bytes) so any
     // existing test that emits ≤ 65 536 bytes stays on the hot path
     // without reserve() ever firing. `reserve()` doubles past that,
     // capped at MAX_SIZE so a runaway emit can't blow up RSS.

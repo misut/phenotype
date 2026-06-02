@@ -1,146 +1,104 @@
 # Modern UI API
 
-The default phenotype interface is moving from an Elm-style
-`State` / `Msg` / `update` loop to a modern C++23 declarative component API.
-The legacy runner remains available for compatibility, but new applications
-should prefer `phenotype::ui`.
+The phenotype UI interface is a C++23 component model built around:
 
-## Reference Model
+- component objects with `body(ui::Context&)`
+- typed local state via `ui::State<T>`
+- explicit value bindings via `ui::Binding<T>`
+- callback-based interaction
+- stable identity through `key(...)` and call-site state
+- native entry points that accept the same App object shape
 
-The API intentionally combines ideas from several mature UI systems:
-
-- SwiftUI: value-like view descriptions, custom view structs, `body`, bindings,
-  environment-style contextual reads, and fluent modifiers.
-- Jetpack Compose: explicit state ownership, state hoisting, slot APIs, and
-  ordered immutable modifier chains.
-- React: render snapshots and explicit keys for preserving or resetting local
-  state under conditional rendering and lists.
-- Solid and Qwik: signal-like local state handles that update only the UI that
-  reads them, without requiring a global reducer.
-- Dear ImGui: minimal duplicated UI state from the user's point of view, while
-  still allowing phenotype to keep retained runtime state internally.
-
-The C++ surface differs from those frameworks where the language demands it:
-
-- Components are ordinary structs with `body(ui::Context&)`.
-- State handles are RAII-friendly non-owning typed handles returned from
-  `Context::state<T>()`.
-- Text fields and child components share state through `ui::Binding<T>`.
-- Callbacks are typed C++ callables instead of message variants.
-- Options use aggregate structs and designated initializers when named
-  parameters make code easier to read.
-- Identity is explicit with `View::key(...)` and `ui::ForEach(...)`.
-
-Primary references:
-
-- SwiftUI custom views and data flow:
-  <https://developer.apple.com/documentation/swiftui/declaring-a-custom-view>
-- Jetpack Compose modifiers:
-  <https://developer.android.com/develop/ui/compose/modifiers>
-- Jetpack Compose state hoisting:
-  <https://developer.android.com/jetpack/compose/state-hoisting>
-- React state snapshots and keyed identity:
-  <https://react.dev/learn/state-as-a-snapshot>
-- React preserving and resetting state:
-  <https://react.dev/learn/preserving-and-resetting-state>
-- Solid fine-grained reactivity:
-  <https://docs.solidjs.com/advanced-concepts/fine-grained-reactivity>
-
-## Minimal App
+## Component Shape
 
 ```cpp
-import phenotype;
-import std;
+struct SearchApp {
+    phenotype::ui::View body(phenotype::ui::Context& ctx) {
+        namespace ui = phenotype::ui;
 
-namespace ui = phenotype::ui;
-
-struct CounterApp {
-    ui::View body(ui::Context& cx) const {
-        auto count = cx.state<int>("count", 0);
+        auto query = ctx.state<std::string>("query");
+        auto pinned = ctx.state<bool>("pinned", false);
 
         return ui::VStack(
-            ui::Text("Counter").font(ui::Font::title),
-            ui::Text("count=" + std::to_string(count.get())),
-            ui::Button("+")
-                .role(ui::ButtonRole::primary)
-                .on_click([count] {
-                    count.update([](int& value) { ++value; });
+            ui::TextField("Search", query.binding()).width(320),
+            ui::Button(pinned.get() ? "Unpin" : "Pin")
+                .on_click([pinned] {
+                    pinned.mutate([](bool& value) { value = !value; });
                 }));
     }
 };
-
-int main() {
-    phenotype::ui::run<CounterApp>();
-}
 ```
 
-Native test and example hosts can pass their host explicitly:
-
-```cpp
-phenotype::null_host host;
-phenotype::ui::run<CounterApp>(host);
-```
+`body` is a pure declaration pass from the framework perspective. A component
+may keep ordinary C++ members, references, shared domain models, or state
+holders; callbacks mutate those values and request a rebuild.
 
 ## State And Binding
 
-State belongs to the closest component that owns the UI logic. Simple UI state
-can stay local:
-
 ```cpp
-auto expanded = cx.state<bool>("expanded", false);
+auto count = ctx.state<int>("count", 0);
+count.set(10);
+count.mutate([](int& value) { value += 1; });
+
+auto name = ctx.state<std::string>("name");
+ui::TextField("Name", name.binding());
 ```
 
-Shared or externally controlled values should be passed down as bindings:
+`State<T>` is useful for UI-local values. `Binding<T>` is for controls that need
+to write the full value, such as text fields.
+
+## Low-Level Widgets
+
+Low-level widget functions accept C++ callbacks directly:
 
 ```cpp
-struct SearchBox {
-    ui::Binding<std::string> text;
-
-    ui::View body(ui::Context&) const {
-        return ui::TextField("Search", text)
-            .semantic_label("Search files");
-    }
-};
+widget::button("Create", [&] { create_item(); });
+widget::glass_button("Apply", [&] { apply_changes(); });
+widget::checkbox("Enabled", enabled, [&] { enabled = !enabled; });
+widget::radio("Compact", density == 0, [&] { density = 0; });
+widget::switch_("Notifications", notifications, [&] {
+    notifications = !notifications;
+});
+widget::text_field("Filter", filter, [&](std::string value) {
+    filter = std::move(value);
+});
+widget::tabs(labels, selected, [&](std::size_t index) {
+    selected = index;
+});
 ```
 
-## Lists And Identity
+The component wrappers are thin, composable conveniences over the same
+callback-based primitives.
 
-Use stable keys for data-driven collections. Keys are local to the parent, just
-like React keys and Compose item keys.
+## Native Apps
 
 ```cpp
-auto rows = std::vector<File>{/* ... */};
+int main() {
+    return phenotype::native::run_app(960, 640, "Search", SearchApp{});
+}
+```
 
-return ui::ForEach<File>(
-    std::move(rows),
-    [](File const& file) { return file.id; },
-    [](File const& file) {
-        return ui::Text(file.name);
+Viewport changes can be handled as a plain callback:
+
+```cpp
+phenotype::native::run_app(
+    960,
+    640,
+    "Search",
+    SearchApp{},
+    [](int width, int height, float scale) {
+        record_viewport(width, height, scale);
     });
 ```
 
-Use `View::key(...)` for conditional branches where state must reset when the
-logical entity changes.
+## Reference Direction
 
-## Modifier Guidance
+The interface follows current UI framework practices while preserving C++ value
+semantics:
 
-Modifiers wrap a `ui::View` and are ordered. The call order must remain
-meaningful and visible at the call site:
-
-```cpp
-return ui::VStack(...)
-    .padding(phenotype::SpaceToken::Lg)
-    .frame({ .max_width = 420 })
-    .glass();
-```
-
-Prefer component parameters for semantic inputs and modifiers for layout,
-appearance, interaction, and accessibility metadata. If a modifier starts
-needing many fields, add an aggregate options type instead of a long positional
-parameter list.
-
-## Compatibility
-
-The legacy `phenotype::run<State, Msg>(view, update)` entry point remains in
-place for older examples and downstream apps. It should be treated as a
-compatibility layer; new docs and examples should use `phenotype::ui`.
+- [SwiftUI custom views](https://developer.apple.com/documentation/swiftui/declaring-a-custom-view): a component object declares its `body`.
+- [Jetpack Compose modifiers](https://developer.android.com/develop/ui/compose/modifiers): visual and layout adjustments are explicit and ordered.
+- [Jetpack Compose state hoisting](https://developer.android.com/jetpack/compose/state-hoisting): state can move up to a natural owner when reuse or coordination requires it.
+- [React state snapshots](https://react.dev/learn/state-as-a-snapshot): each render observes a stable value snapshot.
+- [React state identity](https://react.dev/learn/preserving-and-resetting-state): stable position and keys control state preservation.
+- [Solid fine-grained reactivity](https://docs.solidjs.com/advanced-concepts/fine-grained-reactivity): small typed state handles keep updates local and direct.

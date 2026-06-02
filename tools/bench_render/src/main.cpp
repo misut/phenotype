@@ -1,10 +1,8 @@
 // bench_render — host-only micro-benchmark for the phenotype render pipeline.
 //
-// Drives three synthetic scenarios through the real phenotype::run<> runner
-// and emits a JSON report of diag metric deltas plus per-scenario frame
-// timings. Used as the measurement baseline for the perf roadmap that
-// extends vDOM diff v2 with a paint-side subtree cache (S2) and further
-// stages.
+// Drives synthetic scenarios through the real component runner and emits a
+// JSON report of diag metric deltas plus per-scenario frame timings. Used as
+// the measurement baseline for the perf roadmap.
 //
 // Scenarios:
 //   uniform_static  — N text leaves, zero churn. Expect all frames after
@@ -24,7 +22,6 @@
 #include <fstream>
 #include <string>
 #include <utility>
-#include <variant>
 #include <vector>
 
 import phenotype;
@@ -32,7 +29,7 @@ import phenotype;
 namespace {
 
 // ============================================================
-// Scenario configuration (global — phenotype::run<> resets State{}).
+// Scenario configuration.
 // ============================================================
 
 enum class ScenarioKind { UniformStatic, ListChurn, ScrollOnly, ListReorder };
@@ -45,35 +42,18 @@ struct ScenarioConfig {
 };
 
 ScenarioConfig g_config{};
+int g_frame = 0;
 
-// Messages: Step advances the logical frame counter used by list_churn
-// to rotate which leaves carry a per-frame suffix on their text content.
-struct Step {
-    int frame;
-};
-using Msg = std::variant<Step>;
-
-struct State {
-    int frame = 0;
-};
-
-void update(State& state, Msg msg) {
-    std::visit([&](auto const& m) {
-        using T = std::decay_t<decltype(m)>;
-        if constexpr (std::same_as<T, Step>) state.frame = m.frame;
-    }, msg);
-}
-
-// View: flat column of N text leaves. list_churn varies a fraction of
+// Flat column of N text leaves. list_churn varies a fraction of
 // items per frame; list_reorder emits stable keys and cyclically
 // rotates the visible order so the diff's keyed salvage pass is the
 // only route for items to keep their layout_valid state.
-void view(State const& state) {
+void render_benchmark_tree() {
     using namespace phenotype;
     layout::column([&] {
         if (g_config.kind == ScenarioKind::ListReorder) {
             int const n = g_config.node_count;
-            int const shift = state.frame % n;
+            int const shift = g_frame % n;
             std::string label;
             for (int slot = 0; slot < n; ++slot) {
                 int const i = (slot + shift) % n;
@@ -91,16 +71,22 @@ void view(State const& state) {
             label.append(std::to_string(i));
             if (g_config.kind == ScenarioKind::ListChurn) {
                 int const mod = 10000;
-                int const bucket = (i * 1009 + state.frame * 131) % mod;
+                int const bucket = (i * 1009 + g_frame * 131) % mod;
                 if (bucket < g_config.churn_bp) {
                     label.push_back('.');
-                    label.append(std::to_string(state.frame));
+                    label.append(std::to_string(g_frame));
                 }
             }
             widget::text(str{label});
         }
     });
 }
+
+struct BenchApp {
+    phenotype::ui::View body(phenotype::ui::Context&) const {
+        return phenotype::ui::View{[] { render_benchmark_tree(); }};
+    }
+};
 
 // ============================================================
 // Metric snapshot — pulls the counters we care about out of AppState
@@ -233,7 +219,8 @@ Report run_scenario(char const* name, ScenarioConfig config) {
     // Installs the runner and does the first trigger_rebuild — this is
     // the "warm-up" frame (cold caches, first arena growth). Discarded
     // from the measurement.
-    phenotype::run<State, Msg>(host, view, update);
+    g_frame = 0;
+    phenotype::ui::run(host, BenchApp{});
 
     Snapshot const before = capture();
     auto frame_times = std::vector<std::uint64_t>{};
@@ -245,9 +232,9 @@ Report run_scenario(char const* name, ScenarioConfig config) {
             // match every subtree, so layout_nodes_skipped should equal
             // node_count, but today paint still re-walks and the hash
             // differs because draw_y = ay - scroll_y shifts.
-            detail::g_app.scroll_y = static_cast<float>(f % 200);
+            detail::g_app().scroll_y = static_cast<float>(f % 200);
         }
-        detail::post<Msg>(Step{f});
+        g_frame = f;
         auto const start = std::chrono::steady_clock::now();
         detail::trigger_rebuild();
         auto const end = std::chrono::steady_clock::now();

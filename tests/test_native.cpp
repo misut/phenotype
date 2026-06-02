@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -1413,22 +1414,7 @@ static int debug_panel_mods() {
 
 namespace input_regression {
 
-struct ActivateButton {};
-struct ToggleChecked {};
-struct SelectChoice { int value; };
-struct TextChanged { std::string text; };
-struct TriggerCommand {};
-struct TriggerInputCommand {};
-
-using Msg = std::variant<
-    ActivateButton,
-    ToggleChecked,
-    SelectChoice,
-    TextChanged,
-    TriggerCommand,
-    TriggerInputCommand>;
-
-struct State {
+struct Model {
     int button_activations = 0;
     bool checked = false;
     int choice = 0;
@@ -1437,7 +1423,7 @@ struct State {
     int input_command_activations = 0;
 };
 
-inline State g_observed_state{};
+inline Model g_observed_state{};
 inline int g_link_open_count = 0;
 
 inline constexpr unsigned int button_id = 0;
@@ -1489,7 +1475,6 @@ static void reset_core_state() {
     app.debug_console_copy_serial = 0;
     app.arena.reset();
     app.prev_arena.reset();
-    phenotype::detail::msg_queue().clear();
     phenotype::metrics::reset_all();
     g_observed_state = {};
     g_link_open_count = 0;
@@ -1571,68 +1556,91 @@ static void open_url(char const*, unsigned int) {
     ++g_link_open_count;
 }
 
-static Msg map_text(std::string value) {
-    return TextChanged{std::move(value)};
-}
+struct App {
+    Model state{};
 
-static void update(State& state, Msg msg) {
-    if (std::get_if<ActivateButton>(&msg)) {
-        state.button_activations += 1;
-    } else if (std::get_if<ToggleChecked>(&msg)) {
-        state.checked = !state.checked;
-    } else if (auto const* choice = std::get_if<SelectChoice>(&msg)) {
-        state.choice = choice->value;
-    } else if (auto const* text = std::get_if<TextChanged>(&msg)) {
-        state.text = text->text;
-    } else if (std::get_if<TriggerCommand>(&msg)) {
-        state.command_activations += 1;
-    } else if (std::get_if<TriggerInputCommand>(&msg)) {
-        state.input_command_activations += 1;
-    }
-    g_observed_state = state;
-}
-
-static void view(State const& state) {
-    phenotype::layout::column([&] {
-        phenotype::widget::button<Msg>("Action", ActivateButton{});
+    ui::View body(ui::Context&) {
+        g_observed_state = state;
+        return ui::View{[this] {
+        phenotype::layout::column([&] {
+        phenotype::widget::button("Action", [this] {
+            state.button_activations += 1;
+            g_observed_state = state;
+        });
         phenotype::layout::spacer(10);
         phenotype::widget::link("Open docs", "https://example.com/phenotype");
         phenotype::layout::spacer(10);
-        phenotype::widget::checkbox<Msg>("Enable option", state.checked, ToggleChecked{});
+        phenotype::widget::checkbox("Enable option", state.checked, [this] {
+            state.checked = !state.checked;
+            g_observed_state = state;
+        });
         phenotype::layout::spacer(10);
-        phenotype::widget::radio<Msg>("Choice A", state.choice == 0, SelectChoice{0});
+        phenotype::widget::radio("Choice A", state.choice == 0, [this] {
+            state.choice = 0;
+            g_observed_state = state;
+        });
         phenotype::layout::spacer(6);
-        phenotype::widget::radio<Msg>("Choice B", state.choice == 1, SelectChoice{1});
+        phenotype::widget::radio("Choice B", state.choice == 1, [this] {
+            state.choice = 1;
+            g_observed_state = state;
+        });
         phenotype::layout::spacer(10);
         phenotype::layout::card([&] {
             phenotype::widget::text("Nested input");
-            phenotype::widget::text_field<Msg>("Type here", state.text, +map_text);
+            phenotype::widget::text_field(
+                "Type here",
+                state.text,
+                [this](std::string value) {
+                    state.text = std::move(value);
+                    g_observed_state = state;
+                });
         });
         phenotype::layout::spacer(1200);
         phenotype::widget::text("Bottom marker");
-    });
-}
+        });
+        }};
+    }
+};
 
-static void key_command_view(State const& state) {
-    phenotype::app::key_command<Msg>(
-        static_cast<unsigned int>(Key::D),
-        LEGACY_MOD_CONTROL,
-        TriggerCommand{},
-        phenotype::KeyCommandOptions{
-            .debug_label = "duplicate",
-        });
-    phenotype::app::key_command<Msg>(
-        static_cast<unsigned int>(Key::F),
-        LEGACY_MOD_CONTROL,
-        TriggerInputCommand{},
-        phenotype::KeyCommandOptions{
-            .allow_when_input_focused = true,
-            .debug_label = "find",
-        });
-    phenotype::layout::column([&] {
-        phenotype::widget::text_field<Msg>("Type here", state.text, +map_text);
-    });
-}
+struct KeyCommandApp {
+    Model state{};
+
+    ui::View body(ui::Context&) {
+        phenotype::app::key_command(
+            static_cast<unsigned int>(Key::D),
+            LEGACY_MOD_CONTROL,
+            [this] {
+                state.command_activations += 1;
+                g_observed_state = state;
+            },
+            phenotype::KeyCommandOptions{
+                .debug_label = "duplicate",
+            });
+        phenotype::app::key_command(
+            static_cast<unsigned int>(Key::F),
+            LEGACY_MOD_CONTROL,
+            [this] {
+                state.input_command_activations += 1;
+                g_observed_state = state;
+            },
+            phenotype::KeyCommandOptions{
+                .allow_when_input_focused = true,
+                .debug_label = "find",
+            });
+        g_observed_state = state;
+        return ui::View{[this] {
+            phenotype::layout::column([&] {
+                phenotype::widget::text_field(
+                    "Type here",
+                    state.text,
+                    [this](std::string value) {
+                        state.text = std::move(value);
+                        g_observed_state = state;
+                    });
+            });
+        }};
+    }
+};
 
 static bool has_metric(std::string_view event,
                        std::string_view detail,
@@ -1680,7 +1688,7 @@ struct Harness {
                     .settings_menu_handler_installed);
         platform.open_url = open_url;
         host.platform = &platform;
-        phenotype::native::run<State, Msg>(host, view, update);
+        phenotype::native::run(host, App{});
         assert(phenotype::runtime::application_runtime()
                    .open_url_handler_installed);
         assert(!phenotype::runtime::application_runtime()
@@ -1717,7 +1725,7 @@ struct KeyCommandHarness {
     KeyCommandHarness() {
         reset_core_state();
         host.platform = &platform;
-        phenotype::native::run<State, Msg>(host, key_command_view, update);
+        phenotype::native::run(host, KeyCommandApp{});
         assert(phenotype::detail::g_app().key_commands.size() == 2);
         assert(phenotype::detail::g_app().callbacks.size() == 3);
     }
@@ -1732,24 +1740,24 @@ struct KeyCommandHarness {
 
 namespace native_scene_run_regression {
 
-struct State {
+struct Model {
     int total = 0;
 };
-
-using Msg = int;
 
 inline int g_last_rendered_total = -1;
 inline int g_render_count = 0;
 
-static void update(State& state, Msg msg) {
-    state.total += msg;
-}
+struct App {
+    std::shared_ptr<Model> model;
 
-static void view(State const& state) {
-    g_last_rendered_total = state.total;
-    ++g_render_count;
-    phenotype::widget::text("scene host");
-}
+    ui::View body(ui::Context&) {
+        g_last_rendered_total = model->total;
+        ++g_render_count;
+        return ui::View{[] {
+            phenotype::widget::text("scene host");
+        }};
+    }
+};
 
 static void reset_observed_state() {
     g_last_rendered_total = -1;
@@ -1802,7 +1810,8 @@ static void test_native_run_scene_targets_host_surface_scene() {
         .visible = true,
     });
 
-    phenotype::native::run_scene<State, Msg>(scene, host, view, update);
+    auto model = std::make_shared<Model>();
+    phenotype::native::run_scene(scene, host, App{model});
 
     assert(host.render_scene_id == "native-run-scene");
     assert(phenotype::runtime::active_scene().id == "native-run-scene");
@@ -1817,7 +1826,7 @@ static void test_native_run_scene_targets_host_surface_scene() {
     assert(g_last_rendered_total == 0);
     assert(g_render_count == 1);
 
-    phenotype::runtime::post_to_scene<Msg>(scene, 7);
+    model->total += 7;
     phenotype::runtime::trigger_scene_rebuild(scene);
     assert(g_last_rendered_total == 7);
     assert(g_render_count == 2);
@@ -1867,12 +1876,12 @@ static void test_macos_appkit_scene_window_registry_targets_scene() {
     auto const active_surface_before =
         phenotype::runtime::active_render_surface().id;
 
+    auto model = std::make_shared<Model>();
     bool const opened =
-        phenotype::native::detail::show_appkit_scene_window<State, Msg>(
+        phenotype::native::detail::show_appkit_scene_window(
             platform,
             options,
-            view,
-            update);
+            App{model});
     assert(opened);
     assert(phenotype::native::detail::appkit_scene_window_count() == 1);
     assert(phenotype::native::detail::is_appkit_scene_window_visible(
@@ -1911,11 +1920,10 @@ static void test_macos_appkit_scene_window_registry_targets_scene() {
         .on_close = appkit_scene_window_close_probe,
     };
     bool const callback_opened =
-        phenotype::native::detail::show_appkit_scene_window<State, Msg>(
+        phenotype::native::detail::show_appkit_scene_window(
             platform,
             callback_options,
-            view,
-            update);
+            App{model});
     assert(callback_opened);
     assert(phenotype::native::detail::appkit_scene_window_count() == 2);
     assert(close_count == 0);
@@ -1953,20 +1961,19 @@ static void test_macos_appkit_scene_window_registry_targets_scene() {
 
 namespace scroll_containment_regression {
 
-struct State {};
-using Msg = int;
-
-static void update(State&, Msg) {}
-
-static void view(State const&) {
-    phenotype::layout::column([&] {
-        phenotype::layout::scroll_view(80.0f, [] {
-            for (int i = 0; i < 8; ++i)
-                phenotype::widget::text("inner row");
-        });
-        phenotype::layout::spacer(1200);
-    });
-}
+struct App {
+    ui::View body(ui::Context&) {
+        return ui::View{[] {
+            phenotype::layout::column([&] {
+                phenotype::layout::scroll_view(80.0f, [] {
+                    for (int i = 0; i < 8; ++i)
+                        phenotype::widget::text("inner row");
+                });
+                phenotype::layout::spacer(1200);
+            });
+        }};
+    }
+};
 
 struct Harness {
     platform_api platform = make_stub_platform("test-scroll-containment", nullptr);
@@ -1975,7 +1982,7 @@ struct Harness {
     Harness() {
         input_regression::reset_core_state();
         host.platform = &platform;
-        phenotype::native::run<State, Msg>(host, view, update);
+        phenotype::native::run(host, App{});
         assert(phenotype::detail::g_app().scroll_targets.size() == 1);
     }
 
@@ -2005,10 +2012,7 @@ struct WindowsInputHarness {
         surface = make_win32_surface(window);
         host.window = &surface;
         host.platform = &current_platform();
-        phenotype::native::run<input_regression::State, input_regression::Msg>(
-            host,
-            input_regression::view,
-            input_regression::update);
+        phenotype::native::run(host, input_regression::App{});
         assert(phenotype::native::windows_test::attached_hwnd() != nullptr);
     }
 
@@ -2038,31 +2042,30 @@ struct WindowsInputHarness {
 
 namespace remote_shell_regression {
 
-struct State {};
-using Msg = std::monostate;
-
 inline std::string g_remote_url;
 
-static void update(State&, Msg) {}
-
-static void view(State const&) {
-    phenotype::layout::column([&] {
-        phenotype::widget::text("Remote image shell stress");
-        phenotype::layout::spacer(24);
-        phenotype::widget::text(
-            "This hidden-window regression exercises shell scroll, async image completion, and repaint integration.");
-        phenotype::layout::spacer(1100);
-        phenotype::layout::card([&] {
-            phenotype::widget::text("Remote image");
-            phenotype::layout::spacer(8);
-            phenotype::widget::image(g_remote_url, 320.0f, 180.0f);
-            phenotype::layout::spacer(12);
-            phenotype::widget::text("The placeholder should swap cleanly after the worker completes.");
-        });
-        phenotype::layout::spacer(400);
-        phenotype::widget::text("Bottom marker");
-    });
-}
+struct App {
+    ui::View body(ui::Context&) {
+        return ui::View{[] {
+            phenotype::layout::column([&] {
+                phenotype::widget::text("Remote image shell stress");
+                phenotype::layout::spacer(24);
+                phenotype::widget::text(
+                    "This hidden-window regression exercises shell scroll, async image completion, and repaint integration.");
+                phenotype::layout::spacer(1100);
+                phenotype::layout::card([&] {
+                    phenotype::widget::text("Remote image");
+                    phenotype::layout::spacer(8);
+                    phenotype::widget::image(g_remote_url, 320.0f, 180.0f);
+                    phenotype::layout::spacer(12);
+                    phenotype::widget::text("The placeholder should swap cleanly after the worker completes.");
+                });
+                phenotype::layout::spacer(400);
+                phenotype::widget::text("Bottom marker");
+            });
+        }};
+    }
+};
 
 } // namespace remote_shell_regression
 
@@ -2085,10 +2088,7 @@ struct WindowsRemoteShellHarness {
         surface = make_win32_surface(window);
         host.window = &surface;
         host.platform = &current_platform();
-        phenotype::native::run<remote_shell_regression::State, remote_shell_regression::Msg>(
-            host,
-            remote_shell_regression::view,
-            remote_shell_regression::update);
+        phenotype::native::run(host, remote_shell_regression::App{});
         assert(phenotype::detail::get_total_height() > 640.0f);
     }
 
@@ -3133,10 +3133,7 @@ struct MacInputHarness {
         surface = make_macos_surface(window);
         host.window = &surface;
         host.platform = &current_platform();
-        phenotype::native::run<input_regression::State, input_regression::Msg>(
-            host,
-            input_regression::view,
-            input_regression::update);
+        phenotype::native::run(host, input_regression::App{});
     }
 
     ~MacInputHarness() {
@@ -4222,25 +4219,24 @@ static void test_macos_renderer_fetches_remote_image_via_worker() {
 
 #elif defined(_WIN32)
 
-struct InputMsg {
-    std::string value;
-};
-
 struct InputState {
     std::string value;
 };
 
-static InputMsg map_input(std::string value) {
-    return {std::move(value)};
-}
+struct InputApp {
+    InputState state{};
 
-static void update_input(InputState& state, InputMsg msg) {
-    state.value = std::move(msg.value);
-}
-
-static void view_input(InputState const& state) {
-    phenotype::widget::text_field<InputMsg>("Hint", state.value, map_input);
-}
+    phenotype::ui::View body(phenotype::ui::Context&) {
+        return phenotype::ui::View{[this] {
+            phenotype::widget::text_field(
+                "Hint",
+                state.value,
+                [this](std::string value) {
+                    state.value = std::move(value);
+                });
+        }};
+    }
+};
 
 static void test_windows_text_measure_basic() {
     text::init();
@@ -5163,7 +5159,7 @@ static void test_windows_renderer_rejects_truncated_text_payload() {
 
 static void test_windows_text_field_key_dispatch() {
     phenotype::null_host host;
-    phenotype::run<InputState, InputMsg>(host, view_input, update_input);
+    phenotype::ui::run(host, InputApp{});
 
     phenotype::detail::set_focus_id(0);
     phenotype::detail::handle_key(0, static_cast<unsigned int>('A'));

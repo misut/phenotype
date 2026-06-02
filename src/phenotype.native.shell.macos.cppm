@@ -1105,13 +1105,10 @@ inline AppKitSceneWindowState* ensure_appkit_scene_window(
     return state;
 }
 
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
+template<typename App>
 bool show_appkit_scene_window(platform_api const& platform,
                               AppKitSceneWindowOptions const& options,
-                              View view,
-                              Update update) {
+                              App app) {
     auto* state = ensure_appkit_scene_window(options, platform);
     if (!state)
         return false;
@@ -1124,59 +1121,10 @@ bool show_appkit_scene_window(platform_api const& platform,
     });
     if (!state->runner_installed) {
         ScopedHostActivation activate(state->host);
-        run_host_scene<State, Msg>(
+        run_host_scene(
             state->host,
             scene,
-            std::move(view),
-            std::move(update));
-        state->runner_installed = true;
-    } else {
-        ScopedHostActivation activate(state->host);
-        ::phenotype::runtime::trigger_scene_rebuild(scene);
-    }
-
-    if (options.order_front) {
-        id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
-        activate_current_running_application();
-        if (app) {
-            objc_send<void>(
-                app,
-                sel("activateIgnoringOtherApps:"),
-                static_cast<signed char>(1));
-        }
-        objc_send<void>(state->window, sel("makeKeyAndOrderFront:"), nullptr);
-        objc_send<void>(state->window, sel("orderFrontRegardless"));
-    }
-    refresh_appkit_scene_window_visibility(*state);
-    return true;
-}
-
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-bool show_appkit_scene_window_with_state(platform_api const& platform,
-                                         AppKitSceneWindowOptions const& options,
-                                         State& app_state,
-                                         View view,
-                                         Update update) {
-    auto* state = ensure_appkit_scene_window(options, platform);
-    if (!state)
-        return false;
-
-    auto scene = ::phenotype::runtime::ensure_scene(::phenotype::SceneDescriptor{
-        .id = state->scene_id,
-        .title = state->title,
-        .role = state->scene_role,
-        .visible = true,
-    });
-    if (!state->runner_installed) {
-        ScopedHostActivation activate(state->host);
-        run_host_scene_with_state<State, Msg>(
-            state->host,
-            scene,
-            app_state,
-            std::move(view),
-            std::move(update));
+            std::move(app));
         state->runner_installed = true;
     } else {
         ScopedHostActivation activate(state->host);
@@ -2801,16 +2749,13 @@ inline bool write_startup_artifact_bundle(platform_api const& platform,
     return true;
 }
 
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
+template<typename App>
 int run_app_with_macos_platform(platform_api const& platform,
                                 int width,
                                 int height,
                                 char const* title,
                                 WindowOptions options,
-                                View view,
-                                Update update,
+                                App app_model,
                                 std::function<void(int, int, float)> on_viewport = {}) {
     if (!platform.enabled) {
         std::fprintf(stderr, "Platform backend '%s' is disabled\n", platform.name);
@@ -2887,7 +2832,7 @@ int run_app_with_macos_platform(platform_api const& platform,
         surface.logical_width,
         surface.logical_height,
         surface.content_scale);
-    run_host<State, Msg>(host, std::move(view), std::move(update));
+    run_host(host, std::move(app_model));
 
     request_appkit_window_front(app, window);
     prime_appkit_window_ordering(app);

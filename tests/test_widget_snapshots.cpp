@@ -120,7 +120,6 @@ NodeHandle build_root() {
     detail::g_app().callbacks.clear();
     detail::g_app().input_handlers.clear();
     detail::g_app().input_nodes.clear();
-    detail::msg_queue().clear();
     return detail::alloc_node();
 }
 
@@ -135,9 +134,6 @@ NodeHandle build_widget(F&& fn) {
     assert(root.children.size() >= 1);
     return root.children[0];
 }
-
-struct DummyMsg {};
-inline DummyMsg make_dummy(std::string) { return DummyMsg{}; }
 
 } // namespace
 
@@ -169,7 +165,7 @@ bool test_text_default_snapshot() {
 
 bool test_button_default_snapshot() {
     auto h = build_widget([&]{
-        widget::button<DummyMsg>("Click", DummyMsg{});
+        widget::button("Click", [] {});
     });
     char const* expected = R"snap({
   "interaction_role": "button",
@@ -197,7 +193,7 @@ bool test_button_default_snapshot() {
 
 bool test_text_field_default_snapshot() {
     auto h = build_widget([&]{
-        widget::text_field<DummyMsg>("Name", "", &make_dummy);
+        widget::text_field("Name", "", [](std::string) {});
     });
     char const* expected = R"snap({
   "interaction_role": "text_field",

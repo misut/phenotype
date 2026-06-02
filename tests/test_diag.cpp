@@ -11,10 +11,10 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
-#include <variant>
 #include <vector>
 import phenotype;
 import json;
@@ -39,6 +39,26 @@ extern "C" {
     void phenotype_open_url(char const*, unsigned int) {}
 }
 #endif
+
+struct DiagApp {
+    std::function<void()> build;
+
+    ui::View body(ui::Context&) {
+        return ui::View{[build = build] {
+            if (build)
+                build();
+        }};
+    }
+};
+
+template<typename Build>
+void run_diag_app(Build build) {
+#if !defined(__wasi__) && !defined(__ANDROID__)
+    ui::run(diag_host, DiagApp{std::function<void()>{std::move(build)}});
+#else
+    ui::run(DiagApp{std::function<void()>{std::move(build)}});
+#endif
+}
 
 namespace {
 
@@ -379,7 +399,6 @@ void test_snapshot_shape() {
         assert(scene.at("app_state_owned").is_bool());
         assert(scene.contains("hovered_callback_id"));
         assert(scene.contains("focused_callback_id"));
-        (void)scene.at("queued_messages").as_integer();
         (void)scene.at("framework_local_entries").as_integer();
         (void)scene.at("framework_local_generation").as_integer();
         auto const& schedule = scene.at("schedule").as_object();
@@ -601,17 +620,8 @@ void test_application_runtime_owns_debug_providers() {
     std::puts("PASS: application runtime owns debug providers");
 }
 
-// Smoke-test the runner: a single run<> pass should populate the
+// Smoke-test the runner: a single component pass should populate the
 // rebuild counter and the per-phase histogram with one record per phase.
-struct DiagState {};
-struct DiagMsg {};
-struct DebugPlaneNoop {};
-struct DebugPlaneTextChanged { std::string value; };
-using DebugPlaneMsg = std::variant<DebugPlaneNoop, DebugPlaneTextChanged>;
-
-static DebugPlaneMsg map_debug_plane_text(std::string value) {
-    return DebugPlaneTextChanged{std::move(value)};
-}
 
 #if !defined(__wasi__) && !defined(__ANDROID__)
 // Single emit_* whose payload exceeds the backend's *initial* capacity
@@ -690,15 +700,9 @@ void test_paint_buffer_overflow_records_metric_and_drops_command() {
 void test_runner_records_phases() {
     metrics::reset_all();
     log::set_level(log::Severity::info);
-#if !defined(__wasi__) && !defined(__ANDROID__)
-    run<DiagState, DiagMsg>(diag_host,
-#else
-    run<DiagState, DiagMsg>(
-#endif
-        [](DiagState const&) {
-            widget::text({"diag", 4});
-        },
-        [](DiagState&, DiagMsg) {});
+    run_diag_app([] {
+        widget::text({"diag", 4});
+    });
 
     assert(metrics::inst::rebuilds.total() >= 1);
     assert(metrics::inst::frame_duration.data_points().size() == 1);
@@ -706,7 +710,7 @@ void test_runner_records_phases() {
     assert(fd.count == metrics::inst::rebuilds.total());
 
     // phase_duration carries one data point per phase attribute value.
-    // Five phases recorded by the runner: update / view / layout / paint / flush.
+    // Five phases recorded by the runner: state / view / layout / paint / flush.
     auto const& phase_points = metrics::inst::phase_duration.data_points();
     assert(phase_points.size() == 5);
 }
@@ -714,37 +718,31 @@ void test_runner_records_phases() {
 void test_debug_plane_semantic_tree_shape_and_stability() {
     metrics::reset_all();
     log::set_level(log::Severity::info);
-#if !defined(__wasi__) && !defined(__ANDROID__)
-    run<DiagState, DebugPlaneMsg>(diag_host,
-#else
-    run<DiagState, DebugPlaneMsg>(
-#endif
-        [](DiagState const&) {
-            layout::column([&] {
-                widget::text("Heading");
-                widget::button<DebugPlaneMsg>("Run", DebugPlaneNoop{});
-                widget::button<DebugPlaneMsg>(
-                    "Disabled run",
-                    DebugPlaneNoop{},
-                    ButtonVariant::Default,
-                    true);
-                widget::link("Docs", "https://example.com/docs");
-                widget::checkbox<DebugPlaneMsg>("Subscribe", true, DebugPlaneNoop{});
-                widget::radio<DebugPlaneMsg>("Option A", true, DebugPlaneNoop{});
-                widget::text_field<DebugPlaneMsg>(
-                    "Type here",
-                    "",
-                    map_debug_plane_text);
-                widget::text_field<DebugPlaneMsg>(
-                    "Locked field",
-                    "read only",
-                    map_debug_plane_text,
-                    false,
-                    true);
-                widget::image("hero.png", 48.0f, 32.0f);
-            });
-        },
-        [](DiagState&, DebugPlaneMsg) {});
+    run_diag_app([] {
+        layout::column([&] {
+            widget::text("Heading");
+            widget::button("Run", [] {});
+            widget::button(
+                "Disabled run",
+                [] {},
+                ButtonVariant::Default,
+                true);
+            widget::link("Docs", "https://example.com/docs");
+            widget::checkbox("Subscribe", true, [] {});
+            widget::radio("Option A", true, [] {});
+            widget::text_field(
+                "Type here",
+                "",
+                [](std::string) {});
+            widget::text_field(
+                "Locked field",
+                "read only",
+                [](std::string) {},
+                false,
+                true);
+            widget::image("hero.png", 48.0f, 32.0f);
+        });
+    });
 
     auto first = json::parse(detail::serialize_diag_snapshot_with_debug());
     auto const& debug = first.as_object().at("debug").as_object();
@@ -829,18 +827,12 @@ void test_debug_plane_semantic_tree_shape_and_stability() {
 void test_material_surface_semantic_debug_fields() {
     metrics::reset_all();
     log::set_level(log::Severity::info);
-#if !defined(__wasi__) && !defined(__ANDROID__)
-    run<DiagState, DebugPlaneMsg>(diag_host,
-#else
-    run<DiagState, DebugPlaneMsg>(
-#endif
-        [](DiagState const&) {
-            layout::material_surface(MaterialKind::Regular, [&] {
-                widget::text("Glass panel");
-                widget::button<DebugPlaneMsg>("Action", DebugPlaneNoop{});
-            });
-        },
-        [](DiagState&, DebugPlaneMsg) {});
+    run_diag_app([] {
+        layout::material_surface(MaterialKind::Regular, [&] {
+            widget::text("Glass panel");
+            widget::button("Action", [] {});
+        });
+    });
 
     auto parsed = json::parse(detail::serialize_diag_snapshot_with_debug());
     auto const& debug = parsed.as_object().at("debug").as_object();
@@ -887,16 +879,11 @@ void test_material_surface_semantic_debug_fields() {
 void test_material_app_chrome_helpers_are_semantic_materials() {
     metrics::reset_all();
     log::set_level(log::Severity::info);
-#if !defined(__wasi__) && !defined(__ANDROID__)
-    run<DiagState, DebugPlaneMsg>(diag_host,
-#else
-    run<DiagState, DebugPlaneMsg>(
-#endif
-        [](DiagState const&) {
+    run_diag_app([] {
             layout::column([&] {
                 layout::toolbar([&] {
-                    widget::button<DebugPlaneMsg>("New", DebugPlaneNoop{});
-                    widget::button<DebugPlaneMsg>("Delete", DebugPlaneNoop{});
+                    widget::button("New", [] {});
+                    widget::button("Delete", [] {});
                 });
                 layout::toolbar(
                     layout::MaterialSurfaceOptions{
@@ -909,11 +896,10 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
                         .semantic_label = "Compact Toolbar",
                     },
                     [&] {
-                        widget::button<DebugPlaneMsg>("Compact",
-                                                       DebugPlaneNoop{});
+                        widget::button("Compact", [] {});
                     });
                 layout::navigation([&] {
-                    widget::button<DebugPlaneMsg>("Root", DebugPlaneNoop{});
+                    widget::button("Root", [] {});
                 });
                 layout::navigation(
                     layout::MaterialSurfaceOptions{
@@ -926,15 +912,12 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
                         .semantic_label = "Compact Navigation",
                     },
                     [&] {
-                        widget::button<DebugPlaneMsg>("Documents",
-                                                       DebugPlaneNoop{});
+                        widget::button("Documents", [] {});
                     });
                 layout::segmented_control_surface(
                     [&] {
-                        widget::button<DebugPlaneMsg>("Icons",
-                                                       DebugPlaneNoop{});
-                        widget::button<DebugPlaneMsg>("List",
-                                                       DebugPlaneNoop{});
+                        widget::button("Icons", [] {});
+                        widget::button("List", [] {});
                     },
                     "Mode Segmented Control");
                 layout::sidebar(160.0f, [&] {
@@ -960,33 +943,29 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
                         layout::GlassSurfacePreset::Popover,
                         "Actions Popover"),
                     [&] {
-                        widget::button<DebugPlaneMsg>("Share",
-                                                       DebugPlaneNoop{});
+                        widget::button("Share", [] {});
                     });
                 layout::tooltip([&] {
                     widget::text("Explains material affordance");
                 }, "Glass Tooltip");
                 layout::context_menu([&] {
-                    widget::button<DebugPlaneMsg>("Open",
-                                                   DebugPlaneNoop{});
-                    widget::button<DebugPlaneMsg>("Move to Trash",
-                                                   DebugPlaneNoop{});
+                    widget::button("Open", [] {});
+                    widget::button("Move to Trash", [] {});
                 }, "Glass Context Menu");
-                widget::glass_checkbox<DebugPlaneMsg>(
+                widget::glass_checkbox(
                     "Glass Checkbox",
                     true,
-                    DebugPlaneNoop{});
-                widget::glass_radio<DebugPlaneMsg>(
+                    [] {});
+                widget::glass_radio(
                     "Glass Radio",
                     true,
-                    DebugPlaneNoop{});
-                widget::glass_switch<DebugPlaneMsg>(
+                    [] {});
+                widget::glass_switch(
                     "Glass Switch",
                     true,
-                    DebugPlaneNoop{});
+                    [] {});
             });
-        },
-        [](DiagState&, DebugPlaneMsg) {});
+    });
 
     auto parsed = json::parse(detail::serialize_diag_snapshot_with_debug());
     auto const& children = parsed.as_object()
@@ -1129,27 +1108,21 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
 void test_material_container_semantic_debug_fields() {
     metrics::reset_all();
     log::set_level(log::Severity::info);
-#if !defined(__wasi__) && !defined(__ANDROID__)
-    run<DiagState, DebugPlaneMsg>(diag_host,
-#else
-    run<DiagState, DebugPlaneMsg>(
-#endif
-        [](DiagState const&) {
-            layout::material_container(
-                layout::MaterialContainerOptions{
-                    .container_id = 777u,
-                    .union_id = 3u,
-                    .spacing = 20.0f,
-                    .interactive = true,
-                    .morph_transitions = true,
-                },
-                [] {
-                    layout::material_surface(MaterialKind::Thin, [] {
-                        widget::text("Union glass");
-                    });
+    run_diag_app([] {
+        layout::material_container(
+            layout::MaterialContainerOptions{
+                .container_id = 777u,
+                .union_id = 3u,
+                .spacing = 20.0f,
+                .interactive = true,
+                .morph_transitions = true,
+            },
+            [] {
+                layout::material_surface(MaterialKind::Thin, [] {
+                    widget::text("Union glass");
                 });
-        },
-        [](DiagState&, DebugPlaneMsg) {});
+            });
+    });
 
     auto parsed = json::parse(detail::serialize_diag_snapshot_with_debug());
     auto const& children = parsed.as_object()
@@ -1173,25 +1146,19 @@ void test_material_container_semantic_debug_fields() {
 void test_overlay_semantic_debug_nodes_are_screen_fixed() {
     metrics::reset_all();
     log::set_level(log::Severity::info);
-#if !defined(__wasi__) && !defined(__ANDROID__)
-    run<DiagState, DebugPlaneMsg>(diag_host,
-#else
-    run<DiagState, DebugPlaneMsg>(
-#endif
-        [](DiagState const&) {
-            layout::column([&] {
-                widget::text("Main content");
-                layout::spacer(900.0f);
+    run_diag_app([] {
+        layout::column([&] {
+            widget::text("Main content");
+            layout::spacer(900.0f);
+        });
+        layout::overlay([&] {
+            layout::spacer(32.0f);
+            layout::material_surface(MaterialKind::Thin, [&] {
+                widget::text("Overlay glass");
+                widget::button("Overlay action", [] {});
             });
-            layout::overlay([&] {
-                layout::spacer(32.0f);
-                layout::material_surface(MaterialKind::Thin, [&] {
-                    widget::text("Overlay glass");
-                    widget::button<DebugPlaneMsg>("Overlay action", DebugPlaneNoop{});
-                });
-            });
-        },
-        [](DiagState&, DebugPlaneMsg) {});
+        });
+    });
 
     detail::set_scroll_y(640.0f);
     auto parsed = json::parse(detail::serialize_diag_snapshot_with_debug());

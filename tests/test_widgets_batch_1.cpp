@@ -107,10 +107,9 @@ void test_progress_clamps_value() {
 // `animate_float` snaps to its target, so the assertions below test
 // the steady-state geometry without timing concerns.
 void test_switch_on_state_alignment() {
-    enum Msg { Toggle };
     detail::local_store().clear();
     auto root_h = build([&] {
-        widget::switch_<Msg>("toggled", true, Toggle);
+        widget::switch_("toggled", true, [] {});
     });
     LAYOUT_NODE(root_h, 600.0f);
 
@@ -131,10 +130,9 @@ void test_switch_on_state_alignment() {
 }
 
 void test_switch_off_state_alignment() {
-    enum Msg { Toggle };
     detail::local_store().clear();
     auto root_h = build([&] {
-        widget::switch_<Msg>("untoggled", false, Toggle);
+        widget::switch_("untoggled", false, [] {});
     });
     LAYOUT_NODE(root_h, 600.0f);
 
@@ -157,16 +155,14 @@ void test_switch_off_state_alignment() {
 // switch_ registers a click callback (so Tab+Enter / pointer click
 // can flip it) and is focusable.
 void test_switch_registers_callback() {
-    enum Msg { Toggle };
     bool fired = false;
     build([&] {
-        widget::switch_<Msg>("a", false, Toggle);
+        widget::switch_("a", false, [&] { fired = true; });
     });
     auto& app = detail::g_app();
     assert(app.callbacks.size() == 1);
-    // Invoking the callback should post a Msg, but the test isn't
-    // wiring an `update` — we just confirm a callable was registered.
-    (void)fired;
+    app.callbacks[0]();
+    assert(fired);
     std::puts("PASS: switch_ registers a click callback");
 }
 

@@ -128,7 +128,7 @@ template <render_backend R>
             // pointers in the caller are not a concern.
             return true;
         }
-        // Grow refused (cap exceeded). Fall through to the legacy
+        // Grow refused (cap exceeded). Fall through to the overflow
         // mid-paint flush path; some backends will recover, the
         // overflow case at least gets logged loudly.
         r.flush();

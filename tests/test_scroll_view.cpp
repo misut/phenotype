@@ -248,10 +248,9 @@ void test_scroll_view_paint_clamps_offset() {
 // the inner offset — verified here by reading the wire-format
 // HitRegion bytes back after a non-zero scroll.
 void test_scroll_view_hit_region_offset_matches_scroll() {
-    enum Msg { Tap };
     auto sv = [&] {
         layout::scroll_view(80.0f, [&] {
-            widget::button<Msg>("hit me", Tap);
+            widget::button("hit me", [] {});
             for (int i = 0; i < 6; ++i) widget::text("filler");
         });
     };

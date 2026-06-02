@@ -17,7 +17,6 @@ using namespace phenotype;
 
 #if !defined(__wasi__) && !defined(__ANDROID__)
 static null_host host;
-#define RUN_APP(S, M, V, U)              run<S, M>(host, V, U)
 #define LAYOUT_NODE(h, w)                detail::layout_node(host, h, w)
 #define PAINT_NODE(h, ox, oy, sy, vh)    detail::paint_node(host, host, h, ox, oy, 0.0f, sy, 800.0f, vh)
 #define CMD_BUF                          host.buf()
@@ -37,7 +36,6 @@ extern "C" {
     float phenotype_get_canvas_height() { return 600.0f; }
     void phenotype_open_url(char const*, unsigned int) {}
 }
-#define RUN_APP(S, M, V, U)              run<S, M>(V, U)
 #define LAYOUT_NODE(h, w)                detail::layout_node(h, w)
 #define PAINT_NODE(h, ox, oy, sy, vh)    detail::wasi_paint_node(h, ox, oy, 0.0f, sy, 800.0f, vh)
 #define CMD_BUF                          phenotype_cmd_buf
@@ -358,14 +356,12 @@ void test_default_theme_glass_contract() {
     std::puts("PASS: default theme exposes Apple glass contract metadata");
 }
 
-void test_scene_runtime_isolates_app_state_and_messages() {
+void test_scene_runtime_isolates_app_state_and_schedule() {
     auto main_scene = runtime::main_scene();
     {
         auto activate_main = runtime::activate_scene(main_scene);
         detail::g_app().hovered_id = 11u;
         detail::g_app().focused_id = 12u;
-        runtime::clear_messages();
-        runtime::post<int>(7);
     }
 
     auto settings_scene = runtime::ensure_scene(SceneDescriptor{
@@ -380,22 +376,17 @@ void test_scene_runtime_isolates_app_state_and_messages() {
         assert(detail::g_app().focused_id == 0xFFFFFFFFu);
         detail::g_app().hovered_id = 21u;
         detail::g_app().focused_id = 22u;
-        runtime::post<int>(42);
         auto settings_snapshot = runtime::active_scene();
         assert(settings_snapshot.id == "settings");
         assert(settings_snapshot.role == SceneRole::Settings);
         assert(settings_snapshot.hovered_id == 21u);
         assert(settings_snapshot.focused_id == 22u);
-        assert(settings_snapshot.queued_messages == 1u);
         detail::g_app().has_active_animations = true;
         detail::g_app().debug_panel_refresh_active = true;
         auto settings_schedule = runtime::active_scene_schedule();
         assert(settings_schedule.has_active_animations);
         assert(settings_schedule.debug_panel_refresh_active);
         assert(detail::active_scene_needs_scheduled_tick());
-        auto settings_messages = runtime::drain<int>();
-        assert(settings_messages.size() == 1);
-        assert(settings_messages[0] == 42);
     }
 
     {
@@ -406,16 +397,8 @@ void test_scene_runtime_isolates_app_state_and_messages() {
         assert(!runtime::active_scene_schedule().has_active_animations);
         assert(!runtime::active_scene_schedule().debug_panel_refresh_active);
         assert(!detail::active_scene_needs_scheduled_tick());
-        auto main_messages = runtime::drain<int>();
-        assert(main_messages.size() == 1);
-        assert(main_messages[0] == 7);
     }
 
-    runtime::post_to_scene<int>(settings_scene, 99);
-    assert(runtime::scene(settings_scene).queued_messages == 1u);
-    auto settings_messages = runtime::drain_scene<int>(settings_scene);
-    assert(settings_messages.size() == 1);
-    assert(settings_messages[0] == 99);
     assert(runtime::active_scene().id == "main");
 
     auto snapshots = runtime::scenes();
@@ -433,55 +416,7 @@ void test_scene_runtime_isolates_app_state_and_messages() {
     assert(saw_main);
     assert(saw_settings);
 
-    std::puts("PASS: scene runtime isolates app state and messages");
-}
-
-void test_message_queue_is_derived_from_active_scene() {
-    auto main_scene = runtime::main_scene();
-    auto tools_scene = runtime::ensure_scene(SceneDescriptor{
-        .id = "message-queue-tools",
-        .title = "Message Queue Tools",
-        .role = SceneRole::Custom,
-        .visible = true,
-    });
-
-    {
-        auto activate_main = runtime::activate_scene(main_scene);
-        runtime::clear_messages();
-        runtime::post<int>(101);
-
-        auto* main_queue = &detail::msg_queue();
-        assert(main_queue == &detail::active_scene_runtime().messages);
-
-        {
-            auto activate_tools = runtime::activate_scene(tools_scene);
-            runtime::clear_messages();
-            auto* tools_queue = &detail::msg_queue();
-            assert(tools_queue == &detail::active_scene_runtime().messages);
-            assert(tools_queue != main_queue);
-            assert(runtime::active_scene().queued_messages == 0u);
-
-            runtime::post<int>(202);
-            assert(tools_queue->size() == 1u);
-        }
-
-        assert(runtime::active_scene().id == "main");
-        assert(&detail::msg_queue() == main_queue);
-        assert(runtime::active_scene().queued_messages == 1u);
-
-        auto main_messages = runtime::drain<int>();
-        assert(main_messages.size() == 1u);
-        assert(main_messages[0] == 101);
-    }
-
-    {
-        auto activate_tools = runtime::activate_scene(tools_scene);
-        auto tools_messages = runtime::drain<int>();
-        assert(tools_messages.size() == 1u);
-        assert(tools_messages[0] == 202);
-    }
-
-    std::puts("PASS: message queue is derived from active scene");
+    std::puts("PASS: scene runtime isolates app state and schedule");
 }
 
 void test_app_state_is_derived_from_active_scene() {
@@ -988,61 +923,61 @@ void test_app_runner_can_own_context_pointer() {
     std::puts("PASS: app runner can own context pointer");
 }
 
-static int legacy_runner_scene_a_rebuilds = 0;
-static int legacy_runner_scene_b_rebuilds = 0;
+static int function_runner_scene_a_rebuilds = 0;
+static int function_runner_scene_b_rebuilds = 0;
 
-void legacy_runner_scene_a() {
-    ++legacy_runner_scene_a_rebuilds;
+void function_runner_scene_a() {
+    ++function_runner_scene_a_rebuilds;
 }
 
-void legacy_runner_scene_b() {
-    ++legacy_runner_scene_b_rebuilds;
+void function_runner_scene_b() {
+    ++function_runner_scene_b_rebuilds;
 }
 
-void test_legacy_app_runner_context_is_scene_local() {
+void test_function_app_runner_context_is_scene_local() {
     auto active_before = runtime::active_scene_handle();
     auto scene_a = runtime::ensure_scene(SceneDescriptor{
-        .id = "legacy-runner-scene-a",
-        .title = "Legacy Runner Scene A",
+        .id = "function-runner-scene-a",
+        .title = "Function Runner Scene A",
         .role = SceneRole::Settings,
         .visible = true,
     });
     auto scene_b = runtime::ensure_scene(SceneDescriptor{
-        .id = "legacy-runner-scene-b",
-        .title = "Legacy Runner Scene B",
+        .id = "function-runner-scene-b",
+        .title = "Function Runner Scene B",
         .role = SceneRole::Debug,
         .visible = true,
     });
 
     {
         auto activate = runtime::activate_scene(scene_a);
-        detail::install_app_runner(legacy_runner_scene_a);
+        detail::install_app_runner(function_runner_scene_a);
     }
     {
         auto activate = runtime::activate_scene(scene_b);
-        detail::install_app_runner(legacy_runner_scene_b);
+        detail::install_app_runner(function_runner_scene_b);
     }
 
-    legacy_runner_scene_a_rebuilds = 0;
-    legacy_runner_scene_b_rebuilds = 0;
+    function_runner_scene_a_rebuilds = 0;
+    function_runner_scene_b_rebuilds = 0;
     runtime::trigger_scene_rebuild(scene_a);
-    assert(legacy_runner_scene_a_rebuilds == 1);
-    assert(legacy_runner_scene_b_rebuilds == 0);
+    assert(function_runner_scene_a_rebuilds == 1);
+    assert(function_runner_scene_b_rebuilds == 0);
 
     runtime::trigger_scene_rebuild(scene_b);
-    assert(legacy_runner_scene_a_rebuilds == 1);
-    assert(legacy_runner_scene_b_rebuilds == 1);
+    assert(function_runner_scene_a_rebuilds == 1);
+    assert(function_runner_scene_b_rebuilds == 1);
 
     runtime::clear_scene_runner(scene_a);
     runtime::trigger_scene_rebuild(scene_a);
     runtime::trigger_scene_rebuild(scene_b);
-    assert(legacy_runner_scene_a_rebuilds == 1);
-    assert(legacy_runner_scene_b_rebuilds == 2);
+    assert(function_runner_scene_a_rebuilds == 1);
+    assert(function_runner_scene_b_rebuilds == 2);
 
     runtime::clear_scene_runner(scene_b);
     assert(runtime::active_scene_handle().id == active_before.id);
 
-    std::puts("PASS: legacy app runner context is scene-local");
+    std::puts("PASS: function app runner context is scene-local");
 }
 
 void test_material_build_context_is_scene_local() {
@@ -1195,23 +1130,20 @@ void test_view_build_scope_is_scene_local() {
 }
 
 void test_runtime_run_scene_keeps_same_types_scene_local() {
-    struct SceneRunState {
+    struct SceneModel {
         int value = 0;
     };
 
-    struct ViewProbe {
+    struct SceneApp {
+        std::shared_ptr<SceneModel> model;
         int* last_seen = nullptr;
 
-        void operator()(SceneRunState const& state) const {
+        ui::View body(ui::Context&) {
             if (last_seen)
-                *last_seen = state.value;
-            widget::text("scene value=" + std::to_string(state.value));
-        }
-    };
-
-    struct UpdateProbe {
-        void operator()(SceneRunState& state, int msg) const {
-            state.value += msg;
+                *last_seen = model->value;
+            return ui::View{[model = model] {
+                widget::text("scene value=" + std::to_string(model->value));
+            }};
         }
     };
 
@@ -1228,31 +1160,35 @@ void test_runtime_run_scene_keeps_same_types_scene_local() {
         .visible = true,
     });
     auto active_before = runtime::active_scene_handle();
+    auto model_a = std::make_shared<SceneModel>();
+    auto model_b = std::make_shared<SceneModel>();
     int last_a = -1;
     int last_b = -1;
 
 #if !defined(__wasi__) && !defined(__ANDROID__)
     null_host host_a;
     null_host host_b;
-    runtime::run_scene<SceneRunState, int>(
-        scene_a,
-        host_a,
-        ViewProbe{&last_a},
-        UpdateProbe{});
-    runtime::run_scene<SceneRunState, int>(
-        scene_b,
-        host_b,
-        ViewProbe{&last_b},
-        UpdateProbe{});
+    {
+        runtime::SceneActivation activate{scene_a};
+        ui::_impl::install_native_run_context(
+            host_a,
+            SceneApp{model_a, &last_a});
+    }
+    {
+        runtime::SceneActivation activate{scene_b};
+        ui::_impl::install_native_run_context(
+            host_b,
+            SceneApp{model_b, &last_b});
+    }
 #elif defined(__wasi__)
-    runtime::run_scene<SceneRunState, int>(
-        scene_a,
-        ViewProbe{&last_a},
-        UpdateProbe{});
-    runtime::run_scene<SceneRunState, int>(
-        scene_b,
-        ViewProbe{&last_b},
-        UpdateProbe{});
+    {
+        runtime::SceneActivation activate{scene_a};
+        ui::_impl::install_wasi_run_context(SceneApp{model_a, &last_a});
+    }
+    {
+        runtime::SceneActivation activate{scene_b};
+        ui::_impl::install_wasi_run_context(SceneApp{model_b, &last_b});
+    }
 #else
     std::puts("SKIP: runtime run_scene scene-local contexts");
     return;
@@ -1262,18 +1198,18 @@ void test_runtime_run_scene_keeps_same_types_scene_local() {
     assert(last_a == 0);
     assert(last_b == 0);
 
-    runtime::post_to_scene<int>(scene_a, 3);
+    model_a->value += 3;
     runtime::trigger_scene_rebuild(scene_a);
     assert(last_a == 3);
     assert(last_b == 0);
     assert(runtime::active_scene_handle().id == active_before.id);
 
-    runtime::post_to_scene<int>(scene_b, 5);
+    model_b->value += 5;
     runtime::trigger_scene_rebuild(scene_b);
     assert(last_a == 3);
     assert(last_b == 5);
 
-    runtime::post_to_scene<int>(scene_a, 2);
+    model_a->value += 2;
     runtime::trigger_scene_rebuild(scene_a);
     assert(last_a == 5);
     assert(last_b == 5);
@@ -1289,19 +1225,16 @@ void test_runtime_run_scene_can_share_external_state() {
         int value = 7;
     };
 
-    struct ViewProbe {
+    struct SharedApp {
+        SharedState* state = nullptr;
         int* last_seen = nullptr;
 
-        void operator()(SharedState const& state) const {
+        ui::View body(ui::Context&) {
             if (last_seen)
-                *last_seen = state.value;
-            widget::text("shared value=" + std::to_string(state.value));
-        }
-    };
-
-    struct UpdateProbe {
-        void operator()(SharedState& state, int msg) const {
-            state.value += msg;
+                *last_seen = state->value;
+            return ui::View{[state = state] {
+                widget::text("shared value=" + std::to_string(state->value));
+            }};
         }
     };
 
@@ -1317,18 +1250,17 @@ void test_runtime_run_scene_can_share_external_state() {
 
 #if !defined(__wasi__) && !defined(__ANDROID__)
     null_host host;
-    runtime::run_scene_with_state<SharedState, int>(
-        scene,
-        host,
-        state,
-        ViewProbe{&last_seen},
-        UpdateProbe{});
+    {
+        runtime::SceneActivation activate{scene};
+        ui::_impl::install_native_run_context(
+            host,
+            SharedApp{&state, &last_seen});
+    }
 #elif defined(__wasi__)
-    runtime::run_scene_with_state<SharedState, int>(
-        scene,
-        state,
-        ViewProbe{&last_seen},
-        UpdateProbe{});
+    {
+        runtime::SceneActivation activate{scene};
+        ui::_impl::install_wasi_run_context(SharedApp{&state, &last_seen});
+    }
 #else
     std::puts("SKIP: runtime run_scene shared external state");
     return;
@@ -1338,7 +1270,7 @@ void test_runtime_run_scene_can_share_external_state() {
     assert(state.value == 7);
     assert(last_seen == 7);
 
-    runtime::post_to_scene<int>(scene, 5);
+    state.value += 5;
     runtime::trigger_scene_rebuild(scene);
     assert(state.value == 12);
     assert(last_seen == 12);
@@ -2604,23 +2536,20 @@ void test_layout_relayout_when_available_width_changes() {
 }
 
 void test_checkbox_and_radio_widgets() {
-    struct ToggleA {};
-    struct PickB { int idx; };
-    using Msg = std::variant<ToggleA, PickB>;
-
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    bool toggled = false;
+    int picked = -1;
 
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::checkbox<Msg>("Subscribe",  false, ToggleA{});
-    widget::checkbox<Msg>("Subscribe!", true,  ToggleA{});
-    widget::radio<Msg>   ("Option A",   false, PickB{0});
-    widget::radio<Msg>   ("Option B",   true,  PickB{1});
+    widget::checkbox("Subscribe",  false, [&] { toggled = true; });
+    widget::checkbox("Subscribe!", true,  [&] { toggled = true; });
+    widget::radio   ("Option A",   false, [&] { picked = 0; });
+    widget::radio   ("Option B",   true,  [&] { picked = 1; });
     Scope::set_current(nullptr);
 
     LAYOUT_NODE(root_h, 400.0f);
@@ -2678,16 +2607,11 @@ void test_checkbox_and_radio_widgets() {
 
     auto cb_id_a = detail::node_at(root.children[0]).callback_id;
     detail::g_app().callbacks[cb_id_a]();
-    auto msgs = detail::drain<Msg>();
-    assert(msgs.size() == 1);
-    assert(std::holds_alternative<ToggleA>(msgs[0]));
+    assert(toggled);
 
     auto cb_id_b = detail::node_at(root.children[3]).callback_id;
     detail::g_app().callbacks[cb_id_b]();
-    auto msgs2 = detail::drain<Msg>();
-    assert(msgs2.size() == 1);
-    assert(std::holds_alternative<PickB>(msgs2[0]));
-    assert(std::get<PickB>(msgs2[0]).idx == 1);
+    assert(picked == 1);
 
     CMD_LEN = 0;
     detail::g_app().focusable_ids.clear();
@@ -2708,13 +2632,12 @@ void test_checkbox_and_radio_widgets() {
     detail::g_app().theme.toggle_box_size = 44.0f;
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
     auto root2_h = detail::alloc_node();
     detail::node_at(root2_h).style.flex_direction = FlexDirection::Column;
     {
         Scope scope2(root2_h);
         Scope::set_current(&scope2);
-        widget::checkbox<Msg>("Touch", false, ToggleA{});
+        widget::checkbox("Touch", false, [] {});
         Scope::set_current(nullptr);
     }
     LAYOUT_NODE(root2_h, 400.0f);
@@ -2728,6 +2651,14 @@ void test_checkbox_and_radio_widgets() {
 }
 
 void test_frame_skip_on_identical_cmd_buffer() {
+    struct FrameSkipApp {
+        ui::View body(ui::Context&) {
+            return ui::View{[] {
+                widget::text("hello frame skip");
+            }};
+        }
+    };
+
     detail::g_app().arena.reset();
     detail::g_app().prev_arena.reset();
     metrics::reset_all();
@@ -2735,9 +2666,11 @@ void test_frame_skip_on_identical_cmd_buffer() {
     detail::invalidate_active_render_surface_paint_cache();
     CMD_LEN = 0;
 
-    RUN_APP(int, int,
-        [](int const&) { widget::text("hello frame skip"); },
-        [](int& s, int m) { s = m; });
+#if !defined(__wasi__) && !defined(__ANDROID__)
+    ui::run(host, FrameSkipApp{});
+#else
+    ui::run(FrameSkipApp{});
+#endif
 
     auto initial_flushes = metrics::inst::flush_calls.total();
     auto initial_skips   = metrics::inst::frames_skipped.total();
@@ -2761,7 +2694,7 @@ void test_paint_only_props_invalidate_diff_cache() {
         detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
         Scope scope(root_h);
         Scope::set_current(&scope);
-        widget::radio<int>("Base", selected, 1);
+        widget::radio("Base", selected, [] {});
         Scope::set_current(nullptr);
         if (paint) {
             LAYOUT_NODE(root_h, 400.0f);
@@ -2813,16 +2746,14 @@ void test_paint_only_props_invalidate_diff_cache() {
 // to walk, but C.label.diff still succeeds because its text is
 // unchanged. C.label must NOT take the blit path in that frame.
 void test_radio_paint_cache_stale_descendant_after_subtree_blit() {
-    using Msg = int;
-
     auto build_radios = [](bool a, bool b, bool c) {
         auto root_h = detail::alloc_node();
         detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
         Scope scope(root_h);
         Scope::set_current(&scope);
-        widget::radio<Msg>("Option A", a, 0);
-        widget::radio<Msg>("Option B", b, 1);
-        widget::radio<Msg>("Option C", c, 2);
+        widget::radio("Option A", a, [] {});
+        widget::radio("Option B", b, [] {});
+        widget::radio("Option C", c, [] {});
         Scope::set_current(nullptr);
         return root_h;
     };
@@ -2838,13 +2769,11 @@ void test_radio_paint_cache_stale_descendant_after_subtree_blit() {
         std::swap(detail::g_app().arena, detail::g_app().prev_arena);
         detail::g_app().arena.reset();
         detail::g_app().callbacks.clear();
-        detail::msg_queue().clear();
     };
 
     detail::g_app().arena.reset();
     detail::g_app().prev_arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
     detail::g_app().paint_invalidation_mask = 0;
     detail::g_app().prev_scroll_x = 0;
     detail::g_app().prev_scroll_y = 0;
@@ -3757,8 +3686,7 @@ int main() {
     test_measure_text_cache_dedup();
     test_set_theme_updates_and_invalidates_cache();
     test_default_theme_glass_contract();
-    test_scene_runtime_isolates_app_state_and_messages();
-    test_message_queue_is_derived_from_active_scene();
+    test_scene_runtime_isolates_app_state_and_schedule();
     test_app_state_is_derived_from_active_scene();
     test_scene_scheduler_clock_is_scene_local();
     test_render_surface_runtime_binds_scene_and_tracks_frames();
@@ -3767,7 +3695,7 @@ int main() {
     test_active_runtime_binding_restores_scene_and_surface();
     test_app_runner_uses_context_pointer();
     test_app_runner_can_own_context_pointer();
-    test_legacy_app_runner_context_is_scene_local();
+    test_function_app_runner_context_is_scene_local();
     test_material_build_context_is_scene_local();
     test_view_build_scope_is_scene_local();
     test_runtime_run_scene_keeps_same_types_scene_local();

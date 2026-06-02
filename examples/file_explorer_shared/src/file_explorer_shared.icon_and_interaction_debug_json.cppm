@@ -793,7 +793,7 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
         "system_refresh_policy",
         json::Value{
             "native edge captures OS settings before first frame and refreshes "
-            "them at update-boundary theme sync"});
+            "them at state-sync boundary theme refresh"});
     return json::Value{std::move(out)};
 }
 

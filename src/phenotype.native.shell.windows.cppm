@@ -761,16 +761,13 @@ inline bool write_startup_artifact_bundle(platform_api const& platform,
     return true;
 }
 
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
+template<typename App>
 int run_app_with_windows_platform(platform_api const& platform,
                                   int width,
                                   int height,
                                   char const* title,
                                   WindowOptions options,
-                                  View view,
-                                  Update update,
+                                  App app,
                                   std::function<void(int, int, float)> on_viewport = {}) {
     if (!platform.enabled) {
         std::fprintf(stderr, "Platform backend '%s' is disabled\n", platform.name);
@@ -823,7 +820,7 @@ int run_app_with_windows_platform(platform_api const& platform,
         surface.logical_width,
         surface.logical_height,
         surface.content_scale);
-    run_host<State, Msg>(host, std::move(view), std::move(update));
+    run_host(host, std::move(app));
 
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);

@@ -1,13 +1,13 @@
 # phenotype · android example
 
 Minimal Android application that boots phenotype's Vulkan backend inside a
-[GameActivity](https://developer.android.com/games/agdk/game-activity). As
-of Stage 7 it runs a real `view(State) / update(State, Msg)` loop through
-phenotype's shell and exposes the full `debug_api` (capabilities,
+[GameActivity](https://developer.android.com/games/agdk/game-activity). It
+installs a `demo6::App` component runner through phenotype's shell and exposes
+the full `debug_api` (capabilities,
 `snapshot_json`, `capture_frame_rgba`, `write_artifact_bundle`). The
 built-in counter demo exercises the full three-pipeline stack (color +
 text + image) plus touch + hardware-key + vertical-scroll input: tap the
-`−` / `+` buttons to mutate `State.count`, Tab to cycle focus, Enter /
+`−` / `+` buttons to mutate app-local count state, Tab to cycle focus, Enter /
 Space to trigger the focused button, mouse-wheel / trackpad / `adb shell
 input roll` to dispatch scroll deltas (touchscreen two-finger scroll
 stays Stage 8). Motion, key, and scroll events drain from GameActivity's
@@ -35,9 +35,7 @@ attach), `phenotype_android_bind_activity(app->activity->javaGameActivity)`
 scroll metrics),
 `phenotype_android_bind_assets(app->activity->assetManager)` (`asset://`
 URL resolver), and `phenotype_android_start_app()` on the first
-`APP_CMD_INIT_WINDOW` (instantiates the library-side
-`run_host<demo6::State, demo6::Msg>` so view + update wire into the
-shell).
+`APP_CMD_INIT_WINDOW` (installs the library-side `demo6::App` runner).
 
 ## URL schemes supported by `DrawImage`
 
@@ -102,7 +100,7 @@ mise exec -- exon build
 .exon/debug/phenotype_cli android contract --json # pull and verify a debug artifact bundle
 ```
 
-The legacy `mise run android:*` tasks and scripts under
+The `mise run android:*` tasks and scripts under
 [`tools/android/`](../../tools/android/) remain available for compatibility.
 New automation should prefer `phenotype android ...` so command names, JSON
 output, and device-state overrides are stable. Override defaults via these
