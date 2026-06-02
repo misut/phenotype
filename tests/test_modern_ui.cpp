@@ -65,6 +65,45 @@ struct TextInputApp {
     }
 };
 
+struct SelectionControlsApp {
+    ui::View body(ui::Context& cx) const {
+        auto accepted = cx.state<bool>("accepted", false);
+        auto detailed = cx.state<bool>("detailed", false);
+        auto tab = cx.state<std::size_t>("tab", 0);
+
+        return ui::VStack(
+            ui::Text(
+                "accepted=" + std::string(accepted.get() ? "true" : "false")
+                + " detailed=" + std::string(detailed.get() ? "true" : "false")
+                + " tab=" + std::to_string(tab.get())),
+            ui::Checkbox("Accept", accepted.get())
+                .on_toggle([accepted] {
+                    accepted.mutate([](bool& value) { value = !value; });
+                }),
+            ui::Switch("Details", detailed.get())
+                .on_toggle([detailed] {
+                    detailed.mutate([](bool& value) { value = !value; });
+                }),
+            ui::Tabs(std::vector<std::string>{"Intro", "API"}, tab.get())
+                .on_select([tab](std::size_t index) {
+                    tab.set(index);
+                }),
+            ui::Progress(tab.get() == 0 ? 0.35f : 0.85f).width(240.0f));
+    }
+};
+
+struct ViewportApp {
+    ui::View body(ui::Context& cx) const {
+        return ui::VStack(
+            ui::Text(
+                "viewport="
+                + std::to_string(static_cast<int>(cx.viewport_width()))
+                + "x"
+                + std::to_string(static_cast<int>(cx.viewport_height()))),
+            ui::Text(cx.compact_width(900.0f) ? "compact=true" : "compact=false"));
+    }
+};
+
 void test_local_state_and_callback() {
 #if !defined(__wasi__) && !defined(__ANDROID__)
     ui::run<CounterApp>(host);
@@ -118,11 +157,52 @@ void test_foreach_keys() {
     std::puts("PASS: ui foreach keyed children");
 }
 
+void test_selection_control_wrappers() {
+#if !defined(__wasi__) && !defined(__ANDROID__)
+    ui::run<SelectionControlsApp>(host);
+#else
+    ui::run<SelectionControlsApp>();
+#endif
+    assert(contains_text(
+        detail::g_app().root,
+        "accepted=false detailed=false tab=0"));
+    assert(detail::g_app().callbacks.size() >= 4u);
+
+    detail::g_app().callbacks[0]();
+    assert(contains_text(
+        detail::g_app().root,
+        "accepted=true detailed=false tab=0"));
+
+    detail::g_app().callbacks[1]();
+    assert(contains_text(
+        detail::g_app().root,
+        "accepted=true detailed=true tab=0"));
+
+    detail::g_app().callbacks[3]();
+    assert(contains_text(
+        detail::g_app().root,
+        "accepted=true detailed=true tab=1"));
+    std::puts("PASS: ui selection control wrappers");
+}
+
+void test_context_viewport_helpers() {
+#if !defined(__wasi__) && !defined(__ANDROID__)
+    ui::run<ViewportApp>(host);
+#else
+    ui::run<ViewportApp>();
+#endif
+    assert(contains_text(detail::g_app().root, "viewport=800x600"));
+    assert(contains_text(detail::g_app().root, "compact=true"));
+    std::puts("PASS: ui context viewport helpers");
+}
+
 } // namespace
 
 int main() {
     test_local_state_and_callback();
     test_text_field_binding();
     test_foreach_keys();
+    test_selection_control_wrappers();
+    test_context_viewport_helpers();
     std::puts("\nAll modern ui tests passed.");
 }

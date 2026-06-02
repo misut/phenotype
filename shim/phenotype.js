@@ -846,13 +846,25 @@ function parseCommands(instance) {
         const radius = view.getFloat32(pos, true); pos += 4;
         pos += 4; // kind
         pos += 4; // role
-        pos += 4; // opacity
+        pos += 4; // allows_liquid_glass
+        const opacity = view.getFloat32(pos, true); pos += 4;
         pos += 4; // blur_radius
         const rgba = view.getUint32(pos, true); pos += 4;
         pos += 32; // saturation, luminance, edge, noise, and shadow fields
         pos += 16; // container id, union id, spacing, flags
+        pos += 12; // interaction flags, pointer x, pointer y
+        pos += 12; // transition kind, progress, flags
+        pos += 12; // glass namespace, effect, background kind
+        pos += 8; // glass background feather padding and soft edge radius
+        pos += 8; // prominence flags and intensity
+        pos += 4; // foreground palette marker
+        pos += 16; // foreground, secondary, accent, strong accent colors
         const c = unpackColor(rgba);
-        quads.push({ x, y, w, h, r: c.r, g: c.g, b: c.b, a: c.a, type: 2, radius });
+        quads.push({
+          x, y, w, h,
+          r: c.r, g: c.g, b: c.b, a: c.a * opacity,
+          type: 2, radius
+        });
         break;
       }
       case CMD_LINEAR_GRADIENT_RECT: {
