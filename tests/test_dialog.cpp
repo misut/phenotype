@@ -102,11 +102,10 @@ void test_dialog_registers_overlay_with_centered_card() {
 }
 
 void test_dialog_modal_capture_paints_after_main_hit_regions() {
-    enum Msg { MainHit, DialogHit };
     auto root_h = build([&] {
-        widget::button<Msg>("under", MainHit);
+        widget::button("under", [] {});
         layout::dialog([&] {
-            widget::button<Msg>("modal action", DialogHit);
+            widget::button("modal action", [] {});
         }, 360.0f, 0);
     });
 

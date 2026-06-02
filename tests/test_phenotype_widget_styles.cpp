@@ -7,7 +7,6 @@
 #include <limits>
 #include <string>
 #include <string_view>
-#include <variant>
 #include <vector>
 import phenotype;
 import phenotype.svg;
@@ -16,7 +15,6 @@ using namespace phenotype;
 
 #if !defined(__wasi__) && !defined(__ANDROID__)
 static null_host host;
-#define RUN_APP(S, M, V, U)              run<S, M>(host, V, U)
 #define LAYOUT_NODE(h, w)                detail::layout_node(host, h, w)
 #define PAINT_NODE(h, ox, oy, sy, vh)    detail::paint_node(host, host, h, ox, oy, 0.0f, sy, 800.0f, vh)
 #define CMD_BUF                          host.buf()
@@ -36,7 +34,6 @@ extern "C" {
     float phenotype_get_canvas_height() { return 600.0f; }
     void phenotype_open_url(char const*, unsigned int) {}
 }
-#define RUN_APP(S, M, V, U)              run<S, M>(V, U)
 #define LAYOUT_NODE(h, w)                detail::layout_node(h, w)
 #define PAINT_NODE(h, ox, oy, sy, vh)    detail::wasi_paint_node(h, ox, oy, 0.0f, sy, 800.0f, vh)
 #define CMD_BUF                          phenotype_cmd_buf
@@ -44,9 +41,6 @@ extern "C" {
 #endif
 
 namespace button_test {
-struct Click {};
-using ButtonMsg = std::variant<Click>;
-
 inline NodeHandle build_button(ButtonVariant variant, bool disabled,
                                unsigned int hovered_id = 0xFFFFFFFFu,
                                unsigned int focused_id = 0xFFFFFFFFu,
@@ -54,7 +48,6 @@ inline NodeHandle build_button(ButtonVariant variant, bool disabled,
                                bool focus_visible = false) {
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
     // Wipe per-call-site animation state so the first `animate_color` /
     // `animate_float` inside `widget::button` snaps to its target
     // instead of inheriting the previous test's interpolation.
@@ -70,7 +63,7 @@ inline NodeHandle build_button(ButtonVariant variant, bool disabled,
 
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::button<ButtonMsg>("Click", Click{}, variant, disabled);
+    widget::button("Click", [] {}, variant, disabled);
     Scope::set_current(nullptr);
 
     auto& root = detail::node_at(root_h);
@@ -83,7 +76,6 @@ inline NodeHandle build_button_frame_preserving_animation(
         bool prev_focus_visible) {
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
     detail::g_app().hovered_id = 0xFFFFFFFFu;
     detail::g_app().focused_id = 0u;
     detail::g_app().prev_focused_id = 0u;
@@ -97,9 +89,9 @@ inline NodeHandle build_button_frame_preserving_animation(
 
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::button<ButtonMsg>(
+    widget::button(
         "Click",
-        Click{},
+        [] {},
         ButtonVariant::Default,
         false);
     Scope::set_current(nullptr);
@@ -117,7 +109,6 @@ inline NodeHandle build_button_with_options(
         bool focus_visible = false) {
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
     detail::g_app().hovered_id = hovered_id;
@@ -130,7 +121,7 @@ inline NodeHandle build_button_with_options(
 
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::button<ButtonMsg>("Click", Click{}, options);
+    widget::button("Click", [] {}, options);
     Scope::set_current(nullptr);
 
     auto& root = detail::node_at(root_h);
@@ -148,7 +139,6 @@ inline NodeHandle build_canvas_button_with_options(
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
     detail::g_app().callback_roles.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
     detail::g_app().hovered_id = hovered_id;
@@ -161,7 +151,7 @@ inline NodeHandle build_canvas_button_with_options(
 
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::canvas_button<ButtonMsg>(
+    widget::canvas_button(
         "Grid View",
         44.0f,
         36.0f,
@@ -169,7 +159,7 @@ inline NodeHandle build_canvas_button_with_options(
             p.line(12.0f, 12.0f, 32.0f, 24.0f,
                    2.0f, Color{20, 20, 20, 255});
         },
-        Click{},
+        [] {},
         options,
         paint_token);
     Scope::set_current(nullptr);
@@ -188,7 +178,6 @@ inline NodeHandle build_symbol_button_with_options(
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
     detail::g_app().callback_roles.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
     detail::g_app().hovered_id = hovered_id;
@@ -201,10 +190,10 @@ inline NodeHandle build_symbol_button_with_options(
 
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::symbol_button<ButtonMsg>(
+    widget::symbol_button(
         "Grid View",
         icons::Symbol::Grid,
-        Click{},
+        [] {},
         options);
     Scope::set_current(nullptr);
 
@@ -665,7 +654,6 @@ void test_canvas_button_visual_state_contract() {
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
     detail::g_app().callback_roles.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
     detail::g_app().hovered_id = 0u;
@@ -678,7 +666,7 @@ void test_canvas_button_visual_state_contract() {
     bool observed_hovered = false;
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::canvas_button<button_test::ButtonMsg>(
+    widget::canvas_button(
         "Stateful",
         44.0f,
         36.0f,
@@ -690,7 +678,7 @@ void test_canvas_button_visual_state_contract() {
             p.line(2.0f, 2.0f, state.pressed ? 24.0f : 12.0f, 12.0f,
                    1.0f, Color{20, 20, 20, 255});
         },
-        button_test::Click{},
+        [] {},
         options,
         0xCAFEu);
     Scope::set_current(nullptr);
@@ -978,7 +966,6 @@ void test_glass_button_accepts_configurable_glass_style() {
 
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
     detail::g_app().hovered_id = 0xFFFFFFFFu;
@@ -990,9 +977,9 @@ void test_glass_button_accepts_configurable_glass_style() {
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::glass_button<button_test::ButtonMsg>(
+    widget::glass_button(
         "Tinted",
-        button_test::Click{},
+        [] {},
         effect_glass,
         options);
     Scope::set_current(nullptr);
@@ -1022,7 +1009,6 @@ void test_glass_button_accepts_configurable_glass_style() {
 
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
     CMD_LEN = 0;
 
     auto scoped_root_h = detail::alloc_node();
@@ -1041,9 +1027,9 @@ void test_glass_button_accepts_configurable_glass_style() {
             layout::glass_effect_transition(
                 layout::glass_materialize_transition(0.25f, false),
                 [&] {
-                    widget::glass_button<button_test::ButtonMsg>(
+                    widget::glass_button(
                         "Scoped",
-                        button_test::Click{},
+                        [] {},
                         layout::glass_regular()
                             .effect_id("button", "scoped"),
                         GlassControlStyleOptions{
@@ -1122,15 +1108,14 @@ void test_glass_prominent_button_style_material_contract() {
 
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::glass_prominent_button<button_test::ButtonMsg>(
+    widget::glass_prominent_button(
         "Prominent",
-        button_test::Click{},
+        [] {},
         GlassControlStyleOptions{
             .width = 132.0f,
             .height = 40.0f,
@@ -1188,7 +1173,6 @@ void test_glass_split_button_style_material_contract() {
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
     detail::g_app().callback_roles.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
 
@@ -1196,10 +1180,10 @@ void test_glass_split_button_style_material_contract() {
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::symbol_button<button_test::ButtonMsg>(
+    widget::symbol_button(
         "Sort",
         icons::Symbol::SortGroup,
-        button_test::Click{},
+        [] {},
         icons::SymbolButtonOptions{
             .role = icons::SymbolPresentationRole::Toolbar,
             .width = 44.0f,
@@ -1398,7 +1382,6 @@ void test_glass_menu_item_symbol_button_material_contract() {
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
     detail::g_app().callback_roles.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
 
@@ -1406,10 +1389,10 @@ void test_glass_menu_item_symbol_button_material_contract() {
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::symbol_button<button_test::ButtonMsg>(
+    widget::symbol_button(
         "New File",
         icons::Symbol::NewDocument,
-        button_test::Click{},
+        [] {},
         icons::SymbolButtonOptions{
             .role = icons::SymbolPresentationRole::Navigation,
             .width = 44.0f,
@@ -1466,7 +1449,6 @@ void test_glass_table_header_button_material_contract() {
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
     detail::g_app().callback_roles.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
 
@@ -1474,9 +1456,9 @@ void test_glass_table_header_button_material_contract() {
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::button<button_test::ButtonMsg>(
+    widget::button(
         "Name",
-        button_test::Click{},
+        [] {},
         style);
     Scope::set_current(nullptr);
 
@@ -1545,7 +1527,6 @@ void test_glass_widget_helpers_emit_material_buttons() {
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
     detail::g_app().callback_roles.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
 
@@ -1560,9 +1541,9 @@ void test_glass_widget_helpers_emit_material_buttons() {
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::glass_selection_button<button_test::ButtonMsg>(
+    widget::glass_selection_button(
         "Recents",
-        button_test::Click{},
+        [] {},
         GlassSelectionStyleOptions{
             .chrome = GlassSelectionChrome::SidebarPill,
             .role = MaterialSurfaceRole::Sidebar,
@@ -1570,9 +1551,9 @@ void test_glass_widget_helpers_emit_material_buttons() {
             .width = 188.0f,
             .height = 30.0f,
         });
-    widget::glass_outline_row_button<button_test::ButtonMsg>(
+    widget::glass_outline_row_button(
         "Documents",
-        button_test::Click{},
+        [] {},
         effect_glass,
         GlassOutlineRowStyleOptions{
             .chrome = GlassOutlineRowChrome::ColumnRow,
@@ -1581,24 +1562,24 @@ void test_glass_widget_helpers_emit_material_buttons() {
             .width = 220.0f,
             .height = 28.0f,
         });
-    widget::glass_menu_item_button<button_test::ButtonMsg>(
+    widget::glass_menu_item_button(
         "Rename",
-        button_test::Click{},
+        [] {},
         GlassMenuItemStyleOptions{
             .width = 180.0f,
             .height = 30.0f,
         });
-    widget::glass_table_header_button<button_test::ButtonMsg>(
+    widget::glass_table_header_button(
         "Name",
-        button_test::Click{},
+        [] {},
         GlassTableHeaderStyleOptions{
             .sorted = true,
             .width = 160.0f,
             .height = 28.0f,
         });
-    widget::glass_disclosure_header_button<button_test::ButtonMsg>(
+    widget::glass_disclosure_header_button(
         "Details",
-        button_test::Click{},
+        [] {},
         GlassDisclosureStyleOptions{
             .expanded = true,
             .width = 240.0f,
@@ -1839,15 +1820,14 @@ void test_glass_effect_context_reaches_control_styles() {
 
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::glass_prominent_button<button_test::ButtonMsg>(
+    widget::glass_prominent_button(
         "Primary",
-        button_test::Click{},
+        [] {},
         effect_glass);
     Scope::set_current(nullptr);
 
@@ -1903,10 +1883,6 @@ void test_glass_effect_context_reaches_control_styles() {
 void test_glass_effect_context_reaches_indicator_controls() {
     set_theme(Theme{});
 
-    struct ToggleA {};
-    struct PickB { int idx; };
-    using Msg = std::variant<ToggleA, PickB>;
-
     auto const identity =
         layout::glass_effect_identity("indicators", "checkbox");
     auto const container_id =
@@ -1956,7 +1932,6 @@ void test_glass_effect_context_reaches_indicator_controls() {
 
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
 
@@ -1964,21 +1939,21 @@ void test_glass_effect_context_reaches_indicator_controls() {
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::glass_checkbox<Msg>(
+    widget::glass_checkbox(
         "Glass Check",
         true,
-        ToggleA{},
+        [] {},
         effect_glass,
         GlassToggleStyleOptions{.role = MaterialSurfaceRole::Toolbar});
-    widget::glass_radio<Msg>(
+    widget::glass_radio(
         "Glass Radio",
         false,
-        PickB{1},
+        [] {},
         effect_glass.effect_id("indicators", "radio"));
-    widget::glass_switch<Msg>(
+    widget::glass_switch(
         "Glass Switch",
         true,
-        ToggleA{},
+        [] {},
         effect_glass.effect_id("indicators", "switch"));
     Scope::set_current(nullptr);
 
@@ -2043,7 +2018,6 @@ void test_glass_effect_context_reaches_indicator_controls() {
 
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
 
@@ -2063,10 +2037,10 @@ void test_glass_effect_context_reaches_indicator_controls() {
             layout::glass_effect_transition(
                 layout::glass_materialize_transition(0.35f, true),
                 [&] {
-                    widget::glass_checkbox<Msg>(
+                    widget::glass_checkbox(
                         "Scoped Check",
                         true,
-                        ToggleA{},
+                        [] {},
                         layout::glass_regular()
                             .effect_id("indicators", "scoped"));
                 });
@@ -2093,9 +2067,6 @@ void test_glass_effect_context_reaches_indicator_controls() {
 
 void test_glass_effect_context_reaches_tabs() {
     set_theme(Theme{});
-
-    struct Select { std::size_t index; };
-    using Msg = std::variant<Select>;
 
     auto const pill_identity =
         layout::glass_effect_identity("tabs", "pill");
@@ -2137,7 +2108,6 @@ void test_glass_effect_context_reaches_tabs() {
 
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
     detail::g_app().hovered_id = 1u;
@@ -2153,10 +2123,10 @@ void test_glass_effect_context_reaches_tabs() {
     items.emplace_back("Overview", 8u);
     items.emplace_back("Settings", 8u);
     items.emplace_back("Activity", 8u);
-    widget::tabs<Msg>(
+    widget::tabs(
         items,
         1u,
-        [](std::size_t index) -> Msg { return Select{index}; },
+        [](std::size_t) {},
         effect_glass,
         TabsStyleOptions{.indicator_glass_identity = indicator_identity});
     Scope::set_current(nullptr);
@@ -2219,7 +2189,6 @@ void test_glass_effect_context_reaches_tabs() {
 
     detail::g_app().arena.reset();
     detail::g_app().callbacks.clear();
-    detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
     detail::g_app().hovered_id = 0xFFFFFFFFu;
@@ -2246,12 +2215,10 @@ void test_glass_effect_context_reaches_tabs() {
                     std::vector<str> scoped_items;
                     scoped_items.emplace_back("One", 3u);
                     scoped_items.emplace_back("Two", 3u);
-                    widget::glass_tabs<Msg>(
+                    widget::glass_tabs(
                         scoped_items,
                         0u,
-                        [](std::size_t index) -> Msg {
-                            return Select{index};
-                        },
+                        [](std::size_t) {},
                         layout::glass_clear()
                             .effect_id("tabs", "scoped-pill"),
                         TabsStyleOptions{
@@ -2378,10 +2345,6 @@ void test_symbol_button_disabled_contract() {
 }
 
 namespace text_field_test {
-struct Changed { std::string text; };
-using TfMsg = std::variant<Changed>;
-inline TfMsg make_changed(std::string s) { return Changed{std::move(s)}; }
-
 inline NodeHandle build_text_field_with_options(
         std::string const& current,
         TextFieldStyleOptions options,
@@ -2393,7 +2356,6 @@ inline NodeHandle build_text_field_with_options(
     detail::g_app().callbacks.clear();
     detail::g_app().input_handlers.clear();
     detail::g_app().input_nodes.clear();
-    detail::msg_queue().clear();
     // Wipe per-call-site animation state so the first `animate_float`
     // / `animate_color` inside `widget::text_field` snaps to its
     // target instead of inheriting the previous test's interpolation
@@ -2410,7 +2372,7 @@ inline NodeHandle build_text_field_with_options(
 
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::text_field<TfMsg>("Name", current, &make_changed, options);
+    widget::text_field("Name", current, [](std::string) {}, options);
     Scope::set_current(nullptr);
 
     auto& root = detail::node_at(root_h);
@@ -2627,16 +2589,15 @@ void test_glass_text_field_style_material_contract() {
     detail::g_app().callbacks.clear();
     detail::g_app().input_handlers.clear();
     detail::g_app().input_nodes.clear();
-    detail::msg_queue().clear();
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
     Scope scope(root_h);
     Scope::set_current(&scope);
-    widget::glass_text_field<text_field_test::TfMsg>(
+    widget::glass_text_field(
         "Effect Search",
         std::string{"query"},
-        &text_field_test::make_changed,
+        [](std::string) {},
         layout::glass_regular()
             .effect_id(field_identity)
             .matched_geometry(0.75f, true)

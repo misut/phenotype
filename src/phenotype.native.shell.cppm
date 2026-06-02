@@ -115,7 +115,7 @@ inline void apply_debug_panel_env_tab() {
 }
 #endif
 
-inline Key key_from_legacy_code(int key) {
+inline Key key_from_platform_code(int key) {
     switch (key) {
         case static_cast<int>(Key::Tab): return Key::Tab;
         case static_cast<int>(Key::Backspace): return Key::Backspace;
@@ -141,7 +141,7 @@ inline Key key_from_legacy_code(int key) {
     }
 }
 
-inline KeyAction key_action_from_legacy_code(int action) {
+inline KeyAction key_action_from_platform_code(int action) {
     switch (action) {
         case static_cast<int>(KeyAction::Release): return KeyAction::Release;
         case static_cast<int>(KeyAction::Repeat): return KeyAction::Repeat;
@@ -151,7 +151,7 @@ inline KeyAction key_action_from_legacy_code(int action) {
     }
 }
 
-inline MouseButton mouse_button_from_legacy_code(int button) {
+inline MouseButton mouse_button_from_platform_code(int button) {
     switch (button) {
         case static_cast<int>(MouseButton::Right): return MouseButton::Right;
         case static_cast<int>(MouseButton::Middle): return MouseButton::Middle;
@@ -215,11 +215,9 @@ struct native_host {
     // read it without polling the windowing toolkit each frame.
     float cached_content_scale = 1.0f;
 
-    // Type-erased viewport-change hook installed by the templated
-    // `run_app` overload. Called by the driver after cached_*_px /
-    // cached_content_scale are updated; its body is a captured lambda
-    // that posts the user-supplied Msg into the global queue. Stays
-    // empty when the app uses the 5-arg run_app entry point.
+    // Type-erased viewport-change hook. Called by the driver after
+    // cached_*_px / cached_content_scale are updated, before the active
+    // component tree is rebuilt.
     std::function<void(int /*w*/, int /*h*/, float /*scale*/)>
         on_viewport_changed;
 
@@ -267,7 +265,7 @@ struct native_host {
         return out;
     }
 
-    // Growable command stream. Initial capacity matches the legacy
+    // Growable command stream. Initial capacity matches the original
     // fixed-size buffer (65 536 bytes) so single-canvas apps stay on
     // the same allocation profile they had before. `reserve()`
     // doubles past that, capped at MAX_BUF_SIZE so a runaway emit_*
@@ -1172,8 +1170,8 @@ inline bool dispatch_mouse_button(float mx, float my,
     return dispatch_mouse_button(
         mx,
         my,
-        mouse_button_from_legacy_code(button),
-        key_action_from_legacy_code(action),
+        mouse_button_from_platform_code(button),
+        key_action_from_platform_code(action),
         mods);
 }
 
@@ -1629,8 +1627,8 @@ inline bool dispatch_key(Key key, KeyAction action, int mods) {
 
 inline bool dispatch_key(int key, int action, int mods) {
     return dispatch_key(
-        key_from_legacy_code(key),
-        key_action_from_legacy_code(action),
+        key_from_platform_code(key),
+        key_action_from_platform_code(action),
         mods);
 }
 
@@ -1649,13 +1647,10 @@ inline bool dispatch_char(unsigned int codepoint) {
     return false;
 }
 
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
+template<typename App>
 void run_host_scene(native_host& host,
                     ::phenotype::SceneHandle const& scene,
-                    View view,
-                    Update update) {
+                    App app) {
     host.render_scene_id = scene.id;
     bind_host(host, host.shell.scroll_x, host.shell.scroll_y);
     ::phenotype::detail::set_application_open_url_handler(
@@ -1666,48 +1661,10 @@ void run_host_scene(native_host& host,
         host.platform->text.init();
     if (host.platform && host.platform->renderer.init)
         host.platform->renderer.init(host.window);
-    ::phenotype::runtime::run_scene<State, Msg>(
-        scene,
+    ::phenotype::runtime::SceneActivation activate{scene};
+    ::phenotype::ui::_impl::install_native_run_context(
         host,
-        std::move(view),
-        std::move(update));
-#ifndef NDEBUG
-    if (debug_panel_env_enabled("PHENOTYPE_DEBUG_PANEL")
-        || debug_panel_env_enabled("PHENOTYPE_PERF_DEBUG_PANEL")) {
-        ::phenotype::detail::g_app().debug_panel_open = true;
-        apply_debug_panel_env_tab();
-        ::phenotype::detail::g_app().debug_panel_warmup_frames = 4u;
-        ::phenotype::detail::invalidate_active_render_surface_paint_cache();
-        ::phenotype::detail::trigger_rebuild();
-    }
-#endif
-    sync_platform_input();
-}
-
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void run_host_scene_with_state(native_host& host,
-                               ::phenotype::SceneHandle const& scene,
-                               State& state,
-                               View view,
-                               Update update) {
-    host.render_scene_id = scene.id;
-    bind_host(host, host.shell.scroll_x, host.shell.scroll_y);
-    ::phenotype::detail::set_application_open_url_handler(
-        detail::open_url_bridge);
-    if (host.platform && host.platform->input.attach)
-        host.platform->input.attach(host.window, detail::repaint_current);
-    if (host.platform && host.platform->text.init)
-        host.platform->text.init();
-    if (host.platform && host.platform->renderer.init)
-        host.platform->renderer.init(host.window);
-    ::phenotype::runtime::run_scene_with_state<State, Msg>(
-        scene,
-        host,
-        state,
-        std::move(view),
-        std::move(update));
+        std::move(app));
 #ifndef NDEBUG
     if (debug_panel_env_enabled("PHENOTYPE_DEBUG_PANEL")
         || debug_panel_env_enabled("PHENOTYPE_PERF_DEBUG_PANEL")) {
@@ -1731,15 +1688,12 @@ inline ::phenotype::SceneHandle ensure_host_scene(native_host const& host) {
     });
 }
 
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void run_host(native_host& host, View view, Update update) {
-    run_host_scene<State, Msg>(
+template<typename App>
+void run_host(native_host& host, App app) {
+    run_host_scene(
         host,
         ensure_host_scene(host),
-        std::move(view),
-        std::move(update));
+        std::move(app));
 }
 
 inline void service_host_tick() {

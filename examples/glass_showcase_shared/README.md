@@ -3,7 +3,7 @@
 This package exports the `glass_showcase_shared` C++ module used by the
 material-focused glass showcase example and the phenotype CLI.
 
-The module owns the deterministic app state, typed messages, line-oriented
+The module owns the deterministic app state, typed actions, line-oriented
 drive input grammar, final-state expectations, material-plan count contract,
 and the pure `GlassProbeContract` for `examples/glass_showcase`. Keeping the
 state machine and probe contract in a separate exon library makes the native

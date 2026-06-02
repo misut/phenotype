@@ -425,7 +425,7 @@ struct dialog_api {
     // semicolon-separated list of extensions without leading dots
     // (e.g. "dwg" or "dwg;dxf"), or null to accept any file. The
     // backend invokes `callback` on the same thread that pumps the
-    // view/update loop, so it is safe to dispatch a Msg from inside it:
+    // component tree, so it is safe to mutate captured app state from it:
     //   * `path` is null when the user cancels.
     //   * Otherwise `path` is a NUL-terminated UTF-8 filesystem path.
     //     For backends where the user's pick is not a filesystem entry

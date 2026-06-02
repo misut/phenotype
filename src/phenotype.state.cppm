@@ -91,10 +91,10 @@ struct Arena {
 // AppState — consolidated global state
 // ============================================================
 
-// Type-erased text-input dispatcher used by the new message DSL.
-// New TextField registers one of these per call site so that
-// phenotype_handle_key can route the new value into a typed mapper +
-// post<Msg>. Click callbacks still go through `callbacks` (above).
+// Type-erased text-input dispatcher.
+// TextField registers one of these per call site so phenotype_handle_key can
+// route the new value into a typed callback. Click callbacks still go through
+// `callbacks` (above).
 //
 // `current` holds the actual input value as the view rendered it
 // (separate from the displayed text, which may be the placeholder when
@@ -209,7 +209,7 @@ enum class FrameTraceAction : unsigned char {
 struct FrameTraceSample {
     std::uint64_t total_ns = 0;
     std::uint64_t input_ns = 0;
-    std::uint64_t update_ns = 0;
+    std::uint64_t state_ns = 0;
     std::uint64_t view_ns = 0;
     std::uint64_t layout_ns = 0;
     std::uint64_t paint_ns = 0;
@@ -313,7 +313,6 @@ struct SceneSnapshot {
     bool app_state_owned = false;
     unsigned int hovered_id = 0xFFFFFFFFu;
     unsigned int focused_id = 0xFFFFFFFFu;
-    unsigned int queued_messages = 0;
     unsigned int framework_local_entries = 0;
     std::uint32_t framework_local_generation = 0;
     SceneScheduleSnapshot schedule{};
@@ -412,7 +411,7 @@ struct AppState {
     unsigned int caret_pos = 0xFFFFFFFFu;
     unsigned int selection_anchor = 0xFFFFFFFFu;
     bool caret_visible = true;
-    // Click callbacks indexed by callback_id, registered by Button<Msg>.
+    // Click callbacks indexed by callback_id, registered by interactive widgets.
     std::vector<std::function<void()>> callbacks;
     std::vector<InteractionRole> callback_roles;
     std::vector<KeyCommand> key_commands;
@@ -462,7 +461,7 @@ struct AppState {
     std::vector<unsigned int> focusable_ids;
     // Tracks input nodes by callback_id for focus / handle_key lookup.
     std::vector<std::pair<unsigned int, NodeHandle>> input_nodes;
-    // Sparse map of typed text-input dispatchers, registered by TextField<Msg>.
+    // Sparse map of typed text-input dispatchers, registered by text fields.
     std::vector<std::pair<unsigned int, InputHandler>> input_handlers;
     // FNV-1a 64-bit hash of the previous frame's cmd buffer. Used by
     // phenotype::flush_if_changed() to skip the JS↔WASM phenotype_flush
@@ -569,39 +568,6 @@ struct AppState {
 };
 
 namespace detail {
-    // ============================================================
-    // Message dispatcher — type-erased message queue for the new DSL
-    // ============================================================
-    //
-    // Each Button<Msg>(label, msg) registers a callback that calls
-    // detail::post<Msg>(msg), then trigger_rebuild(). The runner installed
-    // by run<State, Msg>(view, update) drains the queue, folds via
-    // update(state, msg), and calls view(state) to rebuild the tree.
-    //
-    // Storage is type-erased to keep AppState free of template parameters.
-
-    struct DispatchedMsg {
-        void* storage;
-        void (*deleter)(void*);
-        DispatchedMsg() : storage(nullptr), deleter(nullptr) {}
-        DispatchedMsg(void* s, void (*d)(void*)) : storage(s), deleter(d) {}
-        DispatchedMsg(DispatchedMsg&& o) noexcept
-            : storage(o.storage), deleter(o.deleter) {
-            o.storage = nullptr; o.deleter = nullptr;
-        }
-        DispatchedMsg& operator=(DispatchedMsg&& o) noexcept {
-            if (this != &o) {
-                if (deleter && storage) deleter(storage);
-                storage = o.storage; deleter = o.deleter;
-                o.storage = nullptr; o.deleter = nullptr;
-            }
-            return *this;
-        }
-        ~DispatchedMsg() { if (deleter && storage) deleter(storage); }
-        DispatchedMsg(DispatchedMsg const&) = delete;
-        DispatchedMsg& operator=(DispatchedMsg const&) = delete;
-    };
-
     struct LocalEntry {
         std::uint32_t last_seen_gen = 0;
         void* storage = nullptr;
@@ -645,11 +611,9 @@ namespace detail {
         SceneDescriptor descriptor{};
         std::unique_ptr<AppState> owned_app{};
         AppState* app = nullptr;
-        std::vector<DispatchedMsg> messages{};
-        // Installed by phenotype::run<State, Msg>(...) or the transitional
-        // runtime scene-runner API. trigger_rebuild calls this scene-local
-        // root runner; the context pointer lets each scene own its eventual
-        // view/update runner without falling back to a single global static.
+        // Installed by the component runner. trigger_rebuild calls this
+        // scene-local root runner; the context pointer lets each scene own its
+        // view context without falling back to a single global static.
         void (*runner)(void*) = nullptr;
         void* runner_context = nullptr;
         std::shared_ptr<void> runner_context_owner{};
@@ -670,7 +634,7 @@ namespace detail {
         }
     };
 
-    struct LegacyRunnerContext {
+    struct FunctionRunnerContext {
         void (*runner)() = nullptr;
     };
 
@@ -805,10 +769,6 @@ namespace detail {
     inline NodeHandle alloc_node() { return g_app().arena.alloc_node(); }
     inline LayoutNode& node_at(NodeHandle h) { return g_app().arena.must_get(h); }
 
-    inline std::vector<DispatchedMsg>& msg_queue() {
-        return active_scene_runtime().messages;
-    }
-
     inline SceneRuntime* find_scene_runtime(std::string_view id) {
         auto normalized = normalize_scene_id(std::string{id});
         auto& main_scene = default_scene_runtime();
@@ -931,7 +891,6 @@ namespace detail {
                 scene.owned_app && scene.app == scene.owned_app.get(),
             .hovered_id = app ? app->hovered_id : 0xFFFFFFFFu,
             .focused_id = app ? app->focused_id : 0xFFFFFFFFu,
-            .queued_messages = static_cast<unsigned int>(scene.messages.size()),
             .framework_local_entries =
                 static_cast<unsigned int>(scene.framework_local_store.size()),
             .framework_local_generation = scene.framework_local_gen,
@@ -1154,7 +1113,7 @@ namespace detail {
 
     inline void invalidate_active_render_surface_paint_cache() {
         set_active_render_surface_paint_hash(0);
-        // Keep the legacy AppState mirror in lockstep while render surfaces own
+        // Keep the AppState compatibility mirror in lockstep while render surfaces own
         // the real paint cache key.
         g_app().last_paint_hash = 0;
     }
@@ -1240,34 +1199,6 @@ namespace detail {
         return out;
     }
 
-    template<typename Msg>
-    void post(Msg msg) {
-        auto* p = new Msg(std::move(msg));
-        auto& q = msg_queue();
-        q.emplace_back(
-            p,
-            [](void* ptr) { delete static_cast<Msg*>(ptr); }
-        );
-        metrics::inst::messages_posted.add();
-        metrics::inst::max_queue_depth.update_max(
-            static_cast<std::int64_t>(q.size()));
-    }
-
-    template<typename Msg>
-    std::vector<Msg> drain() {
-        auto& q = msg_queue();
-        metrics::inst::messages_drained.add(static_cast<std::uint64_t>(q.size()));
-        std::vector<Msg> out;
-        out.reserve(q.size());
-        for (auto& dm : q) {
-            out.push_back(std::move(*static_cast<Msg*>(dm.storage)));
-            // dm's destructor will free the moved-from storage; that's fine
-            // since the move leaves the Msg in a valid (empty) state.
-        }
-        q.clear();
-        return out;
-    }
-
     inline SceneScheduleSnapshot active_scene_schedule_snapshot() {
         return scene_schedule_snapshot(active_scene_runtime());
     }
@@ -1338,10 +1269,10 @@ namespace detail {
             return;
         }
 
-        auto context = std::make_shared<LegacyRunnerContext>(
-            LegacyRunnerContext{.runner = runner});
+        auto context = std::make_shared<FunctionRunnerContext>(
+            FunctionRunnerContext{.runner = runner});
         scene.runner = [](void* raw) {
-            auto* context = static_cast<LegacyRunnerContext*>(raw);
+            auto* context = static_cast<FunctionRunnerContext*>(raw);
             if (context && context->runner)
                 context->runner();
         };
@@ -1363,11 +1294,10 @@ namespace detail {
     // Use cases like a ScrollView's scroll offset, an Accordion's open
     // flag, a Tooltip's hover-delay timer, or a Dropdown's menu state
     // are properties of the *widget* rather than the *application*, so
-    // forcing them into the user's `State` (and the Msg/update cycle
-    // that mutates it) hurts ergonomics for no architectural gain. This
-    // store keeps such state alive across frames keyed by the call site
-    // of the `framework_local<T>()` invocation, in the same way React
-    // fibers / Compose `currentCompositeKeyHash` do.
+    // forcing them into application state hurts ergonomics for no
+    // architectural gain. This store keeps such state alive across frames
+    // keyed by the call site of the `framework_local<T>()` invocation, in the
+    // same way React fibers / Compose `currentCompositeKeyHash` do.
     //
     // The store is scene-local: settings windows, debug panels, and
     // document windows must not share scroll offsets, accordion state,
@@ -1865,37 +1795,6 @@ inline void trigger_active_scene_rebuild() {
 inline void trigger_scene_rebuild(SceneHandle const& handle) {
     SceneActivation activate{handle};
     trigger_active_scene_rebuild();
-}
-
-inline void clear_messages() {
-    detail::msg_queue().clear();
-}
-
-inline void clear_scene_messages(SceneHandle const& handle) {
-    SceneActivation activate{handle};
-    clear_messages();
-}
-
-template<typename Msg>
-inline void post(Msg msg) {
-    detail::post<Msg>(std::move(msg));
-}
-
-template<typename Msg>
-inline void post_to_scene(SceneHandle const& handle, Msg msg) {
-    SceneActivation activate{handle};
-    post<Msg>(std::move(msg));
-}
-
-template<typename Msg>
-inline std::vector<Msg> drain() {
-    return detail::drain<Msg>();
-}
-
-template<typename Msg>
-inline std::vector<Msg> drain_scene(SceneHandle const& handle) {
-    SceneActivation activate{handle};
-    return drain<Msg>();
 }
 
 inline RenderSurfaceSnapshot active_render_surface() {

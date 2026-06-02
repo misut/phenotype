@@ -1,17 +1,16 @@
-// Memory-safety regression tests for the message DSL.
+// Memory-safety regression tests for the component runner.
 //
-// These exercise the runner / dispatcher / view paths that previously
-// broke silently inside dlmalloc's linear memory. They are intentionally
-// cheap asserts on top of `phenotype` — the real signal comes from
-// AddressSanitizer/UBSan, which is enabled in CI for the native target.
+// These exercise the runner, callbacks, input handlers, and view paths. They
+// are intentionally cheap asserts on top of `phenotype`; the real signal comes
+// from AddressSanitizer/UBSan, which is enabled in CI for the native target.
 
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <random>
 #include <string>
 #include <utility>
-#include <variant>
 #include <vector>
 import phenotype;
 
@@ -19,7 +18,7 @@ using namespace phenotype;
 
 #if !defined(__wasi__) && !defined(__ANDROID__)
 static null_host host;
-#define RUN_APP(S, M, V, U) phenotype::run<S, M>(host, V, U)
+#define RUN_APP(APP) phenotype::ui::run(host, APP)
 #define REPAINT(sy) detail::repaint(host, 0.0f, sy)
 #else
 extern "C" {
@@ -33,52 +32,49 @@ extern "C" {
     float phenotype_get_canvas_height() { return 600.0f; }
     void phenotype_open_url(char const*, unsigned int) {}
 }
-#define RUN_APP(S, M, V, U) phenotype::run<S, M>(V, U)
+#define RUN_APP(APP) phenotype::ui::run(APP)
 #define REPAINT(sy) detail::repaint(0.0f, sy)
 #endif
 
 // ============================================================
-// Shared message + state types
+// Shared app types
 // ============================================================
 
 namespace m {
 
-struct Increment {};
-struct Decrement {};
-struct InputChanged { std::string text; };
-
-using Msg = std::variant<Increment, Decrement, InputChanged>;
-
-struct State {
+struct Model {
     int count = 0;
     std::string input;
 };
 
-inline void update(State& state, Msg msg) {
-    std::visit([&](auto const& x) {
-        using T = std::decay_t<decltype(x)>;
-        if constexpr (std::same_as<T, Increment>)         state.count += 1;
-        else if constexpr (std::same_as<T, Decrement>)    state.count -= 1;
-        else if constexpr (std::same_as<T, InputChanged>) state.input = x.text;
-    }, msg);
-}
+struct CounterApp {
+    std::shared_ptr<Model> model;
 
-inline Msg input_to_msg(std::string s) { return InputChanged{std::move(s)}; }
+    ui::View body(ui::Context&) {
+        return ui::View{[model = model] {
+            layout::column([&] {
+                widget::text("count=" + std::to_string(model->count));
+                widget::button("inc", [model] { ++model->count; });
+            });
+        }};
+    }
+};
 
-inline void view_counter(State const& s) {
-    layout::column([&] {
-        widget::text("count=" + std::to_string(s.count));
-        widget::button<Msg>("inc", Increment{});
-    });
-}
+struct FullApp {
+    std::shared_ptr<Model> model;
 
-inline void view_full(State const& s) {
-    layout::column([&] {
-        widget::text("count=" + std::to_string(s.count));
-        widget::button<Msg>("inc", Increment{});
-        widget::text_field<Msg>("type", s.input, +input_to_msg);
-    });
-}
+    ui::View body(ui::Context&) {
+        return ui::View{[model = model] {
+            layout::column([&] {
+                widget::text("count=" + std::to_string(model->count));
+                widget::button("inc", [model] { ++model->count; });
+                widget::text_field("type", model->input, [model](std::string s) {
+                    model->input = std::move(s);
+                });
+            });
+        }};
+    }
+};
 
 } // namespace m
 
@@ -105,23 +101,23 @@ void reset_app() {
     app.input_debug = {};
     app.arena.reset();
     app.prev_arena.reset();
-    detail::msg_queue().clear();
 }
 
 // ============================================================
-// 1. Run cycle — 100 click+rebuild rounds via run<>
+// 1. Run cycle — 100 click+rebuild rounds via the component runner
 // ============================================================
 
 void test_run_cycle() {
     reset_app();
 
-    RUN_APP(m::State, m::Msg, m::view_counter, m::update);
+    auto model = std::make_shared<m::Model>();
+    RUN_APP(m::CounterApp{model});
 
     for (int i = 0; i < 100; ++i) {
         detail::handle_event(0);
     }
 
-    assert(detail::msg_queue().empty());
+    assert(model->count == 100);
     assert(detail::g_app().callbacks.size() == 1);
 
     reset_app();
@@ -132,30 +128,32 @@ void test_run_cycle() {
 // 2. Callback identity across rebuilds
 // ============================================================
 
-void test_message_dispatch_identity() {
+void test_callback_identity() {
     reset_app();
 
-    RUN_APP(m::State, m::Msg, m::view_counter, m::update);
+    auto model = std::make_shared<m::Model>();
+    RUN_APP(m::CounterApp{model});
     for (int i = 0; i < 5; ++i)
         detail::handle_event(0);
 
     for (int i = 0; i < 5; ++i)
         detail::handle_event(0);
     assert(detail::g_app().callbacks.size() == 1);
-    assert(detail::msg_queue().empty());
+    assert(model->count == 10);
 
     reset_app();
-    std::puts("PASS: message dispatch identity");
+    std::puts("PASS: callback identity");
 }
 
 // ============================================================
-// 3. TextField dispatch via handle_key
+// 3. TextField callback via handle_key
 // ============================================================
 
 void test_textfield_dispatch() {
     reset_app();
 
-    RUN_APP(m::State, m::Msg, m::view_full, m::update);
+    auto model = std::make_shared<m::Model>();
+    RUN_APP(m::FullApp{model});
     detail::set_focus_id(1);
 
     detail::handle_key(/*char*/ 0, 'h');
@@ -163,27 +161,29 @@ void test_textfield_dispatch() {
     detail::handle_key(/*backspace*/ 1, 0);
 
     assert(!detail::g_app().input_handlers.empty());
-    assert(detail::msg_queue().empty());
+    assert(model->input == "h");
 
     reset_app();
     std::puts("PASS: textfield dispatch");
 }
 
 // ============================================================
-// 4. Message queue no-leak
+// 4. Callback rebuild no-leak
 // ============================================================
 
-void test_msg_queue_no_leak() {
+void test_callback_rebuild_no_leak() {
     reset_app();
 
-    RUN_APP(m::State, m::Msg, m::view_counter, m::update);
+    auto model = std::make_shared<m::Model>();
+    RUN_APP(m::CounterApp{model});
     for (int i = 0; i < 50; ++i) {
         detail::handle_event(0);
-        assert(detail::msg_queue().empty());
+        assert(detail::g_app().callbacks.size() == 1);
     }
+    assert(model->count == 50);
 
     reset_app();
-    std::puts("PASS: msg queue no leak");
+    std::puts("PASS: callback rebuild no leak");
 }
 
 // ============================================================
@@ -193,7 +193,8 @@ void test_msg_queue_no_leak() {
 void test_stress_random_events() {
     reset_app();
 
-    RUN_APP(m::State, m::Msg, m::view_full, m::update);
+    auto model = std::make_shared<m::Model>();
+    RUN_APP(m::FullApp{model});
 
     std::mt19937 rng(0xC0FFEE);
     std::uniform_int_distribution<int> action(0, 4);
@@ -222,8 +223,8 @@ void test_stress_random_events() {
         }
     }
 
-    assert(detail::msg_queue().empty());
     assert(!detail::g_app().callbacks.empty());
+    assert(!detail::g_app().input_handlers.empty());
 
     reset_app();
     std::puts("PASS: stress random events (1000 ops)");
@@ -297,9 +298,9 @@ void test_node_handle_stale_traps() {
 
 int main() {
     test_run_cycle();
-    test_message_dispatch_identity();
+    test_callback_identity();
     test_textfield_dispatch();
-    test_msg_queue_no_leak();
+    test_callback_rebuild_no_leak();
     test_stress_random_events();
 #if !defined(__wasi__) && !defined(_WIN32)
     test_arena_overflow_graceful();

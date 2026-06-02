@@ -96,13 +96,13 @@ void test_unequal_weights_split_proportionally() {
     std::puts("PASS: unequal weights split proportionally");
 }
 
-// A row with no `weighted` children keeps the legacy "last unspecified
-// child fills" behaviour — important so existing callers don't shift.
-void test_legacy_single_flex_unaffected() {
+// A row with no `weighted` children keeps the implicit "last unspecified
+// child fills" behavior so existing layouts don't shift.
+void test_implicit_single_flex_unaffected() {
     auto root_h = build([&] {
         layout::row([&] {
             widget::image("a", 80.0f, 30.0f);
-            layout::box([&]{});  // implicit fill (legacy)
+            layout::box([&]{});  // implicit fill
         });
     });
 
@@ -115,11 +115,11 @@ void test_legacy_single_flex_unaffected() {
     assert(fixed.width == 80.0f);
     float remaining = 400.0f - 80.0f - row.style.gap;
     assert(nearly(fill.width, remaining));
-    std::puts("PASS: row without weighted children keeps legacy fill behaviour");
+    std::puts("PASS: row without weighted children keeps implicit fill behavior");
 }
 
-// When at least one child carries flex_grow, the legacy implicit fill
-// is suppressed — the unspecified box gets 0 width and the explicit
+// When at least one child carries flex_grow, the implicit fill is
+// suppressed — the unspecified box gets 0 width and the explicit
 // weighted child eats the entire remainder.
 void test_explicit_weight_suppresses_implicit_fill() {
     auto root_h = build([&] {
@@ -188,7 +188,7 @@ void test_bounded_column_weight_splits_height() {
 int main() {
     test_two_equal_weights_split_evenly();
     test_unequal_weights_split_proportionally();
-    test_legacy_single_flex_unaffected();
+    test_implicit_single_flex_unaffected();
     test_explicit_weight_suppresses_implicit_fill();
     test_bounded_column_weight_splits_height();
     std::puts("\nAll flex_weight tests passed.");

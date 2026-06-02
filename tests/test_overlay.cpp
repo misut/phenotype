@@ -65,16 +65,6 @@ LayoutNode const* find_text(NodeHandle h, char const* text) {
     return nullptr;
 }
 
-enum class DropdownMsg { Icon, List, Column };
-
-DropdownMsg dropdown_pick(std::size_t index) {
-    if (index == 1)
-        return DropdownMsg::List;
-    if (index == 2)
-        return DropdownMsg::Column;
-    return DropdownMsg::Icon;
-}
-
 }  // namespace
 
 // Calling `layout::overlay` registers a NodeHandle on `g_app().overlays`
@@ -101,11 +91,10 @@ void test_overlay_registers_off_main_tree() {
 // therefore returns the overlay's callback even when both overlap
 // the cursor's screen position.
 void test_overlay_paints_on_top_of_main_tree() {
-    enum Msg { TopHit, BottomHit };
     auto root_h = build([&] {
-        widget::button<Msg>("under", BottomHit);
+        widget::button("under", [] {});
         layout::overlay([&] {
-            widget::button<Msg>("over", TopHit);
+            widget::button("over", [] {});
         });
     });
 
@@ -163,11 +152,10 @@ void test_overlay_cleared_between_rebuilds() {
 // Overlay buttons participate in Tab navigation by being collected
 // into `g_app().focusable_ids` alongside main-tree focusables.
 void test_overlay_focusables_collected() {
-    enum Msg { Action };
     auto root_h = build([&] {
-        widget::button<Msg>("main btn", Action);
+        widget::button("main btn", [] {});
         layout::overlay([&] {
-            widget::button<Msg>("overlay btn", Action);
+            widget::button("overlay btn", [] {});
         });
     });
 
@@ -188,7 +176,6 @@ void test_overlay_focusables_collected() {
 }
 
 void test_glass_dropdown_button_opens_context_menu() {
-    detail::msg_queue().clear();
     std::vector<str> items;
     items.emplace_back("Icon", 4u);
     items.emplace_back("List", 4u);
@@ -197,14 +184,15 @@ void test_glass_dropdown_button_opens_context_menu() {
     options.menu_width = 180.0f;
     options.item_height = 32.0f;
     options.top_padding = 24;
+    std::size_t selected = 0;
 
     auto render = [&] {
         return build([&] {
-            widget::glass_dropdown_button<DropdownMsg>(
+            widget::glass_dropdown_button(
                 "View",
                 items,
-                0,
-                dropdown_pick,
+                selected,
+                [&](std::size_t index) { selected = index; },
                 options);
         });
     };
@@ -234,9 +222,7 @@ void test_glass_dropdown_button_opens_context_menu() {
     assert(list->material.role == MaterialSurfaceRole::Overlay);
 
     detail::g_app().callbacks[2]();
-    auto messages = detail::drain<DropdownMsg>();
-    assert(messages.size() == 1);
-    assert(messages[0] == DropdownMsg::List);
+    assert(selected == 1);
 
     render();
     assert(detail::g_app().overlays.empty());
@@ -248,11 +234,11 @@ void test_glass_dropdown_button_accepts_effect_style() {
     items.emplace_back("Icon", 4u);
     items.emplace_back("List", 4u);
     auto root_h = build([&] {
-        widget::glass_dropdown_button<DropdownMsg>(
+        widget::glass_dropdown_button(
             "View",
             items,
             1,
-            dropdown_pick,
+            [](std::size_t) {},
             layout::glass_regular(),
             GlassDropdownStyleOptions{.button_role = MaterialSurfaceRole::Toolbar});
     });

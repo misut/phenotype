@@ -32,9 +32,6 @@ export import phenotype.native.shell.windows;
 
 namespace phenotype::native::detail {
 
-struct UiAppState {};
-struct UiAppMessage {};
-
 inline platform_api const& select_platform() {
 #ifdef __APPLE__
     return macos_platform();
@@ -51,36 +48,31 @@ inline platform_api const& require_platform(platform_api const* platform) {
     return platform ? *platform : select_platform();
 }
 
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
+template<typename App>
 int run_desktop_app_with_platform(platform_api const& platform,
                                   int width,
                                   int height,
                                   char const* title,
                                   WindowOptions options,
-                                  View view,
-                                  Update update,
+                                  App app,
                                   std::function<void(int, int, float)> on_viewport = {}) {
 #if defined(__APPLE__)
-    return run_app_with_macos_platform<State, Msg>(
+    return run_app_with_macos_platform(
         platform,
         width,
         height,
         title,
         options,
-        std::move(view),
-        std::move(update),
+        std::move(app),
         std::move(on_viewport));
 #elif defined(_WIN32)
-    return run_app_with_windows_platform<State, Msg>(
+    return run_app_with_windows_platform(
         platform,
         width,
         height,
         title,
         options,
-        std::move(view),
-        std::move(update),
+        std::move(app),
         std::move(on_viewport));
 #else
     (void)platform;
@@ -88,24 +80,12 @@ int run_desktop_app_with_platform(platform_api const& platform,
     (void)height;
     (void)title;
     (void)options;
-    (void)view;
-    (void)update;
+    (void)app;
     (void)on_viewport;
     std::fprintf(stderr, "phenotype.native run_app is not available on this desktop target\n");
     return 1;
 #endif
 }
-
-template <typename App>
-auto make_ui_view(App app) {
-    return [
-        app = std::move(app),
-        context = ::phenotype::ui::Context{}](UiAppState const&) mutable {
-        ::phenotype::ui::_impl::render_app(app, context);
-    };
-}
-
-inline void update_ui_app(UiAppState&, UiAppMessage) {}
 
 } // namespace phenotype::native::detail
 
@@ -156,25 +136,16 @@ inline void close_window(char const* identifier = "preferences") {
 
 namespace scene_window {
 
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-inline bool show_with_state(NativeSceneWindowOptions const& options,
-                            State& state,
-                            View view,
-                            Update update) {
+template<typename App>
+inline bool show(NativeSceneWindowOptions const& options, App app) {
 #if defined(__APPLE__)
-    return detail::show_appkit_scene_window_with_state<State, Msg>(
+    return detail::show_appkit_scene_window(
         current_platform(),
         detail::appkit_scene_window_options(options),
-        state,
-        std::move(view),
-        std::move(update));
+        std::move(app));
 #else
     (void)options;
-    (void)state;
-    (void)view;
-    (void)update;
+    (void)app;
     return false;
 #endif
 }
@@ -445,103 +416,33 @@ inline void shutdown() {
     ::phenotype::detail::set_application_settings_menu_handler(nullptr);
 }
 
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void run(native_host& host, View view, Update update) {
+template<typename App>
+void run(native_host& host, App app) {
     host.platform = &detail::require_platform(host.platform);
-    detail::run_host<State, Msg>(host, std::move(view), std::move(update));
+    detail::run_host(host, std::move(app));
 }
 
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
+template<typename App>
 void run_scene(SceneHandle const& scene,
                native_host& host,
-               View view,
-               Update update) {
+               App app) {
     host.platform = &detail::require_platform(host.platform);
-    detail::run_host_scene<State, Msg>(
+    detail::run_host_scene(
         host,
         scene,
-        std::move(view),
-        std::move(update));
+        std::move(app));
 }
 
 #if !defined(__ANDROID__)
-// run_app assumes the platform-native desktop windowing driver. Android consumers write
-// their own android_main that pumps the GameActivity loop and calls
-// `run<State, Msg>` directly with a native_host bound to an ANativeWindow*.
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-int run_app(int width, int height, char const* title, View view, Update update) {
-    return detail::run_desktop_app_with_platform<State, Msg>(
-        current_platform(), width, height, title,
-        WindowOptions{}, std::move(view), std::move(update));
-}
-
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-int run_app(int width, int height, char const* title,
-            WindowOptions options,
-            View view, Update update) {
-    return detail::run_desktop_app_with_platform<State, Msg>(
-        current_platform(), width, height, title,
-        options, std::move(view), std::move(update));
-}
-
-// Six-argument overload: `make_viewport_msg(w, h, scale)` returns a Msg
-// emitted to the user's update() lambda whenever the window size or
-// content scale changes (and once at startup with the initial values).
-// The Msg-typed factory is captured into a type-erased thunk so the
-// shell's `native_host` can stay non-templated.
-template<typename State, typename Msg, typename View, typename Update,
-         typename ResizeFactory>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-          && std::invocable<ResizeFactory, int, int, float>
-int run_app(int width, int height, char const* title,
-            View view, Update update, ResizeFactory make_viewport_msg) {
-    std::function<void(int, int, float)> thunk =
-        [factory = std::move(make_viewport_msg)](int w, int h, float s) {
-            ::phenotype::detail::post<Msg>(factory(w, h, s));
-        };
-    return detail::run_desktop_app_with_platform<State, Msg>(
-        current_platform(), width, height, title,
-        WindowOptions{}, std::move(view), std::move(update), std::move(thunk));
-}
-
-template<typename State, typename Msg, typename View, typename Update,
-         typename ResizeFactory>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-          && std::invocable<ResizeFactory, int, int, float>
-int run_app(int width, int height, char const* title,
-            WindowOptions options,
-            View view, Update update, ResizeFactory make_viewport_msg) {
-    std::function<void(int, int, float)> thunk =
-        [factory = std::move(make_viewport_msg)](int w, int h, float s) {
-            ::phenotype::detail::post<Msg>(factory(w, h, s));
-        };
-    return detail::run_desktop_app_with_platform<State, Msg>(
-        current_platform(), width, height, title,
-        options, std::move(view), std::move(update), std::move(thunk));
-}
-
 template <typename App>
 int run_app(int width, int height, char const* title, App app = App{}) {
-    return detail::run_desktop_app_with_platform<
-        detail::UiAppState,
-        detail::UiAppMessage>(
+    return detail::run_desktop_app_with_platform(
             current_platform(),
             width,
             height,
             title,
             WindowOptions{},
-            detail::make_ui_view(std::move(app)),
-            detail::update_ui_app);
+            std::move(app));
 }
 
 template <typename App>
@@ -550,16 +451,48 @@ int run_app(int width,
             char const* title,
             WindowOptions options,
             App app = App{}) {
-    return detail::run_desktop_app_with_platform<
-        detail::UiAppState,
-        detail::UiAppMessage>(
+    return detail::run_desktop_app_with_platform(
             current_platform(),
             width,
             height,
             title,
             options,
-            detail::make_ui_view(std::move(app)),
-            detail::update_ui_app);
+            std::move(app));
+}
+
+template <typename App, typename ViewportChanged>
+    requires std::invocable<ViewportChanged&, int, int, float>
+int run_app(int width,
+            int height,
+            char const* title,
+            App app,
+            ViewportChanged on_viewport) {
+    return detail::run_desktop_app_with_platform(
+            current_platform(),
+            width,
+            height,
+            title,
+            WindowOptions{},
+            std::move(app),
+            std::function<void(int, int, float)>{std::move(on_viewport)});
+}
+
+template <typename App, typename ViewportChanged>
+    requires std::invocable<ViewportChanged&, int, int, float>
+int run_app(int width,
+            int height,
+            char const* title,
+            WindowOptions options,
+            App app,
+            ViewportChanged on_viewport) {
+    return detail::run_desktop_app_with_platform(
+            current_platform(),
+            width,
+            height,
+            title,
+            options,
+            std::move(app),
+            std::function<void(int, int, float)>{std::move(on_viewport)});
 }
 #endif
 

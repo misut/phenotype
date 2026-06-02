@@ -505,7 +505,7 @@
     },
     {
       "path": "application.file_explorer.preferences.system_refresh_policy",
-      "equals": "native edge captures OS settings before first frame and refreshes them at update-boundary theme sync"
+      "equals": "native edge captures OS settings before first frame and refreshes them at state-sync boundary theme refresh"
     },
     {
       "path": "platform_capabilities.system_settings.input_timing_source",

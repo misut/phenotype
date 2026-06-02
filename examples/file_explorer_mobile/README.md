@@ -136,7 +136,7 @@ same line-based script format used by `phenotype drive file-explorer
 `system-font-metrics:false`, `font-size:17`, `heading-font-size:22`,
 `small-font-size:13`,
 `line-height:1.45`, `system-scroll-metrics:app`, `scroll-speed:1.4`, and
-`horizontal-scroll-speed:2` update the shared state before the native theme is
+`horizontal-scroll-speed:2` adjust the shared state before the native theme is
 resolved.
 The native example captures OS settings through the product native API before
 the first frame and refreshes them when app input triggers theme sync, so font,

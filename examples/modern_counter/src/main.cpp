@@ -23,7 +23,7 @@ struct ModernCounterApp {
         auto append_history = [history, next_id](std::string label) {
             auto id = next_id.get();
             next_id.set(id + 1);
-            history.update([&](std::vector<HistoryItem>& rows) {
+            history.mutate([&](std::vector<HistoryItem>& rows) {
                 rows.push_back(HistoryItem{
                     .id = id,
                     .label = std::move(label),
@@ -43,13 +43,13 @@ struct ModernCounterApp {
             ui::HStack(
                 ui::Button("-")
                     .on_click([count, append_history] {
-                        count.update([](int& value) { --value; });
+                        count.mutate([](int& value) { --value; });
                         append_history("decrement");
                     }),
                 ui::Button("+")
                     .role(ui::ButtonRole::primary)
                     .on_click([count, append_history] {
-                        count.update([](int& value) { ++value; });
+                        count.mutate([](int& value) { ++value; });
                         append_history("increment");
                     })),
             ui::TextField("Add a note", note.binding())

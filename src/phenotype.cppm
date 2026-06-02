@@ -352,7 +352,7 @@ inline void cell(str content,
     detail::attach_to_scope(h);
 }
 
-// button<Msg> — click posts a copy of `msg` and triggers a rebuild.
+// button — click invokes the supplied action and triggers a rebuild.
 //
 //   variant=Default  — surface chrome that fades to state_hover_bg on hover.
 //   variant=Primary  — accent-filled, white text, hover darkens to accent_strong.
@@ -570,36 +570,36 @@ inline void action_button(str label,
 
 } // namespace _impl
 
-template<typename Msg>
-inline void button(str label, Msg msg, ButtonStyleOptions options) {
-    _impl::action_button(label, options, [msg = std::move(msg)] {
-        detail::post<Msg>(msg);
+inline void button(str label,
+                   std::function<void()> action,
+                   ButtonStyleOptions options) {
+    _impl::action_button(label, options, [action = std::move(action)] {
+        if (action)
+            action();
         detail::trigger_rebuild();
     });
 }
 
-template<typename Msg>
-inline void button(str label, Msg msg,
+inline void button(str label,
+                   std::function<void()> action,
                    ButtonVariant variant = ButtonVariant::Default,
                    bool disabled = false) {
     ButtonStyleOptions options;
     options.variant = variant;
     options.disabled = disabled;
-    button(label, std::move(msg), options);
+    button(label, std::move(action), options);
 }
 
-template<typename Msg>
 inline void glass_button(str label,
-                         Msg msg,
+                         std::function<void()> action,
                          GlassControlStyleOptions options = {}) {
-    button(label, std::move(msg), glass_control_button_style(options));
+    button(label, std::move(action), glass_control_button_style(options));
 }
 
-template<typename Msg>
 inline void glass_prominent_button(str label,
-                                   Msg msg,
+                                   std::function<void()> action,
                                    GlassControlStyleOptions options = {}) {
-    button(label, std::move(msg), glass_prominent_button_style(options));
+    button(label, std::move(action), glass_prominent_button_style(options));
 }
 
 namespace _impl {
@@ -695,8 +695,7 @@ inline void apply_glass_tabs_effect_context(
     }
 }
 
-template<typename Msg>
-inline void toggle(str label, bool active, Msg msg,
+inline void toggle(str label, bool active, std::function<void()> action,
                    float corner_radius, Decoration active_decoration,
                    InteractionRole role,
                    GlassToggleStyleOptions const* glass_options = nullptr) {
@@ -745,8 +744,9 @@ inline void toggle(str label, bool active, Msg msg,
     }
     ::phenotype::detail::attach_to_scope(row_h);
 
-    ::phenotype::detail::g_app().callbacks.push_back([msg = std::move(msg)] {
-        ::phenotype::detail::post<Msg>(msg);
+    ::phenotype::detail::g_app().callbacks.push_back([action = std::move(action)] {
+        if (action)
+            action();
         ::phenotype::detail::trigger_rebuild();
     });
     ::phenotype::detail::g_app().callback_roles.push_back(role);
@@ -825,37 +825,33 @@ inline void toggle(str label, bool active, Msg msg,
 }
 } // namespace _impl
 
-template<typename Msg>
-inline void checkbox(str label, bool checked, Msg msg) {
-    _impl::toggle(label, checked, std::move(msg),
+inline void checkbox(str label, bool checked, std::function<void()> action) {
+    _impl::toggle(label, checked, std::move(action),
                   detail::g_app().theme.radius_xs, Decoration::Check,
                   InteractionRole::Checkbox);
 }
 
-template<typename Msg>
-inline void glass_checkbox(str label, bool checked, Msg msg,
+inline void glass_checkbox(str label, bool checked, std::function<void()> action,
                            GlassToggleStyleOptions options = {}) {
-    _impl::toggle(label, checked, std::move(msg),
+    _impl::toggle(label, checked, std::move(action),
                   detail::g_app().theme.radius_xs, Decoration::Check,
                   InteractionRole::Checkbox, &options);
 }
 
-template<typename Msg>
-inline void radio(str label, bool selected, Msg msg) {
-    _impl::toggle(label, selected, std::move(msg),
+inline void radio(str label, bool selected, std::function<void()> action) {
+    _impl::toggle(label, selected, std::move(action),
                   detail::g_app().theme.radius_lg, Decoration::Dot,
                   InteractionRole::Radio);
 }
 
-template<typename Msg>
-inline void glass_radio(str label, bool selected, Msg msg,
+inline void glass_radio(str label, bool selected, std::function<void()> action,
                         GlassToggleStyleOptions options = {}) {
-    _impl::toggle(label, selected, std::move(msg),
+    _impl::toggle(label, selected, std::move(action),
                   detail::g_app().theme.radius_lg, Decoration::Dot,
                   InteractionRole::Radio, &options);
 }
 
-// text_field<Msg> — single-line text input.
+// text_field — single-line text input.
 //
 //   error=true     — chrome switches to state_error_* (border / bg / fg).
 //                    The field stays interactive; users can keep editing
@@ -863,9 +859,8 @@ inline void glass_radio(str label, bool selected, Msg msg,
 //   disabled=true  — chrome switches to state_disabled_*. is_input,
 //                    cursor, focus, and the input-handler registration
 //                    all turn off; typing is dropped.
-template<typename Msg>
 inline void text_field(str hint, std::string const& current,
-                       Msg(*mapper)(std::string),
+                       std::function<void(std::string)> on_change,
                        TextFieldStyleOptions options) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
@@ -963,20 +958,21 @@ inline void text_field(str hint, std::string const& current,
         is_focused);
     detail::g_app().callbacks.push_back([] {});
     detail::g_app().callback_roles.push_back(InteractionRole::TextField);
-    using MapperFn = Msg(*)(std::string);
-    auto* mapper_storage = new MapperFn(mapper);
+    auto* handler_storage =
+        new std::function<void(std::string)>(std::move(on_change));
     detail::g_app().input_handlers.push_back({
         id,
         InputHandler{
             current,
-            mapper_storage,
+            handler_storage,
             [](void* state, std::string s) {
-                auto fn = *static_cast<MapperFn*>(state);
-                detail::post<Msg>(fn(std::move(s)));
+                auto& fn = *static_cast<std::function<void(std::string)>*>(state);
+                if (fn)
+                    fn(std::move(s));
                 detail::trigger_rebuild();
             },
             [](void* state) {
-                delete static_cast<MapperFn*>(state);
+                delete static_cast<std::function<void(std::string)>*>(state);
             }
         }
     });
@@ -986,14 +982,13 @@ inline void text_field(str hint, std::string const& current,
     detail::attach_to_scope(h);
 }
 
-template<typename Msg>
 inline void text_field(str hint, std::string const& current,
-                       Msg(*mapper)(std::string),
+                       std::function<void(std::string)> on_change,
                        bool error = false, bool disabled = false) {
     TextFieldStyleOptions options;
     options.error = error;
     options.disabled = disabled;
-    text_field<Msg>(hint, current, mapper, options);
+    text_field(hint, current, std::move(on_change), options);
 }
 
 inline void image(str url, float width, float height) {
@@ -1014,7 +1009,7 @@ inline void image(str url, float width, float height) {
 // By default the paint cache is bypassed for canvas nodes (paint_fn is
 // opaque to the layout-prop diff), so each frame re-runs the callback.
 // Apps with expensive per-frame paint should either pre-compute
-// geometry in update() and capture by reference into the lambda, or
+// geometry while preparing state and capture by reference into the lambda, or
 // opt into the token cache below.
 //
 // `paint_token` (optional) — caller-supplied uint64 dirty hint. When
@@ -1216,12 +1211,12 @@ inline std::uint64_t button_visual_state_token(
     return token;
 }
 
-template<typename Msg, typename PaintFn>
+template<typename PaintFn>
 inline void canvas_button(str label,
                           float width,
                           float height,
                           PaintFn paint_fn,
-                          Msg msg,
+                          std::function<void()> action,
                           ButtonStyleOptions options = {},
                           std::uint64_t paint_token = 0) {
     auto h = detail::alloc_node();
@@ -1347,8 +1342,9 @@ inline void canvas_button(str label,
             is_focused);
         node.cursor_type = 1;
 
-        detail::g_app().callbacks.push_back([msg = std::move(msg)] {
-            detail::post<Msg>(msg);
+        detail::g_app().callbacks.push_back([action = std::move(action)] {
+            if (action)
+                action();
             detail::trigger_rebuild();
         });
         detail::g_app().callback_roles.push_back(InteractionRole::Button);
@@ -1382,15 +1378,14 @@ inline void canvas_button(str label,
     detail::append_child(h, canvas_h);
 }
 
-template<typename Msg>
 inline void symbol_button(str label,
                           icons::Symbol symbol,
-                          Msg msg,
+                          std::function<void()> action,
                           icons::SymbolButtonOptions options,
                           ButtonStyleOptions style) {
     auto const width = icons::symbol_button_width(options);
     auto const height = icons::symbol_button_height(options);
-    canvas_button<Msg>(
+    canvas_button(
         label,
         width,
         height,
@@ -1417,20 +1412,19 @@ inline void symbol_button(str label,
                 width,
                 height);
         },
-        std::move(msg),
+        std::move(action),
         style,
         icons::symbol_button_paint_token(symbol, options));
 }
 
-template<typename Msg>
 inline void symbol_button(str label,
                           icons::Symbol symbol,
-                          Msg msg,
+                          std::function<void()> action,
                           icons::SymbolButtonOptions options = {}) {
-    symbol_button<Msg>(
+    symbol_button(
         label,
         symbol,
-        std::move(msg),
+        std::move(action),
         options,
         icons::macos_symbol_button_style(options));
 }
@@ -1535,7 +1529,7 @@ inline void progress_indeterminate(float max_width = 200.0f) {
 
 // switch_ — labelled on/off toggle rendered as a track + sliding
 // thumb. The trailing underscore avoids the C++ `switch` keyword.
-// Click posts `msg` and triggers a rebuild, same contract as
+// Click invokes the supplied action and triggers a rebuild, same contract as
 // checkbox / radio.
 //
 // The thumb's x-offset and the track background colour both go
@@ -1546,8 +1540,7 @@ inline void progress_indeterminate(float max_width = 200.0f) {
 // animate independently — see the framework_local sibling-counter
 // mechanism.
 namespace _impl {
-template<typename Msg>
-inline void switch_control(str label, bool on, Msg msg,
+inline void switch_control(str label, bool on, std::function<void()> action,
                            GlassSwitchStyleOptions const* glass_options = nullptr) {
     auto const& t = detail::g_app().theme;
     auto id = static_cast<unsigned int>(
@@ -1583,8 +1576,9 @@ inline void switch_control(str label, bool on, Msg msg,
     }
     detail::attach_to_scope(row_h);
 
-    detail::g_app().callbacks.push_back([msg = std::move(msg)] {
-        detail::post<Msg>(msg);
+    detail::g_app().callbacks.push_back([action = std::move(action)] {
+        if (action)
+            action();
         detail::trigger_rebuild();
     });
     detail::g_app().callback_roles.push_back(InteractionRole::Checkbox);
@@ -1697,21 +1691,18 @@ inline void switch_control(str label, bool on, Msg msg,
 }
 } // namespace _impl
 
-template<typename Msg>
-inline void switch_(str label, bool on, Msg msg) {
-    _impl::switch_control(label, on, std::move(msg));
+inline void switch_(str label, bool on, std::function<void()> action) {
+    _impl::switch_control(label, on, std::move(action));
 }
 
-template<typename Msg>
-inline void glass_switch(str label, bool on, Msg msg,
+inline void glass_switch(str label, bool on, std::function<void()> action,
                          GlassSwitchStyleOptions options = {}) {
-    _impl::switch_control(label, on, std::move(msg), &options);
+    _impl::switch_control(label, on, std::move(action), &options);
 }
 
-// tabs — segmented row of buttons that posts `on_select(i)` when the
-// user picks tab `i`. The currently-selected index is supplied by the
-// caller (typically lifted into user `State`), so the widget itself
-// stays stateless — `Msg`/`update` round-trip is the source of truth.
+// tabs — segmented row of buttons that calls `on_select(i)` when the user
+// picks tab `i`. The currently-selected index is supplied by the caller, so
+// the widget itself stays stateless.
 //
 // Visual chrome is the design system's material segmented-control
 // treatment: the outer pill emits a `MaterialRect` using
@@ -1732,13 +1723,9 @@ inline void glass_switch(str label, bool on, Msg msg,
 //
 // Each tab is focusable, so Tab/Enter cycling lands on a tab and
 // activates it via the same handler the pointer click fires. The
-// callback is a stateless lambda that decays to a function pointer
-// so the `Msg(*)(std::size_t)` signature stays terse at the call
-// site.
-template<typename Msg>
 inline void tabs(std::vector<str> const& items,
                  std::size_t selected,
-                 Msg (*on_select)(std::size_t),
+                 std::function<void(std::size_t)> on_select,
                  TabsStyleOptions options = {}) {
     auto const& t = detail::g_app().theme;
 
@@ -1935,7 +1922,8 @@ inline void tabs(std::vector<str> const& items,
         }
 
         detail::g_app().callbacks.push_back([on_select, idx = i] {
-            detail::post<Msg>(on_select(idx));
+            if (on_select)
+                on_select(idx);
             detail::trigger_rebuild();
         });
         detail::g_app().callback_roles.push_back(InteractionRole::Button);
@@ -1994,17 +1982,17 @@ inline void tabs(std::vector<str> const& items,
 
 namespace app {
 
-template<typename Msg>
 inline void key_command(unsigned int key,
                         int modifiers,
-                        Msg msg,
+                        std::function<void()> action,
                         KeyCommandOptions options = {}) {
     if (options.disabled)
         return;
     auto const id = static_cast<unsigned int>(
         detail::g_app().callbacks.size());
-    detail::g_app().callbacks.push_back([msg = std::move(msg)] {
-        detail::post<Msg>(msg);
+    detail::g_app().callbacks.push_back([action = std::move(action)] {
+        if (action)
+            action();
         detail::trigger_rebuild();
     });
     detail::g_app().callback_roles.push_back(InteractionRole::Command);
@@ -2477,15 +2465,15 @@ struct WasiFrameBackend {
 };
 #endif
 
-template<typename UpdateMessages, typename BuildView, typename Backend>
-inline void run_scene_rebuild_frame(UpdateMessages&& update_messages,
+template<typename PrepareFrame, typename BuildView, typename Backend>
+inline void run_scene_rebuild_frame(PrepareFrame&& prepare_frame,
                                     BuildView&& build_view,
                                     Backend&& backend) {
     auto t0 = metrics::detail::now_ns();
 
-    update_messages();
+    prepare_frame();
     auto t1 = metrics::detail::now_ns();
-    metrics::inst::phase_duration.record(t1 - t0, {{"phase", "update"}});
+    metrics::inst::phase_duration.record(t1 - t0, {{"phase", "state"}});
 
     auto& app = g_app();
     app.prev_root = app.root;
@@ -2566,7 +2554,7 @@ inline void run_scene_rebuild_frame(UpdateMessages&& update_messages,
     record_frame_trace(
         FrameTraceSample{
             .total_ns = t5 - t0,
-            .update_ns = t1 - t0,
+            .state_ns = t1 - t0,
             .view_ns = t2 - t1,
             .layout_ns = t3 - t2,
             .paint_ns = t4 - t3,
@@ -2582,7 +2570,7 @@ inline void run_scene_rebuild_frame(UpdateMessages&& update_messages,
     metrics::inst::frame_duration.record(total);
     metrics::inst::rebuilds.add();
     log::debug("phenotype.runner",
-        "rebuild #{} total={}us update={}us view={}us layout={}us paint={}us flush={}us",
+        "rebuild #{} total={}us state={}us view={}us layout={}us paint={}us flush={}us",
         metrics::inst::rebuilds.total(), total / 1000,
         (t1 - t0) / 1000, (t2 - t1) / 1000, (t3 - t2) / 1000,
         (t4 - t3) / 1000, (t5 - t4) / 1000);
@@ -2660,11 +2648,8 @@ inline Theme const& current_theme() noexcept {
 }
 
 // ============================================================
-// run<State, Msg> — application entry point.
+// Runner internals.
 // ============================================================
-//
-// Native: run(host, view, update) — host satisfies host_platform concept.
-// WASM:   run(view, update)       — uses phenotype_host.h C linkage.
 
 namespace detail {
 
@@ -2679,252 +2664,7 @@ inline void reset_active_scene_runner_inputs() {
     reset_pointer_inputs(app);
 }
 
-#ifndef __wasi__
-template<typename State, typename Msg, host_platform Host,
-         typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void install_native_scene_run_context(Host& host, View view, Update update) {
-    struct RunContext {
-        Host* host = nullptr;
-        State state{};
-        View view;
-        Update update;
-    };
-    msg_queue().clear();
-    auto context = std::make_shared<RunContext>(RunContext{
-        .host = &host,
-        .state = State{},
-        .view = std::move(view),
-        .update = std::move(update),
-    });
-    reset_active_scene_runner_inputs();
-
-    auto* raw_context = context.get();
-    install_app_runner([](void* raw) {
-        auto& context = *static_cast<RunContext*>(raw);
-        NativeFrameBackend<Host> backend{context.host};
-        run_scene_rebuild_frame(
-            [&] {
-                auto msgs = drain<Msg>();
-                for (auto& m : msgs)
-                    context.update(context.state, std::move(m));
-            },
-            [&] { context.view(context.state); },
-            backend);
-    }, raw_context, std::move(context));
-    trigger_rebuild();
-}
-
-template<typename State, typename Msg, host_platform Host,
-         typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void install_native_scene_shared_state_run_context(Host& host,
-                                                  State& state,
-                                                  View view,
-                                                  Update update) {
-    struct RunContext {
-        Host* host = nullptr;
-        State* state = nullptr;
-        View view;
-        Update update;
-    };
-    msg_queue().clear();
-    auto context = std::make_shared<RunContext>(RunContext{
-        .host = &host,
-        .state = &state,
-        .view = std::move(view),
-        .update = std::move(update),
-    });
-    reset_active_scene_runner_inputs();
-
-    auto* raw_context = context.get();
-    install_app_runner([](void* raw) {
-        auto& context = *static_cast<RunContext*>(raw);
-        NativeFrameBackend<Host> backend{context.host};
-        run_scene_rebuild_frame(
-            [&] {
-                auto msgs = drain<Msg>();
-                for (auto& m : msgs)
-                    context.update(*context.state, std::move(m));
-            },
-            [&] { context.view(*context.state); },
-            backend);
-    }, raw_context, std::move(context));
-    trigger_rebuild();
-}
-#else // __wasi__
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void install_wasi_scene_run_context(View view, Update update) {
-    struct RunContext {
-        State state{};
-        View view;
-        Update update;
-    };
-    msg_queue().clear();
-    auto context = std::make_shared<RunContext>(RunContext{
-        .state = State{},
-        .view = std::move(view),
-        .update = std::move(update),
-    });
-    reset_active_scene_runner_inputs();
-
-    auto* raw_context = context.get();
-    install_app_runner([](void* raw) {
-        auto& context = *static_cast<RunContext*>(raw);
-        WasiFrameBackend backend{};
-        run_scene_rebuild_frame(
-            [&] {
-                auto msgs = drain<Msg>();
-                for (auto& m : msgs)
-                    context.update(context.state, std::move(m));
-            },
-            [&] { context.view(context.state); },
-            backend);
-    }, raw_context, std::move(context));
-    trigger_rebuild();
-}
-
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void install_wasi_scene_shared_state_run_context(State& state,
-                                                 View view,
-                                                 Update update) {
-    struct RunContext {
-        State* state = nullptr;
-        View view;
-        Update update;
-    };
-    msg_queue().clear();
-    auto context = std::make_shared<RunContext>(RunContext{
-        .state = &state,
-        .view = std::move(view),
-        .update = std::move(update),
-    });
-    reset_active_scene_runner_inputs();
-
-    auto* raw_context = context.get();
-    install_app_runner([](void* raw) {
-        auto& context = *static_cast<RunContext*>(raw);
-        WasiFrameBackend backend{};
-        run_scene_rebuild_frame(
-            [&] {
-                auto msgs = drain<Msg>();
-                for (auto& m : msgs)
-                    context.update(*context.state, std::move(m));
-            },
-            [&] { context.view(*context.state); },
-            backend);
-    }, raw_context, std::move(context));
-    trigger_rebuild();
-}
-#endif
-
 } // namespace detail
-
-#ifndef __wasi__
-template<typename State, typename Msg, host_platform Host,
-         typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void run(Host& host, View view, Update update) {
-    detail::bind_scene_runtime(detail::default_scene_runtime());
-    detail::configure_active_scene(SceneDescriptor{
-        .id = "main",
-        .title = "Main",
-        .role = SceneRole::Main,
-        .visible = true,
-    });
-    detail::install_native_scene_run_context<State, Msg>(
-        host,
-        std::move(view),
-        std::move(update));
-}
-
-namespace runtime {
-
-template<typename State, typename Msg, host_platform Host,
-         typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void run_scene(SceneHandle const& scene,
-               Host& host,
-               View view,
-               Update update) {
-    SceneActivation activate{scene};
-    detail::install_native_scene_run_context<State, Msg>(
-        host,
-        std::move(view),
-        std::move(update));
-}
-
-template<typename State, typename Msg, host_platform Host,
-         typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void run_scene_with_state(SceneHandle const& scene,
-                          Host& host,
-                          State& state,
-                          View view,
-                          Update update) {
-    SceneActivation activate{scene};
-    detail::install_native_scene_shared_state_run_context<State, Msg>(
-        host,
-        state,
-        std::move(view),
-        std::move(update));
-}
-
-} // namespace runtime
-#else // __wasi__
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void run(View view, Update update) {
-    detail::bind_scene_runtime(detail::default_scene_runtime());
-    detail::configure_active_scene(SceneDescriptor{
-        .id = "main",
-        .title = "Main",
-        .role = SceneRole::Main,
-        .visible = true,
-    });
-    detail::install_wasi_scene_run_context<State, Msg>(
-        std::move(view),
-        std::move(update));
-}
-
-namespace runtime {
-
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void run_scene(SceneHandle const& scene, View view, Update update) {
-    SceneActivation activate{scene};
-    detail::install_wasi_scene_run_context<State, Msg>(
-        std::move(view),
-        std::move(update));
-}
-
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-void run_scene_with_state(SceneHandle const& scene,
-                          State& state,
-                          View view,
-                          Update update) {
-    SceneActivation activate{scene};
-    detail::install_wasi_scene_shared_state_run_context<State, Msg>(
-        state,
-        std::move(view),
-        std::move(update));
-}
-
-} // namespace runtime
-#endif
 
 // ============================================================
 // Container helpers
@@ -5008,11 +4748,10 @@ void toast_overlay(F&& builder,
 // background, subtle border, generous inner padding) matches the
 // rest of the design system's surface treatment.
 //
-// Visibility is the caller's call: invoke `layout::dialog(...)`
-// when your `State` says the dialog is open, skip it when it's
-// closed. The Esc key already drops focus through the existing
-// shell handler — wiring "Esc closes the dialog" still belongs in
-// the user's `update`, but it's a one-line `Msg::Close` post.
+// Visibility is the caller's call: invoke `layout::dialog(...)` when local or
+// app state says the dialog is open, skip it when it's closed. The Esc key
+// already drops focus through the existing shell handler; callers can also
+// bind a key command that flips the same state.
 //
 // The overlay root captures pointer input across the viewport so a
 // modal dialog cannot leak hover/press/click state to the covered
@@ -5058,9 +4797,9 @@ void dialog(F&& builder,
 
 // accordion — collapsible section with a clickable header. Persists
 // its expanded/collapsed state in `framework_local<bool>` keyed by
-// the call site, so neither the user `State` nor a `Msg` round-trip
-// is required to remember whether each accordion is open. The click
-// handler captures a pointer into the framework_local store and
+// the call site, so each accordion can remember whether it is open without
+// lifting that detail into app state. The click handler captures a pointer
+// into the framework_local store and
 // flips the boolean directly — the runner's existing trigger_rebuild
 // hook is what turns the change into a re-render. Two accordions in
 // one view get independent state via the same per-call-site counter
@@ -5726,88 +5465,80 @@ inline ButtonStyleOptions glass_button_style(
     return glass_control_button_style(glass, options);
 }
 
-template<typename Msg>
 inline void glass_button(str label,
-                         Msg msg,
+                         std::function<void()> action,
                          layout::GlassEffectStyle glass,
                          GlassControlStyleOptions options = {}) {
     button(
         label,
-        std::move(msg),
+        std::move(action),
         glass_button_style(glass, options));
 }
 
-template<typename Msg>
 inline void glass_prominent_button(str label,
-                                   Msg msg,
+                                   std::function<void()> action,
                                    layout::GlassEffectStyle glass,
                                    GlassControlStyleOptions options = {}) {
     button(
         label,
-        std::move(msg),
+        std::move(action),
         glass_prominent_button_style(glass, options));
 }
 
-template<typename Msg>
 inline void glass_selection_button(str label,
-                                   Msg msg,
+                                   std::function<void()> action,
                                    GlassSelectionStyleOptions options = {}) {
     button(
         label,
-        std::move(msg),
+        std::move(action),
         glass_selection_button_style(options));
 }
 
-template<typename Msg>
 inline void glass_selection_button(str label,
-                                   Msg msg,
+                                   std::function<void()> action,
                                    layout::GlassEffectStyle glass,
                                    GlassSelectionStyleOptions options = {}) {
     button(
         label,
-        std::move(msg),
+        std::move(action),
         glass_selection_button_style(glass, options));
 }
 
-template<typename Msg>
 inline void glass_outline_row_button(str label,
-                                     Msg msg,
+                                     std::function<void()> action,
                                      GlassOutlineRowStyleOptions options = {}) {
     button(
         label,
-        std::move(msg),
+        std::move(action),
         glass_outline_row_button_style(options));
 }
 
-template<typename Msg>
 inline void glass_outline_row_button(str label,
-                                     Msg msg,
+                                     std::function<void()> action,
                                      layout::GlassEffectStyle glass,
                                      GlassOutlineRowStyleOptions options = {}) {
     button(
         label,
-        std::move(msg),
+        std::move(action),
         glass_outline_row_button_style(glass, options));
 }
 
-template<typename Msg>
 inline void glass_menu_item_button(str label,
-                                   Msg msg,
+                                   std::function<void()> action,
                                    GlassMenuItemStyleOptions options = {}) {
     button(
         label,
-        std::move(msg),
+        std::move(action),
         glass_menu_item_button_style(options));
 }
 
-template<typename Msg>
 inline void glass_menu_item_button(str label,
-                                   Msg msg,
+                                   std::function<void()> action,
                                    layout::GlassEffectStyle glass,
                                    GlassMenuItemStyleOptions options = {}) {
     button(
         label,
-        std::move(msg),
+        std::move(action),
         glass_menu_item_button_style(glass, options));
 }
 
@@ -5904,11 +5635,11 @@ inline ButtonStyleOptions dropdown_menu_item_style(
     return style;
 }
 
-template<typename Msg, typename ButtonStyle, typename MenuItemStyle>
+template<typename ButtonStyle, typename MenuItemStyle>
 inline void glass_dropdown_button_impl(str label,
                                        std::vector<str> const& items,
                                        std::size_t selected,
-                                       Msg (*on_select)(std::size_t),
+                                       std::function<void(std::size_t)> on_select,
                                        GlassDropdownStyleOptions options,
                                        ButtonStyle&& button_style,
                                        MenuItemStyle&& menu_item_style) {
@@ -5936,7 +5667,8 @@ inline void glass_dropdown_button_impl(str label,
                 menu_item_style(i == selected),
                 [open_ptr, on_select, idx = i] {
                     *open_ptr = false;
-                    detail::post<Msg>(on_select(idx));
+                    if (on_select)
+                        on_select(idx);
                     detail::trigger_rebuild();
                 });
         }
@@ -5945,13 +5677,12 @@ inline void glass_dropdown_button_impl(str label,
 
 } // namespace _impl
 
-template<typename Msg>
 inline void glass_dropdown_button(str label,
                                   std::vector<str> const& items,
                                   std::size_t selected,
-                                  Msg (*on_select)(std::size_t),
+                                  std::function<void(std::size_t)> on_select,
                                   GlassDropdownStyleOptions options = {}) {
-    _impl::glass_dropdown_button_impl<Msg>(
+    _impl::glass_dropdown_button_impl(
         label,
         items,
         selected,
@@ -5965,14 +5696,13 @@ inline void glass_dropdown_button(str label,
         });
 }
 
-template<typename Msg>
 inline void glass_dropdown_button(str label,
                                   std::vector<str> const& items,
                                   std::size_t selected,
-                                  Msg (*on_select)(std::size_t),
+                                  std::function<void(std::size_t)> on_select,
                                   layout::GlassEffectStyle glass,
                                   GlassDropdownStyleOptions options = {}) {
-    _impl::glass_dropdown_button_impl<Msg>(
+    _impl::glass_dropdown_button_impl(
         label,
         items,
         selected,
@@ -5986,130 +5716,120 @@ inline void glass_dropdown_button(str label,
         });
 }
 
-template<typename Msg>
 inline void glass_table_header_button(str label,
-                                      Msg msg,
+                                      std::function<void()> action,
                                       GlassTableHeaderStyleOptions options = {}) {
     button(
         label,
-        std::move(msg),
+        std::move(action),
         glass_table_header_button_style(options));
 }
 
-template<typename Msg>
 inline void glass_table_header_button(str label,
-                                      Msg msg,
+                                      std::function<void()> action,
                                       layout::GlassEffectStyle glass,
                                       GlassTableHeaderStyleOptions options = {}) {
     button(
         label,
-        std::move(msg),
+        std::move(action),
         glass_table_header_button_style(glass, options));
 }
 
-template<typename Msg>
 inline void glass_disclosure_header_button(
         str label,
-        Msg msg,
+        std::function<void()> action,
         GlassDisclosureStyleOptions options = {}) {
     button(
         label,
-        std::move(msg),
+        std::move(action),
         glass_disclosure_header_style(options));
 }
 
-template<typename Msg>
 inline void glass_disclosure_header_button(
         str label,
-        Msg msg,
+        std::function<void()> action,
         layout::GlassEffectStyle glass,
         GlassDisclosureStyleOptions options = {}) {
     button(
         label,
-        std::move(msg),
+        std::move(action),
         glass_disclosure_header_style(glass, options));
 }
 
-template<typename Msg>
 inline void glass_text_field(str hint,
                              std::string const& current,
-                             Msg(*mapper)(std::string),
+                             std::function<void(std::string)> on_change,
                              layout::GlassEffectStyle glass,
                              GlassTextFieldStyleOptions options = {}) {
-    text_field<Msg>(
+    text_field(
         hint,
         current,
-        mapper,
+        std::move(on_change),
         glass_text_field_style(glass, options));
 }
 
-template<typename Msg>
 inline void glass_checkbox(str label,
                            bool checked,
-                           Msg msg,
+                           std::function<void()> action,
                            layout::GlassEffectStyle glass,
                            GlassToggleStyleOptions options = {}) {
     auto style = glass_toggle_style_options(glass, options);
     _impl::toggle(
         label,
         checked,
-        std::move(msg),
+        std::move(action),
         detail::g_app().theme.radius_xs,
         Decoration::Check,
         InteractionRole::Checkbox,
         &style);
 }
 
-template<typename Msg>
 inline void glass_radio(str label,
                         bool selected,
-                        Msg msg,
+                        std::function<void()> action,
                         layout::GlassEffectStyle glass,
                         GlassToggleStyleOptions options = {}) {
     auto style = glass_toggle_style_options(glass, options);
     _impl::toggle(
         label,
         selected,
-        std::move(msg),
+        std::move(action),
         detail::g_app().theme.radius_lg,
         Decoration::Dot,
         InteractionRole::Radio,
         &style);
 }
 
-template<typename Msg>
 inline void glass_switch(str label,
                          bool on,
-                         Msg msg,
+                         std::function<void()> action,
                          layout::GlassEffectStyle glass,
                          GlassSwitchStyleOptions options = {}) {
     auto style = glass_switch_style_options(glass, options);
-    _impl::switch_control(label, on, std::move(msg), &style);
+    _impl::switch_control(label, on, std::move(action), &style);
 }
 
-template<typename Msg>
 inline void glass_tabs(std::vector<str> const& items,
                        std::size_t selected,
-                       Msg (*on_select)(std::size_t),
+                       std::function<void(std::size_t)> on_select,
                        layout::GlassEffectStyle glass,
                        TabsStyleOptions options = {}) {
-    tabs<Msg>(
+    tabs(
         items,
         selected,
-        on_select,
+        std::move(on_select),
         glass_tabs_style_options(glass, options));
 }
 
-template<typename Msg>
 inline void tabs(std::vector<str> const& items,
                  std::size_t selected,
-                 Msg (*on_select)(std::size_t),
+                 std::function<void(std::size_t)> on_select,
                  layout::GlassEffectStyle glass,
                  TabsStyleOptions options = {}) {
-    glass_tabs<Msg>(
+    glass_tabs(
         items,
         selected,
-        on_select,
+        std::move(on_select),
         glass,
         options);
 }
@@ -7244,9 +6964,6 @@ inline json::Value scene_snapshot_to_json(SceneSnapshot const& snapshot) {
     out.emplace(
         "focused_callback_id",
         diag::callback_id_to_json(optional_callback_id(snapshot.focused_id)));
-    out.emplace(
-        "queued_messages",
-        json::Value{static_cast<std::int64_t>(snapshot.queued_messages)});
     out.emplace(
         "framework_local_entries",
         json::Value{static_cast<std::int64_t>(snapshot.framework_local_entries)});
@@ -8611,7 +8328,7 @@ inline std::array<DebugFrameSegment, 5> debug_frame_segments(
         FrameTraceSample const& frame) {
     return {{
         {"input", frame.input_ns, Color{168, 85, 247, 210}},
-        {"view", frame.view_ns + frame.update_ns, Color{59, 130, 246, 210}},
+        {"view", frame.view_ns + frame.state_ns, Color{59, 130, 246, 210}},
         {"layout", frame.layout_ns, Color{16, 185, 129, 210}},
         {"paint", frame.paint_ns, Color{245, 158, 11, 220}},
         {"flush", frame.flush_ns, Color{236, 72, 153, 210}},
@@ -8942,7 +8659,7 @@ inline std::string performance_debug_block() {
     block.line("frames_over_60fps_budget", frame.over_60fps_budget);
     block.line("last_trace_action", frame_trace_action_label(last.action));
     block.line_ms("last_input_ms", last.input_ns);
-    block.line_ms("last_update_ms", last.update_ns);
+    block.line_ms("last_state_ms", last.state_ns);
     block.line_ms("last_view_ms", last.view_ns);
     block.line_ms("last_layout_ms", last.layout_ns);
     block.line_ms("last_paint_ms", last.paint_ns);
@@ -9383,7 +9100,7 @@ public:
 
     template <typename F>
         requires std::invocable<F&, T&>
-    void update(F&& fn) const {
+    void mutate(F&& fn) const {
         std::forward<F>(fn)(*value_);
         detail::trigger_rebuild();
     }
@@ -9411,7 +9128,7 @@ public:
 
     template <typename F>
         requires std::invocable<F&, T&>
-    void update(F&& fn) const {
+    void mutate(F&& fn) const {
         std::forward<F>(fn)(*value_);
         detail::trigger_rebuild();
     }
@@ -9873,123 +9590,18 @@ struct TextField {
     }
 
     void render() const {
-        auto h = detail::alloc_node();
-        auto& node = detail::node_at(h);
-        auto const& t = detail::g_app().theme;
+        auto render_options = options;
         auto const current = text.valid() ? text.get() : std::string{};
-        node.interaction_role = InteractionRole::TextField;
-        node.placeholder = placeholder;
-        node.text = current.empty() ? node.placeholder : current;
-        node.debug_semantic_label = options.semantic_label
-            ? options.semantic_label
-            : node.placeholder;
-        node.font_size = options.font_size > 0.0f
-            ? options.font_size
-            : t.body_font_size;
-        node.border_radius = options.border_radius >= 0.0f
-            ? options.border_radius
-            : t.radius_sm;
-        float default_padding[4] = {
-            t.space_sm,
-            t.space_md,
-            t.space_sm,
-            t.space_md,
-        };
-        float option_padding[4] = {
-            options.padding_top,
-            options.padding_right,
-            options.padding_bottom,
-            options.padding_left,
-        };
-        for (int i = 0; i < 4; ++i) {
-            node.style.padding[i] = option_padding[i] >= 0.0f
-                ? option_padding[i]
-                : default_padding[i];
-        }
-        node.style.max_width = options.max_width;
-        node.style.fixed_height = options.fixed_height;
-
-        if (options.disabled || !text.valid()) {
-            node.is_input = false;
-            node.background = options.has_background
-                ? options.background
-                : t.state_disabled_bg;
-            node.text_color = options.has_text_color
-                ? options.text_color
-                : t.state_disabled_fg;
-            node.border_color = options.has_border_color
-                ? options.border_color
-                : t.state_disabled_border;
-            node.border_width = options.border_width >= 0.0f
-                ? options.border_width
-                : 1.0f;
-            widget::apply_text_field_material(node, options);
-            node.cursor_type = 0;
-            node.focusable = false;
-            node.debug_semantic_enabled = false;
-            detail::attach_to_scope(h);
-            return;
-        }
-
-        node.is_input = true;
-        Color resting_border;
-        if (options.error) {
-            node.background = t.state_error_bg;
-            node.text_color = current.empty() ? t.muted : t.state_error_fg;
-            resting_border = t.state_error_border;
-        } else {
-            node.background = options.has_background
-                ? options.background
-                : t.surface;
-            node.text_color = current.empty() ? t.muted : t.foreground;
-            resting_border = options.has_border_color
-                ? options.border_color
-                : t.border;
-        }
-        if (options.has_text_color)
-            node.text_color = options.text_color;
-        node.cursor_type = 1;
-
-        auto id = static_cast<unsigned int>(detail::g_app().callbacks.size());
-        bool const is_hovered = id == detail::g_app().hovered_id;
-        bool const is_focused = detail::focus_ring_visible(id);
-        bool const is_pressed = id == detail::g_app().pressed_id;
-        float const base_border_width = options.border_width >= 0.0f
-            ? options.border_width
-            : 1.0f;
-        int const focus_ms = detail::focus_ring_transition_ms(id, 150);
-        node.border_width = animate_float(
-            is_focused ? t.state_focus_ring_width : base_border_width,
-            focus_ms);
-        node.border_color = animate_color(
-            is_focused ? t.state_focus_ring : resting_border,
-            focus_ms);
-        widget::apply_text_field_material(node, options);
-        widget::apply_material_interaction_state(
-            node,
-            is_hovered,
-            is_pressed,
-            is_focused);
-        detail::g_app().callbacks.push_back([] {});
-        detail::g_app().callback_roles.push_back(InteractionRole::TextField);
-        auto* binding_storage = new Binding<std::string>(text);
-        detail::g_app().input_handlers.push_back({
-            id,
-            InputHandler{
-                current,
-                binding_storage,
-                [](void* state, std::string value) {
-                    auto binding = *static_cast<Binding<std::string>*>(state);
+        render_options.disabled = render_options.disabled || !text.valid();
+        auto binding = text;
+        widget::text_field(
+            str(placeholder),
+            current,
+            [binding](std::string value) {
+                if (binding.valid())
                     binding.set(std::move(value));
-                },
-                [](void* state) {
-                    delete static_cast<Binding<std::string>*>(state);
-                }
-            }
-        });
-        node.callback_id = id;
-        detail::g_app().input_nodes.push_back({id, h});
-        detail::attach_to_scope(h);
+            },
+            render_options);
     }
 };
 

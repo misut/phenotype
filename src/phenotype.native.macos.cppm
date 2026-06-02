@@ -379,7 +379,7 @@ inline float bounded_system_setting(
 
 inline std::string scroller_style_name(long style) {
     if (style == 0)
-        return "legacy";
+        return "classic";
     if (style == 1)
         return "overlay";
     return "unknown";
@@ -987,7 +987,7 @@ inline constexpr std::int64_t k_macos_material_max_backdrop_pixels =
     16'777'216;
 inline constexpr std::int64_t k_macos_material_default_texture_dimension_2d =
     16'384;
-inline constexpr std::int64_t k_macos_material_legacy_texture_dimension_2d =
+inline constexpr std::int64_t k_macos_material_compat_texture_dimension_2d =
     8'192;
 
 inline std::int64_t macos_material_max_texture_dimension_2d(
@@ -1002,7 +1002,7 @@ inline std::int64_t macos_material_max_texture_dimension_2d(
         || device->supportsFamily(MTL::GPUFamilyMetal3)) {
         return k_macos_material_default_texture_dimension_2d;
     }
-    return k_macos_material_legacy_texture_dimension_2d;
+    return k_macos_material_compat_texture_dimension_2d;
 }
 
 inline MaterialCapabilityInput macos_material_capability_input(
