@@ -1,3 +1,7 @@
+module;
+
+#include <csignal>
+
 export module phenotype.cli;
 
 import cppx.cli;
@@ -13,6 +17,68 @@ export namespace phenotype::cli {
 inline constexpr auto default_host = std::string_view{"127.0.0.1"};
 inline constexpr auto default_serve_port = std::uint16_t{4174};
 inline constexpr auto default_target = std::string_view{"wasm32-wasi"};
+inline constexpr auto program_name = std::string_view{"phenotype"};
+
+inline volatile std::sig_atomic_t serve_shutdown_signal = 0;
+
+void request_serve_shutdown(int signal_number) {
+    serve_shutdown_signal = static_cast<std::sig_atomic_t>(signal_number);
+}
+
+auto signal_name(int signal_number) -> std::string_view {
+    switch (signal_number) {
+    case SIGINT:
+        return "SIGINT";
+#if defined(SIGTERM)
+    case SIGTERM:
+        return "SIGTERM";
+#endif
+    default:
+        return "signal";
+    }
+}
+
+class ServeSignalScope {
+    using Handler = void (*)(int);
+
+    Handler previous_int_ = SIG_DFL;
+    Handler previous_term_ = SIG_DFL;
+    bool has_int_ = false;
+    bool has_term_ = false;
+
+public:
+    ServeSignalScope() {
+        serve_shutdown_signal = 0;
+
+        previous_int_ = std::signal(SIGINT, request_serve_shutdown);
+        has_int_ = previous_int_ != SIG_ERR;
+
+#if defined(SIGTERM)
+        previous_term_ = std::signal(SIGTERM, request_serve_shutdown);
+        has_term_ = previous_term_ != SIG_ERR;
+#endif
+    }
+
+    ServeSignalScope(ServeSignalScope const&) = delete;
+    auto operator=(ServeSignalScope const&) -> ServeSignalScope& = delete;
+
+    ~ServeSignalScope() {
+        if (has_int_)
+            std::signal(SIGINT, previous_int_);
+#if defined(SIGTERM)
+        if (has_term_)
+            std::signal(SIGTERM, previous_term_);
+#endif
+    }
+
+    auto requested() const -> bool {
+        return serve_shutdown_signal != 0;
+    }
+
+    auto requested_signal() const -> int {
+        return static_cast<int>(serve_shutdown_signal);
+    }
+};
 
 struct CliError {
     std::string message;
@@ -116,7 +182,7 @@ auto command_spec() -> cppx::cli::CommandSpec {
     });
 
     return {
-        .name = "phenotype-cli",
+        .name = std::string{program_name},
         .summary = "Build and preview phenotype WASI apps locally",
         .description =
             "Builds the docs WASI binary, stages the browser shim and HTML, "
@@ -136,8 +202,8 @@ auto command_spec() -> cppx::cli::CommandSpec {
                 .positional_description =
                     "Optional phenotype repository root",
                 .examples = {
-                    "phenotype-cli build",
-                    "phenotype-cli build --release --out-dir dist/phenotype",
+                    "phenotype build",
+                    "phenotype build --release --out-dir dist/phenotype",
                 },
             },
             {
@@ -148,9 +214,9 @@ auto command_spec() -> cppx::cli::CommandSpec {
                 .positional_description =
                     "Optional phenotype repository root",
                 .examples = {
-                    "phenotype-cli serve",
-                    "phenotype-cli serve --port 4174 --open",
-                    "phenotype-cli serve --no-build --out-dir .phenotype/site/wasm32-wasi/debug",
+                    "phenotype serve",
+                    "phenotype serve --port 4174 --open",
+                    "phenotype serve --no-build --out-dir .phenotype/site/wasm32-wasi/debug",
                 },
             },
             {
@@ -161,8 +227,8 @@ auto command_spec() -> cppx::cli::CommandSpec {
                 .positional_description =
                     "Optional phenotype repository root",
                 .examples = {
-                    "phenotype-cli test",
-                    "phenotype-cli test --no-build",
+                    "phenotype test",
+                    "phenotype test --no-build",
                 },
             },
             {
@@ -390,7 +456,8 @@ auto process_error_message(std::string_view context,
 
 auto run_build(Options const& options) -> std::expected<void, CliError> {
     auto spec = build_process_spec(options);
-    std::println("phenotype-cli: building docs ({}, {})",
+    std::println("{}: building docs ({}, {})",
+                 program_name,
                  options.target,
                  profile_name(options.release));
 
@@ -578,10 +645,30 @@ auto run_serve(Options const& options,
     server.serve_static("/", paths.out_dir);
 
     auto url = local_url(options.host, options.port, "/");
-    std::println("phenotype-cli: serving '{}' at {}",
+    std::println("{}: serving '{}' at {}",
+                 program_name,
                  paths.out_dir.string(),
                  url);
-    std::println("phenotype-cli: press Ctrl-C to stop");
+    std::println("{}: press Ctrl-C to stop", program_name);
+
+    auto signal_scope = ServeSignalScope{};
+    auto watcher_done = std::atomic<bool>{false};
+    auto signal_announced = std::atomic<bool>{false};
+    auto wake_url = local_url(options.host,
+                              options.port,
+                              "/__phenotype_shutdown__");
+    auto shutdown_watcher = std::thread{[&] {
+        while (!watcher_done.load() && !signal_scope.requested())
+            std::this_thread::sleep_for(std::chrono::milliseconds{50});
+        if (!signal_scope.requested())
+            return;
+        if (!signal_announced.exchange(true))
+            std::println("{}: received {}, shutting down gracefully",
+                         program_name,
+                         signal_name(signal_scope.requested_signal()));
+        server.stop();
+        (void)cppx::http::system::get(wake_url);
+    }};
 
     auto opener = std::thread{};
     if (options.open) {
@@ -593,8 +680,19 @@ auto run_serve(Options const& options,
     }
 
     auto result = server.run(options.host, options.port);
+    watcher_done.store(true);
+    if (signal_scope.requested()) {
+        server.stop();
+        (void)cppx::http::system::get(wake_url);
+    }
+    if (shutdown_watcher.joinable())
+        shutdown_watcher.join();
     if (opener.joinable())
         opener.join();
+    if (signal_scope.requested()) {
+        std::println("{}: stopped", program_name);
+        return {};
+    }
     if (!result)
         return std::unexpected{CliError{
             .message = std::format("server failed: {}",
@@ -764,7 +862,7 @@ auto build_and_stage(Options const& options)
     auto staged = stage_site(options);
     if (!staged)
         return std::unexpected{staged.error()};
-    std::println("phenotype-cli: staged '{}'", staged->out_dir.string());
+    std::println("{}: staged '{}'", program_name, staged->out_dir.string());
     return staged;
 }
 
@@ -809,7 +907,8 @@ auto cmd_test(cppx::cli::Invocation const& invocation) -> int {
     if (!smoke)
         return std::println(std::cerr, "error: {}", smoke.error().message),
                smoke.error().exit_code;
-    std::println("phenotype-cli: smoke test passed at http://{}:{}/ ({} wasm bytes)",
+    std::println("{}: smoke test passed at http://{}:{}/ ({} wasm bytes)",
+                 program_name,
                  options->host,
                  smoke->port,
                  smoke->wasm_bytes);
@@ -880,7 +979,7 @@ auto main(int argc, char** argv) -> int {
     if (args.size() == 1 && (args[0] == "--help" || args[0] == "-h"))
         return print_help(root);
     if (args.size() == 1 && (args[0] == "--version" || args[0] == "-v")) {
-        std::println("phenotype-cli {}", EXON_PKG_VERSION);
+        std::println("{} {}", program_name, EXON_PKG_VERSION);
         return 0;
     }
 

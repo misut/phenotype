@@ -64,7 +64,7 @@ void test_default_paths() {
 
 void test_stage_site() {
     auto temp = std::filesystem::temp_directory_path() /
-                std::format("phenotype-cli-test-{}",
+                std::format("phenotype-test-{}",
                             std::chrono::steady_clock::now()
                                 .time_since_epoch()
                                 .count());

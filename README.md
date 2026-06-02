@@ -98,17 +98,17 @@ shim, and serves the result with the `cppx` HTTP server.
 cd cli
 mise exec -- exon build
 cd ..
-cli/.exon/debug/phenotype-cli test
-cli/.exon/debug/phenotype-cli serve --open
+cli/.exon/debug/phenotype test
+cli/.exon/debug/phenotype serve --open
 ```
 
 Useful commands:
 
 | Command | Purpose |
 | --- | --- |
-| `phenotype-cli build` | Build `docs` for `wasm32-wasi` and stage `index.html`, `phenotype.js`, and `docs.wasm` |
-| `phenotype-cli serve` | Build, stage, and serve the browser site at `http://127.0.0.1:4174/` |
-| `phenotype-cli test` | Build, stage, start a temporary HTTP server, and verify the HTML, JS, and WASM responses |
+| `phenotype build` | Build `docs` for `wasm32-wasi` and stage `index.html`, `phenotype.js`, and `docs.wasm` |
+| `phenotype serve` | Build, stage, and serve the browser site at `http://127.0.0.1:4174/` |
+| `phenotype test` | Build, stage, start a temporary HTTP server, and verify the HTML, JS, and WASM responses |
 
 Pass `--no-build` to reuse an existing `docs` artifact, `--release` to stage a
 release build, and `--out-dir <dir>` to choose the preview directory.

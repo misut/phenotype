@@ -62,7 +62,7 @@ jobs:
           eval "$(intron env)"
           cd cli
           exon build --release
-          ./.exon/release/phenotype-cli --version
+          ./.exon/release/phenotype --version
 
       - name: Verify Linux preview workflow
         if: runner.os == 'Linux'
@@ -71,18 +71,18 @@ jobs:
           cd docs
           exon build --target wasm32-wasi
           cd ../cli
-          ./.exon/release/phenotype-cli test --no-build --no-mise --exon exon
+          ./.exon/release/phenotype test --no-build --no-mise --exon exon
 
       - name: Package
         run: |
-          tar -czf phenotype-cli-${{ github.ref_name }}-${{ matrix.platform }}.tar.gz \
-            -C cli/.exon/release phenotype-cli
+          tar -czf phenotype-${{ github.ref_name }}-${{ matrix.platform }}.tar.gz \
+            -C cli/.exon/release phenotype
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: phenotype-cli-${{ matrix.platform }}
-          path: phenotype-cli-*.tar.gz
+          name: phenotype-${{ matrix.platform }}
+          path: phenotype-*.tar.gz
           retention-days: 1
           compression-level: 0
 
@@ -142,20 +142,20 @@ jobs:
           Invoke-Expression (& intron env | Out-String)
           Set-Location cli
           exon build --release
-          .\.exon\release\phenotype-cli.exe --version
+          .\.exon\release\phenotype.exe --version
 
       - name: Package
         shell: pwsh
         run: |
           Compress-Archive `
-            -Path cli\.exon\release\phenotype-cli.exe `
-            -DestinationPath phenotype-cli-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip
+            -Path cli\.exon\release\phenotype.exe `
+            -DestinationPath phenotype-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: phenotype-cli-x86_64-pc-windows-msvc
-          path: phenotype-cli-*.zip
+          name: phenotype-x86_64-pc-windows-msvc
+          path: phenotype-*.zip
           retention-days: 1
           compression-level: 0
 
@@ -172,6 +172,6 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            phenotype-cli-*.tar.gz
-            phenotype-cli-*.zip
+            phenotype-*.tar.gz
+            phenotype-*.zip
           generate_release_notes: true
