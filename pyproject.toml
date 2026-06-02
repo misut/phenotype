@@ -1,9 +1,0 @@
-[project]
-name = "phenotype-tools"
-version = "0.0.0"
-description = "Python environment for phenotype artifact verifiers and repository tooling"
-requires-python = ">=3.14,<3.15"
-dependencies = []
-
-[tool.uv]
-package = false
