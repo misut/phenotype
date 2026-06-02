@@ -14,11 +14,7 @@ const CMD_DRAW_TEXT  = 5;
 const CMD_DRAW_LINE  = 6;
 const CMD_HIT_REGION = 7;
 const CMD_DRAW_IMAGE = 8;
-const CMD_SCISSOR    = 9;
-const CMD_FILL_QUADS = 13;
 const CMD_FILL_RECTS = 14;
-const CMD_MATERIAL_RECT = 15;
-const CMD_LINEAR_GRADIENT_RECT = 16;
 
 // --- Color helpers ---
 
@@ -29,37 +25,6 @@ function unpackColor(rgba) {
     b: ((rgba >>>  8) & 0xFF) / 255,
     a: ((rgba >>>  0) & 0xFF) / 255,
   };
-}
-
-function lerpColor(from, to, t) {
-  const clamped = Math.max(0, Math.min(1, t));
-  return {
-    r: from.r + (to.r - from.r) * clamped,
-    g: from.g + (to.g - from.g) * clamped,
-    b: from.b + (to.b - from.b) * clamped,
-    a: from.a + (to.a - from.a) * clamped,
-  };
-}
-
-function pushLinearGradientQuads(quads, x, y, w, h, from, to, axis, steps) {
-  if (w === 0 || h === 0) return;
-  if (w < 0) { x += w; w = -w; }
-  if (h < 0) { y += h; h = -h; }
-
-  const count = Math.max(1, Math.min(64, steps || 1));
-  for (let i = 0; i < count; ++i) {
-    const t = count === 1 ? 0 : i / (count - 1);
-    const c = lerpColor(from, to, t);
-    if (axis === 0) {
-      const x0 = x + w * i / count;
-      const x1 = x + w * (i + 1) / count;
-      quads.push({ x: x0, y, w: x1 - x0, h, r: c.r, g: c.g, b: c.b, a: c.a, type: 0 });
-    } else {
-      const y0 = y + h * i / count;
-      const y1 = y + h * (i + 1) / count;
-      quads.push({ x, y: y0, w, h: y1 - y0, r: c.r, g: c.g, b: c.b, a: c.a, type: 0 });
-    }
-  }
 }
 
 // --- Text measurement (offscreen canvas) ---
@@ -686,6 +651,9 @@ function parseCommands(instance) {
     const cmd = view.getUint32(pos, true); pos += 4;
 
     switch (cmd) {
+      case 0:
+        pos = end;
+        break;
       case CMD_CLEAR: {
         const rgba = view.getUint32(pos, true); pos += 4;
         clearColor = unpackColor(rgba);
@@ -791,40 +759,6 @@ function parseCommands(instance) {
         images.push({ x, y, w, h, url });
         break;
       }
-      case CMD_SCISSOR: {
-        // Scissor is decoded-and-skipped for now: the WebGPU renderer
-        // batches every quad/text/image bucket into a single draw
-        // call, so interleaving passEncoder.setScissorRect calls
-        // requires splitting draws. Parsing is still required so
-        // paint_node can emit Scissor without tripping the "unknown
-        // command" fallback below. Applying the clip is a follow-up.
-        pos += 16; // x, y, w, h
-        break;
-      }
-      case CMD_FILL_QUADS: {
-        const count = view.getUint32(pos, true); pos += 4;
-        for (let i = 0; i < count; ++i) {
-          const rgba = view.getUint32(pos, true); pos += 4;
-          const x0 = view.getFloat32(pos, true); pos += 4;
-          const y0 = view.getFloat32(pos, true); pos += 4;
-          const x1 = view.getFloat32(pos, true); pos += 4;
-          const y1 = view.getFloat32(pos, true); pos += 4;
-          const x2 = view.getFloat32(pos, true); pos += 4;
-          const y2 = view.getFloat32(pos, true); pos += 4;
-          const x3 = view.getFloat32(pos, true); pos += 4;
-          const y3 = view.getFloat32(pos, true); pos += 4;
-          const c = unpackColor(rgba);
-          const minX = Math.min(x0, x1, x2, x3);
-          const maxX = Math.max(x0, x1, x2, x3);
-          const minY = Math.min(y0, y1, y2, y3);
-          const maxY = Math.max(y0, y1, y2, y3);
-          quads.push({
-            x: minX, y: minY, w: maxX - minX, h: maxY - minY,
-            r: c.r, g: c.g, b: c.b, a: c.a, type: 0
-          });
-        }
-        break;
-      }
       case CMD_FILL_RECTS: {
         const count = view.getUint32(pos, true); pos += 4;
         for (let i = 0; i < count; ++i) {
@@ -836,47 +770,6 @@ function parseCommands(instance) {
           const c = unpackColor(rgba);
           quads.push({ x, y, w, h, r: c.r, g: c.g, b: c.b, a: c.a, type: 0 });
         }
-        break;
-      }
-      case CMD_MATERIAL_RECT: {
-        const x = view.getFloat32(pos, true); pos += 4;
-        const y = view.getFloat32(pos, true); pos += 4;
-        const w = view.getFloat32(pos, true); pos += 4;
-        const h = view.getFloat32(pos, true); pos += 4;
-        const radius = view.getFloat32(pos, true); pos += 4;
-        pos += 4; // kind
-        pos += 4; // role
-        pos += 4; // allows_liquid_glass
-        const opacity = view.getFloat32(pos, true); pos += 4;
-        pos += 4; // blur_radius
-        const rgba = view.getUint32(pos, true); pos += 4;
-        pos += 32; // saturation, luminance, edge, noise, and shadow fields
-        pos += 16; // container id, union id, spacing, flags
-        pos += 12; // interaction flags, pointer x, pointer y
-        pos += 12; // transition kind, progress, flags
-        pos += 12; // glass namespace, effect, background kind
-        pos += 8; // glass background feather padding and soft edge radius
-        pos += 8; // prominence flags and intensity
-        pos += 4; // foreground palette marker
-        pos += 16; // foreground, secondary, accent, strong accent colors
-        const c = unpackColor(rgba);
-        quads.push({
-          x, y, w, h,
-          r: c.r, g: c.g, b: c.b, a: c.a * opacity,
-          type: 2, radius
-        });
-        break;
-      }
-      case CMD_LINEAR_GRADIENT_RECT: {
-        const x = view.getFloat32(pos, true); pos += 4;
-        const y = view.getFloat32(pos, true); pos += 4;
-        const w = view.getFloat32(pos, true); pos += 4;
-        const h = view.getFloat32(pos, true); pos += 4;
-        const from = unpackColor(view.getUint32(pos, true)); pos += 4;
-        const to = unpackColor(view.getUint32(pos, true)); pos += 4;
-        const axis = view.getUint32(pos, true); pos += 4;
-        const steps = view.getUint32(pos, true); pos += 4;
-        pushLinearGradientQuads(quads, x, y, w, h, from, to, axis, steps);
         break;
       }
       default:
@@ -1381,36 +1274,12 @@ export async function mount(wasmUrl, rootElement = document.body, extraImports =
   // instead of hiddenInput and gets dropped.
   hiddenInput.focus();
 
-  // Public handle for opt-in extensions like phenotype-otel.js. The
-  // adapter stores `inst` so it can call the diag exports on a timer.
-  // diagExport() is provided as a convenience: it calls the three
-  // host exports, decodes the buffer as UTF-8, and JSON.parses the
-  // result, returning the snapshot object directly so callers don't
-  // have to touch linear memory.
   return {
     inst,
-    diagExport() {
-      const len = inst.exports.phenotype_diag_export();
-      if (len === 0) return null;
-      const ptr = inst.exports.phenotype_diag_get_buf();
-      const bytes = new Uint8Array(inst.exports.memory.buffer, ptr, len);
-      return JSON.parse(new TextDecoder().decode(bytes));
-    },
-    setThemeJson(jsonStr) {
-      // Pre-validate so malformed JSON doesn't abort the WASM instance
-      // (jsoncpp aborts on parse errors when exceptions are disabled).
-      try { JSON.parse(jsonStr); } catch (e) {
-        console.warn('[phenotype] setThemeJson: invalid JSON', e.message);
-        return false;
-      }
-      const utf8 = new TextEncoder().encode(jsonStr);
-      const ptr = inst.exports.phenotype_input_buf();
-      const buf = new Uint8Array(inst.exports.memory.buffer, ptr, utf8.length);
-      buf.set(utf8);
-      const ok = inst.exports.phenotype_set_theme_json(utf8.length);
-      if (!ok) console.warn('[phenotype] setThemeJson: deserialization failed — check field names/types');
-      return ok === 1;
-    },
+    canvas,
+    flush: doFlush,
+    get hitRegions() { return hitRegions; },
+    get totalHeight() { return totalHeight; },
   };
   } catch (e) {
     console.error('phenotype mount error:', e);

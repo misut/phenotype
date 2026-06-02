@@ -9,359 +9,54 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  changes:
-    name: classify changes
-    runs-on: ubuntu-24.04
-    outputs:
-      code_tests: ${{ steps.classify.outputs.code_tests }}
-      windows_code_tests: ${{ steps.classify.outputs.windows_code_tests }}
-      docs_build: ${{ steps.classify.outputs.docs_build }}
-      tools_check: ${{ steps.classify.outputs.tools_check }}
-      cli_check: ${{ steps.classify.outputs.cli_check }}
-      package_resource_check: ${{ steps.classify.outputs.package_resource_check }}
-      file_explorer_examples: ${{ steps.classify.outputs.file_explorer_examples }}
-      glass_showcase_examples: ${{ steps.classify.outputs.glass_showcase_examples }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Classify pull request paths
-        id: classify
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          base="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
-
-          if git cat-file -e "${base}^{commit}" && git cat-file -e "${head}^{commit}"; then
-            mapfile -t files < <(git diff --name-only "$base...$head" | sort)
-          else
-            mapfile -t files < <(git diff --name-only HEAD^1 HEAD | sort)
-          fi
-
-          code_tests=false
-          windows_code_tests=false
-          docs_build=false
-          tools_check=false
-          cli_check=false
-          package_resource_check=false
-          file_explorer_examples=false
-          glass_showcase_examples=false
-
-          for path in "${files[@]}"; do
-            case "$path" in
-              .github/workflows/*)
-                docs_build=true
-                tools_check=true
-                cli_check=true
-                package_resource_check=true
-                windows_code_tests=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              docs/*|README.md|examples/*/README.md|tools/*/README.md)
-                docs_build=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              tools/phenotype_cli/*)
-                cli_check=true
-                package_resource_check=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              packages/phenotype_icon_contract/*)
-                cli_check=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              packages/phenotype_theme_contract/*)
-                cli_check=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              packages/phenotype_io/*)
-                cli_check=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              packages/phenotype_resources/*)
-                cli_check=true
-                package_resource_check=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              packages/phenotype_svg_contract/*)
-                cli_check=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              tools/android/*)
-                tools_check=true
-                cli_check=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              examples/file_explorer_shared/*)
-                cli_check=true
-                file_explorer_examples=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              examples/glass_showcase_shared/*)
-                cli_check=true
-                glass_showcase_examples=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              examples/glass_showcase/*.drive)
-                cli_check=true
-                glass_showcase_examples=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              tools/*|pyproject.toml|uv.lock|.python-version)
-                tools_check=true
-                ;;
-            esac
-
-            case "$path" in
-              examples/file_explorer_*/README.md|examples/file_explorer_*/phenotype.package.toml|examples/file_explorer_*/assets/*|examples/file_explorer_*/fonts/*|examples/file_explorer_*/locales/*)
-                package_resource_check=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              examples/file_explorer_*/*)
-                file_explorer_examples=true
-                ;;
-            esac
-
-            case "$path" in
-              examples/glass_showcase/*)
-                glass_showcase_examples=true
-                ;;
-            esac
-
-            case "$path" in
-              examples/glass_showcase/artifact_manifest*.json)
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              src/phenotype.native.cppm|src/phenotype.native.platform.cppm|src/phenotype.native.shell.cppm|src/phenotype.native.windows.cppm|src/phenotype.native.shell.windows.cppm|tests/test_native.cpp|examples/native/*|exon.toml|exon.lock|mise.toml|.intron.toml)
-                code_tests=true
-                windows_code_tests=true
-                ;;
-            esac
-
-            case "$path" in
-              src/*|tests/*|examples/*|exon.toml|exon.lock|mise.toml|.intron.toml)
-                code_tests=true
-                ;;
-            esac
-
-          done
-
-          {
-            echo "code_tests=$code_tests"
-            echo "windows_code_tests=$windows_code_tests"
-            echo "docs_build=$docs_build"
-            echo "tools_check=$tools_check"
-            echo "cli_check=$cli_check"
-            echo "package_resource_check=$package_resource_check"
-            echo "file_explorer_examples=$file_explorer_examples"
-            echo "glass_showcase_examples=$glass_showcase_examples"
-          } >> "$GITHUB_OUTPUT"
-
-          printf 'Changed files:\n'
-          if ((${#files[@]} == 0)); then
-            printf '  <none>\n'
-          else
-            printf '  %s\n' "${files[@]}"
-          fi
-          printf 'code_tests=%s windows_code_tests=%s docs_build=%s tools_check=%s cli_check=%s package_resource_check=%s file_explorer_examples=%s glass_showcase_examples=%s\n' \
-            "$code_tests" "$windows_code_tests" "$docs_build" "$tools_check" "$cli_check" "$package_resource_check" "$file_explorer_examples" "$glass_showcase_examples"
-
   test:
     name: test (macos-15, native)
-    needs: changes
-    runs-on: ${{ needs.changes.outputs.code_tests == 'true' && 'macos-15' || 'ubuntu-24.04' }}
-    env:
-      PHENOTYPE_CI_CXXFLAGS: -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g -O1
-      PHENOTYPE_CI_LDFLAGS: -fsanitize=address,undefined
+    runs-on: macos-15
     steps:
-      - name: Skip code tests
-        if: needs.changes.outputs.code_tests != 'true'
-        shell: bash
-        run: echo "No root code-test paths changed; required check passes without build."
-
       - uses: actions/checkout@v6
-        if: needs.changes.outputs.code_tests == 'true'
 
       - name: Resolve tool versions
-        if: needs.changes.outputs.code_tests == 'true'
         id: tool-versions
         shell: bash
         run: |
           sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
           sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
 
-      - name: Restore toolchains
-        if: needs.changes.outputs.code_tests == 'true'
-        id: toolchain-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.intron/toolchains
-          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
-
-      - name: Restore build artifacts
-        if: needs.changes.outputs.code_tests == 'true'
-        id: build-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: |
-            .exon
-            ~/.exon/cache
-          key: build-macos-15-native-${{ hashFiles('mise.toml', 'exon.toml', 'exon.lock') }}
-          restore-keys: |
-            build-macos-15-native-
-
       - name: Install intron
-        if: needs.changes.outputs.code_tests == 'true'
         run: |
           gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-aarch64-apple-darwin.tar.gz"
-          tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
+          tar xzf intron-*.tar.gz
+          sudo mv intron /usr/local/bin/
         env:
           GH_TOKEN: ${{ github.token }}
 
       - name: Install toolchains
-        if: needs.changes.outputs.code_tests == 'true'
         run: |
           intron install llvm 22.1.2
           intron install cmake 4.3.1
           intron install ninja 1.13.2
 
-      - name: Save toolchains
-        if: needs.changes.outputs.code_tests == 'true' && github.ref == 'refs/heads/main' && steps.toolchain-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ~/.intron/toolchains
-          key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
-
       - name: Install exon
-        if: needs.changes.outputs.code_tests == 'true'
         run: |
           gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-aarch64-apple-darwin.tar.gz"
-          tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
+          tar xzf exon-*.tar.gz
+          sudo mv exon /usr/local/bin/
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Install uv
-        if: needs.changes.outputs.code_tests == 'true'
-        uses: astral-sh/setup-uv@v8.1.0
-        with:
-          version: "0.11.14"
-          enable-cache: true
-
-      - name: Install Python for tools
-        if: needs.changes.outputs.code_tests == 'true'
-        run: uv python install
-
-      - name: Build
-        if: needs.changes.outputs.code_tests == 'true'
-        env:
-          EXON_CXXFLAGS: ${{ env.PHENOTYPE_CI_CXXFLAGS }}
-          EXON_LDFLAGS: ${{ env.PHENOTYPE_CI_LDFLAGS }}
-        run: |
-          eval "$(intron env)"
-          exon build
-
-      - name: Test
-        if: needs.changes.outputs.code_tests == 'true'
-        env:
-          EXON_CXXFLAGS: ${{ env.PHENOTYPE_CI_CXXFLAGS }}
-          EXON_LDFLAGS: ${{ env.PHENOTYPE_CI_LDFLAGS }}
+      - name: Run tests
         run: |
           eval "$(intron env)"
           exon test
-
-      - name: Test file explorer shared module
-        if: needs.changes.outputs.code_tests == 'true' && needs.changes.outputs.file_explorer_examples == 'true'
-        env:
-          EXON_CXXFLAGS: ${{ env.PHENOTYPE_CI_CXXFLAGS }}
-          EXON_LDFLAGS: ${{ env.PHENOTYPE_CI_LDFLAGS }}
-        run: |
-          eval "$(intron env)"
-          cd examples/file_explorer_shared
-          exon test
-
-      - name: Test glass showcase shared module
-        if: needs.changes.outputs.code_tests == 'true' && needs.changes.outputs.glass_showcase_examples == 'true'
-        env:
-          EXON_CXXFLAGS: ${{ env.PHENOTYPE_CI_CXXFLAGS }}
-          EXON_LDFLAGS: ${{ env.PHENOTYPE_CI_LDFLAGS }}
-        run: |
-          eval "$(intron env)"
-          cd examples/glass_showcase_shared
-          exon test
-
-      - name: Save build artifacts
-        if: needs.changes.outputs.code_tests == 'true' && github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: |
-            .exon
-            ~/.exon/cache
-          key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
   windows-native:
     name: test (windows-2022, native)
-    needs: changes
-    runs-on: ${{ needs.changes.outputs.windows_code_tests == 'true' && 'windows-2022' || 'ubuntu-24.04' }}
+    runs-on: windows-2022
     steps:
-      - name: Skip code tests
-        if: needs.changes.outputs.code_tests != 'true' && needs.changes.outputs.windows_code_tests != 'true'
-        run: echo "No root code-test paths changed; required check passes without allocating a Windows runner."
-
-      - name: Skip Windows native paths
-        if: needs.changes.outputs.code_tests == 'true' && needs.changes.outputs.windows_code_tests != 'true'
-        run: echo "No Windows native paths changed; required check passes without allocating a Windows runner."
-
       - uses: actions/checkout@v6
-        if: needs.changes.outputs.windows_code_tests == 'true'
 
       - name: Resolve tool versions
-        if: needs.changes.outputs.windows_code_tests == 'true'
-        id: windows-tool-versions
+        id: tool-versions
         shell: pwsh
         run: |
           $mise = Get-Content mise.toml -Raw
@@ -372,32 +67,11 @@ jobs:
             "exon=$($Matches[1])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           }
 
-      - name: Restore toolchains
-        if: needs.changes.outputs.windows_code_tests == 'true'
-        id: windows-toolchain-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.intron/toolchains
-          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
-
-      - name: Restore build artifacts
-        if: needs.changes.outputs.windows_code_tests == 'true'
-        id: windows-build-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: |
-            .exon
-            ~/.exon/cache
-          key: build-windows-2022-native-${{ hashFiles('mise.toml', 'exon.toml', 'exon.lock') }}
-          restore-keys: |
-            build-windows-2022-native-
-
       - name: Install intron
-        if: needs.changes.outputs.windows_code_tests == 'true'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\phenotype-bin" | Out-Null
-          gh release download "v${{ steps.windows-tool-versions.outputs.intron }}" -R misut/intron -p "intron-*-x86_64-pc-windows-msvc.zip"
+          gh release download "v${{ steps.tool-versions.outputs.intron }}" -R misut/intron -p "intron-*-x86_64-pc-windows-msvc.zip"
           $archive = Get-Item "intron-*-x86_64-pc-windows-msvc.zip"
           Expand-Archive -Path $archive.FullName -DestinationPath "$env:RUNNER_TEMP\intron" -Force
           Move-Item -Path "$env:RUNNER_TEMP\intron\intron.exe" -Destination "$env:RUNNER_TEMP\phenotype-bin\intron.exe" -Force
@@ -407,25 +81,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Install toolchains
-        if: needs.changes.outputs.windows_code_tests == 'true'
         shell: pwsh
         run: |
           intron install msvc 2022
           intron install cmake 4.3.1
           intron install ninja 1.13.2
 
-      - name: Save toolchains
-        if: needs.changes.outputs.windows_code_tests == 'true' && github.ref == 'refs/heads/main' && steps.windows-toolchain-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ~/.intron/toolchains
-          key: ${{ steps.windows-toolchain-cache.outputs.cache-primary-key }}
-
       - name: Install exon
-        if: needs.changes.outputs.windows_code_tests == 'true'
         shell: pwsh
         run: |
-          gh release download "v${{ steps.windows-tool-versions.outputs.exon }}" -R misut/exon -p "exon-*-x86_64-pc-windows-msvc.zip"
+          gh release download "v${{ steps.tool-versions.outputs.exon }}" -R misut/exon -p "exon-*-x86_64-pc-windows-msvc.zip"
           $archive = Get-Item "exon-*-x86_64-pc-windows-msvc.zip"
           Expand-Archive -Path $archive.FullName -DestinationPath "$env:RUNNER_TEMP\exon" -Force
           Move-Item -Path "$env:RUNNER_TEMP\exon\exon.exe" -Destination "$env:RUNNER_TEMP\phenotype-bin\exon.exe" -Force
@@ -433,46 +98,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Build
-        if: needs.changes.outputs.windows_code_tests == 'true'
-        shell: pwsh
-        run: |
-          Invoke-Expression (& intron env | Out-String)
-          exon build
-
-      - name: Test
-        if: needs.changes.outputs.windows_code_tests == 'true'
+      - name: Run tests
         shell: pwsh
         run: |
           Invoke-Expression (& intron env | Out-String)
           exon test --timeout 120 --show-output failed
 
-      - name: Save build artifacts
-        if: needs.changes.outputs.windows_code_tests == 'true' && github.ref == 'refs/heads/main' && steps.windows-build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: |
-            .exon
-            ~/.exon/cache
-          key: ${{ steps.windows-build-cache.outputs.cache-primary-key }}
-
   wasm32-wasi:
     name: test (ubuntu-24.04, wasm32-wasi)
-    needs: changes
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Defer WASI root matrix
-        if: needs.changes.outputs.code_tests == 'true'
-        run: echo "WASI root validation is covered by docs and scheduled/manual full CI; PR fast path keeps this required check lightweight."
-
-      - name: Skip code tests
-        if: needs.changes.outputs.code_tests != 'true'
-        run: echo "No root code-test paths changed; required check passes without allocating the WASI build path."
-
-  cli-package:
-    name: cli package checks (ubuntu-24.04)
-    needs: changes
-    if: needs.changes.outputs.cli_check == 'true' || needs.changes.outputs.package_resource_check == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -484,178 +117,11 @@ jobs:
           sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
           sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
 
-      - name: Restore toolchains
-        id: toolchain-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.intron/toolchains
-          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
-
-      - name: Restore CLI build artifacts
-        id: build-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: |
-            tools/phenotype_cli/.exon
-            ~/.exon/cache
-          key: cli-package-${{ runner.os }}-${{ hashFiles('mise.toml', 'tools/phenotype_cli/exon.toml', 'examples/file_explorer_shared/exon.toml', 'examples/glass_showcase_shared/exon.toml', 'packages/phenotype_icon_contract/exon.toml', 'packages/phenotype_theme_contract/exon.toml', 'packages/phenotype_io/exon.toml', 'packages/phenotype_resources/exon.toml', 'packages/phenotype_svg_contract/exon.toml') }}
-          restore-keys: |
-            cli-package-${{ runner.os }}-
-
       - name: Install intron
         run: |
           gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-x86_64-linux-gnu.tar.gz"
-          tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Install toolchains
-        run: |
-          intron install llvm 22.1.2
-          intron install cmake 4.3.1
-          intron install ninja 1.13.2
-
-      - name: Save toolchains
-        if: github.ref == 'refs/heads/main' && steps.toolchain-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ~/.intron/toolchains
-          key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
-
-      - name: Install exon
-        run: |
-          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-x86_64-linux-gnu.tar.gz"
-          tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
-        with:
-          version: "0.11.14"
-          enable-cache: true
-
-      - name: Install Python
-        run: uv python install
-
-      - name: Build phenotype CLI
-        run: |
-          eval "$(intron env)"
-          cd tools/phenotype_cli
-          exon build
-
-      - name: Test phenotype resources package
-        run: |
-          eval "$(intron env)"
-          cd packages/phenotype_resources
-          exon test
-
-      - name: Test phenotype icon contract package
-        run: |
-          eval "$(intron env)"
-          cd packages/phenotype_icon_contract
-          exon test
-
-      - name: Test phenotype theme contract package
-        run: |
-          eval "$(intron env)"
-          cd packages/phenotype_theme_contract
-          exon test
-
-      - name: Test phenotype IO contract package
-        run: |
-          eval "$(intron env)"
-          cd packages/phenotype_io
-          exon test
-
-      - name: Build phenotype SVG contract package
-        run: |
-          eval "$(intron env)"
-          cd packages/phenotype_svg_contract
-          exon build
-
-      - name: Test file explorer shared module
-        if: needs.changes.outputs.file_explorer_examples == 'true'
-        run: |
-          eval "$(intron env)"
-          cd examples/file_explorer_shared
-          exon test
-
-      - name: Test glass showcase shared module
-        if: needs.changes.outputs.glass_showcase_examples == 'true'
-        run: |
-          eval "$(intron env)"
-          cd examples/glass_showcase_shared
-          exon test
-
-      - name: Validate CLI JSON commands
-        run: |
-          set -euo pipefail
-          eval "$(intron env)"
-          cli="tools/phenotype_cli/.exon/debug/phenotype_cli"
-          json_tool() {
-            UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/phenotype-cli-json-venv" \
-              uv run --frozen python -m json.tool "$@"
-          }
-          "$cli" doctor --json | json_tool >/dev/null
-          "$cli" commands --json | json_tool >/dev/null
-          "$cli" icons catalog --json | json_tool >/dev/null
-          "$cli" icons sources --json | json_tool >/dev/null
-          "$cli" icons file-types --json | json_tool >/dev/null
-          "$cli" icons lookup recents --json | json_tool >/dev/null
-          "$cli" icons svg desktopcomputer --json | json_tool >/dev/null
-          "$cli" icons present recents --role sidebar --selected --fill 1 --weight 500 --grade 0 --optical-size 40 --json | json_tool >/dev/null
-          "$cli" icons render magnifyingglass --role toolbar --phase pressed --style rounded --fill true --weight 600 --grade 50 --optical-size 24 --json | json_tool >/dev/null
-          "$cli" theme contract --json | json_tool >/dev/null
-          "$cli" io contract --json | json_tool >/dev/null
-          "$cli" package inspect --json examples/file_explorer_desktop | json_tool >/dev/null
-
-      - name: Save CLI build artifacts
-        if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: |
-            tools/phenotype_cli/.exon
-            ~/.exon/cache
-          key: ${{ steps.build-cache.outputs.cache-primary-key }}
-
-  docs:
-    name: docs build (wasm32-wasi)
-    needs: changes
-    if: needs.changes.outputs.docs_build == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Resolve tool versions
-        id: tool-versions
-        shell: bash
-        run: |
-          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
-          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
-
-      - name: Restore toolchains
-        id: toolchain-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.intron/toolchains
-          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
-
-      - name: Restore build artifacts
-        id: build-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: |
-            docs/.exon
-            ~/.exon/cache
-          key: docs-${{ runner.os }}-${{ hashFiles('mise.toml', 'docs/exon.toml', 'exon.lock') }}
-          restore-keys: |
-            docs-${{ runner.os }}-
-
-      - name: Install intron
-        run: |
-          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-x86_64-linux-gnu.tar.gz"
-          tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
+          tar xzf intron-*.tar.gz
+          sudo mv intron /usr/local/bin/
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -668,17 +134,11 @@ jobs:
           intron install wasmtime 43.0.1
           intron default wasmtime 43.0.1
 
-      - name: Save toolchains
-        if: github.ref == 'refs/heads/main' && steps.toolchain-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ~/.intron/toolchains
-          key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
-
       - name: Install exon
         run: |
           gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-x86_64-linux-gnu.tar.gz"
-          tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
+          tar xzf exon-*.tar.gz
+          sudo mv exon /usr/local/bin/
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -687,37 +147,3 @@ jobs:
           eval "$(intron env)"
           cd docs
           exon build --target wasm32-wasi
-
-      - name: Save build artifacts
-        if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: |
-            docs/.exon
-            ~/.exon/cache
-          key: ${{ steps.build-cache.outputs.cache-primary-key }}
-
-  tooling:
-    name: tooling checks
-    needs: changes
-    if: needs.changes.outputs.tools_check == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
-        with:
-          version: "0.11.14"
-          enable-cache: true
-
-      - name: Install Python for tools
-        run: uv python install
-
-      - name: Check artifact verifier syntax
-        run: |
-          uv run --frozen python -m py_compile tools/verify_artifact_bundle.py
-
-      - name: Test artifact verifier contract
-        run: |
-          uv run --frozen python tools/test_verify_artifact_bundle.py

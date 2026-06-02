@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -140,9 +141,9 @@ ui::View pipeline_diagram(bool compact) {
                        Color{132, 96, 30, 255});
 
                 auto const view_label = compact ? "Views" : "View tree";
-                auto const artifact_label = compact
-                    ? "semantic artifacts"
-                    : "diagnostics and semantic artifacts";
+                auto const command_label = compact
+                    ? "command stream"
+                    : "layout, paint, and interaction commands";
 
                 p.text(x(38.0f), y(50.0f), "State", 5u, fs(16.0f),
                        Color{26, 70, 52, 255});
@@ -151,8 +152,9 @@ ui::View pipeline_diagram(bool compact) {
                        Color{35, 63, 120, 255});
                 p.text(x(430.0f), y(50.0f), "Renderer", 8u, fs(16.0f),
                        Color{106, 72, 18, 255});
-                p.text(x(152.0f), y(152.0f), artifact_label,
-                       compact ? 18u : 34u, fs(14.0f),
+                auto command_view = std::string_view{command_label};
+                p.text(x(152.0f), y(152.0f), command_view.data(),
+                       static_cast<unsigned int>(command_view.size()), fs(14.0f),
                        Color{72, 74, 82, 255});
             },
             {},
@@ -173,8 +175,8 @@ ui::View docs_hero(bool compact,
         : "Native and WASI interfaces from one modern C++ tree.";
     auto const summary = compact
         ? "Compose state, controls, rendering, and verification in one tree."
-        : "Compose state locally, bind inputs directly, render material "
-          "surfaces, and verify the result with artifacts.";
+        : "Compose state locally, bind inputs directly, render responsive "
+          "surfaces, and verify the result with visual checks.";
 
     auto actions = compact
         ? ui::VStack(
@@ -234,11 +236,11 @@ ui::View docs_nav(ui::State<std::size_t> section,
 ui::View overview_content(ui::Context& cx, bool compact) {
     auto count = cx.state<int>("preview.count", 2);
     auto project = cx.state<std::string>("preview.project", "Orbit");
-    auto diagnostics = cx.state<bool>("preview.diagnostics", true);
+    auto stream = cx.state<bool>("preview.stream", true);
     auto accepted = cx.state<bool>("preview.accepted", false);
     auto target = cx.state<std::size_t>("preview.target", 0);
 
-    auto const progress = diagnostics.get() ? 0.78f : 0.38f;
+    auto const progress = stream.get() ? 0.78f : 0.38f;
 
     auto preview = ui::Card(
         ui::VStack(
@@ -258,18 +260,18 @@ ui::View overview_content(ui::Context& cx, bool compact) {
                     })),
             ui::TextField("Project", project.binding())
                 .semantic_label("Preview project name"),
-            ui::Tabs(std::vector<std::string>{"WASI", "Native", "Artifacts"},
+            ui::Tabs(std::vector<std::string>{"WASI", "Native", "Visual"},
                      target.get())
                 .on_select([target](std::size_t index) {
                     target.set(index);
                 }),
-            ui::Checkbox("Accept artifact contract", accepted.get())
+            ui::Checkbox("Accept visual check", accepted.get())
                 .on_toggle([accepted] {
                     accepted.mutate([](bool& value) { value = !value; });
                 }),
-            ui::Switch("Live diagnostics", diagnostics.get())
-                .on_toggle([diagnostics] {
-                    diagnostics.mutate([](bool& value) { value = !value; });
+            ui::Switch("Live command stream", stream.get())
+                .on_toggle([stream] {
+                    stream.mutate([](bool& value) { value = !value; });
                 }),
             ui::Progress(progress).width(compact ? 240.0f : 320.0f)));
 
@@ -310,7 +312,7 @@ ui::View overview_content(ui::Context& cx, bool compact) {
             "Start with a living component",
             "Phenotype favors the same directness seen in current declarative "
             "frameworks: describe the view, keep state nearby, and verify the "
-            "result as an artifact."),
+            "result in the browser."),
         responsive_pair(compact, std::move(preview), std::move(pipeline)),
         std::move(code));
 }
@@ -331,7 +333,7 @@ ui::View features_content(bool compact) {
                     "Navigation: tabs and keyed children\n"
                     "Selection: checkbox, radio, switch, progress\n"
                     "Text input: state bindings\n"
-                    "Verification: diagnostics and screenshots"))));
+                    "Verification: build, screenshots, and console checks"))));
 }
 
 ui::View tutorial_content() {
@@ -346,7 +348,7 @@ ui::View tutorial_content() {
                 ui::StackOptions{.spacing = phenotype::SpaceToken::Sm},
                 caption("Flow"),
                 muted("1. Define a component. 2. Add local state. "
-                      "3. Bind controls. 4. Verify artifacts."),
+                      "3. Bind controls. 4. Verify the page."),
                 ui::Code(
                     "auto count = cx.state<int>(\"count\", 0);\n"
                     "ui::Button(\"Increment\").on_click([count] {\n"
@@ -359,7 +361,7 @@ ui::View verification_content(bool compact) {
         ui::StackOptions{.spacing = phenotype::SpaceToken::Lg},
         section_header(
             "Verification and references",
-            "The page is built as a local WASI artifact and checked against "
+            "The page is built as a local WASI site and checked against "
             "official framework references as part of publishing."),
         ui::Card(
             ui::VStack(

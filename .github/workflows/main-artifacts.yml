@@ -9,80 +9,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  changes:
-    name: classify changes
-    runs-on: ubuntu-24.04
-    outputs:
-      docs_build: ${{ steps.classify.outputs.docs_build }}
-      artifact_build: ${{ steps.classify.outputs.artifact_build }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Classify pushed paths
-        id: classify
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          before="${{ github.event.before }}"
-          after="${{ github.sha }}"
-
-          if [[ "$before" =~ ^0+$ ]] || ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
-            mapfile -t files < <(git diff-tree --no-commit-id --name-only -r "$after" | sort)
-          else
-            mapfile -t files < <(git diff --name-only "$before" "$after" | sort)
-          fi
-
-          docs_build=false
-          artifact_build=false
-
-          for path in "${files[@]}"; do
-            case "$path" in
-              .github/workflows/*)
-                docs_build=true
-                artifact_build=true
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              docs/*|README.md)
-                docs_build=true
-                ;;
-            esac
-
-            case "$path" in
-              examples/glass_showcase/*.drive)
-                continue
-                ;;
-            esac
-
-            case "$path" in
-              src/*|examples/glass_showcase/*|examples/glass_showcase_shared/*|tools/verify_artifact_bundle.py|tools/verify_glass_showcase*.sh|pyproject.toml|uv.lock|.python-version|exon.toml|exon.lock|mise.toml|.intron.toml)
-                artifact_build=true
-                ;;
-            esac
-          done
-
-          {
-            echo "docs_build=$docs_build"
-            echo "artifact_build=$artifact_build"
-          } >> "$GITHUB_OUTPUT"
-
-          printf 'Changed files:\n'
-          if ((${#files[@]} == 0)); then
-            printf '  <none>\n'
-          else
-            printf '  %s\n' "${files[@]}"
-          fi
-          printf 'docs_build=%s artifact_build=%s\n' "$docs_build" "$artifact_build"
-
   docs:
     name: docs build (wasm32-wasi)
-    needs: changes
-    if: needs.changes.outputs.docs_build == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -94,28 +22,11 @@ jobs:
           sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
           sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
 
-      - name: Restore toolchains
-        id: toolchain-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.intron/toolchains
-          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
-
-      - name: Restore build artifacts
-        id: build-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: |
-            docs/.exon
-            ~/.exon/cache
-          key: main-docs-${{ runner.os }}-${{ hashFiles('mise.toml', 'docs/exon.toml', 'exon.lock') }}
-          restore-keys: |
-            main-docs-${{ runner.os }}-
-
       - name: Install intron
         run: |
           gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-x86_64-linux-gnu.tar.gz"
-          tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
+          tar xzf intron-*.tar.gz
+          sudo mv intron /usr/local/bin/
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -128,17 +39,11 @@ jobs:
           intron install wasmtime 43.0.1
           intron default wasmtime 43.0.1
 
-      - name: Save toolchains
-        if: steps.toolchain-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ~/.intron/toolchains
-          key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
-
       - name: Install exon
         run: |
           gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-x86_64-linux-gnu.tar.gz"
-          tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
+          tar xzf exon-*.tar.gz
+          sudo mv exon /usr/local/bin/
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -147,89 +52,3 @@ jobs:
           eval "$(intron env)"
           cd docs
           exon build --target wasm32-wasi
-
-      - name: Save build artifacts
-        if: steps.build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: |
-            docs/.exon
-            ~/.exon/cache
-          key: ${{ steps.build-cache.outputs.cache-primary-key }}
-
-  artifact:
-    name: glass showcase build
-    needs: changes
-    if: needs.changes.outputs.artifact_build == 'true'
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Resolve tool versions
-        id: tool-versions
-        shell: bash
-        run: |
-          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
-          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
-
-      - name: Restore toolchains
-        id: toolchain-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.intron/toolchains
-          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
-
-      - name: Restore build artifacts
-        id: build-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: |
-            examples/glass_showcase/.exon
-            examples/glass_showcase_shared/.exon
-            ~/.exon/cache
-          key: main-artifact-${{ runner.os }}-${{ hashFiles('mise.toml', 'examples/glass_showcase/exon.toml', 'examples/glass_showcase_shared/exon.toml', 'exon.lock') }}
-          restore-keys: |
-            main-artifact-${{ runner.os }}-
-
-      - name: Install intron
-        run: |
-          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-aarch64-apple-darwin.tar.gz"
-          tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Install toolchains
-        run: |
-          intron install llvm 22.1.2
-          intron install cmake 4.3.1
-          intron install ninja 1.13.2
-
-      - name: Save toolchains
-        if: steps.toolchain-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ~/.intron/toolchains
-          key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
-
-      - name: Install exon
-        run: |
-          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-aarch64-apple-darwin.tar.gz"
-          tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Build glass showcase
-        run: |
-          eval "$(intron env)"
-          cd examples/glass_showcase
-          exon build
-
-      - name: Save build artifacts
-        if: steps.build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: |
-            examples/glass_showcase/.exon
-            examples/glass_showcase_shared/.exon
-            ~/.exon/cache
-          key: ${{ steps.build-cache.outputs.cache-primary-key }}
