@@ -45,6 +45,9 @@ int main() {
 | `ui::Glass`, `GlassMaterial` | Reusable glass material surfaces and control styling |
 | `ui::run<App>()` | WASI/browser entry point |
 | `native::run_app(..., App)` | Lightweight native prototype entry point |
+| `native::WindowOptions` | Native window chrome, glass backdrop, and toolbar configuration |
+| `native::WindowToolbar` | macOS toolbar groups, title, metrics, and Material Symbols defaults |
+| `native::MaterialSymbolStyle` | Material Symbols `FILL`, `wght`, `GRAD`, `opsz`, and icon sizing |
 
 The API follows a small set of design rules:
 
@@ -72,6 +75,26 @@ return ui::Glass(
             .role(ui::ButtonRole::primary)
             .glass()
             .on_click([] {})));
+```
+
+Native prototypes can use a glass window and a Finder-style icon toolbar with
+semantic dark/light tinting and disabled-state dimming:
+
+```cpp
+auto toolbar = phenotype::native::WindowToolbar{
+    .visible = true,
+    .title = "examples",
+    .leading_groups = {
+        phenotype::native::ToolbarGroup::of({
+            phenotype::native::ToolbarIconButton::make_navigation_icon(
+                "chevron_left",
+                "Back"),
+            phenotype::native::ToolbarIconButton::make_navigation_icon(
+                "chevron_right",
+                "Forward"),
+        }),
+    },
+};
 ```
 
 ## Build
