@@ -1,0 +1,16 @@
+[package]
+name = "files"
+version = "0.1.0"
+description = "phenotype file explorer example"
+type = "bin"
+standard = 23
+platforms = [{ os = "macos", arch = "aarch64" }]
+
+[dependencies.path]
+phenotype = "../.."
+
+[target.'cfg(os = "macos")'.build]
+ldflags = ["-framework", "AppKit", "-Wl,-framework,CoreText"]
+
+[sync]
+cmake-in-root = false
