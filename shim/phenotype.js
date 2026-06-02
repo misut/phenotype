@@ -118,7 +118,7 @@ struct ColorVsOut {
     let d = length(max(p, vec2f(0.0))) - radius;
     if (d > 0.5) { discard; }
     let alpha = in.color.a * clamp(0.5 - d, 0.0, 1.0);
-    return vec4f(in.color.rgb * alpha, alpha);
+    return vec4f(in.color.rgb, alpha);
   }
 
   // Stroke rect
@@ -620,6 +620,102 @@ function createRenderer(device, context, canvas, format) {
   };
 }
 
+function createCanvas2DRenderer(canvas) {
+  const ctx = canvas.getContext('2d');
+  const imageCache = new Map();
+
+  function colorCss(q) {
+    return `rgba(${Math.round(q.r * 255)}, ${Math.round(q.g * 255)}, ${Math.round(q.b * 255)}, ${q.a})`;
+  }
+
+  function roundedPath(x, y, w, h, radius) {
+    const r = Math.max(0, Math.min(radius || 0, Math.min(w, h) * 0.5));
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  function ensureImage(url, repaintCallback) {
+    let entry = imageCache.get(url);
+    if (entry) return entry;
+
+    entry = { loaded: false, error: false, image: null };
+    imageCache.set(url, entry);
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      entry.loaded = true;
+      entry.image = img;
+      if (typeof repaintCallback === 'function') repaintCallback();
+    };
+    img.onerror = () => { entry.error = true; };
+    img.src = url;
+    return entry;
+  }
+
+  return {
+    render(colorQuads, textEntries, imageEntries, clearColor, onImageLoaded) {
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = colorCss(clearColor);
+      ctx.fillRect(0, 0, w, h);
+
+      for (const q of colorQuads) {
+        ctx.fillStyle = colorCss(q);
+        ctx.strokeStyle = colorCss(q);
+        ctx.lineWidth = q.borderWidth || 1;
+        if (q.type === 1) {
+          ctx.strokeRect(q.x, q.y, q.w, q.h);
+        } else if (q.type === 2) {
+          roundedPath(q.x, q.y, q.w, q.h, q.radius || 0);
+          ctx.fill();
+        } else {
+          ctx.fillRect(q.x, q.y, q.w, q.h);
+        }
+      }
+
+      for (const t of textEntries) {
+        ctx.font = fontString(
+          t.fontSize,
+          t.mono,
+          t.bold === true,
+          t.italic === true,
+          t.family || '');
+        const c = t.color;
+        ctx.fillStyle = `rgba(${Math.round(c.r * 255)}, ${Math.round(c.g * 255)}, ${Math.round(c.b * 255)}, ${c.a})`;
+        ctx.textBaseline = 'top';
+        ctx.fillText(t.text, t.x, t.y);
+      }
+
+      for (const im of imageEntries || []) {
+        const entry = ensureImage(im.url, onImageLoaded);
+        if (entry.loaded && entry.image) {
+          ctx.drawImage(entry.image, im.x, im.y, im.w, im.h);
+        } else {
+          ctx.fillStyle = 'rgb(237, 237, 237)';
+          ctx.fillRect(im.x, im.y, im.w, im.h);
+        }
+      }
+    },
+    ensureImage,
+  };
+}
+
 // --- Command buffer parser ---
 
 function parseCommands(instance) {
@@ -807,23 +903,13 @@ function parseCommands(instance) {
 // project-specific imports directly.
 export async function mount(wasmUrl, rootElement = document.body, extraImports = null) {
   try {
-  // --- WebGPU init ---
-  if (!navigator.gpu) {
-    rootElement.textContent = 'WebGPU is not supported in this browser.';
-    return;
-  }
-
-  const adapter = await navigator.gpu.requestAdapter();
-  if (!adapter) {
-    rootElement.textContent = 'Failed to get WebGPU adapter.';
-    return;
-  }
-
-  const device = await adapter.requestDevice();
   const canvas = document.createElement('canvas');
-  canvas.style.width = '100%';
+  canvas.style.width = '100vw';
+  canvas.style.maxWidth = '100vw';
   canvas.style.height = '100vh';
   canvas.style.display = 'block';
+  rootElement.style.margin = '0';
+  rootElement.style.overflowX = 'hidden';
   rootElement.appendChild(canvas);
 
   // Hidden input proxy — the real IME composition target and the
@@ -851,11 +937,24 @@ export async function mount(wasmUrl, rootElement = document.body, extraImports =
   hiddenInput.style.zIndex = '-1';
   rootElement.appendChild(hiddenInput);
 
-  const gpuContext = canvas.getContext('webgpu');
-  const format = navigator.gpu.getPreferredCanvasFormat();
-  gpuContext.configure({ device, format, alphaMode: 'premultiplied' });
-
-  const renderer = createRenderer(device, gpuContext, canvas, format);
+  // --- Renderer init ---
+  let renderer = null;
+  if (navigator.gpu) {
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (adapter) {
+        const device = await adapter.requestDevice();
+        const gpuContext = canvas.getContext('webgpu');
+        const format = navigator.gpu.getPreferredCanvasFormat();
+        gpuContext.configure({ device, format, alphaMode: 'premultiplied' });
+        renderer = createRenderer(device, gpuContext, canvas, format);
+      }
+    } catch (_) {
+      renderer = null;
+    }
+  }
+  if (!renderer)
+    renderer = createCanvas2DRenderer(canvas);
 
   // --- WASM state ---
   let inst = null;

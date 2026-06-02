@@ -174,7 +174,7 @@ ui::View docs_hero(bool compact,
         ? "C++23 UI for native and WASI."
         : "Native and WASI interfaces from one modern C++ tree.";
     auto const summary = compact
-        ? "Compose state, controls, rendering, and verification in one tree."
+        ? "Compose state, controls,\nrendering, and checks."
         : "Compose state locally, bind inputs directly, render responsive "
           "surfaces, and verify the result with visual checks.";
 
@@ -211,7 +211,7 @@ ui::Button nav_button(ui::State<std::size_t> section,
                       std::string label,
                       bool compact) {
     return ui::Button(std::move(label))
-        .width(compact ? 82.0f : 150.0f)
+        .width(compact ? 120.0f : 150.0f)
         .on_click([section, index] {
             section.set(index);
         });
@@ -220,6 +220,29 @@ ui::Button nav_button(ui::State<std::size_t> section,
 ui::View docs_nav(ui::State<std::size_t> section,
                   float width,
                   bool compact) {
+    if (compact) {
+        return centered(
+            width,
+            ui::VStack(
+                ui::StackOptions{
+                    .spacing = phenotype::SpaceToken::Sm,
+                    .cross = ui::AxisAlignment::center},
+                ui::HStack(
+                    ui::StackOptions{
+                        .spacing = phenotype::SpaceToken::Sm,
+                        .cross = ui::AxisAlignment::center,
+                        .main = ui::AxisAlignment::center},
+                    nav_button(section, 0, "Start", compact),
+                    nav_button(section, 1, "Features", compact)),
+                ui::HStack(
+                    ui::StackOptions{
+                        .spacing = phenotype::SpaceToken::Sm,
+                        .cross = ui::AxisAlignment::center,
+                        .main = ui::AxisAlignment::center},
+                    nav_button(section, 2, "Tutorial", compact),
+                    nav_button(section, 3, "Verify", compact))));
+    }
+
     return centered(
         width,
         ui::HStack(
@@ -242,26 +265,35 @@ ui::View overview_content(ui::Context& cx, bool compact) {
 
     auto const progress = stream.get() ? 0.78f : 0.38f;
 
-    auto preview = ui::Card(
+    auto preview = ui::Glass(
+        phenotype::GlassMaterial::regular()
+            .role_as(phenotype::GlassMaterialRole::surface)
+            .radius(24.0f)
+            .grouped(2001u, 36.0f),
         ui::VStack(
             ui::StackOptions{.spacing = phenotype::SpaceToken::Md},
             ui::Text("Live component preview").font(ui::Font::title),
-            muted("This panel is rendered by the same public API shown in "
+            muted(compact
+                ? "Rendered by the public API\nshown in the tutorial."
+                : "This panel is rendered by the same public API shown in "
                   "the tutorial."),
             ui::Text("Counter frame " + std::to_string(count.get())),
             ui::HStack(
-                ui::Button("-").on_click([count] {
+                ui::Button("-").glass().on_click([count] {
                     count.mutate([](int& value) { --value; });
                 }),
                 ui::Button("+")
                     .role(ui::ButtonRole::primary)
+                    .glass()
                     .on_click([count] {
                         count.mutate([](int& value) { ++value; });
                     })),
             ui::TextField("Project", project.binding())
+                .glass(phenotype::GlassMaterial::thin().radius(14.0f))
                 .semantic_label("Preview project name"),
             ui::Tabs(std::vector<std::string>{"WASI", "Native", "Visual"},
                      target.get())
+                .glass(phenotype::GlassMaterial::clear().capsule())
                 .on_select([target](std::size_t index) {
                     target.set(index);
                 }),
@@ -310,9 +342,11 @@ ui::View overview_content(ui::Context& cx, bool compact) {
         ui::StackOptions{.spacing = phenotype::SpaceToken::Lg},
         section_header(
             "Start with a living component",
-            "Phenotype favors the same directness seen in current declarative "
-            "frameworks: describe the view, keep state nearby, and verify the "
-            "result in the browser."),
+            compact
+                ? "Describe the view, keep state nearby,\nand verify in the browser."
+                : "Phenotype favors the same directness seen in current declarative "
+                  "frameworks: describe the view, keep state nearby, and verify the "
+                  "result in the browser."),
         responsive_pair(compact, std::move(preview), std::move(pipeline)),
         std::move(code));
 }
@@ -330,6 +364,7 @@ ui::View features_content(bool compact) {
                 ui::Code(
                     "Action: callbacks and commands\n"
                     "Containment: cards, surfaces, overlays\n"
+                    "Material: Glass surfaces and glass controls\n"
                     "Navigation: tabs and keyed children\n"
                     "Selection: checkbox, radio, switch, progress\n"
                     "Text input: state bindings\n"
@@ -351,9 +386,15 @@ ui::View tutorial_content() {
                       "3. Bind controls. 4. Verify the page."),
                 ui::Code(
                     "auto count = cx.state<int>(\"count\", 0);\n"
-                    "ui::Button(\"Increment\").on_click([count] {\n"
-                    "    count.set(count.get() + 1);\n"
-                    "});"))));
+                    "\n"
+                    "return ui::Glass(\n"
+                    "    phenotype::GlassMaterial::regular().radius(22.0f),\n"
+                    "    ui::Button(\"Increment\")\n"
+                    "        .role(ui::ButtonRole::primary)\n"
+                    "        .glass()\n"
+                    "        .on_click([count] {\n"
+                    "            count.set(count.get() + 1);\n"
+                    "        }));"))));
 }
 
 ui::View verification_content(bool compact) {
@@ -374,6 +415,10 @@ ui::View verification_content(bool compact) {
                       "screenshot, and console errors."),
                 ui::Divider(),
                 ui::Text("References").font(ui::Font::title),
+                ui::Link("Apple Liquid Glass adoption",
+                         "https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass"),
+                ui::Link("SwiftUI custom Liquid Glass views",
+                         "https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views"),
                 ui::Link("Material 3 components",
                          "https://m3.material.io/components"),
                 ui::Link("Material 3 in Compose",

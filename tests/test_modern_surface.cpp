@@ -68,6 +68,36 @@ struct LayoutApp {
     }
 };
 
+struct GlassApp {
+    ui::View body(ui::Context& cx) const {
+        auto query = cx.state<std::string>("glass.query", {});
+        auto tab = cx.state<std::size_t>("glass.tab", 0);
+
+        auto material = phenotype::GlassMaterial::regular()
+            .role_as(phenotype::GlassMaterialRole::surface)
+            .radius(22.0f)
+            .grouped(1001u, 36.0f);
+
+        return ui::VStack(
+            ui::Glass(
+                material,
+                ui::VStack(
+                    ui::StackOptions{.spacing = phenotype::SpaceToken::Md},
+                    ui::Text("Glass surface").font(ui::Font::title),
+                    ui::Text("A material container can own controls."),
+                    ui::Button("Glass action")
+                        .role(ui::ButtonRole::primary)
+                        .glass(),
+                    ui::TextField("Glass input", query.binding())
+                        .glass(phenotype::GlassMaterial::thin().radius(14.0f)),
+                    ui::Tabs(std::vector<std::string>{"One", "Two"}, tab.get())
+                        .glass(phenotype::GlassMaterial::clear().capsule())
+                        .on_select([tab](std::size_t index) {
+                            tab.set(index);
+                        }))));
+    }
+};
+
 void test_state_and_callbacks() {
     ui::run<CounterApp>();
 
@@ -112,11 +142,22 @@ void test_layout_render_contract() {
     std::puts("PASS: layout render contract");
 }
 
+void test_glass_material_contract() {
+    ui::run<GlassApp>();
+
+    assert(phenotype::testing::command_buffer_contains("Glass surface"));
+    assert(phenotype::testing::command_buffer_contains("Glass action"));
+    assert(phenotype::testing::round_rect_count() >= 10u);
+    assert(phenotype::testing::input_count() == 1u);
+    std::puts("PASS: glass material contract");
+}
+
 } // namespace
 
 int main() {
     test_state_and_callbacks();
     test_input_and_selection_controls();
     test_layout_render_contract();
+    test_glass_material_contract();
     std::puts("\nAll modern surface tests passed.");
 }

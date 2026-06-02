@@ -100,6 +100,129 @@ enum class MainAxisAlignment {
     SpaceBetween,
 };
 
+enum class GlassMaterialKind {
+    none,
+    clear,
+    thin,
+    regular,
+    thick,
+};
+
+enum class GlassMaterialRole {
+    surface,
+    navigation,
+    overlay,
+    control,
+};
+
+enum class GlassShape {
+    rounded_rectangle,
+    capsule,
+};
+
+struct GlassMaterial {
+    GlassMaterialKind kind = GlassMaterialKind::regular;
+    GlassMaterialRole role = GlassMaterialRole::surface;
+    GlassShape shape = GlassShape::rounded_rectangle;
+    Color tint = {};
+    Color border = {};
+    float corner_radius = 18.0f;
+    float blur_radius = 18.0f;
+    std::uint32_t container_id = 0;
+    float container_spacing = 0.0f;
+    bool is_interactive = false;
+    bool is_prominent = false;
+    bool has_tint = false;
+    bool has_border = false;
+
+    static constexpr GlassMaterial none() noexcept {
+        auto material = GlassMaterial{};
+        material.kind = GlassMaterialKind::none;
+        material.corner_radius = 0.0f;
+        material.blur_radius = 0.0f;
+        return material;
+    }
+
+    static constexpr GlassMaterial clear() noexcept {
+        auto material = GlassMaterial{};
+        material.kind = GlassMaterialKind::clear;
+        material.blur_radius = 12.0f;
+        return material;
+    }
+
+    static constexpr GlassMaterial thin() noexcept {
+        auto material = GlassMaterial{};
+        material.kind = GlassMaterialKind::thin;
+        material.blur_radius = 16.0f;
+        return material;
+    }
+
+    static constexpr GlassMaterial regular() noexcept {
+        return GlassMaterial{};
+    }
+
+    static constexpr GlassMaterial thick() noexcept {
+        auto material = GlassMaterial{};
+        material.kind = GlassMaterialKind::thick;
+        material.blur_radius = 24.0f;
+        return material;
+    }
+
+    constexpr GlassMaterial role_as(GlassMaterialRole value) const noexcept {
+        auto copy = *this;
+        copy.role = value;
+        return copy;
+    }
+
+    constexpr GlassMaterial radius(float value) const noexcept {
+        auto copy = *this;
+        copy.shape = GlassShape::rounded_rectangle;
+        copy.corner_radius = value;
+        return copy;
+    }
+
+    constexpr GlassMaterial capsule() const noexcept {
+        auto copy = *this;
+        copy.shape = GlassShape::capsule;
+        copy.corner_radius = 999.0f;
+        return copy;
+    }
+
+    constexpr GlassMaterial interactive(bool value = true) const noexcept {
+        auto copy = *this;
+        copy.is_interactive = value;
+        return copy;
+    }
+
+    constexpr GlassMaterial prominent(bool value = true) const noexcept {
+        auto copy = *this;
+        copy.is_prominent = value;
+        return copy;
+    }
+
+    constexpr GlassMaterial with_tint(Color value) const noexcept {
+        auto copy = *this;
+        copy.tint = value;
+        copy.has_tint = true;
+        return copy;
+    }
+
+    constexpr GlassMaterial with_border(Color value) const noexcept {
+        auto copy = *this;
+        copy.border = value;
+        copy.has_border = true;
+        return copy;
+    }
+
+    constexpr GlassMaterial grouped(std::uint32_t id,
+                                    float spacing = 0.0f) const noexcept {
+        auto copy = *this;
+        copy.container_id = id;
+        copy.container_spacing = spacing;
+        return copy;
+    }
+};
+
 namespace detail {
 
 inline constexpr unsigned int invalid_id = 0xFFFFFFFFu;
@@ -158,6 +281,167 @@ inline Color text_color(TextColor color) {
         default:
             return p.text;
     }
+}
+
+inline unsigned char clamp_channel(int value) noexcept {
+    return static_cast<unsigned char>(std::clamp(value, 0, 255));
+}
+
+inline Color with_alpha(Color color, unsigned char alpha) noexcept {
+    color.a = alpha;
+    return color;
+}
+
+inline bool glass_material_visible(GlassMaterial const& material) noexcept {
+    return material.kind != GlassMaterialKind::none;
+}
+
+inline float glass_radius(GlassMaterial const& material,
+                          float width,
+                          float height) noexcept {
+    auto const limit = std::max(0.0f, std::min(width, height) * 0.5f);
+    if (material.shape == GlassShape::capsule)
+        return limit;
+    return std::clamp(material.corner_radius, 0.0f, limit);
+}
+
+struct GlassPaint {
+    Color base{};
+    Color border{};
+    Color highlight{};
+    Color rim{};
+    Color shadow{};
+    float shadow_offset = 4.0f;
+};
+
+inline void stroke_rect(float x,
+                        float y,
+                        float w,
+                        float h,
+                        float line_width,
+                        Color color);
+inline void round_rect(float x,
+                       float y,
+                       float w,
+                       float h,
+                       float radius,
+                       Color color);
+inline void draw_line(float x1,
+                      float y1,
+                      float x2,
+                      float y2,
+                      float thickness,
+                      Color color);
+
+inline GlassPaint glass_paint(GlassMaterial const& material) noexcept {
+    auto const& p = palette();
+    auto paint = GlassPaint{};
+
+    if (material.is_prominent) {
+        paint.base = with_alpha(p.accent, 190);
+        paint.border = with_alpha(p.accent_strong, 210);
+        paint.highlight = Color{255, 255, 255, 74};
+        paint.rim = Color{255, 255, 255, 120};
+        paint.shadow = Color{15, 23, 42, 42};
+        paint.shadow_offset = 5.0f;
+    } else {
+        switch (material.kind) {
+            case GlassMaterialKind::clear:
+                paint.base = Color{255, 255, 255, 96};
+                paint.border = Color{255, 255, 255, 168};
+                paint.highlight = Color{255, 255, 255, 58};
+                paint.rim = Color{255, 255, 255, 112};
+                paint.shadow = Color{15, 23, 42, 20};
+                paint.shadow_offset = 3.0f;
+                break;
+            case GlassMaterialKind::thin:
+                paint.base = Color{255, 255, 255, 142};
+                paint.border = Color{255, 255, 255, 150};
+                paint.highlight = Color{255, 255, 255, 52};
+                paint.rim = Color{255, 255, 255, 96};
+                paint.shadow = Color{15, 23, 42, 24};
+                paint.shadow_offset = 4.0f;
+                break;
+            case GlassMaterialKind::thick:
+                paint.base = Color{255, 255, 255, 224};
+                paint.border = Color{226, 232, 240, 210};
+                paint.highlight = Color{255, 255, 255, 36};
+                paint.rim = Color{255, 255, 255, 82};
+                paint.shadow = Color{15, 23, 42, 36};
+                paint.shadow_offset = 5.0f;
+                break;
+            case GlassMaterialKind::regular:
+            case GlassMaterialKind::none:
+            default:
+                paint.base = Color{255, 255, 255, 184};
+                paint.border = Color{255, 255, 255, 170};
+                paint.highlight = Color{255, 255, 255, 46};
+                paint.rim = Color{255, 255, 255, 92};
+                paint.shadow = Color{15, 23, 42, 30};
+                paint.shadow_offset = 4.0f;
+                break;
+        }
+    }
+
+    if (material.has_tint) {
+        auto tint = material.tint;
+        if (tint.a == 0)
+            tint.a = paint.base.a;
+        paint.base = tint;
+        paint.highlight.a = clamp_channel(
+            static_cast<int>(paint.highlight.a) + 16);
+    }
+    if (material.has_border)
+        paint.border = material.border;
+    if (material.is_interactive) {
+        paint.highlight.a = clamp_channel(
+            static_cast<int>(paint.highlight.a) + 20);
+        paint.rim.a = clamp_channel(static_cast<int>(paint.rim.a) + 24);
+    }
+
+    return paint;
+}
+
+inline void paint_glass_rect(float x,
+                             float y,
+                             float width,
+                             float height,
+                             GlassMaterial const& material) {
+    if (!glass_material_visible(material) || width <= 0.0f || height <= 0.0f)
+        return;
+
+    auto const radius = glass_radius(material, width, height);
+    auto const paint = glass_paint(material);
+
+    if (paint.shadow.a > 0) {
+        round_rect(x,
+                   y + paint.shadow_offset,
+                   width,
+                   height,
+                   radius + 2.0f,
+                   paint.shadow);
+    }
+
+    round_rect(x, y, width, height, radius, paint.base);
+
+    auto const inset = 1.0f;
+    if (width > inset * 2.0f && height > inset * 2.0f) {
+        auto const highlight_height = std::max(4.0f, height * 0.38f);
+        round_rect(x + inset,
+                   y + inset,
+                   width - inset * 2.0f,
+                   std::min(highlight_height, height - inset * 2.0f),
+                   std::max(0.0f, radius - inset),
+                   paint.highlight);
+    }
+
+    stroke_rect(x, y, width, height, 1.0f, paint.border);
+    draw_line(x + std::max(3.0f, radius * 0.36f),
+              y + 1.0f,
+              x + width - std::max(3.0f, radius * 0.36f),
+              y + 1.0f,
+              1.0f,
+              paint.rim);
 }
 
 template <typename T>
@@ -450,6 +734,7 @@ enum class ElementKind {
     Weighted,
     SizedBox,
     Card,
+    Glass,
     ScrollView,
     Text,
     Code,
@@ -494,6 +779,7 @@ struct Element {
     bool primary = false;
     unsigned int callback_id = invalid_id;
     std::vector<unsigned int> callback_ids;
+    std::optional<GlassMaterial> glass;
     std::function<void(Painter&)> paint;
 };
 
@@ -695,6 +981,10 @@ inline Size measure(Element const& element, float width) {
             auto inner = measure_children_vertical(element.children, max_width - 40.0f, 0.0f);
             return Size{max_width, inner.height + 40.0f};
         }
+        case ElementKind::Glass: {
+            auto inner = measure_children_vertical(element.children, max_width - 40.0f, 0.0f);
+            return Size{max_width, inner.height + 40.0f};
+        }
         case ElementKind::SizedBox: {
             auto inner_width = element.width > 0.0f ? element.width : max_width;
             auto inner = measure_children_vertical(element.children, inner_width, 0.0f);
@@ -827,9 +1117,21 @@ inline void paint(Element const& element, float x, float y, float width, float s
                 bg = p.surface_alt;
                 fg = p.muted;
             }
-            round_rect(x, y - scroll_y, size.width, size.height, 7.0f, bg);
-            stroke_rect(x, y - scroll_y, size.width, size.height, 1.0f,
-                        element.primary ? p.accent : p.border);
+            if (element.glass && element.enabled) {
+                auto material = *element.glass;
+                material.role = GlassMaterialRole::control;
+                material.is_interactive = true;
+                material.shape = GlassShape::capsule;
+                if (element.primary) {
+                    material.is_prominent = true;
+                    fg = Color{255, 255, 255, 255};
+                }
+                paint_glass_rect(x, y - scroll_y, size.width, size.height, material);
+            } else {
+                round_rect(x, y - scroll_y, size.width, size.height, 7.0f, bg);
+                stroke_rect(x, y - scroll_y, size.width, size.height, 1.0f,
+                            element.primary ? p.accent : p.border);
+            }
             auto tw = measure_text(element.text, 15.0f, false, true);
             draw_text(x + (size.width - tw) * 0.5f,
                       y + 11.0f - scroll_y,
@@ -844,8 +1146,15 @@ inline void paint(Element const& element, float x, float y, float width, float s
         }
         case ElementKind::TextField: {
             auto size = measure(element, width);
-            round_rect(x, y - scroll_y, size.width, size.height, 7.0f, p.surface);
-            stroke_rect(x, y - scroll_y, size.width, size.height, 1.0f, p.border);
+            if (element.glass && element.enabled) {
+                auto material = *element.glass;
+                material.role = GlassMaterialRole::control;
+                material.is_interactive = true;
+                paint_glass_rect(x, y - scroll_y, size.width, size.height, material);
+            } else {
+                round_rect(x, y - scroll_y, size.width, size.height, 7.0f, p.surface);
+                stroke_rect(x, y - scroll_y, size.width, size.height, 1.0f, p.border);
+            }
             auto value = element.href.empty() ? element.text : element.href;
             auto color = element.href.empty() ? p.muted : p.text;
             if (runtime().focused_id != element.callback_id) {
@@ -887,13 +1196,24 @@ inline void paint(Element const& element, float x, float y, float width, float s
             auto size = measure(element, width);
             auto count = std::max<std::size_t>(1, element.items.size());
             auto item_width = size.width / static_cast<float>(count);
-            round_rect(x, y - scroll_y, size.width, size.height, 8.0f, p.surface_alt);
+            if (element.glass) {
+                auto material = *element.glass;
+                material.role = GlassMaterialRole::navigation;
+                material.is_interactive = true;
+                material.shape = GlassShape::capsule;
+                paint_glass_rect(x, y - scroll_y, size.width, size.height, material);
+            } else {
+                round_rect(x, y - scroll_y, size.width, size.height, 8.0f, p.surface_alt);
+            }
             for (std::size_t i = 0; i < element.items.size(); ++i) {
                 auto item_x = x + item_width * static_cast<float>(i);
                 if (i == element.selected) {
+                    auto selected_bg = element.glass
+                        ? Color{255, 255, 255, 196}
+                        : p.surface;
                     round_rect(item_x + 3.0f, y + 3.0f - scroll_y,
                                item_width - 6.0f, size.height - 6.0f,
-                               6.0f, p.surface);
+                               6.0f, selected_bg);
                 }
                 auto label = std::string_view{element.items[i]};
                 auto tw = measure_text(label, 14.0f, false, i == element.selected);
@@ -934,6 +1254,14 @@ inline void paint(Element const& element, float x, float y, float width, float s
             auto h = measure(element, width).height;
             round_rect(x, y - scroll_y, width, h, 8.0f, p.surface);
             stroke_rect(x, y - scroll_y, width, h, 1.0f, p.border);
+            paint_children_vertical(element.children, x + 20.0f, y + 20.0f,
+                                    width - 40.0f, 0.0f, scroll_y);
+            break;
+        }
+        case ElementKind::Glass: {
+            auto h = measure(element, width).height;
+            auto material = element.glass.value_or(GlassMaterial::regular());
+            paint_glass_rect(x, y - scroll_y, width, h, material);
             paint_children_vertical(element.children, x + 20.0f, y + 20.0f,
                                     width - 40.0f, 0.0f, scroll_y);
             break;
@@ -1410,6 +1738,24 @@ View Card(Child child) {
 }
 
 template <typename Child>
+View Glass(GlassMaterial material, Child child) {
+    auto view = as_view(std::move(child));
+    return View{[view = std::move(view), material] {
+        auto element = detail::make_container(
+            detail::ElementKind::Glass,
+            detail::StackOptions{},
+            [&] { view.render(); });
+        element.glass = material;
+        detail::append(std::move(element));
+    }};
+}
+
+template <typename Child>
+View Glass(Child child) {
+    return Glass(GlassMaterial::regular(), std::move(child));
+}
+
+template <typename Child>
 View ScrollView(float height, Child child) {
     auto view = as_view(std::move(child));
     return View{[view = std::move(view), height] {
@@ -1433,6 +1779,7 @@ struct Button {
     bool enabled = true;
     float width_value = 0.0f;
     float height_value = -1.0f;
+    std::optional<GlassMaterial> glass_value;
     std::function<void()> action;
 
     explicit Button(std::string text) : label(std::move(text)) {}
@@ -1462,6 +1809,19 @@ struct Button {
         return copy;
     }
 
+    Button glass() const {
+        return glass(GlassMaterial::regular()
+            .role_as(GlassMaterialRole::control)
+            .interactive()
+            .capsule());
+    }
+
+    Button glass(GlassMaterial material) const {
+        auto copy = *this;
+        copy.glass_value = material;
+        return copy;
+    }
+
     Button on_click(std::function<void()> callback) const {
         auto copy = *this;
         copy.action = std::move(callback);
@@ -1476,6 +1836,7 @@ struct Button {
         element.enabled = enabled;
         element.width = width_value;
         element.height = height_value;
+        element.glass = glass_value;
         if (enabled) {
             auto callback = action;
             element.callback_id = detail::register_callback(
@@ -1498,6 +1859,7 @@ struct TextField {
     bool enabled = true;
     bool error_value = false;
     std::string semantic;
+    std::optional<GlassMaterial> glass_value;
 
     TextField(std::string placeholder_text, Binding<std::string> text_binding)
         : placeholder(std::move(placeholder_text)), text(std::move(text_binding)) {}
@@ -1520,6 +1882,19 @@ struct TextField {
         return copy;
     }
 
+    TextField glass() const {
+        return glass(GlassMaterial::thin()
+            .role_as(GlassMaterialRole::control)
+            .interactive()
+            .radius(12.0f));
+    }
+
+    TextField glass(GlassMaterial material) const {
+        auto copy = *this;
+        copy.glass_value = material;
+        return copy;
+    }
+
     TextField semantic_label(char const* label) const {
         auto copy = *this;
         copy.semantic = label ? label : "";
@@ -1533,6 +1908,7 @@ struct TextField {
         element.href = text.valid() ? text.get() : std::string{};
         element.width = width_value;
         element.enabled = enabled && text.valid();
+        element.glass = glass_value;
         if (element.enabled) {
             auto binding = text;
             element.callback_id = detail::register_input(
@@ -1633,10 +2009,24 @@ struct Switch {
 struct Tabs {
     std::vector<std::string> items;
     std::size_t selected = 0;
+    std::optional<GlassMaterial> glass_value;
     std::function<void(std::size_t)> action;
 
     Tabs(std::vector<std::string> tab_items, std::size_t selected_index)
         : items(std::move(tab_items)), selected(selected_index) {}
+
+    Tabs glass() const {
+        return glass(GlassMaterial::clear()
+            .role_as(GlassMaterialRole::navigation)
+            .interactive()
+            .capsule());
+    }
+
+    Tabs glass(GlassMaterial material) const {
+        auto copy = *this;
+        copy.glass_value = material;
+        return copy;
+    }
 
     Tabs on_select(std::function<void(std::size_t)> callback) const {
         auto copy = *this;
@@ -1649,6 +2039,7 @@ struct Tabs {
         element.kind = detail::ElementKind::Tabs;
         element.items = items;
         element.selected = selected;
+        element.glass = glass_value;
         for (std::size_t i = 0; i < items.size(); ++i) {
             auto callback = action;
             element.callback_ids.push_back(detail::register_callback(
@@ -1760,6 +2151,21 @@ void card(F&& body) {
         std::forward<F>(body)));
 }
 
+template <typename F>
+void glass(GlassMaterial material, F&& body) {
+    auto element = detail::make_container(
+        detail::ElementKind::Glass,
+        detail::StackOptions{},
+        std::forward<F>(body));
+    element.glass = material;
+    detail::append(std::move(element));
+}
+
+template <typename F>
+void glass(F&& body) {
+    glass(GlassMaterial::regular(), std::forward<F>(body));
+}
+
 inline void spacer(float height) {
     detail::Element element;
     element.kind = detail::ElementKind::Spacer;
@@ -1825,6 +2231,85 @@ inline bool command_buffer_contains(std::string_view needle) {
         phenotype_cmd_len,
     };
     return haystack.find(needle) != std::string_view::npos;
+}
+
+inline unsigned int command_count(std::uint32_t opcode) {
+    auto pos = std::size_t{};
+    auto const len = static_cast<std::size_t>(phenotype_cmd_len);
+    auto count = 0u;
+
+    auto read_u32 = [&](std::size_t offset) {
+        auto value = std::uint32_t{};
+        if (offset + sizeof(value) <= len)
+            std::memcpy(&value, phenotype_cmd_buf + offset, sizeof(value));
+        return value;
+    };
+    auto skip = [&](std::size_t bytes) {
+        pos = std::min(len, pos + bytes);
+    };
+    auto align = [&] {
+        pos = std::min(len, (pos + 3u) & ~std::size_t{3u});
+    };
+    auto skip_string = [&](std::uint32_t string_len) {
+        skip(static_cast<std::size_t>(string_len));
+        align();
+    };
+
+    while (pos + sizeof(std::uint32_t) <= len) {
+        auto const cmd = read_u32(pos);
+        pos += sizeof(std::uint32_t);
+        if (cmd == opcode)
+            ++count;
+
+        switch (static_cast<detail::Command>(cmd)) {
+            case detail::Command::End:
+                return count;
+            case detail::Command::Clear:
+                skip(4u);
+                break;
+            case detail::Command::FillRect:
+                skip(20u);
+                break;
+            case detail::Command::StrokeRect:
+            case detail::Command::RoundRect:
+            case detail::Command::DrawLine:
+            case detail::Command::HitRegion:
+                skip(24u);
+                break;
+            case detail::Command::DrawText: {
+                skip(28u);
+                auto const family_len = read_u32(pos);
+                skip(4u);
+                skip_string(family_len);
+                auto const text_len = read_u32(pos);
+                skip(4u);
+                skip_string(text_len);
+                break;
+            }
+            case detail::Command::DrawImage: {
+                skip(16u);
+                auto const url_len = read_u32(pos);
+                skip(4u);
+                skip_string(url_len);
+                break;
+            }
+            case detail::Command::FillRects: {
+                auto const rect_count = read_u32(pos);
+                skip(4u);
+                skip(static_cast<std::size_t>(rect_count) * 20u);
+                break;
+            }
+            default:
+                return count;
+        }
+    }
+
+    return count;
+}
+
+inline unsigned int round_rect_count() {
+    return command_count(
+        static_cast<std::uint32_t>(detail::Command::RoundRect));
 }
 
 } // namespace testing

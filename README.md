@@ -42,6 +42,7 @@ int main() {
 | `ui::Text`, `ui::Button`, `ui::TextField` | Core interactive components |
 | `ui::Checkbox`, `ui::Radio`, `ui::Switch`, `ui::Tabs` | Selection controls |
 | `ui::VStack`, `ui::HStack`, `ui::Weighted`, `ui::Card` | Layout composition |
+| `ui::Glass`, `GlassMaterial` | Reusable glass material surfaces and control styling |
 | `ui::run<App>()` | WASI/browser entry point |
 | `native::run_app(..., App)` | Lightweight native prototype entry point |
 
@@ -53,6 +54,25 @@ The API follows a small set of design rules:
 - Derive display values during rendering instead of storing duplicate state.
 - Keep identity explicit with keys and stable state names.
 - Keep C++ ownership ordinary: values, references, and lambdas decide lifetime.
+
+Glass surfaces use a small value object so the same intent works in native
+tests, the WASI preview, and future renderers with richer backdrop sampling:
+
+```cpp
+auto surface = phenotype::GlassMaterial::regular()
+    .role_as(phenotype::GlassMaterialRole::surface)
+    .radius(22.0f)
+    .grouped(1u, 36.0f);
+
+return ui::Glass(
+    surface,
+    ui::VStack(
+        ui::Text("Preview").font(ui::Font::title),
+        ui::Button("Run")
+            .role(ui::ButtonRole::primary)
+            .glass()
+            .on_click([] {})));
+```
 
 ## Build
 
