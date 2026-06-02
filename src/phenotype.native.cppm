@@ -32,6 +32,9 @@ export import phenotype.native.shell.windows;
 
 namespace phenotype::native::detail {
 
+struct UiAppState {};
+struct UiAppMessage {};
+
 inline platform_api const& select_platform() {
 #ifdef __APPLE__
     return macos_platform();
@@ -92,6 +95,17 @@ int run_desktop_app_with_platform(platform_api const& platform,
     return 1;
 #endif
 }
+
+template <typename App>
+auto make_ui_view(App app) {
+    return [
+        app = std::move(app),
+        context = ::phenotype::ui::Context{}](UiAppState const&) mutable {
+        ::phenotype::ui::_impl::render_app(app, context);
+    };
+}
+
+inline void update_ui_app(UiAppState&, UiAppMessage) {}
 
 } // namespace phenotype::native::detail
 
@@ -514,6 +528,38 @@ int run_app(int width, int height, char const* title,
     return detail::run_desktop_app_with_platform<State, Msg>(
         current_platform(), width, height, title,
         options, std::move(view), std::move(update), std::move(thunk));
+}
+
+template <typename App>
+int run_app(int width, int height, char const* title, App app = App{}) {
+    return detail::run_desktop_app_with_platform<
+        detail::UiAppState,
+        detail::UiAppMessage>(
+            current_platform(),
+            width,
+            height,
+            title,
+            WindowOptions{},
+            detail::make_ui_view(std::move(app)),
+            detail::update_ui_app);
+}
+
+template <typename App>
+int run_app(int width,
+            int height,
+            char const* title,
+            WindowOptions options,
+            App app = App{}) {
+    return detail::run_desktop_app_with_platform<
+        detail::UiAppState,
+        detail::UiAppMessage>(
+            current_platform(),
+            width,
+            height,
+            title,
+            options,
+            detail::make_ui_view(std::move(app)),
+            detail::update_ui_app);
 }
 #endif
 

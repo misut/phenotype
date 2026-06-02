@@ -1,52 +1,37 @@
 # phenotype
 
-A cross-platform C++ UI framework with a declarative DSL built on a single
-source of truth, typed messages, and a pure-function view. Renders via
-WebGPU on the web today; native desktop support is split into a shared shell
-plus platform-specific text / renderer adapters so macOS and Windows can
-evolve independently without changing the core.
+A cross-platform C++ UI framework with a modern declarative component API,
+typed local state, bindings, fluent modifiers, and a platform-neutral rendering
+core. Renders via WebGPU on the web today; native desktop support is split
+into a shared shell plus platform-specific text / renderer adapters so macOS
+and Windows can evolve independently without changing the core.
 
 ## Example
 
 ```cpp
-#include <concepts>
 #include <string>
-#include <type_traits>
-#include <variant>
 import phenotype;
+import std;
 
-// 1. Messages — every event the UI emits.
-struct Increment {};
-struct Decrement {};
-using Msg = std::variant<Increment, Decrement>;
+namespace ui = phenotype::ui;
 
-// 2. State — single source of truth, owned by the framework runner.
-struct State { int count = 0; };
+struct CounterApp {
+    ui::View body(ui::Context& cx) const {
+        auto count = cx.state<int>("count", 0);
 
-// 3. update — pure transformation, the only place state mutates.
-void update(State& state, Msg msg) {
-    std::visit([&](auto const& m) {
-        using T = std::decay_t<decltype(m)>;
-        if constexpr (std::same_as<T, Increment>) state.count += 1;
-        else if constexpr (std::same_as<T, Decrement>) state.count -= 1;
-    }, msg);
-}
-
-// 4. view — pure function from state to a UI tree.
-void view(State const& state) {
-    using namespace phenotype;
-    layout::column([&] {
-        widget::text("Counter");
-        widget::text(std::string("Count: ") + std::to_string(state.count));
-        layout::row(
-            [&] { widget::button<Msg>("-", Decrement{}); },
-            [&] { widget::button<Msg>("+", Increment{}); }
-        );
-    });
-}
+        return ui::VStack(
+            ui::Text("Counter").font(ui::Font::title),
+            ui::Text("count=" + std::to_string(count.get())),
+            ui::Button("+")
+                .role(ui::ButtonRole::primary)
+                .on_click([count] {
+                    count.update([](int& value) { ++value; });
+                }));
+    }
+};
 
 int main() {
-    phenotype::run<State, Msg>(view, update);
+    phenotype::ui::run<CounterApp>();
     return 0;
 }
 ```
@@ -67,23 +52,47 @@ generated `book.json` into the reader through this hook.
 
 ## Programming model
 
-phenotype follows a message-driven model: application state lives in one
-place, messages are the only way to mutate it, the view function is pure, and
-the framework owns the rebuild loop.
+phenotype's modern API follows a component-driven model. A component is an
+ordinary C++ struct with `body(ui::Context&)`. The body returns a lightweight
+view description; the framework owns the rebuild loop and preserves local
+state by call-site identity and explicit keys.
 
-| Step | Role |
+| Concept | Role |
 |---|---|
-| `Msg` | A `std::variant` (or any type) listing every event the app emits |
-| `State` | The application's data, owned by the framework runner |
-| `update(State&, Msg)` | Pure transformation — the only place state changes |
-| `view(State const&)` | Pure function that builds the UI tree from state |
-| `run<State, Msg>(view, update)` | Installs the runner; calls `view` once, then again after every dispatched message |
+| `ui::Context` | Per-build access to local state, bindings, and invalidation |
+| `cx.state<T>(key, initial)` | Typed component-local state, keyed by call site plus an explicit name |
+| `ui::Binding<T>` | Non-owning typed read/write handle for child components |
+| `ui::View` | Lightweight view description with ordered modifiers |
+| `ui::run<App>()` | Installs the runner and triggers the initial render |
+| `ui::ForEach(items, key, builder)` | Data-driven children with explicit stable identity |
 
-Widgets that emit events (`button`, `text_field`) are templated on `Msg` and
-post a value to the queue when triggered. The runner drains the queue, folds
-through `update`, then re-runs `view` to rebuild the layout tree.
+Callbacks are regular C++ callables. There is no required `Msg` variant or
+central `update()` reducer. State can stay local when it is UI-specific and can
+be hoisted through `Binding<T>` when a parent owns the value.
 
-## DSL reference
+See [docs/MODERN_UI_API.md](docs/MODERN_UI_API.md) for the design rationale,
+reference framework notes, and migration guidance.
+
+## Modern API Reference
+
+### Components (`namespace phenotype::ui`)
+
+| Type / Function | Description |
+|---|---|
+| `struct MyView { ui::View body(ui::Context&) const; }` | Custom component shape |
+| `ui::run<App>()` / `ui::run<App>(host)` | Application entry point |
+| `ui::Text(str).font(...)` | Text label with fluent typography |
+| `ui::Button(label).on_click(...)` | Button with typed C++ callback |
+| `ui::TextField(placeholder, binding)` | Text input bound to `std::string` state |
+| `ui::VStack(...)` / `ui::HStack(...)` | Vertical / horizontal child layout |
+| `ui::Weighted(grow, child)` | Flexible child wrapper |
+| `ui::ForEach(items, key, builder)` | Keyed list rendering |
+| `view.padding(...)`, `view.frame(...)`, `view.glass()` | Ordered view modifiers |
+
+## Compatibility DSL Reference
+
+The legacy message-driven API remains available for older apps and lower-level
+tests. New user-facing examples should prefer `phenotype::ui`.
 
 ### Layout containers (`namespace layout`)
 
@@ -128,7 +137,8 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 
 | Function | Description |
 |---|---|
-| `run<State, Msg>(view, update)` | Installs the runner and triggers the initial render |
+| `ui::run<App>()` | Preferred component runner |
+| `run<State, Msg>(view, update)` | Compatibility runner for legacy message-driven apps |
 
 ### Diagnostics (`namespace phenotype::log`, `phenotype::metrics`, `phenotype::diag`)
 
@@ -147,8 +157,8 @@ artifact bundle layout, and platform-specific runtime extensions.
 
 Every phenotype app starts with the default `Theme` (design tokens
 tuned for the docs site). To override any of them — colors, font
-sizes, padding — call `phenotype::set_theme(...)` before `run<>()`,
-or from inside `update()` for dynamic theme switching:
+sizes, padding — call `phenotype::set_theme(...)` before `ui::run<>()`,
+or from a callback before invalidating the view for dynamic theme switching:
 
 ```cpp
 int main() {
@@ -158,7 +168,7 @@ int main() {
         .accent     = {100, 150, 255, 255},
         // any fields you omit keep their default value
     });
-    phenotype::run<State, Msg>(view, update);
+    phenotype::ui::run<CounterApp>();
     return 0;
 }
 ```
@@ -166,8 +176,8 @@ int main() {
 `set_theme` never triggers a rebuild on its own — the next rebuild
 picks up the new values automatically because paint / layout /
 widget code all read the theme directly. If you change the theme
-from a non-message path (timer, external event), post a no-op
-`Msg` afterwards to force a redraw.
+from a non-callback path (timer, external event), call `ui::Context::invalidate`
+or otherwise trigger a rebuild afterwards.
 
 `phenotype::current_theme()` reads the active theme from inside your
 view function when you need to compute a derived color or pass a
