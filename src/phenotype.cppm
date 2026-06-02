@@ -9156,6 +9156,19 @@ public:
     void invalidate() const {
         detail::trigger_rebuild();
     }
+
+    float viewport_width() const noexcept {
+        return detail::g_app().debug_viewport_width;
+    }
+
+    float viewport_height() const noexcept {
+        return detail::g_app().debug_viewport_height;
+    }
+
+    bool compact_width(float breakpoint = 720.0f) const noexcept {
+        auto const width = viewport_width();
+        return width > 0.0f && width < breakpoint;
+    }
 };
 
 struct Frame {
@@ -9602,6 +9615,127 @@ struct TextField {
                     binding.set(std::move(value));
             },
             render_options);
+    }
+};
+
+struct Progress {
+    float value = 0.0f;
+    float max_width = 200.0f;
+
+    explicit Progress(float progress) : value(progress) {}
+
+    Progress width(float width_value) const {
+        auto copy = *this;
+        copy.max_width = width_value;
+        return copy;
+    }
+
+    void render() const {
+        widget::progress(value, max_width);
+    }
+};
+
+struct Checkbox {
+    std::string label;
+    bool checked = false;
+    std::function<void()> action{};
+
+    Checkbox(std::string text, bool value)
+        : label(std::move(text)),
+          checked(value) {}
+
+    Checkbox on_toggle(std::function<void()> callback) const {
+        auto copy = *this;
+        copy.action = std::move(callback);
+        return copy;
+    }
+
+    void render() const {
+        auto callback = action;
+        widget::checkbox(str(label), checked, [callback = std::move(callback)] {
+            if (callback)
+                callback();
+        });
+    }
+};
+
+struct Radio {
+    std::string label;
+    bool selected = false;
+    std::function<void()> action{};
+
+    Radio(std::string text, bool value)
+        : label(std::move(text)),
+          selected(value) {}
+
+    Radio on_select(std::function<void()> callback) const {
+        auto copy = *this;
+        copy.action = std::move(callback);
+        return copy;
+    }
+
+    void render() const {
+        auto callback = action;
+        widget::radio(str(label), selected, [callback = std::move(callback)] {
+            if (callback)
+                callback();
+        });
+    }
+};
+
+struct Switch {
+    std::string label;
+    bool on = false;
+    std::function<void()> action{};
+
+    Switch(std::string text, bool value)
+        : label(std::move(text)),
+          on(value) {}
+
+    Switch on_toggle(std::function<void()> callback) const {
+        auto copy = *this;
+        copy.action = std::move(callback);
+        return copy;
+    }
+
+    void render() const {
+        auto callback = action;
+        widget::switch_(str(label), on, [callback = std::move(callback)] {
+            if (callback)
+                callback();
+        });
+    }
+};
+
+struct Tabs {
+    std::vector<std::string> items;
+    std::size_t selected = 0;
+    std::function<void(std::size_t)> on_select_callback{};
+
+    Tabs(std::vector<std::string> tab_items, std::size_t selected_index)
+        : items(std::move(tab_items)),
+          selected(selected_index) {}
+
+    Tabs on_select(std::function<void(std::size_t)> callback) const {
+        auto copy = *this;
+        copy.on_select_callback = std::move(callback);
+        return copy;
+    }
+
+    void render() const {
+        auto labels = std::vector<str>{};
+        labels.reserve(items.size());
+        for (auto const& item : items)
+            labels.emplace_back(str(item));
+
+        auto callback = on_select_callback;
+        widget::tabs(
+            labels,
+            selected,
+            [callback = std::move(callback)](std::size_t index) {
+                if (callback)
+                    callback(index);
+            });
     }
 };
 
