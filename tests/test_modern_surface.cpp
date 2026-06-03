@@ -5,8 +5,10 @@
 #include <vector>
 
 import phenotype;
+import phenotype.native;
 
 namespace ui = phenotype::ui;
+namespace native = phenotype::native;
 
 extern "C" {
 extern unsigned int phenotype_cmd_len;
@@ -152,6 +154,69 @@ void test_glass_material_contract() {
     std::puts("PASS: glass material contract");
 }
 
+void test_native_toolbar_presets() {
+    auto toolbar = native::WindowToolbar{
+        .visible = true,
+        .title = "Files",
+        .leading_groups = {
+            native::ToolbarGroup::navigation(),
+        },
+        .trailing_groups = {
+            native::ToolbarGroup::view_modes(
+                native::ToolbarViewMode::columns),
+            native::ToolbarGroup::sort_menu(native::ToolbarSortMode::size),
+            native::ToolbarGroup::item_actions({
+                native::ToolbarMenuItem::command("Duplicate"),
+            }),
+            native::ToolbarGroup::search(),
+        },
+    };
+
+    assert(toolbar.metrics.group_gap == 14.0f);
+    assert(toolbar.metrics.trailing_inset == 10.0f);
+
+    assert(toolbar.leading_groups.size() == 1u);
+    assert(toolbar.leading_groups.front().buttons.size() == 2u);
+    assert(!toolbar.leading_groups.front().buttons.front().enabled);
+
+    auto const& view_group = toolbar.trailing_groups.at(0);
+    assert(view_group.buttons.size() == 4u);
+    assert(view_group.buttons.at(2).selected);
+    assert(view_group.compact_button.has_value());
+    assert(view_group.compact_button->icon == "view_column");
+    assert(view_group.compact_button->opens_menu);
+    assert(view_group.compact_button->menu_items.size() == 4u);
+    assert(view_group.compact_button->menu_items.at(2).selected);
+
+    auto const& sort_group = toolbar.trailing_groups.at(1);
+    assert(sort_group.buttons.size() == 1u);
+    assert(sort_group.buttons.front().opens_menu);
+    assert(sort_group.buttons.front().menu_items.at(1).separator_before);
+    assert(sort_group.buttons.front().menu_items.at(2).selected);
+    assert(sort_group.compact_stages.size() == 1u);
+    assert(sort_group.compact_stages.front().overflow);
+
+    auto const& actions_group = toolbar.trailing_groups.at(2);
+    assert(!actions_group.separators);
+    assert(actions_group.buttons.size() == 3u);
+    assert(actions_group.buttons.at(2).menu_items.at(0).label
+           == "Duplicate");
+    assert(actions_group.compact_stages.size() == 2u);
+    assert(actions_group.compact_stages.at(0).segments.size() == 2u);
+    assert(actions_group.compact_stages.at(1).overflow);
+
+    auto const& search_group = toolbar.trailing_groups.at(3);
+    assert(search_group.buttons.size() == 1u);
+    assert(search_group.buttons.front().opens_search);
+
+    auto padding = native::WindowPadding::macos_toolbar();
+    assert(padding.left == 20.0f);
+    assert(padding.top == 10.0f);
+    assert(padding.right == 0.0f);
+    assert(padding.bottom == 18.0f);
+    std::puts("PASS: native toolbar presets");
+}
+
 } // namespace
 
 int main() {
@@ -159,5 +224,6 @@ int main() {
     test_input_and_selection_controls();
     test_layout_render_contract();
     test_glass_material_contract();
+    test_native_toolbar_presets();
     std::puts("\nAll modern surface tests passed.");
 }

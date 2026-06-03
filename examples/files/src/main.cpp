@@ -25,55 +25,16 @@ int main() {
                 .visible = true,
                 .title = "examples",
                 .leading_groups = {
-                    native::ToolbarGroup::of({
-                        native::ToolbarIconButton::make_navigation_icon(
-                            "chevron_left",
-                            "Back"),
-                        native::ToolbarIconButton::make_navigation_icon(
-                            "chevron_right",
-                            "Forward"),
-                    }),
+                    native::ToolbarGroup::navigation(),
                 },
                 .trailing_groups = {
-                    native::ToolbarGroup::of({
-                        native::ToolbarIconButton::make_selected_icon(
-                            "grid_view",
-                            "Icon View"),
-                        native::ToolbarIconButton::make_icon(
-                            "view_list",
-                            "List View"),
-                        native::ToolbarIconButton::make_icon(
-                            "view_column",
-                            "Column View"),
-                        native::ToolbarIconButton::make_icon(
-                            "view_carousel",
-                            "Gallery View"),
-                    }),
-                    native::ToolbarGroup::of({
-                        native::ToolbarIconButton::make_menu_icon(
-                            "swap_vert",
-                            "Sort"),
-                    }),
-                    native::ToolbarGroup::of({
-                        native::ToolbarIconButton::make_icon(
-                            "ios_share",
-                            "Share"),
-                        native::ToolbarIconButton::make_icon("sell", "Tags"),
-                        native::ToolbarIconButton::make_icon(
-                            "more_horiz",
-                            "More"),
-                    }),
-                    native::ToolbarGroup::of({
-                        native::ToolbarIconButton::make_icon("search", "Search"),
-                    }),
+                    native::ToolbarGroup::view_modes(),
+                    native::ToolbarGroup::sort_menu(),
+                    native::ToolbarGroup::item_actions(),
+                    native::ToolbarGroup::search(),
                 },
             },
-            .padding = {
-                .left = 20.0f,
-                .top = 10.0f,
-                .right = 18.0f,
-                .bottom = 18.0f,
-            },
+            .padding = native::WindowPadding::macos_toolbar(),
         },
         FilesApp{});
 }
