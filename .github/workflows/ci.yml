@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-macos-native:
+    name: test (macos-15, native)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve tool versions
+        id: tool-versions
+        shell: bash
+        run: |
+          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+
+      - name: Install intron
+        run: |
+          gh release download "v${{ steps.tool-versions.outputs.intron }}" -R misut/intron -p "intron-*-aarch64-apple-darwin.tar.gz"
+          tar xzf intron-*.tar.gz
+          sudo mv intron /usr/local/bin/
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install toolchains
+        run: |
+          intron install llvm 22.1.4
+          intron install cmake 4.3.2
+          intron install ninja 1.13.2
+          intron default llvm 22.1.4
+          intron default cmake 4.3.2
+          intron default ninja 1.13.2
+
+      - name: Install exon
+        run: |
+          gh release download "v${{ steps.tool-versions.outputs.exon }}" -R misut/exon -p "exon-*-aarch64-apple-darwin.tar.gz"
+          tar xzf exon-*.tar.gz
+          sudo mv exon /usr/local/bin/
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Run tests
+        run: |
+          eval "$(intron env)"
+          exon test
+
+  test-windows-native:
+    name: test (windows-2022, native)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve tool versions
+        id: tool-versions
+        shell: pwsh
+        run: |
+          $mise = Get-Content mise.toml -Raw
+          if ($mise -match '"vfox:misut/mise-intron"\s*=\s*"([^"]+)"') {
+            "intron=$($Matches[1])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
+          if ($mise -match '"vfox:misut/mise-exon"\s*=\s*"([^"]+)"') {
+            "exon=$($Matches[1])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
+
+      - name: Install intron
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\phenotype-bin" | Out-Null
+          gh release download "v${{ steps.tool-versions.outputs.intron }}" -R misut/intron -p "intron-*-x86_64-pc-windows-msvc.zip"
+          $archive = Get-Item "intron-*-x86_64-pc-windows-msvc.zip"
+          Expand-Archive -Path $archive.FullName -DestinationPath "$env:RUNNER_TEMP\intron" -Force
+          Move-Item -Path "$env:RUNNER_TEMP\intron\intron.exe" -Destination "$env:RUNNER_TEMP\phenotype-bin\intron.exe" -Force
+          "$env:RUNNER_TEMP\phenotype-bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Remove-Item $archive.FullName
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install toolchains
+        shell: pwsh
+        run: |
+          intron install msvc 2022
+          intron install cmake 4.3.2
+          intron install ninja 1.13.2
+          intron default msvc 2022
+          intron default cmake 4.3.2
+          intron default ninja 1.13.2
+
+      - name: Install exon
+        shell: pwsh
+        run: |
+          gh release download "v${{ steps.tool-versions.outputs.exon }}" -R misut/exon -p "exon-*-x86_64-pc-windows-msvc.zip"
+          $archive = Get-Item "exon-*-x86_64-pc-windows-msvc.zip"
+          Expand-Archive -Path $archive.FullName -DestinationPath "$env:RUNNER_TEMP\exon" -Force
+          Move-Item -Path "$env:RUNNER_TEMP\exon\exon.exe" -Destination "$env:RUNNER_TEMP\phenotype-bin\exon.exe" -Force
+          Remove-Item $archive.FullName
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Run tests
+        shell: pwsh
+        run: |
+          Invoke-Expression (& intron env | Out-String)
+          exon test --timeout 120 --show-output failed
+
+  test-ubuntu-wasi:
+    name: test (ubuntu-24.04, wasm32-wasi)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve tool versions
+        id: tool-versions
+        shell: bash
+        run: |
+          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+
+      - name: Install intron
+        run: |
+          gh release download "v${{ steps.tool-versions.outputs.intron }}" -R misut/intron -p "intron-*-x86_64-linux-gnu.tar.gz"
+          tar xzf intron-*.tar.gz
+          sudo mv intron /usr/local/bin/
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install toolchains
+        run: |
+          intron install llvm 22.1.4
+          intron install cmake 4.3.2
+          intron install ninja 1.13.2
+          intron install wasi-sdk 32
+          intron install wasmtime 43.0.1
+          intron default llvm 22.1.4
+          intron default cmake 4.3.2
+          intron default ninja 1.13.2
+          intron default wasi-sdk 32
+          intron default wasmtime 43.0.1
+
+      - name: Install exon
+        run: |
+          gh release download "v${{ steps.tool-versions.outputs.exon }}" -R misut/exon -p "exon-*-x86_64-linux-gnu.tar.gz"
+          tar xzf exon-*.tar.gz
+          sudo mv exon /usr/local/bin/
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Run tests
+        run: |
+          eval "$(intron env)"
+          exon test --target wasm32-wasi --timeout 120 --show-output failed

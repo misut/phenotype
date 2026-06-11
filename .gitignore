@@ -1,0 +1,5 @@
+.DS_Store
+.exon/
+build/
+cmake-build-*/
+CMakeLists.txt
