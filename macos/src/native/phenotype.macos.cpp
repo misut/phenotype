@@ -28,6 +28,8 @@ struct SymbolButton {
     frame : vec4f,
     icon : vec4f,
     style : vec4f,
+    control : vec4f,
+    appearance : vec4f,
 };
 
 struct SceneUniforms {
@@ -73,17 +75,19 @@ fn segmentDistance(position : vec2f, a : vec2f, b : vec2f) -> f32 {
 }
 
 fn iconStrokeWidth(style : vec4f) -> f32 {
+    let ui_scale = max(scene.viewport.w, 1.0);
     let fill = clamp(style.x, 0.0, 1.0);
     let weight = clamp(style.y, 100.0, 700.0);
     let grade = clamp(style.z, -50.0, 200.0);
-    let optical_size = clamp(style.w, 20.0, 48.0);
+    let optical_size = clamp(style.w, 20.0 * ui_scale, 48.0 * ui_scale);
     let optical_scale = optical_size / 24.0;
     return clamp((weight / 400.0) * 2.0 + (grade * 0.004) + (fill * 0.35), 0.8, 4.8) *
         optical_scale;
 }
 
 fn chevronDistance(position : vec2f, icon : vec4f, style : vec4f) -> f32 {
-    let optical_size = clamp(style.w, 20.0, 48.0);
+    let ui_scale = max(scene.viewport.w, 1.0);
+    let optical_size = clamp(style.w, 20.0 * ui_scale, 48.0 * ui_scale);
     let icon_scale = optical_size / 24.0;
     let top = vec2f(icon.x, icon.z) * icon_scale;
     let center = vec2f(icon.y, 0.0) * icon_scale;
@@ -101,25 +105,49 @@ fn compositeOver(destination : vec4f, source_color : vec3f, source_alpha : f32) 
     );
 }
 
-fn drawSymbolButton(layer : vec4f, pixel_position : vec2f, button : SymbolButton) -> vec4f {
-    let center = button.frame.xy;
-    let size = button.frame.zw;
-    let ui_scale = max(scene.viewport.w, 1.0);
-    let radius = 10.0 * ui_scale;
-    let local_position = pixel_position - center;
+fn controlRadius(size : vec2f, shape : f32, ui_scale : f32) -> f32 {
+    if (shape > 0.5) {
+        return min(size.x, size.y) * 0.5;
+    }
+    return min(10.0 * ui_scale, min(size.x, size.y) * 0.5);
+}
 
-    let button_edge = roundedRectDistance(local_position, size * 0.5, radius);
-    let button_coverage = 1.0 - smoothstep(-1.0, 1.0, button_edge);
-    let border_coverage = 1.0 - smoothstep(-1.0, 1.0, abs(button_edge) - (0.75 * ui_scale));
+fn drawSymbolButton(layer : vec4f, pixel_position : vec2f, button : SymbolButton) -> vec4f {
+    let ui_scale = max(scene.viewport.w, 1.0);
+    let control_center = button.control.xy;
+    let control_size = button.control.zw;
+    let radius = controlRadius(control_size, button.appearance.x, ui_scale);
+    let local_control_position = pixel_position - control_center;
+
+    let control_edge = roundedRectDistance(local_control_position, control_size * 0.5, radius);
+    let control_coverage = 1.0 - smoothstep(-1.0, 1.0, control_edge);
+    let border_coverage = 1.0 - smoothstep(-1.0, 1.0, abs(control_edge) - (0.75 * ui_scale));
     let button_fill = vec3f(0.985, 0.988, 0.992);
     let button_border = vec3f(0.73, 0.76, 0.82);
 
-    var out_layer = compositeOver(layer, button_fill, button_coverage * 0.72);
-    out_layer = compositeOver(out_layer, button_border, border_coverage * button_coverage * 0.55);
+    var out_layer = layer;
+    if (button.appearance.y > 0.5) {
+        out_layer = compositeOver(out_layer, button_fill, control_coverage * 0.72);
+        out_layer = compositeOver(out_layer, button_border, border_coverage * control_coverage * 0.55);
 
+        if (button.appearance.w > 0.5) {
+            let divider_distance = abs(pixel_position.x - button.appearance.z) - (0.5 * ui_scale);
+            let divider_coverage = 1.0 - smoothstep(-1.0, 1.0, divider_distance);
+            let divider_height = max(0.0, control_size.y - (16.0 * ui_scale));
+            let divider_y_distance = abs(local_control_position.y) - (divider_height * 0.5);
+            let divider_y_coverage = 1.0 - smoothstep(-1.0, 1.0, divider_y_distance);
+            out_layer = compositeOver(
+                out_layer,
+                button_border,
+                divider_coverage * divider_y_coverage * control_coverage * 0.38,
+            );
+        }
+    }
+
+    let local_position = pixel_position - button.frame.xy;
     let icon_distance = chevronDistance(local_position, button.icon, button.style);
     let icon_coverage = 1.0 - smoothstep(-1.0, 1.0, icon_distance);
-    return compositeOver(out_layer, vec3f(0.13, 0.20, 0.32), icon_coverage * button_coverage);
+    return compositeOver(out_layer, vec3f(0.13, 0.20, 0.32), icon_coverage * control_coverage);
 }
 
 @fragment
@@ -137,6 +165,8 @@ struct SymbolButtonUniform {
   float frame[4];
   float icon[4];
   float style[4];
+  float control[4];
+  float appearance[4];
 };
 
 struct SceneUniforms {
@@ -162,9 +192,15 @@ struct LayoutContext {
 
 struct SymbolButtonLayout {
   LayoutRect frame;
+  LayoutRect control_frame;
   phenotype::ui::Symbol symbol = phenotype::ui::Symbol::chevron_left;
   phenotype::ui::SymbolOptions options;
+  phenotype::ui::ControlShape control_shape =
+      phenotype::ui::ControlShape::square_circle;
   bool is_enabled = true;
+  bool draws_control = true;
+  bool draws_divider = false;
+  float divider_x = 0.0f;
 };
 
 uint32_t PixelSize(CGFloat points, CGFloat scale) noexcept {
@@ -336,6 +372,7 @@ phenotype::ui::Size IntrinsicSize(const phenotype::ui::View &view) {
   case ui::ViewKind::spacer:
   case ui::ViewKind::empty:
     return {};
+  case ui::ViewKind::button_group:
   case ui::ViewKind::stack:
     break;
   }
@@ -382,6 +419,68 @@ const phenotype::ui::View *FindIconContent(const phenotype::ui::View &view) {
   return nullptr;
 }
 
+LayoutRect ContentRect(const phenotype::ui::View &view, LayoutRect rect) {
+  return {
+      rect.x + view.content_padding.left,
+      rect.y + view.content_padding.top,
+      std::max(0.0f, rect.width - view.content_padding.left -
+                         view.content_padding.right),
+      std::max(0.0f, rect.height - view.content_padding.top -
+                         view.content_padding.bottom),
+  };
+}
+
+float ControlShapeValue(phenotype::ui::ControlShape shape) noexcept {
+  switch (shape) {
+  case phenotype::ui::ControlShape::square_circle:
+    return 0.0f;
+  case phenotype::ui::ControlShape::capsule:
+    return 1.0f;
+  }
+  return 0.0f;
+}
+
+void LayoutButtonGroup(const phenotype::ui::View &view, LayoutRect rect,
+                       std::vector<SymbolButtonLayout> &buttons) {
+  namespace ui = phenotype::ui;
+
+  LayoutRect content_rect = ContentRect(view, rect);
+  float cursor_x = content_rect.x;
+  bool draws_control = true;
+  size_t visible_button_index = 0;
+  for (const ui::View &child : view.children) {
+    ui::Size child_size = IntrinsicSize(child);
+    LayoutRect child_rect{cursor_x, content_rect.y, child_size.width,
+                          child_size.height};
+
+    if (child.kind == ui::ViewKind::button) {
+      if (buttons.size() >= kMaxSymbolButtonCount) {
+        return;
+      }
+      const ui::View *icon = FindIconContent(child);
+      if (icon) {
+        bool draws_divider =
+            visible_button_index == 0 && view.children.size() > 1;
+        buttons.push_back({
+            child_rect,
+            content_rect,
+            icon->symbol,
+            icon->symbol_options,
+            view.control_shape,
+            child.is_enabled,
+            draws_control,
+            draws_divider,
+            child_rect.x + child_rect.width + (view.child_spacing * 0.5f),
+        });
+        draws_control = false;
+        ++visible_button_index;
+      }
+    }
+
+    cursor_x += child_size.width + view.child_spacing;
+  }
+}
+
 void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
                 const LayoutContext &context,
                 std::vector<SymbolButtonLayout> &buttons) {
@@ -415,24 +514,25 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
     }
     buttons.push_back({
         rect,
+        rect,
         icon->symbol,
         icon->symbol_options,
+        view.control_shape,
         view.is_enabled,
+        true,
+        false,
+        0.0f,
     });
     return;
   }
+  case ui::ViewKind::button_group:
+    LayoutButtonGroup(view, rect, buttons);
+    return;
   case ui::ViewKind::stack:
     break;
   }
 
-  LayoutRect content_rect{
-      rect.x + view.content_padding.left,
-      rect.y + view.content_padding.top,
-      std::max(0.0f, rect.width - view.content_padding.left -
-                         view.content_padding.right),
-      std::max(0.0f, rect.height - view.content_padding.top -
-                         view.content_padding.bottom),
-  };
+  LayoutRect content_rect = ContentRect(view, rect);
 
   if (view.axis == ui::LayoutAxis::overlay) {
     for (const ui::View &child : view.children) {
@@ -492,6 +592,20 @@ SymbolButtonUniform MakeSymbolButton(const SymbolButtonLayout &button,
           button.options.weight * alpha_scale,
           button.options.grade,
           button.options.optical_size * safe_scale,
+      },
+      {
+          (button.control_frame.x + (button.control_frame.width * 0.5f)) *
+              safe_scale,
+          (button.control_frame.y + (button.control_frame.height * 0.5f)) *
+              safe_scale,
+          button.control_frame.width * safe_scale,
+          button.control_frame.height * safe_scale,
+      },
+      {
+          ControlShapeValue(button.control_shape),
+          button.draws_control ? 1.0f : 0.0f,
+          button.divider_x * safe_scale,
+          button.draws_divider ? 1.0f : 0.0f,
       },
   };
 }

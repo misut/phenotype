@@ -42,11 +42,17 @@ enum class ButtonRole {
   forward,
 };
 
+enum class ControlShape {
+  square_circle,
+  capsule,
+};
+
 enum class ViewKind {
   empty,
   stack,
   spacer,
   button,
+  button_group,
   icon,
 };
 
@@ -69,6 +75,7 @@ public:
   Size preferred_size;
   Insets content_padding;
   LeadingWindowControlsPlacement leading_window_controls_placement;
+  ControlShape control_shape = ControlShape::square_circle;
   float child_spacing = 0.0f;
 
   [[nodiscard]] View spacing(float value) && {
@@ -116,6 +123,16 @@ public:
 
   View &size(Size value) & {
     preferred_size = value;
+    return *this;
+  }
+
+  [[nodiscard]] View shape(ControlShape value) && {
+    control_shape = value;
+    return std::move(*this);
+  }
+
+  View &shape(ControlShape value) & {
+    control_shape = value;
     return *this;
   }
 
@@ -183,6 +200,15 @@ inline View button(View label) {
   view.kind = ViewKind::button;
   view.children.emplace_back(std::move(label));
   view.preferred_size = {40.0f, 36.0f};
+  return view;
+}
+
+template <typename... Children> View button_group(Children &&...children) {
+  View view;
+  view.kind = ViewKind::button_group;
+  view.axis = LayoutAxis::horizontal;
+  view.control_shape = ControlShape::square_circle;
+  (view.children.emplace_back(std::forward<Children>(children)), ...);
   return view;
 }
 

@@ -19,20 +19,21 @@ int main() {
   static_assert(left.bottom_y == right.bottom_y);
 
   auto toolbar =
-      ui::layout::hstack(ui::button(ui::icon(ui::Symbol::chevron_left))
-                             .role(ui::ButtonRole::back)
-                             .accessibility_label("Back"),
-                         ui::button(ui::icon(ui::Symbol::chevron_right))
-                             .role(ui::ButtonRole::forward)
-                             .accessibility_label("Forward"))
-          .spacing(8.0f)
+      ui::button_group(ui::button(ui::icon(ui::Symbol::chevron_left))
+                           .role(ui::ButtonRole::back)
+                           .accessibility_label("Back"),
+                       ui::button(ui::icon(ui::Symbol::chevron_right))
+                           .role(ui::ButtonRole::forward)
+                           .accessibility_label("Forward"))
+          .shape(ui::ControlShape::capsule)
           .after_leading_window_controls(12.0f);
 
-  if (toolbar.kind != ui::ViewKind::stack ||
+  if (toolbar.kind != ui::ViewKind::button_group ||
       toolbar.axis != ui::LayoutAxis::horizontal) {
     return 1;
   }
-  if (toolbar.children.size() != 2 || toolbar.child_spacing != 8.0f ||
+  if (toolbar.children.size() != 2 ||
+      toolbar.control_shape != ui::ControlShape::capsule ||
       !toolbar.leading_window_controls_placement.is_enabled ||
       toolbar.leading_window_controls_placement.spacing != 12.0f ||
       !toolbar.leading_window_controls_placement.aligns_vertical_center) {

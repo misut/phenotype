@@ -13,15 +13,15 @@ ui::View FilesView() {
   };
 
   return ui::layout::vstack(
-      ui::layout::hstack(ui::button(ui::icon(ui::Symbol::chevron_left,
-                                             navigation_icon_options))
-                             .role(ui::ButtonRole::back)
-                             .accessibility_label("Back"),
-                         ui::button(ui::icon(ui::Symbol::chevron_right,
-                                             navigation_icon_options))
-                             .role(ui::ButtonRole::forward)
-                             .accessibility_label("Forward"))
-          .spacing(8.0f)
+      ui::button_group(ui::button(ui::icon(ui::Symbol::chevron_left,
+                                           navigation_icon_options))
+                           .role(ui::ButtonRole::back)
+                           .accessibility_label("Back"),
+                       ui::button(ui::icon(ui::Symbol::chevron_right,
+                                           navigation_icon_options))
+                           .role(ui::ButtonRole::forward)
+                           .accessibility_label("Forward"))
+          .shape(ui::ControlShape::capsule)
           .after_leading_window_controls(12.0f),
       ui::spacer());
 }
