@@ -52,15 +52,18 @@ target_sources(phenotype-macos
     BASE_DIRS ${CMAKE_CURRENT_LIST_DIR}
     FILES ${CMAKE_CURRENT_LIST_DIR}/src/phenotype.macos.cppm
   PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src/native/libcxx_atomic_wait_compat.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/native/phenotype.macos.cpp
+)
+set_source_files_properties(src/native/phenotype.macos.cpp PROPERTIES
+  COMPILE_OPTIONS "-x;objective-c++"
+)
+target_include_directories(phenotype-macos PUBLIC
+  ${CMAKE_CURRENT_LIST_DIR}/include
 )
 target_link_libraries(phenotype-macos PUBLIC
   phenotype-core
   webgpu_dawn
-)
-target_compile_options(phenotype-macos PRIVATE
-  -x
-  objective-c++
 )
 target_link_options(phenotype-macos PUBLIC
   LINKER:-framework,AppKit

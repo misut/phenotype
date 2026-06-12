@@ -1,11 +1,12 @@
 export module phenotype.macos;
 
-extern "C" int phenotype_macos_run_files_application(int argc, char *argv[]);
+export import phenotype;
+import std;
 
-export namespace phenotype::macos {
-
-inline int RunFilesApplication(int argc, char *argv[]) {
-  return phenotype_macos_run_files_application(argc, argv);
+#define PHENOTYPE_IMPORTS_STD_MODULE
+#define PHENOTYPE_MACOS_IMPORTS_PHENOTYPE_MODULE
+export {
+#include "phenotype/macos.hpp"
 }
-
-} // namespace phenotype::macos
+#undef PHENOTYPE_MACOS_IMPORTS_PHENOTYPE_MODULE
+#undef PHENOTYPE_IMPORTS_STD_MODULE

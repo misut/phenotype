@@ -36,9 +36,5 @@ TINT_BUILD_GLSL_VALIDATOR = "OFF"
 TINT_BUILD_IR_BINARY = "OFF"
 TINT_BUILD_TESTS = "OFF"
 
-[build]
-cxxflags = ["-x", "objective-c++"]
-ldflags = ["LINKER:-framework,AppKit", "LINKER:-framework,QuartzCore"]
-
 [sync]
 cmake-in-root = false

@@ -1,18 +1,22 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/CAMetalLayer.h>
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 #include <webgpu/webgpu_cpp.h>
 
-#include <phenotype/material_symbols.hpp>
+#include <phenotype/macos.hpp>
 
 namespace {
 
-constexpr uint32_t kInitialWidth = 960;
-constexpr uint32_t kInitialHeight = 640;
-constexpr uint32_t kNavigationButtonCount = 2;
+constexpr size_t kMaxSymbolButtonCount = 8;
 
 constexpr char kButtonShader[] = R"wgsl(
 struct VertexOut {
@@ -28,7 +32,7 @@ struct SymbolButton {
 
 struct SceneUniforms {
     viewport : vec4f,
-    buttons : array<SymbolButton, 2>,
+    buttons : array<SymbolButton, 8>,
 };
 
 @group(0) @binding(0) var<uniform> scene : SceneUniforms;
@@ -120,8 +124,10 @@ fn drawSymbolButton(layer : vec4f, pixel_position : vec2f, button : SymbolButton
 @fragment
 fn fragmentMain(in : VertexOut) -> @location(0) vec4f {
     var layer = vec4f(0.0);
-    layer = drawSymbolButton(layer, in.pixel_position, scene.buttons[0]);
-    layer = drawSymbolButton(layer, in.pixel_position, scene.buttons[1]);
+    let button_count = min(u32(scene.viewport.z), 8u);
+    for (var index = 0u; index < button_count; index = index + 1u) {
+        layer = drawSymbolButton(layer, in.pixel_position, scene.buttons[index]);
+    }
     return layer;
 }
 )wgsl";
@@ -134,10 +140,24 @@ struct SymbolButtonUniform {
 
 struct SceneUniforms {
   float viewport[4];
-  SymbolButtonUniform buttons[kNavigationButtonCount];
+  SymbolButtonUniform buttons[kMaxSymbolButtonCount];
 };
 
-uint32_t PixelSize(CGFloat points, CGFloat scale) {
+struct LayoutRect {
+  float x = 0.0f;
+  float y = 0.0f;
+  float width = 0.0f;
+  float height = 0.0f;
+};
+
+struct SymbolButtonLayout {
+  LayoutRect frame;
+  phenotype::ui::Symbol symbol = phenotype::ui::Symbol::chevron_left;
+  phenotype::ui::SymbolOptions options;
+  bool is_enabled = true;
+};
+
+uint32_t PixelSize(CGFloat points, CGFloat scale) noexcept {
   double pixels = static_cast<double>(points * scale);
   if (pixels < 1.0) {
     return 1;
@@ -145,7 +165,11 @@ uint32_t PixelSize(CGFloat points, CGFloat scale) {
   return static_cast<uint32_t>(pixels);
 }
 
-NSRect InitialWindowVisibleFrame() {
+float LogicalPixel(CGFloat points, CGFloat scale) noexcept {
+  return static_cast<float>(points * scale);
+}
+
+NSRect InitialWindowVisibleFrame(CGFloat width, CGFloat height) {
   NSArray<NSScreen *> *screens = [NSScreen screens];
   for (NSScreen *screen in screens) {
     NSRect frame = [screen visibleFrame];
@@ -165,31 +189,183 @@ NSRect InitialWindowVisibleFrame() {
   if (screen) {
     return [screen visibleFrame];
   }
-  return NSMakeRect(0.0, 0.0, kInitialWidth, kInitialHeight);
+  return NSMakeRect(0.0, 0.0, width, height);
 }
 
-SymbolButtonUniform MakeSymbolButton(float center_x, float center_y,
-                                     phenotype::MaterialSymbolIcon icon,
-                                     phenotype::MaterialSymbolOptions options) {
-  constexpr float button_width = 40.0f;
-  constexpr float button_height = 36.0f;
-  auto geometry = phenotype::MaterialSymbolChevronGeometryFor(icon);
+NSVisualEffectMaterial
+ToNativeVisualMaterial(phenotype::macos::window::VisualMaterial material) {
+  switch (material) {
+  case phenotype::macos::window::VisualMaterial::under_window_background:
+    return NSVisualEffectMaterialUnderWindowBackground;
+  }
+  return NSVisualEffectMaterialUnderWindowBackground;
+}
+
+phenotype::ui::Size IntrinsicSize(const phenotype::ui::View &view) {
+  namespace ui = phenotype::ui;
+
+  if (view.preferred_size.width > 0.0f || view.preferred_size.height > 0.0f) {
+    return view.preferred_size;
+  }
+
+  switch (view.kind) {
+  case ui::ViewKind::button:
+    return {40.0f, 36.0f};
+  case ui::ViewKind::icon:
+    return {view.symbol_options.optical_size, view.symbol_options.optical_size};
+  case ui::ViewKind::spacer:
+  case ui::ViewKind::empty:
+    return {};
+  case ui::ViewKind::stack:
+    break;
+  }
+
+  ui::Size size;
+  bool has_visible_child = false;
+  for (const ui::View &child : view.children) {
+    ui::Size child_size = IntrinsicSize(child);
+    if (view.axis == ui::LayoutAxis::horizontal) {
+      if (has_visible_child) {
+        size.width += view.child_spacing;
+      }
+      size.width += child_size.width;
+      size.height = std::max(size.height, child_size.height);
+    } else if (view.axis == ui::LayoutAxis::vertical) {
+      if (has_visible_child) {
+        size.height += view.child_spacing;
+      }
+      size.width = std::max(size.width, child_size.width);
+      size.height += child_size.height;
+    } else {
+      size.width = std::max(size.width, child_size.width);
+      size.height = std::max(size.height, child_size.height);
+    }
+    has_visible_child = true;
+  }
+
+  size.width += view.content_padding.left + view.content_padding.right;
+  size.height += view.content_padding.top + view.content_padding.bottom;
+  return size;
+}
+
+const phenotype::ui::View *FindIconContent(const phenotype::ui::View &view) {
+  namespace ui = phenotype::ui;
+
+  if (view.kind == ui::ViewKind::icon) {
+    return &view;
+  }
+  for (const ui::View &child : view.children) {
+    if (const ui::View *icon = FindIconContent(child)) {
+      return icon;
+    }
+  }
+  return nullptr;
+}
+
+void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
+                std::vector<SymbolButtonLayout> &buttons) {
+  namespace ui = phenotype::ui;
+
+  switch (view.kind) {
+  case ui::ViewKind::empty:
+  case ui::ViewKind::spacer:
+  case ui::ViewKind::icon:
+    return;
+  case ui::ViewKind::button: {
+    if (buttons.size() >= kMaxSymbolButtonCount) {
+      return;
+    }
+    const ui::View *icon = FindIconContent(view);
+    if (!icon) {
+      return;
+    }
+    buttons.push_back({
+        rect,
+        icon->symbol,
+        icon->symbol_options,
+        view.is_enabled,
+    });
+    return;
+  }
+  case ui::ViewKind::stack:
+    break;
+  }
+
+  LayoutRect content_rect{
+      rect.x + view.content_padding.left,
+      rect.y + view.content_padding.top,
+      std::max(0.0f, rect.width - view.content_padding.left -
+                         view.content_padding.right),
+      std::max(0.0f, rect.height - view.content_padding.top -
+                         view.content_padding.bottom),
+  };
+
+  if (view.axis == ui::LayoutAxis::overlay) {
+    for (const ui::View &child : view.children) {
+      LayoutView(child, content_rect, buttons);
+    }
+    return;
+  }
+
+  float cursor_x = content_rect.x;
+  float cursor_y = content_rect.y;
+  for (const ui::View &child : view.children) {
+    ui::Size child_size = IntrinsicSize(child);
+    LayoutRect child_rect{cursor_x, cursor_y, child_size.width,
+                          child_size.height};
+    LayoutView(child, child_rect, buttons);
+    if (view.axis == ui::LayoutAxis::horizontal) {
+      cursor_x += child_size.width + view.child_spacing;
+    } else {
+      cursor_y += child_size.height + view.child_spacing;
+    }
+  }
+}
+
+std::vector<SymbolButtonLayout>
+LayoutSymbolButtons(const phenotype::ui::View &root, uint32_t width,
+                    uint32_t height) {
+  std::vector<SymbolButtonLayout> buttons;
+  buttons.reserve(kMaxSymbolButtonCount);
+  LayoutView(root,
+             {
+                 0.0f,
+                 0.0f,
+                 static_cast<float>(width),
+                 static_cast<float>(height),
+             },
+             buttons);
+  return buttons;
+}
+
+SymbolButtonUniform MakeSymbolButton(const SymbolButtonLayout &button) {
+  auto geometry = phenotype::MaterialSymbolChevronGeometryFor(
+      phenotype::ui::ToMaterialSymbolIcon(button.symbol));
+  float alpha_scale = button.is_enabled ? 1.0f : 0.44f;
 
   return SymbolButtonUniform{
-      {center_x, center_y, button_width, button_height},
+      {
+          button.frame.x + (button.frame.width * 0.5f),
+          button.frame.y + (button.frame.height * 0.5f),
+          button.frame.width,
+          button.frame.height,
+      },
       {geometry.outer_x, geometry.center_x, geometry.top_y, geometry.bottom_y},
       {
-          options.fill ? 1.0f : 0.0f,
-          options.weight,
-          options.grade,
-          options.optical_size,
+          button.options.fill ? 1.0f : 0.0f,
+          button.options.weight * alpha_scale,
+          button.options.grade,
+          button.options.optical_size,
       },
   };
 }
 
 class DawnButtonRenderer {
 public:
-  bool Initialize(CAMetalLayer *layer, uint32_t width, uint32_t height) {
+  bool Initialize(CAMetalLayer *layer, uint32_t width, uint32_t height,
+                  phenotype::ui::View root_view) {
+    _root_view = std::move(root_view);
+
     wgpu::InstanceFeatureName required_features[] = {
         wgpu::InstanceFeatureName::TimedWaitAny,
     };
@@ -435,27 +611,16 @@ private:
       return;
     }
 
-    phenotype::MaterialSymbolOptions navigation_icon_options{
-        .fill = false,
-        .weight = 500.0f,
-        .grade = 0.0f,
-        .optical_size = 24.0f,
-    };
-    constexpr float toolbar_y = 54.0f;
-    constexpr float left_button_x = 68.0f;
-    constexpr float right_button_x = 114.0f;
+    std::vector<SymbolButtonLayout> buttons =
+        LayoutSymbolButtons(_root_view, _width, _height);
 
-    SceneUniforms uniforms = {
-        {static_cast<float>(_width), static_cast<float>(_height), 0.0f, 0.0f},
-        {
-            MakeSymbolButton(left_button_x, toolbar_y,
-                             phenotype::MaterialSymbolIcon::chevron_left,
-                             navigation_icon_options),
-            MakeSymbolButton(right_button_x, toolbar_y,
-                             phenotype::MaterialSymbolIcon::chevron_right,
-                             navigation_icon_options),
-        },
-    };
+    SceneUniforms uniforms = {};
+    uniforms.viewport[0] = static_cast<float>(_width);
+    uniforms.viewport[1] = static_cast<float>(_height);
+    uniforms.viewport[2] = static_cast<float>(buttons.size());
+    for (size_t index = 0; index < buttons.size(); ++index) {
+      uniforms.buttons[index] = MakeSymbolButton(buttons[index]);
+    }
     _device.GetQueue().WriteBuffer(_scene_uniform_buffer, 0, &uniforms,
                                    sizeof(uniforms));
   }
@@ -468,6 +633,7 @@ private:
   wgpu::BindGroup _scene_bind_group;
   wgpu::TextureFormat _format = wgpu::TextureFormat::Undefined;
   wgpu::RenderPipeline _pipeline;
+  phenotype::ui::View _root_view;
   uint32_t _width = 0;
   uint32_t _height = 0;
 };
@@ -479,16 +645,28 @@ private:
   NSTimer *_render_timer;
   NSView *_metal_view;
   CAMetalLayer *_metal_layer;
-  DawnButtonRenderer *_renderer;
+  std::unique_ptr<DawnButtonRenderer> _renderer;
+  phenotype::macos::window::Spec _spec;
 }
+- (instancetype)initWithSpec:(phenotype::macos::window::Spec)spec;
 @end
 
 @implementation AppDelegate
 
+- (instancetype)initWithSpec:(phenotype::macos::window::Spec)spec {
+  self = [super init];
+  if (self) {
+    _spec = std::move(spec);
+  }
+  return self;
+}
+
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
   (void)notification;
 
-  NSRect content_rect = NSMakeRect(0.0, 0.0, kInitialWidth, kInitialHeight);
+  CGFloat window_width = std::max<CGFloat>(1.0, _spec.options.size.width);
+  CGFloat window_height = std::max<CGFloat>(1.0, _spec.options.size.height);
+  NSRect content_rect = NSMakeRect(0.0, 0.0, window_width, window_height);
   NSWindowStyleMask style_mask =
       NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
       NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
@@ -497,14 +675,23 @@ private:
                                         styleMask:style_mask
                                           backing:NSBackingStoreBuffered
                                             defer:NO];
-  [_window setTitle:@"Files"];
-  [_window setOpaque:NO];
-  [_window setBackgroundColor:[NSColor clearColor]];
+  [_window
+      setTitle:[NSString stringWithUTF8String:_spec.options.title.c_str()]];
 
-  NSRect visible_frame = InitialWindowVisibleFrame();
+  bool uses_blur = _spec.options.background.kind ==
+                   phenotype::macos::window::Background::Kind::blurred;
+  if (uses_blur) {
+    [_window setOpaque:NO];
+    [_window setBackgroundColor:[NSColor clearColor]];
+  } else {
+    [_window setOpaque:YES];
+    [_window setBackgroundColor:[NSColor windowBackgroundColor]];
+  }
+
+  NSRect visible_frame = InitialWindowVisibleFrame(window_width, window_height);
   [_window setFrameOrigin:NSMakePoint(
-                              NSMidX(visible_frame) - (kInitialWidth / 2.0),
-                              NSMidY(visible_frame) - (kInitialHeight / 2.0))];
+                              NSMidX(visible_frame) - (window_width / 2.0),
+                              NSMidY(visible_frame) - (window_height / 2.0))];
 
   NSView *content_view = [[NSView alloc] initWithFrame:content_rect];
   [content_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
@@ -512,16 +699,19 @@ private:
   [[content_view layer] setOpaque:NO];
   [[content_view layer] setBackgroundColor:[[NSColor clearColor] CGColor]];
 
-  NSVisualEffectView *background_view =
-      [[NSVisualEffectView alloc] initWithFrame:content_rect];
-  [background_view
-      setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
-  [background_view setMaterial:NSVisualEffectMaterialUnderWindowBackground];
-  [background_view setBlendingMode:NSVisualEffectBlendingModeBehindWindow];
-  [background_view setState:NSVisualEffectStateActive];
-  [background_view setAlphaValue:0.78];
-  [content_view addSubview:background_view];
-  [background_view release];
+  if (uses_blur) {
+    NSVisualEffectView *background_view =
+        [[NSVisualEffectView alloc] initWithFrame:content_rect];
+    [background_view
+        setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    [background_view setMaterial:ToNativeVisualMaterial(
+                                     _spec.options.background.blur.material)];
+    [background_view setBlendingMode:NSVisualEffectBlendingModeBehindWindow];
+    [background_view setState:NSVisualEffectStateActive];
+    [background_view setAlphaValue:_spec.options.background.blur.opacity];
+    [content_view addSubview:background_view];
+    [background_view release];
+  }
 
   _metal_view = [[NSView alloc] initWithFrame:content_rect];
   [_metal_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
@@ -533,9 +723,10 @@ private:
   [_metal_layer setFrame:NSRectToCGRect([_metal_view bounds])];
   [_metal_layer setContentsScale:[_window backingScaleFactor]];
   [_metal_layer
-      setDrawableSize:CGSizeMake(kInitialWidth * [_window backingScaleFactor],
-                                 kInitialHeight *
-                                     [_window backingScaleFactor])];
+      setDrawableSize:CGSizeMake(LogicalPixel(window_width,
+                                              [_window backingScaleFactor]),
+                                 LogicalPixel(window_height,
+                                              [_window backingScaleFactor]))];
   [_metal_view setLayer:_metal_layer];
   [content_view addSubview:_metal_view];
   [_metal_view release];
@@ -543,12 +734,14 @@ private:
   [_window setContentView:content_view];
   [content_view release];
 
-  _renderer = new DawnButtonRenderer();
+  phenotype::ui::View root_view =
+      _spec.content ? _spec.content() : phenotype::ui::empty();
+  _renderer = std::make_unique<DawnButtonRenderer>();
   if (!_renderer->Initialize(
-          _metal_layer, PixelSize(kInitialWidth, [_window backingScaleFactor]),
-          PixelSize(kInitialHeight, [_window backingScaleFactor]))) {
-    delete _renderer;
-    _renderer = nullptr;
+          _metal_layer, PixelSize(window_width, [_window backingScaleFactor]),
+          PixelSize(window_height, [_window backingScaleFactor]),
+          std::move(root_view))) {
+    _renderer.reset();
     [NSApp terminate:nil];
     return;
   }
@@ -576,9 +769,11 @@ private:
   [_metal_layer setContentsScale:scale];
   [_metal_layer setDrawableSize:drawable_size];
 
-  _renderer->Resize(PixelSize(bounds.width, scale),
-                    PixelSize(bounds.height, scale));
-  _renderer->Render();
+  if (_renderer) {
+    _renderer->Resize(PixelSize(bounds.width, scale),
+                      PixelSize(bounds.height, scale));
+    _renderer->Render();
+  }
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:
@@ -589,20 +784,21 @@ private:
 
 - (void)dealloc {
   [_render_timer invalidate];
-  delete _renderer;
+  _renderer.reset();
   [_window release];
   [super dealloc];
 }
 
 @end
 
-extern "C" int phenotype_macos_run_files_application(int argc, char *argv[]) {
+extern "C" int phenotype_macos_app_run(int argc, char *argv[],
+                                       phenotype::macos::window::Spec *spec) {
   (void)argc;
   (void)argv;
 
   @autoreleasepool {
     NSApplication *application = [NSApplication sharedApplication];
-    AppDelegate *delegate = [[AppDelegate alloc] init];
+    AppDelegate *delegate = [[AppDelegate alloc] initWithSpec:std::move(*spec)];
 
     [application setActivationPolicy:NSApplicationActivationPolicyRegular];
     [application setDelegate:delegate];
