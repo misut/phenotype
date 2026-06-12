@@ -1,5 +1,5 @@
 export module phenotype;
 
 export {
-#include "phenotype.material_symbols.hpp"
+#include "phenotype/material_symbols.hpp"
 }
