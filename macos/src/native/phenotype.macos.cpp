@@ -104,12 +104,13 @@ fn compositeOver(destination : vec4f, source_color : vec3f, source_alpha : f32) 
 fn drawSymbolButton(layer : vec4f, pixel_position : vec2f, button : SymbolButton) -> vec4f {
     let center = button.frame.xy;
     let size = button.frame.zw;
-    let radius = 10.0;
+    let ui_scale = max(scene.viewport.w, 1.0);
+    let radius = 10.0 * ui_scale;
     let local_position = pixel_position - center;
 
     let button_edge = roundedRectDistance(local_position, size * 0.5, radius);
     let button_coverage = 1.0 - smoothstep(-1.0, 1.0, button_edge);
-    let border_coverage = 1.0 - smoothstep(-1.0, 1.0, abs(button_edge) - 0.75);
+    let border_coverage = 1.0 - smoothstep(-1.0, 1.0, abs(button_edge) - (0.75 * ui_scale));
     let button_fill = vec3f(0.985, 0.988, 0.992);
     let button_border = vec3f(0.73, 0.76, 0.82);
 
@@ -148,6 +149,15 @@ struct LayoutRect {
   float y = 0.0f;
   float width = 0.0f;
   float height = 0.0f;
+};
+
+struct LayoutWindowControls {
+  bool has_leading_controls = false;
+  LayoutRect leading_controls;
+};
+
+struct LayoutContext {
+  LayoutWindowControls window_controls;
 };
 
 struct SymbolButtonLayout {
@@ -217,6 +227,49 @@ void ApplyTitleBarStyle(NSWindow *window,
   [window setMovableByWindowBackground:NO];
 }
 
+LayoutContext BuildLayoutContext(NSWindow *window, NSView *content_view) {
+  LayoutContext context;
+  if (!window || !content_view) {
+    return context;
+  }
+
+  std::array<NSWindowButton, 3> button_types{
+      NSWindowCloseButton,
+      NSWindowMiniaturizeButton,
+      NSWindowZoomButton,
+  };
+
+  bool has_controls = false;
+  NSRect controls_rect = NSZeroRect;
+  for (NSWindowButton button_type : button_types) {
+    NSButton *button = [window standardWindowButton:button_type];
+    if (!button || [button isHidden] || ![button superview]) {
+      continue;
+    }
+
+    [[button superview] layoutSubtreeIfNeeded];
+    NSRect button_rect =
+        [[button superview] convertRect:[button frame] toView:content_view];
+    controls_rect =
+        has_controls ? NSUnionRect(controls_rect, button_rect) : button_rect;
+    has_controls = true;
+  }
+
+  if (!has_controls) {
+    return context;
+  }
+
+  NSRect content_bounds = [content_view bounds];
+  context.window_controls.has_leading_controls = true;
+  context.window_controls.leading_controls = {
+      static_cast<float>(NSMinX(controls_rect)),
+      static_cast<float>(NSHeight(content_bounds) - NSMaxY(controls_rect)),
+      static_cast<float>(NSWidth(controls_rect)),
+      static_cast<float>(NSHeight(controls_rect)),
+  };
+  return context;
+}
+
 phenotype::ui::Size IntrinsicSize(const phenotype::ui::View &view) {
   namespace ui = phenotype::ui;
 
@@ -279,8 +332,22 @@ const phenotype::ui::View *FindIconContent(const phenotype::ui::View &view) {
 }
 
 void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
+                const LayoutContext &context,
                 std::vector<SymbolButtonLayout> &buttons) {
   namespace ui = phenotype::ui;
+
+  if (view.leading_window_controls_placement.is_enabled &&
+      context.window_controls.has_leading_controls) {
+    const LayoutRect &controls = context.window_controls.leading_controls;
+    ui::Size view_size = IntrinsicSize(view);
+    rect.x =
+        std::max(rect.x, controls.x + controls.width +
+                             view.leading_window_controls_placement.spacing);
+    if (view.leading_window_controls_placement.aligns_vertical_center) {
+      rect.y =
+          controls.y + (controls.height * 0.5f) - (view_size.height * 0.5f);
+    }
+  }
 
   switch (view.kind) {
   case ui::ViewKind::empty:
@@ -318,7 +385,7 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
 
   if (view.axis == ui::LayoutAxis::overlay) {
     for (const ui::View &child : view.children) {
-      LayoutView(child, content_rect, buttons);
+      LayoutView(child, content_rect, context, buttons);
     }
     return;
   }
@@ -329,7 +396,7 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
     ui::Size child_size = IntrinsicSize(child);
     LayoutRect child_rect{cursor_x, cursor_y, child_size.width,
                           child_size.height};
-    LayoutView(child, child_rect, buttons);
+    LayoutView(child, child_rect, context, buttons);
     if (view.axis == ui::LayoutAxis::horizontal) {
       cursor_x += child_size.width + view.child_spacing;
     } else {
@@ -339,39 +406,41 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
 }
 
 std::vector<SymbolButtonLayout>
-LayoutSymbolButtons(const phenotype::ui::View &root, uint32_t width,
-                    uint32_t height) {
+LayoutSymbolButtons(const phenotype::ui::View &root, float width, float height,
+                    const LayoutContext &context) {
   std::vector<SymbolButtonLayout> buttons;
   buttons.reserve(kMaxSymbolButtonCount);
   LayoutView(root,
              {
                  0.0f,
                  0.0f,
-                 static_cast<float>(width),
-                 static_cast<float>(height),
+                 width,
+                 height,
              },
-             buttons);
+             context, buttons);
   return buttons;
 }
 
-SymbolButtonUniform MakeSymbolButton(const SymbolButtonLayout &button) {
+SymbolButtonUniform MakeSymbolButton(const SymbolButtonLayout &button,
+                                     float scale) {
   auto geometry = phenotype::MaterialSymbolChevronGeometryFor(
       phenotype::ui::ToMaterialSymbolIcon(button.symbol));
   float alpha_scale = button.is_enabled ? 1.0f : 0.44f;
+  float safe_scale = std::max(1.0f, scale);
 
   return SymbolButtonUniform{
       {
-          button.frame.x + (button.frame.width * 0.5f),
-          button.frame.y + (button.frame.height * 0.5f),
-          button.frame.width,
-          button.frame.height,
+          (button.frame.x + (button.frame.width * 0.5f)) * safe_scale,
+          (button.frame.y + (button.frame.height * 0.5f)) * safe_scale,
+          button.frame.width * safe_scale,
+          button.frame.height * safe_scale,
       },
       {geometry.outer_x, geometry.center_x, geometry.top_y, geometry.bottom_y},
       {
           button.options.fill ? 1.0f : 0.0f,
           button.options.weight * alpha_scale,
           button.options.grade,
-          button.options.optical_size,
+          button.options.optical_size * safe_scale,
       },
   };
 }
@@ -379,8 +448,12 @@ SymbolButtonUniform MakeSymbolButton(const SymbolButtonLayout &button) {
 class DawnButtonRenderer {
 public:
   bool Initialize(CAMetalLayer *layer, uint32_t width, uint32_t height,
-                  phenotype::ui::View root_view) {
+                  float scale, phenotype::ui::Size layout_size,
+                  LayoutContext layout_context, phenotype::ui::View root_view) {
     _root_view = std::move(root_view);
+    _scale = scale;
+    _layout_size = layout_size;
+    _layout_context = layout_context;
 
     wgpu::InstanceFeatureName required_features[] = {
         wgpu::InstanceFeatureName::TimedWaitAny,
@@ -419,11 +492,16 @@ public:
     return static_cast<bool>(_pipeline);
   }
 
-  void Resize(uint32_t width, uint32_t height) {
+  void Resize(uint32_t width, uint32_t height, float scale,
+              phenotype::ui::Size layout_size, LayoutContext layout_context) {
     if (width == 0 || height == 0 || !_device) {
       return;
     }
+    _scale = scale;
+    _layout_size = layout_size;
+    _layout_context = layout_context;
     if (width == _width && height == _height) {
+      UpdateSceneUniforms();
       return;
     }
     ConfigureSurface(width, height);
@@ -627,15 +705,16 @@ private:
       return;
     }
 
-    std::vector<SymbolButtonLayout> buttons =
-        LayoutSymbolButtons(_root_view, _width, _height);
+    std::vector<SymbolButtonLayout> buttons = LayoutSymbolButtons(
+        _root_view, _layout_size.width, _layout_size.height, _layout_context);
 
     SceneUniforms uniforms = {};
     uniforms.viewport[0] = static_cast<float>(_width);
     uniforms.viewport[1] = static_cast<float>(_height);
     uniforms.viewport[2] = static_cast<float>(buttons.size());
+    uniforms.viewport[3] = std::max(1.0f, _scale);
     for (size_t index = 0; index < buttons.size(); ++index) {
-      uniforms.buttons[index] = MakeSymbolButton(buttons[index]);
+      uniforms.buttons[index] = MakeSymbolButton(buttons[index], _scale);
     }
     _device.GetQueue().WriteBuffer(_scene_uniform_buffer, 0, &uniforms,
                                    sizeof(uniforms));
@@ -650,6 +729,9 @@ private:
   wgpu::TextureFormat _format = wgpu::TextureFormat::Undefined;
   wgpu::RenderPipeline _pipeline;
   phenotype::ui::View _root_view;
+  phenotype::ui::Size _layout_size;
+  LayoutContext _layout_context;
+  float _scale = 1.0f;
   uint32_t _width = 0;
   uint32_t _height = 0;
 };
@@ -759,20 +841,29 @@ private:
   [content_view release];
   ApplyTitleBarStyle(_window, _spec.options.title_bar);
 
+  [_window makeKeyAndOrderFront:nil];
+  [NSApp activate];
+
+  CGFloat scale = [_window backingScaleFactor];
+  NSSize bounds = [_metal_view bounds].size;
+  phenotype::ui::Size layout_size{
+      static_cast<float>(bounds.width),
+      static_cast<float>(bounds.height),
+  };
+  LayoutContext layout_context =
+      BuildLayoutContext(_window, [_window contentView]);
+
   phenotype::ui::View root_view =
       _spec.content ? _spec.content() : phenotype::ui::empty();
   _renderer = std::make_unique<DawnButtonRenderer>();
-  if (!_renderer->Initialize(
-          _metal_layer, PixelSize(window_width, [_window backingScaleFactor]),
-          PixelSize(window_height, [_window backingScaleFactor]),
-          std::move(root_view))) {
+  if (!_renderer->Initialize(_metal_layer, PixelSize(bounds.width, scale),
+                             PixelSize(bounds.height, scale),
+                             static_cast<float>(scale), layout_size,
+                             layout_context, std::move(root_view))) {
     _renderer.reset();
     [NSApp terminate:nil];
     return;
   }
-
-  [_window makeKeyAndOrderFront:nil];
-  [NSApp activate];
 
   _render_timer =
       [NSTimer scheduledTimerWithTimeInterval:(1.0 / 60.0)
@@ -795,8 +886,15 @@ private:
   [_metal_layer setDrawableSize:drawable_size];
 
   if (_renderer) {
+    phenotype::ui::Size layout_size{
+        static_cast<float>(bounds.width),
+        static_cast<float>(bounds.height),
+    };
+    LayoutContext layout_context =
+        BuildLayoutContext(_window, [_window contentView]);
     _renderer->Resize(PixelSize(bounds.width, scale),
-                      PixelSize(bounds.height, scale));
+                      PixelSize(bounds.height, scale),
+                      static_cast<float>(scale), layout_size, layout_context);
     _renderer->Render();
   }
 }

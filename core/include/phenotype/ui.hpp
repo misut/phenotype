@@ -23,6 +23,12 @@ struct Insets {
   float bottom = 0.0f;
 };
 
+struct LeadingWindowControlsPlacement {
+  bool is_enabled = false;
+  float spacing = 12.0f;
+  bool aligns_vertical_center = true;
+};
+
 using SymbolOptions = phenotype::MaterialSymbolOptions;
 
 enum class Symbol {
@@ -62,6 +68,7 @@ public:
   std::string accessibility_label_text;
   Size preferred_size;
   Insets content_padding;
+  LeadingWindowControlsPlacement leading_window_controls_placement;
   float child_spacing = 0.0f;
 
   [[nodiscard]] View spacing(float value) && {
@@ -81,6 +88,24 @@ public:
 
   View &padding(Insets value) & {
     content_padding = value;
+    return *this;
+  }
+
+  [[nodiscard]] View after_leading_window_controls(float spacing = 12.0f) && {
+    leading_window_controls_placement = {
+        .is_enabled = true,
+        .spacing = spacing,
+        .aligns_vertical_center = true,
+    };
+    return std::move(*this);
+  }
+
+  View &after_leading_window_controls(float spacing = 12.0f) & {
+    leading_window_controls_placement = {
+        .is_enabled = true,
+        .spacing = spacing,
+        .aligns_vertical_center = true,
+    };
     return *this;
   }
 

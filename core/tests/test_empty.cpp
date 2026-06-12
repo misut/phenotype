@@ -26,15 +26,16 @@ int main() {
                              .role(ui::ButtonRole::forward)
                              .accessibility_label("Forward"))
           .spacing(8.0f)
-          .padding({.left = 48.0f, .top = 36.0f});
+          .after_leading_window_controls(12.0f);
 
   if (toolbar.kind != ui::ViewKind::stack ||
       toolbar.axis != ui::LayoutAxis::horizontal) {
     return 1;
   }
   if (toolbar.children.size() != 2 || toolbar.child_spacing != 8.0f ||
-      toolbar.content_padding.left != 48.0f ||
-      toolbar.content_padding.top != 36.0f) {
+      !toolbar.leading_window_controls_placement.is_enabled ||
+      toolbar.leading_window_controls_placement.spacing != 12.0f ||
+      !toolbar.leading_window_controls_placement.aligns_vertical_center) {
     return 2;
   }
   if (toolbar.children[0].button_role != ui::ButtonRole::back ||
