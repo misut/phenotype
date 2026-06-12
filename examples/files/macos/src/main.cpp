@@ -7,23 +7,26 @@ namespace macos = phenotype::macos;
 ui::View FilesView() {
   constexpr ui::SymbolOptions navigation_icon_options{
       .fill = false,
-      .weight = 450.0f,
+      .weight = 300.0f,
       .grade = 0.0f,
       .optical_size = 24.0f,
   };
 
-  return ui::layout::vstack(
-      ui::button_group(ui::button(ui::icon(ui::Symbol::chevron_left,
+  return ui::layout::vstack([&](ui::Block &body) {
+    body << ui::button_group([&](ui::Block &group) {
+              group << ui::button(ui::icon(ui::Symbol::chevron_left,
                                            navigation_icon_options))
                            .role(ui::ButtonRole::back)
-                           .accessibility_label("Back"),
-                       ui::button(ui::icon(ui::Symbol::chevron_right,
+                           .accessibility_label("Back");
+              group << ui::button(ui::icon(ui::Symbol::chevron_right,
                                            navigation_icon_options))
                            .role(ui::ButtonRole::forward)
-                           .accessibility_label("Forward"))
-          .shape(ui::ControlShape::capsule)
-          .after_leading_window_controls(12.0f),
-      ui::spacer());
+                           .accessibility_label("Forward");
+            })
+                .shape(ui::ControlShape::capsule)
+                .after_leading_window_controls(12.0f);
+    body << ui::spacer();
+  });
 }
 
 int main(int argc, char *argv[]) {

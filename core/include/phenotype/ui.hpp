@@ -167,6 +167,30 @@ public:
   }
 };
 
+class Block {
+public:
+  std::vector<View> children;
+
+  Block &operator<<(View value) & {
+    children.emplace_back(std::move(value));
+    return *this;
+  }
+};
+
+template <typename T>
+concept ViewValue = requires(T &&value) { View{std::forward<T>(value)}; };
+
+template <typename T>
+concept BlockContent =
+    requires(T &&content, Block &block) { std::forward<T>(content)(block); };
+
+template <BlockContent Content>
+std::vector<View> BuildChildren(Content &&content) {
+  Block block;
+  std::forward<Content>(content)(block);
+  return std::move(block.children);
+}
+
 inline constexpr MaterialSymbolIcon
 ToMaterialSymbolIcon(Symbol symbol) noexcept {
   switch (symbol) {
@@ -203,7 +227,15 @@ inline View button(View label) {
   return view;
 }
 
-template <typename... Children> View button_group(Children &&...children) {
+template <BlockContent Content> View button(Content &&content) {
+  View view;
+  view.kind = ViewKind::button;
+  view.children = BuildChildren(std::forward<Content>(content));
+  view.preferred_size = {40.0f, 36.0f};
+  return view;
+}
+
+template <ViewValue... Children> View button_group(Children &&...children) {
   View view;
   view.kind = ViewKind::button_group;
   view.axis = LayoutAxis::horizontal;
@@ -212,14 +244,31 @@ template <typename... Children> View button_group(Children &&...children) {
   return view;
 }
 
+template <BlockContent Content> View button_group(Content &&content) {
+  View view;
+  view.kind = ViewKind::button_group;
+  view.axis = LayoutAxis::horizontal;
+  view.control_shape = ControlShape::square_circle;
+  view.children = BuildChildren(std::forward<Content>(content));
+  return view;
+}
+
 namespace layout {
 
-template <typename... Children>
+template <ViewValue... Children>
 View stack(LayoutAxis axis, Children &&...children) {
   View view;
   view.kind = ViewKind::stack;
   view.axis = axis;
   (view.children.emplace_back(std::forward<Children>(children)), ...);
+  return view;
+}
+
+template <BlockContent Content> View stack(LayoutAxis axis, Content &&content) {
+  View view;
+  view.kind = ViewKind::stack;
+  view.axis = axis;
+  view.children = BuildChildren(std::forward<Content>(content));
   return view;
 }
 
