@@ -10,6 +10,9 @@ platforms = [{ os = "macos", arch = "aarch64" }]
 
 [dependencies]
 
+[dependencies.path]
+phenotype = "../../.."
+
 [dependencies.cmake.dawn]
 git = "https://github.com/google/dawn.git"
 tag = "v20260423.175430"

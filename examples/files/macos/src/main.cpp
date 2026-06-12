@@ -6,46 +6,53 @@
 #include <cstdlib>
 #include <webgpu/webgpu_cpp.h>
 
+#include "../../../../src/phenotype.material_symbols.hpp"
+
 namespace {
 
 constexpr uint32_t kInitialWidth = 960;
 constexpr uint32_t kInitialHeight = 640;
+constexpr uint32_t kNavigationButtonCount = 2;
 
 constexpr char kButtonShader[] = R"wgsl(
 struct VertexOut {
     @builtin(position) position : vec4f,
-    @location(0) local_position : vec2f,
+    @location(0) pixel_position : vec2f,
+};
+
+struct SymbolButton {
+    frame : vec4f,
+    icon : vec4f,
+    style : vec4f,
 };
 
 struct SceneUniforms {
     viewport : vec4f,
-    button : vec4f,
+    buttons : array<SymbolButton, 2>,
 };
 
 @group(0) @binding(0) var<uniform> scene : SceneUniforms;
 
 @vertex
 fn vertexMain(@builtin(vertex_index) index : u32) -> VertexOut {
-    let local = array<vec2f, 6>(
-        vec2f(-0.5, -0.5),
-        vec2f(-0.5,  0.5),
-        vec2f( 0.5, -0.5),
-        vec2f( 0.5, -0.5),
-        vec2f(-0.5,  0.5),
-        vec2f( 0.5,  0.5),
+    let clip = array<vec2f, 6>(
+        vec2f(-1.0, -1.0),
+        vec2f(-1.0,  1.0),
+        vec2f( 1.0, -1.0),
+        vec2f( 1.0, -1.0),
+        vec2f(-1.0,  1.0),
+        vec2f( 1.0,  1.0),
     );
 
     let viewport_size = scene.viewport.xy;
-    let button_size = scene.button.xy;
-    let pixel_position = (viewport_size * 0.5) + (local[index] * button_size);
-    let clip_position = vec2f(
-        (pixel_position.x / viewport_size.x) * 2.0 - 1.0,
-        1.0 - (pixel_position.y / viewport_size.y) * 2.0,
+    let pixel_position = vec2f(
+        (clip[index].x + 1.0) * 0.5 * viewport_size.x,
+        (1.0 - clip[index].y) * 0.5 * viewport_size.y,
     );
 
     var out : VertexOut;
-    out.position = vec4f(clip_position, 0.0, 1.0);
-    out.local_position = local[index] * button_size;
+    out.position = vec4f(clip[index], 0.0, 1.0);
+    out.pixel_position = pixel_position;
     return out;
 }
 
@@ -54,24 +61,72 @@ fn roundedRectDistance(position : vec2f, half_size : vec2f, radius : f32) -> f32
     return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - radius;
 }
 
+fn segmentDistance(position : vec2f, a : vec2f, b : vec2f) -> f32 {
+    let pa = position - a;
+    let ba = b - a;
+    let h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - (ba * h));
+}
+
+fn iconStrokeWidth(style : vec4f) -> f32 {
+    let fill = clamp(style.x, 0.0, 1.0);
+    let weight = clamp(style.y, 100.0, 700.0);
+    let grade = clamp(style.z, -50.0, 200.0);
+    let optical_size = clamp(style.w, 20.0, 48.0);
+    let optical_scale = optical_size / 24.0;
+    return clamp((weight / 400.0) * 2.0 + (grade * 0.004) + (fill * 0.35), 0.8, 4.8) *
+        optical_scale;
+}
+
+fn chevronDistance(position : vec2f, icon : vec4f, style : vec4f) -> f32 {
+    let optical_size = clamp(style.w, 20.0, 48.0);
+    let icon_scale = optical_size / 24.0;
+    let top = vec2f(icon.x, icon.z) * icon_scale;
+    let center = vec2f(icon.y, 0.0) * icon_scale;
+    let bottom = vec2f(icon.x, icon.w) * icon_scale;
+    let stroke_radius = iconStrokeWidth(style) * 0.5;
+    return min(segmentDistance(position, top, center), segmentDistance(position, center, bottom)) -
+        stroke_radius;
+}
+
+fn drawSymbolButton(color : vec3f, pixel_position : vec2f, button : SymbolButton) -> vec3f {
+    let center = button.frame.xy;
+    let size = button.frame.zw;
+    let radius = 10.0;
+    let local_position = pixel_position - center;
+
+    let button_edge = roundedRectDistance(local_position, size * 0.5, radius);
+    let button_coverage = 1.0 - smoothstep(-1.0, 1.0, button_edge);
+    let border_coverage = 1.0 - smoothstep(-1.0, 1.0, abs(button_edge) - 0.75);
+    let button_fill = vec3f(0.985, 0.988, 0.992);
+    let button_border = vec3f(0.73, 0.76, 0.82);
+
+    var out_color = mix(color, button_fill, button_coverage);
+    out_color = mix(out_color, button_border, border_coverage * button_coverage);
+
+    let icon_distance = chevronDistance(local_position, button.icon, button.style);
+    let icon_coverage = 1.0 - smoothstep(-1.0, 1.0, icon_distance);
+    return mix(out_color, vec3f(0.13, 0.20, 0.32), icon_coverage * button_coverage);
+}
+
 @fragment
 fn fragmentMain(in : VertexOut) -> @location(0) vec4f {
-    let button_size = scene.button.xy;
-    let radius = scene.button.z;
-    let edge = roundedRectDistance(in.local_position, button_size * 0.5, radius);
-
-    let local_y = (in.local_position.y / button_size.y) + 0.5;
-    let highlight = 0.08 * (1.0 - local_y);
-    let background = vec3f(0.94, 0.95, 0.97);
-    let fill = vec3f(0.12 + highlight, 0.32 + highlight, 0.78 + highlight);
-    let coverage = 1.0 - smoothstep(-1.0, 1.0, edge);
-    return vec4f(mix(background, fill, coverage), 1.0);
+    var color = vec3f(0.94, 0.95, 0.97);
+    color = drawSymbolButton(color, in.pixel_position, scene.buttons[0]);
+    color = drawSymbolButton(color, in.pixel_position, scene.buttons[1]);
+    return vec4f(color, 1.0);
 }
 )wgsl";
 
+struct SymbolButtonUniform {
+    float frame[4];
+    float icon[4];
+    float style[4];
+};
+
 struct SceneUniforms {
     float viewport[4];
-    float button[4];
+    SymbolButtonUniform buttons[kNavigationButtonCount];
 };
 
 uint32_t PixelSize(CGFloat points, CGFloat scale) {
@@ -103,6 +158,26 @@ NSRect InitialWindowVisibleFrame() {
         return [screen visibleFrame];
     }
     return NSMakeRect(0.0, 0.0, kInitialWidth, kInitialHeight);
+}
+
+SymbolButtonUniform MakeSymbolButton(float center_x,
+                                     float center_y,
+                                     phenotype::MaterialSymbolIcon icon,
+                                     phenotype::MaterialSymbolOptions options) {
+    constexpr float button_width = 40.0f;
+    constexpr float button_height = 36.0f;
+    auto geometry = phenotype::MaterialSymbolChevronGeometryFor(icon);
+
+    return SymbolButtonUniform{
+        {center_x, center_y, button_width, button_height},
+        {geometry.outer_x, geometry.center_x, geometry.top_y, geometry.bottom_y},
+        {
+            options.fill ? 1.0f : 0.0f,
+            options.weight,
+            options.grade,
+            options.optical_size,
+        },
+    };
 }
 
 class DawnButtonRenderer {
@@ -351,9 +426,26 @@ private:
             return;
         }
 
+        phenotype::MaterialSymbolOptions navigation_icon_options{
+            .fill = false,
+            .weight = 500.0f,
+            .grade = 0.0f,
+            .optical_size = 24.0f,
+        };
+        constexpr float toolbar_y = 54.0f;
+        constexpr float left_button_x = 68.0f;
+        constexpr float right_button_x = 114.0f;
+
         SceneUniforms uniforms = {
             {static_cast<float>(_width), static_cast<float>(_height), 0.0f, 0.0f},
-            {360.0f, 72.0f, 16.0f, 0.0f},
+            {
+                MakeSymbolButton(left_button_x, toolbar_y,
+                                 phenotype::MaterialSymbolIcon::chevron_left,
+                                 navigation_icon_options),
+                MakeSymbolButton(right_button_x, toolbar_y,
+                                 phenotype::MaterialSymbolIcon::chevron_right,
+                                 navigation_icon_options),
+            },
         };
         _device.GetQueue().WriteBuffer(_scene_uniform_buffer, 0, &uniforms, sizeof(uniforms));
     }
