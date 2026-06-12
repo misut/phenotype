@@ -18,7 +18,7 @@ enum class VisualMaterial {
 
 struct BlurBackground {
   VisualMaterial material = VisualMaterial::under_window_background;
-  float opacity = 0.78f;
+  float opacity = 1.0f;
 };
 
 struct Background {

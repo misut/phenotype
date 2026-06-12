@@ -693,24 +693,26 @@ private:
                               NSMidX(visible_frame) - (window_width / 2.0),
                               NSMidY(visible_frame) - (window_height / 2.0))];
 
-  NSView *content_view = [[NSView alloc] initWithFrame:content_rect];
-  [content_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
-  [content_view setWantsLayer:YES];
-  [[content_view layer] setOpaque:NO];
-  [[content_view layer] setBackgroundColor:[[NSColor clearColor] CGColor]];
-
+  NSView *content_view = nil;
   if (uses_blur) {
-    NSVisualEffectView *background_view =
+    NSVisualEffectView *visual_effect_view =
         [[NSVisualEffectView alloc] initWithFrame:content_rect];
-    [background_view
+    [visual_effect_view
         setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
-    [background_view setMaterial:ToNativeVisualMaterial(
-                                     _spec.options.background.blur.material)];
-    [background_view setBlendingMode:NSVisualEffectBlendingModeBehindWindow];
-    [background_view setState:NSVisualEffectStateActive];
-    [background_view setAlphaValue:_spec.options.background.blur.opacity];
-    [content_view addSubview:background_view];
-    [background_view release];
+    [visual_effect_view
+        setMaterial:ToNativeVisualMaterial(
+                        _spec.options.background.blur.material)];
+    [visual_effect_view setBlendingMode:NSVisualEffectBlendingModeBehindWindow];
+    [visual_effect_view setState:NSVisualEffectStateActive];
+    [visual_effect_view setEmphasized:YES];
+    [visual_effect_view setAlphaValue:_spec.options.background.blur.opacity];
+    content_view = visual_effect_view;
+  } else {
+    content_view = [[NSView alloc] initWithFrame:content_rect];
+    [content_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    [content_view setWantsLayer:YES];
+    [[content_view layer] setOpaque:NO];
+    [[content_view layer] setBackgroundColor:[[NSColor clearColor] CGColor]];
   }
 
   _metal_view = [[NSView alloc] initWithFrame:content_rect];
