@@ -14,52 +14,65 @@ constexpr uint32_t kInitialHeight = 640;
 constexpr char kButtonShader[] = R"wgsl(
 struct VertexOut {
     @builtin(position) position : vec4f,
-    @location(0) local : vec2f,
+    @location(0) local_position : vec2f,
 };
+
+struct SceneUniforms {
+    viewport : vec4f,
+    button : vec4f,
+};
+
+@group(0) @binding(0) var<uniform> scene : SceneUniforms;
 
 @vertex
 fn vertexMain(@builtin(vertex_index) index : u32) -> VertexOut {
-    let positions = array<vec2f, 6>(
-        vec2f(-0.42, -0.12),
-        vec2f(-0.42,  0.12),
-        vec2f( 0.42, -0.12),
-        vec2f( 0.42, -0.12),
-        vec2f(-0.42,  0.12),
-        vec2f( 0.42,  0.12),
-    );
     let local = array<vec2f, 6>(
-        vec2f(0.0, 0.0),
-        vec2f(0.0, 1.0),
-        vec2f(1.0, 0.0),
-        vec2f(1.0, 0.0),
-        vec2f(0.0, 1.0),
-        vec2f(1.0, 1.0),
+        vec2f(-0.5, -0.5),
+        vec2f(-0.5,  0.5),
+        vec2f( 0.5, -0.5),
+        vec2f( 0.5, -0.5),
+        vec2f(-0.5,  0.5),
+        vec2f( 0.5,  0.5),
+    );
+
+    let viewport_size = scene.viewport.xy;
+    let button_size = scene.button.xy;
+    let pixel_position = (viewport_size * 0.5) + (local[index] * button_size);
+    let clip_position = vec2f(
+        (pixel_position.x / viewport_size.x) * 2.0 - 1.0,
+        1.0 - (pixel_position.y / viewport_size.y) * 2.0,
     );
 
     var out : VertexOut;
-    out.position = vec4f(positions[index], 0.0, 1.0);
-    out.local = local[index];
+    out.position = vec4f(clip_position, 0.0, 1.0);
+    out.local_position = local[index] * button_size;
     return out;
 }
 
-fn roundedButtonDistance(local : vec2f) -> f32 {
-    let half_size = vec2f(0.5, 0.5);
-    let radius = 0.18;
-    let q = abs(local - half_size) - (half_size - vec2f(radius));
+fn roundedRectDistance(position : vec2f, half_size : vec2f, radius : f32) -> f32 {
+    let q = abs(position) - (half_size - vec2f(radius));
     return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - radius;
 }
 
 @fragment
 fn fragmentMain(in : VertexOut) -> @location(0) vec4f {
-    let edge = roundedButtonDistance(in.local);
-    if (edge > 0.0) {
-        discard;
-    }
+    let button_size = scene.button.xy;
+    let radius = scene.button.z;
+    let edge = roundedRectDistance(in.local_position, button_size * 0.5, radius);
 
-    let highlight = 0.10 * (1.0 - in.local.y);
-    return vec4f(0.12 + highlight, 0.32 + highlight, 0.78 + highlight, 1.0);
+    let local_y = (in.local_position.y / button_size.y) + 0.5;
+    let highlight = 0.08 * (1.0 - local_y);
+    let background = vec3f(0.94, 0.95, 0.97);
+    let fill = vec3f(0.12 + highlight, 0.32 + highlight, 0.78 + highlight);
+    let coverage = 1.0 - smoothstep(-1.0, 1.0, edge);
+    return vec4f(mix(background, fill, coverage), 1.0);
 }
 )wgsl";
+
+struct SceneUniforms {
+    float viewport[4];
+    float button[4];
+};
 
 uint32_t PixelSize(CGFloat points, CGFloat scale) {
     double pixels = static_cast<double>(points * scale);
@@ -123,6 +136,7 @@ public:
             return false;
         }
 
+        CreateSceneUniformBuffer();
         if (!ConfigureSurface(width, height)) {
             return false;
         }
@@ -168,6 +182,7 @@ public:
         wgpu::CommandEncoder encoder = _device.CreateCommandEncoder();
         wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&render_pass_descriptor);
         pass.SetPipeline(_pipeline);
+        pass.SetBindGroup(0, _scene_bind_group);
         pass.Draw(6);
         pass.End();
 
@@ -249,6 +264,7 @@ private:
         _format = capabilities.formats[0];
         _width = width;
         _height = height;
+        UpdateSceneUniforms();
 
         wgpu::SurfaceConfiguration configuration;
         configuration.device = _device;
@@ -266,6 +282,25 @@ private:
         wgpu::ShaderSourceWGSL wgsl;
         wgsl.code = kButtonShader;
 
+        wgpu::BindGroupLayoutEntry bind_group_layout_entry;
+        bind_group_layout_entry.binding = 0;
+        bind_group_layout_entry.visibility = wgpu::ShaderStage::Vertex |
+            wgpu::ShaderStage::Fragment;
+        bind_group_layout_entry.buffer.type = wgpu::BufferBindingType::Uniform;
+        bind_group_layout_entry.buffer.minBindingSize = sizeof(SceneUniforms);
+
+        wgpu::BindGroupLayoutDescriptor bind_group_layout_descriptor;
+        bind_group_layout_descriptor.entryCount = 1;
+        bind_group_layout_descriptor.entries = &bind_group_layout_entry;
+        wgpu::BindGroupLayout bind_group_layout =
+            _device.CreateBindGroupLayout(&bind_group_layout_descriptor);
+
+        wgpu::PipelineLayoutDescriptor pipeline_layout_descriptor;
+        pipeline_layout_descriptor.bindGroupLayoutCount = 1;
+        pipeline_layout_descriptor.bindGroupLayouts = &bind_group_layout;
+        wgpu::PipelineLayout pipeline_layout =
+            _device.CreatePipelineLayout(&pipeline_layout_descriptor);
+
         wgpu::ShaderModuleDescriptor shader_descriptor;
         shader_descriptor.nextInChain = &wgsl;
         wgpu::ShaderModule shader = _device.CreateShaderModule(&shader_descriptor);
@@ -281,6 +316,7 @@ private:
         fragment.targets = &color_target;
 
         wgpu::RenderPipelineDescriptor pipeline_descriptor;
+        pipeline_descriptor.layout = pipeline_layout;
         pipeline_descriptor.vertex.module = shader;
         pipeline_descriptor.vertex.entryPoint = "vertexMain";
         pipeline_descriptor.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
@@ -288,12 +324,46 @@ private:
         pipeline_descriptor.multisample.count = 1;
 
         _pipeline = _device.CreateRenderPipeline(&pipeline_descriptor);
+
+        wgpu::BindGroupEntry bind_group_entry;
+        bind_group_entry.binding = 0;
+        bind_group_entry.buffer = _scene_uniform_buffer;
+        bind_group_entry.offset = 0;
+        bind_group_entry.size = sizeof(SceneUniforms);
+
+        wgpu::BindGroupDescriptor bind_group_descriptor;
+        bind_group_descriptor.layout = bind_group_layout;
+        bind_group_descriptor.entryCount = 1;
+        bind_group_descriptor.entries = &bind_group_entry;
+        _scene_bind_group = _device.CreateBindGroup(&bind_group_descriptor);
+    }
+
+    void CreateSceneUniformBuffer() {
+        wgpu::BufferDescriptor buffer_descriptor;
+        buffer_descriptor.size = sizeof(SceneUniforms);
+        buffer_descriptor.usage = wgpu::BufferUsage::CopyDst |
+            wgpu::BufferUsage::Uniform;
+        _scene_uniform_buffer = _device.CreateBuffer(&buffer_descriptor);
+    }
+
+    void UpdateSceneUniforms() {
+        if (!_scene_uniform_buffer) {
+            return;
+        }
+
+        SceneUniforms uniforms = {
+            {static_cast<float>(_width), static_cast<float>(_height), 0.0f, 0.0f},
+            {360.0f, 72.0f, 16.0f, 0.0f},
+        };
+        _device.GetQueue().WriteBuffer(_scene_uniform_buffer, 0, &uniforms, sizeof(uniforms));
     }
 
     wgpu::Instance _instance;
     wgpu::Surface _surface;
     wgpu::Adapter _adapter;
     wgpu::Device _device;
+    wgpu::Buffer _scene_uniform_buffer;
+    wgpu::BindGroup _scene_bind_group;
     wgpu::TextureFormat _format = wgpu::TextureFormat::Undefined;
     wgpu::RenderPipeline _pipeline;
     uint32_t _width = 0;
