@@ -53,6 +53,8 @@ jobs:
         run: |
           eval "$(intron env)"
           exon test
+          cd examples/files/macos
+          exon build
 
   test-windows-native:
     name: test (windows-2022, native)
