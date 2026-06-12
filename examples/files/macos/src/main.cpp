@@ -7,7 +7,7 @@ namespace macos = phenotype::macos;
 ui::View FilesView() {
   constexpr ui::SymbolOptions navigation_icon_options{
       .fill = false,
-      .weight = 500.0f,
+      .weight = 450.0f,
       .grade = 0.0f,
       .optical_size = 24.0f,
   };
