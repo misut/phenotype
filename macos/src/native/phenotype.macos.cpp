@@ -201,6 +201,22 @@ ToNativeVisualMaterial(phenotype::macos::window::VisualMaterial material) {
   return NSVisualEffectMaterialUnderWindowBackground;
 }
 
+void ApplyTitleBarStyle(NSWindow *window,
+                        phenotype::macos::window::TitleBarStyle style) {
+  if (style == phenotype::macos::window::TitleBarStyle::hidden) {
+    [window
+        setStyleMask:[window styleMask] | NSWindowStyleMaskFullSizeContentView];
+    [window setTitleVisibility:NSWindowTitleHidden];
+    [window setTitlebarAppearsTransparent:YES];
+    [window setMovableByWindowBackground:YES];
+    return;
+  }
+
+  [window setTitleVisibility:NSWindowTitleVisible];
+  [window setTitlebarAppearsTransparent:NO];
+  [window setMovableByWindowBackground:NO];
+}
+
 phenotype::ui::Size IntrinsicSize(const phenotype::ui::View &view) {
   namespace ui = phenotype::ui;
 
@@ -667,9 +683,14 @@ private:
   CGFloat window_width = std::max<CGFloat>(1.0, _spec.options.size.width);
   CGFloat window_height = std::max<CGFloat>(1.0, _spec.options.size.height);
   NSRect content_rect = NSMakeRect(0.0, 0.0, window_width, window_height);
+  bool hides_title_bar = _spec.options.title_bar ==
+                         phenotype::macos::window::TitleBarStyle::hidden;
   NSWindowStyleMask style_mask =
       NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
       NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
+  if (hides_title_bar) {
+    style_mask |= NSWindowStyleMaskFullSizeContentView;
+  }
 
   _window = [[NSWindow alloc] initWithContentRect:content_rect
                                         styleMask:style_mask
@@ -677,6 +698,7 @@ private:
                                             defer:NO];
   [_window
       setTitle:[NSString stringWithUTF8String:_spec.options.title.c_str()]];
+  ApplyTitleBarStyle(_window, _spec.options.title_bar);
 
   bool uses_blur = _spec.options.background.kind ==
                    phenotype::macos::window::Background::Kind::blurred;
@@ -735,6 +757,7 @@ private:
 
   [_window setContentView:content_view];
   [content_view release];
+  ApplyTitleBarStyle(_window, _spec.options.title_bar);
 
   phenotype::ui::View root_view =
       _spec.content ? _spec.content() : phenotype::ui::empty();

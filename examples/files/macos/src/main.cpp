@@ -33,6 +33,7 @@ int main(int argc, char *argv[]) {
           {
               .title = "Files",
               .size = {960.0f, 640.0f},
+              .title_bar = macos::window::TitleBarStyle::hidden,
               .background = macos::window::Background::blurred(),
           },
           FilesView));
