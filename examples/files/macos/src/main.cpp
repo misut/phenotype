@@ -22,7 +22,7 @@ ui::View FilesView() {
                              .role(ui::ButtonRole::forward)
                              .accessibility_label("Forward"))
           .spacing(8.0f)
-          .padding({.left = 48.0f, .top = 36.0f}),
+          .padding({.left = 92.0f, .top = 0.0f}),
       ui::spacer());
 }
 
