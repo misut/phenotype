@@ -42,11 +42,16 @@ struct Background {
   }
 };
 
+struct WindowControls {
+  float vertical_offset = 0.0f;
+};
+
 struct Options {
   std::string title;
   ui::Size size = {960.0f, 640.0f};
   TitleBarStyle title_bar = TitleBarStyle::visible;
   Background background = Background::system();
+  WindowControls window_controls;
 };
 
 struct Spec {

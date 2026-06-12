@@ -179,6 +179,14 @@ float LogicalPixel(CGFloat points, CGFloat scale) noexcept {
   return static_cast<float>(points * scale);
 }
 
+constexpr std::array<NSWindowButton, 3> LeadingWindowButtonTypes() noexcept {
+  return {
+      NSWindowCloseButton,
+      NSWindowMiniaturizeButton,
+      NSWindowZoomButton,
+  };
+}
+
 NSRect InitialWindowVisibleFrame(CGFloat width, CGFloat height) {
   NSArray<NSScreen *> *screens = [NSScreen screens];
   for (NSScreen *screen in screens) {
@@ -227,21 +235,64 @@ void ApplyTitleBarStyle(NSWindow *window,
   [window setMovableByWindowBackground:NO];
 }
 
+bool CaptureWindowControlFrames(NSWindow *window, std::array<NSRect, 3> &frames,
+                                std::array<bool, 3> &has_frame) {
+  frames.fill(NSZeroRect);
+  has_frame.fill(false);
+  if (!window) {
+    return false;
+  }
+
+  bool has_any_frame = false;
+  std::array<NSWindowButton, 3> button_types = LeadingWindowButtonTypes();
+  for (size_t index = 0; index < button_types.size(); ++index) {
+    NSButton *button = [window standardWindowButton:button_types[index]];
+    if (!button || ![button superview]) {
+      continue;
+    }
+
+    [[button superview] layoutSubtreeIfNeeded];
+    frames[index] = [button frame];
+    has_frame[index] = true;
+    has_any_frame = true;
+  }
+  return has_any_frame;
+}
+
+void ApplyWindowControlVerticalOffset(NSWindow *window,
+                                      const std::array<NSRect, 3> &base_frames,
+                                      const std::array<bool, 3> &has_base_frame,
+                                      CGFloat offset) {
+  if (!window) {
+    return;
+  }
+
+  std::array<NSWindowButton, 3> button_types = LeadingWindowButtonTypes();
+  for (size_t index = 0; index < button_types.size(); ++index) {
+    if (!has_base_frame[index]) {
+      continue;
+    }
+
+    NSButton *button = [window standardWindowButton:button_types[index]];
+    if (!button || ![button superview]) {
+      continue;
+    }
+
+    NSRect frame = base_frames[index];
+    frame.origin.y -= offset;
+    [button setFrame:frame];
+  }
+}
+
 LayoutContext BuildLayoutContext(NSWindow *window, NSView *content_view) {
   LayoutContext context;
   if (!window || !content_view) {
     return context;
   }
 
-  std::array<NSWindowButton, 3> button_types{
-      NSWindowCloseButton,
-      NSWindowMiniaturizeButton,
-      NSWindowZoomButton,
-  };
-
   bool has_controls = false;
   NSRect controls_rect = NSZeroRect;
-  for (NSWindowButton button_type : button_types) {
+  for (NSWindowButton button_type : LeadingWindowButtonTypes()) {
     NSButton *button = [window standardWindowButton:button_type];
     if (!button || [button isHidden] || ![button superview]) {
       continue;
@@ -745,6 +796,9 @@ private:
   CAMetalLayer *_metal_layer;
   std::unique_ptr<DawnButtonRenderer> _renderer;
   phenotype::macos::window::Spec _spec;
+  std::array<NSRect, 3> _window_control_base_frames;
+  std::array<bool, 3> _window_control_has_base_frame;
+  bool _has_window_control_base_frames;
 }
 - (instancetype)initWithSpec:(phenotype::macos::window::Spec)spec;
 @end
@@ -755,6 +809,9 @@ private:
   self = [super init];
   if (self) {
     _spec = std::move(spec);
+    _window_control_base_frames.fill(NSZeroRect);
+    _window_control_has_base_frame.fill(false);
+    _has_window_control_base_frames = false;
   }
   return self;
 }
@@ -843,6 +900,11 @@ private:
 
   [_window makeKeyAndOrderFront:nil];
   [NSApp activate];
+  _has_window_control_base_frames = CaptureWindowControlFrames(
+      _window, _window_control_base_frames, _window_control_has_base_frame);
+  ApplyWindowControlVerticalOffset(
+      _window, _window_control_base_frames, _window_control_has_base_frame,
+      _spec.options.window_controls.vertical_offset);
 
   CGFloat scale = [_window backingScaleFactor];
   NSSize bounds = [_metal_view bounds].size;
@@ -886,6 +948,14 @@ private:
   [_metal_layer setDrawableSize:drawable_size];
 
   if (_renderer) {
+    if (!_has_window_control_base_frames) {
+      _has_window_control_base_frames = CaptureWindowControlFrames(
+          _window, _window_control_base_frames, _window_control_has_base_frame);
+    }
+    ApplyWindowControlVerticalOffset(
+        _window, _window_control_base_frames, _window_control_has_base_frame,
+        _spec.options.window_controls.vertical_offset);
+
     phenotype::ui::Size layout_size{
         static_cast<float>(bounds.width),
         static_cast<float>(bounds.height),
