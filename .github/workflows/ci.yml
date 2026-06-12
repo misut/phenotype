@@ -52,7 +52,7 @@ jobs:
       - name: Run tests
         run: |
           eval "$(intron env)"
-          exon test
+          exon test --member phenotype-core
           cd examples/files/macos
           exon build
 
@@ -112,7 +112,7 @@ jobs:
         shell: pwsh
         run: |
           Invoke-Expression (& intron env | Out-String)
-          exon test --timeout 120 --show-output failed
+          exon test --member phenotype-core --timeout 120 --show-output failed
 
   test-ubuntu-wasi:
     name: test (ubuntu-24.04, wasm32-wasi)
@@ -159,4 +159,4 @@ jobs:
       - name: Run tests
         run: |
           eval "$(intron env)"
-          exon test --target wasm32-wasi --timeout 120 --show-output failed
+          exon test --member phenotype-core --target wasm32-wasi --timeout 120 --show-output failed

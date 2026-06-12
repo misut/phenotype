@@ -10,8 +10,10 @@ platforms = [{ os = "macos", arch = "aarch64" }]
 
 [dependencies]
 
+[dependencies.workspace]
+phenotype-core = true
+
 [dependencies.path]
-phenotype = "../../.."
 phenotype-macos = "../../../macos"
 
 [sync]

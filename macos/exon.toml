@@ -10,7 +10,7 @@ build-system = "cmake"
 platforms = [{ os = "macos", arch = "aarch64" }]
 
 [dependencies.path]
-phenotype = ".."
+phenotype-core = "../core"
 
 [dependencies.cmake.dawn]
 git = "https://github.com/google/dawn.git"
@@ -36,7 +36,7 @@ TINT_BUILD_GLSL_VALIDATOR = "OFF"
 TINT_BUILD_IR_BINARY = "OFF"
 TINT_BUILD_TESTS = "OFF"
 
-[target.'cfg(os = "macos")'.build]
+[build]
 cxxflags = ["-x", "objective-c++"]
 ldflags = ["LINKER:-framework,AppKit", "LINKER:-framework,QuartzCore"]
 

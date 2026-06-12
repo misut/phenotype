@@ -1,0 +1,8 @@
+[package]
+name = "phenotype-core"
+version = "0.1.0"
+description = "Core cross-platform primitives for phenotype"
+authors = ["misut"]
+license = "MIT"
+type = "lib"
+standard = 23

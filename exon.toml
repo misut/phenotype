@@ -1,10 +1,15 @@
-[package]
-name = "phenotype"
+[workspace]
+members = [
+    "core",
+    "examples/files/macos",
+]
+
+[workspace.package]
 version = "0.1.0"
-description = ""
 authors = ["misut"]
 license = "MIT"
-type = "lib"
 standard = 23
+build-system = "exon"
 
-[dependencies]
+[sync]
+cmake-in-root = false
