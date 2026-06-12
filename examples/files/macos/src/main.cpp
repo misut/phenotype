@@ -89,7 +89,15 @@ fn chevronDistance(position : vec2f, icon : vec4f, style : vec4f) -> f32 {
         stroke_radius;
 }
 
-fn drawSymbolButton(color : vec3f, pixel_position : vec2f, button : SymbolButton) -> vec3f {
+fn compositeOver(destination : vec4f, source_color : vec3f, source_alpha : f32) -> vec4f {
+    let alpha = clamp(source_alpha, 0.0, 1.0);
+    return vec4f(
+        destination.rgb * (1.0 - alpha) + source_color * alpha,
+        destination.a * (1.0 - alpha) + alpha,
+    );
+}
+
+fn drawSymbolButton(layer : vec4f, pixel_position : vec2f, button : SymbolButton) -> vec4f {
     let center = button.frame.xy;
     let size = button.frame.zw;
     let radius = 10.0;
@@ -101,20 +109,20 @@ fn drawSymbolButton(color : vec3f, pixel_position : vec2f, button : SymbolButton
     let button_fill = vec3f(0.985, 0.988, 0.992);
     let button_border = vec3f(0.73, 0.76, 0.82);
 
-    var out_color = mix(color, button_fill, button_coverage);
-    out_color = mix(out_color, button_border, border_coverage * button_coverage);
+    var out_layer = compositeOver(layer, button_fill, button_coverage * 0.72);
+    out_layer = compositeOver(out_layer, button_border, border_coverage * button_coverage * 0.55);
 
     let icon_distance = chevronDistance(local_position, button.icon, button.style);
     let icon_coverage = 1.0 - smoothstep(-1.0, 1.0, icon_distance);
-    return mix(out_color, vec3f(0.13, 0.20, 0.32), icon_coverage * button_coverage);
+    return compositeOver(out_layer, vec3f(0.13, 0.20, 0.32), icon_coverage * button_coverage);
 }
 
 @fragment
 fn fragmentMain(in : VertexOut) -> @location(0) vec4f {
-    var color = vec3f(0.94, 0.95, 0.97);
-    color = drawSymbolButton(color, in.pixel_position, scene.buttons[0]);
-    color = drawSymbolButton(color, in.pixel_position, scene.buttons[1]);
-    return vec4f(color, 1.0);
+    var layer = vec4f(0.0);
+    layer = drawSymbolButton(layer, in.pixel_position, scene.buttons[0]);
+    layer = drawSymbolButton(layer, in.pixel_position, scene.buttons[1]);
+    return layer;
 }
 )wgsl";
 
@@ -248,7 +256,7 @@ public:
         color_attachment.view = backbuffer;
         color_attachment.loadOp = wgpu::LoadOp::Clear;
         color_attachment.storeOp = wgpu::StoreOp::Store;
-        color_attachment.clearValue = {0.94, 0.95, 0.97, 1.0};
+        color_attachment.clearValue = {0.0, 0.0, 0.0, 0.0};
 
         wgpu::RenderPassDescriptor render_pass_descriptor;
         render_pass_descriptor.colorAttachmentCount = 1;
@@ -348,7 +356,7 @@ private:
         configuration.width = _width;
         configuration.height = _height;
         configuration.presentMode = wgpu::PresentMode::Fifo;
-        configuration.alphaMode = wgpu::CompositeAlphaMode::Auto;
+        configuration.alphaMode = wgpu::CompositeAlphaMode::Premultiplied;
         _surface.Configure(&configuration);
         return true;
     }
@@ -467,6 +475,7 @@ private:
 @interface AppDelegate : NSObject <NSApplicationDelegate> {
     NSWindow* _window;
     NSTimer* _render_timer;
+    NSView* _metal_view;
     CAMetalLayer* _metal_layer;
     DawnButtonRenderer* _renderer;
 }
@@ -488,6 +497,8 @@ private:
                                             backing:NSBackingStoreBuffered
                                               defer:NO];
     [_window setTitle:@"Files"];
+    [_window setOpaque:NO];
+    [_window setBackgroundColor:[NSColor clearColor]];
 
     NSRect visible_frame = InitialWindowVisibleFrame();
     [_window setFrameOrigin:NSMakePoint(
@@ -495,14 +506,37 @@ private:
         NSMidY(visible_frame) - (kInitialHeight / 2.0))];
 
     NSView* content_view = [[NSView alloc] initWithFrame:content_rect];
+    [content_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
     [content_view setWantsLayer:YES];
+    [[content_view layer] setOpaque:NO];
+    [[content_view layer] setBackgroundColor:[[NSColor clearColor] CGColor]];
+
+    NSVisualEffectView* background_view =
+        [[NSVisualEffectView alloc] initWithFrame:content_rect];
+    [background_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    [background_view setMaterial:NSVisualEffectMaterialUnderWindowBackground];
+    [background_view setBlendingMode:NSVisualEffectBlendingModeBehindWindow];
+    [background_view setState:NSVisualEffectStateActive];
+    [background_view setAlphaValue:0.78];
+    [content_view addSubview:background_view];
+    [background_view release];
+
+    _metal_view = [[NSView alloc] initWithFrame:content_rect];
+    [_metal_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    [_metal_view setWantsLayer:YES];
 
     _metal_layer = [CAMetalLayer layer];
+    [_metal_layer setOpaque:NO];
+    [_metal_layer setBackgroundColor:[[NSColor clearColor] CGColor]];
+    [_metal_layer setFrame:NSRectToCGRect([_metal_view bounds])];
     [_metal_layer setContentsScale:[_window backingScaleFactor]];
     [_metal_layer setDrawableSize:CGSizeMake(
         kInitialWidth * [_window backingScaleFactor],
         kInitialHeight * [_window backingScaleFactor])];
-    [content_view setLayer:_metal_layer];
+    [_metal_view setLayer:_metal_layer];
+    [content_view addSubview:_metal_view];
+    [_metal_view release];
+
     [_window setContentView:content_view];
     [content_view release];
 
@@ -531,8 +565,9 @@ private:
     (void)timer;
 
     CGFloat scale = [_window backingScaleFactor];
-    NSSize bounds = [[_window contentView] bounds].size;
+    NSSize bounds = [_metal_view bounds].size;
     CGSize drawable_size = CGSizeMake(bounds.width * scale, bounds.height * scale);
+    [_metal_layer setFrame:NSRectToCGRect([_metal_view bounds])];
     [_metal_layer setContentsScale:scale];
     [_metal_layer setDrawableSize:drawable_size];
 
