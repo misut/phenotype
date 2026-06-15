@@ -1,0 +1,16 @@
+[package]
+name = "phenotype-windows"
+version = "0.1.0"
+description = "Windows native shell for phenotype"
+authors = ["misut"]
+license = "MIT"
+type = "lib"
+standard = 23
+build-system = "cmake"
+platforms = [{ os = "windows", arch = "x86_64" }]
+
+[dependencies.path]
+phenotype-core = "../core"
+
+[sync]
+cmake-in-root = false

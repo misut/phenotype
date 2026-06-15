@@ -115,6 +115,8 @@ jobs:
           Invoke-Expression (& intron env | Out-String)
           Set-Location core
           exon test --timeout 120 --show-output failed
+          Set-Location ..\examples\files\windows
+          exon build
 
   test-ubuntu-wasi:
     name: test (ubuntu-24.04, wasm32-wasi)
