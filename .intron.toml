@@ -1,0 +1,9 @@
+[toolchain]
+cmake = "4.3.2"
+ninja = "1.13.2"
+
+[toolchain.macos]
+llvm = "22.1.4"
+
+[toolchain.windows]
+msvc = "2022"
