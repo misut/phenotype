@@ -1,8 +1,6 @@
 [workspace]
 members = [
     "core",
-    "examples/files/macos",
-    "examples/files/windows",
 ]
 
 [workspace.package]

@@ -8,12 +8,8 @@ type = "bin"
 standard = 23
 platforms = [{ os = "macos", arch = "aarch64" }]
 
-[dependencies]
-
-[dependencies.workspace]
-phenotype-core = true
-
 [dependencies.path]
+phenotype-core = "../../../core"
 phenotype-macos = "../../../macos"
 
 [sync]
