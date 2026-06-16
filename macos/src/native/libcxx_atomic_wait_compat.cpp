@@ -1,8 +1,9 @@
+#include <cstddef>
 #include <cstdint>
 
 // Dawn is built with the intron LLVM libc++ headers, while the app links the
-// macOS system libc++ dylib. Forward LLVM 22 atomic-wait ABI symbols to the
-// older system ABI so AppKit and Dawn share one libc++ runtime.
+// macOS system libc++ dylib. Forward LLVM 22 libc++ ABI symbols to the older
+// system ABI so AppKit and Dawn share one libc++ runtime.
 namespace std {
 inline namespace __1 {
 
@@ -28,6 +29,18 @@ void __atomic_notify_one_global_table(void const *address) noexcept {
 
 void __atomic_notify_all_global_table(void const *address) noexcept {
   __cxx_atomic_notify_all(address);
+}
+
+std::size_t __hash_memory(void const *data, std::size_t length) noexcept {
+  auto const *bytes = static_cast<std::uint8_t const *>(data);
+  std::uint64_t hash = 14695981039346656037ull;
+
+  for (std::size_t index = 0; index < length; ++index) {
+    hash ^= bytes[index];
+    hash *= 1099511628211ull;
+  }
+
+  return static_cast<std::size_t>(hash);
 }
 
 } // namespace __1

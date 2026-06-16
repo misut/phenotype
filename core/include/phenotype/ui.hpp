@@ -23,6 +23,13 @@ struct Insets {
   float bottom = 0.0f;
 };
 
+struct Color {
+  float red = 0.0f;
+  float green = 0.0f;
+  float blue = 0.0f;
+  float alpha = 1.0f;
+};
+
 struct LeadingWindowControlsPlacement {
   bool is_enabled = false;
   float spacing = 12.0f;
@@ -34,6 +41,8 @@ using SymbolOptions = phenotype::MaterialSymbolOptions;
 enum class Symbol {
   chevron_left,
   chevron_right,
+  folder,
+  description,
 };
 
 enum class ButtonRole {
@@ -54,12 +63,26 @@ enum class ViewKind {
   button,
   button_group,
   icon,
+  panel,
+  text,
+  grid,
 };
 
 enum class LayoutAxis {
   horizontal,
   vertical,
   overlay,
+};
+
+enum class TextOverflow {
+  clip,
+  ellipsis,
+};
+
+enum class TextTruncation {
+  head,
+  middle,
+  tail,
 };
 
 class View {
@@ -71,12 +94,29 @@ public:
   SymbolOptions symbol_options;
   ButtonRole button_role = ButtonRole::normal;
   bool is_enabled = true;
+  std::string text_content;
   std::string accessibility_label_text;
   Size preferred_size;
   Insets content_padding;
+  Color background_color;
+  Color foreground_color = {0.13f, 0.15f, 0.18f, 1.0f};
   LeadingWindowControlsPlacement leading_window_controls_placement;
   ControlShape control_shape = ControlShape::square_circle;
+  float font_size_value = 17.0f;
+  float font_weight_value = 400.0f;
+  float corner_radius_value = 0.0f;
   float child_spacing = 0.0f;
+  float grid_min_column_width = 112.0f;
+  float grid_row_height = 104.0f;
+  float grid_column_gap = 20.0f;
+  float grid_row_gap = 22.0f;
+  int text_line_limit = 0;
+  TextOverflow text_overflow = TextOverflow::clip;
+  TextTruncation text_truncation = TextTruncation::tail;
+  bool centers_children = false;
+  bool centers_text = false;
+  bool expands_width = false;
+  bool expands_height = false;
 
   [[nodiscard]] View spacing(float value) && {
     child_spacing = value;
@@ -85,6 +125,75 @@ public:
 
   View &spacing(float value) & {
     child_spacing = value;
+    return *this;
+  }
+
+  [[nodiscard]] View grid_metrics(float min_column_width, float row_height,
+                                  float column_gap = 20.0f,
+                                  float row_gap = 22.0f) && {
+    grid_min_column_width = min_column_width;
+    grid_row_height = row_height;
+    grid_column_gap = column_gap;
+    grid_row_gap = row_gap;
+    return std::move(*this);
+  }
+
+  View &grid_metrics(float min_column_width, float row_height,
+                     float column_gap = 20.0f, float row_gap = 22.0f) & {
+    grid_min_column_width = min_column_width;
+    grid_row_height = row_height;
+    grid_column_gap = column_gap;
+    grid_row_gap = row_gap;
+    return *this;
+  }
+
+  [[nodiscard]] View center_children() && {
+    centers_children = true;
+    return std::move(*this);
+  }
+
+  View &center_children() & {
+    centers_children = true;
+    return *this;
+  }
+
+  [[nodiscard]] View center_text() && {
+    centers_text = true;
+    return std::move(*this);
+  }
+
+  View &center_text() & {
+    centers_text = true;
+    return *this;
+  }
+
+  [[nodiscard]] View line_limit(int value) && {
+    text_line_limit = value < 0 ? 0 : value;
+    return std::move(*this);
+  }
+
+  View &line_limit(int value) & {
+    text_line_limit = value < 0 ? 0 : value;
+    return *this;
+  }
+
+  [[nodiscard]] View overflow(TextOverflow value) && {
+    text_overflow = value;
+    return std::move(*this);
+  }
+
+  View &overflow(TextOverflow value) & {
+    text_overflow = value;
+    return *this;
+  }
+
+  [[nodiscard]] View truncation(TextTruncation value) && {
+    text_truncation = value;
+    return std::move(*this);
+  }
+
+  View &truncation(TextTruncation value) & {
+    text_truncation = value;
     return *this;
   }
 
@@ -126,6 +235,18 @@ public:
     return *this;
   }
 
+  [[nodiscard]] View expand() && {
+    expands_width = true;
+    expands_height = true;
+    return std::move(*this);
+  }
+
+  View &expand() & {
+    expands_width = true;
+    expands_height = true;
+    return *this;
+  }
+
   [[nodiscard]] View shape(ControlShape value) && {
     control_shape = value;
     return std::move(*this);
@@ -133,6 +254,46 @@ public:
 
   View &shape(ControlShape value) & {
     control_shape = value;
+    return *this;
+  }
+
+  [[nodiscard]] View corner_radius(float value) && {
+    corner_radius_value = value;
+    return std::move(*this);
+  }
+
+  View &corner_radius(float value) & {
+    corner_radius_value = value;
+    return *this;
+  }
+
+  [[nodiscard]] View font_size(float value) && {
+    font_size_value = value;
+    return std::move(*this);
+  }
+
+  View &font_size(float value) & {
+    font_size_value = value;
+    return *this;
+  }
+
+  [[nodiscard]] View font_weight(float value) && {
+    font_weight_value = value;
+    return std::move(*this);
+  }
+
+  View &font_weight(float value) & {
+    font_weight_value = value;
+    return *this;
+  }
+
+  [[nodiscard]] View foreground(Color value) && {
+    foreground_color = value;
+    return std::move(*this);
+  }
+
+  View &foreground(Color value) & {
+    foreground_color = value;
     return *this;
   }
 
@@ -198,6 +359,10 @@ ToMaterialSymbolIcon(Symbol symbol) noexcept {
     return MaterialSymbolIcon::chevron_left;
   case Symbol::chevron_right:
     return MaterialSymbolIcon::chevron_right;
+  case Symbol::folder:
+    return MaterialSymbolIcon::folder;
+  case Symbol::description:
+    return MaterialSymbolIcon::description;
   }
   return MaterialSymbolIcon::chevron_left;
 }
@@ -207,6 +372,33 @@ inline View empty() { return {}; }
 inline View spacer() {
   View view;
   view.kind = ViewKind::spacer;
+  view.expands_width = true;
+  view.expands_height = true;
+  return view;
+}
+
+inline constexpr Color white() noexcept { return {1.0f, 1.0f, 1.0f, 1.0f}; }
+
+inline constexpr Color control_background() noexcept {
+  return {0.985f, 0.988f, 0.992f, 0.72f};
+}
+
+inline constexpr Color primary_label() noexcept {
+  return {0.13f, 0.15f, 0.18f, 1.0f};
+}
+
+inline View panel(Color color) {
+  View view;
+  view.kind = ViewKind::panel;
+  view.background_color = color;
+  return view;
+}
+
+inline View text(std::string_view content) {
+  View view;
+  view.kind = ViewKind::text;
+  view.text_content = content;
+  view.foreground_color = primary_label();
   return view;
 }
 
@@ -282,6 +474,20 @@ template <typename... Children> View vstack(Children &&...children) {
 
 template <typename... Children> View zstack(Children &&...children) {
   return stack(LayoutAxis::overlay, std::forward<Children>(children)...);
+}
+
+template <ViewValue... Children> View grid(Children &&...children) {
+  View view;
+  view.kind = ViewKind::grid;
+  (view.children.emplace_back(std::forward<Children>(children)), ...);
+  return view;
+}
+
+template <BlockContent Content> View grid(Content &&content) {
+  View view;
+  view.kind = ViewKind::grid;
+  view.children = BuildChildren(std::forward<Content>(content));
+  return view;
 }
 
 } // namespace layout
