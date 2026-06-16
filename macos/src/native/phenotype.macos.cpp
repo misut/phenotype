@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -280,10 +281,17 @@ struct TextLayout {
   bool centers_text = false;
 };
 
+struct HitTargetLayout {
+  LayoutRect frame;
+  std::function<void()> action;
+  bool is_enabled = true;
+};
+
 struct SceneLayout {
   std::vector<PanelLayout> panels;
   std::vector<SymbolButtonLayout> buttons;
   std::vector<TextLayout> texts;
+  std::vector<HitTargetLayout> hit_targets;
 };
 
 struct TextAtlasEntry {
@@ -867,7 +875,7 @@ void ApplyTitleBarStyle(NSWindow *window,
         setStyleMask:[window styleMask] | NSWindowStyleMaskFullSizeContentView];
     [window setTitleVisibility:NSWindowTitleHidden];
     [window setTitlebarAppearsTransparent:YES];
-    [window setMovableByWindowBackground:YES];
+    [window setMovableByWindowBackground:NO];
     return;
   }
 
@@ -1063,6 +1071,11 @@ float ControlShapeValue(phenotype::ui::ControlShape shape) noexcept {
   return 0.0f;
 }
 
+bool Contains(LayoutRect rect, phenotype::ui::Size point) noexcept {
+  return point.width >= rect.x && point.width <= rect.x + rect.width &&
+         point.height >= rect.y && point.height <= rect.y + rect.height;
+}
+
 void LayoutButtonGroup(const phenotype::ui::View &view, LayoutRect rect,
                        SceneLayout &scene) {
   namespace ui = phenotype::ui;
@@ -1077,6 +1090,15 @@ void LayoutButtonGroup(const phenotype::ui::View &view, LayoutRect rect,
                           child_size.height};
 
     if (child.kind == ui::ViewKind::button) {
+      if (child.click_action && child_rect.width > 0.0f &&
+          child_rect.height > 0.0f) {
+        scene.hit_targets.push_back({
+            child_rect,
+            child.click_action,
+            child.is_enabled,
+        });
+      }
+
       if (scene.buttons.size() >= kMaxSymbolButtonCount) {
         return;
       }
@@ -1153,6 +1175,14 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
       rect.y =
           controls.y + (controls.height * 0.5f) - (view_size.height * 0.5f);
     }
+  }
+
+  if (view.click_action && rect.width > 0.0f && rect.height > 0.0f) {
+    scene.hit_targets.push_back({
+        rect,
+        view.click_action,
+        view.is_enabled,
+    });
   }
 
   switch (view.kind) {
@@ -1325,6 +1355,7 @@ SceneLayout LayoutScene(const phenotype::ui::View &root, float width,
   scene.panels.reserve(kMaxPanelCount);
   scene.buttons.reserve(kMaxSymbolButtonCount);
   scene.texts.reserve(kMaxTextCount);
+  scene.hit_targets.reserve(64);
   LayoutView(root,
              {
                  0.0f,
@@ -1500,6 +1531,25 @@ public:
       return;
     }
     ConfigureSurface(width, height);
+  }
+
+  void UpdateRootView(phenotype::ui::View root_view) {
+    _root_view = std::move(root_view);
+    UpdateSceneUniforms();
+  }
+
+  bool ActivateAt(phenotype::ui::Size point) {
+    SceneLayout scene = LayoutScene(_root_view, _layout_size.width,
+                                    _layout_size.height, _layout_context);
+    for (auto iterator = scene.hit_targets.rbegin();
+         iterator != scene.hit_targets.rend(); ++iterator) {
+      if (!iterator->is_enabled || !Contains(iterator->frame, point)) {
+        continue;
+      }
+      iterator->action();
+      return true;
+    }
+    return false;
   }
 
   void Render() {
@@ -1845,6 +1895,7 @@ private:
 
 @protocol PhenotypeMetalViewDelegate
 - (void)metalViewNeedsRender:(NSView *)view;
+- (BOOL)metalView:(NSView *)view mouseDownAt:(NSPoint)location;
 @end
 
 @interface PhenotypeMetalView : NSView {
@@ -1859,6 +1910,27 @@ private:
 
 - (void)requestRender {
   [_renderDelegate metalViewNeedsRender:self];
+}
+
+- (BOOL)acceptsFirstResponder {
+  return YES;
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
+  (void)event;
+  return YES;
+}
+
+- (BOOL)mouseDownCanMoveWindow {
+  return NO;
+}
+
+- (void)mouseDown:(NSEvent *)event {
+  [[self window] makeFirstResponder:self];
+  NSPoint location = [self convertPoint:[event locationInWindow] fromView:nil];
+  if (![_renderDelegate metalView:self mouseDownAt:location]) {
+    [[self window] performWindowDragWithEvent:event];
+  }
 }
 
 - (void)setFrameSize:(NSSize)newSize {
@@ -1908,6 +1980,7 @@ private:
 - (instancetype)initWithSpec:(phenotype::macos::window::Spec)spec;
 - (LayoutContext)buildLayoutContext;
 - (void)applyWindowControlOffset;
+- (void)refreshRootView;
 @end
 
 @implementation AppDelegate
@@ -2060,6 +2133,13 @@ private:
   _is_rendering = false;
 }
 
+- (void)refreshRootView {
+  if (!_renderer || !_spec.content) {
+    return;
+  }
+  _renderer->UpdateRootView(_spec.content());
+}
+
 - (void)renderOnce {
   CGFloat scale = [_window backingScaleFactor];
   NSRect bounds_rect = [_metal_view bounds];
@@ -2135,6 +2215,23 @@ private:
   if (view == _metal_view) {
     [self renderNow];
   }
+}
+
+- (BOOL)metalView:(NSView *)view mouseDownAt:(NSPoint)location {
+  if (view != _metal_view || !_renderer) {
+    return NO;
+  }
+  NSSize bounds = [_metal_view bounds].size;
+  phenotype::ui::Size layout_point{
+      static_cast<float>(location.x),
+      static_cast<float>(bounds.height - location.y),
+  };
+  if (_renderer->ActivateAt(layout_point)) {
+    [self refreshRootView];
+    [self renderNow];
+    return YES;
+  }
+  return NO;
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:

@@ -170,5 +170,16 @@ int main() {
     return 7;
   }
 
+  bool clicked = false;
+  ui::View clickable = ui::panel(ui::control_background())
+                           .on_click([&clicked] { clicked = true; });
+  if (!clickable.click_action) {
+    return 14;
+  }
+  clickable.click_action();
+  if (!clicked) {
+    return 15;
+  }
+
   return 0;
 }

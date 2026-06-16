@@ -1,6 +1,7 @@
 #pragma once
 
 #ifndef PHENOTYPE_IMPORTS_STD_MODULE
+#include <functional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -117,6 +118,7 @@ public:
   bool centers_text = false;
   bool expands_width = false;
   bool expands_height = false;
+  std::function<void()> click_action;
 
   [[nodiscard]] View spacing(float value) && {
     child_spacing = value;
@@ -324,6 +326,16 @@ public:
 
   View &accessibility_label(std::string_view value) & {
     accessibility_label_text = value;
+    return *this;
+  }
+
+  [[nodiscard]] View on_click(std::function<void()> action) && {
+    click_action = std::move(action);
+    return std::move(*this);
+  }
+
+  View &on_click(std::function<void()> action) & {
+    click_action = std::move(action);
     return *this;
   }
 };
