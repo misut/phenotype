@@ -39,4 +39,5 @@ target_compile_definitions(phenotype-windows PRIVATE
 target_link_libraries(phenotype-windows PUBLIC
   phenotype-core
   user32
+  dwmapi
 )

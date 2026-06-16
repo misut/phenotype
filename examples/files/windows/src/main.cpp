@@ -13,6 +13,7 @@ int main(int argc, char *argv[]) {
           {
               .title = "Files",
               .size = {960.0f, 640.0f},
+              .background = windows::window::Background::blurred(),
           },
           FilesView));
 }

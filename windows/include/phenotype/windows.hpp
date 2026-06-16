@@ -12,9 +12,36 @@
 
 namespace phenotype::windows::window {
 
+enum class VisualMaterial {
+  desktop_acrylic,
+  mica,
+  mica_alt,
+};
+
+struct BlurBackground {
+  VisualMaterial material = VisualMaterial::desktop_acrylic;
+};
+
+struct Background {
+  enum class Kind {
+    system,
+    blurred,
+  };
+
+  Kind kind = Kind::system;
+  BlurBackground blur;
+
+  static constexpr Background system() noexcept { return {}; }
+
+  static constexpr Background blurred(BlurBackground value = {}) noexcept {
+    return {Kind::blurred, value};
+  }
+};
+
 struct Options {
   std::string title;
   ui::Size size = {960.0f, 640.0f};
+  Background background = Background::system();
 };
 
 struct Spec {
