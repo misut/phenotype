@@ -12,5 +12,8 @@ platforms = [{ os = "macos", arch = "aarch64" }]
 phenotype-core = "../../../core"
 phenotype-macos = "../../../macos"
 
+[dependencies.find]
+Threads = "Threads::Threads"
+
 [sync]
 cmake-in-root = false

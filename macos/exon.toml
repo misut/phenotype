@@ -12,6 +12,9 @@ platforms = [{ os = "macos", arch = "aarch64" }]
 [dependencies.path]
 phenotype-core = "../core"
 
+[dependencies.find]
+Threads = "Threads::Threads"
+
 [dependencies.cmake.dawn]
 git = "https://github.com/google/dawn.git"
 tag = "v20260423.175430"
@@ -35,6 +38,13 @@ TINT_BUILD_CMD_TOOLS = "OFF"
 TINT_BUILD_GLSL_VALIDATOR = "OFF"
 TINT_BUILD_IR_BINARY = "OFF"
 TINT_BUILD_TESTS = "OFF"
+
+[dependencies.cmake.dawn.install]
+package = "Dawn"
+targets = "dawn::webgpu_dawn"
+
+[dependencies.cmake.dawn.install.options]
+DAWN_ENABLE_INSTALL = "ON"
 
 [sync]
 cmake-in-root = false
