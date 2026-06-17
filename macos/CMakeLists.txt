@@ -6,6 +6,11 @@ set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "451f2fe2-a8a2-47c3-bc32-94786d8fc91b")
 set(CMAKE_CXX_MODULE_STD ON)
 project(phenotype-macos LANGUAGES CXX)
 
+find_package(Dawn CONFIG QUIET)
+if(TARGET dawn::webgpu_dawn AND NOT TARGET webgpu_dawn)
+  add_library(webgpu_dawn ALIAS dawn::webgpu_dawn)
+endif()
+
 if(NOT TARGET webgpu_dawn)
   include(FetchContent)
 
