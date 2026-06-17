@@ -49,13 +49,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Restore Dawn install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.exon/cache/cmake-install
+          key: ${{ runner.os }}-dawn-install-${{ steps.tool-versions.outputs.exon }}-${{ hashFiles('macos/exon.toml', 'examples/files/macos/exon.toml', '.intron.toml', 'mise.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-dawn-install-${{ steps.tool-versions.outputs.exon }}-
+            ${{ runner.os }}-dawn-install-
+
       - name: Run tests
         run: |
           eval "$(intron env)"
           cd core
           exon test
           cd ../examples/files/macos
-          exon build
+          EXON_CMAKE_INSTALL_CACHE=prefer exon build
 
   test-windows-native:
     name: test (windows-2022, native)
