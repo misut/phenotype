@@ -516,48 +516,52 @@ ui::Size MeasureView(HDC context, const ui::View &view) {
   case ui::ViewKind::button:
   case ui::ViewKind::icon:
     return view.preferred_size;
-  case ui::ViewKind::button_group: {
-    ui::Size measured{};
-    for (const ui::View &child : view.children) {
-      ui::Size child_size = MeasureView(context, child);
+  case ui::ViewKind::grid:
+    return {view.grid_min_column_width, view.grid_row_height};
+  case ui::ViewKind::empty:
+  case ui::ViewKind::spacer:
+    return view.preferred_size;
+  case ui::ViewKind::button_group:
+  case ui::ViewKind::panel:
+  case ui::ViewKind::stack:
+    break;
+  }
+
+  ui::Size measured{};
+  bool has_visible_child = false;
+  for (const ui::View &child : view.children) {
+    ui::Size child_size = MeasureView(context, child);
+    if (view.axis == ui::LayoutAxis::horizontal) {
+      if (has_visible_child) {
+        measured.width += view.child_spacing;
+      }
       measured.width += child_size.width;
       measured.height = std::max(measured.height, child_size.height);
-    }
-    return measured;
-  }
-  case ui::ViewKind::stack: {
-    ui::Size measured{};
-    if (view.axis == ui::LayoutAxis::horizontal) {
-      for (const ui::View &child : view.children) {
-        ui::Size child_size = MeasureView(context, child);
-        measured.width += child_size.width;
-        measured.height = std::max(measured.height, child_size.height);
+    } else if (view.axis == ui::LayoutAxis::vertical) {
+      if (has_visible_child) {
+        measured.height += view.child_spacing;
       }
-      if (view.children.size() > 1) {
-        measured.width += view.child_spacing *
-                          static_cast<float>(view.children.size() - 1);
-      }
+      measured.width = std::max(measured.width, child_size.width);
+      measured.height += child_size.height;
     } else {
-      for (const ui::View &child : view.children) {
-        ui::Size child_size = MeasureView(context, child);
-        measured.width = std::max(measured.width, child_size.width);
-        measured.height += child_size.height;
-      }
-      if (view.children.size() > 1) {
-        measured.height += view.child_spacing *
-                           static_cast<float>(view.children.size() - 1);
-      }
+      measured.width = std::max(measured.width, child_size.width);
+      measured.height = std::max(measured.height, child_size.height);
     }
-    measured.width += view.content_padding.left + view.content_padding.right;
-    measured.height += view.content_padding.top + view.content_padding.bottom;
-    if (view.axis == ui::LayoutAxis::horizontal) {
-      measured.width += LeadingWindowControlsOffset(view);
-    }
-    return measured;
+    has_visible_child = true;
   }
-  default:
-    return view.preferred_size;
+
+  measured.width += view.content_padding.left + view.content_padding.right;
+  measured.height += view.content_padding.top + view.content_padding.bottom;
+  if (view.axis == ui::LayoutAxis::horizontal) {
+    measured.width += LeadingWindowControlsOffset(view);
   }
+  if (HasWidth(view.preferred_size)) {
+    measured.width = view.preferred_size.width;
+  }
+  if (HasHeight(view.preferred_size)) {
+    measured.height = view.preferred_size.height;
+  }
+  return measured;
 }
 
 void AddHitTarget(WindowState &state, RectF rect, const ui::View &view,
@@ -629,6 +633,19 @@ std::uint32_t PremultipliedBgra(COLORREF color, std::uint8_t alpha) {
       static_cast<std::uint8_t>((GetGValue(color) * alpha + 127) / 255);
   std::uint8_t const blue =
       static_cast<std::uint8_t>((GetBValue(color) * alpha + 127) / 255);
+  return (static_cast<std::uint32_t>(alpha) << 24) |
+         (static_cast<std::uint32_t>(red) << 16) |
+         (static_cast<std::uint32_t>(green) << 8) |
+         static_cast<std::uint32_t>(blue);
+}
+
+std::uint32_t PremultipliedBgra(ui::Color color, std::uint8_t alpha) {
+  std::uint8_t const red = static_cast<std::uint8_t>(
+      (ToByte(color.red) * static_cast<int>(alpha) + 127) / 255);
+  std::uint8_t const green = static_cast<std::uint8_t>(
+      (ToByte(color.green) * static_cast<int>(alpha) + 127) / 255);
+  std::uint8_t const blue = static_cast<std::uint8_t>(
+      (ToByte(color.blue) * static_cast<int>(alpha) + 127) / 255);
   return (static_cast<std::uint32_t>(alpha) << 24) |
          (static_cast<std::uint32_t>(red) << 16) |
          (static_cast<std::uint32_t>(green) << 8) |
@@ -785,22 +802,123 @@ void RenderCaptionButtons(HWND window, HDC context, WindowState &state) {
 void RenderView(HDC context, const ui::View &view, RectF rect,
                 WindowState &state, bool inherited_enabled = true);
 
+bool RenderGlyphMask(HDC context, const ui::View &view, RectF rect,
+                     ui::Color color) {
+  MAT2 matrix{
+      {0, 1},
+      {0, 0},
+      {0, 0},
+      {0, 1},
+  };
+  GLYPHMETRICS metrics{};
+  wchar_t const glyph = MaterialSymbolCodepoint(view.symbol);
+  DWORD const buffer_size =
+      GetGlyphOutlineW(context, static_cast<UINT>(glyph), GGO_GRAY8_BITMAP,
+                       &metrics, 0, nullptr, &matrix);
+  if (buffer_size == GDI_ERROR || buffer_size == 0 ||
+      metrics.gmBlackBoxX == 0 || metrics.gmBlackBoxY == 0) {
+    return false;
+  }
+
+  std::vector<std::uint8_t> mask(buffer_size);
+  DWORD const result =
+      GetGlyphOutlineW(context, static_cast<UINT>(glyph), GGO_GRAY8_BITMAP,
+                       &metrics, buffer_size, mask.data(), &matrix);
+  if (result == GDI_ERROR) {
+    return false;
+  }
+
+  int const width = static_cast<int>(metrics.gmBlackBoxX);
+  int const height = static_cast<int>(metrics.gmBlackBoxY);
+  int const row_stride = (width + 3) & ~3;
+  size_t const required_mask_size =
+      static_cast<size_t>(row_stride) * static_cast<size_t>(height);
+  if (mask.size() < required_mask_size) {
+    return false;
+  }
+
+  BITMAPINFO info{};
+  info.bmiHeader.biSize = sizeof(info.bmiHeader);
+  info.bmiHeader.biWidth = width;
+  info.bmiHeader.biHeight = -height;
+  info.bmiHeader.biPlanes = 1;
+  info.bmiHeader.biBitCount = 32;
+  info.bmiHeader.biCompression = BI_RGB;
+
+  void *raw_pixels = nullptr;
+  HBITMAP bitmap =
+      CreateDIBSection(context, &info, DIB_RGB_COLORS, &raw_pixels, nullptr, 0);
+  HDC source = CreateCompatibleDC(context);
+  if (bitmap == nullptr || source == nullptr || raw_pixels == nullptr) {
+    if (source != nullptr) {
+      DeleteDC(source);
+    }
+    if (bitmap != nullptr) {
+      DeleteObject(bitmap);
+    }
+    return false;
+  }
+
+  auto *pixels = static_cast<std::uint32_t *>(raw_pixels);
+  std::uint8_t const color_alpha = ToByte(color.alpha);
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      std::uint8_t const coverage =
+          mask[static_cast<size_t>(y * row_stride + x)];
+      std::uint8_t const alpha = static_cast<std::uint8_t>(
+          (static_cast<int>(coverage) * static_cast<int>(color_alpha) + 32) /
+          64);
+      pixels[y * width + x] = PremultipliedBgra(color, alpha);
+    }
+  }
+
+  HGDIOBJ previous_bitmap = SelectObject(source, bitmap);
+  BLENDFUNCTION blend{
+      .BlendOp = AC_SRC_OVER,
+      .BlendFlags = 0,
+      .SourceConstantAlpha = 255,
+      .AlphaFormat = AC_SRC_ALPHA,
+  };
+  int const draw_x =
+      RoundToInt(rect.x +
+                 (rect.width - static_cast<float>(width)) * 0.5f);
+  int const draw_y =
+      RoundToInt(rect.y + (rect.height - static_cast<float>(height)) * 0.5f);
+  BOOL const blended = previous_bitmap != nullptr &&
+                       previous_bitmap != HGDI_ERROR &&
+                       AlphaBlend(context, draw_x, draw_y, width, height,
+                                  source, 0, 0, width, height, blend);
+  if (previous_bitmap != nullptr && previous_bitmap != HGDI_ERROR) {
+    SelectObject(source, previous_bitmap);
+  }
+  DeleteDC(source);
+  DeleteObject(bitmap);
+  return blended != FALSE;
+}
+
+void RenderIconFallback(HDC context, const ui::View &view, RectF rect,
+                        ui::Color color) {
+  wchar_t glyph[] = {MaterialSymbolCodepoint(view.symbol), L'\0'};
+  RECT bounds = ToRect(rect);
+  SetBkMode(context, TRANSPARENT);
+  SetTextColor(context, ToColorRef(color));
+  DrawTextW(context, glyph, 1, &bounds,
+            DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+}
+
 void RenderIcon(HDC context, const ui::View &view, RectF rect,
                 bool is_enabled) {
   ui::Color color =
       is_enabled ? view.foreground_color : DisabledColor(view.foreground_color);
-  wchar_t glyph[] = {MaterialSymbolCodepoint(view.symbol), L'\0'};
   HFONT font = CreateMaterialSymbolsFont(view.symbol_options);
   if (font == nullptr) {
     return;
   }
-  RECT bounds = ToRect(rect);
   {
     ScopedSelect select_font(context, font);
-    SetBkMode(context, TRANSPARENT);
-    SetTextColor(context, ToColorRef(color));
-    DrawTextW(context, glyph, 1, &bounds,
-              DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+    if (!RenderGlyphMask(context, view, rect, color)) {
+      RenderIconFallback(context, view, rect, color);
+    }
   }
   DeleteObject(font);
 }
@@ -810,6 +928,17 @@ void RenderText(HDC context, const ui::View &view, RectF rect,
   std::wstring const text = ToWide(view.text_content);
   HFONT font = CreateFontForView(view.font_size_value, view.font_weight_value);
   RECT bounds = ToRect(rect);
+  UINT format = DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX;
+  if (view.centers_text) {
+    format |= DT_CENTER;
+  }
+  if (view.text_overflow == ui::TextOverflow::ellipsis) {
+    if (view.text_truncation == ui::TextTruncation::middle) {
+      format |= DT_PATH_ELLIPSIS;
+    } else {
+      format |= DT_END_ELLIPSIS;
+    }
+  }
   {
     ScopedSelect select_font(context, font);
     SetBkMode(context, TRANSPARENT);
@@ -817,7 +946,7 @@ void RenderText(HDC context, const ui::View &view, RectF rect,
                                                 : DisabledColor(
                                                       view.foreground_color)));
     DrawTextW(context, text.c_str(), static_cast<int>(text.size()), &bounds,
-              DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
+              format);
   }
   DeleteObject(font);
 }
@@ -825,7 +954,6 @@ void RenderText(HDC context, const ui::View &view, RectF rect,
 void RenderButton(HDC context, const ui::View &view, RectF rect,
                   WindowState &state, bool inherited_enabled) {
   bool const is_enabled = inherited_enabled && view.is_enabled;
-  AddHitTarget(state, rect, view, is_enabled);
 
   for (const ui::View &child : view.children) {
     ui::Size child_size = MeasureView(context, child);
@@ -836,6 +964,41 @@ void RenderButton(HDC context, const ui::View &view, RectF rect,
         .height = child_size.height,
     };
     RenderView(context, child, child_rect, state, is_enabled);
+  }
+}
+
+void RenderPanel(HDC context, const ui::View &view, RectF rect) {
+  FillRoundedRect(context, rect, view.corner_radius_value,
+                  view.background_color);
+}
+
+void RenderGrid(HDC context, const ui::View &view, RectF rect,
+                WindowState &state, bool inherited_enabled) {
+  RectF content = Inset(rect, view.content_padding);
+  float const min_column_width = std::max(1.0f, view.grid_min_column_width);
+  float const column_gap = std::max(0.0f, view.grid_column_gap);
+  float const row_gap = std::max(0.0f, view.grid_row_gap);
+  std::size_t const column_count = std::max<std::size_t>(
+      1, static_cast<std::size_t>((content.width + column_gap) /
+                                  (min_column_width + column_gap)));
+  float const total_gap = column_gap * static_cast<float>(column_count - 1);
+  float const cell_width =
+      std::max(1.0f, (content.width - total_gap) /
+                         static_cast<float>(column_count));
+  float const row_height = std::max(1.0f, view.grid_row_height);
+
+  for (std::size_t index = 0; index < view.children.size(); ++index) {
+    std::size_t const row = index / column_count;
+    std::size_t const column = index % column_count;
+    RectF child_rect{
+        .x = content.x +
+             static_cast<float>(column) * (cell_width + column_gap),
+        .y = content.y + static_cast<float>(row) * (row_height + row_gap),
+        .width = cell_width,
+        .height = row_height,
+    };
+    RenderView(context, view.children[index], child_rect, state,
+               inherited_enabled);
   }
 }
 
@@ -875,25 +1038,84 @@ void RenderStack(HDC context, const ui::View &view, RectF rect,
   }
   if (view.axis == ui::LayoutAxis::horizontal &&
       state.title_bar == phenotype::windows::window::TitleBarStyle::hidden) {
-    content.x += LeadingWindowControlsOffset(view);
+    float const offset = LeadingWindowControlsOffset(view);
+    content.x += offset;
+    content.width = std::max(0.0f, content.width - offset);
   }
+
+  if (view.axis == ui::LayoutAxis::overlay) {
+    for (const ui::View &child : view.children) {
+      RenderView(context, child, content, state, inherited_enabled);
+    }
+    return;
+  }
+
+  float const available_main =
+      view.axis == ui::LayoutAxis::horizontal ? content.width : content.height;
+  std::size_t flexible_child_count = 0;
+  float fixed_main =
+      view.children.empty()
+          ? 0.0f
+          : view.child_spacing * static_cast<float>(view.children.size() - 1);
+  for (const ui::View &child : view.children) {
+    ui::Size child_size = MeasureView(context, child);
+    bool const expands_on_axis =
+        view.axis == ui::LayoutAxis::horizontal ? child.expands_width
+                                                : child.expands_height;
+    if (expands_on_axis) {
+      ++flexible_child_count;
+    } else {
+      fixed_main += view.axis == ui::LayoutAxis::horizontal
+                        ? child_size.width
+                        : child_size.height;
+    }
+  }
+
+  float flexible_main = 0.0f;
+  if (flexible_child_count > 0) {
+    flexible_main =
+        std::max(0.0f, available_main - fixed_main) /
+        static_cast<float>(flexible_child_count);
+  }
+
   float x = content.x;
   float y = content.y;
-
   for (const ui::View &child : view.children) {
     ui::Size child_size = MeasureView(context, child);
     if (view.axis == ui::LayoutAxis::horizontal) {
+      if (child.expands_width) {
+        child_size.width = flexible_main;
+      }
+      if (child.expands_height) {
+        child_size.height = content.height;
+      }
       RectF child_rect{
           .x = x,
-          .y = content.y + (content.height - child_size.height) * 0.5f,
+          .y = child.expands_height
+                   ? content.y
+                   : content.y + std::max(0.0f, content.height -
+                                                     child_size.height) *
+                                     0.5f,
           .width = child_size.width,
           .height = child_size.height,
       };
       RenderView(context, child, child_rect, state, inherited_enabled);
       x += child_size.width + view.child_spacing;
     } else {
+      if (child.expands_width) {
+        child_size.width = content.width;
+      }
+      if (child.expands_height) {
+        child_size.height = flexible_main;
+      }
+      float child_x = content.x;
+      if (view.centers_children && !child.expands_width) {
+        child_x =
+            content.x +
+            std::max(0.0f, content.width - child_size.width) * 0.5f;
+      }
       RectF child_rect{
-          .x = content.x,
+          .x = child_x,
           .y = y,
           .width = child_size.width,
           .height = child_size.height,
@@ -907,7 +1129,12 @@ void RenderStack(HDC context, const ui::View &view, RectF rect,
 void RenderView(HDC context, const ui::View &view, RectF rect,
                 WindowState &state, bool inherited_enabled) {
   bool const is_enabled = inherited_enabled && view.is_enabled;
+  AddHitTarget(state, rect, view, is_enabled);
+
   switch (view.kind) {
+  case ui::ViewKind::empty:
+  case ui::ViewKind::spacer:
+    break;
   case ui::ViewKind::button:
     RenderButton(context, view, rect, state, inherited_enabled);
     break;
@@ -920,10 +1147,14 @@ void RenderView(HDC context, const ui::View &view, RectF rect,
   case ui::ViewKind::text:
     RenderText(context, view, rect, is_enabled);
     break;
+  case ui::ViewKind::panel:
+    RenderPanel(context, view, rect);
+    break;
+  case ui::ViewKind::grid:
+    RenderGrid(context, view, rect, state, is_enabled);
+    break;
   case ui::ViewKind::stack:
     RenderStack(context, view, rect, state, is_enabled);
-    break;
-  default:
     break;
   }
 }

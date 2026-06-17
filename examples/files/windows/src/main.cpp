@@ -39,6 +39,12 @@ constexpr ui::Color NavigationChevronColor(bool is_enabled) noexcept {
   return {0.62f, 0.65f, 0.70f, 1.0f};
 }
 
+ui::View ContentSurface() {
+  return ui::layout::zstack([&](ui::Block &surface) {
+    surface << ui::panel(ui::control_background()).corner_radius(18.0f).expand();
+  }).expand();
+}
+
 ui::View FilesView(const std::shared_ptr<NavigationState> &state) {
   constexpr float chrome_margin = 12.0f;
   constexpr ui::SymbolOptions navigation_icon_options{
@@ -73,7 +79,8 @@ ui::View FilesView(const std::shared_ptr<NavigationState> &state) {
             })
                 .spacing(24.0f)
                 .after_leading_window_controls(chrome_margin);
-  })
+    body << ContentSurface();
+  }).spacing(chrome_margin)
       .padding({chrome_margin, chrome_margin, chrome_margin, chrome_margin});
 }
 
