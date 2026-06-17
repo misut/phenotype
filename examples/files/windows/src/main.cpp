@@ -70,22 +70,26 @@ ui::View FilesView(const std::shared_ptr<NavigationState> &state) {
                              .on_click([state] { NavigateForward(*state); })
                              .accessibility_label("Forward");
               }).shape(ui::ControlShape::capsule);
-            }).spacing(24.0f);
+            })
+                .spacing(24.0f)
+                .after_leading_window_controls(chrome_margin);
   })
       .padding({chrome_margin, chrome_margin, chrome_margin, chrome_margin});
 }
 
 int main(int argc, char *argv[]) {
   auto state = std::make_shared<NavigationState>();
+  constexpr windows::window::TitleBarStyle title_bar =
+      windows::window::TitleBarStyle::hidden;
+  windows::window::Options options;
+  options.title = "Files";
+  options.size = {960.0f, 640.0f};
+  options.title_bar = title_bar;
+  options.background = windows::window::Background::blurred();
 
   return windows::app::run(
       argc, argv,
-      windows::window::create(
-          {
-              .title = "Files",
-              .size = {960.0f, 640.0f},
-          },
-          [state] {
-            return FilesView(state);
-          }));
+      windows::window::create(std::move(options), [state] {
+        return FilesView(state);
+      }));
 }

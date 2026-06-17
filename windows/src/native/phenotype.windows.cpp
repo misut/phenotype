@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <mutex>
@@ -18,10 +19,13 @@
 
 #include <windows.h>
 #include <windowsx.h>
+#include <dwmapi.h>
 
 #include <phenotype/windows.hpp>
 
+#pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "gdi32.lib")
+#pragma comment(lib, "msimg32.lib")
 
 namespace {
 
@@ -29,6 +33,13 @@ namespace ui = phenotype::ui;
 
 constexpr wchar_t kWindowClassName[] = L"PhenotypeWindow";
 constexpr wchar_t kFallbackWindowTitle[] = L"Phenotype";
+constexpr float kTrafficLightLeft = 16.0f;
+constexpr float kTrafficLightDiameter = 12.0f;
+constexpr float kTrafficLightGap = 8.0f;
+constexpr float kDefaultTopChromeMargin = 12.0f;
+constexpr float kDefaultToolbarControlHeight = 36.0f;
+constexpr float kDefaultTrafficLightCenterY =
+    kDefaultTopChromeMargin + kDefaultToolbarControlHeight * 0.5f;
 constexpr char kMaterialSymbolsFontFileName[] =
     "MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf";
 constexpr wchar_t kMaterialSymbolsFontFamily[] = L"Material Symbols Rounded";
@@ -46,9 +57,20 @@ struct HitTarget {
   std::function<void()> action;
 };
 
+enum class CaptionButton {
+  close,
+  minimize,
+  maximize_restore,
+};
+
 struct WindowState {
   phenotype::windows::window::Spec *spec = nullptr;
+  phenotype::windows::window::TitleBarStyle title_bar =
+      phenotype::windows::window::TitleBarStyle::visible;
   std::vector<HitTarget> hit_targets;
+  bool uses_transparent_background = false;
+  float traffic_light_center_y = kDefaultTrafficLightCenterY;
+  bool has_traffic_light_alignment = false;
 };
 
 class ScopedSelect {
@@ -116,6 +138,19 @@ bool HasHeight(ui::Size size) noexcept {
   return size.height > 0.0f;
 }
 
+float LeadingCaptionControlsWidth() noexcept {
+  return kTrafficLightLeft + kTrafficLightDiameter * 3.0f +
+         kTrafficLightGap * 2.0f;
+}
+
+float LeadingWindowControlsOffset(const ui::View &view) noexcept {
+  if (!view.leading_window_controls_placement.is_enabled) {
+    return 0.0f;
+  }
+  return LeadingCaptionControlsWidth() +
+         view.leading_window_controls_placement.spacing;
+}
+
 int ColorComponent(float value, float alpha) {
   float const blended =
       std::clamp(value, 0.0f, 1.0f) * alpha + (1.0f - alpha);
@@ -127,6 +162,11 @@ COLORREF ToColorRef(ui::Color color) {
   return RGB(ColorComponent(color.red, alpha),
              ColorComponent(color.green, alpha),
              ColorComponent(color.blue, alpha));
+}
+
+std::uint8_t ToByte(float value) {
+  return static_cast<std::uint8_t>(
+      std::clamp(static_cast<int>(std::lround(value * 255.0f)), 0, 255));
 }
 
 ui::Color DisabledColor(ui::Color color) {
@@ -225,6 +265,183 @@ private:
 bool RegisterMaterialSymbolsFontIfAvailable() {
   static MaterialSymbolsFontRegistration registration;
   return registration.is_registered();
+}
+
+bool WantsBlurredBackground(
+    const phenotype::windows::window::Options &options) noexcept {
+  return options.background.kind ==
+         phenotype::windows::window::Background::Kind::blurred;
+}
+
+bool ApplyBlurredBackground(HWND window) {
+  // Windows SDK names: DWMWA_SYSTEMBACKDROP_TYPE = 38,
+  // DWMSBT_TRANSIENTWINDOW = 3. Use values directly so older SDK headers still
+  // compile while newer Windows 11 builds can enable Desktop Acrylic.
+  constexpr DWORD kDwmSystemBackdropTypeAttribute = 38;
+  constexpr int kDwmTransientWindowBackdrop = 3;
+
+  int backdrop = kDwmTransientWindowBackdrop;
+  HRESULT const backdrop_result =
+      DwmSetWindowAttribute(window, kDwmSystemBackdropTypeAttribute, &backdrop,
+                            sizeof(backdrop));
+  if (FAILED(backdrop_result)) {
+    return false;
+  }
+
+  MARGINS margins{-1, -1, -1, -1};
+  HRESULT const frame_result = DwmExtendFrameIntoClientArea(window, &margins);
+  return SUCCEEDED(frame_result);
+}
+
+bool ApplyWindowBackground(
+    HWND window, const phenotype::windows::window::Options &options) {
+  if (!WantsBlurredBackground(options)) {
+    return false;
+  }
+  return ApplyBlurredBackground(window);
+}
+
+bool WindowWantsHiddenTitleBar(HWND window) noexcept {
+  WindowState *state = GetWindowState(window);
+  return state != nullptr &&
+         state->title_bar ==
+             phenotype::windows::window::TitleBarStyle::hidden;
+}
+
+int ResizeBorderThickness() {
+  return GetSystemMetrics(SM_CXFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+}
+
+bool IsPointInHitTarget(const WindowState &state, POINT point) noexcept {
+  for (const HitTarget &target : state.hit_targets) {
+    if (PtInRect(&target.bounds, point) != FALSE) {
+      return true;
+    }
+  }
+  return false;
+}
+
+float TrafficLightTop(float center_y) noexcept {
+  return center_y - kTrafficLightDiameter * 0.5f;
+}
+
+RectF CaptionButtonRect(CaptionButton button, float center_y) {
+  constexpr float hit_padding_x = 4.0f;
+  constexpr float hit_padding_y = 6.0f;
+  int const index = [button] {
+    switch (button) {
+    case CaptionButton::close:
+      return 0;
+    case CaptionButton::minimize:
+      return 1;
+    case CaptionButton::maximize_restore:
+      return 2;
+    }
+    return 0;
+  }();
+  float const x = kTrafficLightLeft +
+                  static_cast<float>(index) *
+                      (kTrafficLightDiameter + kTrafficLightGap);
+  return {
+      .x = x - hit_padding_x,
+      .y = TrafficLightTop(center_y) - hit_padding_y,
+      .width = kTrafficLightDiameter + hit_padding_x * 2.0f,
+      .height = kTrafficLightDiameter + hit_padding_y * 2.0f,
+  };
+}
+
+RectF CaptionButtonDotRect(CaptionButton button, float center_y) {
+  int const index = [button] {
+    switch (button) {
+    case CaptionButton::close:
+      return 0;
+    case CaptionButton::minimize:
+      return 1;
+    case CaptionButton::maximize_restore:
+      return 2;
+    }
+    return 0;
+  }();
+  return {
+      .x = kTrafficLightLeft +
+           static_cast<float>(index) *
+               (kTrafficLightDiameter + kTrafficLightGap),
+      .y = TrafficLightTop(center_y),
+      .width = kTrafficLightDiameter,
+      .height = kTrafficLightDiameter,
+  };
+}
+
+bool IsPointInCaptionButtonArea(HWND window, POINT point) noexcept {
+  WindowState *state = GetWindowState(window);
+  float const center_y =
+      state == nullptr ? kDefaultTrafficLightCenterY
+                       : state->traffic_light_center_y;
+  for (CaptionButton button : {CaptionButton::close, CaptionButton::minimize,
+                               CaptionButton::maximize_restore}) {
+    RECT bounds = ToRect(CaptionButtonRect(button, center_y));
+    if (PtInRect(&bounds, point) != FALSE) {
+      return true;
+    }
+  }
+  return false;
+}
+
+LRESULT HitTestHiddenTitleBarWindow(HWND window, LPARAM lparam) {
+  constexpr int kDragRegionHeight = 56;
+
+  POINT screen_point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+  RECT window_rect{};
+  GetWindowRect(window, &window_rect);
+
+  POINT client_point = screen_point;
+  ScreenToClient(window, &client_point);
+  if (IsPointInCaptionButtonArea(window, client_point)) {
+    return HTCLIENT;
+  }
+
+  int const border = ResizeBorderThickness();
+  if (IsZoomed(window) == FALSE) {
+    bool const is_left = screen_point.x < window_rect.left + border;
+    bool const is_right = screen_point.x >= window_rect.right - border;
+    bool const is_top = screen_point.y < window_rect.top + border;
+    bool const is_bottom = screen_point.y >= window_rect.bottom - border;
+
+    if (is_top && is_left) {
+      return HTTOPLEFT;
+    }
+    if (is_top && is_right) {
+      return HTTOPRIGHT;
+    }
+    if (is_bottom && is_left) {
+      return HTBOTTOMLEFT;
+    }
+    if (is_bottom && is_right) {
+      return HTBOTTOMRIGHT;
+    }
+    if (is_left) {
+      return HTLEFT;
+    }
+    if (is_right) {
+      return HTRIGHT;
+    }
+    if (is_top) {
+      return HTTOP;
+    }
+    if (is_bottom) {
+      return HTBOTTOM;
+    }
+  }
+
+  WindowState *state = GetWindowState(window);
+  if (state != nullptr &&
+      IsPointInHitTarget(*state, client_point)) {
+    return HTCLIENT;
+  }
+  if (client_point.y < kDragRegionHeight) {
+    return HTCAPTION;
+  }
+  return HTCLIENT;
 }
 
 HFONT CreateFontForView(float font_size, float font_weight) {
@@ -333,6 +550,9 @@ ui::Size MeasureView(HDC context, const ui::View &view) {
     }
     measured.width += view.content_padding.left + view.content_padding.right;
     measured.height += view.content_padding.top + view.content_padding.bottom;
+    if (view.axis == ui::LayoutAxis::horizontal) {
+      measured.width += LeadingWindowControlsOffset(view);
+    }
     return measured;
   }
   default:
@@ -353,8 +573,140 @@ void AddHitTarget(WindowState &state, RectF rect, const ui::View &view,
   });
 }
 
-void FillRoundedRect(HDC context, RectF rect, float radius, ui::Color color) {
-  RECT bounds = ToRect(rect);
+void AddActionHitTarget(WindowState &state, RectF rect,
+                        std::function<void()> action) {
+  state.hit_targets.push_back({
+      .bounds = ToRect(rect),
+      .is_enabled = true,
+      .action = std::move(action),
+  });
+}
+
+constexpr int kRoundedRectSampleCountPerAxis = 4;
+constexpr int kRoundedRectTotalSampleCount =
+    kRoundedRectSampleCountPerAxis * kRoundedRectSampleCountPerAxis;
+
+bool ContainsRoundedRectSample(float x, float y, float width, float height,
+                               float radius) {
+  float const nearest_x = std::clamp(x, radius, width - radius);
+  float const nearest_y = std::clamp(y, radius, height - radius);
+  float const distance_x = x - nearest_x;
+  float const distance_y = y - nearest_y;
+  return distance_x * distance_x + distance_y * distance_y <= radius * radius;
+}
+
+std::uint8_t RoundedRectCoverage(int x, int y, int width, int height,
+                                 float radius) {
+  int covered_samples = 0;
+  for (int sample_y = 0; sample_y < kRoundedRectSampleCountPerAxis;
+       ++sample_y) {
+    for (int sample_x = 0; sample_x < kRoundedRectSampleCountPerAxis;
+         ++sample_x) {
+      float const sample_local_x =
+          static_cast<float>(x) +
+          (static_cast<float>(sample_x) + 0.5f) /
+              static_cast<float>(kRoundedRectSampleCountPerAxis);
+      float const sample_local_y =
+          static_cast<float>(y) +
+          (static_cast<float>(sample_y) + 0.5f) /
+              static_cast<float>(kRoundedRectSampleCountPerAxis);
+      if (ContainsRoundedRectSample(sample_local_x, sample_local_y,
+                                    static_cast<float>(width),
+                                    static_cast<float>(height), radius)) {
+        ++covered_samples;
+      }
+    }
+  }
+
+  return ToByte(static_cast<float>(covered_samples) /
+                static_cast<float>(kRoundedRectTotalSampleCount));
+}
+
+std::uint32_t PremultipliedBgra(COLORREF color, std::uint8_t alpha) {
+  std::uint8_t const red =
+      static_cast<std::uint8_t>((GetRValue(color) * alpha + 127) / 255);
+  std::uint8_t const green =
+      static_cast<std::uint8_t>((GetGValue(color) * alpha + 127) / 255);
+  std::uint8_t const blue =
+      static_cast<std::uint8_t>((GetBValue(color) * alpha + 127) / 255);
+  return (static_cast<std::uint32_t>(alpha) << 24) |
+         (static_cast<std::uint32_t>(red) << 16) |
+         (static_cast<std::uint32_t>(green) << 8) |
+         static_cast<std::uint32_t>(blue);
+}
+
+void FillRoundedRectMask(std::uint32_t *pixels, int width, int height,
+                         float radius, COLORREF color) {
+  float const clamped_radius =
+      std::clamp(radius, 0.0f,
+                 std::min(static_cast<float>(width),
+                          static_cast<float>(height)) *
+                     0.5f);
+
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      pixels[y * width + x] =
+          PremultipliedBgra(color,
+                            RoundedRectCoverage(x, y, width, height,
+                                                clamped_radius));
+    }
+  }
+}
+
+bool FillAntialiasedRoundedRect(HDC context, RECT bounds, float radius,
+                                ui::Color color) {
+  int const width = bounds.right - bounds.left;
+  int const height = bounds.bottom - bounds.top;
+  if (width <= 0 || height <= 0) {
+    return true;
+  }
+
+  BITMAPINFO info{};
+  info.bmiHeader.biSize = sizeof(info.bmiHeader);
+  info.bmiHeader.biWidth = width;
+  info.bmiHeader.biHeight = -height;
+  info.bmiHeader.biPlanes = 1;
+  info.bmiHeader.biBitCount = 32;
+  info.bmiHeader.biCompression = BI_RGB;
+
+  void *raw_pixels = nullptr;
+  HBITMAP bitmap =
+      CreateDIBSection(context, &info, DIB_RGB_COLORS, &raw_pixels, nullptr, 0);
+  HDC source = CreateCompatibleDC(context);
+  if (bitmap == nullptr || source == nullptr || raw_pixels == nullptr) {
+    if (source != nullptr) {
+      DeleteDC(source);
+    }
+    if (bitmap != nullptr) {
+      DeleteObject(bitmap);
+    }
+    return false;
+  }
+
+  FillRoundedRectMask(static_cast<std::uint32_t *>(raw_pixels), width, height,
+                      radius, ToColorRef(color));
+
+  HGDIOBJ previous_bitmap = SelectObject(source, bitmap);
+  BLENDFUNCTION blend{
+      .BlendOp = AC_SRC_OVER,
+      .BlendFlags = 0,
+      .SourceConstantAlpha = 255,
+      .AlphaFormat = AC_SRC_ALPHA,
+  };
+  BOOL const blended = previous_bitmap != nullptr &&
+                       previous_bitmap != HGDI_ERROR &&
+                       AlphaBlend(context, bounds.left, bounds.top, width,
+                                  height, source, 0, 0, width, height, blend);
+  if (previous_bitmap != nullptr && previous_bitmap != HGDI_ERROR) {
+    SelectObject(source, previous_bitmap);
+  }
+  DeleteDC(source);
+  DeleteObject(bitmap);
+  return blended != FALSE;
+}
+
+void FillGdiRoundedRect(HDC context, RECT bounds, float radius,
+                        ui::Color color) {
   int const diameter = std::max(1, RoundToInt(radius * 2.0f));
   HBRUSH brush = CreateSolidBrush(ToColorRef(color));
   HPEN pen = static_cast<HPEN>(GetStockObject(NULL_PEN));
@@ -365,13 +717,69 @@ void FillRoundedRect(HDC context, RectF rect, float radius, ui::Color color) {
   DeleteObject(brush);
 }
 
-void StrokeLine(HDC context, float x1, float y1, float x2, float y2,
-                ui::Color color) {
-  HPEN pen = CreatePen(PS_SOLID, 2, ToColorRef(color));
-  ScopedSelect select_pen(context, pen);
-  MoveToEx(context, RoundToInt(x1), RoundToInt(y1), nullptr);
-  LineTo(context, RoundToInt(x2), RoundToInt(y2));
-  DeleteObject(pen);
+void FillRoundedRect(HDC context, RectF rect, float radius, ui::Color color) {
+  RECT bounds = ToRect(rect);
+  if (!FillAntialiasedRoundedRect(context, bounds, radius, color)) {
+    FillGdiRoundedRect(context, bounds, radius, color);
+  }
+}
+
+void FillButtonGroupSeparator(HDC context, float x, float y, float height) {
+  constexpr ui::Color separator_color{0.72f, 0.76f, 0.82f, 1.0f};
+  FillRoundedRect(context,
+                  {
+                      .x = x - 0.5f,
+                      .y = y,
+                      .width = 1.0f,
+                      .height = height,
+                  },
+                  0.5f, separator_color);
+}
+
+ui::Color CaptionButtonColor(CaptionButton button) noexcept {
+  switch (button) {
+  case CaptionButton::close:
+    return {1.0f, 0.38f, 0.34f, 1.0f};
+  case CaptionButton::minimize:
+    return {1.0f, 0.76f, 0.20f, 1.0f};
+  case CaptionButton::maximize_restore:
+    return {0.22f, 0.78f, 0.35f, 1.0f};
+  }
+  return ui::white();
+}
+
+void DrawCaptionButton(HDC context, CaptionButton button, float center_y) {
+  RectF dot = CaptionButtonDotRect(button, center_y);
+  FillRoundedRect(context, dot, dot.width * 0.5f, CaptionButtonColor(button));
+}
+
+void AddCaptionButtonHitTargets(HWND window, WindowState &state,
+                                float center_y) {
+  AddActionHitTarget(state, CaptionButtonRect(CaptionButton::close, center_y),
+                     [window] { PostMessageW(window, WM_CLOSE, 0, 0); });
+  AddActionHitTarget(state, CaptionButtonRect(CaptionButton::minimize,
+                                              center_y),
+                     [window] { ShowWindow(window, SW_MINIMIZE); });
+  AddActionHitTarget(
+      state, CaptionButtonRect(CaptionButton::maximize_restore, center_y),
+      [window] {
+        ShowWindow(window, IsZoomed(window) != FALSE ? SW_RESTORE
+                                                     : SW_MAXIMIZE);
+      });
+}
+
+void RenderCaptionButtons(HWND window, HDC context, WindowState &state) {
+  if (state.title_bar !=
+      phenotype::windows::window::TitleBarStyle::hidden) {
+    return;
+  }
+
+  float const center_y = state.traffic_light_center_y;
+  for (CaptionButton button : {CaptionButton::close, CaptionButton::minimize,
+                               CaptionButton::maximize_restore}) {
+    DrawCaptionButton(context, button, center_y);
+  }
+  AddCaptionButtonHitTargets(window, state, center_y);
 }
 
 void RenderView(HDC context, const ui::View &view, RectF rect,
@@ -433,8 +841,7 @@ void RenderButton(HDC context, const ui::View &view, RectF rect,
 
 void RenderButtonGroup(HDC context, const ui::View &view, RectF rect,
                        WindowState &state, bool inherited_enabled) {
-  FillRoundedRect(context, rect, rect.height * 0.5f,
-                  {0.92f, 0.94f, 0.97f, 1.0f});
+  FillRoundedRect(context, rect, rect.height * 0.5f, ui::white());
 
   float x = rect.x;
   for (std::size_t index = 0; index < view.children.size(); ++index) {
@@ -450,8 +857,8 @@ void RenderButtonGroup(HDC context, const ui::View &view, RectF rect,
     x += child_size.width;
 
     if (index + 1 < view.children.size()) {
-      StrokeLine(context, x, rect.y + 8.0f, x, rect.y + rect.height - 8.0f,
-                 {0.78f, 0.81f, 0.86f, 1.0f});
+      FillButtonGroupSeparator(context, x, rect.y + 8.0f,
+                               rect.height - 16.0f);
     }
   }
 }
@@ -459,6 +866,17 @@ void RenderButtonGroup(HDC context, const ui::View &view, RectF rect,
 void RenderStack(HDC context, const ui::View &view, RectF rect,
                  WindowState &state, bool inherited_enabled) {
   RectF content = Inset(rect, view.content_padding);
+  if (view.axis == ui::LayoutAxis::horizontal &&
+      view.leading_window_controls_placement.is_enabled &&
+      view.leading_window_controls_placement.aligns_vertical_center &&
+      !state.has_traffic_light_alignment) {
+    state.traffic_light_center_y = content.y + content.height * 0.5f;
+    state.has_traffic_light_alignment = true;
+  }
+  if (view.axis == ui::LayoutAxis::horizontal &&
+      state.title_bar == phenotype::windows::window::TitleBarStyle::hidden) {
+    content.x += LeadingWindowControlsOffset(view);
+  }
   float x = content.x;
   float y = content.y;
 
@@ -510,8 +928,11 @@ void RenderView(HDC context, const ui::View &view, RectF rect,
   }
 }
 
-void FillSystemBackground(HDC context, RECT client) {
-  HBRUSH brush = CreateSolidBrush(RGB(246, 248, 251));
+void FillWindowBackground(HDC context, RECT client,
+                          bool uses_transparent_background) {
+  HBRUSH brush = CreateSolidBrush(uses_transparent_background
+                                      ? RGB(0, 0, 0)
+                                      : RGB(246, 248, 251));
   FillRect(context, &client, brush);
   DeleteObject(brush);
 }
@@ -528,13 +949,16 @@ void PaintWindow(HWND window, HDC target, WindowState &state) {
   HBITMAP bitmap = CreateCompatibleBitmap(target, width, height);
   HGDIOBJ previous_bitmap = SelectObject(buffer, bitmap);
 
-  FillSystemBackground(buffer, client);
+  FillWindowBackground(buffer, client, state.uses_transparent_background);
   state.hit_targets.clear();
+  state.traffic_light_center_y = kDefaultTrafficLightCenterY;
+  state.has_traffic_light_alignment = false;
 
   if (state.spec != nullptr && state.spec->content) {
     ui::View content = state.spec->content();
     RenderView(buffer, content, FromRect(client), state);
   }
+  RenderCaptionButtons(window, buffer, state);
 
   BitBlt(target, 0, 0, width, height, buffer, 0, 0, SRCCOPY);
   SelectObject(buffer, previous_bitmap);
@@ -561,6 +985,24 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam,
                       reinterpret_cast<LONG_PTR>(create->lpCreateParams));
     return TRUE;
   }
+  case WM_NCCALCSIZE:
+    if (wparam == TRUE && WindowWantsHiddenTitleBar(window)) {
+      if (IsZoomed(window) != FALSE) {
+        auto *parameters = reinterpret_cast<NCCALCSIZE_PARAMS *>(lparam);
+        int const border = ResizeBorderThickness();
+        parameters->rgrc[0].left += border;
+        parameters->rgrc[0].top += border;
+        parameters->rgrc[0].right -= border;
+        parameters->rgrc[0].bottom -= border;
+      }
+      return 0;
+    }
+    break;
+  case WM_NCHITTEST:
+    if (WindowWantsHiddenTitleBar(window)) {
+      return HitTestHiddenTitleBarWindow(window, lparam);
+    }
+    break;
   case WM_ERASEBKGND:
     return 1;
   case WM_PAINT: {
@@ -576,6 +1018,15 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam,
   case WM_SIZE:
     InvalidateRect(window, nullptr, FALSE);
     return 0;
+  case WM_DWMCOMPOSITIONCHANGED: {
+    WindowState *state = GetWindowState(window);
+    if (state != nullptr && state->spec != nullptr) {
+      state->uses_transparent_background =
+          ApplyWindowBackground(window, state->spec->options);
+    }
+    InvalidateRect(window, nullptr, FALSE);
+    return 0;
+  }
   case WM_LBUTTONUP: {
     WindowState *state = GetWindowState(window);
     if (state == nullptr) {
@@ -624,25 +1075,40 @@ bool RegisterMainWindowClass(HINSTANCE instance) {
   return GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
 }
 
-HWND CreateMainWindow(HINSTANCE instance,
-                      const phenotype::windows::window::Options &options,
-                      WindowState *state) {
-  DWORD const style = WS_OVERLAPPEDWINDOW;
+DWORD WindowStyle(phenotype::windows::window::TitleBarStyle title_bar) {
+  if (title_bar == phenotype::windows::window::TitleBarStyle::hidden) {
+    return WS_POPUP | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+  }
+  return WS_OVERLAPPEDWINDOW;
+}
+
+HWND CreateMainWindow(
+    HINSTANCE instance, const phenotype::windows::window::Options &options,
+    phenotype::windows::window::TitleBarStyle title_bar, WindowState *state) {
+  DWORD const style = WindowStyle(title_bar);
   DWORD const extended_style = 0;
   int const width = std::max(1, static_cast<int>(options.size.width));
   int const height = std::max(1, static_cast<int>(options.size.height));
   RECT window_rect{0, 0, width, height};
-  AdjustWindowRectEx(&window_rect, style, FALSE, extended_style);
+  if (title_bar != phenotype::windows::window::TitleBarStyle::hidden) {
+    AdjustWindowRectEx(&window_rect, style, FALSE, extended_style);
+  }
 
   std::wstring title = ToWide(options.title);
   wchar_t const *title_text =
       title.empty() ? kFallbackWindowTitle : title.c_str();
 
-  return CreateWindowExW(extended_style, kWindowClassName, title_text, style,
-                         CW_USEDEFAULT, CW_USEDEFAULT,
-                         window_rect.right - window_rect.left,
-                         window_rect.bottom - window_rect.top, nullptr,
-                         nullptr, instance, state);
+  HWND const window =
+      CreateWindowExW(extended_style, kWindowClassName, title_text, style,
+                      CW_USEDEFAULT, CW_USEDEFAULT,
+                      window_rect.right - window_rect.left,
+                      window_rect.bottom - window_rect.top, nullptr, nullptr,
+                      instance, state);
+  if (window != nullptr) {
+    state->uses_transparent_background =
+        ApplyWindowBackground(window, options);
+  }
+  return window;
 }
 
 int RunMessageLoop() {
@@ -666,7 +1132,8 @@ int RunMessageLoop() {
 } // namespace
 
 extern "C" int phenotype_windows_app_run(
-    int argc, char *argv[], phenotype::windows::window::Spec *spec) {
+    int argc, char *argv[], phenotype::windows::window::Spec *spec,
+    int title_bar) {
   (void)argc;
   (void)argv;
 
@@ -675,15 +1142,22 @@ extern "C" int phenotype_windows_app_run(
   }
 
   phenotype::windows::window::Spec window_spec = std::move(*spec);
+  phenotype::windows::window::TitleBarStyle title_bar_style =
+      title_bar == static_cast<int>(
+                       phenotype::windows::window::TitleBarStyle::hidden)
+          ? phenotype::windows::window::TitleBarStyle::hidden
+          : phenotype::windows::window::TitleBarStyle::visible;
 
   HINSTANCE const instance = GetModuleHandleW(nullptr);
   if (instance == nullptr || !RegisterMainWindowClass(instance)) {
     return 1;
   }
 
-  WindowState window_state{&window_spec};
-  HWND const window =
-      CreateMainWindow(instance, window_spec.options, &window_state);
+  WindowState window_state;
+  window_state.spec = &window_spec;
+  window_state.title_bar = title_bar_style;
+  HWND const window = CreateMainWindow(instance, window_spec.options,
+                                       window_state.title_bar, &window_state);
   if (window == nullptr) {
     return 1;
   }
