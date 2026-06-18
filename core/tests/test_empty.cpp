@@ -11,83 +11,73 @@ int main() {
 
   auto root = ui::layout::vstack([](ui::Block &body) {
     body << ui::layout::hstack([](ui::Block &toolbar) {
-              toolbar << ui::button_group([](ui::Block &group) {
-                group << ui::button(ui::icon(ui::Symbol::chevron_left))
-                             .role(ui::ButtonRole::back)
-                             .accessibility_label("Back");
-                group << ui::button(ui::icon(ui::Symbol::chevron_right))
-                             .role(ui::ButtonRole::forward)
-                             .accessibility_label("Forward");
-              }).shape(ui::ControlShape::capsule);
-              toolbar << ui::text("kakao")
-                             .font_size(20.0f)
-                             .font_weight(550.0f)
-                             .foreground(ui::primary_label());
-            })
+      toolbar << ui::button_group([](ui::Block &group) {
+        group << ui::button(ui::icon(ui::Symbol::chevron_left))
+                     .role(ui::ButtonRole::back)
+                     .accessibility_label("Back");
+        group << ui::button(ui::icon(ui::Symbol::chevron_right))
+                     .role(ui::ButtonRole::forward)
+                     .accessibility_label("Forward");
+      }).shape(ui::ControlShape::capsule);
+      toolbar << ui::text("kakao").font_size(20.0f).font_weight(550.0f).foreground(
+          ui::primary_label());
+    })
                 .spacing(24.0f)
                 .after_leading_window_controls(12.0f);
     body << ui::layout::zstack([](ui::Block &surface) {
-      surface << ui::panel(ui::control_background()).corner_radius(18.0f)
-                     .expand();
+      surface << ui::panel(ui::control_background()).corner_radius(18.0f).expand();
       surface << ui::layout::grid([](ui::Block &grid) {
-                   grid << ui::layout::vstack([](ui::Block &tile) {
-                     tile << ui::icon(ui::Symbol::folder,
-                                      {.fill = true,
-                                       .weight = 400.0f,
-                                       .grade = 0.0f,
-                                       .optical_size = 42.0f});
-                     tile << ui::text("Documents")
-                                 .font_size(13.0f)
-                                 .font_weight(450.0f)
-                                 .center_text()
-                                 .line_limit(1)
-                                 .overflow(ui::TextOverflow::ellipsis)
-                                 .truncation(ui::TextTruncation::tail)
-                                 .size({96.0f, 18.0f});
-                   }).spacing(8.0f)
-                       .center_children();
-                   grid << ui::layout::vstack([](ui::Block &tile) {
-                     tile << ui::icon(ui::Symbol::description,
-                                      {.fill = false,
-                                       .weight = 400.0f,
-                                       .grade = 0.0f,
-                                       .optical_size = 42.0f});
-                     tile << ui::text("Notes.txt")
-                                 .font_size(13.0f)
-                                 .font_weight(450.0f)
-                                 .center_text()
-                                 .line_limit(1)
-                                 .overflow(ui::TextOverflow::ellipsis)
-                                 .truncation(ui::TextTruncation::tail)
-                                 .size({96.0f, 18.0f});
-                   }).spacing(8.0f)
-                       .center_children();
-                 })
+        grid << ui::layout::vstack([](ui::Block &tile) {
+          tile << ui::icon(ui::Symbol::folder,
+              {.fill = true, .weight = 400.0f, .grade = 0.0f, .optical_size = 42.0f});
+          tile << ui::text("Documents")
+                      .font_size(13.0f)
+                      .font_weight(450.0f)
+                      .center_text()
+                      .line_limit(1)
+                      .overflow(ui::TextOverflow::ellipsis)
+                      .truncation(ui::TextTruncation::tail)
+                      .size({96.0f, 18.0f});
+        })
+                    .spacing(8.0f)
+                    .center_children();
+        grid << ui::layout::vstack([](ui::Block &tile) {
+          tile << ui::icon(ui::Symbol::description,
+              {.fill = false, .weight = 400.0f, .grade = 0.0f, .optical_size = 42.0f});
+          tile << ui::text("Notes.txt")
+                      .font_size(13.0f)
+                      .font_weight(450.0f)
+                      .center_text()
+                      .line_limit(1)
+                      .overflow(ui::TextOverflow::ellipsis)
+                      .truncation(ui::TextTruncation::tail)
+                      .size({96.0f, 18.0f});
+        })
+                    .spacing(8.0f)
+                    .center_children();
+      })
                      .grid_metrics(112.0f, 92.0f, 18.0f, 20.0f)
                      .expand();
     }).expand();
-  }).spacing(20.0f)
-      .padding({24.0f, 0.0f, 24.0f, 24.0f});
+  })
+                  .spacing(20.0f)
+                  .padding({24.0f, 0.0f, 24.0f, 24.0f});
 
-  if (root.kind != ui::ViewKind::stack ||
-      root.axis != ui::LayoutAxis::vertical || root.children.size() != 2 ||
-      root.children[1].kind != ui::ViewKind::stack ||
+  if (root.kind != ui::ViewKind::stack || root.axis != ui::LayoutAxis::vertical ||
+      root.children.size() != 2 || root.children[1].kind != ui::ViewKind::stack ||
       root.children[1].axis != ui::LayoutAxis::overlay) {
     return 1;
   }
   if (root.child_spacing != 20.0f || root.content_padding.left != 24.0f ||
-      root.content_padding.right != 24.0f ||
-      root.content_padding.bottom != 24.0f) {
+      root.content_padding.right != 24.0f || root.content_padding.bottom != 24.0f) {
     return 8;
   }
 
   const ui::View &toolbar = root.children[0];
   const ui::View &content_surface = root.children[1];
 
-  if (toolbar.kind != ui::ViewKind::stack ||
-      toolbar.axis != ui::LayoutAxis::horizontal ||
-      toolbar.child_spacing != 24.0f ||
-      toolbar.children.size() != 2 ||
+  if (toolbar.kind != ui::ViewKind::stack || toolbar.axis != ui::LayoutAxis::horizontal ||
+      toolbar.child_spacing != 24.0f || toolbar.children.size() != 2 ||
       toolbar.children[0].kind != ui::ViewKind::button_group ||
       toolbar.children[1].kind != ui::ViewKind::text) {
     return 2;
@@ -108,10 +98,8 @@ int main() {
       navigation_group.children[1].button_role != ui::ButtonRole::forward) {
     return 4;
   }
-  if (navigation_group.children[0].children[0].symbol !=
-          ui::Symbol::chevron_left ||
-      navigation_group.children[1].children[0].symbol !=
-          ui::Symbol::chevron_right) {
+  if (navigation_group.children[0].children[0].symbol != ui::Symbol::chevron_left ||
+      navigation_group.children[1].children[0].symbol != ui::Symbol::chevron_right) {
     return 5;
   }
   if (navigation_group.children[0].accessibility_label_text != "Back" ||
@@ -134,18 +122,16 @@ int main() {
   const ui::View &content_panel = content_surface.children[0];
   const ui::View &content_grid = content_surface.children[1];
   if (!content_panel.expands_width || !content_panel.expands_height ||
-      content_panel.corner_radius_value != 18.0f ||
-      content_panel.background_color.red != 0.985f ||
+      content_panel.corner_radius_value != 18.0f || content_panel.background_color.red != 0.985f ||
       content_panel.background_color.green != 0.988f ||
       content_panel.background_color.blue != 0.992f ||
       content_panel.background_color.alpha != 0.72f) {
     return 9;
   }
   if (!content_grid.expands_width || !content_grid.expands_height ||
-      content_grid.grid_min_column_width != 112.0f ||
-      content_grid.grid_row_height != 92.0f ||
-      content_grid.grid_column_gap != 18.0f ||
-      content_grid.grid_row_gap != 20.0f ||
+      content_grid.grid_min_column_width != 112.0f || content_grid.grid_row_height != 92.0f ||
+      content_grid.grid_column_gap != 18.0f || content_grid.grid_row_gap != 20.0f ||
+      content_grid.grid_item_offset_value != 0 || content_grid.grid_total_item_count_value != 0 ||
       content_grid.children.size() != 2) {
     return 12;
   }
@@ -155,30 +141,118 @@ int main() {
       !content_grid.children[0].children[1].centers_text ||
       content_grid.children[0].children[1].preferred_size.width != 96.0f ||
       content_grid.children[0].children[1].text_line_limit != 1 ||
-      content_grid.children[0].children[1].text_overflow !=
-          ui::TextOverflow::ellipsis ||
-      content_grid.children[0].children[1].text_truncation !=
-          ui::TextTruncation::tail) {
+      content_grid.children[0].children[1].text_overflow != ui::TextOverflow::ellipsis ||
+      content_grid.children[0].children[1].text_truncation != ui::TextTruncation::tail) {
     return 13;
   }
 
-  auto direct_group =
-      ui::button_group(ui::button(ui::icon(ui::Symbol::chevron_left)),
-                       ui::button(ui::icon(ui::Symbol::chevron_right)));
-  if (direct_group.kind != ui::ViewKind::button_group ||
-      direct_group.children.size() != 2) {
+  auto direct_group = ui::button_group(ui::button(ui::icon(ui::Symbol::chevron_left)),
+      ui::button(ui::icon(ui::Symbol::chevron_right)));
+  if (direct_group.kind != ui::ViewKind::button_group || direct_group.children.size() != 2) {
     return 7;
   }
 
   bool clicked = false;
-  ui::View clickable = ui::panel(ui::control_background())
-                           .on_click([&clicked] { clicked = true; });
+  ui::View clickable = ui::panel(ui::control_background()).on_click([&clicked] { clicked = true; });
   if (!clickable.click_action) {
     return 14;
   }
   clickable.click_action();
   if (!clicked) {
     return 15;
+  }
+
+  float scrolled_to = 0.0f;
+  ui::View scroller = ui::layout::scroll(ui::layout::grid([](ui::Block &grid) {
+    grid << ui::text("A");
+    grid << ui::text("B");
+  }))
+                          .scroll_offset(18.0f)
+                          .scroll_content_offset(8.0f)
+                          .scroll_range_headroom(48.0f)
+                          .on_scroll([&scrolled_to](float value) { scrolled_to = value; });
+  if (scroller.kind != ui::ViewKind::scroll || scroller.children.size() != 1 ||
+      scroller.children[0].kind != ui::ViewKind::grid || !scroller.expands_width ||
+      !scroller.expands_height || scroller.scroll_offset_y_value != 18.0f ||
+      scroller.scroll_content_offset_y_value != 8.0f ||
+      scroller.scroll_range_headroom_y_value != 48.0f || !scroller.scroll_action) {
+    return 16;
+  }
+  scroller.scroll_action(42.0f);
+  if (scrolled_to != 42.0f) {
+    return 17;
+  }
+
+  ui::View virtual_grid = ui::layout::grid([](ui::Block &grid) {
+    grid << ui::text("C");
+    grid << ui::text("D");
+  }).grid_virtual_range(24, 120);
+  if (virtual_grid.kind != ui::ViewKind::grid || virtual_grid.grid_item_offset_value != 24 ||
+      virtual_grid.grid_total_item_count_value != 120 || virtual_grid.children.size() != 2) {
+    return 25;
+  }
+
+  ui::View effect_panel =
+      ui::visual_effect_panel(ui::control_background()).corner_radius(18.0f).expand_width();
+  if (effect_panel.kind != ui::ViewKind::visual_effect_panel ||
+      effect_panel.corner_radius_value != 18.0f || !effect_panel.expands_width ||
+      effect_panel.expands_height) {
+    return 18;
+  }
+
+  bool helper_back_clicked = false;
+  bool helper_forward_clicked = false;
+  ui::View helper_group = ui::navigation_button_group(
+      false, [&helper_back_clicked] { helper_back_clicked = true; }, true,
+      [&helper_forward_clicked] { helper_forward_clicked = true; });
+  if (helper_group.kind != ui::ViewKind::button_group ||
+      helper_group.control_shape != ui::ControlShape::capsule ||
+      helper_group.children.size() != 2 ||
+      helper_group.children[0].button_role != ui::ButtonRole::back ||
+      helper_group.children[1].button_role != ui::ButtonRole::forward ||
+      helper_group.children[0].is_enabled || !helper_group.children[1].is_enabled) {
+    return 19;
+  }
+  if (helper_group.children[0].children[0].symbol_options.optical_size != 30.0f ||
+      helper_group.children[0].children[0].foreground_color.red != ui::disabled_label().red ||
+      helper_group.children[1].children[0].foreground_color.red != ui::primary_label().red) {
+    return 20;
+  }
+  helper_group.children[1].click_action();
+  if (!helper_forward_clicked || helper_back_clicked) {
+    return 21;
+  }
+
+  ui::View helper_toolbar =
+      ui::toolbar([](ui::Block &toolbar) { toolbar << ui::toolbar_title("Development"); });
+  if (helper_toolbar.kind != ui::ViewKind::stack ||
+      helper_toolbar.axis != ui::LayoutAxis::horizontal ||
+      helper_toolbar.child_spacing != ui::default_toolbar_spacing() ||
+      helper_toolbar.leading_window_controls_placement.spacing != ui::default_chrome_margin() ||
+      helper_toolbar.preferred_size.height != ui::default_toolbar_height() ||
+      !helper_toolbar.expands_width || helper_toolbar.expands_height ||
+      helper_toolbar.children[0].text_content != "Development" ||
+      helper_toolbar.children[0].font_size_value != 16.0f ||
+      helper_toolbar.children[0].font_weight_value != 500.0f) {
+    return 22;
+  }
+
+  ui::View helper_blur = ui::toolbar_blur_panel();
+  if (helper_blur.kind != ui::ViewKind::visual_effect_panel ||
+      helper_blur.preferred_size.height != ui::default_toolbar_blur_height() ||
+      helper_blur.corner_radius_value != ui::default_surface_corner_radius() ||
+      !helper_blur.rounds_top_corners_only || helper_blur.rounds_bottom_corners_only ||
+      helper_blur.background_color.alpha != ui::toolbar_material().alpha ||
+      !helper_blur.expands_width || helper_blur.expands_height) {
+    return 23;
+  }
+
+  ui::View helper_bottom_panel = ui::content_surface_panel().bottom_corners_only();
+  if (helper_bottom_panel.kind != ui::ViewKind::panel ||
+      helper_bottom_panel.rounds_top_corners_only ||
+      !helper_bottom_panel.rounds_bottom_corners_only ||
+      helper_bottom_panel.corner_radius_value != ui::default_surface_corner_radius()) {
+    return 24;
   }
 
   return 0;

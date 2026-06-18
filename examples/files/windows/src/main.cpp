@@ -32,49 +32,23 @@ void NavigateForward(NavigationState &state) {
   ++state.history_index;
 }
 
-constexpr ui::Color NavigationChevronColor(bool is_enabled) noexcept {
-  if (is_enabled) {
-    return ui::primary_label();
-  }
-  return {0.62f, 0.65f, 0.70f, 1.0f};
-}
-
 ui::View ContentSurface() {
   return ui::layout::zstack([&](ui::Block &surface) {
-    surface << ui::panel(ui::control_background()).corner_radius(18.0f).expand();
+    surface << ui::content_surface_panel().expand();
   }).expand();
 }
 
 ui::View FilesView(const std::shared_ptr<NavigationState> &state) {
-  constexpr float chrome_margin = 12.0f;
-  constexpr ui::SymbolOptions navigation_icon_options{
-      .fill = false,
-      .weight = 200.0f,
-      .grade = 0.0f,
-      .optical_size = 30.0f,
-  };
+  constexpr float chrome_margin = ui::default_chrome_margin();
   bool can_navigate_back = CanNavigateBack(*state);
   bool can_navigate_forward = CanNavigateForward(*state);
 
   return ui::layout::vstack([&](ui::Block &body) {
-    body << ui::layout::hstack([&](ui::Block &toolbar) {
-      toolbar << ui::button_group([&](ui::Block &group) {
-        group << ui::button(ui::icon(ui::Symbol::chevron_left, navigation_icon_options)
-                                .foreground(NavigationChevronColor(can_navigate_back)))
-                     .role(ui::ButtonRole::back)
-                     .enabled(can_navigate_back)
-                     .on_click([state] { NavigateBack(*state); })
-                     .accessibility_label("Back");
-        group << ui::button(ui::icon(ui::Symbol::chevron_right, navigation_icon_options)
-                                .foreground(NavigationChevronColor(can_navigate_forward)))
-                     .role(ui::ButtonRole::forward)
-                     .enabled(can_navigate_forward)
-                     .on_click([state] { NavigateForward(*state); })
-                     .accessibility_label("Forward");
-      }).shape(ui::ControlShape::capsule);
-    })
-                .spacing(24.0f)
-                .after_leading_window_controls(chrome_margin);
+    body << ui::toolbar([&](ui::Block &toolbar) {
+      toolbar << ui::navigation_button_group(
+          can_navigate_back, [state] { NavigateBack(*state); }, can_navigate_forward,
+          [state] { NavigateForward(*state); });
+    });
     body << ContentSurface();
   })
       .spacing(chrome_margin)

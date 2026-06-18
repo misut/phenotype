@@ -486,6 +486,8 @@ ui::Size MeasureView(HDC context, const ui::View &view) {
     return view.preferred_size;
   case ui::ViewKind::button_group:
   case ui::ViewKind::panel:
+  case ui::ViewKind::visual_effect_panel:
+  case ui::ViewKind::scroll:
   case ui::ViewKind::stack:
     break;
   }
@@ -897,8 +899,9 @@ void RenderGrid(
   float const row_height = std::max(1.0f, view.grid_row_height);
 
   for (std::size_t index = 0; index < view.children.size(); ++index) {
-    std::size_t const row = index / column_count;
-    std::size_t const column = index % column_count;
+    std::size_t const item_index = view.grid_item_offset_value + index;
+    std::size_t const row = item_index / column_count;
+    std::size_t const column = item_index % column_count;
     RectF child_rect{
         .x = content.x + static_cast<float>(column) * (cell_width + column_gap),
         .y = content.y + static_cast<float>(row) * (row_height + row_gap),
@@ -1045,10 +1048,14 @@ void RenderView(
     RenderText(context, view, rect, is_enabled);
     break;
   case ui::ViewKind::panel:
+  case ui::ViewKind::visual_effect_panel:
     RenderPanel(context, view, rect);
     break;
   case ui::ViewKind::grid:
     RenderGrid(context, view, rect, state, is_enabled);
+    break;
+  case ui::ViewKind::scroll:
+    RenderStack(context, view, rect, state, is_enabled);
     break;
   case ui::ViewKind::stack:
     RenderStack(context, view, rect, state, is_enabled);

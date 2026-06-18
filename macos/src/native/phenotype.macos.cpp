@@ -12,7 +12,9 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include <webgpu/webgpu_cpp.h>
@@ -24,6 +26,7 @@ namespace {
 constexpr size_t kMaxSymbolButtonCount = 128;
 constexpr size_t kMaxPanelCount = 16;
 constexpr size_t kMaxTextCount = 128;
+constexpr size_t kMaxEffectPanelCount = 8;
 constexpr uint32_t kTextAtlasPadding = 2;
 constexpr uint32_t kTextAtlasRowAlignmentPixels = 64;
 
@@ -40,19 +43,21 @@ struct SymbolButton {
     control : vec4f,
     appearance : vec4f,
     color : vec4f,
-    glyph : vec4f,
+    clip : vec4f,
 };
 
 struct Panel {
     frame : vec4f,
     color : vec4f,
     style : vec4f,
+    clip : vec4f,
 };
 
 struct TextRun {
     frame : vec4f,
     uv : vec4f,
     color : vec4f,
+    clip : vec4f,
 };
 
 struct SceneUniforms {
@@ -95,6 +100,44 @@ fn roundedRectDistance(position : vec2f, half_size : vec2f, radius : f32) -> f32
     return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - radius;
 }
 
+fn rectDistance(position : vec2f, half_size : vec2f) -> f32 {
+    let q = abs(position) - half_size;
+    return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0);
+}
+
+fn topRoundedRectDistance(position : vec2f, half_size : vec2f, radius : f32) -> f32 {
+    let x = abs(position.x);
+    let y_from_top = position.y + half_size.y;
+    if (y_from_top < radius && x > half_size.x - radius) {
+        let corner_center = vec2f(half_size.x - radius, radius);
+        return length(vec2f(x, y_from_top) - corner_center) - radius;
+    }
+    return rectDistance(position, half_size);
+}
+
+fn bottomRoundedRectDistance(position : vec2f, half_size : vec2f, radius : f32) -> f32 {
+    let x = abs(position.x);
+    let y_from_bottom = half_size.y - position.y;
+    if (y_from_bottom < radius && x > half_size.x - radius) {
+        let corner_center = vec2f(half_size.x - radius, radius);
+        return length(vec2f(x, y_from_bottom) - corner_center) - radius;
+    }
+    return rectDistance(position, half_size);
+}
+
+fn panelDistance(position : vec2f, half_size : vec2f, radius : f32, corner_mode : f32) -> f32 {
+    if (radius <= 0.0) {
+        return rectDistance(position, half_size);
+    }
+    if (corner_mode > 1.5) {
+        return bottomRoundedRectDistance(position, half_size, radius);
+    }
+    if (corner_mode > 0.5) {
+        return topRoundedRectDistance(position, half_size, radius);
+    }
+    return roundedRectDistance(position, half_size, radius);
+}
+
 fn compositeOver(destination : vec4f, source_color : vec3f, source_alpha : f32) -> vec4f {
     let alpha = clamp(source_alpha, 0.0, 1.0);
     return vec4f(
@@ -110,8 +153,17 @@ fn controlRadius(size : vec2f, shape : f32, ui_scale : f32) -> f32 {
     return min(10.0 * ui_scale, min(size.x, size.y) * 0.5);
 }
 
+fn clipCoverage(pixel_position : vec2f, clip : vec4f) -> f32 {
+    let local = pixel_position - clip.xy;
+    return step(0.0, local.x) *
+        step(0.0, local.y) *
+        step(local.x, clip.z) *
+        step(local.y, clip.w);
+}
+
 fn drawSymbolButton(layer : vec4f, pixel_position : vec2f, button : SymbolButton) -> vec4f {
     let ui_scale = max(scene.viewport.w, 1.0);
+    let clip_coverage = clipCoverage(pixel_position, button.clip);
     let control_center = button.control.xy;
     let control_size = button.control.zw;
     let radius = controlRadius(control_size, button.appearance.x, ui_scale);
@@ -125,8 +177,9 @@ fn drawSymbolButton(layer : vec4f, pixel_position : vec2f, button : SymbolButton
 
     var out_layer = layer;
     if (button.appearance.y > 0.5) {
-        out_layer = compositeOver(out_layer, button_fill, control_coverage * 0.72);
-        out_layer = compositeOver(out_layer, button_border, border_coverage * control_coverage * 0.55);
+        out_layer = compositeOver(out_layer, button_fill, control_coverage * clip_coverage * 0.84);
+        out_layer =
+            compositeOver(out_layer, button_border, border_coverage * control_coverage * clip_coverage * 0.62);
 
         if (button.appearance.w > 0.5) {
             let divider_distance = abs(pixel_position.x - button.appearance.z) - (0.5 * ui_scale);
@@ -137,7 +190,7 @@ fn drawSymbolButton(layer : vec4f, pixel_position : vec2f, button : SymbolButton
             out_layer = compositeOver(
                 out_layer,
                 button_border,
-                divider_coverage * divider_y_coverage * control_coverage * 0.38,
+                divider_coverage * divider_y_coverage * control_coverage * clip_coverage * 0.45,
             );
         }
     }
@@ -154,21 +207,23 @@ fn drawSymbolButton(layer : vec4f, pixel_position : vec2f, button : SymbolButton
     return compositeOver(
         out_layer,
         button.color.rgb,
-        button.color.a * sample_alpha * inside * control_coverage,
+        button.color.a * sample_alpha * inside * control_coverage * clip_coverage,
     );
 }
 
 fn drawPanel(layer : vec4f, pixel_position : vec2f, panel : Panel) -> vec4f {
     let ui_scale = max(scene.viewport.w, 1.0);
+    let clip_coverage = clipCoverage(pixel_position, panel.clip);
     let local_position = pixel_position - panel.frame.xy;
     let half_size = panel.frame.zw * 0.5;
     let radius = min(panel.style.x * ui_scale, min(half_size.x, half_size.y));
-    let edge_distance = roundedRectDistance(local_position, half_size, radius);
+    let edge_distance = panelDistance(local_position, half_size, radius, panel.style.y);
     let coverage = 1.0 - smoothstep(-1.0, 1.0, edge_distance);
-    return compositeOver(layer, panel.color.rgb, panel.color.a * coverage);
+    return compositeOver(layer, panel.color.rgb, panel.color.a * coverage * clip_coverage);
 }
 
 fn drawText(layer : vec4f, pixel_position : vec2f, text : TextRun) -> vec4f {
+    let clip_coverage = clipCoverage(pixel_position, text.clip);
     let top_left = text.frame.xy - (text.frame.zw * 0.5);
     let local_position = pixel_position - top_left;
     let inside = step(0.0, local_position.x) *
@@ -178,7 +233,7 @@ fn drawText(layer : vec4f, pixel_position : vec2f, text : TextRun) -> vec4f {
     let local_uv = local_position / max(text.frame.zw, vec2f(1.0));
     let uv = text.uv.xy + ((text.uv.zw - text.uv.xy) * local_uv);
     let sample_alpha = textureSample(text_atlas, text_sampler, uv).a;
-    return compositeOver(layer, text.color.rgb, text.color.a * sample_alpha * inside);
+    return compositeOver(layer, text.color.rgb, text.color.a * sample_alpha * inside * clip_coverage);
 }
 
 @fragment
@@ -202,6 +257,242 @@ fn fragmentMain(in : VertexOut) -> @location(0) vec4f {
 }
 )wgsl";
 
+constexpr char kEffectShader[] = R"wgsl(
+struct VertexOut {
+    @builtin(position) position : vec4f,
+    @location(0) pixel_position : vec2f,
+};
+
+struct EffectPanel {
+    frame : vec4f,
+    color : vec4f,
+    style : vec4f,
+    clip : vec4f,
+};
+
+struct EffectUniforms {
+    viewport : vec4f,
+    counts : vec4f,
+    effects : array<EffectPanel, 8>,
+};
+
+@group(0) @binding(0) var<uniform> effect_scene : EffectUniforms;
+@group(0) @binding(1) var scene_texture : texture_2d<f32>;
+@group(0) @binding(2) var blurred_texture : texture_2d<f32>;
+@group(0) @binding(3) var source_sampler : sampler;
+
+@vertex
+fn vertexMain(@builtin(vertex_index) index : u32) -> VertexOut {
+    let clip = array<vec2f, 6>(
+        vec2f(-1.0, -1.0),
+        vec2f(-1.0,  1.0),
+        vec2f( 1.0, -1.0),
+        vec2f( 1.0, -1.0),
+        vec2f(-1.0,  1.0),
+        vec2f( 1.0,  1.0),
+    );
+
+    let viewport_size = effect_scene.viewport.xy;
+    let pixel_position = vec2f(
+        (clip[index].x + 1.0) * 0.5 * viewport_size.x,
+        (1.0 - clip[index].y) * 0.5 * viewport_size.y,
+    );
+
+    var out : VertexOut;
+    out.position = vec4f(clip[index], 0.0, 1.0);
+    out.pixel_position = pixel_position;
+    return out;
+}
+
+fn roundedRectDistance(position : vec2f, half_size : vec2f, radius : f32) -> f32 {
+    let q = abs(position) - (half_size - vec2f(radius));
+    return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - radius;
+}
+
+fn rectDistance(position : vec2f, half_size : vec2f) -> f32 {
+    let q = abs(position) - half_size;
+    return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0);
+}
+
+fn topRoundedRectDistance(position : vec2f, half_size : vec2f, radius : f32) -> f32 {
+    let x = abs(position.x);
+    let y_from_top = position.y + half_size.y;
+    if (y_from_top < radius && x > half_size.x - radius) {
+        let corner_center = vec2f(half_size.x - radius, radius);
+        return length(vec2f(x, y_from_top) - corner_center) - radius;
+    }
+    return rectDistance(position, half_size);
+}
+
+fn bottomRoundedRectDistance(position : vec2f, half_size : vec2f, radius : f32) -> f32 {
+    let x = abs(position.x);
+    let y_from_bottom = half_size.y - position.y;
+    if (y_from_bottom < radius && x > half_size.x - radius) {
+        let corner_center = vec2f(half_size.x - radius, radius);
+        return length(vec2f(x, y_from_bottom) - corner_center) - radius;
+    }
+    return rectDistance(position, half_size);
+}
+
+fn panelDistance(position : vec2f, half_size : vec2f, radius : f32, corner_mode : f32) -> f32 {
+    if (radius <= 0.0) {
+        return rectDistance(position, half_size);
+    }
+    if (corner_mode > 1.5) {
+        return bottomRoundedRectDistance(position, half_size, radius);
+    }
+    if (corner_mode > 0.5) {
+        return topRoundedRectDistance(position, half_size, radius);
+    }
+    return roundedRectDistance(position, half_size, radius);
+}
+
+fn clipCoverage(pixel_position : vec2f, clip : vec4f) -> f32 {
+    let local = pixel_position - clip.xy;
+    return step(0.0, local.x) *
+        step(0.0, local.y) *
+        step(local.x, clip.z) *
+        step(local.y, clip.w);
+}
+
+fn compositeOver(destination : vec4f, source_color : vec3f, source_alpha : f32) -> vec4f {
+    let alpha = clamp(source_alpha, 0.0, 1.0);
+    return vec4f(
+        destination.rgb * (1.0 - alpha) + source_color * alpha,
+        destination.a * (1.0 - alpha) + alpha,
+    );
+}
+
+fn sampleScene(pixel_position : vec2f) -> vec4f {
+    let uv = clamp(pixel_position / max(effect_scene.viewport.xy, vec2f(1.0)), vec2f(0.0), vec2f(1.0));
+    return textureSampleLevel(scene_texture, source_sampler, uv, 0.0);
+}
+
+fn sampleBlurred(pixel_position : vec2f) -> vec4f {
+    let uv = clamp(pixel_position / max(effect_scene.viewport.xy, vec2f(1.0)), vec2f(0.0), vec2f(1.0));
+    return textureSampleLevel(blurred_texture, source_sampler, uv, 0.0);
+}
+
+fn tintPremultiplied(layer : vec4f, tint_color : vec3f, tint_strength : f32) -> vec4f {
+    let alpha = clamp(layer.a, 0.0, 1.0);
+    let tint = tint_color * alpha;
+    return vec4f(mix(layer.rgb, tint, clamp(tint_strength, 0.0, 1.0)), alpha);
+}
+
+fn effectCoverage(pixel_position : vec2f, panel : EffectPanel) -> f32 {
+    let ui_scale = max(effect_scene.viewport.w, 1.0);
+    let local_position = pixel_position - panel.frame.xy;
+    let half_size = panel.frame.zw * 0.5;
+    let radius = min(panel.style.x * ui_scale, min(half_size.x, half_size.y));
+    let edge_distance = panelDistance(local_position, half_size, radius, panel.style.y);
+    let shape_coverage = 1.0 - smoothstep(-1.0, 1.0, edge_distance);
+    let bottom = panel.frame.y + half_size.y;
+    let fade_height = 12.0 * ui_scale;
+    let bottom_fade = 1.0 - smoothstep(bottom - fade_height, bottom, pixel_position.y);
+    return shape_coverage * bottom_fade * clipCoverage(pixel_position, panel.clip);
+}
+
+@fragment
+fn fragmentMain(in : VertexOut) -> @location(0) vec4f {
+    let base_layer = sampleScene(in.pixel_position);
+    let backdrop_presence = smoothstep(0.02, 0.20, base_layer.a);
+    var layer = base_layer;
+    let effect_count = min(u32(effect_scene.counts.x), 8u);
+    for (var index = 0u; index < effect_count; index = index + 1u) {
+        let panel = effect_scene.effects[index];
+        let coverage = effectCoverage(in.pixel_position, panel) * backdrop_presence;
+        if (coverage > 0.0) {
+            let frosted = tintPremultiplied(sampleBlurred(in.pixel_position), panel.color.rgb, panel.color.a);
+            layer = mix(layer, frosted, coverage);
+        }
+    }
+    return layer;
+}
+)wgsl";
+
+constexpr char kBlurShader[] = R"wgsl(
+struct VertexOut {
+    @builtin(position) position : vec4f,
+    @location(0) uv : vec2f,
+};
+
+struct BlurUniforms {
+    source_size : vec4f,
+    direction : vec4f,
+};
+
+@group(0) @binding(0) var<uniform> blur : BlurUniforms;
+@group(0) @binding(1) var source_texture : texture_2d<f32>;
+@group(0) @binding(2) var source_sampler : sampler;
+
+@vertex
+fn vertexMain(@builtin(vertex_index) index : u32) -> VertexOut {
+    let clip = array<vec2f, 6>(
+        vec2f(-1.0, -1.0),
+        vec2f(-1.0,  1.0),
+        vec2f( 1.0, -1.0),
+        vec2f( 1.0, -1.0),
+        vec2f(-1.0,  1.0),
+        vec2f( 1.0,  1.0),
+    );
+
+    var out : VertexOut;
+    out.position = vec4f(clip[index], 0.0, 1.0);
+    out.uv = vec2f((clip[index].x + 1.0) * 0.5, (1.0 - clip[index].y) * 0.5);
+    return out;
+}
+
+fn sampleSource(uv : vec2f) -> vec4f {
+    return textureSampleLevel(source_texture, source_sampler, clamp(uv, vec2f(0.0), vec2f(1.0)), 0.0);
+}
+
+fn downsample(uv : vec2f) -> vec4f {
+    let texel = 1.0 / max(blur.source_size.xy, vec2f(1.0));
+    var layer = vec4f(0.0);
+    for (var y = 0u; y < 4u; y = y + 1u) {
+        for (var x = 0u; x < 4u; x = x + 1u) {
+            let offset = vec2f(f32(x) - 1.5, f32(y) - 1.5) * texel;
+            layer = layer + sampleSource(uv + offset);
+        }
+    }
+    return layer * 0.0625;
+}
+
+fn blur1d(uv : vec2f) -> vec4f {
+    let weights = array<f32, 13>(
+        0.0185440,
+        0.0341660,
+        0.0563310,
+        0.0831080,
+        0.1097190,
+        0.1296180,
+        0.1370230,
+        0.1296180,
+        0.1097190,
+        0.0831080,
+        0.0563310,
+        0.0341660,
+        0.0185440,
+    );
+    let radius = max(blur.direction.z, 1.0);
+    let step_radius = radius / 6.0;
+    var layer = vec4f(0.0);
+    for (var index = 0u; index < 13u; index = index + 1u) {
+        let offset = blur.direction.xy * ((f32(index) - 6.0) * step_radius);
+        layer = layer + sampleSource(uv + offset) * weights[index];
+    }
+    return layer;
+}
+
+@fragment
+fn fragmentMain(in : VertexOut) -> @location(0) vec4f {
+    if (blur.direction.w < 0.5) {
+        return downsample(in.uv);
+    }
+    return blur1d(in.uv);
+}
+)wgsl";
+
 struct SymbolButtonUniform {
   float frame[4];
   float icon[4];
@@ -209,19 +500,21 @@ struct SymbolButtonUniform {
   float control[4];
   float appearance[4];
   float color[4];
-  float glyph[4];
+  float clip[4];
 };
 
 struct PanelUniform {
   float frame[4];
   float color[4];
   float style[4];
+  float clip[4];
 };
 
 struct TextUniform {
   float frame[4];
   float uv[4];
   float color[4];
+  float clip[4];
 };
 
 struct SceneUniforms {
@@ -232,11 +525,36 @@ struct SceneUniforms {
   TextUniform texts[kMaxTextCount];
 };
 
+struct EffectPanelUniform {
+  float frame[4];
+  float color[4];
+  float style[4];
+  float clip[4];
+};
+
+struct EffectUniforms {
+  float viewport[4];
+  float counts[4];
+  EffectPanelUniform effects[kMaxEffectPanelCount];
+};
+
+struct BlurUniforms {
+  float source_size[4];
+  float direction[4];
+};
+
 struct LayoutRect {
   float x = 0.0f;
   float y = 0.0f;
   float width = 0.0f;
   float height = 0.0f;
+};
+
+struct PixelRect {
+  uint32_t x = 0;
+  uint32_t y = 0;
+  uint32_t width = 0;
+  uint32_t height = 0;
 };
 
 struct LayoutWindowControls {
@@ -246,6 +564,7 @@ struct LayoutWindowControls {
 
 struct LayoutContext {
   LayoutWindowControls window_controls;
+  std::optional<LayoutRect> clip_rect;
 };
 
 struct SymbolButtonLayout {
@@ -259,12 +578,25 @@ struct SymbolButtonLayout {
   bool draws_control = true;
   bool draws_divider = false;
   float divider_x = 0.0f;
+  std::optional<LayoutRect> clip_rect;
 };
 
 struct PanelLayout {
   LayoutRect frame;
   phenotype::ui::Color color;
   float corner_radius = 0.0f;
+  bool rounds_top_corners_only = false;
+  bool rounds_bottom_corners_only = false;
+  std::optional<LayoutRect> clip_rect;
+};
+
+struct EffectPanelLayout {
+  LayoutRect frame;
+  phenotype::ui::Color color;
+  float corner_radius = 0.0f;
+  bool rounds_top_corners_only = false;
+  bool rounds_bottom_corners_only = false;
+  std::optional<LayoutRect> clip_rect;
 };
 
 struct TextLayout {
@@ -277,19 +609,37 @@ struct TextLayout {
   phenotype::ui::TextOverflow overflow = phenotype::ui::TextOverflow::clip;
   phenotype::ui::TextTruncation truncation = phenotype::ui::TextTruncation::tail;
   bool centers_text = false;
+  std::optional<LayoutRect> clip_rect;
 };
 
 struct HitTargetLayout {
   LayoutRect frame;
   std::function<void()> action;
   bool is_enabled = true;
+  std::optional<LayoutRect> clip_rect;
 };
 
-struct SceneLayout {
+struct ScrollTargetLayout {
+  LayoutRect frame;
+  float offset_y = 0.0f;
+  float content_height = 0.0f;
+  float max_offset_y = 0.0f;
+  std::function<void(float)> action;
+};
+
+struct SceneDrawLayer {
   std::vector<PanelLayout> panels;
   std::vector<SymbolButtonLayout> buttons;
   std::vector<TextLayout> texts;
+};
+
+struct SceneLayout {
+  SceneDrawLayer background;
+  SceneDrawLayer foreground;
+  std::vector<EffectPanelLayout> effects;
   std::vector<HitTargetLayout> hit_targets;
+  std::vector<ScrollTargetLayout> scroll_targets;
+  bool uses_foreground_layer = false;
 };
 
 struct TextAtlasEntry {
@@ -299,6 +649,7 @@ struct TextAtlasEntry {
   float uv_right = 1.0f;
   float uv_bottom = 1.0f;
   phenotype::ui::Color color;
+  std::optional<LayoutRect> clip_rect;
 };
 
 struct TextAtlas {
@@ -308,6 +659,48 @@ struct TextAtlas {
   std::vector<TextAtlasEntry> entries;
   std::vector<TextAtlasEntry> symbol_entries;
 };
+
+struct TextAtlasCacheKey {
+  size_t text_count = 0;
+  size_t symbol_count = 0;
+  size_t hash = 0;
+};
+
+bool operator==(const TextAtlasCacheKey &lhs, const TextAtlasCacheKey &rhs) noexcept {
+  return lhs.text_count == rhs.text_count && lhs.symbol_count == rhs.symbol_count &&
+         lhs.hash == rhs.hash;
+}
+
+void HashCombine(size_t &seed, size_t value) noexcept {
+  seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
+}
+
+void HashFloat(size_t &seed, float value) noexcept { HashCombine(seed, std::hash<float>{}(value)); }
+
+void HashInt(size_t &seed, int value) noexcept { HashCombine(seed, std::hash<int>{}(value)); }
+
+void HashBool(size_t &seed, bool value) noexcept { HashCombine(seed, std::hash<bool>{}(value)); }
+
+void HashString(size_t &seed, std::string_view value) noexcept {
+  HashCombine(seed, std::hash<std::string_view>{}(value));
+}
+
+void HashPixelSize(size_t &seed, float points, float scale) noexcept {
+  float pixels = std::max(1.0f, points * scale);
+  HashCombine(seed, std::hash<uint32_t>{}(static_cast<uint32_t>(std::ceil(pixels))));
+}
+
+void HashTextAtlasFrameSize(size_t &seed, LayoutRect frame, float scale) noexcept {
+  HashPixelSize(seed, frame.width, scale);
+  HashPixelSize(seed, frame.height, scale);
+}
+
+void HashSymbolOptions(size_t &seed, phenotype::ui::SymbolOptions options) noexcept {
+  HashBool(seed, options.fill);
+  HashFloat(seed, options.weight);
+  HashFloat(seed, options.grade);
+  HashFloat(seed, options.optical_size);
+}
 
 uint32_t PixelSize(CGFloat points, CGFloat scale) noexcept {
   double pixels = static_cast<double>(points * scale);
@@ -541,6 +934,82 @@ std::string_view MaterialSymbolName(phenotype::ui::Symbol symbol) noexcept {
   return "";
 }
 
+TextAtlasCacheKey MakeTextAtlasCacheKey(const std::vector<TextLayout> &texts,
+    const std::vector<SymbolButtonLayout> &symbols, float scale) {
+  float safe_scale = std::max(1.0f, scale);
+  size_t hash = 0;
+  HashFloat(hash, safe_scale);
+
+  for (const TextLayout &text : texts) {
+    HashString(hash, text.content);
+    HashTextAtlasFrameSize(hash, text.frame, safe_scale);
+    HashFloat(hash, text.font_size);
+    HashFloat(hash, text.font_weight);
+    HashInt(hash, text.line_limit);
+    HashCombine(hash, static_cast<size_t>(text.overflow));
+    HashCombine(hash, static_cast<size_t>(text.truncation));
+    HashBool(hash, text.centers_text);
+  }
+
+  for (const SymbolButtonLayout &symbol : symbols) {
+    HashString(hash, MaterialSymbolName(symbol.symbol));
+    HashTextAtlasFrameSize(hash, symbol.frame, safe_scale);
+    HashSymbolOptions(hash, symbol.options);
+  }
+
+  return {
+      texts.size(),
+      symbols.size(),
+      hash,
+  };
+}
+
+bool CanRasterizeText(const TextLayout &text, size_t index) noexcept {
+  return !text.content.empty() && text.frame.width > 0.0f && text.frame.height > 0.0f &&
+         index < kMaxTextCount;
+}
+
+bool CanRasterizeSymbol(const SymbolButtonLayout &symbol, size_t index) noexcept {
+  return !MaterialSymbolName(symbol.symbol).empty() && symbol.frame.width > 0.0f &&
+         symbol.frame.height > 0.0f && index < kMaxSymbolButtonCount;
+}
+
+TextAtlas RetargetTextAtlasEntries(const TextAtlas &cached, const std::vector<TextLayout> &texts,
+    const std::vector<SymbolButtonLayout> &symbols) {
+  TextAtlas atlas;
+  atlas.width = cached.width;
+  atlas.height = cached.height;
+  atlas.entries = cached.entries;
+  atlas.symbol_entries = cached.symbol_entries;
+
+  size_t entry_index = 0;
+  for (size_t index = 0; index < texts.size() && entry_index < atlas.entries.size(); ++index) {
+    const TextLayout &text = texts[index];
+    if (!CanRasterizeText(text, index)) {
+      continue;
+    }
+
+    TextAtlasEntry &entry = atlas.entries[entry_index++];
+    entry.frame = text.frame;
+    entry.color = text.color;
+    entry.clip_rect = text.clip_rect;
+  }
+
+  for (size_t index = 0; index < symbols.size() && index < atlas.symbol_entries.size(); ++index) {
+    const SymbolButtonLayout &symbol = symbols[index];
+    if (!CanRasterizeSymbol(symbol, index)) {
+      continue;
+    }
+
+    TextAtlasEntry &entry = atlas.symbol_entries[index];
+    entry.frame = symbol.frame;
+    entry.color = symbol.color;
+    entry.clip_rect = symbol.clip_rect;
+  }
+
+  return atlas;
+}
+
 NSLineBreakMode ToNativeLineBreakMode(
     phenotype::ui::TextOverflow overflow, phenotype::ui::TextTruncation truncation) noexcept {
   if (overflow != phenotype::ui::TextOverflow::ellipsis) {
@@ -597,6 +1066,7 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
     phenotype::ui::TextTruncation truncation = phenotype::ui::TextTruncation::tail;
     phenotype::ui::SymbolOptions symbol_options;
     bool centers_text = false;
+    std::optional<LayoutRect> clip_rect;
     uint32_t x = 0;
     uint32_t y = 0;
     uint32_t width = 0;
@@ -666,6 +1136,7 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
         .overflow = text.overflow,
         .truncation = text.truncation,
         .centers_text = text.centers_text,
+        .clip_rect = text.clip_rect,
     });
   }
 
@@ -686,6 +1157,7 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
         .font_weight = symbol.options.weight,
         .symbol_options = symbol.options,
         .centers_text = true,
+        .clip_rect = symbol.clip_rect,
     });
   }
 
@@ -768,6 +1240,7 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
         static_cast<float>(text.x + text.width) / static_cast<float>(atlas.width),
         static_cast<float>(text.y + text.height) / static_cast<float>(atlas.height),
         text.color,
+        text.clip_rect,
     };
     if (is_symbol) {
       if (text.index < atlas.symbol_entries.size()) {
@@ -868,6 +1341,40 @@ bool NearlyEqual(NSRect lhs, NSRect rhs) noexcept {
          NearlyEqual(lhs.size.height, rhs.size.height);
 }
 
+bool NearlyEqual(LayoutRect lhs, LayoutRect rhs) noexcept {
+  return NearlyEqual(lhs.x, rhs.x) && NearlyEqual(lhs.y, rhs.y) &&
+         NearlyEqual(lhs.width, rhs.width) && NearlyEqual(lhs.height, rhs.height);
+}
+
+bool NearlyEqual(phenotype::ui::Size lhs, phenotype::ui::Size rhs) noexcept {
+  return NearlyEqual(lhs.width, rhs.width) && NearlyEqual(lhs.height, rhs.height);
+}
+
+bool NearlyEqual(std::optional<LayoutRect> lhs, std::optional<LayoutRect> rhs) noexcept {
+  if (lhs.has_value() != rhs.has_value()) {
+    return false;
+  }
+  if (!lhs) {
+    return true;
+  }
+  return NearlyEqual(*lhs, *rhs);
+}
+
+bool NearlyEqual(LayoutWindowControls lhs, LayoutWindowControls rhs) noexcept {
+  if (lhs.has_leading_controls != rhs.has_leading_controls) {
+    return false;
+  }
+  if (!lhs.has_leading_controls) {
+    return true;
+  }
+  return NearlyEqual(lhs.leading_controls, rhs.leading_controls);
+}
+
+bool NearlyEqual(LayoutContext lhs, LayoutContext rhs) noexcept {
+  return NearlyEqual(lhs.window_controls, rhs.window_controls) &&
+         NearlyEqual(lhs.clip_rect, rhs.clip_rect);
+}
+
 void ApplyWindowControlVerticalOffset(NSWindow *window, const std::array<NSRect, 3> &base_frames,
     const std::array<bool, 3> &has_base_frame, CGFloat offset) {
   if (!window) {
@@ -944,11 +1451,14 @@ phenotype::ui::Size IntrinsicSize(const phenotype::ui::View &view) {
     return MeasureText(view.text_content, view.font_size_value, view.font_weight_value);
   case ui::ViewKind::grid:
     return {view.grid_min_column_width, view.grid_row_height};
+  case ui::ViewKind::scroll:
+    break;
   case ui::ViewKind::spacer:
   case ui::ViewKind::empty:
     return {};
   case ui::ViewKind::button_group:
   case ui::ViewKind::panel:
+  case ui::ViewKind::visual_effect_panel:
   case ui::ViewKind::stack:
     break;
   }
@@ -957,6 +1467,84 @@ phenotype::ui::Size IntrinsicSize(const phenotype::ui::View &view) {
   bool has_visible_child = false;
   for (const ui::View &child : view.children) {
     ui::Size child_size = IntrinsicSize(child);
+    if (view.axis == ui::LayoutAxis::horizontal) {
+      if (has_visible_child) {
+        size.width += view.child_spacing;
+      }
+      size.width += child_size.width;
+      size.height = std::max(size.height, child_size.height);
+    } else if (view.axis == ui::LayoutAxis::vertical) {
+      if (has_visible_child) {
+        size.height += view.child_spacing;
+      }
+      size.width = std::max(size.width, child_size.width);
+      size.height += child_size.height;
+    } else {
+      size.width = std::max(size.width, child_size.width);
+      size.height = std::max(size.height, child_size.height);
+    }
+    has_visible_child = true;
+  }
+
+  size.width += view.content_padding.left + view.content_padding.right;
+  size.height += view.content_padding.top + view.content_padding.bottom;
+  return size;
+}
+
+phenotype::ui::Size NaturalContentSize(const phenotype::ui::View &view, float available_width) {
+  namespace ui = phenotype::ui;
+
+  if (view.preferred_size.width > 0.0f || view.preferred_size.height > 0.0f) {
+    return view.preferred_size;
+  }
+
+  switch (view.kind) {
+  case ui::ViewKind::empty:
+  case ui::ViewKind::spacer:
+    return {};
+  case ui::ViewKind::button:
+  case ui::ViewKind::icon:
+  case ui::ViewKind::text:
+  case ui::ViewKind::button_group:
+    return IntrinsicSize(view);
+  case ui::ViewKind::panel:
+  case ui::ViewKind::visual_effect_panel:
+    return {};
+  case ui::ViewKind::scroll:
+    if (view.children.empty()) {
+      return {};
+    }
+    return NaturalContentSize(view.children.front(), available_width);
+  case ui::ViewKind::grid: {
+    float content_width =
+        std::max(0.0f, available_width - view.content_padding.left - view.content_padding.right);
+    float min_column_width = std::max(1.0f, view.grid_min_column_width);
+    float column_gap = std::max(0.0f, view.grid_column_gap);
+    float row_height = std::max(1.0f, view.grid_row_height);
+    size_t column_count = std::max<size_t>(
+        1, static_cast<size_t>((content_width + column_gap) / (min_column_width + column_gap)));
+    size_t item_count = std::max(
+        view.grid_total_item_count_value, view.grid_item_offset_value + view.children.size());
+    size_t row_count = item_count == 0 ? 0 : (item_count + column_count - 1) / column_count;
+    float height = row_count == 0
+                       ? 0.0f
+                       : row_height * static_cast<float>(row_count) +
+                             std::max(0.0f, view.grid_row_gap) * static_cast<float>(row_count - 1);
+    return {
+        available_width,
+        height + view.content_padding.top + view.content_padding.bottom,
+    };
+  }
+  case ui::ViewKind::stack:
+    break;
+  }
+
+  ui::Size size;
+  bool has_visible_child = false;
+  float child_width =
+      std::max(0.0f, available_width - view.content_padding.left - view.content_padding.right);
+  for (const ui::View &child : view.children) {
+    ui::Size child_size = NaturalContentSize(child, child_width);
     if (view.axis == ui::LayoutAxis::horizontal) {
       if (has_visible_child) {
         size.width += view.child_spacing;
@@ -1004,6 +1592,131 @@ LayoutRect ContentRect(const phenotype::ui::View &view, LayoutRect rect) {
   };
 }
 
+LayoutRect Intersect(LayoutRect lhs, LayoutRect rhs) noexcept {
+  float min_x = std::max(lhs.x, rhs.x);
+  float min_y = std::max(lhs.y, rhs.y);
+  float max_x = std::min(lhs.x + lhs.width, rhs.x + rhs.width);
+  float max_y = std::min(lhs.y + lhs.height, rhs.y + rhs.height);
+  return {
+      min_x,
+      min_y,
+      std::max(0.0f, max_x - min_x),
+      std::max(0.0f, max_y - min_y),
+  };
+}
+
+bool HasArea(LayoutRect rect) noexcept { return rect.width > 0.0f && rect.height > 0.0f; }
+
+bool HasArea(PixelRect rect) noexcept { return rect.width > 0 && rect.height > 0; }
+
+std::optional<LayoutRect> IntersectClip(
+    std::optional<LayoutRect> existing, LayoutRect rect) noexcept {
+  if (!existing) {
+    return rect;
+  }
+  return Intersect(*existing, rect);
+}
+
+bool IsVisibleInClip(LayoutRect rect, std::optional<LayoutRect> clip) noexcept {
+  if (rect.width <= 0.0f || rect.height <= 0.0f) {
+    return false;
+  }
+  if (!clip) {
+    return true;
+  }
+  return HasArea(Intersect(rect, *clip));
+}
+
+LayoutRect Union(LayoutRect lhs, LayoutRect rhs) noexcept {
+  float min_x = std::min(lhs.x, rhs.x);
+  float min_y = std::min(lhs.y, rhs.y);
+  float max_x = std::max(lhs.x + lhs.width, rhs.x + rhs.width);
+  float max_y = std::max(lhs.y + lhs.height, rhs.y + rhs.height);
+  return {
+      min_x,
+      min_y,
+      std::max(0.0f, max_x - min_x),
+      std::max(0.0f, max_y - min_y),
+  };
+}
+
+std::optional<LayoutRect> EffectBounds(const std::vector<EffectPanelLayout> &effects) noexcept {
+  std::optional<LayoutRect> bounds;
+  for (const EffectPanelLayout &effect : effects) {
+    LayoutRect frame = effect.frame;
+    if (effect.clip_rect) {
+      frame = Intersect(frame, *effect.clip_rect);
+    }
+    if (!HasArea(frame)) {
+      continue;
+    }
+    bounds = bounds ? Union(*bounds, frame) : frame;
+  }
+  return bounds;
+}
+
+PixelRect ScaleToPixelRect(
+    LayoutRect rect, float scale, uint32_t width, uint32_t height, float padding) noexcept {
+  if (width == 0 || height == 0) {
+    return {};
+  }
+
+  float min_x = (rect.x - padding) * scale;
+  float min_y = (rect.y - padding) * scale;
+  float max_x = (rect.x + rect.width + padding) * scale;
+  float max_y = (rect.y + rect.height + padding) * scale;
+
+  int32_t x0 = std::max<int32_t>(0, static_cast<int32_t>(std::floor(min_x)));
+  int32_t y0 = std::max<int32_t>(0, static_cast<int32_t>(std::floor(min_y)));
+  int32_t x1 =
+      std::min<int32_t>(static_cast<int32_t>(width), static_cast<int32_t>(std::ceil(max_x)));
+  int32_t y1 =
+      std::min<int32_t>(static_cast<int32_t>(height), static_cast<int32_t>(std::ceil(max_y)));
+  if (x1 <= x0 || y1 <= y0) {
+    return {};
+  }
+  return {
+      static_cast<uint32_t>(x0),
+      static_cast<uint32_t>(y0),
+      static_cast<uint32_t>(x1 - x0),
+      static_cast<uint32_t>(y1 - y0),
+  };
+}
+
+PixelRect ScalePixelRect(PixelRect rect, uint32_t source_width, uint32_t source_height,
+    uint32_t target_width, uint32_t target_height) noexcept {
+  if (!HasArea(rect) || source_width == 0 || source_height == 0 || target_width == 0 ||
+      target_height == 0) {
+    return {};
+  }
+
+  float scale_x = static_cast<float>(target_width) / static_cast<float>(source_width);
+  float scale_y = static_cast<float>(target_height) / static_cast<float>(source_height);
+  int32_t x0 = std::max<int32_t>(0, static_cast<int32_t>(std::floor(rect.x * scale_x)));
+  int32_t y0 = std::max<int32_t>(0, static_cast<int32_t>(std::floor(rect.y * scale_y)));
+  int32_t x1 = std::min<int32_t>(static_cast<int32_t>(target_width),
+      static_cast<int32_t>(std::ceil((rect.x + rect.width) * scale_x)));
+  int32_t y1 = std::min<int32_t>(static_cast<int32_t>(target_height),
+      static_cast<int32_t>(std::ceil((rect.y + rect.height) * scale_y)));
+  if (x1 <= x0 || y1 <= y0) {
+    return {};
+  }
+  return {
+      static_cast<uint32_t>(x0),
+      static_cast<uint32_t>(y0),
+      static_cast<uint32_t>(x1 - x0),
+      static_cast<uint32_t>(y1 - y0),
+  };
+}
+
+std::optional<LayoutRect> VisibleClip(
+    std::optional<LayoutRect> clip, LayoutRect fallback) noexcept {
+  if (!clip) {
+    return fallback;
+  }
+  return Intersect(*clip, fallback);
+}
+
 float ControlShapeValue(phenotype::ui::ControlShape shape) noexcept {
   switch (shape) {
   case phenotype::ui::ControlShape::square_circle:
@@ -1014,12 +1727,27 @@ float ControlShapeValue(phenotype::ui::ControlShape shape) noexcept {
   return 0.0f;
 }
 
+float CornerMode(bool top_only, bool bottom_only) noexcept {
+  if (bottom_only) {
+    return 2.0f;
+  }
+  if (top_only) {
+    return 1.0f;
+  }
+  return 0.0f;
+}
+
 bool Contains(LayoutRect rect, phenotype::ui::Size point) noexcept {
   return point.width >= rect.x && point.width <= rect.x + rect.width && point.height >= rect.y &&
          point.height <= rect.y + rect.height;
 }
 
-void LayoutButtonGroup(const phenotype::ui::View &view, LayoutRect rect, SceneLayout &scene) {
+SceneDrawLayer &ActiveDrawLayer(SceneLayout &scene) noexcept {
+  return scene.uses_foreground_layer ? scene.foreground : scene.background;
+}
+
+void LayoutButtonGroup(const phenotype::ui::View &view, LayoutRect rect,
+    const LayoutContext &context, SceneLayout &scene) {
   namespace ui = phenotype::ui;
 
   LayoutRect content_rect = ContentRect(view, rect);
@@ -1036,16 +1764,22 @@ void LayoutButtonGroup(const phenotype::ui::View &view, LayoutRect rect, SceneLa
             child_rect,
             child.click_action,
             child.is_enabled,
+            context.clip_rect,
         });
       }
 
-      if (scene.buttons.size() >= kMaxSymbolButtonCount) {
+      if (!IsVisibleInClip(child_rect, context.clip_rect)) {
+        cursor_x += child_size.width + view.child_spacing;
+        continue;
+      }
+      SceneDrawLayer &layer = ActiveDrawLayer(scene);
+      if (layer.buttons.size() >= kMaxSymbolButtonCount) {
         return;
       }
       const ui::View *icon = FindIconContent(child);
       if (icon) {
         bool draws_divider = visible_button_index == 0 && view.children.size() > 1;
-        scene.buttons.push_back({
+        layer.buttons.push_back({
             child_rect,
             content_rect,
             icon->symbol,
@@ -1056,6 +1790,7 @@ void LayoutButtonGroup(const phenotype::ui::View &view, LayoutRect rect, SceneLa
             draws_control,
             draws_divider,
             child_rect.x + child_rect.width + (view.child_spacing * 0.5f),
+            context.clip_rect,
         });
         draws_control = false;
         ++visible_button_index;
@@ -1083,10 +1818,39 @@ void LayoutGrid(const phenotype::ui::View &view, LayoutRect rect, const LayoutCo
   float cell_width =
       std::max(1.0f, (content_rect.width - total_gap) / static_cast<float>(column_count));
   float row_height = std::max(1.0f, view.grid_row_height);
+  float row_stride = row_height + row_gap;
+  size_t first_visible_item = 0;
+  size_t last_visible_item = view.grid_item_offset_value + view.children.size();
+
+  if (context.clip_rect && row_stride > 0.0f) {
+    const LayoutRect &clip = *context.clip_rect;
+    float clip_top = clip.y;
+    float clip_bottom = clip.y + clip.height;
+    if (clip_bottom <= content_rect.y) {
+      last_visible_item = 0;
+    } else {
+      float first_row_value = std::floor((clip_top - content_rect.y) / row_stride);
+      size_t first_row = first_row_value <= 0.0f ? 0 : static_cast<size_t>(first_row_value);
+      if (first_row > 0) {
+        --first_row;
+      }
+
+      float last_row_value = std::floor((clip_bottom - content_rect.y) / row_stride);
+      size_t last_row = last_row_value <= 0.0f ? 0 : static_cast<size_t>(last_row_value);
+      last_row += 2;
+
+      first_visible_item = first_row * column_count;
+      last_visible_item = std::min(last_visible_item, last_row * column_count);
+    }
+  }
 
   for (size_t index = 0; index < view.children.size(); ++index) {
-    size_t row = index / column_count;
-    size_t column = index % column_count;
+    size_t item_index = view.grid_item_offset_value + index;
+    if (item_index < first_visible_item || item_index >= last_visible_item) {
+      continue;
+    }
+    size_t row = item_index / column_count;
+    size_t column = item_index % column_count;
     LayoutRect child_rect{
         content_rect.x + (static_cast<float>(column) * (cell_width + column_gap)),
         content_rect.y + (static_cast<float>(row) * (row_height + row_gap)),
@@ -1094,6 +1858,56 @@ void LayoutGrid(const phenotype::ui::View &view, LayoutRect rect, const LayoutCo
         row_height,
     };
     LayoutView(view.children[index], child_rect, context, scene);
+  }
+}
+
+void LayoutScroll(const phenotype::ui::View &view, LayoutRect rect, const LayoutContext &context,
+    SceneLayout &scene) {
+  LayoutRect viewport = ContentRect(view, rect);
+  if (!HasArea(viewport)) {
+    return;
+  }
+
+  std::optional<LayoutRect> viewport_clip = IntersectClip(context.clip_rect, viewport);
+  if (!viewport_clip || !HasArea(*viewport_clip)) {
+    return;
+  }
+
+  phenotype::ui::Size natural_size = {};
+  for (const phenotype::ui::View &child : view.children) {
+    phenotype::ui::Size child_size = NaturalContentSize(child, viewport.width);
+    natural_size.width = std::max(natural_size.width, child_size.width);
+    natural_size.height = std::max(natural_size.height, child_size.height);
+  }
+  float content_height = std::max(viewport.height, natural_size.height);
+  float content_max_offset = std::max(0.0f, content_height - viewport.height);
+  bool can_scroll_content = content_max_offset > 0.0f;
+  float headroom_offset =
+      can_scroll_content ? std::max(0.0f, view.scroll_range_headroom_y_value) : 0.0f;
+  float max_offset = content_max_offset + headroom_offset;
+  float offset_y = std::clamp(view.scroll_offset_y_value, 0.0f, max_offset);
+  float content_offset_y = std::clamp(view.scroll_content_offset_y_value, 0.0f, content_max_offset);
+
+  if (view.scroll_action && max_offset > 0.0f) {
+    scene.scroll_targets.push_back({
+        viewport,
+        offset_y,
+        content_height,
+        max_offset,
+        view.scroll_action,
+    });
+  }
+
+  LayoutContext child_context = context;
+  child_context.clip_rect = viewport_clip;
+  LayoutRect child_rect{
+      viewport.x,
+      viewport.y - content_offset_y,
+      viewport.width,
+      content_height,
+  };
+  for (const phenotype::ui::View &child : view.children) {
+    LayoutView(child, child_rect, child_context, scene);
   }
 }
 
@@ -1112,11 +1926,13 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect, const LayoutCo
     }
   }
 
-  if (view.click_action && rect.width > 0.0f && rect.height > 0.0f) {
+  if (view.click_action && rect.width > 0.0f && rect.height > 0.0f &&
+      IsVisibleInClip(rect, context.clip_rect)) {
     scene.hit_targets.push_back({
         rect,
         view.click_action,
         view.is_enabled,
+        context.clip_rect,
     });
   }
 
@@ -1125,10 +1941,11 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect, const LayoutCo
   case ui::ViewKind::spacer:
     return;
   case ui::ViewKind::icon:
-    if (scene.buttons.size() >= kMaxSymbolButtonCount) {
+    if (ActiveDrawLayer(scene).buttons.size() >= kMaxSymbolButtonCount ||
+        !IsVisibleInClip(rect, context.clip_rect)) {
       return;
     }
-    scene.buttons.push_back({
+    ActiveDrawLayer(scene).buttons.push_back({
         rect,
         rect,
         view.symbol,
@@ -1139,13 +1956,15 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect, const LayoutCo
         false,
         false,
         0.0f,
+        context.clip_rect,
     });
     return;
   case ui::ViewKind::text:
-    if (scene.texts.size() >= kMaxTextCount) {
+    if (ActiveDrawLayer(scene).texts.size() >= kMaxTextCount ||
+        !IsVisibleInClip(rect, context.clip_rect)) {
       return;
     }
-    scene.texts.push_back({
+    ActiveDrawLayer(scene).texts.push_back({
         rect,
         view.text_content,
         view.foreground_color,
@@ -1155,27 +1974,46 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect, const LayoutCo
         view.text_overflow,
         view.text_truncation,
         view.centers_text,
+        context.clip_rect,
     });
     return;
   case ui::ViewKind::panel:
-    if (scene.panels.size() >= kMaxPanelCount) {
+    if (ActiveDrawLayer(scene).panels.size() >= kMaxPanelCount ||
+        !IsVisibleInClip(rect, context.clip_rect)) {
       return;
     }
-    scene.panels.push_back({
+    ActiveDrawLayer(scene).panels.push_back({
         rect,
         view.background_color,
         view.corner_radius_value,
+        view.rounds_top_corners_only,
+        view.rounds_bottom_corners_only,
+        context.clip_rect,
     });
     return;
+  case ui::ViewKind::visual_effect_panel:
+    if (scene.effects.size() < kMaxEffectPanelCount && IsVisibleInClip(rect, context.clip_rect)) {
+      scene.effects.push_back({
+          rect,
+          view.background_color,
+          view.corner_radius_value,
+          view.rounds_top_corners_only,
+          view.rounds_bottom_corners_only,
+          context.clip_rect,
+      });
+    }
+    scene.uses_foreground_layer = true;
+    return;
   case ui::ViewKind::button: {
-    if (scene.buttons.size() >= kMaxSymbolButtonCount) {
+    if (ActiveDrawLayer(scene).buttons.size() >= kMaxSymbolButtonCount ||
+        !IsVisibleInClip(rect, context.clip_rect)) {
       return;
     }
     const ui::View *icon = FindIconContent(view);
     if (!icon) {
       return;
     }
-    scene.buttons.push_back({
+    ActiveDrawLayer(scene).buttons.push_back({
         rect,
         rect,
         icon->symbol,
@@ -1186,14 +2024,18 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect, const LayoutCo
         true,
         false,
         0.0f,
+        context.clip_rect,
     });
     return;
   }
   case ui::ViewKind::button_group:
-    LayoutButtonGroup(view, rect, scene);
+    LayoutButtonGroup(view, rect, context, scene);
     return;
   case ui::ViewKind::grid:
     LayoutGrid(view, rect, context, scene);
+    return;
+  case ui::ViewKind::scroll:
+    LayoutScroll(view, rect, context, scene);
     return;
   case ui::ViewKind::stack:
     break;
@@ -1274,10 +2116,19 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect, const LayoutCo
 SceneLayout LayoutScene(
     const phenotype::ui::View &root, float width, float height, const LayoutContext &context) {
   SceneLayout scene;
-  scene.panels.reserve(kMaxPanelCount);
-  scene.buttons.reserve(kMaxSymbolButtonCount);
-  scene.texts.reserve(kMaxTextCount);
+  scene.background.panels.reserve(kMaxPanelCount);
+  scene.background.buttons.reserve(kMaxSymbolButtonCount);
+  scene.background.texts.reserve(kMaxTextCount);
+  scene.foreground.panels.reserve(kMaxPanelCount);
+  scene.foreground.buttons.reserve(kMaxSymbolButtonCount);
+  scene.foreground.texts.reserve(kMaxTextCount);
+  scene.effects.reserve(kMaxEffectPanelCount);
   scene.hit_targets.reserve(64);
+  scene.scroll_targets.reserve(8);
+  LayoutContext root_context = context;
+  if (!root_context.clip_rect) {
+    root_context.clip_rect = LayoutRect{0.0f, 0.0f, width, height};
+  }
   LayoutView(root,
       {
           0.0f,
@@ -1285,16 +2136,24 @@ SceneLayout LayoutScene(
           width,
           height,
       },
-      context, scene);
+      root_context, scene);
   return scene;
 }
 
-SymbolButtonUniform MakeSymbolButton(
-    const SymbolButtonLayout &button, const TextAtlasEntry &symbol, float scale) {
+void FillClipUniform(float values[4], std::optional<LayoutRect> clip_rect, LayoutRect fallback,
+    float scale) noexcept {
+  LayoutRect clip = clip_rect.value_or(fallback);
+  values[0] = clip.x * scale;
+  values[1] = clip.y * scale;
+  values[2] = clip.width * scale;
+  values[3] = clip.height * scale;
+}
+
+SymbolButtonUniform MakeSymbolButton(const SymbolButtonLayout &button, const TextAtlasEntry &symbol,
+    float scale, LayoutRect fallback_clip) {
   float alpha_scale = button.is_enabled ? 1.0f : 0.44f;
   float safe_scale = std::max(1.0f, scale);
-
-  return SymbolButtonUniform{
+  SymbolButtonUniform uniform{
       {
           (button.frame.x + (button.frame.width * 0.5f)) * safe_scale,
           (button.frame.y + (button.frame.height * 0.5f)) * safe_scale,
@@ -1331,18 +2190,14 @@ SymbolButtonUniform MakeSymbolButton(
           button.color.blue,
           button.color.alpha * alpha_scale,
       },
-      {
-          0.0f,
-          0.0f,
-          0.0f,
-          0.0f,
-      },
   };
+  FillClipUniform(uniform.clip, button.clip_rect, fallback_clip, safe_scale);
+  return uniform;
 }
 
-PanelUniform MakePanel(const PanelLayout &panel, float scale) {
+PanelUniform MakePanel(const PanelLayout &panel, float scale, LayoutRect fallback_clip) {
   float safe_scale = std::max(1.0f, scale);
-  return {
+  PanelUniform uniform{
       {
           (panel.frame.x + (panel.frame.width * 0.5f)) * safe_scale,
           (panel.frame.y + (panel.frame.height * 0.5f)) * safe_scale,
@@ -1357,16 +2212,45 @@ PanelUniform MakePanel(const PanelLayout &panel, float scale) {
       },
       {
           panel.corner_radius,
-          0.0f,
+          CornerMode(panel.rounds_top_corners_only, panel.rounds_bottom_corners_only),
           0.0f,
           0.0f,
       },
   };
+  FillClipUniform(uniform.clip, panel.clip_rect, fallback_clip, safe_scale);
+  return uniform;
 }
 
-TextUniform MakeText(const TextAtlasEntry &text, float scale) {
+EffectPanelUniform MakeEffectPanel(
+    const EffectPanelLayout &panel, float scale, LayoutRect fallback_clip) {
   float safe_scale = std::max(1.0f, scale);
-  return {
+  EffectPanelUniform uniform{
+      {
+          (panel.frame.x + (panel.frame.width * 0.5f)) * safe_scale,
+          (panel.frame.y + (panel.frame.height * 0.5f)) * safe_scale,
+          panel.frame.width * safe_scale,
+          panel.frame.height * safe_scale,
+      },
+      {
+          panel.color.red,
+          panel.color.green,
+          panel.color.blue,
+          panel.color.alpha,
+      },
+      {
+          panel.corner_radius,
+          CornerMode(panel.rounds_top_corners_only, panel.rounds_bottom_corners_only),
+          0.0f,
+          0.0f,
+      },
+  };
+  FillClipUniform(uniform.clip, panel.clip_rect, fallback_clip, safe_scale);
+  return uniform;
+}
+
+TextUniform MakeText(const TextAtlasEntry &text, float scale, LayoutRect fallback_clip) {
+  float safe_scale = std::max(1.0f, scale);
+  TextUniform uniform{
       {
           (text.frame.x + (text.frame.width * 0.5f)) * safe_scale,
           (text.frame.y + (text.frame.height * 0.5f)) * safe_scale,
@@ -1386,6 +2270,48 @@ TextUniform MakeText(const TextAtlasEntry &text, float scale) {
           text.color.alpha,
       },
   };
+  FillClipUniform(uniform.clip, text.clip_rect, fallback_clip, safe_scale);
+  return uniform;
+}
+
+void AppendTextLayouts(
+    std::vector<TextLayout> &destination, const std::vector<TextLayout> &source) {
+  destination.insert(destination.end(), source.begin(), source.end());
+}
+
+void AppendButtonLayouts(
+    std::vector<SymbolButtonLayout> &destination, const std::vector<SymbolButtonLayout> &source) {
+  destination.insert(destination.end(), source.begin(), source.end());
+}
+
+void FillSceneUniforms(SceneUniforms &uniforms, const SceneDrawLayer &layer,
+    const TextAtlas &text_atlas, size_t text_offset, size_t symbol_offset, float width,
+    float height, float scale, LayoutRect viewport_clip) {
+  uniforms.viewport[0] = width;
+  uniforms.viewport[1] = height;
+  uniforms.viewport[3] = std::max(1.0f, scale);
+  uniforms.counts[0] = static_cast<float>(layer.panels.size());
+  uniforms.counts[1] = static_cast<float>(layer.buttons.size());
+  uniforms.counts[2] = static_cast<float>(layer.texts.size());
+
+  for (size_t index = 0; index < layer.panels.size(); ++index) {
+    uniforms.panels[index] = MakePanel(layer.panels[index], scale, viewport_clip);
+  }
+  TextAtlasEntry empty_symbol;
+  for (size_t index = 0; index < layer.buttons.size(); ++index) {
+    size_t symbol_index = symbol_offset + index;
+    const TextAtlasEntry &symbol = symbol_index < text_atlas.symbol_entries.size()
+                                       ? text_atlas.symbol_entries[symbol_index]
+                                       : empty_symbol;
+    uniforms.buttons[index] = MakeSymbolButton(layer.buttons[index], symbol, scale, viewport_clip);
+  }
+  TextAtlasEntry empty_text;
+  for (size_t index = 0; index < layer.texts.size(); ++index) {
+    size_t text_index = text_offset + index;
+    const TextAtlasEntry &text =
+        text_index < text_atlas.entries.size() ? text_atlas.entries[text_index] : empty_text;
+    uniforms.texts[index] = MakeText(text, scale, viewport_clip);
+  }
 }
 
 class DawnButtonRenderer {
@@ -1434,7 +2360,8 @@ public:
     }
 
     CreatePipeline();
-    return static_cast<bool>(_pipeline);
+    return static_cast<bool>(_pipeline) && static_cast<bool>(_effect_pipeline) &&
+           static_cast<bool>(_blur_pipeline);
   }
 
   void Resize(uint32_t width, uint32_t height, float scale, phenotype::ui::Size layout_size,
@@ -1442,11 +2369,17 @@ public:
     if (width == 0 || height == 0 || !_device) {
       return;
     }
+    bool size_changed = width != _width || height != _height;
+    bool layout_changed = !NearlyEqual(_scale, scale) || !NearlyEqual(_layout_size, layout_size) ||
+                          !NearlyEqual(_layout_context, layout_context);
     _scale = scale;
     _layout_size = layout_size;
     _layout_context = layout_context;
-    if (width == _width && height == _height) {
-      UpdateSceneUniforms();
+    if (!size_changed) {
+      if (layout_changed) {
+        UpdateSceneUniforms();
+        UpdateBlurUniforms();
+      }
       return;
     }
     ConfigureSurface(width, height);
@@ -1458,11 +2391,9 @@ public:
   }
 
   bool ActivateAt(phenotype::ui::Size point) {
-    SceneLayout scene =
-        LayoutScene(_root_view, _layout_size.width, _layout_size.height, _layout_context);
-    for (auto iterator = scene.hit_targets.rbegin(); iterator != scene.hit_targets.rend();
-        ++iterator) {
-      if (!iterator->is_enabled || !Contains(iterator->frame, point)) {
+    for (auto iterator = _hit_targets.rbegin(); iterator != _hit_targets.rend(); ++iterator) {
+      if (!iterator->is_enabled || !Contains(iterator->frame, point) ||
+          (iterator->clip_rect && !Contains(*iterator->clip_rect, point))) {
         continue;
       }
       iterator->action();
@@ -1471,8 +2402,41 @@ public:
     return false;
   }
 
+  bool HasScrollTargetAt(phenotype::ui::Size point) const {
+    for (auto iterator = _scroll_targets.rbegin(); iterator != _scroll_targets.rend(); ++iterator) {
+      if (Contains(iterator->frame, point)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool ScrollAt(phenotype::ui::Size point, float delta_y) {
+    if (delta_y == 0.0f) {
+      return false;
+    }
+
+    for (auto iterator = _scroll_targets.rbegin(); iterator != _scroll_targets.rend(); ++iterator) {
+      if (!Contains(iterator->frame, point)) {
+        continue;
+      }
+
+      float previous = std::clamp(iterator->offset_y, 0.0f, iterator->max_offset_y);
+      float next = std::clamp(previous - delta_y, 0.0f, iterator->max_offset_y);
+      if (next != previous) {
+        iterator->action(next);
+        return true;
+      }
+      return false;
+    }
+    return false;
+  }
+
   void Render() {
-    if (!_device || !_surface || !_pipeline) {
+    if (!_device || !_surface || !_pipeline || !_effect_pipeline || !_blur_pipeline ||
+        !_scene_texture_view || !_blur_texture_a_view || !_blur_texture_b_view ||
+        !_scene_bind_group || !_foreground_scene_bind_group || !_effect_bind_group ||
+        !_downsample_bind_group || !_horizontal_blur_bind_group || !_vertical_blur_bind_group) {
       return;
     }
 
@@ -1485,22 +2449,21 @@ public:
 
     wgpu::TextureView backbuffer = surface_texture.texture.CreateView();
 
-    wgpu::RenderPassColorAttachment color_attachment;
-    color_attachment.view = backbuffer;
-    color_attachment.loadOp = wgpu::LoadOp::Clear;
-    color_attachment.storeOp = wgpu::StoreOp::Store;
-    color_attachment.clearValue = {0.0, 0.0, 0.0, 0.0};
-
-    wgpu::RenderPassDescriptor render_pass_descriptor;
-    render_pass_descriptor.colorAttachmentCount = 1;
-    render_pass_descriptor.colorAttachments = &color_attachment;
-
     wgpu::CommandEncoder encoder = _device.CreateCommandEncoder();
-    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&render_pass_descriptor);
-    pass.SetPipeline(_pipeline);
-    pass.SetBindGroup(0, _scene_bind_group);
-    pass.Draw(6);
-    pass.End();
+    DrawFullscreenPass(
+        encoder, _scene_texture_view, _pipeline, _scene_bind_group, wgpu::LoadOp::Clear);
+    if (_has_effect_panels) {
+      DrawFullscreenPass(encoder, _blur_texture_a_view, _blur_pipeline, _downsample_bind_group,
+          wgpu::LoadOp::Clear, _blur_scissor);
+      DrawFullscreenPass(encoder, _blur_texture_b_view, _blur_pipeline, _horizontal_blur_bind_group,
+          wgpu::LoadOp::Clear, _blur_scissor);
+      DrawFullscreenPass(encoder, _blur_texture_a_view, _blur_pipeline, _vertical_blur_bind_group,
+          wgpu::LoadOp::Clear, _blur_scissor);
+    }
+    DrawFullscreenPass(
+        encoder, backbuffer, _effect_pipeline, _effect_bind_group, wgpu::LoadOp::Clear);
+    DrawFullscreenPass(
+        encoder, backbuffer, _pipeline, _foreground_scene_bind_group, wgpu::LoadOp::Load);
 
     wgpu::CommandBuffer commands = encoder.Finish();
     _device.GetQueue().Submit(1, &commands);
@@ -1509,6 +2472,35 @@ public:
   }
 
 private:
+  void DrawFullscreenPass(wgpu::CommandEncoder &encoder, wgpu::TextureView view,
+      wgpu::RenderPipeline pipeline, wgpu::BindGroup bind_group, wgpu::LoadOp load_op,
+      std::optional<PixelRect> scissor = std::nullopt) {
+    if (scissor && !HasArea(*scissor)) {
+      return;
+    }
+
+    wgpu::RenderPassColorAttachment color_attachment;
+    color_attachment.view = view;
+    color_attachment.loadOp = load_op;
+    color_attachment.storeOp = wgpu::StoreOp::Store;
+    if (load_op == wgpu::LoadOp::Clear) {
+      color_attachment.clearValue = {0.0, 0.0, 0.0, 0.0};
+    }
+
+    wgpu::RenderPassDescriptor render_pass_descriptor;
+    render_pass_descriptor.colorAttachmentCount = 1;
+    render_pass_descriptor.colorAttachments = &color_attachment;
+
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&render_pass_descriptor);
+    if (scissor) {
+      pass.SetScissorRect(scissor->x, scissor->y, scissor->width, scissor->height);
+    }
+    pass.SetPipeline(pipeline);
+    pass.SetBindGroup(0, bind_group);
+    pass.Draw(6);
+    pass.End();
+  }
+
   bool RequestAdapter() {
     wgpu::RequestAdapterOptions options;
     options.compatibleSurface = _surface;
@@ -1572,6 +2564,8 @@ private:
     _format = capabilities.formats[0];
     _width = width;
     _height = height;
+    CreateSceneTexture();
+    UpdateBlurUniforms();
     UpdateSceneUniforms();
 
     wgpu::SurfaceConfiguration configuration;
@@ -1587,6 +2581,15 @@ private:
   }
 
   void CreatePipeline() {
+    CreateScenePipeline();
+    CreateEffectPipeline();
+    CreateBlurPipeline();
+    CreateSceneBindGroups();
+    CreateBlurBindGroups();
+    CreateEffectBindGroup();
+  }
+
+  void CreateScenePipeline() {
     wgpu::ShaderSourceWGSL wgsl;
     wgsl.code = kButtonShader;
 
@@ -1624,6 +2627,18 @@ private:
     wgpu::ColorTargetState color_target;
     color_target.format = _format;
     color_target.writeMask = wgpu::ColorWriteMask::All;
+    wgpu::BlendComponent color_blend;
+    color_blend.operation = wgpu::BlendOperation::Add;
+    color_blend.srcFactor = wgpu::BlendFactor::One;
+    color_blend.dstFactor = wgpu::BlendFactor::OneMinusSrcAlpha;
+    wgpu::BlendComponent alpha_blend;
+    alpha_blend.operation = wgpu::BlendOperation::Add;
+    alpha_blend.srcFactor = wgpu::BlendFactor::One;
+    alpha_blend.dstFactor = wgpu::BlendFactor::OneMinusSrcAlpha;
+    wgpu::BlendState blend_state;
+    blend_state.color = color_blend;
+    blend_state.alpha = alpha_blend;
+    color_target.blend = &blend_state;
 
     wgpu::FragmentState fragment;
     fragment.module = shader;
@@ -1640,17 +2655,133 @@ private:
     pipeline_descriptor.multisample.count = 1;
 
     _pipeline = _device.CreateRenderPipeline(&pipeline_descriptor);
-    CreateSceneBindGroup();
   }
 
-  void CreateSceneBindGroup() {
-    if (!_bind_group_layout || !_scene_uniform_buffer || !_text_texture_view || !_text_sampler) {
-      return;
+  void CreateEffectPipeline() {
+    wgpu::ShaderSourceWGSL wgsl;
+    wgsl.code = kEffectShader;
+
+    std::array<wgpu::BindGroupLayoutEntry, 4> bind_group_layout_entries{};
+    bind_group_layout_entries[0].binding = 0;
+    bind_group_layout_entries[0].visibility =
+        wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+    bind_group_layout_entries[0].buffer.type = wgpu::BufferBindingType::Uniform;
+    bind_group_layout_entries[0].buffer.minBindingSize = sizeof(EffectUniforms);
+
+    bind_group_layout_entries[1].binding = 1;
+    bind_group_layout_entries[1].visibility = wgpu::ShaderStage::Fragment;
+    bind_group_layout_entries[1].texture.sampleType = wgpu::TextureSampleType::Float;
+    bind_group_layout_entries[1].texture.viewDimension = wgpu::TextureViewDimension::e2D;
+
+    bind_group_layout_entries[2].binding = 2;
+    bind_group_layout_entries[2].visibility = wgpu::ShaderStage::Fragment;
+    bind_group_layout_entries[2].texture.sampleType = wgpu::TextureSampleType::Float;
+    bind_group_layout_entries[2].texture.viewDimension = wgpu::TextureViewDimension::e2D;
+
+    bind_group_layout_entries[3].binding = 3;
+    bind_group_layout_entries[3].visibility = wgpu::ShaderStage::Fragment;
+    bind_group_layout_entries[3].sampler.type = wgpu::SamplerBindingType::Filtering;
+
+    wgpu::BindGroupLayoutDescriptor bind_group_layout_descriptor;
+    bind_group_layout_descriptor.entryCount = bind_group_layout_entries.size();
+    bind_group_layout_descriptor.entries = bind_group_layout_entries.data();
+    _effect_bind_group_layout = _device.CreateBindGroupLayout(&bind_group_layout_descriptor);
+
+    wgpu::PipelineLayoutDescriptor pipeline_layout_descriptor;
+    pipeline_layout_descriptor.bindGroupLayoutCount = 1;
+    pipeline_layout_descriptor.bindGroupLayouts = &_effect_bind_group_layout;
+    wgpu::PipelineLayout pipeline_layout =
+        _device.CreatePipelineLayout(&pipeline_layout_descriptor);
+
+    wgpu::ShaderModuleDescriptor shader_descriptor;
+    shader_descriptor.nextInChain = &wgsl;
+    wgpu::ShaderModule shader = _device.CreateShaderModule(&shader_descriptor);
+
+    wgpu::ColorTargetState color_target;
+    color_target.format = _format;
+    color_target.writeMask = wgpu::ColorWriteMask::All;
+
+    wgpu::FragmentState fragment;
+    fragment.module = shader;
+    fragment.entryPoint = "fragmentMain";
+    fragment.targetCount = 1;
+    fragment.targets = &color_target;
+
+    wgpu::RenderPipelineDescriptor pipeline_descriptor;
+    pipeline_descriptor.layout = pipeline_layout;
+    pipeline_descriptor.vertex.module = shader;
+    pipeline_descriptor.vertex.entryPoint = "vertexMain";
+    pipeline_descriptor.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
+    pipeline_descriptor.fragment = &fragment;
+    pipeline_descriptor.multisample.count = 1;
+
+    _effect_pipeline = _device.CreateRenderPipeline(&pipeline_descriptor);
+  }
+
+  void CreateBlurPipeline() {
+    wgpu::ShaderSourceWGSL wgsl;
+    wgsl.code = kBlurShader;
+
+    std::array<wgpu::BindGroupLayoutEntry, 3> bind_group_layout_entries{};
+    bind_group_layout_entries[0].binding = 0;
+    bind_group_layout_entries[0].visibility =
+        wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+    bind_group_layout_entries[0].buffer.type = wgpu::BufferBindingType::Uniform;
+    bind_group_layout_entries[0].buffer.minBindingSize = sizeof(BlurUniforms);
+
+    bind_group_layout_entries[1].binding = 1;
+    bind_group_layout_entries[1].visibility = wgpu::ShaderStage::Fragment;
+    bind_group_layout_entries[1].texture.sampleType = wgpu::TextureSampleType::Float;
+    bind_group_layout_entries[1].texture.viewDimension = wgpu::TextureViewDimension::e2D;
+
+    bind_group_layout_entries[2].binding = 2;
+    bind_group_layout_entries[2].visibility = wgpu::ShaderStage::Fragment;
+    bind_group_layout_entries[2].sampler.type = wgpu::SamplerBindingType::Filtering;
+
+    wgpu::BindGroupLayoutDescriptor bind_group_layout_descriptor;
+    bind_group_layout_descriptor.entryCount = bind_group_layout_entries.size();
+    bind_group_layout_descriptor.entries = bind_group_layout_entries.data();
+    _blur_bind_group_layout = _device.CreateBindGroupLayout(&bind_group_layout_descriptor);
+
+    wgpu::PipelineLayoutDescriptor pipeline_layout_descriptor;
+    pipeline_layout_descriptor.bindGroupLayoutCount = 1;
+    pipeline_layout_descriptor.bindGroupLayouts = &_blur_bind_group_layout;
+    wgpu::PipelineLayout pipeline_layout =
+        _device.CreatePipelineLayout(&pipeline_layout_descriptor);
+
+    wgpu::ShaderModuleDescriptor shader_descriptor;
+    shader_descriptor.nextInChain = &wgsl;
+    wgpu::ShaderModule shader = _device.CreateShaderModule(&shader_descriptor);
+
+    wgpu::ColorTargetState color_target;
+    color_target.format = _format;
+    color_target.writeMask = wgpu::ColorWriteMask::All;
+
+    wgpu::FragmentState fragment;
+    fragment.module = shader;
+    fragment.entryPoint = "fragmentMain";
+    fragment.targetCount = 1;
+    fragment.targets = &color_target;
+
+    wgpu::RenderPipelineDescriptor pipeline_descriptor;
+    pipeline_descriptor.layout = pipeline_layout;
+    pipeline_descriptor.vertex.module = shader;
+    pipeline_descriptor.vertex.entryPoint = "vertexMain";
+    pipeline_descriptor.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
+    pipeline_descriptor.fragment = &fragment;
+    pipeline_descriptor.multisample.count = 1;
+
+    _blur_pipeline = _device.CreateRenderPipeline(&pipeline_descriptor);
+  }
+
+  wgpu::BindGroup CreateSceneBindGroup(wgpu::Buffer uniform_buffer) {
+    if (!_bind_group_layout || !uniform_buffer || !_text_texture_view || !_text_sampler) {
+      return {};
     }
 
     std::array<wgpu::BindGroupEntry, 3> bind_group_entries{};
     bind_group_entries[0].binding = 0;
-    bind_group_entries[0].buffer = _scene_uniform_buffer;
+    bind_group_entries[0].buffer = uniform_buffer;
     bind_group_entries[0].offset = 0;
     bind_group_entries[0].size = sizeof(SceneUniforms);
 
@@ -1664,7 +2795,72 @@ private:
     bind_group_descriptor.layout = _bind_group_layout;
     bind_group_descriptor.entryCount = bind_group_entries.size();
     bind_group_descriptor.entries = bind_group_entries.data();
-    _scene_bind_group = _device.CreateBindGroup(&bind_group_descriptor);
+    return _device.CreateBindGroup(&bind_group_descriptor);
+  }
+
+  void CreateSceneBindGroups() {
+    _scene_bind_group = CreateSceneBindGroup(_scene_uniform_buffer);
+    _foreground_scene_bind_group = CreateSceneBindGroup(_foreground_scene_uniform_buffer);
+  }
+
+  wgpu::BindGroup CreateBlurBindGroup(wgpu::Buffer uniform_buffer, wgpu::TextureView source_view) {
+    if (!_blur_bind_group_layout || !uniform_buffer || !source_view || !_text_sampler) {
+      return {};
+    }
+
+    std::array<wgpu::BindGroupEntry, 3> bind_group_entries{};
+    bind_group_entries[0].binding = 0;
+    bind_group_entries[0].buffer = uniform_buffer;
+    bind_group_entries[0].offset = 0;
+    bind_group_entries[0].size = sizeof(BlurUniforms);
+
+    bind_group_entries[1].binding = 1;
+    bind_group_entries[1].textureView = source_view;
+
+    bind_group_entries[2].binding = 2;
+    bind_group_entries[2].sampler = _text_sampler;
+
+    wgpu::BindGroupDescriptor bind_group_descriptor;
+    bind_group_descriptor.layout = _blur_bind_group_layout;
+    bind_group_descriptor.entryCount = bind_group_entries.size();
+    bind_group_descriptor.entries = bind_group_entries.data();
+    return _device.CreateBindGroup(&bind_group_descriptor);
+  }
+
+  void CreateBlurBindGroups() {
+    _downsample_bind_group = CreateBlurBindGroup(_downsample_uniform_buffer, _scene_texture_view);
+    _horizontal_blur_bind_group =
+        CreateBlurBindGroup(_horizontal_blur_uniform_buffer, _blur_texture_a_view);
+    _vertical_blur_bind_group =
+        CreateBlurBindGroup(_vertical_blur_uniform_buffer, _blur_texture_b_view);
+  }
+
+  void CreateEffectBindGroup() {
+    if (!_effect_bind_group_layout || !_effect_uniform_buffer || !_scene_texture_view ||
+        !_blur_texture_a_view || !_text_sampler) {
+      return;
+    }
+
+    std::array<wgpu::BindGroupEntry, 4> bind_group_entries{};
+    bind_group_entries[0].binding = 0;
+    bind_group_entries[0].buffer = _effect_uniform_buffer;
+    bind_group_entries[0].offset = 0;
+    bind_group_entries[0].size = sizeof(EffectUniforms);
+
+    bind_group_entries[1].binding = 1;
+    bind_group_entries[1].textureView = _scene_texture_view;
+
+    bind_group_entries[2].binding = 2;
+    bind_group_entries[2].textureView = _blur_texture_a_view;
+
+    bind_group_entries[3].binding = 3;
+    bind_group_entries[3].sampler = _text_sampler;
+
+    wgpu::BindGroupDescriptor bind_group_descriptor;
+    bind_group_descriptor.layout = _effect_bind_group_layout;
+    bind_group_descriptor.entryCount = bind_group_entries.size();
+    bind_group_descriptor.entries = bind_group_entries.data();
+    _effect_bind_group = _device.CreateBindGroup(&bind_group_descriptor);
   }
 
   void CreateSceneUniformBuffer() {
@@ -1672,6 +2868,62 @@ private:
     buffer_descriptor.size = sizeof(SceneUniforms);
     buffer_descriptor.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
     _scene_uniform_buffer = _device.CreateBuffer(&buffer_descriptor);
+    _foreground_scene_uniform_buffer = _device.CreateBuffer(&buffer_descriptor);
+
+    wgpu::BufferDescriptor effect_buffer_descriptor;
+    effect_buffer_descriptor.size = sizeof(EffectUniforms);
+    effect_buffer_descriptor.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
+    _effect_uniform_buffer = _device.CreateBuffer(&effect_buffer_descriptor);
+
+    wgpu::BufferDescriptor blur_buffer_descriptor;
+    blur_buffer_descriptor.size = sizeof(BlurUniforms);
+    blur_buffer_descriptor.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
+    _downsample_uniform_buffer = _device.CreateBuffer(&blur_buffer_descriptor);
+    _horizontal_blur_uniform_buffer = _device.CreateBuffer(&blur_buffer_descriptor);
+    _vertical_blur_uniform_buffer = _device.CreateBuffer(&blur_buffer_descriptor);
+  }
+
+  void CreateSceneTexture() {
+    if (!_device || _width == 0 || _height == 0 || _format == wgpu::TextureFormat::Undefined) {
+      return;
+    }
+
+    wgpu::TextureDescriptor texture_descriptor;
+    texture_descriptor.usage =
+        wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding;
+    texture_descriptor.dimension = wgpu::TextureDimension::e2D;
+    texture_descriptor.size = {
+        _width,
+        _height,
+        1,
+    };
+    texture_descriptor.format = _format;
+    _scene_texture = _device.CreateTexture(&texture_descriptor);
+    _scene_texture_view = _scene_texture.CreateView();
+    CreateBlurTextures();
+    CreateBlurBindGroups();
+    CreateEffectBindGroup();
+  }
+
+  void CreateBlurTextures() {
+    _blur_width = std::max<uint32_t>(1, (_width + 1) / 2);
+    _blur_height = std::max<uint32_t>(1, (_height + 1) / 2);
+
+    wgpu::TextureDescriptor texture_descriptor;
+    texture_descriptor.usage =
+        wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding;
+    texture_descriptor.dimension = wgpu::TextureDimension::e2D;
+    texture_descriptor.size = {
+        _blur_width,
+        _blur_height,
+        1,
+    };
+    texture_descriptor.format = _format;
+
+    _blur_texture_a = _device.CreateTexture(&texture_descriptor);
+    _blur_texture_a_view = _blur_texture_a.CreateView();
+    _blur_texture_b = _device.CreateTexture(&texture_descriptor);
+    _blur_texture_b_view = _blur_texture_b.CreateView();
   }
 
   void CreateTextSampler() {
@@ -1700,7 +2952,7 @@ private:
     texture_descriptor.format = wgpu::TextureFormat::RGBA8Unorm;
     _text_texture = _device.CreateTexture(&texture_descriptor);
     _text_texture_view = _text_texture.CreateView();
-    CreateSceneBindGroup();
+    CreateSceneBindGroups();
   }
 
   void UploadTextAtlas(const TextAtlas &atlas) {
@@ -1733,37 +2985,119 @@ private:
         &destination, atlas.pixels.data(), atlas.pixels.size(), &layout, &write_size);
   }
 
+  void UpdateBlurUniforms() {
+    if (!_downsample_uniform_buffer || !_horizontal_blur_uniform_buffer ||
+        !_vertical_blur_uniform_buffer || _width == 0 || _height == 0 || _blur_width == 0 ||
+        _blur_height == 0) {
+      return;
+    }
+
+    BlurUniforms downsample_uniforms = {};
+    downsample_uniforms.source_size[0] = static_cast<float>(_width);
+    downsample_uniforms.source_size[1] = static_cast<float>(_height);
+    downsample_uniforms.source_size[2] = static_cast<float>(_blur_width);
+    downsample_uniforms.source_size[3] = static_cast<float>(_blur_height);
+    _device.GetQueue().WriteBuffer(
+        _downsample_uniform_buffer, 0, &downsample_uniforms, sizeof(downsample_uniforms));
+
+    float safe_scale = std::max(1.0f, _scale);
+    float radius_x = std::max(1.0f, 12.0f * safe_scale * static_cast<float>(_blur_width) /
+                                        std::max(1.0f, static_cast<float>(_width)));
+    float radius_y = std::max(1.0f, 12.0f * safe_scale * static_cast<float>(_blur_height) /
+                                        std::max(1.0f, static_cast<float>(_height)));
+
+    BlurUniforms horizontal_uniforms = {};
+    horizontal_uniforms.source_size[0] = static_cast<float>(_blur_width);
+    horizontal_uniforms.source_size[1] = static_cast<float>(_blur_height);
+    horizontal_uniforms.source_size[2] = static_cast<float>(_blur_width);
+    horizontal_uniforms.source_size[3] = static_cast<float>(_blur_height);
+    horizontal_uniforms.direction[0] = 1.0f / std::max(1.0f, static_cast<float>(_blur_width));
+    horizontal_uniforms.direction[2] = radius_x;
+    horizontal_uniforms.direction[3] = 1.0f;
+    _device.GetQueue().WriteBuffer(
+        _horizontal_blur_uniform_buffer, 0, &horizontal_uniforms, sizeof(horizontal_uniforms));
+
+    BlurUniforms vertical_uniforms = {};
+    vertical_uniforms.source_size[0] = static_cast<float>(_blur_width);
+    vertical_uniforms.source_size[1] = static_cast<float>(_blur_height);
+    vertical_uniforms.source_size[2] = static_cast<float>(_blur_width);
+    vertical_uniforms.source_size[3] = static_cast<float>(_blur_height);
+    vertical_uniforms.direction[1] = 1.0f / std::max(1.0f, static_cast<float>(_blur_height));
+    vertical_uniforms.direction[2] = radius_y;
+    vertical_uniforms.direction[3] = 1.0f;
+    _device.GetQueue().WriteBuffer(
+        _vertical_blur_uniform_buffer, 0, &vertical_uniforms, sizeof(vertical_uniforms));
+  }
+
   void UpdateSceneUniforms() {
-    if (!_scene_uniform_buffer) {
+    if (!_scene_uniform_buffer || !_foreground_scene_uniform_buffer || !_effect_uniform_buffer) {
       return;
     }
 
     SceneLayout scene =
         LayoutScene(_root_view, _layout_size.width, _layout_size.height, _layout_context);
-    TextAtlas text_atlas = BuildTextAtlas(scene.texts, scene.buttons, _scale);
-    UploadTextAtlas(text_atlas);
+    _hit_targets = scene.hit_targets;
+    _scroll_targets = scene.scroll_targets;
 
-    SceneUniforms uniforms = {};
-    uniforms.viewport[0] = static_cast<float>(_width);
-    uniforms.viewport[1] = static_cast<float>(_height);
-    uniforms.viewport[3] = std::max(1.0f, _scale);
-    uniforms.counts[0] = static_cast<float>(scene.panels.size());
-    uniforms.counts[1] = static_cast<float>(scene.buttons.size());
-    uniforms.counts[2] = static_cast<float>(text_atlas.entries.size());
-    for (size_t index = 0; index < scene.panels.size(); ++index) {
-      uniforms.panels[index] = MakePanel(scene.panels[index], _scale);
+    std::vector<TextLayout> atlas_texts;
+    atlas_texts.reserve(scene.background.texts.size() + scene.foreground.texts.size());
+    AppendTextLayouts(atlas_texts, scene.background.texts);
+    AppendTextLayouts(atlas_texts, scene.foreground.texts);
+
+    std::vector<SymbolButtonLayout> atlas_buttons;
+    atlas_buttons.reserve(scene.background.buttons.size() + scene.foreground.buttons.size());
+    AppendButtonLayouts(atlas_buttons, scene.background.buttons);
+    AppendButtonLayouts(atlas_buttons, scene.foreground.buttons);
+
+    TextAtlasCacheKey text_atlas_key = MakeTextAtlasCacheKey(atlas_texts, atlas_buttons, _scale);
+    if (!_has_text_atlas_cache || !(text_atlas_key == _text_atlas_cache_key)) {
+      _text_atlas_cache = BuildTextAtlas(atlas_texts, atlas_buttons, _scale);
+      UploadTextAtlas(_text_atlas_cache);
+      _text_atlas_cache_key = text_atlas_key;
+      _has_text_atlas_cache = true;
     }
-    TextAtlasEntry empty_symbol;
-    for (size_t index = 0; index < scene.buttons.size(); ++index) {
-      const TextAtlasEntry &symbol = index < text_atlas.symbol_entries.size()
-                                         ? text_atlas.symbol_entries[index]
-                                         : empty_symbol;
-      uniforms.buttons[index] = MakeSymbolButton(scene.buttons[index], symbol, _scale);
+    TextAtlas text_atlas = RetargetTextAtlasEntries(_text_atlas_cache, atlas_texts, atlas_buttons);
+
+    LayoutRect viewport_clip{
+        0.0f,
+        0.0f,
+        _layout_size.width,
+        _layout_size.height,
+    };
+
+    SceneUniforms background_uniforms = {};
+    FillSceneUniforms(background_uniforms, scene.background, text_atlas, 0, 0,
+        static_cast<float>(_width), static_cast<float>(_height), _scale, viewport_clip);
+    _device.GetQueue().WriteBuffer(
+        _scene_uniform_buffer, 0, &background_uniforms, sizeof(background_uniforms));
+
+    SceneUniforms foreground_uniforms = {};
+    FillSceneUniforms(foreground_uniforms, scene.foreground, text_atlas,
+        scene.background.texts.size(), scene.background.buttons.size(), static_cast<float>(_width),
+        static_cast<float>(_height), _scale, viewport_clip);
+    _device.GetQueue().WriteBuffer(
+        _foreground_scene_uniform_buffer, 0, &foreground_uniforms, sizeof(foreground_uniforms));
+
+    EffectUniforms effect_uniforms = {};
+    effect_uniforms.viewport[0] = static_cast<float>(_width);
+    effect_uniforms.viewport[1] = static_cast<float>(_height);
+    effect_uniforms.viewport[3] = std::max(1.0f, _scale);
+    _has_effect_panels = false;
+    _blur_scissor.reset();
+    if (std::optional<LayoutRect> effect_bounds = EffectBounds(scene.effects)) {
+      constexpr float blur_padding = 48.0f;
+      PixelRect effect_scissor =
+          ScaleToPixelRect(*effect_bounds, _scale, _width, _height, blur_padding);
+      _blur_scissor = ScalePixelRect(effect_scissor, _width, _height, _blur_width, _blur_height);
+      _has_effect_panels = _blur_scissor.has_value() && HasArea(*_blur_scissor);
     }
-    for (size_t index = 0; index < text_atlas.entries.size(); ++index) {
-      uniforms.texts[index] = MakeText(text_atlas.entries[index], _scale);
+    effect_uniforms.counts[0] =
+        _has_effect_panels ? static_cast<float>(scene.effects.size()) : 0.0f;
+    for (size_t index = 0; index < scene.effects.size(); ++index) {
+      effect_uniforms.effects[index] = MakeEffectPanel(scene.effects[index], _scale, viewport_clip);
     }
-    _device.GetQueue().WriteBuffer(_scene_uniform_buffer, 0, &uniforms, sizeof(uniforms));
+    _device.GetQueue().WriteBuffer(
+        _effect_uniform_buffer, 0, &effect_uniforms, sizeof(effect_uniforms));
   }
 
   wgpu::Instance _instance;
@@ -1771,19 +3105,48 @@ private:
   wgpu::Adapter _adapter;
   wgpu::Device _device;
   wgpu::Buffer _scene_uniform_buffer;
+  wgpu::Buffer _foreground_scene_uniform_buffer;
+  wgpu::Buffer _effect_uniform_buffer;
+  wgpu::Buffer _downsample_uniform_buffer;
+  wgpu::Buffer _horizontal_blur_uniform_buffer;
+  wgpu::Buffer _vertical_blur_uniform_buffer;
   wgpu::BindGroupLayout _bind_group_layout;
+  wgpu::BindGroupLayout _effect_bind_group_layout;
+  wgpu::BindGroupLayout _blur_bind_group_layout;
   wgpu::BindGroup _scene_bind_group;
+  wgpu::BindGroup _foreground_scene_bind_group;
+  wgpu::BindGroup _effect_bind_group;
+  wgpu::BindGroup _downsample_bind_group;
+  wgpu::BindGroup _horizontal_blur_bind_group;
+  wgpu::BindGroup _vertical_blur_bind_group;
+  wgpu::Texture _scene_texture;
+  wgpu::TextureView _scene_texture_view;
+  wgpu::Texture _blur_texture_a;
+  wgpu::TextureView _blur_texture_a_view;
+  wgpu::Texture _blur_texture_b;
+  wgpu::TextureView _blur_texture_b_view;
   wgpu::Texture _text_texture;
   wgpu::TextureView _text_texture_view;
   wgpu::Sampler _text_sampler;
   wgpu::TextureFormat _format = wgpu::TextureFormat::Undefined;
   wgpu::RenderPipeline _pipeline;
+  wgpu::RenderPipeline _effect_pipeline;
+  wgpu::RenderPipeline _blur_pipeline;
   phenotype::ui::View _root_view;
   phenotype::ui::Size _layout_size;
   LayoutContext _layout_context;
+  std::vector<HitTargetLayout> _hit_targets;
+  std::vector<ScrollTargetLayout> _scroll_targets;
+  TextAtlasCacheKey _text_atlas_cache_key;
+  TextAtlas _text_atlas_cache;
+  std::optional<PixelRect> _blur_scissor;
   float _scale = 1.0f;
+  bool _has_text_atlas_cache = false;
+  bool _has_effect_panels = false;
   uint32_t _width = 0;
   uint32_t _height = 0;
+  uint32_t _blur_width = 0;
+  uint32_t _blur_height = 0;
   uint32_t _text_texture_width = 0;
   uint32_t _text_texture_height = 0;
 };
@@ -1793,6 +3156,7 @@ private:
 @protocol PhenotypeMetalViewDelegate
 - (void)metalViewNeedsRender:(NSView *)view;
 - (BOOL)metalView:(NSView *)view mouseDownAt:(NSPoint)location;
+- (BOOL)metalView:(NSView *)view scrollAt:(NSPoint)location deltaY:(CGFloat)deltaY;
 @end
 
 @interface PhenotypeMetalView : NSView {
@@ -1827,6 +3191,13 @@ private:
   NSPoint location = [self convertPoint:[event locationInWindow] fromView:nil];
   if (![_renderDelegate metalView:self mouseDownAt:location]) {
     [[self window] performWindowDragWithEvent:event];
+  }
+}
+
+- (void)scrollWheel:(NSEvent *)event {
+  NSPoint location = [self convertPoint:[event locationInWindow] fromView:nil];
+  if (![_renderDelegate metalView:self scrollAt:location deltaY:[event scrollingDeltaY]]) {
+    [super scrollWheel:event];
   }
 }
 
@@ -1872,11 +3243,15 @@ private:
   bool _has_window_control_base_frames;
   bool _is_rendering;
   bool _render_requested_after_current;
+  bool _needs_render;
 }
 - (instancetype)initWithSpec:(phenotype::macos::window::Spec)spec;
 - (LayoutContext)buildLayoutContext;
 - (void)applyWindowControlOffset;
 - (void)refreshRootView;
+- (void)requestFrame;
+- (void)renderFrameIfNeeded;
+- (phenotype::ui::Size)layoutPointForLocation:(NSPoint)location;
 @end
 
 @implementation AppDelegate
@@ -1891,6 +3266,7 @@ private:
     _has_window_control_base_frames = false;
     _is_rendering = false;
     _render_requested_after_current = false;
+    _needs_render = false;
   }
   return self;
 }
@@ -2001,6 +3377,27 @@ private:
   [self renderNow];
 }
 
+- (void)requestFrame {
+  _needs_render = true;
+}
+
+- (phenotype::ui::Size)layoutPointForLocation:(NSPoint)location {
+  NSSize bounds = [_metal_view bounds].size;
+  return {
+      static_cast<float>(location.x),
+      static_cast<float>(bounds.height - location.y),
+  };
+}
+
+- (void)renderFrameIfNeeded {
+  if (!_needs_render) {
+    return;
+  }
+
+  _needs_render = false;
+  [self renderNow];
+}
+
 - (void)renderNow {
   if (!_window || !_metal_view || !_metal_layer) {
     return;
@@ -2014,6 +3411,7 @@ private:
     _render_requested_after_current = false;
     [self renderOnce];
   } while (_render_requested_after_current);
+  _needs_render = false;
   _is_rendering = false;
 }
 
@@ -2089,12 +3487,12 @@ private:
 
 - (void)renderFrame:(NSTimer *)timer {
   (void)timer;
-  [self renderNow];
+  [self renderFrameIfNeeded];
 }
 
 - (void)metalViewNeedsRender:(NSView *)view {
   if (view == _metal_view) {
-    [self renderNow];
+    [self requestFrame];
   }
 }
 
@@ -2102,17 +3500,30 @@ private:
   if (view != _metal_view || !_renderer) {
     return NO;
   }
-  NSSize bounds = [_metal_view bounds].size;
-  phenotype::ui::Size layout_point{
-      static_cast<float>(location.x),
-      static_cast<float>(bounds.height - location.y),
-  };
+  phenotype::ui::Size layout_point = [self layoutPointForLocation:location];
   if (_renderer->ActivateAt(layout_point)) {
     [self refreshRootView];
     [self renderNow];
     return YES;
   }
   return NO;
+}
+
+- (BOOL)metalView:(NSView *)view scrollAt:(NSPoint)location deltaY:(CGFloat)deltaY {
+  if (view != _metal_view || !_renderer) {
+    return NO;
+  }
+
+  phenotype::ui::Size layout_point = [self layoutPointForLocation:location];
+  if (!_renderer->HasScrollTargetAt(layout_point)) {
+    return NO;
+  }
+
+  if (_renderer->ScrollAt(layout_point, static_cast<float>(deltaY))) {
+    [self refreshRootView];
+    [self renderNow];
+  }
+  return YES;
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
