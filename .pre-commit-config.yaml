@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: exon-fmt
+        name: exon fmt
+        entry: bash tools/check-format.sh
+        language: system
+        pass_filenames: false

@@ -86,8 +86,7 @@ void OpenDirectory(FilesState &state, std::filesystem::path path) {
 
   if (state.history_index + 1 < state.path_history.size()) {
     auto next_history =
-        state.path_history.begin() +
-        static_cast<std::ptrdiff_t>(state.history_index + 1);
+        state.path_history.begin() + static_cast<std::ptrdiff_t>(state.history_index + 1);
     state.path_history.erase(next_history, state.path_history.end());
   }
 
@@ -162,9 +161,8 @@ ui::View FileTileContent(const FileItem &item) {
   constexpr ui::Color file_color{0.42f, 0.47f, 0.55f, 1.0f};
 
   return ui::layout::vstack([&](ui::Block &tile) {
-    tile << ui::icon(item.is_directory ? ui::Symbol::folder
-                                       : ui::Symbol::description,
-                     item.is_directory ? folder_icon_options : file_icon_options)
+    tile << ui::icon(item.is_directory ? ui::Symbol::folder : ui::Symbol::description,
+        item.is_directory ? folder_icon_options : file_icon_options)
                 .foreground(item.is_directory ? folder_color : file_color);
     tile << ui::text(item.name)
                 .font_size(13.0f)
@@ -175,7 +173,8 @@ ui::View FileTileContent(const FileItem &item) {
                 .overflow(ui::TextOverflow::ellipsis)
                 .truncation(ui::TextTruncation::tail)
                 .size({96.0f, 18.0f});
-  }).spacing(8.0f)
+  })
+      .spacing(8.0f)
       .center_children()
       .padding({8.0f, 4.0f, 8.0f, 4.0f});
 }
@@ -196,13 +195,12 @@ ui::View ContentSurface(const std::shared_ptr<FilesState> &state) {
   return ui::layout::zstack([&](ui::Block &surface) {
     surface << ui::panel(ui::control_background()).corner_radius(18.0f).expand();
     surface << ui::layout::grid([&](ui::Block &grid) {
-                 for (const FileItem &item : state->items) {
-                   ui::View tile = FileTile(item, IsFocused(*state, item));
-                   tile.on_click(
-                       [state, item] { FocusOrActivate(*state, item); });
-                   grid << std::move(tile);
-                 }
-               })
+      for (const FileItem &item : state->items) {
+        ui::View tile = FileTile(item, IsFocused(*state, item));
+        tile.on_click([state, item] { FocusOrActivate(*state, item); });
+        grid << std::move(tile);
+      }
+    })
                    .grid_metrics(112.0f, 92.0f, 18.0f, 20.0f)
                    .padding({28.0f, 26.0f, 28.0f, 26.0f})
                    .expand();
@@ -222,33 +220,30 @@ ui::View FilesView(const std::shared_ptr<FilesState> &state) {
 
   return ui::layout::vstack([&](ui::Block &body) {
     body << ui::layout::hstack([&](ui::Block &toolbar) {
-              toolbar << ui::button_group([&](ui::Block &group) {
-                group << ui::button(ui::icon(ui::Symbol::chevron_left,
-                                             navigation_icon_options)
-                                         .foreground(NavigationChevronColor(
-                                             can_navigate_back)))
-                             .role(ui::ButtonRole::back)
-                             .enabled(can_navigate_back)
-                             .on_click([state] { NavigateBack(*state); })
-                             .accessibility_label("Back");
-                group << ui::button(ui::icon(ui::Symbol::chevron_right,
-                                             navigation_icon_options)
-                                         .foreground(NavigationChevronColor(
-                                             can_navigate_forward)))
-                             .role(ui::ButtonRole::forward)
-                             .enabled(can_navigate_forward)
-                             .on_click([state] { NavigateForward(*state); })
-                             .accessibility_label("Forward");
-              }).shape(ui::ControlShape::capsule);
-              toolbar << ui::text(DirectoryName(state->current_path))
-                             .font_size(16.0f)
-                             .font_weight(500.0f)
-                             .foreground(ui::primary_label());
-            })
+      toolbar << ui::button_group([&](ui::Block &group) {
+        group << ui::button(ui::icon(ui::Symbol::chevron_left, navigation_icon_options)
+                                .foreground(NavigationChevronColor(can_navigate_back)))
+                     .role(ui::ButtonRole::back)
+                     .enabled(can_navigate_back)
+                     .on_click([state] { NavigateBack(*state); })
+                     .accessibility_label("Back");
+        group << ui::button(ui::icon(ui::Symbol::chevron_right, navigation_icon_options)
+                                .foreground(NavigationChevronColor(can_navigate_forward)))
+                     .role(ui::ButtonRole::forward)
+                     .enabled(can_navigate_forward)
+                     .on_click([state] { NavigateForward(*state); })
+                     .accessibility_label("Forward");
+      }).shape(ui::ControlShape::capsule);
+      toolbar << ui::text(DirectoryName(state->current_path))
+                     .font_size(16.0f)
+                     .font_weight(500.0f)
+                     .foreground(ui::primary_label());
+    })
                 .spacing(24.0f)
                 .after_leading_window_controls(chrome_margin);
     body << ContentSurface(state);
-  }).spacing(chrome_margin)
+  })
+      .spacing(chrome_margin)
       .padding({chrome_margin, 0.0f, chrome_margin, chrome_margin});
 }
 
@@ -256,8 +251,7 @@ int main(int argc, char *argv[]) {
   auto state = std::make_shared<FilesState>();
   OpenDirectory(*state, HomeDirectory());
 
-  return macos::app::run(
-      argc, argv,
+  return macos::app::run(argc, argv,
       macos::window::create(
           {
               .title = "Files",
@@ -266,7 +260,5 @@ int main(int argc, char *argv[]) {
               .background = macos::window::Background::blurred(),
               .window_controls = {.vertical_offset = 8.0f},
           },
-          [state] {
-            return FilesView(state);
-          }));
+          [state] { return FilesView(state); }));
 }

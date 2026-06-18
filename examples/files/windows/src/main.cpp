@@ -58,45 +58,38 @@ ui::View FilesView(const std::shared_ptr<NavigationState> &state) {
 
   return ui::layout::vstack([&](ui::Block &body) {
     body << ui::layout::hstack([&](ui::Block &toolbar) {
-              toolbar << ui::button_group([&](ui::Block &group) {
-                group << ui::button(ui::icon(ui::Symbol::chevron_left,
-                                             navigation_icon_options)
-                                         .foreground(NavigationChevronColor(
-                                             can_navigate_back)))
-                             .role(ui::ButtonRole::back)
-                             .enabled(can_navigate_back)
-                             .on_click([state] { NavigateBack(*state); })
-                             .accessibility_label("Back");
-                group << ui::button(ui::icon(ui::Symbol::chevron_right,
-                                             navigation_icon_options)
-                                         .foreground(NavigationChevronColor(
-                                             can_navigate_forward)))
-                             .role(ui::ButtonRole::forward)
-                             .enabled(can_navigate_forward)
-                             .on_click([state] { NavigateForward(*state); })
-                             .accessibility_label("Forward");
-              }).shape(ui::ControlShape::capsule);
-            })
+      toolbar << ui::button_group([&](ui::Block &group) {
+        group << ui::button(ui::icon(ui::Symbol::chevron_left, navigation_icon_options)
+                                .foreground(NavigationChevronColor(can_navigate_back)))
+                     .role(ui::ButtonRole::back)
+                     .enabled(can_navigate_back)
+                     .on_click([state] { NavigateBack(*state); })
+                     .accessibility_label("Back");
+        group << ui::button(ui::icon(ui::Symbol::chevron_right, navigation_icon_options)
+                                .foreground(NavigationChevronColor(can_navigate_forward)))
+                     .role(ui::ButtonRole::forward)
+                     .enabled(can_navigate_forward)
+                     .on_click([state] { NavigateForward(*state); })
+                     .accessibility_label("Forward");
+      }).shape(ui::ControlShape::capsule);
+    })
                 .spacing(24.0f)
                 .after_leading_window_controls(chrome_margin);
     body << ContentSurface();
-  }).spacing(chrome_margin)
+  })
+      .spacing(chrome_margin)
       .padding({chrome_margin, chrome_margin, chrome_margin, chrome_margin});
 }
 
 int main(int argc, char *argv[]) {
   auto state = std::make_shared<NavigationState>();
-  constexpr windows::window::TitleBarStyle title_bar =
-      windows::window::TitleBarStyle::hidden;
+  constexpr windows::window::TitleBarStyle title_bar = windows::window::TitleBarStyle::hidden;
   windows::window::Options options;
   options.title = "Files";
   options.size = {960.0f, 640.0f};
   options.title_bar = title_bar;
   options.background = windows::window::Background::blurred();
 
-  return windows::app::run(
-      argc, argv,
-      windows::window::create(std::move(options), [state] {
-        return FilesView(state);
-      }));
+  return windows::app::run(argc, argv,
+      windows::window::create(std::move(options), [state] { return FilesView(state); }));
 }
