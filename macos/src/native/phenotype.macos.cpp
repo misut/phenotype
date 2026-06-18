@@ -253,8 +253,7 @@ struct SymbolButtonLayout {
   LayoutRect control_frame;
   phenotype::ui::Symbol symbol = phenotype::ui::Symbol::chevron_left;
   phenotype::ui::SymbolOptions options;
-  phenotype::ui::ControlShape control_shape =
-      phenotype::ui::ControlShape::square_circle;
+  phenotype::ui::ControlShape control_shape = phenotype::ui::ControlShape::square_circle;
   phenotype::ui::Color color = phenotype::ui::primary_label();
   bool is_enabled = true;
   bool draws_control = true;
@@ -276,8 +275,7 @@ struct TextLayout {
   float font_weight = 400.0f;
   int line_limit = 0;
   phenotype::ui::TextOverflow overflow = phenotype::ui::TextOverflow::clip;
-  phenotype::ui::TextTruncation truncation =
-      phenotype::ui::TextTruncation::tail;
+  phenotype::ui::TextTruncation truncation = phenotype::ui::TextTruncation::tail;
   bool centers_text = false;
 };
 
@@ -327,8 +325,7 @@ uint32_t AlignUp(uint32_t value, uint32_t alignment) noexcept {
 }
 
 constexpr uint32_t FontAxisTag(char a, char b, char c, char d) noexcept {
-  return (static_cast<uint32_t>(a) << 24U) |
-         (static_cast<uint32_t>(b) << 16U) |
+  return (static_cast<uint32_t>(a) << 24U) | (static_cast<uint32_t>(b) << 16U) |
          (static_cast<uint32_t>(c) << 8U) | static_cast<uint32_t>(d);
 }
 
@@ -362,14 +359,14 @@ NSFont *TextFont(float point_size, float weight) {
 
 std::filesystem::path SourcePretendardFontPath() {
   std::filesystem::path source_file = __FILE__;
-  return source_file.parent_path().parent_path().parent_path() / "resources" /
-         "fonts" / "PretendardVariable.ttf";
+  return source_file.parent_path().parent_path().parent_path() / "resources" / "fonts" /
+         "PretendardVariable.ttf";
 }
 
 std::filesystem::path SourceMaterialSymbolsFontPath() {
   std::filesystem::path source_file = __FILE__;
-  return source_file.parent_path().parent_path().parent_path() / "resources" /
-         "fonts" / "MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf";
+  return source_file.parent_path().parent_path().parent_path() / "resources" / "fonts" /
+         "MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf";
 }
 
 std::filesystem::path FindPretendardFontPath() {
@@ -383,8 +380,7 @@ std::filesystem::path FindPretendardFontPath() {
   }
 
   std::filesystem::path current_path = std::filesystem::current_path();
-  candidates.push_back(current_path / "macos" / "resources" / "fonts" /
-                       "PretendardVariable.ttf");
+  candidates.push_back(current_path / "macos" / "resources" / "fonts" / "PretendardVariable.ttf");
   candidates.push_back(current_path / "../../../macos/resources/fonts/"
                                       "PretendardVariable.ttf");
   candidates.push_back(SourcePretendardFontPath());
@@ -409,12 +405,10 @@ std::filesystem::path FindMaterialSymbolsFontPath() {
   }
 
   std::filesystem::path current_path = std::filesystem::current_path();
-  candidates.push_back(
-      current_path / "macos" / "resources" / "fonts" /
-      "MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf");
-  candidates.push_back(
-      current_path / "../../../macos/resources/fonts/"
-                     "MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf");
+  candidates.push_back(current_path / "macos" / "resources" / "fonts" /
+                       "MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf");
+  candidates.push_back(current_path / "../../../macos/resources/fonts/"
+                                      "MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf");
   candidates.push_back(SourceMaterialSymbolsFontPath());
 
   for (const std::filesystem::path &candidate : candidates) {
@@ -436,8 +430,7 @@ void RegisterPretendardFontIfAvailable() {
     }
 
     std::string font_path_text = font_path.string();
-    NSString *native_path =
-        [NSString stringWithUTF8String:font_path_text.c_str()];
+    NSString *native_path = [NSString stringWithUTF8String:font_path_text.c_str()];
     if (native_path == nil) {
       return;
     }
@@ -445,14 +438,12 @@ void RegisterPretendardFontIfAvailable() {
     NSURL *font_url = [NSURL fileURLWithPath:native_path];
     CFErrorRef error = nullptr;
     bool registered = CTFontManagerRegisterFontsForURL(
-        reinterpret_cast<CFURLRef>(font_url), kCTFontManagerScopeProcess,
-        &error);
+        reinterpret_cast<CFURLRef>(font_url), kCTFontManagerScopeProcess, &error);
     if (!registered && error != nullptr) {
       CFIndex code = CFErrorGetCode(error);
       if (code != kCTFontManagerErrorAlreadyRegistered) {
-        std::fprintf(stderr,
-                     "phenotype: failed to register Pretendard font (%ld)\n",
-                     static_cast<long>(code));
+        std::fprintf(stderr, "phenotype: failed to register Pretendard font (%ld)\n",
+            static_cast<long>(code));
       }
       CFRelease(error);
     }
@@ -469,8 +460,7 @@ void RegisterMaterialSymbolsFontIfAvailable() {
     }
 
     std::string font_path_text = font_path.string();
-    NSString *native_path =
-        [NSString stringWithUTF8String:font_path_text.c_str()];
+    NSString *native_path = [NSString stringWithUTF8String:font_path_text.c_str()];
     if (native_path == nil) {
       return;
     }
@@ -478,15 +468,14 @@ void RegisterMaterialSymbolsFontIfAvailable() {
     NSURL *font_url = [NSURL fileURLWithPath:native_path];
     CFErrorRef error = nullptr;
     bool registered = CTFontManagerRegisterFontsForURL(
-        reinterpret_cast<CFURLRef>(font_url), kCTFontManagerScopeProcess,
-        &error);
+        reinterpret_cast<CFURLRef>(font_url), kCTFontManagerScopeProcess, &error);
     if (!registered && error != nullptr) {
       CFIndex code = CFErrorGetCode(error);
       if (code != kCTFontManagerErrorAlreadyRegistered) {
         std::fprintf(stderr,
-                     "phenotype: failed to register Material Symbols font "
-                     "(%ld)\n",
-                     static_cast<long>(code));
+            "phenotype: failed to register Material Symbols font "
+            "(%ld)\n",
+            static_cast<long>(code));
       }
       CFRelease(error);
     }
@@ -506,12 +495,9 @@ NSFont *DefaultTextFont(float point_size, float weight) {
       NSFontFamilyAttribute : family_name,
       NSFontTraitsAttribute : traits,
     };
-    NSFontDescriptor *descriptor =
-        [NSFontDescriptor fontDescriptorWithFontAttributes:attributes];
+    NSFontDescriptor *descriptor = [NSFontDescriptor fontDescriptorWithFontAttributes:attributes];
     NSFont *font = [NSFont fontWithDescriptor:descriptor size:size];
-    if (font != nil &&
-        [[font familyName] rangeOfString:@"Pretendard"].location !=
-            NSNotFound) {
+    if (font != nil && [[font familyName] rangeOfString:@"Pretendard"].location != NSNotFound) {
       return font;
     }
   }
@@ -519,26 +505,21 @@ NSFont *DefaultTextFont(float point_size, float weight) {
   return TextFont(point_size, weight);
 }
 
-NSFont *MaterialSymbolFont(float point_size,
-                           phenotype::ui::SymbolOptions options) {
+NSFont *MaterialSymbolFont(float point_size, phenotype::ui::SymbolOptions options) {
   RegisterMaterialSymbolsFontIfAvailable();
 
   CGFloat size = std::max<CGFloat>(1.0, point_size);
   NSDictionary *variations = @{
     @(FontAxisTag('F', 'I', 'L', 'L')) : @(options.fill ? 1.0 : 0.0),
-    @(FontAxisTag('G', 'R', 'A', 'D')) :
-        @(std::clamp(options.grade, -50.0f, 200.0f)),
-    @(FontAxisTag('o', 'p', 's', 'z')) :
-        @(std::clamp(options.optical_size, 20.0f, 48.0f)),
-    @(FontAxisTag('w', 'g', 'h', 't')) :
-        @(std::clamp(options.weight, 100.0f, 700.0f)),
+    @(FontAxisTag('G', 'R', 'A', 'D')) : @(std::clamp(options.grade, -50.0f, 200.0f)),
+    @(FontAxisTag('o', 'p', 's', 'z')) : @(std::clamp(options.optical_size, 20.0f, 48.0f)),
+    @(FontAxisTag('w', 'g', 'h', 't')) : @(std::clamp(options.weight, 100.0f, 700.0f)),
   };
   NSDictionary *attributes = @{
     NSFontNameAttribute : @"MaterialSymbolsRounded-Regular",
     NSFontVariationAttribute : variations,
   };
-  NSFontDescriptor *descriptor =
-      [NSFontDescriptor fontDescriptorWithFontAttributes:attributes];
+  NSFontDescriptor *descriptor = [NSFontDescriptor fontDescriptorWithFontAttributes:attributes];
   NSFont *font = [NSFont fontWithDescriptor:descriptor size:size];
   if (font != nil) {
     return font;
@@ -560,9 +541,8 @@ std::string_view MaterialSymbolName(phenotype::ui::Symbol symbol) noexcept {
   return "";
 }
 
-NSLineBreakMode
-ToNativeLineBreakMode(phenotype::ui::TextOverflow overflow,
-                      phenotype::ui::TextTruncation truncation) noexcept {
+NSLineBreakMode ToNativeLineBreakMode(
+    phenotype::ui::TextOverflow overflow, phenotype::ui::TextTruncation truncation) noexcept {
   if (overflow != phenotype::ui::TextOverflow::ellipsis) {
     return NSLineBreakByClipping;
   }
@@ -578,8 +558,7 @@ ToNativeLineBreakMode(phenotype::ui::TextOverflow overflow,
   return NSLineBreakByTruncatingTail;
 }
 
-phenotype::ui::Size MeasureText(std::string_view content, float font_size,
-                                float font_weight) {
+phenotype::ui::Size MeasureText(std::string_view content, float font_size, float font_weight) {
   if (content.empty()) {
     return {};
   }
@@ -599,8 +578,7 @@ phenotype::ui::Size MeasureText(std::string_view content, float font_size,
 }
 
 TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
-                         const std::vector<SymbolButtonLayout> &symbols,
-                         float scale) {
+    const std::vector<SymbolButtonLayout> &symbols, float scale) {
   enum class PendingKind {
     text,
     symbol,
@@ -616,8 +594,7 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
     float font_weight = 400.0f;
     int line_limit = 0;
     phenotype::ui::TextOverflow overflow = phenotype::ui::TextOverflow::clip;
-    phenotype::ui::TextTruncation truncation =
-        phenotype::ui::TextTruncation::tail;
+    phenotype::ui::TextTruncation truncation = phenotype::ui::TextTruncation::tail;
     phenotype::ui::SymbolOptions symbol_options;
     bool centers_text = false;
     uint32_t x = 0;
@@ -638,27 +615,22 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
   uint32_t atlas_height = 1;
 
   auto add_pending = [&](PendingText item) {
-    if (item.content.empty() || item.frame.width <= 0.0f ||
-        item.frame.height <= 0.0f) {
+    if (item.content.empty() || item.frame.width <= 0.0f || item.frame.height <= 0.0f) {
       return;
     }
 
     if (item.kind == PendingKind::text && item.index >= kMaxTextCount) {
       return;
     }
-    if (item.kind == PendingKind::symbol &&
-        item.index >= kMaxSymbolButtonCount) {
+    if (item.kind == PendingKind::symbol && item.index >= kMaxSymbolButtonCount) {
       return;
     }
 
     uint32_t width =
-        std::max<uint32_t>(1, static_cast<uint32_t>(
-                                  std::ceil(item.frame.width * safe_scale)));
+        std::max<uint32_t>(1, static_cast<uint32_t>(std::ceil(item.frame.width * safe_scale)));
     uint32_t height =
-        std::max<uint32_t>(1, static_cast<uint32_t>(
-                                  std::ceil(item.frame.height * safe_scale)));
-    if (cursor_x + width + kTextAtlasPadding > max_atlas_width &&
-        cursor_x > kTextAtlasPadding) {
+        std::max<uint32_t>(1, static_cast<uint32_t>(std::ceil(item.frame.height * safe_scale)));
+    if (cursor_x + width + kTextAtlasPadding > max_atlas_width && cursor_x > kTextAtlasPadding) {
       cursor_x = kTextAtlasPadding;
       cursor_y += row_height + kTextAtlasPadding;
       row_height = 0;
@@ -673,8 +645,7 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
     cursor_x += width + kTextAtlasPadding;
     row_height = std::max(row_height, height);
     atlas_width = std::max(atlas_width, cursor_x);
-    atlas_height =
-        std::max(atlas_height, cursor_y + row_height + kTextAtlasPadding);
+    atlas_height = std::max(atlas_height, cursor_y + row_height + kTextAtlasPadding);
   };
 
   for (size_t index = 0; index < texts.size(); ++index) {
@@ -730,12 +701,10 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
   atlas.symbol_entries.resize(symbols.size());
 
   CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
-  CGBitmapInfo bitmap_info =
-      static_cast<CGBitmapInfo>(kCGImageAlphaPremultipliedLast) |
-      static_cast<CGBitmapInfo>(kCGBitmapByteOrder32Big);
-  CGContextRef context =
-      CGBitmapContextCreate(atlas.pixels.data(), atlas.width, atlas.height, 8,
-                            atlas.width * 4, color_space, bitmap_info);
+  CGBitmapInfo bitmap_info = static_cast<CGBitmapInfo>(kCGImageAlphaPremultipliedLast) |
+                             static_cast<CGBitmapInfo>(kCGBitmapByteOrder32Big);
+  CGContextRef context = CGBitmapContextCreate(
+      atlas.pixels.data(), atlas.width, atlas.height, 8, atlas.width * 4, color_space, bitmap_info);
   CGColorSpaceRelease(color_space);
   if (context == nullptr) {
     return {};
@@ -750,49 +719,37 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
   [NSGraphicsContext setCurrentContext:graphics_context];
 
   for (const PendingText &text : pending) {
-    NSString *content =
-        [NSString stringWithUTF8String:text.content.c_str()];
+    NSString *content = [NSString stringWithUTF8String:text.content.c_str()];
     if (content == nil) {
       continue;
     }
 
     bool is_symbol = text.kind == PendingKind::symbol;
-    NSFont *font =
-        is_symbol
-            ? MaterialSymbolFont(text.font_size * safe_scale,
-                                 text.symbol_options)
-            : DefaultTextFont(text.font_size * safe_scale, text.font_weight);
-    NSMutableParagraphStyle *paragraph_style =
-        [[NSMutableParagraphStyle alloc] init];
-    [paragraph_style setAlignment:text.centers_text
-                                      ? NSTextAlignmentCenter
-                                      : NSTextAlignmentLeft];
+    NSFont *font = is_symbol ? MaterialSymbolFont(text.font_size * safe_scale, text.symbol_options)
+                             : DefaultTextFont(text.font_size * safe_scale, text.font_weight);
+    NSMutableParagraphStyle *paragraph_style = [[NSMutableParagraphStyle alloc] init];
+    [paragraph_style setAlignment:text.centers_text ? NSTextAlignmentCenter : NSTextAlignmentLeft];
     if (!is_symbol) {
-      [paragraph_style setLineBreakMode:ToNativeLineBreakMode(
-                                             text.overflow, text.truncation)];
+      [paragraph_style setLineBreakMode:ToNativeLineBreakMode(text.overflow, text.truncation)];
     }
     NSDictionary *attributes = @{
       NSFontAttributeName : font,
       NSLigatureAttributeName : @1,
       NSParagraphStyleAttributeName : paragraph_style,
-      NSForegroundColorAttributeName :
-          [NSColor colorWithCalibratedWhite:1.0 alpha:1.0]
+      NSForegroundColorAttributeName : [NSColor colorWithCalibratedWhite:1.0 alpha:1.0]
     };
     if (is_symbol) {
       NSSize size = [content sizeWithAttributes:attributes];
-      CGFloat draw_x = static_cast<CGFloat>(text.x) +
-                       (static_cast<CGFloat>(text.width) - size.width) * 0.5;
-      CGFloat draw_y = static_cast<CGFloat>(text.y) +
-                       (static_cast<CGFloat>(text.height) - size.height) * 0.5;
+      CGFloat draw_x =
+          static_cast<CGFloat>(text.x) + (static_cast<CGFloat>(text.width) - size.width) * 0.5;
+      CGFloat draw_y =
+          static_cast<CGFloat>(text.y) + (static_cast<CGFloat>(text.height) - size.height) * 0.5;
       [content drawAtPoint:NSMakePoint(draw_x, draw_y) withAttributes:attributes];
     } else {
       CGFloat draw_height = static_cast<CGFloat>(text.height);
       if (text.line_limit > 0) {
-        CGFloat line_height =
-            std::ceil([font ascender] - [font descender] + [font leading]);
-        draw_height =
-            std::min(draw_height,
-                     line_height * static_cast<CGFloat>(text.line_limit));
+        CGFloat line_height = std::ceil([font ascender] - [font descender] + [font leading]);
+        draw_height = std::min(draw_height, line_height * static_cast<CGFloat>(text.line_limit));
       }
       NSStringDrawingOptions draw_options = NSStringDrawingUsesLineFragmentOrigin;
       if (text.overflow == phenotype::ui::TextOverflow::ellipsis) {
@@ -808,10 +765,8 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
         text.frame,
         static_cast<float>(text.x) / static_cast<float>(atlas.width),
         static_cast<float>(text.y) / static_cast<float>(atlas.height),
-        static_cast<float>(text.x + text.width) /
-            static_cast<float>(atlas.width),
-        static_cast<float>(text.y + text.height) /
-            static_cast<float>(atlas.height),
+        static_cast<float>(text.x + text.width) / static_cast<float>(atlas.width),
+        static_cast<float>(text.y + text.height) / static_cast<float>(atlas.height),
         text.color,
     };
     if (is_symbol) {
@@ -859,8 +814,7 @@ NSRect InitialWindowVisibleFrame(CGFloat width, CGFloat height) {
   return NSMakeRect(0.0, 0.0, width, height);
 }
 
-NSVisualEffectMaterial
-ToNativeVisualMaterial(phenotype::macos::window::VisualMaterial material) {
+NSVisualEffectMaterial ToNativeVisualMaterial(phenotype::macos::window::VisualMaterial material) {
   switch (material) {
   case phenotype::macos::window::VisualMaterial::under_window_background:
     return NSVisualEffectMaterialUnderWindowBackground;
@@ -868,11 +822,9 @@ ToNativeVisualMaterial(phenotype::macos::window::VisualMaterial material) {
   return NSVisualEffectMaterialUnderWindowBackground;
 }
 
-void ApplyTitleBarStyle(NSWindow *window,
-                        phenotype::macos::window::TitleBarStyle style) {
+void ApplyTitleBarStyle(NSWindow *window, phenotype::macos::window::TitleBarStyle style) {
   if (style == phenotype::macos::window::TitleBarStyle::hidden) {
-    [window
-        setStyleMask:[window styleMask] | NSWindowStyleMaskFullSizeContentView];
+    [window setStyleMask:[window styleMask] | NSWindowStyleMaskFullSizeContentView];
     [window setTitleVisibility:NSWindowTitleHidden];
     [window setTitlebarAppearsTransparent:YES];
     [window setMovableByWindowBackground:NO];
@@ -884,8 +836,8 @@ void ApplyTitleBarStyle(NSWindow *window,
   [window setMovableByWindowBackground:NO];
 }
 
-bool CaptureWindowControlFrames(NSWindow *window, std::array<NSRect, 3> &frames,
-                                std::array<bool, 3> &has_frame) {
+bool CaptureWindowControlFrames(
+    NSWindow *window, std::array<NSRect, 3> &frames, std::array<bool, 3> &has_frame) {
   frames.fill(NSZeroRect);
   has_frame.fill(false);
   if (!window) {
@@ -908,21 +860,16 @@ bool CaptureWindowControlFrames(NSWindow *window, std::array<NSRect, 3> &frames,
   return has_any_frame;
 }
 
-bool NearlyEqual(CGFloat lhs, CGFloat rhs) noexcept {
-  return std::abs(lhs - rhs) < 0.5;
-}
+bool NearlyEqual(CGFloat lhs, CGFloat rhs) noexcept { return std::abs(lhs - rhs) < 0.5; }
 
 bool NearlyEqual(NSRect lhs, NSRect rhs) noexcept {
-  return NearlyEqual(lhs.origin.x, rhs.origin.x) &&
-         NearlyEqual(lhs.origin.y, rhs.origin.y) &&
+  return NearlyEqual(lhs.origin.x, rhs.origin.x) && NearlyEqual(lhs.origin.y, rhs.origin.y) &&
          NearlyEqual(lhs.size.width, rhs.size.width) &&
          NearlyEqual(lhs.size.height, rhs.size.height);
 }
 
-void ApplyWindowControlVerticalOffset(NSWindow *window,
-                                      const std::array<NSRect, 3> &base_frames,
-                                      const std::array<bool, 3> &has_base_frame,
-                                      CGFloat offset) {
+void ApplyWindowControlVerticalOffset(NSWindow *window, const std::array<NSRect, 3> &base_frames,
+    const std::array<bool, 3> &has_base_frame, CGFloat offset) {
   if (!window) {
     return;
   }
@@ -962,8 +909,7 @@ LayoutContext BuildLayoutContext(NSWindow *window, NSView *content_view) {
 
     NSRect button_rect = [button convertRect:[button bounds] toView:nil];
     button_rect = [content_view convertRect:button_rect fromView:nil];
-    controls_rect =
-        has_controls ? NSUnionRect(controls_rect, button_rect) : button_rect;
+    controls_rect = has_controls ? NSUnionRect(controls_rect, button_rect) : button_rect;
     has_controls = true;
   }
 
@@ -995,8 +941,7 @@ phenotype::ui::Size IntrinsicSize(const phenotype::ui::View &view) {
   case ui::ViewKind::icon:
     return {view.symbol_options.optical_size, view.symbol_options.optical_size};
   case ui::ViewKind::text:
-    return MeasureText(view.text_content, view.font_size_value,
-                       view.font_weight_value);
+    return MeasureText(view.text_content, view.font_size_value, view.font_weight_value);
   case ui::ViewKind::grid:
     return {view.grid_min_column_width, view.grid_row_height};
   case ui::ViewKind::spacer:
@@ -1054,10 +999,8 @@ LayoutRect ContentRect(const phenotype::ui::View &view, LayoutRect rect) {
   return {
       rect.x + view.content_padding.left,
       rect.y + view.content_padding.top,
-      std::max(0.0f, rect.width - view.content_padding.left -
-                         view.content_padding.right),
-      std::max(0.0f, rect.height - view.content_padding.top -
-                         view.content_padding.bottom),
+      std::max(0.0f, rect.width - view.content_padding.left - view.content_padding.right),
+      std::max(0.0f, rect.height - view.content_padding.top - view.content_padding.bottom),
   };
 }
 
@@ -1072,12 +1015,11 @@ float ControlShapeValue(phenotype::ui::ControlShape shape) noexcept {
 }
 
 bool Contains(LayoutRect rect, phenotype::ui::Size point) noexcept {
-  return point.width >= rect.x && point.width <= rect.x + rect.width &&
-         point.height >= rect.y && point.height <= rect.y + rect.height;
+  return point.width >= rect.x && point.width <= rect.x + rect.width && point.height >= rect.y &&
+         point.height <= rect.y + rect.height;
 }
 
-void LayoutButtonGroup(const phenotype::ui::View &view, LayoutRect rect,
-                       SceneLayout &scene) {
+void LayoutButtonGroup(const phenotype::ui::View &view, LayoutRect rect, SceneLayout &scene) {
   namespace ui = phenotype::ui;
 
   LayoutRect content_rect = ContentRect(view, rect);
@@ -1086,12 +1028,10 @@ void LayoutButtonGroup(const phenotype::ui::View &view, LayoutRect rect,
   size_t visible_button_index = 0;
   for (const ui::View &child : view.children) {
     ui::Size child_size = IntrinsicSize(child);
-    LayoutRect child_rect{cursor_x, content_rect.y, child_size.width,
-                          child_size.height};
+    LayoutRect child_rect{cursor_x, content_rect.y, child_size.width, child_size.height};
 
     if (child.kind == ui::ViewKind::button) {
-      if (child.click_action && child_rect.width > 0.0f &&
-          child_rect.height > 0.0f) {
+      if (child.click_action && child_rect.width > 0.0f && child_rect.height > 0.0f) {
         scene.hit_targets.push_back({
             child_rect,
             child.click_action,
@@ -1104,8 +1044,7 @@ void LayoutButtonGroup(const phenotype::ui::View &view, LayoutRect rect,
       }
       const ui::View *icon = FindIconContent(child);
       if (icon) {
-        bool draws_divider =
-            visible_button_index == 0 && view.children.size() > 1;
+        bool draws_divider = visible_button_index == 0 && view.children.size() > 1;
         scene.buttons.push_back({
             child_rect,
             content_rect,
@@ -1127,11 +1066,11 @@ void LayoutButtonGroup(const phenotype::ui::View &view, LayoutRect rect,
   }
 }
 
-void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
-                const LayoutContext &context, SceneLayout &scene);
+void LayoutView(const phenotype::ui::View &view, LayoutRect rect, const LayoutContext &context,
+    SceneLayout &scene);
 
-void LayoutGrid(const phenotype::ui::View &view, LayoutRect rect,
-                const LayoutContext &context, SceneLayout &scene) {
+void LayoutGrid(const phenotype::ui::View &view, LayoutRect rect, const LayoutContext &context,
+    SceneLayout &scene) {
   namespace ui = phenotype::ui;
 
   LayoutRect content_rect = ContentRect(view, rect);
@@ -1139,12 +1078,10 @@ void LayoutGrid(const phenotype::ui::View &view, LayoutRect rect,
   float column_gap = std::max(0.0f, view.grid_column_gap);
   float row_gap = std::max(0.0f, view.grid_row_gap);
   size_t column_count = std::max<size_t>(
-      1, static_cast<size_t>((content_rect.width + column_gap) /
-                             (min_column_width + column_gap)));
+      1, static_cast<size_t>((content_rect.width + column_gap) / (min_column_width + column_gap)));
   float total_gap = column_gap * static_cast<float>(column_count - 1);
   float cell_width =
-      std::max(1.0f, (content_rect.width - total_gap) /
-                         static_cast<float>(column_count));
+      std::max(1.0f, (content_rect.width - total_gap) / static_cast<float>(column_count));
   float row_height = std::max(1.0f, view.grid_row_height);
 
   for (size_t index = 0; index < view.children.size(); ++index) {
@@ -1160,20 +1097,18 @@ void LayoutGrid(const phenotype::ui::View &view, LayoutRect rect,
   }
 }
 
-void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
-                const LayoutContext &context, SceneLayout &scene) {
+void LayoutView(const phenotype::ui::View &view, LayoutRect rect, const LayoutContext &context,
+    SceneLayout &scene) {
   namespace ui = phenotype::ui;
 
   if (view.leading_window_controls_placement.is_enabled &&
       context.window_controls.has_leading_controls) {
     const LayoutRect &controls = context.window_controls.leading_controls;
     ui::Size view_size = IntrinsicSize(view);
-    rect.x =
-        std::max(rect.x, controls.x + controls.width +
-                             view.leading_window_controls_placement.spacing);
+    rect.x = std::max(
+        rect.x, controls.x + controls.width + view.leading_window_controls_placement.spacing);
     if (view.leading_window_controls_placement.aligns_vertical_center) {
-      rect.y =
-          controls.y + (controls.height * 0.5f) - (view_size.height * 0.5f);
+      rect.y = controls.y + (controls.height * 0.5f) - (view_size.height * 0.5f);
     }
   }
 
@@ -1274,33 +1209,27 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
   }
 
   float available_main =
-      view.axis == ui::LayoutAxis::horizontal ? content_rect.width
-                                              : content_rect.height;
+      view.axis == ui::LayoutAxis::horizontal ? content_rect.width : content_rect.height;
   size_t flexible_child_count = 0;
   float fixed_main = view.children.empty()
                          ? 0.0f
-                         : view.child_spacing *
-                               static_cast<float>(view.children.size() - 1);
+                         : view.child_spacing * static_cast<float>(view.children.size() - 1);
 
   for (const ui::View &child : view.children) {
     ui::Size child_size = IntrinsicSize(child);
     bool expands_on_axis =
-        view.axis == ui::LayoutAxis::horizontal ? child.expands_width
-                                                : child.expands_height;
+        view.axis == ui::LayoutAxis::horizontal ? child.expands_width : child.expands_height;
     if (expands_on_axis) {
       ++flexible_child_count;
     } else {
-      fixed_main += view.axis == ui::LayoutAxis::horizontal
-                        ? child_size.width
-                        : child_size.height;
+      fixed_main += view.axis == ui::LayoutAxis::horizontal ? child_size.width : child_size.height;
     }
   }
 
   float flexible_main = 0.0f;
   if (flexible_child_count > 0) {
     flexible_main =
-        std::max(0.0f, available_main - fixed_main) /
-        static_cast<float>(flexible_child_count);
+        std::max(0.0f, available_main - fixed_main) / static_cast<float>(flexible_child_count);
   }
 
   float cursor_x = content_rect.x;
@@ -1326,20 +1255,13 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
     float child_x = cursor_x;
     float child_y = cursor_y;
     if (view.axis == ui::LayoutAxis::horizontal && !child.expands_height) {
-      child_y =
-          content_rect.y + std::max(0.0f, content_rect.height -
-                                              child_size.height) *
-                               0.5f;
+      child_y = content_rect.y + std::max(0.0f, content_rect.height - child_size.height) * 0.5f;
     } else if (view.axis == ui::LayoutAxis::vertical && view.centers_children &&
                !child.expands_width) {
-      child_x =
-          content_rect.x + std::max(0.0f, content_rect.width -
-                                              child_size.width) *
-                               0.5f;
+      child_x = content_rect.x + std::max(0.0f, content_rect.width - child_size.width) * 0.5f;
     }
 
-    LayoutRect child_rect{child_x, child_y, child_size.width,
-                          child_size.height};
+    LayoutRect child_rect{child_x, child_y, child_size.width, child_size.height};
     LayoutView(child, child_rect, context, scene);
     if (view.axis == ui::LayoutAxis::horizontal) {
       cursor_x += child_size.width + view.child_spacing;
@@ -1349,27 +1271,26 @@ void LayoutView(const phenotype::ui::View &view, LayoutRect rect,
   }
 }
 
-SceneLayout LayoutScene(const phenotype::ui::View &root, float width,
-                        float height, const LayoutContext &context) {
+SceneLayout LayoutScene(
+    const phenotype::ui::View &root, float width, float height, const LayoutContext &context) {
   SceneLayout scene;
   scene.panels.reserve(kMaxPanelCount);
   scene.buttons.reserve(kMaxSymbolButtonCount);
   scene.texts.reserve(kMaxTextCount);
   scene.hit_targets.reserve(64);
   LayoutView(root,
-             {
-                 0.0f,
-                 0.0f,
-                 width,
-                 height,
-             },
-             context, scene);
+      {
+          0.0f,
+          0.0f,
+          width,
+          height,
+      },
+      context, scene);
   return scene;
 }
 
-SymbolButtonUniform MakeSymbolButton(const SymbolButtonLayout &button,
-                                     const TextAtlasEntry &symbol,
-                                     float scale) {
+SymbolButtonUniform MakeSymbolButton(
+    const SymbolButtonLayout &button, const TextAtlasEntry &symbol, float scale) {
   float alpha_scale = button.is_enabled ? 1.0f : 0.44f;
   float safe_scale = std::max(1.0f, scale);
 
@@ -1393,10 +1314,8 @@ SymbolButtonUniform MakeSymbolButton(const SymbolButtonLayout &button,
           button.options.optical_size * safe_scale,
       },
       {
-          (button.control_frame.x + (button.control_frame.width * 0.5f)) *
-              safe_scale,
-          (button.control_frame.y + (button.control_frame.height * 0.5f)) *
-              safe_scale,
+          (button.control_frame.x + (button.control_frame.width * 0.5f)) * safe_scale,
+          (button.control_frame.y + (button.control_frame.height * 0.5f)) * safe_scale,
           button.control_frame.width * safe_scale,
           button.control_frame.height * safe_scale,
       },
@@ -1471,9 +1390,9 @@ TextUniform MakeText(const TextAtlasEntry &text, float scale) {
 
 class DawnButtonRenderer {
 public:
-  bool Initialize(CAMetalLayer *layer, uint32_t width, uint32_t height,
-                  float scale, phenotype::ui::Size layout_size,
-                  LayoutContext layout_context, phenotype::ui::View root_view) {
+  bool Initialize(CAMetalLayer *layer, uint32_t width, uint32_t height, float scale,
+      phenotype::ui::Size layout_size, LayoutContext layout_context,
+      phenotype::ui::View root_view) {
     _root_view = std::move(root_view);
     _scale = scale;
     _layout_size = layout_size;
@@ -1518,8 +1437,8 @@ public:
     return static_cast<bool>(_pipeline);
   }
 
-  void Resize(uint32_t width, uint32_t height, float scale,
-              phenotype::ui::Size layout_size, LayoutContext layout_context) {
+  void Resize(uint32_t width, uint32_t height, float scale, phenotype::ui::Size layout_size,
+      LayoutContext layout_context) {
     if (width == 0 || height == 0 || !_device) {
       return;
     }
@@ -1539,10 +1458,10 @@ public:
   }
 
   bool ActivateAt(phenotype::ui::Size point) {
-    SceneLayout scene = LayoutScene(_root_view, _layout_size.width,
-                                    _layout_size.height, _layout_context);
-    for (auto iterator = scene.hit_targets.rbegin();
-         iterator != scene.hit_targets.rend(); ++iterator) {
+    SceneLayout scene =
+        LayoutScene(_root_view, _layout_size.width, _layout_size.height, _layout_context);
+    for (auto iterator = scene.hit_targets.rbegin(); iterator != scene.hit_targets.rend();
+        ++iterator) {
       if (!iterator->is_enabled || !Contains(iterator->frame, point)) {
         continue;
       }
@@ -1559,10 +1478,8 @@ public:
 
     wgpu::SurfaceTexture surface_texture;
     _surface.GetCurrentTexture(&surface_texture);
-    if (surface_texture.status !=
-            wgpu::SurfaceGetCurrentTextureStatus::SuccessOptimal &&
-        surface_texture.status !=
-            wgpu::SurfaceGetCurrentTextureStatus::SuccessSuboptimal) {
+    if (surface_texture.status != wgpu::SurfaceGetCurrentTextureStatus::SuccessOptimal &&
+        surface_texture.status != wgpu::SurfaceGetCurrentTextureStatus::SuccessSuboptimal) {
       return;
     }
 
@@ -1579,8 +1496,7 @@ public:
     render_pass_descriptor.colorAttachments = &color_attachment;
 
     wgpu::CommandEncoder encoder = _device.CreateCommandEncoder();
-    wgpu::RenderPassEncoder pass =
-        encoder.BeginRenderPass(&render_pass_descriptor);
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&render_pass_descriptor);
     pass.SetPipeline(_pipeline);
     pass.SetBindGroup(0, _scene_bind_group);
     pass.Draw(6);
@@ -1599,10 +1515,8 @@ private:
 
     bool resolved = false;
     bool succeeded = false;
-    wgpu::Future future = _instance.RequestAdapter(
-        &options, wgpu::CallbackMode::WaitAnyOnly,
-        [&](wgpu::RequestAdapterStatus status, wgpu::Adapter adapter,
-            wgpu::StringView message) {
+    wgpu::Future future = _instance.RequestAdapter(&options, wgpu::CallbackMode::WaitAnyOnly,
+        [&](wgpu::RequestAdapterStatus status, wgpu::Adapter adapter, wgpu::StringView message) {
           (void)message;
           resolved = true;
           succeeded = status == wgpu::RequestAdapterStatus::Success;
@@ -1621,20 +1535,16 @@ private:
 
   bool RequestDevice() {
     wgpu::DeviceDescriptor descriptor;
-    descriptor.SetUncapturedErrorCallback([](const wgpu::Device &,
-                                             wgpu::ErrorType error_type,
-                                             wgpu::StringView message) {
-      std::fprintf(stderr, "Dawn device error (%u): %.*s\n",
-                   static_cast<unsigned>(error_type),
-                   static_cast<int>(message.length), message.data);
-    });
+    descriptor.SetUncapturedErrorCallback(
+        [](const wgpu::Device &, wgpu::ErrorType error_type, wgpu::StringView message) {
+          std::fprintf(stderr, "Dawn device error (%u): %.*s\n", static_cast<unsigned>(error_type),
+              static_cast<int>(message.length), message.data);
+        });
 
     bool resolved = false;
     bool succeeded = false;
-    wgpu::Future future = _adapter.RequestDevice(
-        &descriptor, wgpu::CallbackMode::WaitAnyOnly,
-        [&](wgpu::RequestDeviceStatus status, wgpu::Device device,
-            wgpu::StringView message) {
+    wgpu::Future future = _adapter.RequestDevice(&descriptor, wgpu::CallbackMode::WaitAnyOnly,
+        [&](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
           (void)message;
           resolved = true;
           succeeded = status == wgpu::RequestDeviceStatus::Success;
@@ -1684,28 +1594,22 @@ private:
     bind_group_layout_entries[0].binding = 0;
     bind_group_layout_entries[0].visibility =
         wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-    bind_group_layout_entries[0].buffer.type =
-        wgpu::BufferBindingType::Uniform;
-    bind_group_layout_entries[0].buffer.minBindingSize =
-        sizeof(SceneUniforms);
+    bind_group_layout_entries[0].buffer.type = wgpu::BufferBindingType::Uniform;
+    bind_group_layout_entries[0].buffer.minBindingSize = sizeof(SceneUniforms);
 
     bind_group_layout_entries[1].binding = 1;
     bind_group_layout_entries[1].visibility = wgpu::ShaderStage::Fragment;
-    bind_group_layout_entries[1].texture.sampleType =
-        wgpu::TextureSampleType::Float;
-    bind_group_layout_entries[1].texture.viewDimension =
-        wgpu::TextureViewDimension::e2D;
+    bind_group_layout_entries[1].texture.sampleType = wgpu::TextureSampleType::Float;
+    bind_group_layout_entries[1].texture.viewDimension = wgpu::TextureViewDimension::e2D;
 
     bind_group_layout_entries[2].binding = 2;
     bind_group_layout_entries[2].visibility = wgpu::ShaderStage::Fragment;
-    bind_group_layout_entries[2].sampler.type =
-        wgpu::SamplerBindingType::Filtering;
+    bind_group_layout_entries[2].sampler.type = wgpu::SamplerBindingType::Filtering;
 
     wgpu::BindGroupLayoutDescriptor bind_group_layout_descriptor;
     bind_group_layout_descriptor.entryCount = bind_group_layout_entries.size();
     bind_group_layout_descriptor.entries = bind_group_layout_entries.data();
-    _bind_group_layout =
-        _device.CreateBindGroupLayout(&bind_group_layout_descriptor);
+    _bind_group_layout = _device.CreateBindGroupLayout(&bind_group_layout_descriptor);
 
     wgpu::PipelineLayoutDescriptor pipeline_layout_descriptor;
     pipeline_layout_descriptor.bindGroupLayoutCount = 1;
@@ -1731,8 +1635,7 @@ private:
     pipeline_descriptor.layout = pipeline_layout;
     pipeline_descriptor.vertex.module = shader;
     pipeline_descriptor.vertex.entryPoint = "vertexMain";
-    pipeline_descriptor.primitive.topology =
-        wgpu::PrimitiveTopology::TriangleList;
+    pipeline_descriptor.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
     pipeline_descriptor.fragment = &fragment;
     pipeline_descriptor.multisample.count = 1;
 
@@ -1741,8 +1644,7 @@ private:
   }
 
   void CreateSceneBindGroup() {
-    if (!_bind_group_layout || !_scene_uniform_buffer || !_text_texture_view ||
-        !_text_sampler) {
+    if (!_bind_group_layout || !_scene_uniform_buffer || !_text_texture_view || !_text_sampler) {
       return;
     }
 
@@ -1768,8 +1670,7 @@ private:
   void CreateSceneUniformBuffer() {
     wgpu::BufferDescriptor buffer_descriptor;
     buffer_descriptor.size = sizeof(SceneUniforms);
-    buffer_descriptor.usage =
-        wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
+    buffer_descriptor.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
     _scene_uniform_buffer = _device.CreateBuffer(&buffer_descriptor);
   }
 
@@ -1789,8 +1690,7 @@ private:
     _text_texture_height = std::max<uint32_t>(1, height);
 
     wgpu::TextureDescriptor texture_descriptor;
-    texture_descriptor.usage =
-        wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopyDst;
+    texture_descriptor.usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopyDst;
     texture_descriptor.dimension = wgpu::TextureDimension::e2D;
     texture_descriptor.size = {
         _text_texture_width,
@@ -1808,8 +1708,8 @@ private:
       return;
     }
 
-    if (atlas.width != _text_texture_width ||
-        atlas.height != _text_texture_height || !_text_texture) {
+    if (atlas.width != _text_texture_width || atlas.height != _text_texture_height ||
+        !_text_texture) {
       CreateTextTexture(atlas.width, atlas.height);
     }
     if (!_text_texture || atlas.pixels.empty()) {
@@ -1829,8 +1729,8 @@ private:
         atlas.height,
         1,
     };
-    _device.GetQueue().WriteTexture(&destination, atlas.pixels.data(),
-                                    atlas.pixels.size(), &layout, &write_size);
+    _device.GetQueue().WriteTexture(
+        &destination, atlas.pixels.data(), atlas.pixels.size(), &layout, &write_size);
   }
 
   void UpdateSceneUniforms() {
@@ -1838,8 +1738,8 @@ private:
       return;
     }
 
-    SceneLayout scene = LayoutScene(_root_view, _layout_size.width,
-                                    _layout_size.height, _layout_context);
+    SceneLayout scene =
+        LayoutScene(_root_view, _layout_size.width, _layout_size.height, _layout_context);
     TextAtlas text_atlas = BuildTextAtlas(scene.texts, scene.buttons, _scale);
     UploadTextAtlas(text_atlas);
 
@@ -1855,18 +1755,15 @@ private:
     }
     TextAtlasEntry empty_symbol;
     for (size_t index = 0; index < scene.buttons.size(); ++index) {
-      const TextAtlasEntry &symbol =
-          index < text_atlas.symbol_entries.size()
-              ? text_atlas.symbol_entries[index]
-              : empty_symbol;
-      uniforms.buttons[index] = MakeSymbolButton(
-          scene.buttons[index], symbol, _scale);
+      const TextAtlasEntry &symbol = index < text_atlas.symbol_entries.size()
+                                         ? text_atlas.symbol_entries[index]
+                                         : empty_symbol;
+      uniforms.buttons[index] = MakeSymbolButton(scene.buttons[index], symbol, _scale);
     }
     for (size_t index = 0; index < text_atlas.entries.size(); ++index) {
       uniforms.texts[index] = MakeText(text_atlas.entries[index], _scale);
     }
-    _device.GetQueue().WriteBuffer(_scene_uniform_buffer, 0, &uniforms,
-                                   sizeof(uniforms));
+    _device.GetQueue().WriteBuffer(_scene_uniform_buffer, 0, &uniforms, sizeof(uniforms));
   }
 
   wgpu::Instance _instance;
@@ -1962,8 +1859,7 @@ private:
 @end
 
 @interface AppDelegate
-    : NSObject <NSApplicationDelegate, NSWindowDelegate,
-                PhenotypeMetalViewDelegate> {
+    : NSObject <NSApplicationDelegate, NSWindowDelegate, PhenotypeMetalViewDelegate> {
   NSWindow *_window;
   NSTimer *_render_timer;
   NSView *_metal_view;
@@ -2005,11 +1901,9 @@ private:
   CGFloat window_width = std::max<CGFloat>(1.0, _spec.options.size.width);
   CGFloat window_height = std::max<CGFloat>(1.0, _spec.options.size.height);
   NSRect content_rect = NSMakeRect(0.0, 0.0, window_width, window_height);
-  bool hides_title_bar = _spec.options.title_bar ==
-                         phenotype::macos::window::TitleBarStyle::hidden;
-  NSWindowStyleMask style_mask =
-      NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
-      NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
+  bool hides_title_bar = _spec.options.title_bar == phenotype::macos::window::TitleBarStyle::hidden;
+  NSWindowStyleMask style_mask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
+                                 NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
   if (hides_title_bar) {
     style_mask |= NSWindowStyleMaskFullSizeContentView;
   }
@@ -2019,12 +1913,11 @@ private:
                                           backing:NSBackingStoreBuffered
                                             defer:NO];
   [_window setDelegate:self];
-  [_window
-      setTitle:[NSString stringWithUTF8String:_spec.options.title.c_str()]];
+  [_window setTitle:[NSString stringWithUTF8String:_spec.options.title.c_str()]];
   ApplyTitleBarStyle(_window, _spec.options.title_bar);
 
-  bool uses_blur = _spec.options.background.kind ==
-                   phenotype::macos::window::Background::Kind::blurred;
+  bool uses_blur =
+      _spec.options.background.kind == phenotype::macos::window::Background::Kind::blurred;
   if (uses_blur) {
     [_window setOpaque:NO];
     [_window setBackgroundColor:[NSColor clearColor]];
@@ -2034,19 +1927,15 @@ private:
   }
 
   NSRect visible_frame = InitialWindowVisibleFrame(window_width, window_height);
-  [_window setFrameOrigin:NSMakePoint(
-                              NSMidX(visible_frame) - (window_width / 2.0),
+  [_window setFrameOrigin:NSMakePoint(NSMidX(visible_frame) - (window_width / 2.0),
                               NSMidY(visible_frame) - (window_height / 2.0))];
 
   NSView *content_view = nil;
   if (uses_blur) {
     NSVisualEffectView *visual_effect_view =
         [[NSVisualEffectView alloc] initWithFrame:content_rect];
-    [visual_effect_view
-        setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
-    [visual_effect_view
-        setMaterial:ToNativeVisualMaterial(
-                        _spec.options.background.blur.material)];
+    [visual_effect_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    [visual_effect_view setMaterial:ToNativeVisualMaterial(_spec.options.background.blur.material)];
     [visual_effect_view setBlendingMode:NSVisualEffectBlendingModeBehindWindow];
     [visual_effect_view setState:NSVisualEffectStateActive];
     [visual_effect_view setEmphasized:YES];
@@ -2071,11 +1960,8 @@ private:
   [_metal_layer setContentsGravity:kCAGravityTopLeft];
   [_metal_layer setFrame:NSRectToCGRect([_metal_view bounds])];
   [_metal_layer setContentsScale:[_window backingScaleFactor]];
-  [_metal_layer
-      setDrawableSize:CGSizeMake(LogicalPixel(window_width,
-                                              [_window backingScaleFactor]),
-                                 LogicalPixel(window_height,
-                                              [_window backingScaleFactor]))];
+  [_metal_layer setDrawableSize:CGSizeMake(LogicalPixel(window_width, [_window backingScaleFactor]),
+                                    LogicalPixel(window_height, [_window backingScaleFactor]))];
   [_metal_view setLayer:_metal_layer];
   [content_view addSubview:_metal_view];
   [_metal_view release];
@@ -2096,13 +1982,11 @@ private:
   };
   LayoutContext layout_context = [self buildLayoutContext];
 
-  phenotype::ui::View root_view =
-      _spec.content ? _spec.content() : phenotype::ui::empty();
+  phenotype::ui::View root_view = _spec.content ? _spec.content() : phenotype::ui::empty();
   _renderer = std::make_unique<DawnButtonRenderer>();
   if (!_renderer->Initialize(_metal_layer, PixelSize(bounds.width, scale),
-                             PixelSize(bounds.height, scale),
-                             static_cast<float>(scale), layout_size,
-                             layout_context, std::move(root_view))) {
+          PixelSize(bounds.height, scale), static_cast<float>(scale), layout_size, layout_context,
+          std::move(root_view))) {
     _renderer.reset();
     [NSApp terminate:nil];
     return;
@@ -2147,8 +2031,7 @@ private:
   if (bounds.width <= 0.0 || bounds.height <= 0.0) {
     return;
   }
-  CGSize drawable_size =
-      CGSizeMake(bounds.width * scale, bounds.height * scale);
+  CGSize drawable_size = CGSizeMake(bounds.width * scale, bounds.height * scale);
   [_metal_layer setFrame:NSRectToCGRect(bounds_rect)];
   [_metal_layer setContentsScale:scale];
   [_metal_layer setDrawableSize:drawable_size];
@@ -2159,9 +2042,8 @@ private:
         static_cast<float>(bounds.height),
     };
     LayoutContext layout_context = [self buildLayoutContext];
-    _renderer->Resize(PixelSize(bounds.width, scale),
-                      PixelSize(bounds.height, scale),
-                      static_cast<float>(scale), layout_size, layout_context);
+    _renderer->Resize(PixelSize(bounds.width, scale), PixelSize(bounds.height, scale),
+        static_cast<float>(scale), layout_size, layout_context);
     _renderer->Render();
   }
 }
@@ -2185,9 +2067,8 @@ private:
     _has_window_control_base_frames = CaptureWindowControlFrames(
         _window, _window_control_base_frames, _window_control_has_base_frame);
   }
-  ApplyWindowControlVerticalOffset(
-      _window, _window_control_base_frames, _window_control_has_base_frame,
-      _spec.options.window_controls.vertical_offset);
+  ApplyWindowControlVerticalOffset(_window, _window_control_base_frames,
+      _window_control_has_base_frame, _spec.options.window_controls.vertical_offset);
 }
 
 - (void)windowDidResize:(NSNotification *)notification {
@@ -2234,8 +2115,7 @@ private:
   return NO;
 }
 
-- (BOOL)applicationShouldTerminateAfterLastWindowClosed:
-    (NSApplication *)sender {
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
   (void)sender;
   return YES;
 }
@@ -2251,8 +2131,8 @@ private:
 
 @end
 
-extern "C" int phenotype_macos_app_run(int argc, char *argv[],
-                                       phenotype::macos::window::Spec *spec) {
+extern "C" int phenotype_macos_app_run(
+    int argc, char *argv[], phenotype::macos::window::Spec *spec) {
   (void)argc;
   (void)argv;
 

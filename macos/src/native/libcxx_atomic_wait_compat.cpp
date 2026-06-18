@@ -18,8 +18,7 @@ __cxx_contention_t __atomic_monitor_global(void const *address) noexcept {
   return __libcpp_atomic_monitor(address);
 }
 
-void __atomic_wait_global_table(void const *address,
-                                __cxx_contention_t monitor_value) noexcept {
+void __atomic_wait_global_table(void const *address, __cxx_contention_t monitor_value) noexcept {
   __libcpp_atomic_wait(address, monitor_value);
 }
 
