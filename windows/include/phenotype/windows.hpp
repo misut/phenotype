@@ -7,6 +7,7 @@
 #endif
 
 #ifndef PHENOTYPE_WINDOWS_IMPORTS_PHENOTYPE_MODULE
+#include "phenotype/runtime.hpp"
 #include "phenotype/ui.hpp"
 #endif
 
@@ -69,3 +70,39 @@ inline int run(int argc, char *argv[], window::Spec spec) {
 }
 
 } // namespace phenotype::windows::app
+
+// Component-app entry point: the modern surface over the window shell.
+//
+// run_app owns one ui::Runtime for the surface and drives the App's
+// body(Context&) through it. The shell already re-invokes the content closure
+// after each click/scroll, so a state mutation inside an event handler is
+// reflected on the next frame without extra plumbing.
+//
+// The App and its Runtime are held by shared_ptr so the content closure (stored
+// in the Spec and outliving this call) keeps them alive for the app's lifetime.
+namespace phenotype::native {
+
+template <ui::Component App>
+int run_app(App app, windows::window::Options options) {
+  auto runtime = std::make_shared<ui::Runtime>();
+  auto holder = std::make_shared<App>(std::move(app));
+  windows::window::Spec spec =
+      windows::window::create(std::move(options), [runtime, holder] {
+        runtime->BeginFrame();
+        ui::Context context{*runtime};
+        ui::View view = holder->body(context);
+        runtime->Prune();
+        return view;
+      });
+  return windows::app::run(0, nullptr, std::move(spec));
+}
+
+template <ui::Component App>
+int run_app(App app, float width, float height, std::string title) {
+  windows::window::Options options;
+  options.title = std::move(title);
+  options.size = {width, height};
+  return run_app<App>(std::move(app), std::move(options));
+}
+
+} // namespace phenotype::native
