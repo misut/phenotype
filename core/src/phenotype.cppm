@@ -6,6 +6,7 @@ import std;
 export {
 #include "phenotype/layout.hpp"
 #include "phenotype/material_symbols.hpp"
+#include "phenotype/scene.hpp"
 #include "phenotype/ui.hpp"
 }
 #undef PHENOTYPE_IMPORTS_STD_MODULE

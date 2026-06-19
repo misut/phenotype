@@ -21,10 +21,13 @@
 
 #include <phenotype/layout.hpp>
 #include <phenotype/macos.hpp>
+#include <phenotype/scene.hpp>
 
-// The platform-independent layout engine lives in phenotype/layout.hpp. Pull
-// its names into scope so the renderer and the AppKit delegate (outside the
-// anonymous namespace) share the same LayoutRect/LayoutContext/SceneLayout.
+// The scene contract (LayoutRect/SceneLayout/...) lives in phenotype/scene.hpp
+// and the layout engine that fills it in phenotype/layout.hpp. Pull both into
+// scope so the renderer and the AppKit delegate (outside the anonymous
+// namespace) share the same types.
+using namespace phenotype::scene;
 using namespace phenotype::layout;
 
 namespace {
@@ -1243,10 +1246,10 @@ bool CaptureWindowControlFrames(
   return has_any_frame;
 }
 
-// Merge the layout core's NearlyEqual overloads (Size, LayoutRect,
+// Merge the scene contract's NearlyEqual overloads (Size, LayoutRect,
 // LayoutContext, ...) with the AppKit-specific CGFloat/NSRect ones below so
 // unqualified calls resolve against the whole set instead of being hidden.
-using phenotype::layout::NearlyEqual;
+using phenotype::scene::NearlyEqual;
 
 bool NearlyEqual(CGFloat lhs, CGFloat rhs) noexcept { return std::abs(lhs - rhs) < 0.5; }
 
