@@ -349,18 +349,27 @@ ui::View FilesView(const std::shared_ptr<FilesState> &state) {
   }).expand();
 }
 
-int main(int argc, char *argv[]) {
-  auto state = std::make_shared<FilesState>();
-  OpenDirectory(*state, HomeDirectory());
+// The Files window as a component app. The domain model lives in a shared
+// FilesState that the event callbacks mutate; body() is the declarative pass
+// the runtime re-runs after each interaction. State is held as an app member
+// rather than ctx.state<T> because it is a single app-lifetime model — the
+// per-call-site state cells earn their keep with dynamic widgets, not here.
+struct FilesApp {
+  std::shared_ptr<FilesState> state = std::make_shared<FilesState>();
 
-  return macos::app::run(argc, argv,
-      macos::window::create(
-          {
-              .title = "Files",
-              .size = FilesWindowSize,
-              .title_bar = macos::window::TitleBarStyle::hidden,
-              .background = macos::window::Background::blurred(),
-              .window_controls = {.vertical_offset = 8.0f},
-          },
-          [state] { return FilesView(state); }));
+  ui::View body(ui::Context &) const { return FilesView(state); }
+};
+
+int main() {
+  FilesApp app;
+  OpenDirectory(*app.state, HomeDirectory());
+
+  return phenotype::native::run_app(
+      std::move(app), macos::window::Options{
+                          .title = "Files",
+                          .size = FilesWindowSize,
+                          .title_bar = macos::window::TitleBarStyle::hidden,
+                          .background = macos::window::Background::blurred(),
+                          .window_controls = {.vertical_offset = 8.0f},
+                      });
 }
