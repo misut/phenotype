@@ -228,14 +228,6 @@ inline std::optional<LayoutRect> EffectBounds(const std::vector<EffectPanelLayou
   return bounds;
 }
 
-inline std::optional<LayoutRect> VisibleClip(
-    std::optional<LayoutRect> clip, LayoutRect fallback) noexcept {
-  if (!clip) {
-    return fallback;
-  }
-  return Intersect(*clip, fallback);
-}
-
 inline float ControlShapeValue(ui::ControlShape shape) noexcept {
   switch (shape) {
   case ui::ControlShape::square_circle:

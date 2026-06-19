@@ -423,22 +423,21 @@ wchar_t MaterialSymbolCodepoint(ui::Symbol symbol) noexcept {
 // Adapts the GDI text metrics into the platform-neutral layout engine. The
 // engine owns all sizing/flex/grid/scroll math (shared with macOS); GDI only
 // answers "how wide is this text run". A scratch screen DC is used so the
-// callback is self-contained and matches the DrawTextW path used at paint.
-scene::MeasureTextFn MakeMeasureTextFn() {
-  return [](std::string_view content, float font_size, float font_weight) -> ui::Size {
+// callback measures against the same back-buffer DC used to paint, so metrics
+// match the DrawTextW render path and no per-call screen DC is acquired.
+scene::MeasureTextFn MakeMeasureTextFn(HDC context) {
+  return [context](std::string_view content, float font_size, float font_weight) -> ui::Size {
     if (content.empty()) {
       return {};
     }
     std::wstring const text = ToWide(content);
     HFONT font = CreateFontForView(font_size, font_weight);
-    HDC screen = GetDC(nullptr);
     RECT bounds{0, 0, 10000, 10000};
     {
-      ScopedSelect select_font(screen, font);
-      DrawTextW(screen, text.c_str(), static_cast<int>(text.size()), &bounds,
+      ScopedSelect select_font(context, font);
+      DrawTextW(context, text.c_str(), static_cast<int>(text.size()), &bounds,
           DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
     }
-    ReleaseDC(nullptr, screen);
     DeleteObject(font);
     return {
         .width = static_cast<float>(bounds.right - bounds.left),
@@ -928,7 +927,7 @@ void PaintWindow(HWND window, HDC target, WindowState &state) {
   if (state.spec != nullptr && state.spec->content) {
     ui::View content = state.spec->content();
     scene::LayoutContext context = BuildWindowsLayoutContext(state);
-    scene::SceneLayout scene_layout = layout::LayoutScene(MakeMeasureTextFn(), content,
+    scene::SceneLayout scene_layout = layout::LayoutScene(MakeMeasureTextFn(buffer), content,
         static_cast<float>(width), static_cast<float>(height), context);
     RenderScene(buffer, scene_layout);
     CollectHitTargets(state, scene_layout);
