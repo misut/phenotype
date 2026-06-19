@@ -55,15 +55,25 @@ ui::View FilesView(const std::shared_ptr<NavigationState> &state) {
       .padding({chrome_margin, chrome_margin, chrome_margin, chrome_margin});
 }
 
-int main(int argc, char *argv[]) {
-  auto state = std::make_shared<NavigationState>();
-  constexpr windows::window::TitleBarStyle title_bar = windows::window::TitleBarStyle::hidden;
+// The Files window as a component app. The domain model lives in a shared
+// NavigationState that the event callbacks mutate; body() is the declarative
+// pass the runtime re-runs after each interaction. State is held as an app
+// member rather than ctx.state<T> because it is a single app-lifetime model —
+// the per-call-site state cells earn their keep with dynamic widgets, not here.
+struct FilesApp {
+  std::shared_ptr<NavigationState> state = std::make_shared<NavigationState>();
+
+  ui::View body(ui::Context &) const { return FilesView(state); }
+};
+
+int main() {
+  FilesApp app;
+
   windows::window::Options options;
   options.title = "Files";
   options.size = {960.0f, 640.0f};
-  options.title_bar = title_bar;
+  options.title_bar = windows::window::TitleBarStyle::hidden;
   options.background = windows::window::Background::blurred();
 
-  return windows::app::run(argc, argv,
-      windows::window::create(std::move(options), [state] { return FilesView(state); }));
+  return phenotype::native::run_app(std::move(app), std::move(options));
 }
