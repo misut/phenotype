@@ -21,6 +21,8 @@
 #include <windows.h>
 #include <windowsx.h>
 
+#include <phenotype/layout.hpp>
+#include <phenotype/scene.hpp>
 #include <phenotype/windows.hpp>
 
 #pragma comment(lib, "dwmapi.lib")
@@ -30,6 +32,8 @@
 namespace {
 
 namespace ui = phenotype::ui;
+namespace scene = phenotype::scene;
+namespace layout = phenotype::layout;
 
 constexpr wchar_t kWindowClassName[] = L"PhenotypeWindow";
 constexpr wchar_t kFallbackWindowTitle[] = L"Phenotype";
@@ -69,7 +73,6 @@ struct WindowState {
   std::vector<HitTarget> hit_targets;
   bool uses_transparent_background = false;
   float traffic_light_center_y = kDefaultTrafficLightCenterY;
-  bool has_traffic_light_alignment = false;
 };
 
 class ScopedSelect {
@@ -105,40 +108,10 @@ RECT ToRect(RectF rect) {
   return {left, top, right, bottom};
 }
 
-RectF FromRect(RECT rect) {
-  return {
-      .x = static_cast<float>(rect.left),
-      .y = static_cast<float>(rect.top),
-      .width = static_cast<float>(rect.right - rect.left),
-      .height = static_cast<float>(rect.bottom - rect.top),
-  };
-}
-
-RectF Inset(RectF rect, ui::Insets insets) {
-  rect.x += insets.left;
-  rect.y += insets.top;
-  rect.width = std::max(0.0f, rect.width - insets.left - insets.right);
-  rect.height = std::max(0.0f, rect.height - insets.top - insets.bottom);
-  return rect;
-}
-
-RectF Inset(RectF rect, float horizontal, float vertical) {
-  return Inset(rect, {horizontal, vertical, horizontal, vertical});
-}
-
-bool HasWidth(ui::Size size) noexcept { return size.width > 0.0f; }
-
-bool HasHeight(ui::Size size) noexcept { return size.height > 0.0f; }
-
+// Width occupied by the simulated traffic-light caption controls. The layout
+// engine offsets leading content past this via LayoutContext::window_controls.
 float LeadingCaptionControlsWidth() noexcept {
   return kTrafficLightLeft + kTrafficLightDiameter * 3.0f + kTrafficLightGap * 2.0f;
-}
-
-float LeadingWindowControlsOffset(const ui::View &view) noexcept {
-  if (!view.leading_window_controls_placement.is_enabled) {
-    return 0.0f;
-  }
-  return LeadingCaptionControlsWidth() + view.leading_window_controls_placement.spacing;
 }
 
 int ColorComponent(float value, float alpha) {
@@ -447,98 +420,30 @@ wchar_t MaterialSymbolCodepoint(ui::Symbol symbol) noexcept {
   return L'\xE5CB';
 }
 
-ui::Size MeasureText(HDC context, const ui::View &view) {
-  if (HasWidth(view.preferred_size) && HasHeight(view.preferred_size)) {
-    return view.preferred_size;
-  }
-
-  std::wstring const text = ToWide(view.text_content);
-  HFONT font = CreateFontForView(view.font_size_value, view.font_weight_value);
-  RECT bounds{0, 0, 10000, 10000};
-  {
-    ScopedSelect select_font(context, font);
-    DrawTextW(context, text.c_str(), static_cast<int>(text.size()), &bounds,
-        DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
-  }
-  DeleteObject(font);
-
-  return {
-      .width = HasWidth(view.preferred_size) ? view.preferred_size.width
-                                             : static_cast<float>(bounds.right - bounds.left),
-      .height = HasHeight(view.preferred_size)
-                    ? view.preferred_size.height
-                    : std::max(static_cast<float>(bounds.bottom - bounds.top),
-                          view.font_size_value * 1.35f),
-  };
-}
-
-ui::Size MeasureView(HDC context, const ui::View &view) {
-  switch (view.kind) {
-  case ui::ViewKind::text:
-    return MeasureText(context, view);
-  case ui::ViewKind::button:
-  case ui::ViewKind::icon:
-    return view.preferred_size;
-  case ui::ViewKind::grid:
-    return {view.grid_min_column_width, view.grid_row_height};
-  case ui::ViewKind::empty:
-  case ui::ViewKind::spacer:
-    return view.preferred_size;
-  case ui::ViewKind::button_group:
-  case ui::ViewKind::panel:
-  case ui::ViewKind::visual_effect_panel:
-  case ui::ViewKind::scroll:
-  case ui::ViewKind::stack:
-    break;
-  }
-
-  ui::Size measured{};
-  bool has_visible_child = false;
-  for (const ui::View &child : view.children) {
-    ui::Size child_size = MeasureView(context, child);
-    if (view.axis == ui::LayoutAxis::horizontal) {
-      if (has_visible_child) {
-        measured.width += view.child_spacing;
-      }
-      measured.width += child_size.width;
-      measured.height = std::max(measured.height, child_size.height);
-    } else if (view.axis == ui::LayoutAxis::vertical) {
-      if (has_visible_child) {
-        measured.height += view.child_spacing;
-      }
-      measured.width = std::max(measured.width, child_size.width);
-      measured.height += child_size.height;
-    } else {
-      measured.width = std::max(measured.width, child_size.width);
-      measured.height = std::max(measured.height, child_size.height);
+// Adapts the GDI text metrics into the platform-neutral layout engine. The
+// engine owns all sizing/flex/grid/scroll math (shared with macOS); GDI only
+// answers "how wide is this text run". A scratch screen DC is used so the
+// callback measures against the same back-buffer DC used to paint, so metrics
+// match the DrawTextW render path and no per-call screen DC is acquired.
+scene::MeasureTextFn MakeMeasureTextFn(HDC context) {
+  return [context](std::string_view content, float font_size, float font_weight) -> ui::Size {
+    if (content.empty()) {
+      return {};
     }
-    has_visible_child = true;
-  }
-
-  measured.width += view.content_padding.left + view.content_padding.right;
-  measured.height += view.content_padding.top + view.content_padding.bottom;
-  if (view.axis == ui::LayoutAxis::horizontal) {
-    measured.width += LeadingWindowControlsOffset(view);
-  }
-  if (HasWidth(view.preferred_size)) {
-    measured.width = view.preferred_size.width;
-  }
-  if (HasHeight(view.preferred_size)) {
-    measured.height = view.preferred_size.height;
-  }
-  return measured;
-}
-
-void AddHitTarget(WindowState &state, RectF rect, const ui::View &view, bool is_enabled) {
-  if (!view.click_action) {
-    return;
-  }
-
-  state.hit_targets.push_back({
-      .bounds = ToRect(rect),
-      .is_enabled = is_enabled,
-      .action = view.click_action,
-  });
+    std::wstring const text = ToWide(content);
+    HFONT font = CreateFontForView(font_size, font_weight);
+    RECT bounds{0, 0, 10000, 10000};
+    {
+      ScopedSelect select_font(context, font);
+      DrawTextW(context, text.c_str(), static_cast<int>(text.size()), &bounds,
+          DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+    }
+    DeleteObject(font);
+    return {
+        .width = static_cast<float>(bounds.right - bounds.left),
+        .height = std::max(static_cast<float>(bounds.bottom - bounds.top), font_size * 1.35f),
+    };
+  };
 }
 
 void AddActionHitTarget(WindowState &state, RectF rect, std::function<void()> action) {
@@ -731,10 +636,7 @@ void RenderCaptionButtons(HWND window, HDC context, WindowState &state) {
   AddCaptionButtonHitTargets(window, state, center_y);
 }
 
-void RenderView(HDC context, const ui::View &view, RectF rect, WindowState &state,
-    bool inherited_enabled = true);
-
-bool RenderGlyphMask(HDC context, const ui::View &view, RectF rect, ui::Color color) {
+bool RenderGlyphMask(HDC context, ui::Symbol symbol, RectF rect, ui::Color color) {
   MAT2 matrix{
       {0, 1},
       {0, 0},
@@ -742,7 +644,7 @@ bool RenderGlyphMask(HDC context, const ui::View &view, RectF rect, ui::Color co
       {0, 1},
   };
   GLYPHMETRICS metrics{};
-  wchar_t const glyph = MaterialSymbolCodepoint(view.symbol);
+  wchar_t const glyph = MaterialSymbolCodepoint(symbol);
   DWORD const buffer_size = GetGlyphOutlineW(
       context, static_cast<UINT>(glyph), GGO_GRAY8_BITMAP, &metrics, 0, nullptr, &matrix);
   if (buffer_size == GDI_ERROR || buffer_size == 0 || metrics.gmBlackBoxX == 0 ||
@@ -817,39 +719,39 @@ bool RenderGlyphMask(HDC context, const ui::View &view, RectF rect, ui::Color co
   return blended != FALSE;
 }
 
-void RenderIconFallback(HDC context, const ui::View &view, RectF rect, ui::Color color) {
-  wchar_t glyph[] = {MaterialSymbolCodepoint(view.symbol), L'\0'};
+void RenderIconFallback(HDC context, ui::Symbol symbol, RectF rect, ui::Color color) {
+  wchar_t glyph[] = {MaterialSymbolCodepoint(symbol), L'\0'};
   RECT bounds = ToRect(rect);
   SetBkMode(context, TRANSPARENT);
   SetTextColor(context, ToColorRef(color));
   DrawTextW(context, glyph, 1, &bounds, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
 }
 
-void RenderIcon(HDC context, const ui::View &view, RectF rect, bool is_enabled) {
-  ui::Color color = is_enabled ? view.foreground_color : DisabledColor(view.foreground_color);
-  HFONT font = CreateMaterialSymbolsFont(view.symbol_options);
+void RenderIcon(
+    HDC context, ui::Symbol symbol, ui::SymbolOptions options, RectF rect, ui::Color color) {
+  HFONT font = CreateMaterialSymbolsFont(options);
   if (font == nullptr) {
     return;
   }
   {
     ScopedSelect select_font(context, font);
-    if (!RenderGlyphMask(context, view, rect, color)) {
-      RenderIconFallback(context, view, rect, color);
+    if (!RenderGlyphMask(context, symbol, rect, color)) {
+      RenderIconFallback(context, symbol, rect, color);
     }
   }
   DeleteObject(font);
 }
 
-void RenderText(HDC context, const ui::View &view, RectF rect, bool is_enabled) {
-  std::wstring const text = ToWide(view.text_content);
-  HFONT font = CreateFontForView(view.font_size_value, view.font_weight_value);
+void RenderText(HDC context, const scene::TextLayout &text, RectF rect) {
+  std::wstring const wide = ToWide(text.content);
+  HFONT font = CreateFontForView(text.font_size, text.font_weight);
   RECT bounds = ToRect(rect);
   UINT format = DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX;
-  if (view.centers_text) {
+  if (text.centers_text) {
     format |= DT_CENTER;
   }
-  if (view.text_overflow == ui::TextOverflow::ellipsis) {
-    if (view.text_truncation == ui::TextTruncation::middle) {
+  if (text.overflow == ui::TextOverflow::ellipsis) {
+    if (text.truncation == ui::TextTruncation::middle) {
       format |= DT_PATH_ELLIPSIS;
     } else {
       format |= DT_END_ELLIPSIS;
@@ -858,215 +760,155 @@ void RenderText(HDC context, const ui::View &view, RectF rect, bool is_enabled) 
   {
     ScopedSelect select_font(context, font);
     SetBkMode(context, TRANSPARENT);
-    SetTextColor(context,
-        ToColorRef(is_enabled ? view.foreground_color : DisabledColor(view.foreground_color)));
-    DrawTextW(context, text.c_str(), static_cast<int>(text.size()), &bounds, format);
+    SetTextColor(context, ToColorRef(text.color));
+    DrawTextW(context, wide.c_str(), static_cast<int>(wide.size()), &bounds, format);
   }
   DeleteObject(font);
 }
 
-void RenderButton(
-    HDC context, const ui::View &view, RectF rect, WindowState &state, bool inherited_enabled) {
-  bool const is_enabled = inherited_enabled && view.is_enabled;
-
-  for (const ui::View &child : view.children) {
-    ui::Size child_size = MeasureView(context, child);
-    RectF child_rect{
-        .x = rect.x + (rect.width - child_size.width) * 0.5f,
-        .y = rect.y + (rect.height - child_size.height) * 0.5f,
-        .width = child_size.width,
-        .height = child_size.height,
-    };
-    RenderView(context, child, child_rect, state, is_enabled);
-  }
+RectF ToRectF(scene::LayoutRect rect) noexcept {
+  return {.x = rect.x, .y = rect.y, .width = rect.width, .height = rect.height};
 }
 
-void RenderPanel(HDC context, const ui::View &view, RectF rect) {
-  FillRoundedRect(context, rect, view.corner_radius_value, view.background_color);
-}
-
-void RenderGrid(
-    HDC context, const ui::View &view, RectF rect, WindowState &state, bool inherited_enabled) {
-  RectF content = Inset(rect, view.content_padding);
-  float const min_column_width = std::max(1.0f, view.grid_min_column_width);
-  float const column_gap = std::max(0.0f, view.grid_column_gap);
-  float const row_gap = std::max(0.0f, view.grid_row_gap);
-  std::size_t const column_count = std::max<std::size_t>(
-      1, static_cast<std::size_t>((content.width + column_gap) / (min_column_width + column_gap)));
-  float const total_gap = column_gap * static_cast<float>(column_count - 1);
-  float const cell_width =
-      std::max(1.0f, (content.width - total_gap) / static_cast<float>(column_count));
-  float const row_height = std::max(1.0f, view.grid_row_height);
-
-  for (std::size_t index = 0; index < view.children.size(); ++index) {
-    std::size_t const item_index = view.grid_item_offset_value + index;
-    std::size_t const row = item_index / column_count;
-    std::size_t const column = item_index % column_count;
-    RectF child_rect{
-        .x = content.x + static_cast<float>(column) * (cell_width + column_gap),
-        .y = content.y + static_cast<float>(row) * (row_height + row_gap),
-        .width = cell_width,
-        .height = row_height,
-    };
-    RenderView(context, view.children[index], child_rect, state, inherited_enabled);
-  }
-}
-
-void RenderButtonGroup(
-    HDC context, const ui::View &view, RectF rect, WindowState &state, bool inherited_enabled) {
-  FillRoundedRect(context, rect, rect.height * 0.5f, ui::white());
-
-  float x = rect.x;
-  for (std::size_t index = 0; index < view.children.size(); ++index) {
-    const ui::View &child = view.children[index];
-    ui::Size child_size = MeasureView(context, child);
-    RectF child_rect{
-        .x = x,
-        .y = rect.y,
-        .width = child_size.width,
-        .height = rect.height,
-    };
-    RenderView(context, child, child_rect, state, inherited_enabled);
-    x += child_size.width;
-
-    if (index + 1 < view.children.size()) {
-      FillButtonGroupSeparator(context, x, rect.y + 8.0f, rect.height - 16.0f);
+// Restricts GDI drawing to a clip rect for the duration of the scope. This is
+// how the Windows backend honours the scene's clip rects (e.g. scroll
+// viewports), a capability the old immediate-mode renderer lacked.
+class ScopedClip {
+public:
+  ScopedClip(HDC context, std::optional<scene::LayoutRect> clip) : _context(context) {
+    if (!clip) {
+      return;
     }
-  }
-}
-
-void RenderStack(
-    HDC context, const ui::View &view, RectF rect, WindowState &state, bool inherited_enabled) {
-  RectF content = Inset(rect, view.content_padding);
-  if (view.axis == ui::LayoutAxis::horizontal &&
-      view.leading_window_controls_placement.is_enabled &&
-      view.leading_window_controls_placement.aligns_vertical_center &&
-      !state.has_traffic_light_alignment) {
-    state.traffic_light_center_y = content.y + content.height * 0.5f;
-    state.has_traffic_light_alignment = true;
-  }
-  if (view.axis == ui::LayoutAxis::horizontal &&
-      state.title_bar == phenotype::windows::window::TitleBarStyle::hidden) {
-    float const offset = LeadingWindowControlsOffset(view);
-    content.x += offset;
-    content.width = std::max(0.0f, content.width - offset);
-  }
-
-  if (view.axis == ui::LayoutAxis::overlay) {
-    for (const ui::View &child : view.children) {
-      RenderView(context, child, content, state, inherited_enabled);
+    _region = CreateRectRgn(RoundToInt(clip->x), RoundToInt(clip->y),
+        RoundToInt(clip->x + clip->width), RoundToInt(clip->y + clip->height));
+    if (_region == nullptr) {
+      return;
     }
-    return;
+    _previous = CreateRectRgn(0, 0, 0, 0);
+    if (GetClipRgn(context, _previous) != 1) {
+      DeleteObject(_previous);
+      _previous = nullptr;
+    }
+    ExtSelectClipRgn(context, _region, RGN_AND);
+    _active = true;
   }
 
-  float const available_main =
-      view.axis == ui::LayoutAxis::horizontal ? content.width : content.height;
-  std::size_t flexible_child_count = 0;
-  float fixed_main = view.children.empty()
-                         ? 0.0f
-                         : view.child_spacing * static_cast<float>(view.children.size() - 1);
-  for (const ui::View &child : view.children) {
-    ui::Size child_size = MeasureView(context, child);
-    bool const expands_on_axis =
-        view.axis == ui::LayoutAxis::horizontal ? child.expands_width : child.expands_height;
-    if (expands_on_axis) {
-      ++flexible_child_count;
-    } else {
-      fixed_main += view.axis == ui::LayoutAxis::horizontal ? child_size.width : child_size.height;
+  ScopedClip(const ScopedClip &) = delete;
+  ScopedClip &operator=(const ScopedClip &) = delete;
+
+  ~ScopedClip() {
+    if (_active) {
+      SelectClipRgn(_context, _previous);
+    }
+    if (_previous != nullptr) {
+      DeleteObject(_previous);
+    }
+    if (_region != nullptr) {
+      DeleteObject(_region);
     }
   }
 
-  float flexible_main = 0.0f;
-  if (flexible_child_count > 0) {
-    flexible_main =
-        std::max(0.0f, available_main - fixed_main) / static_cast<float>(flexible_child_count);
+private:
+  HDC _context = nullptr;
+  HRGN _region = nullptr;
+  HRGN _previous = nullptr;
+  bool _active = false;
+};
+
+void RenderScenePanel(HDC context, const scene::PanelLayout &panel) {
+  ScopedClip clip(context, panel.clip_rect);
+  FillRoundedRect(context, ToRectF(panel.frame), panel.corner_radius, panel.color);
+}
+
+// Paints a symbol button from the resolved scene record. The layout engine has
+// already decided which button in a group draws the shared control background
+// (draws_control) and the inter-button divider (draws_divider); GDI just obeys.
+void RenderSceneButton(HDC context, const scene::SymbolButtonLayout &button) {
+  ScopedClip clip(context, button.clip_rect);
+
+  if (button.draws_control) {
+    RectF control = ToRectF(button.control_frame);
+    float const radius = scene::ControlShapeValue(button.control_shape) > 0.5f
+                             ? control.height * 0.5f
+                             : std::min(10.0f, std::min(control.width, control.height) * 0.5f);
+    FillRoundedRect(context, control, radius, ui::white());
+  }
+  if (button.draws_divider) {
+    RectF control = ToRectF(button.control_frame);
+    FillButtonGroupSeparator(context, button.divider_x, control.y + 8.0f, control.height - 16.0f);
   }
 
-  float x = content.x;
-  float y = content.y;
-  for (const ui::View &child : view.children) {
-    ui::Size child_size = MeasureView(context, child);
-    if (view.axis == ui::LayoutAxis::horizontal) {
-      if (child.expands_width) {
-        child_size.width = flexible_main;
-      }
-      if (child.expands_height) {
-        child_size.height = content.height;
-      }
-      RectF child_rect{
-          .x = x,
-          .y = child.expands_height
-                   ? content.y
-                   : content.y + std::max(0.0f, content.height - child_size.height) * 0.5f,
-          .width = child_size.width,
-          .height = child_size.height,
-      };
-      RenderView(context, child, child_rect, state, inherited_enabled);
-      x += child_size.width + view.child_spacing;
-    } else {
-      if (child.expands_width) {
-        child_size.width = content.width;
-      }
-      if (child.expands_height) {
-        child_size.height = flexible_main;
-      }
-      float child_x = content.x;
-      if (view.centers_children && !child.expands_width) {
-        child_x = content.x + std::max(0.0f, content.width - child_size.width) * 0.5f;
-      }
-      RectF child_rect{
-          .x = child_x,
-          .y = y,
-          .width = child_size.width,
-          .height = child_size.height,
-      };
-      RenderView(context, child, child_rect, state, inherited_enabled);
-      y += child_size.height + view.child_spacing;
-    }
+  ui::Color const color = button.is_enabled ? button.color : DisabledColor(button.color);
+  RenderIcon(context, button.symbol, button.options, ToRectF(button.frame), color);
+}
+
+void RenderSceneText(HDC context, const scene::TextLayout &text) {
+  ScopedClip clip(context, text.clip_rect);
+  RenderText(context, text, ToRectF(text.frame));
+}
+
+// Interprets one resolved draw layer in the same paint order the macOS shader
+// composites: panels, then symbol buttons, then text runs.
+void RenderSceneLayer(HDC context, const scene::SceneDrawLayer &layer) {
+  for (const scene::PanelLayout &panel : layer.panels) {
+    RenderScenePanel(context, panel);
+  }
+  for (const scene::SymbolButtonLayout &button : layer.buttons) {
+    RenderSceneButton(context, button);
+  }
+  for (const scene::TextLayout &text : layer.texts) {
+    RenderSceneText(context, text);
   }
 }
 
-void RenderView(
-    HDC context, const ui::View &view, RectF rect, WindowState &state, bool inherited_enabled) {
-  bool const is_enabled = inherited_enabled && view.is_enabled;
-  AddHitTarget(state, rect, view, is_enabled);
-
-  switch (view.kind) {
-  case ui::ViewKind::empty:
-  case ui::ViewKind::spacer:
-    break;
-  case ui::ViewKind::button:
-    RenderButton(context, view, rect, state, inherited_enabled);
-    break;
-  case ui::ViewKind::button_group:
-    RenderButtonGroup(context, view, rect, state, is_enabled);
-    break;
-  case ui::ViewKind::icon:
-    RenderIcon(context, view, rect, is_enabled);
-    break;
-  case ui::ViewKind::text:
-    RenderText(context, view, rect, is_enabled);
-    break;
-  case ui::ViewKind::panel:
-  case ui::ViewKind::visual_effect_panel:
-    RenderPanel(context, view, rect);
-    break;
-  case ui::ViewKind::grid:
-    RenderGrid(context, view, rect, state, is_enabled);
-    break;
-  case ui::ViewKind::scroll:
-    RenderStack(context, view, rect, state, is_enabled);
-    break;
-  case ui::ViewKind::stack:
-    RenderStack(context, view, rect, state, is_enabled);
-    break;
+// Paints a fully resolved scene. Effect panels have no GDI blur, so they fall
+// back to a flat fill (matching the prior visual_effect_panel behaviour), then
+// the background and foreground draw layers composite on top.
+void RenderScene(HDC context, const scene::SceneLayout &scene_layout) {
+  for (const scene::EffectPanelLayout &effect : scene_layout.effects) {
+    ScopedClip clip(context, effect.clip_rect);
+    FillRoundedRect(context, ToRectF(effect.frame), effect.corner_radius, effect.color);
   }
+  RenderSceneLayer(context, scene_layout.background);
+  RenderSceneLayer(context, scene_layout.foreground);
 }
 
 void FillWindowBackground(HDC context, RECT client, bool uses_transparent_background) {
   HBRUSH brush = CreateSolidBrush(uses_transparent_background ? RGB(0, 0, 0) : RGB(246, 248, 251));
   FillRect(context, &client, brush);
   DeleteObject(brush);
+}
+
+// Builds the layout context for a frame. When the title bar is hidden we draw
+// our own traffic-light caption controls, so we advertise their bounds to the
+// layout engine, which offsets leading toolbar content past them (the offset
+// the old renderer applied by hand).
+scene::LayoutContext BuildWindowsLayoutContext(const WindowState &state) {
+  scene::LayoutContext context;
+  if (state.title_bar != phenotype::windows::window::TitleBarStyle::hidden) {
+    return context;
+  }
+  context.window_controls.has_leading_controls = true;
+  context.window_controls.leading_controls = {
+      .x = 0.0f,
+      .y = TrafficLightTop(state.traffic_light_center_y),
+      .width = LeadingCaptionControlsWidth(),
+      .height = kTrafficLightDiameter,
+  };
+  return context;
+}
+
+void CollectHitTargets(WindowState &state, const scene::SceneLayout &scene_layout) {
+  for (const scene::HitTargetLayout &target : scene_layout.hit_targets) {
+    if (!target.action) {
+      continue;
+    }
+    state.hit_targets.push_back({
+        .bounds = ToRect(ToRectF(target.frame)),
+        .is_enabled = target.is_enabled,
+        .action = target.action,
+    });
+  }
 }
 
 void PaintWindow(HWND window, HDC target, WindowState &state) {
@@ -1081,12 +923,14 @@ void PaintWindow(HWND window, HDC target, WindowState &state) {
 
   FillWindowBackground(buffer, client, state.uses_transparent_background);
   state.hit_targets.clear();
-  state.traffic_light_center_y = kDefaultTrafficLightCenterY;
-  state.has_traffic_light_alignment = false;
 
   if (state.spec != nullptr && state.spec->content) {
     ui::View content = state.spec->content();
-    RenderView(buffer, content, FromRect(client), state);
+    scene::LayoutContext context = BuildWindowsLayoutContext(state);
+    scene::SceneLayout scene_layout = layout::LayoutScene(MakeMeasureTextFn(buffer), content,
+        static_cast<float>(width), static_cast<float>(height), context);
+    RenderScene(buffer, scene_layout);
+    CollectHitTargets(state, scene_layout);
   }
   RenderCaptionButtons(window, buffer, state);
 
