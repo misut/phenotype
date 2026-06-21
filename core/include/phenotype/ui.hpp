@@ -2,6 +2,7 @@
 
 #ifndef PHENOTYPE_IMPORTS_STD_MODULE
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -130,6 +131,17 @@ public:
   bool rounds_bottom_corners_only = false;
   std::function<void()> click_action;
   std::function<void(float)> scroll_action;
+  std::uint64_t view_key = 0;
+
+  [[nodiscard]] View key(std::uint64_t value) && {
+    view_key = value;
+    return std::move(*this);
+  }
+
+  View &key(std::uint64_t value) & {
+    view_key = value;
+    return *this;
+  }
 
   [[nodiscard]] View spacing(float value) && {
     child_spacing = value;

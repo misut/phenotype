@@ -146,5 +146,69 @@ int main() {
     }
   }
 
+  // --- .key() round-trips a stable identity onto a View -------------------
+  {
+    ui::View tagged = ui::Text("row").key(42ull);
+    if (tagged.view_key != 42ull) {
+      return 19;
+    }
+    // Default is "no key".
+    if (ui::Text("plain").view_key != 0ull) {
+      return 20;
+    }
+  }
+
+  // --- ForEach builds one keyed child per item ----------------------------
+  {
+    std::vector<int> ids{10, 20, 30};
+    ui::View list = ui::ForEach(
+        ids, [](int id) { return id; },
+        [](int id) { return ui::Text(std::to_string(id)); });
+    if (list.kind != ui::ViewKind::stack || list.children.size() != 3) {
+      return 21;
+    }
+    // Each child carries a distinct, non-zero key derived from its id.
+    if (list.children[0].view_key == 0ull ||
+        list.children[0].view_key == list.children[1].view_key ||
+        list.children[1].view_key == list.children[2].view_key) {
+      return 22;
+    }
+    // item_fn output is preserved (text content), only the key is stamped.
+    if (list.children[1].text_content != "20") {
+      return 23;
+    }
+  }
+
+  // --- ForEach over an empty range yields an empty stack ------------------
+  {
+    std::vector<int> none;
+    ui::View list = ui::ForEach(
+        none, [](int id) { return id; },
+        [](int id) { return ui::Text(std::to_string(id)); });
+    if (list.kind != ui::ViewKind::stack || !list.children.empty()) {
+      return 24;
+    }
+  }
+
+  // --- ForEach accepts a verbatim uint64 key and string keys --------------
+  {
+    std::vector<std::string> names{"alpha", "beta"};
+    ui::View list = ui::ForEach(
+        names, [](const std::string &name) { return std::string_view{name}; },
+        [](const std::string &name) { return ui::Text(name); });
+    if (list.children.size() != 2 ||
+        list.children[0].view_key == list.children[1].view_key) {
+      return 25;
+    }
+    // A key_fn that returns uint64 is used verbatim (non-zero preserved).
+    std::vector<int> ids{7};
+    ui::View verbatim = ui::ForEach(
+        ids, [](int) { return std::uint64_t{999}; },
+        [](int id) { return ui::Text(std::to_string(id)); });
+    if (verbatim.children.front().view_key != 999ull) {
+      return 26;
+    }
+  }
+
   return 0;
 }
