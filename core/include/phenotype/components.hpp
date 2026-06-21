@@ -8,6 +8,7 @@
 #include <utility>
 #endif
 
+#include "phenotype/runtime.hpp"
 #include "phenotype/tokens.hpp"
 #include "phenotype/ui.hpp"
 
@@ -19,8 +20,9 @@
 // supports (text, icon button, panel, stack, grid, scroll). ForEach adds keyed
 // list children — pure identity metadata (View::view_key) the layout engine
 // ignores today and the retained-tree reconciliation slice consumes later.
-// Richer controls that need new layout/renderer support (text fields,
-// checkboxes, tabs, glass) are intentionally deferred to a later slice.
+// Checkbox / Radio / Switch add a ViewKind::toggle the layout pass lowers into
+// plain panels, so they too need no renderer support. Richer controls (text
+// fields, tabs, glass) are intentionally deferred to a later slice.
 //
 // Two entry styles over the same primitives:
 //   - ui::Text / ui::Button / ui::VStack / ... : value builders that compose
@@ -140,6 +142,45 @@ inline View Button(std::string_view label) {
 inline View IconButton(Symbol symbol, std::function<void()> on_click,
     SymbolOptions options = navigation_symbol_options()) {
   return button(icon(symbol, options)).on_click(std::move(on_click));
+}
+
+// --- Toggles (Checkbox / Radio / Switch) ------------------------------------
+
+namespace detail {
+
+// A labelled toggle row: the control box, an optional label, and a click action
+// over the whole row that flips the bound value. The control reflects the bound
+// value, so the next rebuild redraws it in the new state.
+inline View ToggleRow(ToggleStyle style, Binding<bool> value, std::string_view label) {
+  View control = toggle(style, value.valid() && value.get());
+  View row = label.empty()
+                 ? layout::hstack(std::move(control))
+                 : layout::hstack(std::move(control), Text(label));
+  row.child_spacing = Space(SpaceToken::sm);
+  return std::move(row).on_click([value] {
+    if (value.valid()) {
+      value.set(!value.get());
+    }
+  });
+}
+
+} // namespace detail
+
+// A checkbox bound to a bool. Toggling the row flips the binding; the layout
+// pass renders the box from plain panels, so it needs no renderer support.
+inline View Checkbox(Binding<bool> value, std::string_view label = {}) {
+  return detail::ToggleRow(ToggleStyle::checkbox, value, label);
+}
+
+// A radio control bound to a bool (the caller drives mutual exclusion by setting
+// the shared selection and binding each option to its own predicate).
+inline View Radio(Binding<bool> value, std::string_view label = {}) {
+  return detail::ToggleRow(ToggleStyle::radio, value, label);
+}
+
+// A switch bound to a bool, drawn as a capsule track with a sliding knob.
+inline View Switch(Binding<bool> value, std::string_view label = {}) {
+  return detail::ToggleRow(ToggleStyle::switcher, value, label);
 }
 
 // --- ForEach ----------------------------------------------------------------
