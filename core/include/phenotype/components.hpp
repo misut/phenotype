@@ -1,11 +1,14 @@
 #pragma once
 
 #ifndef PHENOTYPE_IMPORTS_STD_MODULE
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <span>
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 #endif
 
 #include "phenotype/runtime.hpp"
@@ -21,8 +24,9 @@
 // list children — pure identity metadata (View::view_key) the layout engine
 // ignores today and the retained-tree reconciliation slice consumes later.
 // Checkbox / Radio / Switch add a ViewKind::toggle the layout pass lowers into
-// plain panels, so they too need no renderer support. Richer controls (text
-// fields, tabs, glass) are intentionally deferred to a later slice.
+// plain panels, and Tabs is composed from panel/text/stack kinds — both need no
+// renderer support. Richer controls (text fields, glass) are intentionally
+// deferred to a later slice.
 //
 // Two entry styles over the same primitives:
 //   - ui::Text / ui::Button / ui::VStack / ... : value builders that compose
@@ -181,6 +185,49 @@ inline View Radio(Binding<bool> value, std::string_view label = {}) {
 // A switch bound to a bool, drawn as a capsule track with a sliding knob.
 inline View Switch(Binding<bool> value, std::string_view label = {}) {
   return detail::ToggleRow(ToggleStyle::switcher, value, label);
+}
+
+// --- Tabs (segmented control) -----------------------------------------------
+
+// A segmented control bound to a selected index. Each segment is a clickable
+// label; the selected one carries a rounded highlight panel behind it. The bar
+// sits on a track panel. Composed entirely from panel/text/stack kinds, so it
+// needs no new scene record or renderer support — the same strategy as Button
+// and the toggles. Clicking a segment sets the bound index, and the next
+// rebuild moves the highlight.
+inline View Tabs(Binding<int> selection, std::span<const std::string_view> labels) {
+  int selected = selection.valid() ? selection.get() : 0;
+
+  std::vector<View> segments;
+  segments.reserve(labels.size());
+  for (std::size_t index = 0; index < labels.size(); ++index) {
+    bool is_selected = static_cast<int>(index) == selected;
+    View label = Text(labels[index]).center_text();
+    if (is_selected) {
+      label.foreground_color = primary_label();
+    }
+
+    View segment = is_selected
+                       ? layout::zstack(panel(white()).corner_radius(7.0f).expand(),
+                             std::move(label))
+                       : layout::zstack(std::move(label));
+    int target = static_cast<int>(index);
+    segment = std::move(segment).expand_width().on_click([selection, target] {
+      if (selection.valid()) {
+        selection.set(target);
+      }
+    });
+    segments.push_back(std::move(segment));
+  }
+
+  View bar;
+  bar.kind = ViewKind::stack;
+  bar.axis = LayoutAxis::horizontal;
+  bar.children = std::move(segments);
+  bar.child_spacing = 2.0f;
+  bar.content_padding = SpaceInsets(SpaceToken::xs);
+
+  return layout::zstack(panel(control_background()).corner_radius(9.0f).expand(), std::move(bar));
 }
 
 // --- ForEach ----------------------------------------------------------------
