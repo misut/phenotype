@@ -299,5 +299,78 @@ int main() {
     }
   }
 
+  // --- Tabs builds a track with one segment per label ---------------------
+  {
+    ui::Runtime runtime;
+    ui::Context ctx{runtime};
+    ui::State<int> selected = ctx.state<int>("section", 0);
+    std::array<std::string_view, 3> labels{"All", "Active", "Done"};
+    ui::View tabs = ui::Tabs(selected.binding(), labels);
+    // zstack of (track panel, segment bar).
+    if (tabs.kind != ui::ViewKind::stack || tabs.axis != ui::LayoutAxis::overlay ||
+        tabs.children.size() != 2 || tabs.children[0].kind != ui::ViewKind::panel) {
+      return 37;
+    }
+    const ui::View &bar = tabs.children[1];
+    if (bar.axis != ui::LayoutAxis::horizontal || bar.children.size() != 3) {
+      return 38;
+    }
+    // The selected (index 0) segment carries a highlight panel behind its
+    // label; the others are label-only.
+    if (bar.children[0].children.size() != 2 ||
+        bar.children[0].children[0].kind != ui::ViewKind::panel ||
+        bar.children[1].children.size() != 1) {
+      return 39;
+    }
+  }
+
+  // --- Clicking a Tabs segment sets the bound index -----------------------
+  {
+    ui::Runtime runtime;
+    ui::Context ctx{runtime};
+    ui::State<int> selected = ctx.state<int>("section", 0);
+    std::array<std::string_view, 3> labels{"All", "Active", "Done"};
+    ui::View tabs = ui::Tabs(selected.binding(), labels);
+    // Fire the third segment's click action.
+    ui::View &third = tabs.children[1].children[2];
+    if (!third.click_action) {
+      return 40;
+    }
+    third.click_action();
+    if (selected.get() != 2) {
+      return 41;
+    }
+    // Rebuilding with the new selection moves the highlight to index 2.
+    ui::View rebuilt = ui::Tabs(selected.binding(), labels);
+    if (rebuilt.children[1].children[2].children.size() != 2 ||
+        rebuilt.children[1].children[0].children.size() != 1) {
+      return 42;
+    }
+  }
+
+  // --- Tabs lays out into a track panel plus per-segment text runs --------
+  {
+    ui::Runtime runtime;
+    ui::Context ctx{runtime};
+    ui::State<int> selected = ctx.state<int>("section", 1);
+    std::array<std::string_view, 2> labels{"One", "Two"};
+    ui::View tabs = ui::Tabs(selected.binding(), labels);
+    ps::LayoutContext context;
+    ps::SceneLayout laid =
+        phenotype::layout::LayoutScene(MeasureStub, tabs, 300.0f, 44.0f, context);
+    // Track panel + selected segment's highlight panel = at least 2 panels.
+    if (laid.background.panels.size() < 2) {
+      return 43;
+    }
+    // Both segment labels produce text runs.
+    if (laid.background.texts.size() != 2) {
+      return 44;
+    }
+    // Each segment is clickable.
+    if (laid.hit_targets.size() < 2) {
+      return 45;
+    }
+  }
+
   return 0;
 }
