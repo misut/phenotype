@@ -1,8 +1,10 @@
 #pragma once
 
 #ifndef PHENOTYPE_IMPORTS_STD_MODULE
+#include <cstdint>
 #include <functional>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #endif
 
@@ -14,9 +16,11 @@
 // These are thin, token-speaking conveniences that assemble the same value-tree
 // ui::View the layout engine already consumes — they add no new ViewKind and no
 // new scene records, so everything here renders on the kinds main already
-// supports (text, icon button, panel, stack, grid, scroll). Richer controls
-// that need new layout/renderer support (text fields, checkboxes, tabs, glass,
-// keyed lists) are intentionally deferred to a later slice.
+// supports (text, icon button, panel, stack, grid, scroll). ForEach adds keyed
+// list children — pure identity metadata (View::view_key) the layout engine
+// ignores today and the retained-tree reconciliation slice consumes later.
+// Richer controls that need new layout/renderer support (text fields,
+// checkboxes, tabs, glass) are intentionally deferred to a later slice.
 //
 // Two entry styles over the same primitives:
 //   - ui::Text / ui::Button / ui::VStack / ... : value builders that compose
@@ -136,6 +140,72 @@ inline View Button(std::string_view label) {
 inline View IconButton(Symbol symbol, std::function<void()> on_click,
     SymbolOptions options = navigation_symbol_options()) {
   return button(icon(symbol, options)).on_click(std::move(on_click));
+}
+
+// --- ForEach ----------------------------------------------------------------
+
+namespace detail {
+
+// FNV-1a over the bytes of a trivially-copyable key, so ForEach can derive a
+// stable view_key from common key types (integers, enums) without the caller
+// hashing by hand. String keys go through the string_view overload below.
+template <typename T>
+[[nodiscard]] std::uint64_t HashKey(const T &value) noexcept
+  requires std::is_trivially_copyable_v<T>
+{
+  const auto *bytes = reinterpret_cast<const unsigned char *>(&value);
+  std::uint64_t hash = 1469598103934665603ull;
+  for (std::size_t index = 0; index < sizeof(T); ++index) {
+    hash ^= static_cast<std::uint64_t>(bytes[index]);
+    hash *= 1099511628211ull;
+  }
+  // 0 means "no key" on a View, so never collapse a real key onto it.
+  return hash == 0 ? 1ull : hash;
+}
+
+[[nodiscard]] inline std::uint64_t HashKey(std::string_view value) noexcept {
+  std::uint64_t hash = 1469598103934665603ull;
+  for (char character : value) {
+    hash ^= static_cast<std::uint64_t>(static_cast<unsigned char>(character));
+    hash *= 1099511628211ull;
+  }
+  return hash == 0 ? 1ull : hash;
+}
+
+} // namespace detail
+
+// Build one keyed child View per item in a range.
+//
+// Each item is turned into a View by item_fn, and tagged with a stable view_key
+// derived from key_fn(item). The children live under a single container (a
+// vstack by default), so the keys only need to be unique among siblings — the
+// same per-parent identity scope React/SwiftUI/Flutter use for list diffing.
+// This is the identity the retained-tree reconciliation slice keys off, so two
+// ForEach loops elsewhere in the tree never collide.
+//
+// key_fn returns either something hashable here (integer/enum or a
+// string_view) or a std::uint64_t that is used verbatim. item_fn returns the
+// item's View; its view_key is overwritten with the derived key.
+template <typename Range, typename KeyFn, typename ItemFn>
+[[nodiscard]] View ForEach(Range &&range, KeyFn &&key_fn, ItemFn &&item_fn) {
+  std::vector<View> children;
+  for (auto &&item : std::forward<Range>(range)) {
+    auto key = key_fn(item);
+    std::uint64_t view_key;
+    if constexpr (std::is_same_v<std::decay_t<decltype(key)>, std::uint64_t>) {
+      view_key = key == 0 ? 1ull : key;
+    } else {
+      view_key = detail::HashKey(key);
+    }
+    View child = item_fn(item);
+    child.view_key = view_key;
+    children.push_back(std::move(child));
+  }
+  View container;
+  container.kind = ViewKind::stack;
+  container.axis = LayoutAxis::vertical;
+  container.children = std::move(children);
+  return container;
 }
 
 } // namespace phenotype::ui
