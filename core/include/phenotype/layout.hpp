@@ -38,6 +38,11 @@ inline ui::Size IntrinsicSize(const MeasureTextFn &measure, const ui::View &view
     return measure(view.text_content, view.font_size_value, view.font_weight_value);
   case ui::ViewKind::grid:
     return {view.grid_min_column_width, view.grid_row_height};
+  case ui::ViewKind::toggle:
+    // The factory always sets preferred_size, handled above; fall back to the
+    // style's intrinsic box if a caller cleared it.
+    return view.toggle_style == ui::ToggleStyle::switcher ? ui::Size{36.0f, 22.0f}
+                                                          : ui::Size{18.0f, 18.0f};
   case ui::ViewKind::scroll:
     break;
   case ui::ViewKind::spacer:
@@ -92,6 +97,7 @@ inline ui::Size NaturalContentSize(
   case ui::ViewKind::icon:
   case ui::ViewKind::text:
   case ui::ViewKind::button_group:
+  case ui::ViewKind::toggle:
     return IntrinsicSize(measure, view);
   case ui::ViewKind::panel:
   case ui::ViewKind::visual_effect_panel:
@@ -229,6 +235,48 @@ inline void LayoutButtonGroup(const MeasureTextFn &measure, const ui::View &view
     }
 
     cursor_x += child_size.width + view.child_spacing;
+  }
+}
+
+// Lower a toggle control into plain panel draw commands so it renders on every
+// backend with no dedicated scene record. A checkbox/radio is a track panel
+// with a centered inner mark when on; a switch is a capsule track with a knob
+// panel slid to the trailing edge when on. The caller (LayoutView) has already
+// pushed the hit target from view.click_action.
+inline void LayoutToggle(const ui::View &view, LayoutRect rect, const LayoutContext &context,
+    SceneLayout &scene) {
+  if (!IsVisibleInClip(rect, context.clip_rect)) {
+    return;
+  }
+  SceneDrawLayer &layer = ActiveDrawLayer(scene);
+
+  auto push_panel = [&](LayoutRect frame, ui::Color color, float corner_radius) {
+    if (layer.panels.size() >= kMaxPanelCount) {
+      return;
+    }
+    layer.panels.push_back({frame, color, corner_radius, false, false, context.clip_rect});
+  };
+
+  if (view.toggle_style == ui::ToggleStyle::switcher) {
+    float track_radius = rect.height * 0.5f;
+    push_panel(rect, view.is_on ? ui::control_accent() : ui::control_outline(), track_radius);
+    float inset = std::max(1.0f, rect.height * 0.1f);
+    float knob_diameter = rect.height - inset * 2.0f;
+    float knob_x = view.is_on ? rect.x + rect.width - inset - knob_diameter : rect.x + inset;
+    push_panel({knob_x, rect.y + inset, knob_diameter, knob_diameter}, ui::white(),
+        knob_diameter * 0.5f);
+    return;
+  }
+
+  // Checkbox and radio share a square box; radio rounds to a full circle.
+  float box_radius = view.toggle_style == ui::ToggleStyle::radio ? rect.height * 0.5f : 4.0f;
+  push_panel(rect, view.is_on ? ui::control_accent() : ui::control_outline(), box_radius);
+  if (view.is_on) {
+    float mark_inset = std::max(2.0f, rect.width * 0.28f);
+    LayoutRect mark{rect.x + mark_inset, rect.y + mark_inset, rect.width - mark_inset * 2.0f,
+        rect.height - mark_inset * 2.0f};
+    float mark_radius = view.toggle_style == ui::ToggleStyle::radio ? mark.height * 0.5f : 1.0f;
+    push_panel(mark, ui::white(), mark_radius);
   }
 }
 
@@ -460,6 +508,9 @@ inline void LayoutView(const MeasureTextFn &measure, const ui::View &view, Layou
     return;
   case ui::ViewKind::scroll:
     LayoutScroll(measure, view, rect, context, scene);
+    return;
+  case ui::ViewKind::toggle:
+    LayoutToggle(view, rect, context, scene);
     return;
   case ui::ViewKind::stack:
     break;

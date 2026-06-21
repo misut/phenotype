@@ -54,6 +54,12 @@ enum class ButtonRole {
   forward,
 };
 
+enum class ToggleStyle {
+  checkbox,
+  radio,
+  switcher,
+};
+
 enum class ControlShape {
   square_circle,
   capsule,
@@ -71,6 +77,7 @@ enum class ViewKind {
   text,
   grid,
   scroll,
+  toggle,
 };
 
 enum class LayoutAxis {
@@ -107,6 +114,8 @@ public:
   Color foreground_color = {0.13f, 0.15f, 0.18f, 1.0f};
   LeadingWindowControlsPlacement leading_window_controls_placement;
   ControlShape control_shape = ControlShape::square_circle;
+  ToggleStyle toggle_style = ToggleStyle::checkbox;
+  bool is_on = false;
   float font_size_value = 17.0f;
   float font_weight_value = 400.0f;
   float corner_radius_value = 0.0f;
@@ -504,6 +513,19 @@ inline View spacer() {
   return view;
 }
 
+// A toggle control (checkbox, radio, or switch). The control box is fixed-size
+// per style; the layout pass lowers it into plain panel draw commands, so it
+// renders on every backend without a dedicated scene record. click_action is
+// wired by the component builder to flip the bound value.
+inline View toggle(ToggleStyle style, bool is_on) {
+  View view;
+  view.kind = ViewKind::toggle;
+  view.toggle_style = style;
+  view.is_on = is_on;
+  view.preferred_size = style == ToggleStyle::switcher ? Size{36.0f, 22.0f} : Size{18.0f, 18.0f};
+  return view;
+}
+
 inline constexpr Color white() noexcept { return {1.0f, 1.0f, 1.0f, 1.0f}; }
 
 inline constexpr Color control_background() noexcept { return {0.985f, 0.988f, 0.992f, 0.72f}; }
@@ -513,6 +535,13 @@ inline constexpr Color primary_label() noexcept { return {0.13f, 0.15f, 0.18f, 1
 inline constexpr Color disabled_label() noexcept { return {0.62f, 0.65f, 0.70f, 1.0f}; }
 
 inline constexpr Color toolbar_material() noexcept { return {0.985f, 0.988f, 0.992f, 0.38f}; }
+
+// Tint for an engaged control (a checked box, a switched-on track). A saturated
+// system blue that reads against both the light track and white knob/marks.
+inline constexpr Color control_accent() noexcept { return {0.0f, 0.48f, 1.0f, 1.0f}; }
+
+// Outline tint for a disengaged control's track.
+inline constexpr Color control_outline() noexcept { return {0.78f, 0.80f, 0.84f, 1.0f}; }
 
 inline constexpr float default_chrome_margin() noexcept { return 12.0f; }
 

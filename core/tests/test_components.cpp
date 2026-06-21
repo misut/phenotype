@@ -210,5 +210,94 @@ int main() {
     }
   }
 
+  // --- Toggle factory sets style + state + intrinsic box ------------------
+  {
+    ui::View box = ui::toggle(ui::ToggleStyle::checkbox, true);
+    if (box.kind != ui::ViewKind::toggle || box.toggle_style != ui::ToggleStyle::checkbox ||
+        !box.is_on || !Approx(box.preferred_size.width, 18.0f)) {
+      return 27;
+    }
+    ui::View sw = ui::toggle(ui::ToggleStyle::switcher, false);
+    if (!Approx(sw.preferred_size.width, 36.0f) || !Approx(sw.preferred_size.height, 22.0f)) {
+      return 28;
+    }
+  }
+
+  // --- An "on" checkbox lays out into a track panel + an inner mark -------
+  {
+    ui::View on = ui::toggle(ui::ToggleStyle::checkbox, true);
+    ui::View off = ui::toggle(ui::ToggleStyle::checkbox, false);
+    ps::LayoutContext context;
+    ps::SceneLayout on_scene =
+        phenotype::layout::LayoutScene(MeasureStub, on, 100.0f, 100.0f, context);
+    ps::SceneLayout off_scene =
+        phenotype::layout::LayoutScene(MeasureStub, off, 100.0f, 100.0f, context);
+    // On = track + mark (2 panels); off = track only (1 panel).
+    if (on_scene.background.panels.size() != 2 || off_scene.background.panels.size() != 1) {
+      return 29;
+    }
+    // The mark sits inside the track.
+    const ps::PanelLayout &track = on_scene.background.panels[0];
+    const ps::PanelLayout &mark = on_scene.background.panels[1];
+    if (mark.frame.x <= track.frame.x || mark.frame.width >= track.frame.width) {
+      return 30;
+    }
+  }
+
+  // --- A switch knob slides to the trailing edge when on ------------------
+  {
+    // Wrap in a row so the switch lays out at its 36x22 intrinsic box (a root
+    // view is stretched to the window, which would square the track).
+    ui::View on = ui::HStack(ui::toggle(ui::ToggleStyle::switcher, true));
+    ui::View off = ui::HStack(ui::toggle(ui::ToggleStyle::switcher, false));
+    ps::LayoutContext context;
+    ps::SceneLayout on_scene =
+        phenotype::layout::LayoutScene(MeasureStub, on, 200.0f, 100.0f, context);
+    ps::SceneLayout off_scene =
+        phenotype::layout::LayoutScene(MeasureStub, off, 200.0f, 100.0f, context);
+    if (on_scene.background.panels.size() != 2 || off_scene.background.panels.size() != 2) {
+      return 31;
+    }
+    // Knob is panel[1]; its x must be greater in the on state.
+    if (on_scene.background.panels[1].frame.x <= off_scene.background.panels[1].frame.x) {
+      return 32;
+    }
+  }
+
+  // --- Checkbox component flips its binding when the row is clicked -------
+  {
+    ui::Runtime runtime;
+    ui::Context ctx{runtime};
+    ui::State<bool> checked = ctx.state<bool>("agree", false);
+    ui::View row = ui::Checkbox(checked.binding(), "I agree");
+    // Row is a clickable hstack of the control + label.
+    if (row.kind != ui::ViewKind::stack || row.axis != ui::LayoutAxis::horizontal ||
+        !row.click_action || row.children.size() != 2 ||
+        row.children[0].kind != ui::ViewKind::toggle ||
+        row.children[1].kind != ui::ViewKind::text) {
+      return 33;
+    }
+    row.click_action();
+    if (!checked.get()) {
+      return 34;
+    }
+    row.click_action();
+    if (checked.get()) {
+      return 35;
+    }
+  }
+
+  // --- Switch reflects the bound value in the control's is_on ------------
+  {
+    ui::Runtime runtime;
+    ui::Context ctx{runtime};
+    ui::State<bool> on = ctx.state<bool>("wifi", true);
+    ui::View row = ui::Switch(on.binding());
+    if (row.children.size() != 1 || row.children[0].kind != ui::ViewKind::toggle ||
+        !row.children[0].is_on || row.children[0].toggle_style != ui::ToggleStyle::switcher) {
+      return 36;
+    }
+  }
+
   return 0;
 }
