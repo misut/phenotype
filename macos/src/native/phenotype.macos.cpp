@@ -2951,6 +2951,13 @@ private:
 
 - (void)renderFrame:(NSTimer *)timer {
   (void)timer;
+  // While an animation is in flight, rebuild each tick so animate_* re-samples
+  // the clock and advances; the runtime clears needs_tick once everything
+  // settles, so this naturally stops re-arming and the app goes idle.
+  if (_spec.wants_animation_frame && _spec.wants_animation_frame()) {
+    [self refreshRootView];
+    [self requestFrame];
+  }
   [self renderFrameIfNeeded];
 }
 

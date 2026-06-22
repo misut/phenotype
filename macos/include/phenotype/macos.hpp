@@ -1,7 +1,9 @@
 #pragma once
 
 #ifndef PHENOTYPE_IMPORTS_STD_MODULE
+#include <chrono>
 #include <functional>
+#include <memory>
 #include <string>
 #include <utility>
 #endif
@@ -58,11 +60,14 @@ struct Options {
 struct Spec {
   Options options;
   std::function<ui::View()> content;
+  // Optional: returns true when the last content() build left an animation in
+  // flight, so the shell should schedule another frame. Empty for static apps.
+  std::function<bool()> wants_animation_frame;
 };
 
 template <typename Content> Spec create(Options options, Content &&content) {
   return {std::move(options),
-          std::function<ui::View()>(std::forward<Content>(content))};
+          std::function<ui::View()>(std::forward<Content>(content)), {}};
 }
 
 } // namespace phenotype::macos::window
@@ -94,13 +99,22 @@ namespace phenotype::native {
 template <ui::Component App> int run_app(App app, macos::window::Options options) {
   auto runtime = std::make_shared<ui::Runtime>();
   auto holder = std::make_shared<App>(std::move(app));
-  macos::window::Spec spec = macos::window::create(options, [runtime, holder] {
+  // A steady clock started at launch supplies body()'s frame time in seconds, so
+  // animate_* interpolations advance with wall time. Shared so every rebuild
+  // reads the same origin.
+  auto epoch = std::make_shared<std::chrono::steady_clock::time_point>(
+      std::chrono::steady_clock::now());
+  macos::window::Spec spec = macos::window::create(options, [runtime, holder, epoch] {
+    double now = std::chrono::duration<double>(std::chrono::steady_clock::now() - *epoch).count();
     runtime->BeginFrame();
-    ui::Context context{*runtime};
+    ui::Context context{*runtime, now};
     ui::View view = holder->body(context);
     runtime->Prune();
     return view;
   });
+  // The shell polls this after each build: while an animation is in flight the
+  // runtime asks for another frame, and the shell idles once they all settle.
+  spec.wants_animation_frame = [runtime] { return runtime->needs_tick(); };
   return macos::app::run(0, nullptr, std::move(spec));
 }
 
