@@ -669,38 +669,42 @@ inline constexpr Color selection_highlight() noexcept { return {0.0f, 0.48f, 1.0
 // How strongly a material frosts its backdrop: 0 leaves the sharp backdrop
 // visible, 1 fully blurs it. The renderer lerps the sampled scene toward its
 // blurred copy by this amount, so a single blur pass serves every thickness.
+// regular and thick fully frost (the default look before materials existed);
+// clear and thin let progressively more of the sharp backdrop through.
 inline constexpr float MaterialBlurAmount(MaterialKind kind) noexcept {
   switch (kind) {
   case MaterialKind::none:
     return 0.0f;
   case MaterialKind::clear:
-    return 0.25f;
+    return 0.5f;
   case MaterialKind::thin:
-    return 0.55f;
-  case MaterialKind::regular:
     return 0.8f;
+  case MaterialKind::regular:
+    return 1.0f;
   case MaterialKind::thick:
     return 1.0f;
   }
-  return 0.8f;
+  return 1.0f;
 }
 
 // How hard a material tints the frosted backdrop toward the panel color.
-// Thicker materials improve contrast by leaning on the tint.
+// regular matches the pre-material tint (the control_background alpha the
+// effect shader used), so a default glass panel looks unchanged; thicker leans
+// harder on the tint for contrast, thinner backs off.
 inline constexpr float MaterialTintStrength(MaterialKind kind) noexcept {
   switch (kind) {
   case MaterialKind::none:
     return 1.0f;
   case MaterialKind::clear:
-    return 0.1f;
+    return 0.45f;
   case MaterialKind::thin:
-    return 0.2f;
+    return 0.6f;
   case MaterialKind::regular:
-    return 0.35f;
+    return 0.72f;
   case MaterialKind::thick:
-    return 0.55f;
+    return 0.85f;
   }
-  return 0.35f;
+  return 0.72f;
 }
 
 inline constexpr float default_chrome_margin() noexcept { return 12.0f; }

@@ -35,6 +35,13 @@ namespace {
 constexpr uint32_t kTextAtlasPadding = 2;
 constexpr uint32_t kTextAtlasRowAlignmentPixels = 64;
 
+// The glyph atlas packs at most this many text / symbol entries per frame. The
+// scene record vectors are now unbounded (storage buffers), but the atlas is a
+// fixed-size texture, so glyph entries beyond these bounds are not rasterized.
+// These are renderer-local and independent of the scene reserve hints.
+constexpr size_t kTextAtlasEntryLimit = 128;
+constexpr size_t kSymbolAtlasEntryLimit = 128;
+
 constexpr char kButtonShader[] = R"wgsl(
 struct VertexOut {
     @builtin(position) position : vec4f,
@@ -65,17 +72,20 @@ struct TextRun {
     clip : vec4f,
 };
 
-struct SceneUniforms {
+struct SceneHeader {
     viewport : vec4f,
     counts : vec4f,
-    panels : array<Panel, 16>,
-    buttons : array<SymbolButton, 128>,
-    texts : array<TextRun, 128>,
 };
 
-@group(0) @binding(0) var<uniform> scene : SceneUniforms;
-@group(0) @binding(1) var text_atlas : texture_2d<f32>;
-@group(0) @binding(2) var text_sampler : sampler;
+// Per-kind draw records live in storage buffers, so the scene is bounded only
+// by the storage-buffer size limit (128 MiB) instead of the old fixed
+// 16/128/128 uniform-array caps. The fragment compositing is unchanged.
+@group(0) @binding(0) var<uniform> scene : SceneHeader;
+@group(0) @binding(1) var<storage, read> panels : array<Panel>;
+@group(0) @binding(2) var<storage, read> buttons : array<SymbolButton>;
+@group(0) @binding(3) var<storage, read> texts : array<TextRun>;
+@group(0) @binding(4) var text_atlas : texture_2d<f32>;
+@group(0) @binding(5) var text_sampler : sampler;
 
 @vertex
 fn vertexMain(@builtin(vertex_index) index : u32) -> VertexOut {
@@ -244,19 +254,19 @@ fn drawText(layer : vec4f, pixel_position : vec2f, text : TextRun) -> vec4f {
 @fragment
 fn fragmentMain(in : VertexOut) -> @location(0) vec4f {
     var layer = vec4f(0.0);
-    let panel_count = min(u32(scene.counts.x), 16u);
+    let panel_count = u32(scene.counts.x);
     for (var index = 0u; index < panel_count; index = index + 1u) {
-        layer = drawPanel(layer, in.pixel_position, scene.panels[index]);
+        layer = drawPanel(layer, in.pixel_position, panels[index]);
     }
 
-    let button_count = min(u32(scene.counts.y), 128u);
+    let button_count = u32(scene.counts.y);
     for (var index = 0u; index < button_count; index = index + 1u) {
-        layer = drawSymbolButton(layer, in.pixel_position, scene.buttons[index]);
+        layer = drawSymbolButton(layer, in.pixel_position, buttons[index]);
     }
 
-    let text_count = min(u32(scene.counts.z), 128u);
+    let text_count = u32(scene.counts.z);
     for (var index = 0u; index < text_count; index = index + 1u) {
-        layer = drawText(layer, in.pixel_position, scene.texts[index]);
+        layer = drawText(layer, in.pixel_position, texts[index]);
     }
     return layer;
 }
@@ -526,12 +536,12 @@ struct TextUniform {
   float clip[4];
 };
 
-struct SceneUniforms {
+// The per-frame header (viewport + counts) is a small uniform; the per-kind
+// draw records go into storage buffers, so the scene is no longer bounded by
+// the old fixed 16/128/128 uniform-array caps.
+struct SceneHeader {
   float viewport[4];
   float counts[4];
-  PanelUniform panels[kMaxPanelCount];
-  SymbolButtonUniform buttons[kMaxSymbolButtonCount];
-  TextUniform texts[kMaxTextCount];
 };
 
 struct EffectPanelUniform {
@@ -883,12 +893,12 @@ TextAtlasCacheKey MakeTextAtlasCacheKey(const std::vector<TextLayout> &texts,
 
 bool CanRasterizeText(const TextLayout &text, size_t index) noexcept {
   return !text.content.empty() && text.frame.width > 0.0f && text.frame.height > 0.0f &&
-         index < kMaxTextCount;
+         index < kTextAtlasEntryLimit;
 }
 
 bool CanRasterizeSymbol(const SymbolButtonLayout &symbol, size_t index) noexcept {
   return !MaterialSymbolName(symbol.symbol).empty() && symbol.frame.width > 0.0f &&
-         symbol.frame.height > 0.0f && index < kMaxSymbolButtonCount;
+         symbol.frame.height > 0.0f && index < kSymbolAtlasEntryLimit;
 }
 
 TextAtlas RetargetTextAtlasEntries(const TextAtlas &cached, const std::vector<TextLayout> &texts,
@@ -1006,10 +1016,10 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
       return;
     }
 
-    if (item.kind == PendingKind::text && item.index >= kMaxTextCount) {
+    if (item.kind == PendingKind::text && item.index >= kTextAtlasEntryLimit) {
       return;
     }
-    if (item.kind == PendingKind::symbol && item.index >= kMaxSymbolButtonCount) {
+    if (item.kind == PendingKind::symbol && item.index >= kSymbolAtlasEntryLimit) {
       return;
     }
 
@@ -1037,7 +1047,7 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
 
   for (size_t index = 0; index < texts.size(); ++index) {
     const TextLayout &text = texts[index];
-    if (pending.size() >= kMaxTextCount + kMaxSymbolButtonCount) {
+    if (pending.size() >= kTextAtlasEntryLimit + kSymbolAtlasEntryLimit) {
       continue;
     }
 
@@ -1058,7 +1068,7 @@ TextAtlas BuildTextAtlas(const std::vector<TextLayout> &texts,
   }
 
   for (size_t index = 0; index < symbols.size(); ++index) {
-    if (pending.size() >= kMaxTextCount + kMaxSymbolButtonCount) {
+    if (pending.size() >= kTextAtlasEntryLimit + kSymbolAtlasEntryLimit) {
       continue;
     }
 
@@ -1523,38 +1533,65 @@ void AppendButtonLayouts(
   destination.insert(destination.end(), source.begin(), source.end());
 }
 
-void FillSceneUniforms(SceneUniforms &uniforms, const SceneDrawLayer &layer,
+// The per-kind draw records for one layer, destined for storage buffers.
+struct SceneRecords {
+  std::vector<PanelUniform> panels;
+  std::vector<SymbolButtonUniform> buttons;
+  std::vector<TextUniform> texts;
+};
+
+void FillSceneRecords(SceneHeader &header, SceneRecords &records, const SceneDrawLayer &layer,
     const TextAtlas &text_atlas, size_t text_offset, size_t symbol_offset, float width,
     float height, float scale, LayoutRect viewport_clip) {
-  uniforms.viewport[0] = width;
-  uniforms.viewport[1] = height;
-  uniforms.viewport[3] = std::max(1.0f, scale);
-  uniforms.counts[0] = static_cast<float>(layer.panels.size());
-  uniforms.counts[1] = static_cast<float>(layer.buttons.size());
-  uniforms.counts[2] = static_cast<float>(layer.texts.size());
+  header.viewport[0] = width;
+  header.viewport[1] = height;
+  header.viewport[3] = std::max(1.0f, scale);
+  header.counts[0] = static_cast<float>(layer.panels.size());
+  header.counts[1] = static_cast<float>(layer.buttons.size());
+  header.counts[2] = static_cast<float>(layer.texts.size());
 
+  records.panels.clear();
+  records.panels.reserve(layer.panels.size());
   for (size_t index = 0; index < layer.panels.size(); ++index) {
-    uniforms.panels[index] = MakePanel(layer.panels[index], scale, viewport_clip);
+    records.panels.push_back(MakePanel(layer.panels[index], scale, viewport_clip));
   }
   TextAtlasEntry empty_symbol;
+  records.buttons.clear();
+  records.buttons.reserve(layer.buttons.size());
   for (size_t index = 0; index < layer.buttons.size(); ++index) {
     size_t symbol_index = symbol_offset + index;
     const TextAtlasEntry &symbol = symbol_index < text_atlas.symbol_entries.size()
                                        ? text_atlas.symbol_entries[symbol_index]
                                        : empty_symbol;
-    uniforms.buttons[index] = MakeSymbolButton(layer.buttons[index], symbol, scale, viewport_clip);
+    records.buttons.push_back(MakeSymbolButton(layer.buttons[index], symbol, scale, viewport_clip));
   }
   TextAtlasEntry empty_text;
+  records.texts.clear();
+  records.texts.reserve(layer.texts.size());
   for (size_t index = 0; index < layer.texts.size(); ++index) {
     size_t text_index = text_offset + index;
     const TextAtlasEntry &text =
         text_index < text_atlas.entries.size() ? text_atlas.entries[text_index] : empty_text;
-    uniforms.texts[index] = MakeText(text, scale, viewport_clip);
+    records.texts.push_back(MakeText(text, scale, viewport_clip));
   }
 }
 
 class DawnButtonRenderer {
 public:
+  // One scene layer's GPU buffers: a small header uniform plus three growable
+  // storage buffers (panels / buttons / texts). The bind group is rebuilt
+  // whenever any storage buffer is reallocated to a larger capacity.
+  struct SceneLayerBuffers {
+    wgpu::Buffer header;
+    wgpu::Buffer panels;
+    wgpu::Buffer buttons;
+    wgpu::Buffer texts;
+    size_t panel_capacity = 0;
+    size_t button_capacity = 0;
+    size_t text_capacity = 0;
+    wgpu::BindGroup bind_group;
+  };
+
   bool Initialize(CAMetalLayer *layer, uint32_t width, uint32_t height, float scale,
       phenotype::ui::Size layout_size, LayoutContext layout_context,
       phenotype::ui::View root_view) {
@@ -1674,7 +1711,7 @@ public:
   void Render() {
     if (!_device || !_surface || !_pipeline || !_effect_pipeline || !_blur_pipeline ||
         !_scene_texture_view || !_blur_texture_a_view || !_blur_texture_b_view ||
-        !_scene_bind_group || !_foreground_scene_bind_group || !_effect_bind_group ||
+        !_background_buffers.bind_group || !_foreground_buffers.bind_group || !_effect_bind_group ||
         !_downsample_bind_group || !_horizontal_blur_bind_group || !_vertical_blur_bind_group) {
       return;
     }
@@ -1689,8 +1726,8 @@ public:
     wgpu::TextureView backbuffer = surface_texture.texture.CreateView();
 
     wgpu::CommandEncoder encoder = _device.CreateCommandEncoder();
-    DrawFullscreenPass(
-        encoder, _scene_texture_view, _pipeline, _scene_bind_group, wgpu::LoadOp::Clear);
+    DrawFullscreenPass(encoder, _scene_texture_view, _pipeline, _background_buffers.bind_group,
+        wgpu::LoadOp::Clear);
     if (_has_effect_panels) {
       DrawFullscreenPass(encoder, _blur_texture_a_view, _blur_pipeline, _downsample_bind_group,
           wgpu::LoadOp::Clear, _blur_scissor);
@@ -1702,7 +1739,7 @@ public:
     DrawFullscreenPass(
         encoder, backbuffer, _effect_pipeline, _effect_bind_group, wgpu::LoadOp::Clear);
     DrawFullscreenPass(
-        encoder, backbuffer, _pipeline, _foreground_scene_bind_group, wgpu::LoadOp::Load);
+        encoder, backbuffer, _pipeline, _foreground_buffers.bind_group, wgpu::LoadOp::Load);
 
     wgpu::CommandBuffer commands = encoder.Finish();
     _device.GetQueue().Submit(1, &commands);
@@ -1832,21 +1869,29 @@ private:
     wgpu::ShaderSourceWGSL wgsl;
     wgsl.code = kButtonShader;
 
-    std::array<wgpu::BindGroupLayoutEntry, 3> bind_group_layout_entries{};
+    std::array<wgpu::BindGroupLayoutEntry, 6> bind_group_layout_entries{};
     bind_group_layout_entries[0].binding = 0;
     bind_group_layout_entries[0].visibility =
         wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
     bind_group_layout_entries[0].buffer.type = wgpu::BufferBindingType::Uniform;
-    bind_group_layout_entries[0].buffer.minBindingSize = sizeof(SceneUniforms);
+    bind_group_layout_entries[0].buffer.minBindingSize = sizeof(SceneHeader);
 
-    bind_group_layout_entries[1].binding = 1;
-    bind_group_layout_entries[1].visibility = wgpu::ShaderStage::Fragment;
-    bind_group_layout_entries[1].texture.sampleType = wgpu::TextureSampleType::Float;
-    bind_group_layout_entries[1].texture.viewDimension = wgpu::TextureViewDimension::e2D;
+    // Per-kind draw records as read-only storage buffers (panels/buttons/texts).
+    for (uint32_t storage_index = 1; storage_index <= 3; ++storage_index) {
+      bind_group_layout_entries[storage_index].binding = storage_index;
+      bind_group_layout_entries[storage_index].visibility = wgpu::ShaderStage::Fragment;
+      bind_group_layout_entries[storage_index].buffer.type =
+          wgpu::BufferBindingType::ReadOnlyStorage;
+    }
 
-    bind_group_layout_entries[2].binding = 2;
-    bind_group_layout_entries[2].visibility = wgpu::ShaderStage::Fragment;
-    bind_group_layout_entries[2].sampler.type = wgpu::SamplerBindingType::Filtering;
+    bind_group_layout_entries[4].binding = 4;
+    bind_group_layout_entries[4].visibility = wgpu::ShaderStage::Fragment;
+    bind_group_layout_entries[4].texture.sampleType = wgpu::TextureSampleType::Float;
+    bind_group_layout_entries[4].texture.viewDimension = wgpu::TextureViewDimension::e2D;
+
+    bind_group_layout_entries[5].binding = 5;
+    bind_group_layout_entries[5].visibility = wgpu::ShaderStage::Fragment;
+    bind_group_layout_entries[5].sampler.type = wgpu::SamplerBindingType::Filtering;
 
     wgpu::BindGroupLayoutDescriptor bind_group_layout_descriptor;
     bind_group_layout_descriptor.entryCount = bind_group_layout_entries.size();
@@ -2013,33 +2058,85 @@ private:
     _blur_pipeline = _device.CreateRenderPipeline(&pipeline_descriptor);
   }
 
-  wgpu::BindGroup CreateSceneBindGroup(wgpu::Buffer uniform_buffer) {
-    if (!_bind_group_layout || !uniform_buffer || !_text_texture_view || !_text_sampler) {
-      return {};
+  // Allocate a read-only storage buffer sized for `capacity` records. Capacity
+  // is forced to at least 1 so the buffer is never zero-sized (a WGSL
+  // runtime-sized array needs at least one element of backing store).
+  template <typename Record> wgpu::Buffer CreateStorageBuffer(size_t capacity) {
+    wgpu::BufferDescriptor descriptor;
+    descriptor.size = sizeof(Record) * std::max<size_t>(1, capacity);
+    descriptor.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage;
+    return _device.CreateBuffer(&descriptor);
+  }
+
+  // Grow a layer's storage buffers to fit the record counts, rounding capacity
+  // up to a power of two so steady-state frames reuse the existing buffers.
+  // Returns true if any buffer was reallocated (so the bind group is rebuilt).
+  bool EnsureLayerCapacity(SceneLayerBuffers &buffers, const SceneRecords &records) {
+    auto next_capacity = [](size_t needed, size_t current) {
+      size_t capacity = std::max<size_t>(current, 1);
+      while (capacity < needed) {
+        capacity *= 2;
+      }
+      return capacity;
+    };
+    bool grew = false;
+    if (!buffers.panels || records.panels.size() > buffers.panel_capacity) {
+      buffers.panel_capacity = next_capacity(records.panels.size(), buffers.panel_capacity);
+      buffers.panels = CreateStorageBuffer<PanelUniform>(buffers.panel_capacity);
+      grew = true;
+    }
+    if (!buffers.buttons || records.buttons.size() > buffers.button_capacity) {
+      buffers.button_capacity = next_capacity(records.buttons.size(), buffers.button_capacity);
+      buffers.buttons = CreateStorageBuffer<SymbolButtonUniform>(buffers.button_capacity);
+      grew = true;
+    }
+    if (!buffers.texts || records.texts.size() > buffers.text_capacity) {
+      buffers.text_capacity = next_capacity(records.texts.size(), buffers.text_capacity);
+      buffers.texts = CreateStorageBuffer<TextUniform>(buffers.text_capacity);
+      grew = true;
+    }
+    return grew;
+  }
+
+  void RebuildSceneBindGroup(SceneLayerBuffers &buffers) {
+    if (!_bind_group_layout || !buffers.header || !buffers.panels || !buffers.buttons ||
+        !buffers.texts || !_text_texture_view || !_text_sampler) {
+      return;
     }
 
-    std::array<wgpu::BindGroupEntry, 3> bind_group_entries{};
+    std::array<wgpu::BindGroupEntry, 6> bind_group_entries{};
     bind_group_entries[0].binding = 0;
-    bind_group_entries[0].buffer = uniform_buffer;
-    bind_group_entries[0].offset = 0;
-    bind_group_entries[0].size = sizeof(SceneUniforms);
+    bind_group_entries[0].buffer = buffers.header;
+    bind_group_entries[0].size = sizeof(SceneHeader);
 
     bind_group_entries[1].binding = 1;
-    bind_group_entries[1].textureView = _text_texture_view;
+    bind_group_entries[1].buffer = buffers.panels;
+    bind_group_entries[1].size = sizeof(PanelUniform) * buffers.panel_capacity;
 
     bind_group_entries[2].binding = 2;
-    bind_group_entries[2].sampler = _text_sampler;
+    bind_group_entries[2].buffer = buffers.buttons;
+    bind_group_entries[2].size = sizeof(SymbolButtonUniform) * buffers.button_capacity;
+
+    bind_group_entries[3].binding = 3;
+    bind_group_entries[3].buffer = buffers.texts;
+    bind_group_entries[3].size = sizeof(TextUniform) * buffers.text_capacity;
+
+    bind_group_entries[4].binding = 4;
+    bind_group_entries[4].textureView = _text_texture_view;
+
+    bind_group_entries[5].binding = 5;
+    bind_group_entries[5].sampler = _text_sampler;
 
     wgpu::BindGroupDescriptor bind_group_descriptor;
     bind_group_descriptor.layout = _bind_group_layout;
     bind_group_descriptor.entryCount = bind_group_entries.size();
     bind_group_descriptor.entries = bind_group_entries.data();
-    return _device.CreateBindGroup(&bind_group_descriptor);
+    buffers.bind_group = _device.CreateBindGroup(&bind_group_descriptor);
   }
 
   void CreateSceneBindGroups() {
-    _scene_bind_group = CreateSceneBindGroup(_scene_uniform_buffer);
-    _foreground_scene_bind_group = CreateSceneBindGroup(_foreground_scene_uniform_buffer);
+    RebuildSceneBindGroup(_background_buffers);
+    RebuildSceneBindGroup(_foreground_buffers);
   }
 
   wgpu::BindGroup CreateBlurBindGroup(wgpu::Buffer uniform_buffer, wgpu::TextureView source_view) {
@@ -2102,12 +2199,19 @@ private:
     _effect_bind_group = _device.CreateBindGroup(&bind_group_descriptor);
   }
 
-  void CreateSceneUniformBuffer() {
+  void CreateSceneHeaderBuffer(SceneLayerBuffers &buffers) {
     wgpu::BufferDescriptor buffer_descriptor;
-    buffer_descriptor.size = sizeof(SceneUniforms);
+    buffer_descriptor.size = sizeof(SceneHeader);
     buffer_descriptor.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
-    _scene_uniform_buffer = _device.CreateBuffer(&buffer_descriptor);
-    _foreground_scene_uniform_buffer = _device.CreateBuffer(&buffer_descriptor);
+    buffers.header = _device.CreateBuffer(&buffer_descriptor);
+    // Storage buffers start at capacity 1 and grow on demand in
+    // EnsureLayerCapacity; this primes them so the first bind group is valid.
+    EnsureLayerCapacity(buffers, SceneRecords{});
+  }
+
+  void CreateSceneUniformBuffer() {
+    CreateSceneHeaderBuffer(_background_buffers);
+    CreateSceneHeaderBuffer(_foreground_buffers);
 
     wgpu::BufferDescriptor effect_buffer_descriptor;
     effect_buffer_descriptor.size = sizeof(EffectUniforms);
@@ -2268,8 +2372,37 @@ private:
         _vertical_blur_uniform_buffer, 0, &vertical_uniforms, sizeof(vertical_uniforms));
   }
 
+  // Fill a layer's header + records, grow its storage buffers if needed
+  // (rebuilding the bind group on growth), then upload header and records.
+  void UploadSceneLayer(SceneLayerBuffers &buffers, const SceneDrawLayer &layer,
+      const TextAtlas &text_atlas, size_t text_offset, size_t symbol_offset,
+      LayoutRect viewport_clip) {
+    SceneHeader header = {};
+    SceneRecords records;
+    FillSceneRecords(header, records, layer, text_atlas, text_offset, symbol_offset,
+        static_cast<float>(_width), static_cast<float>(_height), _scale, viewport_clip);
+
+    if (EnsureLayerCapacity(buffers, records)) {
+      RebuildSceneBindGroup(buffers);
+    }
+
+    _device.GetQueue().WriteBuffer(buffers.header, 0, &header, sizeof(header));
+    if (!records.panels.empty()) {
+      _device.GetQueue().WriteBuffer(
+          buffers.panels, 0, records.panels.data(), records.panels.size() * sizeof(PanelUniform));
+    }
+    if (!records.buttons.empty()) {
+      _device.GetQueue().WriteBuffer(buffers.buttons, 0, records.buttons.data(),
+          records.buttons.size() * sizeof(SymbolButtonUniform));
+    }
+    if (!records.texts.empty()) {
+      _device.GetQueue().WriteBuffer(
+          buffers.texts, 0, records.texts.data(), records.texts.size() * sizeof(TextUniform));
+    }
+  }
+
   void UpdateSceneUniforms() {
-    if (!_scene_uniform_buffer || !_foreground_scene_uniform_buffer || !_effect_uniform_buffer) {
+    if (!_background_buffers.header || !_foreground_buffers.header || !_effect_uniform_buffer) {
       return;
     }
 
@@ -2304,18 +2437,9 @@ private:
         _layout_size.height,
     };
 
-    SceneUniforms background_uniforms = {};
-    FillSceneUniforms(background_uniforms, scene.background, text_atlas, 0, 0,
-        static_cast<float>(_width), static_cast<float>(_height), _scale, viewport_clip);
-    _device.GetQueue().WriteBuffer(
-        _scene_uniform_buffer, 0, &background_uniforms, sizeof(background_uniforms));
-
-    SceneUniforms foreground_uniforms = {};
-    FillSceneUniforms(foreground_uniforms, scene.foreground, text_atlas,
-        scene.background.texts.size(), scene.background.buttons.size(), static_cast<float>(_width),
-        static_cast<float>(_height), _scale, viewport_clip);
-    _device.GetQueue().WriteBuffer(
-        _foreground_scene_uniform_buffer, 0, &foreground_uniforms, sizeof(foreground_uniforms));
+    UploadSceneLayer(_background_buffers, scene.background, text_atlas, 0, 0, viewport_clip);
+    UploadSceneLayer(_foreground_buffers, scene.foreground, text_atlas,
+        scene.background.texts.size(), scene.background.buttons.size(), viewport_clip);
 
     EffectUniforms effect_uniforms = {};
     effect_uniforms.viewport[0] = static_cast<float>(_width);
@@ -2343,8 +2467,8 @@ private:
   wgpu::Surface _surface;
   wgpu::Adapter _adapter;
   wgpu::Device _device;
-  wgpu::Buffer _scene_uniform_buffer;
-  wgpu::Buffer _foreground_scene_uniform_buffer;
+  SceneLayerBuffers _background_buffers;
+  SceneLayerBuffers _foreground_buffers;
   wgpu::Buffer _effect_uniform_buffer;
   wgpu::Buffer _downsample_uniform_buffer;
   wgpu::Buffer _horizontal_blur_uniform_buffer;
@@ -2352,8 +2476,6 @@ private:
   wgpu::BindGroupLayout _bind_group_layout;
   wgpu::BindGroupLayout _effect_bind_group_layout;
   wgpu::BindGroupLayout _blur_bind_group_layout;
-  wgpu::BindGroup _scene_bind_group;
-  wgpu::BindGroup _foreground_scene_bind_group;
   wgpu::BindGroup _effect_bind_group;
   wgpu::BindGroup _downsample_bind_group;
   wgpu::BindGroup _horizontal_blur_bind_group;
