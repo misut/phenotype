@@ -1,0 +1,29 @@
+{
+  "pipeline": "layout-scene",
+  "scenarios": [
+    {
+      "name": "uniform_static",
+      "emitted": { "panels": 0, "buttons": 0, "texts": 36 },
+      "truncated": false,
+      "layout_us": { "mean": 77.64, "median": 73.46, "p95": 96.38 }
+    },
+    {
+      "name": "list_churn",
+      "emitted": { "panels": 0, "buttons": 0, "texts": 36 },
+      "truncated": false,
+      "layout_us": { "mean": 76.35, "median": 71.62, "p95": 96.25 }
+    },
+    {
+      "name": "scroll_only",
+      "emitted": { "panels": 0, "buttons": 0, "texts": 36 },
+      "truncated": false,
+      "layout_us": { "mean": 75.18, "median": 70.83, "p95": 100.33 }
+    },
+    {
+      "name": "flat_dense",
+      "emitted": { "panels": 0, "buttons": 0, "texts": 128 },
+      "truncated": true,
+      "layout_us": { "mean": 45.94, "median": 43.29, "p95": 58.29 }
+    }
+  ]
+}
