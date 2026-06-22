@@ -89,6 +89,7 @@ enum class ViewKind {
   grid,
   scroll,
   toggle,
+  text_field,
 };
 
 enum class LayoutAxis {
@@ -108,6 +109,51 @@ enum class TextTruncation {
   tail,
 };
 
+// UTF-8 boundary helpers for text-field caret math. A byte is a continuation
+// byte when its top bits are 10xxxxxx; a caret may only sit on a lead byte or
+// the end of the string, so edits never split a multi-byte codepoint. Defined
+// ahead of View because its caret/selection builders clamp through them.
+inline bool IsUtf8Continuation(char byte) noexcept {
+  return (static_cast<unsigned char>(byte) & 0xC0u) == 0x80u;
+}
+
+// Snap a byte offset down to the nearest codepoint boundary, clamped to [0,len].
+inline std::size_t ClampToCharBoundary(std::string_view text, std::size_t index) noexcept {
+  if (index >= text.size()) {
+    return text.size();
+  }
+  while (index > 0 && IsUtf8Continuation(text[index])) {
+    --index;
+  }
+  return index;
+}
+
+// The boundary one codepoint before `index` (for a left-arrow / backspace).
+inline std::size_t PrevCharBoundary(std::string_view text, std::size_t index) noexcept {
+  index = ClampToCharBoundary(text, index);
+  if (index == 0) {
+    return 0;
+  }
+  --index;
+  while (index > 0 && IsUtf8Continuation(text[index])) {
+    --index;
+  }
+  return index;
+}
+
+// The boundary one codepoint after `index` (for a right-arrow / delete).
+inline std::size_t NextCharBoundary(std::string_view text, std::size_t index) noexcept {
+  index = ClampToCharBoundary(text, index);
+  if (index >= text.size()) {
+    return text.size();
+  }
+  ++index;
+  while (index < text.size() && IsUtf8Continuation(text[index])) {
+    ++index;
+  }
+  return index;
+}
+
 class View {
 public:
   ViewKind kind = ViewKind::empty;
@@ -118,6 +164,7 @@ public:
   ButtonRole button_role = ButtonRole::normal;
   bool is_enabled = true;
   std::string text_content;
+  std::string placeholder_text;
   std::string accessibility_label_text;
   Size preferred_size;
   Insets content_padding;
@@ -128,6 +175,11 @@ public:
   ToggleStyle toggle_style = ToggleStyle::checkbox;
   MaterialKind material = MaterialKind::regular;
   bool is_on = false;
+  // Text-field editing state. caret_position / selection_anchor are byte
+  // offsets into text_content; equal means a collapsed caret (no selection).
+  std::size_t caret_position = 0;
+  std::size_t selection_anchor = 0;
+  bool is_focused = false;
   float font_size_value = 17.0f;
   float font_weight_value = 400.0f;
   float corner_radius_value = 0.0f;
@@ -374,6 +426,32 @@ public:
     return *this;
   }
 
+  [[nodiscard]] View focused(bool value) && {
+    is_focused = value;
+    return std::move(*this);
+  }
+
+  View &focused(bool value) & {
+    is_focused = value;
+    return *this;
+  }
+
+  // Place the caret and selection from byte offsets, snapped to UTF-8
+  // boundaries and clamped to the current text. A single argument collapses the
+  // selection at the caret.
+  [[nodiscard]] View selection(std::size_t caret, std::size_t anchor) && {
+    caret_position = ClampToCharBoundary(text_content, caret);
+    selection_anchor = ClampToCharBoundary(text_content, anchor);
+    return std::move(*this);
+  }
+
+  [[nodiscard]] View caret(std::size_t position) && {
+    position = ClampToCharBoundary(text_content, position);
+    caret_position = position;
+    selection_anchor = position;
+    return std::move(*this);
+  }
+
   [[nodiscard]] View corner_radius(float value) && {
     corner_radius_value = value;
     return std::move(*this);
@@ -548,6 +626,23 @@ inline View toggle(ToggleStyle style, bool is_on) {
   return view;
 }
 
+// A single-line text input bound by the caller to a string value. caret defaults
+// to the end of the text; selection is collapsed. Editing/focus is wired by the
+// platform shell in a later slice; this slice renders the value, placeholder,
+// caret, and selection from the editing state.
+inline View text_field(std::string_view value, std::string_view placeholder = {}) {
+  View view;
+  view.kind = ViewKind::text_field;
+  view.text_content = value;
+  view.placeholder_text = placeholder;
+  view.caret_position = value.size();
+  view.selection_anchor = value.size();
+  view.font_size_value = 16.0f;
+  // A field fills the width it is given; its intrinsic size sets the height.
+  view.expands_width = true;
+  return view;
+}
+
 inline constexpr Color white() noexcept { return {1.0f, 1.0f, 1.0f, 1.0f}; }
 
 inline constexpr Color control_background() noexcept { return {0.985f, 0.988f, 0.992f, 0.72f}; }
@@ -564,6 +659,12 @@ inline constexpr Color control_accent() noexcept { return {0.0f, 0.48f, 1.0f, 1.
 
 // Outline tint for a disengaged control's track.
 inline constexpr Color control_outline() noexcept { return {0.78f, 0.80f, 0.84f, 1.0f}; }
+
+// Fill for a text field's track.
+inline constexpr Color field_background() noexcept { return {1.0f, 1.0f, 1.0f, 0.92f}; }
+
+// Selection highlight behind selected text (a translucent accent).
+inline constexpr Color selection_highlight() noexcept { return {0.0f, 0.48f, 1.0f, 0.28f}; }
 
 // How strongly a material frosts its backdrop: 0 leaves the sharp backdrop
 // visible, 1 fully blurs it. The renderer lerps the sampled scene toward its

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -24,9 +25,10 @@
 // list children — pure identity metadata (View::view_key) the layout engine
 // ignores today and the retained-tree reconciliation slice consumes later.
 // Checkbox / Radio / Switch add a ViewKind::toggle the layout pass lowers into
-// plain panels, and Tabs is composed from panel/text/stack kinds — both need no
-// renderer support. Richer controls (text fields, glass) are intentionally
-// deferred to a later slice.
+// plain panels, Tabs is composed from panel/text/stack kinds, and TextField
+// adds a ViewKind::text_field that lowers into panel + text records — all need
+// no renderer support. TextField's live keyboard input and caret blink are
+// wired by the platform shell in a later slice.
 //
 // Two entry styles over the same primitives:
 //   - ui::Text / ui::Button / ui::VStack / ... : value builders that compose
@@ -196,6 +198,19 @@ inline View Radio(Binding<bool> value, std::string_view label = {}) {
 // A switch bound to a bool, drawn as a capsule track with a sliding knob.
 inline View Switch(Binding<bool> value, std::string_view label = {}) {
   return detail::ToggleRow(ToggleStyle::switcher, value, label);
+}
+
+// --- TextField --------------------------------------------------------------
+
+// A single-line text input bound to a string. This slice renders the bound
+// value (or the placeholder when empty) and the caret/selection from the
+// field's editing state; the caret defaults to the end of the text. Live
+// keyboard input, focus routing, and caret blink are wired by the platform
+// shell in a later slice — the binding is captured here so that slice can write
+// edits straight back through it.
+inline View TextField(Binding<std::string> value, std::string_view placeholder = {}) {
+  std::string current = value.valid() ? value.get() : std::string{};
+  return text_field(current, placeholder);
 }
 
 // --- Tabs (segmented control) -----------------------------------------------

@@ -392,5 +392,86 @@ int main() {
     }
   }
 
+  // --- UTF-8 caret boundary helpers ---------------------------------------
+  {
+    // "héllo": h(1) é(2 bytes) l l o  -> bytes: 0 h, 1-2 é, 3 l, 4 l, 5 o
+    std::string_view s = "héllo";
+    // Clamping into the middle of é snaps back to its lead byte (1).
+    if (ui::ClampToCharBoundary(s, 2) != 1 || ui::ClampToCharBoundary(s, 1) != 1) {
+      return 48;
+    }
+    // Next boundary after the 'h' skips the whole é (1 -> 3).
+    if (ui::NextCharBoundary(s, 1) != 3) {
+      return 49;
+    }
+    // Prev boundary from after é (3) lands on its lead byte (1).
+    if (ui::PrevCharBoundary(s, 3) != 1) {
+      return 50;
+    }
+    // Clamp past the end returns the length.
+    if (ui::ClampToCharBoundary(s, 99) != s.size()) {
+      return 51;
+    }
+  }
+
+  // --- text_field factory + caret/selection builders ----------------------
+  {
+    ui::View field = ui::text_field("hi", "type here");
+    if (field.kind != ui::ViewKind::text_field || field.text_content != "hi" ||
+        field.placeholder_text != "type here" || field.caret_position != 2 ||
+        field.selection_anchor != 2 || !field.expands_width) {
+      return 52;
+    }
+    // selection() snaps both ends to char boundaries.
+    ui::View sel = ui::text_field("héllo").selection(2, 0);
+    if (sel.caret_position != 1 || sel.selection_anchor != 0) {
+      return 53;
+    }
+    // caret() collapses the selection at the (clamped) position.
+    ui::View car = ui::text_field("héllo").caret(2);
+    if (car.caret_position != 1 || car.selection_anchor != 1) {
+      return 54;
+    }
+  }
+
+  // --- TextField lowers into a track panel + a text run -------------------
+  {
+    ui::Runtime runtime;
+    ui::Context ctx{runtime};
+    ui::State<std::string> name = ctx.state<std::string>("name", std::string{"Ada"});
+    ui::View field = ui::TextField(name.binding(), "Name");
+    if (field.kind != ui::ViewKind::text_field || field.text_content != "Ada") {
+      return 55;
+    }
+    ps::LayoutContext context;
+    ps::SceneLayout laid =
+        phenotype::layout::LayoutScene(MeasureStub, field, 240.0f, 30.0f, context);
+    // Track panel + the value text run (unfocused: no caret panel).
+    if (laid.background.panels.size() != 1 || laid.background.texts.size() != 1 ||
+        laid.background.texts[0].content != "Ada") {
+      return 56;
+    }
+  }
+
+  // --- A focused field adds a caret panel; empty shows the placeholder ----
+  {
+    ui::View focused = ui::text_field("ab").focused(true).caret(1);
+    ps::LayoutContext context;
+    ps::SceneLayout laid =
+        phenotype::layout::LayoutScene(MeasureStub, focused, 240.0f, 30.0f, context);
+    // Track panel + caret panel = 2 panels.
+    if (laid.background.panels.size() != 2) {
+      return 57;
+    }
+    // Empty field renders the placeholder text instead of the value.
+    ui::View empty = ui::text_field("", "Search");
+    ps::SceneLayout empty_laid =
+        phenotype::layout::LayoutScene(MeasureStub, empty, 240.0f, 30.0f, context);
+    if (empty_laid.background.texts.size() != 1 ||
+        empty_laid.background.texts[0].content != "Search") {
+      return 58;
+    }
+  }
+
   return 0;
 }
