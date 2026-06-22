@@ -46,6 +46,9 @@ constexpr char kButtonShader[] = R"wgsl(
 struct VertexOut {
     @builtin(position) position : vec4f,
     @location(0) pixel_position : vec2f,
+    // instance_index is vertex-only; carry it to the fragment stage as a flat
+    // varying so each kind's fragment knows which record it is shading.
+    @location(1) @interpolate(flat) instance : u32,
 };
 
 struct SymbolButton {
@@ -87,27 +90,70 @@ struct SceneHeader {
 @group(0) @binding(4) var text_atlas : texture_2d<f32>;
 @group(0) @binding(5) var text_sampler : sampler;
 
-@vertex
-fn vertexMain(@builtin(vertex_index) index : u32) -> VertexOut {
-    let clip = array<vec2f, 6>(
-        vec2f(-1.0, -1.0),
-        vec2f(-1.0,  1.0),
-        vec2f( 1.0, -1.0),
-        vec2f( 1.0, -1.0),
-        vec2f(-1.0,  1.0),
-        vec2f( 1.0,  1.0),
+// One instance is drawn as a 6-vertex quad covering a pixel-space rectangle
+// (min..max). The rect is the instance's bounds padded a couple of pixels so
+// the SDF anti-aliasing fringe (which extends ~1px past the geometry edge) is
+// not clipped — coverage outside the rect is zero, so padding is free.
+fn quadVertex(index : u32, instance : u32, min_px : vec2f, max_px : vec2f) -> VertexOut {
+    let corners = array<vec2f, 6>(
+        vec2f(0.0, 0.0),
+        vec2f(0.0, 1.0),
+        vec2f(1.0, 0.0),
+        vec2f(1.0, 0.0),
+        vec2f(0.0, 1.0),
+        vec2f(1.0, 1.0),
     );
+    let corner = corners[index];
+    let pixel_position = mix(min_px, max_px, corner);
 
-    let viewport_size = scene.viewport.xy;
-    let pixel_position = vec2f(
-        (clip[index].x + 1.0) * 0.5 * viewport_size.x,
-        (1.0 - clip[index].y) * 0.5 * viewport_size.y,
+    let viewport_size = max(scene.viewport.xy, vec2f(1.0));
+    let ndc = vec2f(
+        (pixel_position.x / viewport_size.x) * 2.0 - 1.0,
+        1.0 - (pixel_position.y / viewport_size.y) * 2.0,
     );
 
     var out : VertexOut;
-    out.position = vec4f(clip[index], 0.0, 1.0);
+    out.position = vec4f(ndc, 0.0, 1.0);
     out.pixel_position = pixel_position;
+    out.instance = instance;
     return out;
+}
+
+// Expand a pixel rect by the AA fringe and intersect with the clip rect, so the
+// quad never covers more than the clipped region (matches clipCoverage).
+fn paddedClippedRect(min_px : vec2f, max_px : vec2f, clip : vec4f) -> array<vec2f, 2> {
+    let pad = vec2f(2.0 * max(scene.viewport.w, 1.0));
+    let lo = max(min_px - pad, clip.xy);
+    let hi = min(max_px + pad, clip.xy + clip.zw);
+    return array<vec2f, 2>(lo, hi);
+}
+
+@vertex
+fn panelVertex(@builtin(vertex_index) vi : u32, @builtin(instance_index) ii : u32) -> VertexOut {
+    let panel = panels[ii];
+    let half = panel.frame.zw * 0.5;
+    let bounds = paddedClippedRect(panel.frame.xy - half, panel.frame.xy + half, panel.clip);
+    return quadVertex(vi, ii, bounds[0], bounds[1]);
+}
+
+@vertex
+fn buttonVertex(@builtin(vertex_index) vi : u32, @builtin(instance_index) ii : u32) -> VertexOut {
+    let button = buttons[ii];
+    // Cover the union of the icon frame and the (possibly larger) control box.
+    let frame_lo = button.frame.xy - button.frame.zw * 0.5;
+    let frame_hi = button.frame.xy + button.frame.zw * 0.5;
+    let control_lo = button.control.xy - button.control.zw * 0.5;
+    let control_hi = button.control.xy + button.control.zw * 0.5;
+    let bounds = paddedClippedRect(min(frame_lo, control_lo), max(frame_hi, control_hi), button.clip);
+    return quadVertex(vi, ii, bounds[0], bounds[1]);
+}
+
+@vertex
+fn textVertex(@builtin(vertex_index) vi : u32, @builtin(instance_index) ii : u32) -> VertexOut {
+    let text = texts[ii];
+    let top_left = text.frame.xy - text.frame.zw * 0.5;
+    let bounds = paddedClippedRect(top_left, top_left + text.frame.zw, text.clip);
+    return quadVertex(vi, ii, bounds[0], bounds[1]);
 }
 
 fn roundedRectDistance(position : vec2f, half_size : vec2f, radius : f32) -> f32 {
@@ -251,24 +297,26 @@ fn drawText(layer : vec4f, pixel_position : vec2f, text : TextRun) -> vec4f {
     return compositeOver(layer, text.color.rgb, text.color.a * sample_alpha * inside * clip_coverage);
 }
 
+// Each kind is drawn as one instanced pass. A draw function returns the
+// premultiplied "source over transparent" color for this record; the pipeline's
+// premultiplied (One / OneMinusSrcAlpha) blend then composites it onto the
+// target. Premultiplied over is associative, and instances rasterize in array
+// order, so drawing panels then buttons then texts is pixel-identical to the
+// old single-pass loop — only now each fragment touches one record over its own
+// quad instead of every record over the whole screen.
 @fragment
-fn fragmentMain(in : VertexOut) -> @location(0) vec4f {
-    var layer = vec4f(0.0);
-    let panel_count = u32(scene.counts.x);
-    for (var index = 0u; index < panel_count; index = index + 1u) {
-        layer = drawPanel(layer, in.pixel_position, panels[index]);
-    }
+fn panelFragment(in : VertexOut) -> @location(0) vec4f {
+    return drawPanel(vec4f(0.0), in.pixel_position, panels[in.instance]);
+}
 
-    let button_count = u32(scene.counts.y);
-    for (var index = 0u; index < button_count; index = index + 1u) {
-        layer = drawSymbolButton(layer, in.pixel_position, buttons[index]);
-    }
+@fragment
+fn buttonFragment(in : VertexOut) -> @location(0) vec4f {
+    return drawSymbolButton(vec4f(0.0), in.pixel_position, buttons[in.instance]);
+}
 
-    let text_count = u32(scene.counts.z);
-    for (var index = 0u; index < text_count; index = index + 1u) {
-        layer = drawText(layer, in.pixel_position, texts[index]);
-    }
-    return layer;
+@fragment
+fn textFragment(in : VertexOut) -> @location(0) vec4f {
+    return drawText(vec4f(0.0), in.pixel_position, texts[in.instance]);
 }
 )wgsl";
 
@@ -1589,6 +1637,10 @@ public:
     size_t panel_capacity = 0;
     size_t button_capacity = 0;
     size_t text_capacity = 0;
+    // Record counts uploaded this frame, i.e. the instance counts to draw.
+    uint32_t panel_count = 0;
+    uint32_t button_count = 0;
+    uint32_t text_count = 0;
     wgpu::BindGroup bind_group;
   };
 
@@ -1636,7 +1688,8 @@ public:
     }
 
     CreatePipeline();
-    return static_cast<bool>(_pipeline) && static_cast<bool>(_effect_pipeline) &&
+    return static_cast<bool>(_panel_pipeline) && static_cast<bool>(_button_pipeline) &&
+           static_cast<bool>(_text_pipeline) && static_cast<bool>(_effect_pipeline) &&
            static_cast<bool>(_blur_pipeline);
   }
 
@@ -1709,10 +1762,11 @@ public:
   }
 
   void Render() {
-    if (!_device || !_surface || !_pipeline || !_effect_pipeline || !_blur_pipeline ||
-        !_scene_texture_view || !_blur_texture_a_view || !_blur_texture_b_view ||
-        !_background_buffers.bind_group || !_foreground_buffers.bind_group || !_effect_bind_group ||
-        !_downsample_bind_group || !_horizontal_blur_bind_group || !_vertical_blur_bind_group) {
+    if (!_device || !_surface || !_panel_pipeline || !_button_pipeline || !_text_pipeline ||
+        !_effect_pipeline || !_blur_pipeline || !_scene_texture_view || !_blur_texture_a_view ||
+        !_blur_texture_b_view || !_background_buffers.bind_group ||
+        !_foreground_buffers.bind_group || !_effect_bind_group || !_downsample_bind_group ||
+        !_horizontal_blur_bind_group || !_vertical_blur_bind_group) {
       return;
     }
 
@@ -1726,8 +1780,7 @@ public:
     wgpu::TextureView backbuffer = surface_texture.texture.CreateView();
 
     wgpu::CommandEncoder encoder = _device.CreateCommandEncoder();
-    DrawFullscreenPass(encoder, _scene_texture_view, _pipeline, _background_buffers.bind_group,
-        wgpu::LoadOp::Clear);
+    DrawSceneLayer(encoder, _scene_texture_view, _background_buffers, wgpu::LoadOp::Clear);
     if (_has_effect_panels) {
       DrawFullscreenPass(encoder, _blur_texture_a_view, _blur_pipeline, _downsample_bind_group,
           wgpu::LoadOp::Clear, _blur_scissor);
@@ -1738,8 +1791,7 @@ public:
     }
     DrawFullscreenPass(
         encoder, backbuffer, _effect_pipeline, _effect_bind_group, wgpu::LoadOp::Clear);
-    DrawFullscreenPass(
-        encoder, backbuffer, _pipeline, _foreground_buffers.bind_group, wgpu::LoadOp::Load);
+    DrawSceneLayer(encoder, backbuffer, _foreground_buffers, wgpu::LoadOp::Load);
 
     wgpu::CommandBuffer commands = encoder.Finish();
     _device.GetQueue().Submit(1, &commands);
@@ -1774,6 +1826,41 @@ private:
     pass.SetPipeline(pipeline);
     pass.SetBindGroup(0, bind_group);
     pass.Draw(6);
+    pass.End();
+  }
+
+  // Draw one scene layer as three instanced passes (panels, then buttons, then
+  // texts) into a single render pass, preserving the old compositing order. Each
+  // record becomes one 6-vertex quad instance; the premultiplied-over blend
+  // composites them exactly as the former single fullscreen loop did.
+  void DrawSceneLayer(wgpu::CommandEncoder &encoder, wgpu::TextureView view,
+      const SceneLayerBuffers &buffers, wgpu::LoadOp load_op) {
+    wgpu::RenderPassColorAttachment color_attachment;
+    color_attachment.view = view;
+    color_attachment.loadOp = load_op;
+    color_attachment.storeOp = wgpu::StoreOp::Store;
+    if (load_op == wgpu::LoadOp::Clear) {
+      color_attachment.clearValue = {0.0, 0.0, 0.0, 0.0};
+    }
+
+    wgpu::RenderPassDescriptor render_pass_descriptor;
+    render_pass_descriptor.colorAttachmentCount = 1;
+    render_pass_descriptor.colorAttachments = &color_attachment;
+
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&render_pass_descriptor);
+    pass.SetBindGroup(0, buffers.bind_group);
+    if (buffers.panel_count > 0) {
+      pass.SetPipeline(_panel_pipeline);
+      pass.Draw(6, buffers.panel_count);
+    }
+    if (buffers.button_count > 0) {
+      pass.SetPipeline(_button_pipeline);
+      pass.Draw(6, buffers.button_count);
+    }
+    if (buffers.text_count > 0) {
+      pass.SetPipeline(_text_pipeline);
+      pass.Draw(6, buffers.text_count);
+    }
     pass.End();
   }
 
@@ -1877,9 +1964,12 @@ private:
     bind_group_layout_entries[0].buffer.minBindingSize = sizeof(SceneHeader);
 
     // Per-kind draw records as read-only storage buffers (panels/buttons/texts).
+    // Visible to the vertex stage too: the instanced vertex shaders read each
+    // record's rect to size its quad.
     for (uint32_t storage_index = 1; storage_index <= 3; ++storage_index) {
       bind_group_layout_entries[storage_index].binding = storage_index;
-      bind_group_layout_entries[storage_index].visibility = wgpu::ShaderStage::Fragment;
+      bind_group_layout_entries[storage_index].visibility =
+          wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
       bind_group_layout_entries[storage_index].buffer.type =
           wgpu::BufferBindingType::ReadOnlyStorage;
     }
@@ -1924,21 +2014,29 @@ private:
     blend_state.alpha = alpha_blend;
     color_target.blend = &blend_state;
 
-    wgpu::FragmentState fragment;
-    fragment.module = shader;
-    fragment.entryPoint = "fragmentMain";
-    fragment.targetCount = 1;
-    fragment.targets = &color_target;
+    // One instanced pipeline per kind, sharing the layout, shader, and
+    // premultiplied-over blend. Each draws a quad per record (6 verts × N
+    // instances) using the kind's vertex/fragment entry points.
+    auto make_pipeline = [&](const char *vertex_entry, const char *fragment_entry) {
+      wgpu::FragmentState fragment;
+      fragment.module = shader;
+      fragment.entryPoint = fragment_entry;
+      fragment.targetCount = 1;
+      fragment.targets = &color_target;
 
-    wgpu::RenderPipelineDescriptor pipeline_descriptor;
-    pipeline_descriptor.layout = pipeline_layout;
-    pipeline_descriptor.vertex.module = shader;
-    pipeline_descriptor.vertex.entryPoint = "vertexMain";
-    pipeline_descriptor.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
-    pipeline_descriptor.fragment = &fragment;
-    pipeline_descriptor.multisample.count = 1;
+      wgpu::RenderPipelineDescriptor pipeline_descriptor;
+      pipeline_descriptor.layout = pipeline_layout;
+      pipeline_descriptor.vertex.module = shader;
+      pipeline_descriptor.vertex.entryPoint = vertex_entry;
+      pipeline_descriptor.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
+      pipeline_descriptor.fragment = &fragment;
+      pipeline_descriptor.multisample.count = 1;
+      return _device.CreateRenderPipeline(&pipeline_descriptor);
+    };
 
-    _pipeline = _device.CreateRenderPipeline(&pipeline_descriptor);
+    _panel_pipeline = make_pipeline("panelVertex", "panelFragment");
+    _button_pipeline = make_pipeline("buttonVertex", "buttonFragment");
+    _text_pipeline = make_pipeline("textVertex", "textFragment");
   }
 
   void CreateEffectPipeline() {
@@ -2385,6 +2483,9 @@ private:
     if (EnsureLayerCapacity(buffers, records)) {
       RebuildSceneBindGroup(buffers);
     }
+    buffers.panel_count = static_cast<uint32_t>(records.panels.size());
+    buffers.button_count = static_cast<uint32_t>(records.buttons.size());
+    buffers.text_count = static_cast<uint32_t>(records.texts.size());
 
     _device.GetQueue().WriteBuffer(buffers.header, 0, &header, sizeof(header));
     if (!records.panels.empty()) {
@@ -2490,7 +2591,9 @@ private:
   wgpu::TextureView _text_texture_view;
   wgpu::Sampler _text_sampler;
   wgpu::TextureFormat _format = wgpu::TextureFormat::Undefined;
-  wgpu::RenderPipeline _pipeline;
+  wgpu::RenderPipeline _panel_pipeline;
+  wgpu::RenderPipeline _button_pipeline;
+  wgpu::RenderPipeline _text_pipeline;
   wgpu::RenderPipeline _effect_pipeline;
   wgpu::RenderPipeline _blur_pipeline;
   phenotype::ui::View _root_view;
