@@ -217,9 +217,6 @@ inline void LayoutButtonGroup(const MeasureTextFn &measure, const ui::View &view
         continue;
       }
       SceneDrawLayer &layer = ActiveDrawLayer(scene);
-      if (layer.buttons.size() >= kMaxSymbolButtonCount) {
-        return;
-      }
       const ui::View *icon = FindIconContent(child);
       if (icon) {
         bool draws_divider = visible_button_index == 0 && view.children.size() > 1;
@@ -258,9 +255,6 @@ inline void LayoutToggle(const ui::View &view, LayoutRect rect, const LayoutCont
   SceneDrawLayer &layer = ActiveDrawLayer(scene);
 
   auto push_panel = [&](LayoutRect frame, ui::Color color, float corner_radius) {
-    if (layer.panels.size() >= kMaxPanelCount) {
-      return;
-    }
     layer.panels.push_back({frame, color, corner_radius, false, false, context.clip_rect});
   };
 
@@ -301,9 +295,7 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
   SceneDrawLayer &layer = ActiveDrawLayer(scene);
 
   // Track: a rounded panel, accent outline-tinted when focused.
-  if (layer.panels.size() < kMaxPanelCount) {
-    layer.panels.push_back({rect, ui::field_background(), 7.0f, false, false, context.clip_rect});
-  }
+  layer.panels.push_back({rect, ui::field_background(), 7.0f, false, false, context.clip_rect});
 
   LayoutRect content = ContentRect(view, rect);
   float text_inset = 8.0f;
@@ -326,38 +318,32 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
     std::size_t end = std::max(view.caret_position, view.selection_anchor);
     float begin_x = text_x + prefix_width(begin);
     float end_x = text_x + prefix_width(end);
-    if (layer.panels.size() < kMaxPanelCount) {
-      layer.panels.push_back({{begin_x, content.y + 4.0f, std::max(0.0f, end_x - begin_x),
-                                  std::max(0.0f, content.height - 8.0f)},
-          ui::selection_highlight(), 2.0f, false, false, context.clip_rect});
-    }
+    layer.panels.push_back({{begin_x, content.y + 4.0f, std::max(0.0f, end_x - begin_x),
+                                std::max(0.0f, content.height - 8.0f)},
+        ui::selection_highlight(), 2.0f, false, false, context.clip_rect});
   }
 
   // The text run, or the placeholder when empty.
-  if (layer.texts.size() < kMaxTextCount) {
-    LayoutRect text_rect{text_x, content.y, std::max(0.0f, content.width - text_inset * 2.0f),
-        content.height};
-    layer.texts.push_back({
-        text_rect,
-        empty ? view.placeholder_text : view.text_content,
-        empty ? ui::disabled_label() : view.foreground_color,
-        font_size,
-        font_weight,
-        1,
-        ui::TextOverflow::clip,
-        ui::TextTruncation::tail,
-        false,
-        context.clip_rect,
-    });
-  }
+  LayoutRect text_rect{text_x, content.y, std::max(0.0f, content.width - text_inset * 2.0f),
+      content.height};
+  layer.texts.push_back({
+      text_rect,
+      empty ? view.placeholder_text : view.text_content,
+      empty ? ui::disabled_label() : view.foreground_color,
+      font_size,
+      font_weight,
+      1,
+      ui::TextOverflow::clip,
+      ui::TextTruncation::tail,
+      false,
+      context.clip_rect,
+  });
 
   // Caret: a thin panel at the caret x, when focused with a collapsed selection.
   if (view.is_focused && view.caret_position == view.selection_anchor) {
     float caret_x = text_x + prefix_width(view.caret_position);
-    if (layer.panels.size() < kMaxPanelCount) {
-      layer.panels.push_back({{caret_x, content.y + 4.0f, 1.5f, std::max(0.0f, content.height - 8.0f)},
-          ui::primary_label(), 0.0f, false, false, context.clip_rect});
-    }
+    layer.panels.push_back({{caret_x, content.y + 4.0f, 1.5f, std::max(0.0f, content.height - 8.0f)},
+        ui::primary_label(), 0.0f, false, false, context.clip_rect});
   }
 }
 
@@ -494,8 +480,7 @@ inline void LayoutView(const MeasureTextFn &measure, const ui::View &view, Layou
   case ui::ViewKind::spacer:
     return;
   case ui::ViewKind::icon:
-    if (ActiveDrawLayer(scene).buttons.size() >= kMaxSymbolButtonCount ||
-        !IsVisibleInClip(rect, context.clip_rect)) {
+    if (!IsVisibleInClip(rect, context.clip_rect)) {
       return;
     }
     ActiveDrawLayer(scene).buttons.push_back({
@@ -513,8 +498,7 @@ inline void LayoutView(const MeasureTextFn &measure, const ui::View &view, Layou
     });
     return;
   case ui::ViewKind::text:
-    if (ActiveDrawLayer(scene).texts.size() >= kMaxTextCount ||
-        !IsVisibleInClip(rect, context.clip_rect)) {
+    if (!IsVisibleInClip(rect, context.clip_rect)) {
       return;
     }
     ActiveDrawLayer(scene).texts.push_back({
@@ -531,8 +515,7 @@ inline void LayoutView(const MeasureTextFn &measure, const ui::View &view, Layou
     });
     return;
   case ui::ViewKind::panel:
-    if (ActiveDrawLayer(scene).panels.size() >= kMaxPanelCount ||
-        !IsVisibleInClip(rect, context.clip_rect)) {
+    if (!IsVisibleInClip(rect, context.clip_rect)) {
       return;
     }
     ActiveDrawLayer(scene).panels.push_back({
@@ -564,8 +547,7 @@ inline void LayoutView(const MeasureTextFn &measure, const ui::View &view, Layou
     scene.uses_foreground_layer = true;
     return;
   case ui::ViewKind::button: {
-    if (ActiveDrawLayer(scene).buttons.size() >= kMaxSymbolButtonCount ||
-        !IsVisibleInClip(rect, context.clip_rect)) {
+    if (!IsVisibleInClip(rect, context.clip_rect)) {
       return;
     }
     const ui::View *icon = FindIconContent(view);
@@ -681,12 +663,12 @@ inline void LayoutView(const MeasureTextFn &measure, const ui::View &view, Layou
 inline SceneLayout LayoutScene(const MeasureTextFn &measure, const ui::View &root, float width,
     float height, const LayoutContext &context) {
   SceneLayout scene;
-  scene.background.panels.reserve(kMaxPanelCount);
-  scene.background.buttons.reserve(kMaxSymbolButtonCount);
-  scene.background.texts.reserve(kMaxTextCount);
-  scene.foreground.panels.reserve(kMaxPanelCount);
-  scene.foreground.buttons.reserve(kMaxSymbolButtonCount);
-  scene.foreground.texts.reserve(kMaxTextCount);
+  scene.background.panels.reserve(kPanelReserve);
+  scene.background.buttons.reserve(kSymbolButtonReserve);
+  scene.background.texts.reserve(kTextReserve);
+  scene.foreground.panels.reserve(kPanelReserve);
+  scene.foreground.buttons.reserve(kSymbolButtonReserve);
+  scene.foreground.texts.reserve(kTextReserve);
   scene.effects.reserve(kMaxEffectPanelCount);
   scene.hit_targets.reserve(64);
   scene.scroll_targets.reserve(8);

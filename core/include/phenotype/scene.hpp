@@ -129,9 +129,15 @@ struct SceneLayout {
 using MeasureTextFn =
     std::function<ui::Size(std::string_view content, float font_size, float font_weight)>;
 
-inline constexpr std::size_t kMaxSymbolButtonCount = 128;
-inline constexpr std::size_t kMaxPanelCount = 16;
-inline constexpr std::size_t kMaxTextCount = 128;
+// Initial reserve hints for the per-kind scene vectors. These are no longer
+// hard caps: the layout pass pushes every visible record and the macOS renderer
+// uploads them to growable storage buffers (the panel/button/text limits were
+// removed in the storage-buffer slice). They stay as reserve sizes so a typical
+// frame avoids reallocating. kMaxEffectPanelCount IS still a hard cap, because
+// the effect/blur shader keeps a fixed-size uniform array.
+inline constexpr std::size_t kSymbolButtonReserve = 128;
+inline constexpr std::size_t kPanelReserve = 16;
+inline constexpr std::size_t kTextReserve = 128;
 inline constexpr std::size_t kMaxEffectPanelCount = 8;
 
 inline bool NearlyEqual(float lhs, float rhs) noexcept { return std::abs(lhs - rhs) < 0.5f; }
