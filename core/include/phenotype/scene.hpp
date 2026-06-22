@@ -74,6 +74,9 @@ struct EffectPanelLayout {
   float corner_radius = 0.0f;
   bool rounds_top_corners_only = false;
   bool rounds_bottom_corners_only = false;
+  // 0 leaves the sharp backdrop, 1 fully frosts it (see ui::MaterialBlurAmount).
+  // color.alpha carries the tint strength (ui::MaterialTintStrength).
+  float blur_amount = 0.8f;
   std::optional<LayoutRect> clip_rect;
 };
 

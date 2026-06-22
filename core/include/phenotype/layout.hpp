@@ -465,12 +465,18 @@ inline void LayoutView(const MeasureTextFn &measure, const ui::View &view, Layou
     return;
   case ui::ViewKind::visual_effect_panel:
     if (scene.effects.size() < kMaxEffectPanelCount && IsVisibleInClip(rect, context.clip_rect)) {
+      // The material thickness drives how much the backdrop is frosted and how
+      // hard it is tinted; the tint strength rides on the color alpha, which is
+      // how the effect shader already reads it.
+      ui::Color tint = view.background_color;
+      tint.alpha = ui::MaterialTintStrength(view.material);
       scene.effects.push_back({
           rect,
-          view.background_color,
+          tint,
           view.corner_radius_value,
           view.rounds_top_corners_only,
           view.rounds_bottom_corners_only,
+          ui::MaterialBlurAmount(view.material),
           context.clip_rect,
       });
     }

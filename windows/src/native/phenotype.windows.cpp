@@ -862,12 +862,17 @@ void RenderSceneLayer(HDC context, const scene::SceneDrawLayer &layer) {
 }
 
 // Paints a fully resolved scene. Effect panels have no GDI blur, so they fall
-// back to a flat fill (matching the prior visual_effect_panel behaviour), then
-// the background and foreground draw layers composite on top.
+// back to a translucent rounded rect (the G1 fallback policy), then the
+// background and foreground draw layers composite on top. The record's color
+// alpha now carries only the tint strength, which is far too sheer for a flat
+// fill, so the fallback opacity is derived from the material thickness
+// (blur_amount) to keep thicker materials legible.
 void RenderScene(HDC context, const scene::SceneLayout &scene_layout) {
   for (const scene::EffectPanelLayout &effect : scene_layout.effects) {
     ScopedClip clip(context, effect.clip_rect);
-    FillRoundedRect(context, ToRectF(effect.frame), effect.corner_radius, effect.color);
+    ui::Color fill = effect.color;
+    fill.alpha = 0.55f + 0.4f * std::clamp(effect.blur_amount, 0.0f, 1.0f);
+    FillRoundedRect(context, ToRectF(effect.frame), effect.corner_radius, fill);
   }
   RenderSceneLayer(context, scene_layout.background);
   RenderSceneLayer(context, scene_layout.foreground);

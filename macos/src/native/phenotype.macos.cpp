@@ -407,7 +407,11 @@ fn fragmentMain(in : VertexOut) -> @location(0) vec4f {
         let panel = effect_scene.effects[index];
         let coverage = effectCoverage(in.pixel_position, panel) * backdrop_presence;
         if (coverage > 0.0) {
-            let frosted = tintPremultiplied(sampleBlurred(in.pixel_position), panel.color.rgb, panel.color.a);
+            // style.z is the material's blur amount: lerp the sharp backdrop
+            // toward its blurred copy so thinner materials stay clearer.
+            let blur_amount = clamp(panel.style.z, 0.0, 1.0);
+            let backdrop = mix(sampleScene(in.pixel_position), sampleBlurred(in.pixel_position), blur_amount);
+            let frosted = tintPremultiplied(backdrop, panel.color.rgb, panel.color.a);
             layer = mix(layer, frosted, coverage);
         }
     }
@@ -1475,7 +1479,7 @@ EffectPanelUniform MakeEffectPanel(
       {
           panel.corner_radius,
           CornerMode(panel.rounds_top_corners_only, panel.rounds_bottom_corners_only),
-          0.0f,
+          panel.blur_amount,
           0.0f,
       },
   };

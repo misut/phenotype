@@ -372,5 +372,25 @@ int main() {
     }
   }
 
+  // --- Glass overlays content on a material-backed effect panel -----------
+  {
+    ui::View glass = ui::Glass(ui::Text("floating"), ui::MaterialKind::thin);
+    if (glass.kind != ui::ViewKind::stack || glass.axis != ui::LayoutAxis::overlay ||
+        glass.children.size() != 2 ||
+        glass.children[0].kind != ui::ViewKind::visual_effect_panel ||
+        glass.children[0].material != ui::MaterialKind::thin ||
+        glass.children[1].kind != ui::ViewKind::text) {
+      return 46;
+    }
+    // It lays out into an effect panel carrying the thin material's blur amount.
+    ps::LayoutContext context;
+    ps::SceneLayout laid =
+        phenotype::layout::LayoutScene(MeasureStub, glass, 200.0f, 80.0f, context);
+    if (laid.effects.size() != 1 ||
+        !Approx(laid.effects[0].blur_amount, ui::MaterialBlurAmount(ui::MaterialKind::thin))) {
+      return 47;
+    }
+  }
+
   return 0;
 }
