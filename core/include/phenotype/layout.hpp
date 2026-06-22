@@ -458,8 +458,14 @@ inline void LayoutView(const MeasureTextFn &measure, const ui::View &view, Layou
       context.window_controls.has_leading_controls) {
     const LayoutRect &controls = context.window_controls.leading_controls;
     ui::Size view_size = IntrinsicSize(measure, view);
-    rect.x = std::max(
+    float shifted_x = std::max(
         rect.x, controls.x + controls.width + view.leading_window_controls_placement.spacing);
+    // Shrink the width by however far the start was pushed right, so the view
+    // still ends at its original trailing edge. Without this, a trailing-aligned
+    // child (e.g. a spacer pushing a button to the right edge) would be laid out
+    // past the window and culled.
+    rect.width = std::max(0.0f, rect.width - (shifted_x - rect.x));
+    rect.x = shifted_x;
     if (view.leading_window_controls_placement.aligns_vertical_center) {
       rect.y = controls.y + (controls.height * 0.5f) - (view_size.height * 0.5f);
     }

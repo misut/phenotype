@@ -46,6 +46,7 @@ enum class Symbol {
   chevron_right,
   folder,
   description,
+  search,
 };
 
 enum class ButtonRole {
@@ -599,6 +600,8 @@ inline constexpr MaterialSymbolIcon ToMaterialSymbolIcon(Symbol symbol) noexcept
     return MaterialSymbolIcon::folder;
   case Symbol::description:
     return MaterialSymbolIcon::description;
+  case Symbol::search:
+    return MaterialSymbolIcon::search;
   }
   return MaterialSymbolIcon::chevron_left;
 }

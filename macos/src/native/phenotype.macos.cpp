@@ -905,6 +905,8 @@ std::string_view MaterialSymbolName(phenotype::ui::Symbol symbol) noexcept {
     return "folder";
   case phenotype::ui::Symbol::description:
     return "description";
+  case phenotype::ui::Symbol::search:
+    return "search";
   }
   return "";
 }
