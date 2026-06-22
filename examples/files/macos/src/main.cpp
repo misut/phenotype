@@ -31,7 +31,13 @@ struct FilesState {
   std::vector<std::filesystem::path> path_history;
   std::size_t history_index = 0;
   float scroll_offset_y = 0.0f;
+  bool searching = false;
 };
+
+// Toggle the search affordance. The search field itself is a later slice; for
+// now the toolbar button flips this flag so the entry point is wired and
+// observable.
+void ToggleSearch(FilesState &state) { state.searching = !state.searching; }
 
 std::filesystem::path HomeDirectory() {
   const char *home = std::getenv("HOME");
@@ -321,6 +327,16 @@ ui::View FilesView(ui::Context &context, const std::shared_ptr<FilesState> &stat
           can_navigate_back, [state] { NavigateBack(*state); }, can_navigate_forward,
           [state] { NavigateForward(*state); });
       toolbar << ui::toolbar_title(DirectoryName(state->current_path));
+      // Push a search button to the trailing edge. It is the entry point for the
+      // (later) search field; for now it just toggles the model's search flag.
+      // Built like the navigation buttons (capsule control, explicit label
+      // color) so it shares their toolbar appearance.
+      toolbar << ui::spacer();
+      toolbar << ui::button(ui::icon(ui::Symbol::search, ui::navigation_symbol_options())
+                                .foreground(ui::navigation_chevron_color(true)))
+                     .shape(ui::ControlShape::capsule)
+                     .on_click([state] { ToggleSearch(*state); })
+                     .accessibility_label("Search");
     });
   };
 

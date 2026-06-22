@@ -7,6 +7,7 @@ enum class MaterialSymbolIcon {
   chevron_right,
   folder,
   description,
+  search,
 };
 
 struct MaterialSymbolOptions {

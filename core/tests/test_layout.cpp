@@ -201,5 +201,40 @@ int main() {
     }
   }
 
+  // --- Test 9: leading-window-controls offset shrinks width, keeps trailing
+  //     content on screen. Regression: after_leading_window_controls shifted
+  //     rect.x without reducing width, so a spacer-pushed trailing button
+  //     overflowed past the window edge and got culled (the missing Files
+  //     search button).
+  {
+    bool fired = false;
+    ui::View bar = ui::layout::hstack([&fired](ui::Block &b) {
+      b << ui::text("title").size({40.0f, 20.0f});
+      b << ui::spacer();
+      b << ui::panel(ui::white()).size({40.0f, 36.0f}).on_click([&fired] { fired = true; });
+    })
+                       .after_leading_window_controls(12.0f)
+                       .size({0.0f, 52.0f})
+                       .expand_width();
+
+    pl::LayoutContext context;
+    context.window_controls.has_leading_controls = true;
+    context.window_controls.leading_controls = {20.0f, 6.0f, 60.0f, 20.0f};
+
+    pl::SceneLayout scene = pl::LayoutScene(measure, bar, 400.0f, 52.0f, context);
+    // The trailing panel must still be emitted and sit within the 400px window.
+    if (scene.background.panels.size() != 1) {
+      return 23;
+    }
+    const pl::PanelLayout &trailing = scene.background.panels.front();
+    if (trailing.frame.x + trailing.frame.width > 400.0f + 0.5f) {
+      return 24;
+    }
+    // And its hit target must be reachable (not culled off-screen).
+    if (scene.hit_targets.empty()) {
+      return 25;
+    }
+  }
+
   return 0;
 }
