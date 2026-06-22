@@ -7,6 +7,7 @@ export {
 #include "phenotype/components.hpp"
 #include "phenotype/layout.hpp"
 #include "phenotype/material_symbols.hpp"
+#include "phenotype/reconcile.hpp"
 #include "phenotype/runtime.hpp"
 #include "phenotype/scene.hpp"
 #include "phenotype/tokens.hpp"
