@@ -2,8 +2,9 @@
 // pipeline. It drives synthetic View trees through the real
 // phenotype::layout::LayoutScene and reports, per scenario:
 //   - the draw-command counts the scene emits (panels / buttons / texts),
-//   - whether any per-kind cap truncated the scene (the 16/128/128 limits
-//     slice 10 removes by moving to storage buffers),
+//   - whether those counts exceed the old fixed caps (16/128/128) that slice 10
+//     replaced with storage buffers — the scene no longer truncates, so this
+//     now flags scenarios that would have been clipped before the change,
 //   - LayoutScene wall-clock per frame (mean / median / p95, microseconds).
 //
 // This is the MEASURE-FIRST baseline for Phase 5. main's LayoutScene is a pure
@@ -88,7 +89,7 @@ struct ScenarioResult {
   std::size_t panels = 0;
   std::size_t buttons = 0;
   std::size_t texts = 0;
-  bool truncated = false;
+  bool exceeds_old_caps = false;
   double mean_us = 0.0;
   double median_us = 0.0;
   double p95_us = 0.0;
@@ -117,10 +118,12 @@ ScenarioResult RunScenario(const ScenarioConfig &config) {
   result.panels = last.background.panels.size() + last.foreground.panels.size();
   result.buttons = last.background.buttons.size() + last.foreground.buttons.size();
   result.texts = last.background.texts.size() + last.foreground.texts.size();
-  // The scene truncates when a layer hits a per-kind cap. A scroll culls to the
-  // viewport, so texts at the cap signals the 128 limit clipped the content.
-  result.truncated = result.texts >= ps::kMaxTextCount || result.panels >= ps::kMaxPanelCount ||
-                     result.buttons >= ps::kMaxSymbolButtonCount;
+  // Since the storage-buffer slice the scene no longer truncates — every
+  // visible record is emitted. This flag now reports whether the emitted counts
+  // exceed the old fixed caps (now reserve hints), i.e. whether this scenario
+  // would have been silently clipped before the change.
+  result.exceeds_old_caps = result.texts > ps::kTextReserve || result.panels > ps::kPanelReserve ||
+                            result.buttons > ps::kSymbolButtonReserve;
 
   std::sort(frame_us.begin(), frame_us.end());
   double sum = 0.0;
@@ -145,7 +148,7 @@ void PrintJson(const std::vector<ScenarioResult> &results) {
     std::println("      \"name\": \"{}\",", r.name);
     std::println("      \"emitted\": {{ \"panels\": {}, \"buttons\": {}, \"texts\": {} }},",
         r.panels, r.buttons, r.texts);
-    std::println("      \"truncated\": {},", r.truncated ? "true" : "false");
+    std::println("      \"exceeds_old_caps\": {},", r.exceeds_old_caps ? "true" : "false");
     std::println("      \"layout_us\": {{ \"mean\": {:.2f}, \"median\": {:.2f}, \"p95\": {:.2f} }}",
         r.mean_us, r.median_us, r.p95_us);
     std::println("    }}{}", index + 1 == results.size() ? "" : ",");
