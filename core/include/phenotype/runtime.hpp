@@ -76,6 +76,20 @@ struct LocalCell {
   std::uint64_t generation = 0;
 };
 
+// One interpolation in flight, keyed by call site like a state cell. Holds the
+// closed-form interval (from -> to over [start, start+duration]); the current
+// value is computed from the clock each frame rather than stepped, so it is
+// frame-rate independent (egui's ValueAnim shape). generation drives the same
+// drop-when-untouched GC as LocalCell.
+struct AnimCell {
+  LocalKey key;
+  float from = 0.0f;
+  float to = 0.0f;
+  double start_time = 0.0;
+  double duration = 0.0;
+  std::uint64_t generation = 0;
+};
+
 } // namespace detail
 
 template <typename T> class Binding;
@@ -159,13 +173,63 @@ public:
     return *raw;
   }
 
+  // Drive an interpolation toward `target`, returning the value for the clock
+  // time `now` (seconds). On the first call, or when `target` changes mid-flight,
+  // the interval is rebased from the current value so the motion is continuous
+  // (no jump on retarget). Reaches `target` exactly at start + duration. Sets
+  // the needs-tick flag while any animation is still in flight, so the shell can
+  // schedule another frame and stop once everything has settled.
+  //
+  // The clock is injected (passed in), never read from a global, so the core
+  // stays deterministic and testable — the platform shell supplies real time.
+  [[nodiscard]] float Animate(
+      float target, double now, double duration, std::uint32_t key, std::source_location loc) {
+    detail::LocalKey id{loc.file_name(), loc.line(), loc.column(), key};
+    detail::AnimCell *cell = nullptr;
+    for (detail::AnimCell &candidate : anims_) {
+      if (candidate.key == id) {
+        cell = &candidate;
+        break;
+      }
+    }
+    if (cell == nullptr) {
+      anims_.push_back({id, target, target, now, duration, generation_});
+      return target;
+    }
+
+    cell->generation = generation_;
+    float current = SampleAnim(*cell, now);
+    if (cell->to != target) {
+      cell->from = current;
+      cell->to = target;
+      cell->start_time = now;
+      cell->duration = duration;
+      current = cell->duration <= 0.0 ? target : current;
+    }
+    if (current != cell->to) {
+      needs_tick_ = true;
+    }
+    return current;
+  }
+
+  // True when at least one animation queried this frame has not yet settled.
+  // Cleared at the start of each rebuild pass (BeginFrame); the shell reads it
+  // after body() to decide whether to schedule another frame.
+  [[nodiscard]] bool needs_tick() const noexcept { return needs_tick_; }
+
   // Open a rebuild pass. Cells touched (Local-accessed) during the pass are
   // stamped with this generation; Prune() then drops the cells the new tree no
   // longer references, so state for removed views does not leak.
-  void BeginFrame() noexcept { ++generation_; }
+  void BeginFrame() noexcept {
+    ++generation_;
+    needs_tick_ = false;
+  }
 
   void Prune() {
     std::erase_if(cells_, [this](const detail::LocalCell &cell) {
+      return cell.generation != generation_;
+    });
+    std::erase_if(anims_, [this](const detail::AnimCell &cell) {
       return cell.generation != generation_;
     });
   }
@@ -179,11 +243,31 @@ public:
   }
 
   [[nodiscard]] std::size_t cell_count() const noexcept { return cells_.size(); }
+  [[nodiscard]] std::size_t anim_count() const noexcept { return anims_.size(); }
 
 private:
+  // Closed-form linear sample of an in-flight interval, clamped to [from, to]
+  // at the interval ends. Easing is applied by the caller (a later slice) on
+  // top of this linear factor.
+  [[nodiscard]] static float SampleAnim(const detail::AnimCell &cell, double now) noexcept {
+    if (cell.duration <= 0.0) {
+      return cell.to;
+    }
+    double t = (now - cell.start_time) / cell.duration;
+    if (t <= 0.0) {
+      return cell.from;
+    }
+    if (t >= 1.0) {
+      return cell.to;
+    }
+    return cell.from + (cell.to - cell.from) * static_cast<float>(t);
+  }
+
   std::vector<detail::LocalCell> cells_;
+  std::vector<detail::AnimCell> anims_;
   std::function<void()> rebuild_;
   std::uint64_t generation_ = 0;
+  bool needs_tick_ = false;
 };
 
 // Thin borrow of the active Runtime handed to body(). state() returns a typed
@@ -191,7 +275,10 @@ private:
 // cells declared on the same source line.
 class Context {
 public:
-  explicit Context(Runtime &runtime) noexcept : runtime_(&runtime) {}
+  // now is the frame's clock time in seconds, supplied by the shell each
+  // rebuild; it defaults to 0 for tests and non-animating callers.
+  explicit Context(Runtime &runtime, double now = 0.0) noexcept
+      : runtime_(&runtime), now_(now) {}
 
   template <typename T>
   [[nodiscard]] State<T> state(std::string_view key, T initial = T{},
@@ -200,10 +287,36 @@ public:
         runtime_->Local<T>(std::move(initial), detail::StableId(key), loc), runtime_};
   }
 
+  // Animate a float toward target over duration_ms, returning the value for this
+  // frame. Call-site keyed like state(); pass a distinct key to animate several
+  // values on one source line. Retargeting mid-flight is continuous.
+  [[nodiscard]] float animate_float(float target, float duration_ms = 150.0f,
+      std::string_view key = {}, std::source_location loc = std::source_location::current()) const {
+    return runtime_->Animate(target, now_, static_cast<double>(duration_ms) / 1000.0,
+        detail::StableId(key), loc);
+  }
+
+  // Animate a color channelwise toward target. Each channel is its own keyed
+  // interval (disambiguated by a per-channel salt) so they interpolate together.
+  [[nodiscard]] Color animate_color(Color target, float duration_ms = 150.0f,
+      std::string_view key = {}, std::source_location loc = std::source_location::current()) const {
+    double seconds = static_cast<double>(duration_ms) / 1000.0;
+    std::uint32_t base = detail::StableId(key);
+    return Color{
+        runtime_->Animate(target.red, now_, seconds, base ^ 0x00000001u, loc),
+        runtime_->Animate(target.green, now_, seconds, base ^ 0x00000002u, loc),
+        runtime_->Animate(target.blue, now_, seconds, base ^ 0x00000003u, loc),
+        runtime_->Animate(target.alpha, now_, seconds, base ^ 0x00000004u, loc),
+    };
+  }
+
+  [[nodiscard]] double now() const noexcept { return now_; }
+
   void invalidate() const { runtime_->RequestRebuild(); }
 
 private:
   Runtime *runtime_ = nullptr;
+  double now_ = 0.0;
 };
 
 // --- out-of-line State/Binding members (need the complete Runtime) ----------
