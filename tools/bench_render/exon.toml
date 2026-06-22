@@ -1,0 +1,14 @@
+[package]
+name = "bench-render"
+version = "0.1.0"
+description = "Host-only micro-benchmark for the phenotype layout/scene pipeline"
+authors = ["misut"]
+license = "MIT"
+type = "bin"
+standard = 23
+
+[dependencies.path]
+phenotype-core = "../../core"
+
+[sync]
+cmake-in-root = false
