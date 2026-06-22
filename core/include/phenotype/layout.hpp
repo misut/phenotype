@@ -43,6 +43,12 @@ inline ui::Size IntrinsicSize(const MeasureTextFn &measure, const ui::View &view
     // style's intrinsic box if a caller cleared it.
     return view.toggle_style == ui::ToggleStyle::switcher ? ui::Size{36.0f, 22.0f}
                                                           : ui::Size{18.0f, 18.0f};
+  case ui::ViewKind::text_field: {
+    // Width grows with the content; the field expands to fill its row. Height
+    // comes from the font plus vertical padding.
+    ui::Size content = measure(view.text_content, view.font_size_value, view.font_weight_value);
+    return {content.width + 16.0f, std::max(30.0f, content.height + 12.0f)};
+  }
   case ui::ViewKind::scroll:
     break;
   case ui::ViewKind::spacer:
@@ -98,6 +104,7 @@ inline ui::Size NaturalContentSize(
   case ui::ViewKind::text:
   case ui::ViewKind::button_group:
   case ui::ViewKind::toggle:
+  case ui::ViewKind::text_field:
     return IntrinsicSize(measure, view);
   case ui::ViewKind::panel:
   case ui::ViewKind::visual_effect_panel:
@@ -277,6 +284,80 @@ inline void LayoutToggle(const ui::View &view, LayoutRect rect, const LayoutCont
         rect.height - mark_inset * 2.0f};
     float mark_radius = view.toggle_style == ui::ToggleStyle::radio ? mark.height * 0.5f : 1.0f;
     push_panel(mark, ui::white(), mark_radius);
+  }
+}
+
+// Lower a text field into plain panel + text draw commands: a rounded track, an
+// optional selection highlight, the value (or placeholder when empty), and a
+// caret when focused with a collapsed selection. Caret and selection x-offsets
+// come from measuring the text prefix, so this reuses the injected text
+// measurer and needs no dedicated scene record or renderer support. The hit
+// target is pushed by the caller from view.click_action.
+inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, LayoutRect rect,
+    const LayoutContext &context, SceneLayout &scene) {
+  if (!IsVisibleInClip(rect, context.clip_rect)) {
+    return;
+  }
+  SceneDrawLayer &layer = ActiveDrawLayer(scene);
+
+  // Track: a rounded panel, accent outline-tinted when focused.
+  if (layer.panels.size() < kMaxPanelCount) {
+    layer.panels.push_back({rect, ui::field_background(), 7.0f, false, false, context.clip_rect});
+  }
+
+  LayoutRect content = ContentRect(view, rect);
+  float text_inset = 8.0f;
+  float text_x = content.x + text_inset;
+  float font_size = view.font_size_value;
+  float font_weight = view.font_weight_value;
+  bool empty = view.text_content.empty();
+
+  auto prefix_width = [&](std::size_t byte_count) {
+    if (byte_count == 0) {
+      return 0.0f;
+    }
+    std::string_view prefix(view.text_content.data(), byte_count);
+    return measure(prefix, font_size, font_weight).width;
+  };
+
+  // Selection highlight (only meaningful while focused with a real range).
+  if (view.is_focused && view.caret_position != view.selection_anchor) {
+    std::size_t begin = std::min(view.caret_position, view.selection_anchor);
+    std::size_t end = std::max(view.caret_position, view.selection_anchor);
+    float begin_x = text_x + prefix_width(begin);
+    float end_x = text_x + prefix_width(end);
+    if (layer.panels.size() < kMaxPanelCount) {
+      layer.panels.push_back({{begin_x, content.y + 4.0f, std::max(0.0f, end_x - begin_x),
+                                  std::max(0.0f, content.height - 8.0f)},
+          ui::selection_highlight(), 2.0f, false, false, context.clip_rect});
+    }
+  }
+
+  // The text run, or the placeholder when empty.
+  if (layer.texts.size() < kMaxTextCount) {
+    LayoutRect text_rect{text_x, content.y, std::max(0.0f, content.width - text_inset * 2.0f),
+        content.height};
+    layer.texts.push_back({
+        text_rect,
+        empty ? view.placeholder_text : view.text_content,
+        empty ? ui::disabled_label() : view.foreground_color,
+        font_size,
+        font_weight,
+        1,
+        ui::TextOverflow::clip,
+        ui::TextTruncation::tail,
+        false,
+        context.clip_rect,
+    });
+  }
+
+  // Caret: a thin panel at the caret x, when focused with a collapsed selection.
+  if (view.is_focused && view.caret_position == view.selection_anchor) {
+    float caret_x = text_x + prefix_width(view.caret_position);
+    if (layer.panels.size() < kMaxPanelCount) {
+      layer.panels.push_back({{caret_x, content.y + 4.0f, 1.5f, std::max(0.0f, content.height - 8.0f)},
+          ui::primary_label(), 0.0f, false, false, context.clip_rect});
+    }
   }
 }
 
@@ -517,6 +598,9 @@ inline void LayoutView(const MeasureTextFn &measure, const ui::View &view, Layou
     return;
   case ui::ViewKind::toggle:
     LayoutToggle(view, rect, context, scene);
+    return;
+  case ui::ViewKind::text_field:
+    LayoutTextField(measure, view, rect, context, scene);
     return;
   case ui::ViewKind::stack:
     break;
