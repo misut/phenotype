@@ -171,5 +171,35 @@ int main() {
     }
   }
 
+  // --- Test 8: material kind drives effect-panel blur amount + tint ----------
+  // A thicker material frosts more (higher blur_amount) and tints harder
+  // (higher color alpha) than a thinner one; the resolvers are monotonic.
+  {
+    ui::View thin = ui::layout::zstack([](ui::Block &surface) {
+      surface << ui::visual_effect_panel().material_kind(ui::MaterialKind::thin).expand();
+    });
+    ui::View thick = ui::layout::zstack([](ui::Block &surface) {
+      surface << ui::visual_effect_panel().material_kind(ui::MaterialKind::thick).expand();
+    });
+    pl::SceneLayout thin_scene = pl::LayoutScene(measure, thin, 200.0f, 100.0f, {});
+    pl::SceneLayout thick_scene = pl::LayoutScene(measure, thick, 200.0f, 100.0f, {});
+    if (thin_scene.effects.size() != 1 || thick_scene.effects.size() != 1) {
+      return 19;
+    }
+    if (!(thick_scene.effects[0].blur_amount > thin_scene.effects[0].blur_amount)) {
+      return 20;
+    }
+    if (!(thick_scene.effects[0].color.alpha > thin_scene.effects[0].color.alpha)) {
+      return 21;
+    }
+    // The resolvers themselves are ordered across the ramp.
+    if (!(ui::MaterialBlurAmount(ui::MaterialKind::clear) <
+              ui::MaterialBlurAmount(ui::MaterialKind::regular) &&
+            ui::MaterialBlurAmount(ui::MaterialKind::regular) <=
+                ui::MaterialBlurAmount(ui::MaterialKind::thick))) {
+      return 22;
+    }
+  }
+
   return 0;
 }

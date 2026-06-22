@@ -108,6 +108,17 @@ inline View Card(View content) {
       std::move(content));
 }
 
+// A glass surface: content floating over a frosted backdrop. The material kind
+// sets how much the backdrop is blurred and tinted (macOS samples a blurred
+// copy of the scene; other backends fall back to a translucent fill). Glass is
+// for controls and navigation that float above content, not a content card.
+inline View Glass(View content, MaterialKind material = MaterialKind::regular,
+    float corner_radius = default_surface_corner_radius()) {
+  return layout::zstack(
+      visual_effect_panel().material_kind(material).corner_radius(corner_radius).expand(),
+      std::move(content));
+}
+
 // --- Button -----------------------------------------------------------------
 
 [[nodiscard]] inline Color ButtonBackground(ButtonRole role) noexcept {

@@ -60,6 +60,17 @@ enum class ToggleStyle {
   switcher,
 };
 
+// Glass material thickness for a visual_effect_panel. Thinner materials let
+// more of the sharp backdrop through; thicker ones frost it more and tint
+// harder. `none` is an opaque fallback fill (no backdrop sampling).
+enum class MaterialKind {
+  none,
+  clear,
+  thin,
+  regular,
+  thick,
+};
+
 enum class ControlShape {
   square_circle,
   capsule,
@@ -115,6 +126,7 @@ public:
   LeadingWindowControlsPlacement leading_window_controls_placement;
   ControlShape control_shape = ControlShape::square_circle;
   ToggleStyle toggle_style = ToggleStyle::checkbox;
+  MaterialKind material = MaterialKind::regular;
   bool is_on = false;
   float font_size_value = 17.0f;
   float font_weight_value = 400.0f;
@@ -352,6 +364,16 @@ public:
     return *this;
   }
 
+  [[nodiscard]] View material_kind(MaterialKind value) && {
+    material = value;
+    return std::move(*this);
+  }
+
+  View &material_kind(MaterialKind value) & {
+    material = value;
+    return *this;
+  }
+
   [[nodiscard]] View corner_radius(float value) && {
     corner_radius_value = value;
     return std::move(*this);
@@ -542,6 +564,43 @@ inline constexpr Color control_accent() noexcept { return {0.0f, 0.48f, 1.0f, 1.
 
 // Outline tint for a disengaged control's track.
 inline constexpr Color control_outline() noexcept { return {0.78f, 0.80f, 0.84f, 1.0f}; }
+
+// How strongly a material frosts its backdrop: 0 leaves the sharp backdrop
+// visible, 1 fully blurs it. The renderer lerps the sampled scene toward its
+// blurred copy by this amount, so a single blur pass serves every thickness.
+inline constexpr float MaterialBlurAmount(MaterialKind kind) noexcept {
+  switch (kind) {
+  case MaterialKind::none:
+    return 0.0f;
+  case MaterialKind::clear:
+    return 0.25f;
+  case MaterialKind::thin:
+    return 0.55f;
+  case MaterialKind::regular:
+    return 0.8f;
+  case MaterialKind::thick:
+    return 1.0f;
+  }
+  return 0.8f;
+}
+
+// How hard a material tints the frosted backdrop toward the panel color.
+// Thicker materials improve contrast by leaning on the tint.
+inline constexpr float MaterialTintStrength(MaterialKind kind) noexcept {
+  switch (kind) {
+  case MaterialKind::none:
+    return 1.0f;
+  case MaterialKind::clear:
+    return 0.1f;
+  case MaterialKind::thin:
+    return 0.2f;
+  case MaterialKind::regular:
+    return 0.35f;
+  case MaterialKind::thick:
+    return 0.55f;
+  }
+  return 0.35f;
+}
 
 inline constexpr float default_chrome_margin() noexcept { return 12.0f; }
 
