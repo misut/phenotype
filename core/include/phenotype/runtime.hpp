@@ -1,6 +1,7 @@
 #pragma once
 
 #ifndef PHENOTYPE_IMPORTS_STD_MODULE
+#include <cmath>
 #include <concepts>
 #include <cstdint>
 #include <functional>
@@ -27,6 +28,35 @@
 // isolation) and never reach for a global. Components read and write state
 // through Context, a thin borrow of the active Runtime.
 namespace phenotype::ui {
+
+// Easing curve applied on top of the linear interpolation factor. linear is the
+// identity; ease_in/out/in_out are the standard cubic curves. Animations feel
+// natural with ease_out (fast start, gentle settle), the default.
+enum class Easing {
+  linear,
+  ease_in,
+  ease_out,
+  ease_in_out,
+};
+
+// Remap a linear progress t in [0, 1] through an easing curve. Outside [0, 1]
+// the caller has already clamped to the interval ends, so this assumes [0, 1].
+[[nodiscard]] inline float ApplyEasing(Easing easing, float t) noexcept {
+  switch (easing) {
+  case Easing::linear:
+    return t;
+  case Easing::ease_in:
+    return t * t * t;
+  case Easing::ease_out: {
+    float inv = 1.0f - t;
+    return 1.0f - inv * inv * inv;
+  }
+  case Easing::ease_in_out:
+    return t < 0.5f ? 4.0f * t * t * t
+                    : 1.0f - std::pow(-2.0f * t + 2.0f, 3.0f) / 2.0f;
+  }
+  return t;
+}
 
 class Runtime;
 
@@ -87,6 +117,7 @@ struct AnimCell {
   float to = 0.0f;
   double start_time = 0.0;
   double duration = 0.0;
+  Easing easing = Easing::ease_out;
   std::uint64_t generation = 0;
 };
 
@@ -182,8 +213,8 @@ public:
   //
   // The clock is injected (passed in), never read from a global, so the core
   // stays deterministic and testable — the platform shell supplies real time.
-  [[nodiscard]] float Animate(
-      float target, double now, double duration, std::uint32_t key, std::source_location loc) {
+  [[nodiscard]] float Animate(float target, double now, double duration, Easing easing,
+      std::uint32_t key, std::source_location loc) {
     detail::LocalKey id{loc.file_name(), loc.line(), loc.column(), key};
     detail::AnimCell *cell = nullptr;
     for (detail::AnimCell &candidate : anims_) {
@@ -193,7 +224,7 @@ public:
       }
     }
     if (cell == nullptr) {
-      anims_.push_back({id, target, target, now, duration, generation_});
+      anims_.push_back({id, target, target, now, duration, easing, generation_});
       return target;
     }
 
@@ -204,6 +235,7 @@ public:
       cell->to = target;
       cell->start_time = now;
       cell->duration = duration;
+      cell->easing = easing;
       current = cell->duration <= 0.0 ? target : current;
     }
     if (current != cell->to) {
@@ -246,9 +278,9 @@ public:
   [[nodiscard]] std::size_t anim_count() const noexcept { return anims_.size(); }
 
 private:
-  // Closed-form linear sample of an in-flight interval, clamped to [from, to]
-  // at the interval ends. Easing is applied by the caller (a later slice) on
-  // top of this linear factor.
+  // Closed-form sample of an in-flight interval, clamped to [from, to] at the
+  // interval ends. The linear progress is remapped through the cell's easing
+  // curve before interpolating, so the motion accelerates/settles naturally.
   [[nodiscard]] static float SampleAnim(const detail::AnimCell &cell, double now) noexcept {
     if (cell.duration <= 0.0) {
       return cell.to;
@@ -260,7 +292,8 @@ private:
     if (t >= 1.0) {
       return cell.to;
     }
-    return cell.from + (cell.to - cell.from) * static_cast<float>(t);
+    float eased = ApplyEasing(cell.easing, static_cast<float>(t));
+    return cell.from + (cell.to - cell.from) * eased;
   }
 
   std::vector<detail::LocalCell> cells_;
@@ -291,22 +324,24 @@ public:
   // frame. Call-site keyed like state(); pass a distinct key to animate several
   // values on one source line. Retargeting mid-flight is continuous.
   [[nodiscard]] float animate_float(float target, float duration_ms = 150.0f,
-      std::string_view key = {}, std::source_location loc = std::source_location::current()) const {
-    return runtime_->Animate(target, now_, static_cast<double>(duration_ms) / 1000.0,
+      Easing easing = Easing::ease_out, std::string_view key = {},
+      std::source_location loc = std::source_location::current()) const {
+    return runtime_->Animate(target, now_, static_cast<double>(duration_ms) / 1000.0, easing,
         detail::StableId(key), loc);
   }
 
   // Animate a color channelwise toward target. Each channel is its own keyed
   // interval (disambiguated by a per-channel salt) so they interpolate together.
   [[nodiscard]] Color animate_color(Color target, float duration_ms = 150.0f,
-      std::string_view key = {}, std::source_location loc = std::source_location::current()) const {
+      Easing easing = Easing::ease_out, std::string_view key = {},
+      std::source_location loc = std::source_location::current()) const {
     double seconds = static_cast<double>(duration_ms) / 1000.0;
     std::uint32_t base = detail::StableId(key);
     return Color{
-        runtime_->Animate(target.red, now_, seconds, base ^ 0x00000001u, loc),
-        runtime_->Animate(target.green, now_, seconds, base ^ 0x00000002u, loc),
-        runtime_->Animate(target.blue, now_, seconds, base ^ 0x00000003u, loc),
-        runtime_->Animate(target.alpha, now_, seconds, base ^ 0x00000004u, loc),
+        runtime_->Animate(target.red, now_, seconds, easing, base ^ 0x00000001u, loc),
+        runtime_->Animate(target.green, now_, seconds, easing, base ^ 0x00000002u, loc),
+        runtime_->Animate(target.blue, now_, seconds, easing, base ^ 0x00000003u, loc),
+        runtime_->Animate(target.alpha, now_, seconds, easing, base ^ 0x00000004u, loc),
     };
   }
 

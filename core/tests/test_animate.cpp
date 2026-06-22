@@ -10,10 +10,12 @@ bool Approx(float lhs, float rhs) noexcept { return std::abs(lhs - rhs) < 0.001f
 // Drive one animate_float call across a rebuild at clock time `now`, returning
 // the sampled value. Each frame opens a pass (BeginFrame), animates, and prunes;
 // the call site is fixed so the same cell is reused frame to frame.
+// Linear easing keeps the midpoint math simple for the interpolation tests; the
+// easing curves get their own cases below.
 float Frame(ui::Runtime &runtime, float target, double now, float duration_ms = 100.0f) {
   runtime.BeginFrame();
   ui::Context ctx{runtime, now};
-  float value = ctx.animate_float(target, duration_ms);
+  float value = ctx.animate_float(target, duration_ms, ui::Easing::linear);
   runtime.Prune();
   return value;
 }
@@ -23,7 +25,17 @@ float Frame(ui::Runtime &runtime, float target, double now, float duration_ms = 
 ui::Color ColorFrame(ui::Runtime &runtime, ui::Color target, double now) {
   runtime.BeginFrame();
   ui::Context ctx{runtime, now};
-  ui::Color value = ctx.animate_color(target, 100.0f);
+  ui::Color value = ctx.animate_color(target, 100.0f, ui::Easing::linear);
+  runtime.Prune();
+  return value;
+}
+
+// Drive one eased animate_float at a fixed call site.
+float EasedFrame(
+    ui::Runtime &runtime, float target, double now, ui::Easing easing, float duration_ms = 100.0f) {
+  runtime.BeginFrame();
+  ui::Context ctx{runtime, now};
+  float value = ctx.animate_float(target, duration_ms, easing);
   runtime.Prune();
   return value;
 }
@@ -145,6 +157,45 @@ int main() {
     // Four channels -> four animation cells.
     if (runtime.anim_count() != 4) {
       return 14;
+    }
+  }
+
+  // --- ApplyEasing curve shapes --------------------------------------------
+  {
+    // Endpoints are fixed for every curve.
+    for (ui::Easing e : {ui::Easing::linear, ui::Easing::ease_in, ui::Easing::ease_out,
+             ui::Easing::ease_in_out}) {
+      if (!Approx(ui::ApplyEasing(e, 0.0f), 0.0f) || !Approx(ui::ApplyEasing(e, 1.0f), 1.0f)) {
+        return 15;
+      }
+    }
+    // ease_out is ahead of linear at the midpoint (fast start); ease_in behind.
+    float lin = ui::ApplyEasing(ui::Easing::linear, 0.5f);
+    float out = ui::ApplyEasing(ui::Easing::ease_out, 0.5f);
+    float in = ui::ApplyEasing(ui::Easing::ease_in, 0.5f);
+    if (!(out > lin && in < lin)) {
+      return 16;
+    }
+    // ease_in_out is symmetric about the midpoint (0.5 -> 0.5).
+    if (!Approx(ui::ApplyEasing(ui::Easing::ease_in_out, 0.5f), 0.5f)) {
+      return 17;
+    }
+  }
+
+  // --- An eased animation still hits both endpoints exactly ----------------
+  {
+    ui::Runtime runtime;
+    EasedFrame(runtime, 0.0f, 0.0, ui::Easing::ease_out);
+    EasedFrame(runtime, 1.0f, 0.0, ui::Easing::ease_out); // retarget at t=0
+    // Midpoint is eased ahead of linear 0.5.
+    float mid = EasedFrame(runtime, 1.0f, 0.05, ui::Easing::ease_out);
+    if (!(mid > 0.5f) || !runtime.needs_tick()) {
+      return 18;
+    }
+    // Reaches exactly 1.0 at the end and settles.
+    float end = EasedFrame(runtime, 1.0f, 0.1, ui::Easing::ease_out);
+    if (!Approx(end, 1.0f) || runtime.needs_tick()) {
+      return 19;
     }
   }
 

@@ -282,7 +282,7 @@ ui::View ContentSurface(const std::shared_ptr<FilesState> &state, float content_
   }).expand();
 }
 
-ui::View FilesView(const std::shared_ptr<FilesState> &state) {
+ui::View FilesView(ui::Context &context, const std::shared_ptr<FilesState> &state) {
   constexpr float chrome_margin = ui::default_chrome_margin();
   constexpr float toolbar_height = ui::default_toolbar_height();
   constexpr float surface_collapse_distance = toolbar_height + chrome_margin;
@@ -307,6 +307,13 @@ ui::View FilesView(const std::shared_ptr<FilesState> &state) {
   FileGridVisibleRange visible_range =
       VisibleFileRange(state->items.size(), surface_width, surface_height, content_scroll_offset);
   bool has_toolbar_backdrop = toolbar_clearance < toolbar_height;
+  // Fade the toolbar backdrop in and out instead of popping it: animate a 0->1
+  // factor toward its target on every rebuild. The animation tick keeps
+  // rebuilding while it is mid-flight, so the panel stays mounted (and visible)
+  // until the fade-out completes.
+  float toolbar_backdrop_opacity =
+      context.animate_float(has_toolbar_backdrop ? 1.0f : 0.0f, 180.0f);
+  bool show_toolbar_backdrop = toolbar_backdrop_opacity > 0.001f;
 
   auto make_toolbar_content = [&] {
     return ui::toolbar([&](ui::Block &toolbar) {
@@ -329,9 +336,11 @@ ui::View FilesView(const std::shared_ptr<FilesState> &state) {
 
     root << ui::layout::vstack([&](ui::Block &chrome) {
       ui::View toolbar_content = make_toolbar_content();
-      if (has_toolbar_backdrop) {
+      if (show_toolbar_backdrop) {
+        ui::Color backdrop = ui::toolbar_material();
+        backdrop.alpha *= toolbar_backdrop_opacity;
         chrome << ui::layout::zstack([&](ui::Block &toolbar) {
-          toolbar << ui::toolbar_blur_panel();
+          toolbar << ui::toolbar_blur_panel(backdrop);
           toolbar << ui::layout::vstack([&](ui::Block &content) {
             content << std::move(toolbar_content);
             content << ui::spacer();
@@ -357,7 +366,7 @@ ui::View FilesView(const std::shared_ptr<FilesState> &state) {
 struct FilesApp {
   std::shared_ptr<FilesState> state = std::make_shared<FilesState>();
 
-  ui::View body(ui::Context &) const { return FilesView(state); }
+  ui::View body(ui::Context &context) const { return FilesView(context, state); }
 };
 
 int main() {
