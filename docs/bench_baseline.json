@@ -4,26 +4,26 @@
     {
       "name": "uniform_static",
       "emitted": { "panels": 0, "buttons": 0, "texts": 36 },
-      "truncated": false,
-      "layout_us": { "mean": 77.64, "median": 73.46, "p95": 96.38 }
+      "exceeds_old_caps": false,
+      "layout_us": { "mean": 76.36, "median": 71.54, "p95": 98.42 }
     },
     {
       "name": "list_churn",
       "emitted": { "panels": 0, "buttons": 0, "texts": 36 },
-      "truncated": false,
-      "layout_us": { "mean": 76.35, "median": 71.62, "p95": 96.25 }
+      "exceeds_old_caps": false,
+      "layout_us": { "mean": 74.83, "median": 71.38, "p95": 90.38 }
     },
     {
       "name": "scroll_only",
       "emitted": { "panels": 0, "buttons": 0, "texts": 36 },
-      "truncated": false,
-      "layout_us": { "mean": 75.18, "median": 70.83, "p95": 100.33 }
+      "exceeds_old_caps": false,
+      "layout_us": { "mean": 74.70, "median": 72.62, "p95": 88.67 }
     },
     {
       "name": "flat_dense",
-      "emitted": { "panels": 0, "buttons": 0, "texts": 128 },
-      "truncated": true,
-      "layout_us": { "mean": 45.94, "median": 43.29, "p95": 58.29 }
+      "emitted": { "panels": 0, "buttons": 0, "texts": 144 },
+      "exceeds_old_caps": true,
+      "layout_us": { "mean": 87.49, "median": 83.42, "p95": 108.83 }
     }
   ]
 }
