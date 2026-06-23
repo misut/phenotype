@@ -1735,6 +1735,20 @@ public:
     return false;
   }
 
+  // True when a focused text field is accepting input this frame; the shell uses
+  // it to decide whether to consume key events as text.
+  bool HasTextInput() const { return !_text_input_targets.empty(); }
+
+  // Deliver an edit command to the focused text field (the last emitted wins if
+  // several were focused). Returns true if a field consumed it.
+  bool DispatchTextEdit(const phenotype::ui::TextEdit &edit) {
+    if (_text_input_targets.empty()) {
+      return false;
+    }
+    _text_input_targets.back().action(edit);
+    return true;
+  }
+
   bool HasScrollTargetAt(phenotype::ui::Size point) const {
     for (auto iterator = _scroll_targets.rbegin(); iterator != _scroll_targets.rend(); ++iterator) {
       if (Contains(iterator->frame, point)) {
@@ -2515,6 +2529,7 @@ private:
         MeasureText, _root_view, _layout_size.width, _layout_size.height, _layout_context);
     _hit_targets = scene.hit_targets;
     _scroll_targets = scene.scroll_targets;
+    _text_input_targets = scene.text_input_targets;
 
     std::vector<TextLayout> atlas_texts;
     atlas_texts.reserve(scene.background.texts.size() + scene.foreground.texts.size());
@@ -2605,6 +2620,7 @@ private:
   LayoutContext _layout_context;
   std::vector<HitTargetLayout> _hit_targets;
   std::vector<ScrollTargetLayout> _scroll_targets;
+  std::vector<TextInputTargetLayout> _text_input_targets;
   TextAtlasCacheKey _text_atlas_cache_key;
   TextAtlas _text_atlas_cache;
   std::optional<PixelRect> _blur_scissor;
@@ -2625,6 +2641,8 @@ private:
 - (void)metalViewNeedsRender:(NSView *)view;
 - (BOOL)metalView:(NSView *)view mouseDownAt:(NSPoint)location;
 - (BOOL)metalView:(NSView *)view scrollAt:(NSPoint)location deltaY:(CGFloat)deltaY;
+- (BOOL)metalView:(NSView *)view textEdit:(const phenotype::ui::TextEdit &)edit;
+- (BOOL)metalViewHasTextInput:(NSView *)view;
 @end
 
 @interface PhenotypeMetalView : NSView {
@@ -2667,6 +2685,57 @@ private:
   if (![_renderDelegate metalView:self scrollAt:location deltaY:[event scrollingDeltaY]]) {
     [super scrollWheel:event];
   }
+}
+
+- (void)keyDown:(NSEvent *)event {
+  // Only consume keys when a text field is focused; otherwise pass through so
+  // system shortcuts and the responder chain still work.
+  if (![_renderDelegate metalViewHasTextInput:self]) {
+    [super keyDown:event];
+    return;
+  }
+
+  using Edit = phenotype::ui::TextEdit;
+  bool const shift = ([event modifierFlags] & NSEventModifierFlagShift) != 0;
+  // Translate the key to an edit command. Key codes cover the editing keys;
+  // everything else inserts its typed characters.
+  std::optional<Edit> edit;
+  switch ([event keyCode]) {
+  case 51: // delete / backspace
+    edit = Edit{Edit::Kind::delete_backward, {}, false};
+    break;
+  case 117: // forward delete
+    edit = Edit{Edit::Kind::delete_forward, {}, false};
+    break;
+  case 123: // left arrow
+    edit = Edit{Edit::Kind::move_left, {}, shift};
+    break;
+  case 124: // right arrow
+    edit = Edit{Edit::Kind::move_right, {}, shift};
+    break;
+  case 115: // home
+    edit = Edit{Edit::Kind::move_home, {}, shift};
+    break;
+  case 119: // end
+    edit = Edit{Edit::Kind::move_end, {}, shift};
+    break;
+  default: {
+    NSString *characters = [event characters];
+    if (characters.length > 0) {
+      unichar first = [characters characterAtIndex:0];
+      // Ignore control characters (enter, escape, tab) for this single-line field.
+      if (first >= 0x20 && first != 0x7F) {
+        edit = Edit{Edit::Kind::insert, std::string([characters UTF8String]), false};
+      }
+    }
+    break;
+  }
+  }
+
+  if (edit && [_renderDelegate metalView:self textEdit:*edit]) {
+    return;
+  }
+  [super keyDown:event];
 }
 
 - (void)setFrameSize:(NSSize)newSize {
@@ -2999,6 +3068,25 @@ private:
     [self renderNow];
   }
   return YES;
+}
+
+- (BOOL)metalViewHasTextInput:(NSView *)view {
+  if (view != _metal_view || !_renderer) {
+    return NO;
+  }
+  return _renderer->HasTextInput() ? YES : NO;
+}
+
+- (BOOL)metalView:(NSView *)view textEdit:(const phenotype::ui::TextEdit &)edit {
+  if (view != _metal_view || !_renderer) {
+    return NO;
+  }
+  if (_renderer->DispatchTextEdit(edit)) {
+    [self refreshRootView];
+    [self renderNow];
+    return YES;
+  }
+  return NO;
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {

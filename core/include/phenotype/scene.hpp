@@ -100,6 +100,15 @@ struct HitTargetLayout {
   std::optional<LayoutRect> clip_rect;
 };
 
+// A focused text field's input sink: the shell routes key events into action.
+// Emitted only for the focused field, so the shell drives at most one. The
+// edit command vocabulary (ui::TextEdit) lives in ui.hpp next to the View.
+struct TextInputTargetLayout {
+  LayoutRect frame;
+  std::function<void(const ui::TextEdit &)> action;
+  std::optional<LayoutRect> clip_rect;
+};
+
 struct ScrollTargetLayout {
   LayoutRect frame;
   float offset_y = 0.0f;
@@ -120,6 +129,7 @@ struct SceneLayout {
   std::vector<EffectPanelLayout> effects;
   std::vector<HitTargetLayout> hit_targets;
   std::vector<ScrollTargetLayout> scroll_targets;
+  std::vector<TextInputTargetLayout> text_input_targets;
   bool uses_foreground_layer = false;
 };
 

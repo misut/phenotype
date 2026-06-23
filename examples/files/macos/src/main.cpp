@@ -33,16 +33,59 @@ struct FilesState {
   float scroll_offset_y = 0.0f;
   bool searching = false;
   std::string search_query;
+  std::size_t search_caret = 0;      // byte offset into search_query
+  std::uint64_t search_edit_seq = 0; // bumped on each edit, to reset the blink
+  std::uint64_t blink_seen_seq = 0;  // last edit seq the view observed
+  double caret_blink_since = 0.0;    // clock time the caret last moved
 };
 
 // Toggle the search affordance: clicking the search button expands it into a
-// field; collapsing clears the query. Live keyboard entry into the field is a
-// later slice; this one animates the expand/collapse.
+// focused field; collapsing clears the query and caret.
 void ToggleSearch(FilesState &state) {
   state.searching = !state.searching;
   if (!state.searching) {
     state.search_query.clear();
+    state.search_caret = 0;
   }
+}
+
+// Apply one edit command from the shell to the search query + caret, using the
+// UTF-8 boundary helpers so multi-byte codepoints are never split.
+void ApplySearchEdit(FilesState &state, const ui::TextEdit &edit) {
+  std::string &query = state.search_query;
+  std::size_t caret = std::min(state.search_caret, query.size());
+  switch (edit.kind) {
+  case ui::TextEdit::Kind::insert:
+    query.insert(caret, edit.text);
+    caret += edit.text.size();
+    break;
+  case ui::TextEdit::Kind::delete_backward: {
+    std::size_t prev = ui::PrevCharBoundary(query, caret);
+    query.erase(prev, caret - prev);
+    caret = prev;
+    break;
+  }
+  case ui::TextEdit::Kind::delete_forward: {
+    std::size_t next = ui::NextCharBoundary(query, caret);
+    query.erase(caret, next - caret);
+    break;
+  }
+  case ui::TextEdit::Kind::move_left:
+    caret = ui::PrevCharBoundary(query, caret);
+    break;
+  case ui::TextEdit::Kind::move_right:
+    caret = ui::NextCharBoundary(query, caret);
+    break;
+  case ui::TextEdit::Kind::move_home:
+    caret = 0;
+    break;
+  case ui::TextEdit::Kind::move_end:
+    caret = query.size();
+    break;
+  }
+  state.search_caret = caret;
+  // Mark that the caret moved, so the next build resets the blink to solid-on.
+  ++state.search_edit_seq;
 }
 
 std::filesystem::path HomeDirectory() {
@@ -299,7 +342,7 @@ ui::View ContentSurface(const std::shared_ptr<FilesState> &state, float content_
 // leading magnifier and a trailing clear button. The outer box is pinned to the
 // animated width so the surrounding toolbar layout sees a smoothly growing item.
 ui::View MakeSearchAffordance(
-    const std::shared_ptr<FilesState> &state, float width, bool expanded) {
+    ui::Context &context, const std::shared_ptr<FilesState> &state, float width, bool expanded) {
   constexpr float height = 36.0f;
 
   if (!expanded) {
@@ -319,30 +362,44 @@ ui::View MakeSearchAffordance(
   // contained search field rather than separate buttons. The icons are plain
   // (no button control fill); the clear icon still carries a click action, which
   // produces a hit target for any kind.
-  bool has_query = !state->search_query.empty();
-  std::string_view text = has_query ? std::string_view{state->search_query} : "Search";
-  ui::Color text_color = has_query ? ui::primary_label() : ui::disabled_label();
-
   // Smaller, lighter glyphs than the toolbar navigation icons so they sit
   // inside the field rather than reading as full-size buttons.
   ui::SymbolOptions field_icon_options = ui::navigation_symbol_options();
   field_icon_options.optical_size = 20.0f;
 
-  ui::View row = ui::layout::hstack([&](ui::Block &content) {
+  // An edit since the last build resets the blink origin to now, so the caret
+  // shows solid right after typing/moving and only then resumes blinking.
+  if (state->search_edit_seq != state->blink_seen_seq) {
+    state->blink_seen_seq = state->search_edit_seq;
+    state->caret_blink_since = context.now();
+  }
+
+  // The text field IS the capsule bar: a transparent-cornered field styled to
+  // match, focused so the shell routes keys to it, with left/right padding that
+  // leaves room for the overlaid magnifier and clear icons. on_text_edit applies
+  // each shell command to the query + caret.
+  ui::View field =
+      ui::text_field(state->search_query, "Search")
+          .focused(true)
+          .show_caret(context.caret_blink_visible(state->caret_blink_since))
+          .selection(state->search_caret, state->search_caret)
+          .padding({34.0f, 0.0f, 30.0f, 0.0f})
+          .corner_radius(height * 0.5f)
+          .expand()
+          .on_text_edit([state](const ui::TextEdit &edit) { ApplySearchEdit(*state, edit); });
+
+  // Overlay the leading magnifier and trailing clear X on top of the field.
+  ui::View icons = ui::layout::hstack([&](ui::Block &content) {
     content << ui::icon(ui::Symbol::search, field_icon_options).foreground(ui::disabled_label());
-    content << ui::text(text).font_size(15.0f).foreground(text_color).expand_width();
+    content << ui::spacer();
     content << ui::icon(ui::Symbol::close, field_icon_options)
                    .foreground(ui::disabled_label())
                    .on_click([state] { ToggleSearch(*state); });
   })
-                     .spacing(ui::Space(ui::SpaceToken::xs))
-                     .padding({12.0f, 0.0f, 10.0f, 0.0f})
-                     .center_children()
-                     .expand();
+                       .padding({10.0f, 0.0f, 9.0f, 0.0f})
+                       .expand();
 
-  return ui::layout::zstack(
-      ui::panel(ui::field_background()).corner_radius(height * 0.5f).expand(), std::move(row))
-      .size({width, height});
+  return ui::layout::zstack(std::move(field), std::move(icons)).size({width, height});
 }
 
 ui::View FilesView(ui::Context &context, const std::shared_ptr<FilesState> &state) {
@@ -395,7 +452,7 @@ ui::View FilesView(ui::Context &context, const std::shared_ptr<FilesState> &stat
       bool expanded = width > collapsed_width + 1.0f;
 
       toolbar << ui::spacer();
-      toolbar << MakeSearchAffordance(state, width, expanded);
+      toolbar << MakeSearchAffordance(context, state, width, expanded);
     });
   };
 
