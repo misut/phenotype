@@ -8,6 +8,7 @@ enum class MaterialSymbolIcon {
   folder,
   description,
   search,
+  close,
 };
 
 struct MaterialSymbolOptions {

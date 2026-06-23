@@ -418,6 +418,8 @@ wchar_t MaterialSymbolCodepoint(ui::Symbol symbol) noexcept {
     return L'\xE873';
   case ui::Symbol::search:
     return L'\xE8B6';
+  case ui::Symbol::close:
+    return L'\xE5CD';
   }
   return L'\xE5CB';
 }

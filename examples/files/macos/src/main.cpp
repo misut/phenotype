@@ -32,12 +32,18 @@ struct FilesState {
   std::size_t history_index = 0;
   float scroll_offset_y = 0.0f;
   bool searching = false;
+  std::string search_query;
 };
 
-// Toggle the search affordance. The search field itself is a later slice; for
-// now the toolbar button flips this flag so the entry point is wired and
-// observable.
-void ToggleSearch(FilesState &state) { state.searching = !state.searching; }
+// Toggle the search affordance: clicking the search button expands it into a
+// field; collapsing clears the query. Live keyboard entry into the field is a
+// later slice; this one animates the expand/collapse.
+void ToggleSearch(FilesState &state) {
+  state.searching = !state.searching;
+  if (!state.searching) {
+    state.search_query.clear();
+  }
+}
 
 std::filesystem::path HomeDirectory() {
   const char *home = std::getenv("HOME");
@@ -288,6 +294,57 @@ ui::View ContentSurface(const std::shared_ptr<FilesState> &state, float content_
   }).expand();
 }
 
+// The trailing search affordance, sized to the animated `width`. Collapsed it
+// is a capsule search button; expanded it is a rounded search field with a
+// leading magnifier and a trailing clear button. The outer box is pinned to the
+// animated width so the surrounding toolbar layout sees a smoothly growing item.
+ui::View MakeSearchAffordance(
+    const std::shared_ptr<FilesState> &state, float width, bool expanded) {
+  constexpr float height = 36.0f;
+
+  if (!expanded) {
+    // Capsule icon button — the collapsed entry point.
+    return ui::layout::zstack(
+        ui::button(ui::icon(ui::Symbol::search, ui::navigation_symbol_options())
+                       .foreground(ui::navigation_chevron_color(true)))
+            .shape(ui::ControlShape::capsule)
+            .on_click([state] { ToggleSearch(*state); })
+            .accessibility_label("Search"))
+        .size({width, height});
+  }
+
+  // Expanded field: a single rounded capsule bar containing a leading magnifier,
+  // the query (or placeholder), and a trailing clear icon. Everything sits
+  // inside the one bar — no nested control backgrounds — so it reads as one
+  // contained search field rather than separate buttons. The icons are plain
+  // (no button control fill); the clear icon still carries a click action, which
+  // produces a hit target for any kind.
+  bool has_query = !state->search_query.empty();
+  std::string_view text = has_query ? std::string_view{state->search_query} : "Search";
+  ui::Color text_color = has_query ? ui::primary_label() : ui::disabled_label();
+
+  // Smaller, lighter glyphs than the toolbar navigation icons so they sit
+  // inside the field rather than reading as full-size buttons.
+  ui::SymbolOptions field_icon_options = ui::navigation_symbol_options();
+  field_icon_options.optical_size = 20.0f;
+
+  ui::View row = ui::layout::hstack([&](ui::Block &content) {
+    content << ui::icon(ui::Symbol::search, field_icon_options).foreground(ui::disabled_label());
+    content << ui::text(text).font_size(15.0f).foreground(text_color).expand_width();
+    content << ui::icon(ui::Symbol::close, field_icon_options)
+                   .foreground(ui::disabled_label())
+                   .on_click([state] { ToggleSearch(*state); });
+  })
+                     .spacing(ui::Space(ui::SpaceToken::xs))
+                     .padding({12.0f, 0.0f, 10.0f, 0.0f})
+                     .center_children()
+                     .expand();
+
+  return ui::layout::zstack(
+      ui::panel(ui::field_background()).corner_radius(height * 0.5f).expand(), std::move(row))
+      .size({width, height});
+}
+
 ui::View FilesView(ui::Context &context, const std::shared_ptr<FilesState> &state) {
   constexpr float chrome_margin = ui::default_chrome_margin();
   constexpr float toolbar_height = ui::default_toolbar_height();
@@ -327,16 +384,18 @@ ui::View FilesView(ui::Context &context, const std::shared_ptr<FilesState> &stat
           can_navigate_back, [state] { NavigateBack(*state); }, can_navigate_forward,
           [state] { NavigateForward(*state); });
       toolbar << ui::toolbar_title(DirectoryName(state->current_path));
-      // Push a search button to the trailing edge. It is the entry point for the
-      // (later) search field; for now it just toggles the model's search flag.
-      // Built like the navigation buttons (capsule control, explicit label
-      // color) so it shares their toolbar appearance.
+      // Search affordance at the trailing edge: a button that expands into a
+      // search field. The width animates between the two so the transition
+      // glides; once past the collapsed width we swap the icon button for the
+      // field (the icon stays as the field's leading adornment).
+      constexpr float collapsed_width = 40.0f;
+      constexpr float expanded_width = 260.0f;
+      float target_width = state->searching ? expanded_width : collapsed_width;
+      float width = context.animate_float(target_width, 140.0f, ui::Easing::ease_out, "search");
+      bool expanded = width > collapsed_width + 1.0f;
+
       toolbar << ui::spacer();
-      toolbar << ui::button(ui::icon(ui::Symbol::search, ui::navigation_symbol_options())
-                                .foreground(ui::navigation_chevron_color(true)))
-                     .shape(ui::ControlShape::capsule)
-                     .on_click([state] { ToggleSearch(*state); })
-                     .accessibility_label("Search");
+      toolbar << MakeSearchAffordance(state, width, expanded);
     });
   };
 
