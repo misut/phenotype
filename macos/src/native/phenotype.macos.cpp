@@ -907,6 +907,8 @@ std::string_view MaterialSymbolName(phenotype::ui::Symbol symbol) noexcept {
     return "description";
   case phenotype::ui::Symbol::search:
     return "search";
+  case phenotype::ui::Symbol::close:
+    return "close";
   }
   return "";
 }
