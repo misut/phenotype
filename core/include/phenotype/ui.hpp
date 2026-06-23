@@ -156,6 +156,24 @@ inline std::size_t NextCharBoundary(std::string_view text, std::size_t index) no
   return index;
 }
 
+// A single edit intent the platform shell delivers to a focused text field. The
+// shell translates raw key / IME events into these; a component applies them to
+// its bound text with the UTF-8 caret helpers above.
+struct TextEdit {
+  enum class Kind {
+    insert,          // insert `text` at the caret, replacing any selection
+    delete_backward, // backspace
+    delete_forward,  // forward delete
+    move_left,       // caret one codepoint left
+    move_right,      // caret one codepoint right
+    move_home,       // caret to the start
+    move_end,        // caret to the end
+  };
+  Kind kind = Kind::insert;
+  std::string text;              // payload for insert
+  bool extend_selection = false; // shift held, for the move_* kinds
+};
+
 class View {
 public:
   ViewKind kind = ViewKind::empty;
@@ -206,6 +224,7 @@ public:
   bool rounds_bottom_corners_only = false;
   std::function<void()> click_action;
   std::function<void(float)> scroll_action;
+  std::function<void(const TextEdit &)> text_edit_action;
   std::uint64_t view_key = 0;
 
   [[nodiscard]] View key(std::uint64_t value) && {
@@ -565,6 +584,16 @@ public:
 
   View &on_scroll(std::function<void(float)> action) & {
     scroll_action = std::move(action);
+    return *this;
+  }
+
+  [[nodiscard]] View on_text_edit(std::function<void(const TextEdit &)> action) && {
+    text_edit_action = std::move(action);
+    return std::move(*this);
+  }
+
+  View &on_text_edit(std::function<void(const TextEdit &)> action) & {
+    text_edit_action = std::move(action);
     return *this;
   }
 };

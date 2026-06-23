@@ -294,8 +294,18 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
   }
   SceneDrawLayer &layer = ActiveDrawLayer(scene);
 
-  // Track: a rounded panel, accent outline-tinted when focused.
-  layer.panels.push_back({rect, ui::field_background(), 7.0f, false, false, context.clip_rect});
+  // A focused field with an edit callback becomes the input sink the shell
+  // routes key events to. Only the focused field is emitted, so at most one is
+  // active at a time.
+  if (view.is_focused && view.text_edit_action) {
+    scene.text_input_targets.push_back({rect, view.text_edit_action, context.clip_rect});
+  }
+
+  // Track: a rounded panel filled with the field background. A caller may round
+  // it further (e.g. a capsule) via the View's corner radius.
+  float track_radius = view.corner_radius_value > 0.0f ? view.corner_radius_value : 7.0f;
+  layer.panels.push_back(
+      {rect, ui::field_background(), track_radius, false, false, context.clip_rect});
 
   LayoutRect content = ContentRect(view, rect);
   float text_inset = 8.0f;
@@ -303,6 +313,15 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
   float font_size = view.font_size_value;
   float font_weight = view.font_weight_value;
   bool empty = view.text_content.empty();
+
+  // Lay the single line of text and the caret on a line-height band centred in
+  // the field, so a tall field still shows vertically-centred text rather than
+  // top-aligned text. The caret matches that band.
+  float line_height = measure(view.text_content, font_size, font_weight).height;
+  if (line_height <= 0.0f) {
+    line_height = font_size;
+  }
+  float band_y = content.y + std::max(0.0f, (content.height - line_height) * 0.5f);
 
   auto prefix_width = [&](std::size_t byte_count) {
     if (byte_count == 0) {
@@ -318,14 +337,13 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
     std::size_t end = std::max(view.caret_position, view.selection_anchor);
     float begin_x = text_x + prefix_width(begin);
     float end_x = text_x + prefix_width(end);
-    layer.panels.push_back({{begin_x, content.y + 4.0f, std::max(0.0f, end_x - begin_x),
-                                std::max(0.0f, content.height - 8.0f)},
+    layer.panels.push_back({{begin_x, band_y, std::max(0.0f, end_x - begin_x), line_height},
         ui::selection_highlight(), 2.0f, false, false, context.clip_rect});
   }
 
   // The text run, or the placeholder when empty.
-  LayoutRect text_rect{text_x, content.y, std::max(0.0f, content.width - text_inset * 2.0f),
-      content.height};
+  LayoutRect text_rect{
+      text_x, band_y, std::max(0.0f, content.width - text_inset * 2.0f), line_height};
   layer.texts.push_back({
       text_rect,
       empty ? view.placeholder_text : view.text_content,
@@ -339,11 +357,13 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
       context.clip_rect,
   });
 
-  // Caret: a thin panel at the caret x, when focused with a collapsed selection.
+  // Caret: a thin panel at the caret x, on the same band as the text, when
+  // focused with a collapsed selection.
   if (view.is_focused && view.caret_position == view.selection_anchor) {
     float caret_x = text_x + prefix_width(view.caret_position);
-    layer.panels.push_back({{caret_x, content.y + 4.0f, 1.5f, std::max(0.0f, content.height - 8.0f)},
-        ui::primary_label(), 0.0f, false, false, context.clip_rect});
+    layer.panels.push_back(
+        {{caret_x, band_y, 1.5f, line_height}, ui::primary_label(), 0.0f, false, false,
+            context.clip_rect});
   }
 }
 
@@ -678,6 +698,7 @@ inline SceneLayout LayoutScene(const MeasureTextFn &measure, const ui::View &roo
   scene.effects.reserve(kMaxEffectPanelCount);
   scene.hit_targets.reserve(64);
   scene.scroll_targets.reserve(8);
+  scene.text_input_targets.reserve(2);
   LayoutContext root_context = context;
   if (!root_context.clip_rect) {
     root_context.clip_rect = LayoutRect{0.0f, 0.0f, width, height};
