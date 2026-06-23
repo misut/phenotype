@@ -200,6 +200,9 @@ public:
   std::size_t caret_position = 0;
   std::size_t selection_anchor = 0;
   bool is_focused = false;
+  // Whether the caret is drawn this frame. The field stays focused (and an
+  // input target) regardless; the component toggles this for a blink.
+  bool caret_visible = true;
   float font_size_value = 17.0f;
   float font_weight_value = 400.0f;
   float corner_radius_value = 0.0f;
@@ -454,6 +457,16 @@ public:
 
   View &focused(bool value) & {
     is_focused = value;
+    return *this;
+  }
+
+  [[nodiscard]] View show_caret(bool value) && {
+    caret_visible = value;
+    return std::move(*this);
+  }
+
+  View &show_caret(bool value) & {
+    caret_visible = value;
     return *this;
   }
 

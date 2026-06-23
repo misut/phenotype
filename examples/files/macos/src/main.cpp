@@ -33,7 +33,10 @@ struct FilesState {
   float scroll_offset_y = 0.0f;
   bool searching = false;
   std::string search_query;
-  std::size_t search_caret = 0; // byte offset into search_query
+  std::size_t search_caret = 0;      // byte offset into search_query
+  std::uint64_t search_edit_seq = 0; // bumped on each edit, to reset the blink
+  std::uint64_t blink_seen_seq = 0;  // last edit seq the view observed
+  double caret_blink_since = 0.0;    // clock time the caret last moved
 };
 
 // Toggle the search affordance: clicking the search button expands it into a
@@ -81,6 +84,8 @@ void ApplySearchEdit(FilesState &state, const ui::TextEdit &edit) {
     break;
   }
   state.search_caret = caret;
+  // Mark that the caret moved, so the next build resets the blink to solid-on.
+  ++state.search_edit_seq;
 }
 
 std::filesystem::path HomeDirectory() {
@@ -337,7 +342,7 @@ ui::View ContentSurface(const std::shared_ptr<FilesState> &state, float content_
 // leading magnifier and a trailing clear button. The outer box is pinned to the
 // animated width so the surrounding toolbar layout sees a smoothly growing item.
 ui::View MakeSearchAffordance(
-    const std::shared_ptr<FilesState> &state, float width, bool expanded) {
+    ui::Context &context, const std::shared_ptr<FilesState> &state, float width, bool expanded) {
   constexpr float height = 36.0f;
 
   if (!expanded) {
@@ -362,6 +367,13 @@ ui::View MakeSearchAffordance(
   ui::SymbolOptions field_icon_options = ui::navigation_symbol_options();
   field_icon_options.optical_size = 20.0f;
 
+  // An edit since the last build resets the blink origin to now, so the caret
+  // shows solid right after typing/moving and only then resumes blinking.
+  if (state->search_edit_seq != state->blink_seen_seq) {
+    state->blink_seen_seq = state->search_edit_seq;
+    state->caret_blink_since = context.now();
+  }
+
   // The text field IS the capsule bar: a transparent-cornered field styled to
   // match, focused so the shell routes keys to it, with left/right padding that
   // leaves room for the overlaid magnifier and clear icons. on_text_edit applies
@@ -369,6 +381,7 @@ ui::View MakeSearchAffordance(
   ui::View field =
       ui::text_field(state->search_query, "Search")
           .focused(true)
+          .show_caret(context.caret_blink_visible(state->caret_blink_since))
           .selection(state->search_caret, state->search_caret)
           .padding({34.0f, 0.0f, 30.0f, 0.0f})
           .corner_radius(height * 0.5f)
@@ -439,7 +452,7 @@ ui::View FilesView(ui::Context &context, const std::shared_ptr<FilesState> &stat
       bool expanded = width > collapsed_width + 1.0f;
 
       toolbar << ui::spacer();
-      toolbar << MakeSearchAffordance(state, width, expanded);
+      toolbar << MakeSearchAffordance(context, state, width, expanded);
     });
   };
 

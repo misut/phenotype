@@ -249,6 +249,11 @@ public:
   // after body() to decide whether to schedule another frame.
   [[nodiscard]] bool needs_tick() const noexcept { return needs_tick_; }
 
+  // Ask the shell to keep delivering frames even without an in-flight
+  // interpolation — e.g. a blinking caret that must toggle on a clock the
+  // component samples itself. Cleared each BeginFrame like the animation flag.
+  void RequestTick() noexcept { needs_tick_ = true; }
+
   // Open a rebuild pass. Cells touched (Local-accessed) during the pass are
   // stamped with this generation; Prune() then drops the cells the new tree no
   // longer references, so state for removed views does not leak.
@@ -346,6 +351,23 @@ public:
   }
 
   [[nodiscard]] double now() const noexcept { return now_; }
+
+  // Whether a blinking caret should be drawn this frame. The blink cycle is
+  // measured from `since` — the time of the last caret-moving edit — so the
+  // caret shows solid right after typing or moving and only then resumes
+  // blinking (on for the first half of each cycle, off for the second). Requests
+  // a tick so the shell keeps rebuilding while a caret is present. period_ms is
+  // the full on+off cycle.
+  [[nodiscard]] bool caret_blink_visible(double since = 0.0, float period_ms = 1060.0f) const {
+    runtime_->RequestTick();
+    double period = static_cast<double>(period_ms) / 1000.0;
+    if (period <= 0.0) {
+      return true;
+    }
+    double elapsed = now_ > since ? now_ - since : 0.0;
+    double phase = elapsed - std::floor(elapsed / period) * period;
+    return phase < period * 0.5;
+  }
 
   void invalidate() const { runtime_->RequestRebuild(); }
 

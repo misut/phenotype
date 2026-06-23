@@ -199,5 +199,38 @@ int main() {
     }
   }
 
+  // --- Caret blink, measured from the last edit time (since): on for the first
+  //     half of each cycle, off for the second; always requests a tick.
+  {
+    ui::Runtime runtime;
+    // since = 0, 1s period. now=0.1 -> early -> visible.
+    runtime.BeginFrame();
+    ui::Context on_phase{runtime, 0.1};
+    if (!on_phase.caret_blink_visible(0.0, 1000.0f) || !runtime.needs_tick()) {
+      return 20;
+    }
+    // now=0.7 -> past the half -> hidden.
+    runtime.BeginFrame();
+    ui::Context off_phase{runtime, 0.7};
+    if (off_phase.caret_blink_visible(0.0, 1000.0f) || !runtime.needs_tick()) {
+      return 21;
+    }
+    // now=1.1 -> next cycle -> visible again.
+    runtime.BeginFrame();
+    ui::Context wrapped{runtime, 1.1};
+    if (!wrapped.caret_blink_visible(0.0, 1000.0f)) {
+      return 22;
+    }
+
+    // Edit resets the phase: an edit at since=0.7 makes the caret solid-on at
+    // now=0.7 (elapsed 0) even though the absolute phase would be in the off
+    // half — proving the blink is measured from the edit, not absolute time.
+    runtime.BeginFrame();
+    ui::Context after_edit{runtime, 0.7};
+    if (!after_edit.caret_blink_visible(0.7, 1000.0f)) {
+      return 23;
+    }
+  }
+
   return 0;
 }

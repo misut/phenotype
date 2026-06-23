@@ -358,8 +358,8 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
   });
 
   // Caret: a thin panel at the caret x, on the same band as the text, when
-  // focused with a collapsed selection.
-  if (view.is_focused && view.caret_position == view.selection_anchor) {
+  // focused with a collapsed selection and visible this frame (blink).
+  if (view.is_focused && view.caret_visible && view.caret_position == view.selection_anchor) {
     float caret_x = text_x + prefix_width(view.caret_position);
     layer.panels.push_back(
         {{caret_x, band_y, 1.5f, line_height}, ui::primary_label(), 0.0f, false, false,
