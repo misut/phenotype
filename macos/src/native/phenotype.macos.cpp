@@ -2696,7 +2696,14 @@ private:
   }
 
   using Edit = phenotype::ui::TextEdit;
-  bool const shift = ([event modifierFlags] & NSEventModifierFlagShift) != 0;
+  NSEventModifierFlags const flags = [event modifierFlags];
+  bool const shift = (flags & NSEventModifierFlagShift) != 0;
+  // Command-modified keys are shortcuts (handled in performKeyEquivalent:), not
+  // text — don't let them fall through to the insert path below.
+  if ((flags & NSEventModifierFlagCommand) != 0) {
+    [super keyDown:event];
+    return;
+  }
   // Translate the key to an edit command. Key codes cover the editing keys;
   // everything else inserts its typed characters.
   std::optional<Edit> edit;
@@ -2736,6 +2743,22 @@ private:
     return;
   }
   [super keyDown:event];
+}
+
+- (BOOL)performKeyEquivalent:(NSEvent *)event {
+  // Editing shortcuts for a focused field. Cmd+A selects all; others fall
+  // through so app/system equivalents still work.
+  if ([_renderDelegate metalViewHasTextInput:self] &&
+      ([event modifierFlags] & NSEventModifierFlagCommand) != 0) {
+    NSString *characters = [event charactersIgnoringModifiers];
+    if ([characters isEqualToString:@"a"]) {
+      using Edit = phenotype::ui::TextEdit;
+      if ([_renderDelegate metalView:self textEdit:Edit{Edit::Kind::select_all, {}, false}]) {
+        return YES;
+      }
+    }
+  }
+  return [super performKeyEquivalent:event];
 }
 
 - (void)setFrameSize:(NSSize)newSize {

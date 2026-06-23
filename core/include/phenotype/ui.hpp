@@ -168,6 +168,7 @@ struct TextEdit {
     move_right,      // caret one codepoint right
     move_home,       // caret to the start
     move_end,        // caret to the end
+    select_all,      // select the whole field
   };
   Kind kind = Kind::insert;
   std::string text;              // payload for insert
