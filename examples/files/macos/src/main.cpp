@@ -34,47 +34,72 @@ struct FilesState {
   bool searching = false;
   std::string search_query;
   std::size_t search_caret = 0;      // byte offset into search_query
+  std::size_t search_anchor = 0;     // selection anchor; == caret when collapsed
   std::uint64_t search_edit_seq = 0; // bumped on each edit, to reset the blink
   std::uint64_t blink_seen_seq = 0;  // last edit seq the view observed
   double caret_blink_since = 0.0;    // clock time the caret last moved
 };
 
 // Toggle the search affordance: clicking the search button expands it into a
-// focused field; collapsing clears the query and caret.
+// focused field; collapsing clears the query, caret, and selection.
 void ToggleSearch(FilesState &state) {
   state.searching = !state.searching;
   if (!state.searching) {
     state.search_query.clear();
     state.search_caret = 0;
+    state.search_anchor = 0;
   }
 }
 
-// Apply one edit command from the shell to the search query + caret, using the
-// UTF-8 boundary helpers so multi-byte codepoints are never split.
+// Apply one edit command from the shell to the search query, caret, and
+// selection, using the UTF-8 boundary helpers so multi-byte codepoints are
+// never split. A non-empty selection is replaced/removed by inserts and
+// deletes, and any caret move collapses it.
 void ApplySearchEdit(FilesState &state, const ui::TextEdit &edit) {
   std::string &query = state.search_query;
   std::size_t caret = std::min(state.search_caret, query.size());
+  std::size_t anchor = std::min(state.search_anchor, query.size());
+  bool has_selection = caret != anchor;
+  std::size_t sel_begin = std::min(caret, anchor);
+  std::size_t sel_end = std::max(caret, anchor);
+
+  // Drop the selected range and place the caret at its start. Shared by insert
+  // and backspace/forward-delete when something is selected.
+  auto erase_selection = [&] {
+    query.erase(sel_begin, sel_end - sel_begin);
+    caret = sel_begin;
+  };
+
   switch (edit.kind) {
   case ui::TextEdit::Kind::insert:
+    if (has_selection) {
+      erase_selection();
+    }
     query.insert(caret, edit.text);
     caret += edit.text.size();
     break;
-  case ui::TextEdit::Kind::delete_backward: {
-    std::size_t prev = ui::PrevCharBoundary(query, caret);
-    query.erase(prev, caret - prev);
-    caret = prev;
+  case ui::TextEdit::Kind::delete_backward:
+    if (has_selection) {
+      erase_selection();
+    } else {
+      std::size_t prev = ui::PrevCharBoundary(query, caret);
+      query.erase(prev, caret - prev);
+      caret = prev;
+    }
     break;
-  }
-  case ui::TextEdit::Kind::delete_forward: {
-    std::size_t next = ui::NextCharBoundary(query, caret);
-    query.erase(caret, next - caret);
+  case ui::TextEdit::Kind::delete_forward:
+    if (has_selection) {
+      erase_selection();
+    } else {
+      std::size_t next = ui::NextCharBoundary(query, caret);
+      query.erase(caret, next - caret);
+    }
     break;
-  }
   case ui::TextEdit::Kind::move_left:
-    caret = ui::PrevCharBoundary(query, caret);
+    caret = has_selection ? sel_begin : ui::PrevCharBoundary(query, caret);
     break;
   case ui::TextEdit::Kind::move_right:
-    caret = ui::NextCharBoundary(query, caret);
+    caret = has_selection ? sel_end : ui::NextCharBoundary(query, caret);
     break;
   case ui::TextEdit::Kind::move_home:
     caret = 0;
@@ -82,8 +107,16 @@ void ApplySearchEdit(FilesState &state, const ui::TextEdit &edit) {
   case ui::TextEdit::Kind::move_end:
     caret = query.size();
     break;
+  case ui::TextEdit::Kind::select_all:
+    // Select the whole field: anchor at the start, caret at the end.
+    state.search_anchor = 0;
+    state.search_caret = query.size();
+    ++state.search_edit_seq;
+    return;
   }
+  // Every other command collapses the selection at the new caret.
   state.search_caret = caret;
+  state.search_anchor = caret;
   // Mark that the caret moved, so the next build resets the blink to solid-on.
   ++state.search_edit_seq;
 }
@@ -193,6 +226,46 @@ bool IsFocused(const FilesState &state, const FileItem &item) {
   return state.focused_path.has_value() && *state.focused_path == item.path;
 }
 
+// ASCII case-insensitive substring test, enough for filtering file names by the
+// typed query (non-ASCII matches fall back to exact bytes, which still works).
+bool ContainsCaseInsensitive(std::string_view haystack, std::string_view needle) {
+  if (needle.empty()) {
+    return true;
+  }
+  auto lower = [](char c) { return static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c); };
+  if (needle.size() > haystack.size()) {
+    return false;
+  }
+  for (std::size_t start = 0; start + needle.size() <= haystack.size(); ++start) {
+    bool match = true;
+    for (std::size_t i = 0; i < needle.size(); ++i) {
+      if (lower(haystack[start + i]) != lower(needle[i])) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The items shown in the grid: every item, or — while searching with a non-empty
+// query — only those whose name matches. Returns pointers into state.items so no
+// copies are made; the grid indexes into this filtered list.
+std::vector<const FileItem *> FilteredItems(const FilesState &state) {
+  std::vector<const FileItem *> result;
+  result.reserve(state.items.size());
+  bool filtering = state.searching && !state.search_query.empty();
+  for (const FileItem &item : state.items) {
+    if (!filtering || ContainsCaseInsensitive(item.name, state.search_query)) {
+      result.push_back(&item);
+    }
+  }
+  return result;
+}
+
 std::size_t FileGridColumnCount(float surface_width) {
   float content_width =
       std::max(0.0f, surface_width - FileGridPadding.left - FileGridPadding.right);
@@ -295,11 +368,12 @@ ui::View FileTile(const FileItem &item, bool is_focused) {
   });
 }
 
-ui::View ContentSurface(const std::shared_ptr<FilesState> &state, float content_scroll_offset,
+ui::View ContentSurface(const std::shared_ptr<FilesState> &state,
+    const std::vector<const FileItem *> &items, float content_scroll_offset,
     float scroll_range_headroom, FileGridVisibleRange visible_range) {
   ui::View content = ui::layout::grid([&](ui::Block &grid) {
     for (std::size_t index = visible_range.start; index < visible_range.end; ++index) {
-      const FileItem &item = state->items[index];
+      const FileItem &item = *items[index];
       ui::View tile = FileTile(item, IsFocused(*state, item));
       tile.on_click([state, item] { FocusOrActivate(*state, item); });
       grid << std::move(tile);
@@ -307,7 +381,7 @@ ui::View ContentSurface(const std::shared_ptr<FilesState> &state, float content_
   })
                          .grid_metrics(FileGridMinColumnWidth, FileGridRowHeight, FileGridColumnGap,
                              FileGridRowGap)
-                         .grid_virtual_range(visible_range.start, state->items.size())
+                         .grid_virtual_range(visible_range.start, items.size())
                          .padding(FileGridPadding)
                          .expand_width();
 
@@ -382,7 +456,7 @@ ui::View MakeSearchAffordance(
       ui::text_field(state->search_query, "Search")
           .focused(true)
           .show_caret(context.caret_blink_visible(state->caret_blink_since))
-          .selection(state->search_caret, state->search_caret)
+          .selection(state->search_caret, state->search_anchor)
           .padding({34.0f, 0.0f, 30.0f, 0.0f})
           .corner_radius(height * 0.5f)
           .expand()
@@ -409,7 +483,9 @@ ui::View FilesView(ui::Context &context, const std::shared_ptr<FilesState> &stat
   bool can_navigate_back = CanNavigateBack(*state);
   bool can_navigate_forward = CanNavigateForward(*state);
   float surface_width = FilesWindowSize.width - chrome_margin - chrome_margin;
-  float content_height = FileGridNaturalHeight(state->items.size(), surface_width);
+  // The grid shows the filtered items (all of them when not searching).
+  std::vector<const FileItem *> items = FilteredItems(*state);
+  float content_height = FileGridNaturalHeight(items.size(), surface_width);
   float content_max_offset_without_bottom_margin =
       std::max(0.0f, content_height - FilesWindowSize.height);
   float max_offset_without_bottom_margin =
@@ -425,7 +501,7 @@ ui::View FilesView(ui::Context &context, const std::shared_ptr<FilesState> &stat
   float surface_height =
       std::max(0.0f, FilesWindowSize.height - chrome_margin - bottom_margin - toolbar_clearance);
   FileGridVisibleRange visible_range =
-      VisibleFileRange(state->items.size(), surface_width, surface_height, content_scroll_offset);
+      VisibleFileRange(items.size(), surface_width, surface_height, content_scroll_offset);
   bool has_toolbar_backdrop = toolbar_clearance < toolbar_height;
   // Fade the toolbar backdrop in and out instead of popping it: animate a 0->1
   // factor toward its target on every rebuild. The animation tick keeps
@@ -461,7 +537,8 @@ ui::View FilesView(ui::Context &context, const std::shared_ptr<FilesState> &stat
       if (toolbar_clearance > 0.0f) {
         body << ui::empty().size({0.0f, toolbar_clearance});
       }
-      body << ContentSurface(state, content_scroll_offset, scroll_range_headroom, visible_range);
+      body << ContentSurface(
+          state, items, content_scroll_offset, scroll_range_headroom, visible_range);
     })
                 .padding({chrome_margin, 0.0f, chrome_margin, bottom_margin})
                 .expand();
