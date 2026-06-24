@@ -33,11 +33,13 @@ struct FilesState {
   float scroll_offset_y = 0.0f;
   bool searching = false;
   std::string search_query;
-  std::size_t search_caret = 0;      // byte offset into search_query
-  std::size_t search_anchor = 0;     // selection anchor; == caret when collapsed
-  std::uint64_t search_edit_seq = 0; // bumped on each edit, to reset the blink
-  std::uint64_t blink_seen_seq = 0;  // last edit seq the view observed
-  double caret_blink_since = 0.0;    // clock time the caret last moved
+  std::size_t search_caret = 0;        // byte offset into search_query
+  std::size_t search_anchor = 0;       // selection anchor; == caret when collapsed
+  std::string search_marked;           // IME composition in progress (uncommitted)
+  std::size_t search_marked_caret = 0; // caret within search_marked
+  std::uint64_t search_edit_seq = 0;   // bumped on each edit, to reset the blink
+  std::uint64_t blink_seen_seq = 0;    // last edit seq the view observed
+  double caret_blink_since = 0.0;      // clock time the caret last moved
 };
 
 // Toggle the search affordance: clicking the search button expands it into a
@@ -71,7 +73,28 @@ void ApplySearchEdit(FilesState &state, const ui::TextEdit &edit) {
   };
 
   switch (edit.kind) {
+  case ui::TextEdit::Kind::set_marked:
+    // A composition is in progress: drop any selection on first marked input,
+    // then stash the marked string + its caret. The query is untouched until the
+    // IME commits (which arrives as an insert).
+    if (has_selection && state.search_marked.empty()) {
+      erase_selection();
+      state.search_caret = caret;
+      state.search_anchor = caret;
+    }
+    state.search_marked = edit.text;
+    state.search_marked_caret = std::min(edit.marked_caret, edit.text.size());
+    ++state.search_edit_seq;
+    return;
+  case ui::TextEdit::Kind::unmark:
+    state.search_marked.clear();
+    state.search_marked_caret = 0;
+    ++state.search_edit_seq;
+    return;
   case ui::TextEdit::Kind::insert:
+    // Committed text (typing or IME commit) ends any composition.
+    state.search_marked.clear();
+    state.search_marked_caret = 0;
     if (has_selection) {
       erase_selection();
     }
@@ -457,6 +480,7 @@ ui::View MakeSearchAffordance(
           .focused(true)
           .show_caret(context.caret_blink_visible(state->caret_blink_since))
           .selection(state->search_caret, state->search_anchor)
+          .marked(state->search_marked, state->search_marked_caret)
           .padding({34.0f, 0.0f, 30.0f, 0.0f})
           .corner_radius(height * 0.5f)
           .expand()

@@ -1749,6 +1749,29 @@ public:
     return true;
   }
 
+  // The focused field's committed text + selection (byte offsets), for clipboard
+  // copy/cut. Returns false when nothing is focused.
+  bool FocusedSelection(std::string &out_text, size_t &out_begin, size_t &out_end) const {
+    if (_text_input_targets.empty()) {
+      return false;
+    }
+    const TextInputTargetLayout &target = _text_input_targets.back();
+    out_text = target.text;
+    out_begin = target.selection_begin;
+    out_end = target.selection_end;
+    return true;
+  }
+
+  // The focused field's caret rect (field/scene coordinates), for placing the
+  // IME candidate window. Returns false when nothing is focused.
+  bool FocusedCaretRect(LayoutRect &out_rect) const {
+    if (_text_input_targets.empty()) {
+      return false;
+    }
+    out_rect = _text_input_targets.back().caret_rect;
+    return true;
+  }
+
   bool HasScrollTargetAt(phenotype::ui::Size point) const {
     for (auto iterator = _scroll_targets.rbegin(); iterator != _scroll_targets.rend(); ++iterator) {
       if (Contains(iterator->frame, point)) {
@@ -2643,10 +2666,17 @@ private:
 - (BOOL)metalView:(NSView *)view scrollAt:(NSPoint)location deltaY:(CGFloat)deltaY;
 - (BOOL)metalView:(NSView *)view textEdit:(const phenotype::ui::TextEdit &)edit;
 - (BOOL)metalViewHasTextInput:(NSView *)view;
+// The focused field's currently-selected committed text (empty if none), for
+// clipboard copy/cut.
+- (NSString *)metalViewSelectedText:(NSView *)view;
+// The focused field's caret rect in the view's coordinate space, for the IME
+// candidate window. Returns NSZeroRect when nothing is focused.
+- (NSRect)metalViewCaretRect:(NSView *)view;
 @end
 
-@interface PhenotypeMetalView : NSView {
+@interface PhenotypeMetalView : NSView <NSTextInputClient> {
   id<PhenotypeMetalViewDelegate> _renderDelegate;
+  NSString *_markedText;
 }
 @property(nonatomic, assign) id<PhenotypeMetalViewDelegate> renderDelegate;
 @end
@@ -2694,71 +2724,217 @@ private:
     [super keyDown:event];
     return;
   }
-
-  using Edit = phenotype::ui::TextEdit;
-  NSEventModifierFlags const flags = [event modifierFlags];
-  bool const shift = (flags & NSEventModifierFlagShift) != 0;
-  // Command-modified keys are shortcuts (handled in performKeyEquivalent:), not
-  // text — don't let them fall through to the insert path below.
-  if ((flags & NSEventModifierFlagCommand) != 0) {
+  // Hand the event straight to the input context so the active IME composes
+  // multi-byte input (Hangul/Japanese/Chinese): it calls back into our
+  // NSTextInputClient methods (insertText: for committed text, setMarkedText:
+  // while composing) and doCommandBySelector: for editing keys. Unlike
+  // interpretKeyEvents: (NSResponder path), handleEvent: makes this view the
+  // current input client immediately, so the FIRST key after switching to a
+  // composing IME starts a composition instead of being committed outright.
+  if (![[self inputContext] handleEvent:event]) {
     [super keyDown:event];
-    return;
   }
-  // Translate the key to an edit command. Key codes cover the editing keys;
-  // everything else inserts its typed characters.
-  std::optional<Edit> edit;
-  switch ([event keyCode]) {
-  case 51: // delete / backspace
-    edit = Edit{Edit::Kind::delete_backward, {}, false};
-    break;
-  case 117: // forward delete
-    edit = Edit{Edit::Kind::delete_forward, {}, false};
-    break;
-  case 123: // left arrow
-    edit = Edit{Edit::Kind::move_left, {}, shift};
-    break;
-  case 124: // right arrow
-    edit = Edit{Edit::Kind::move_right, {}, shift};
-    break;
-  case 115: // home
-    edit = Edit{Edit::Kind::move_home, {}, shift};
-    break;
-  case 119: // end
-    edit = Edit{Edit::Kind::move_end, {}, shift};
-    break;
-  default: {
-    NSString *characters = [event characters];
-    if (characters.length > 0) {
-      unichar first = [characters characterAtIndex:0];
-      // Ignore control characters (enter, escape, tab) for this single-line field.
-      if (first >= 0x20 && first != 0x7F) {
-        edit = Edit{Edit::Kind::insert, std::string([characters UTF8String]), false};
-      }
-    }
-    break;
-  }
-  }
+}
 
-  if (edit && [_renderDelegate metalView:self textEdit:*edit]) {
+// --- editing commands routed from interpretKeyEvents: via doCommandBySelector:
+- (void)doCommandBySelector:(SEL)selector {
+  using Edit = phenotype::ui::TextEdit;
+  std::optional<Edit> edit;
+  if (selector == @selector(deleteBackward:)) {
+    edit = Edit{Edit::Kind::delete_backward, {}, false, 0};
+  } else if (selector == @selector(deleteForward:)) {
+    edit = Edit{Edit::Kind::delete_forward, {}, false, 0};
+  } else if (selector == @selector(moveLeft:)) {
+    edit = Edit{Edit::Kind::move_left, {}, false, 0};
+  } else if (selector == @selector(moveRight:)) {
+    edit = Edit{Edit::Kind::move_right, {}, false, 0};
+  } else if (selector == @selector(moveLeftAndModifySelection:)) {
+    edit = Edit{Edit::Kind::move_left, {}, true, 0};
+  } else if (selector == @selector(moveRightAndModifySelection:)) {
+    edit = Edit{Edit::Kind::move_right, {}, true, 0};
+  } else if (selector == @selector(moveToBeginningOfLine:) ||
+             selector == @selector(moveToLeftEndOfLine:) ||
+             selector == @selector(scrollToBeginningOfDocument:)) {
+    edit = Edit{Edit::Kind::move_home, {}, false, 0};
+  } else if (selector == @selector(moveToEndOfLine:) ||
+             selector == @selector(moveToRightEndOfLine:) ||
+             selector == @selector(scrollToEndOfDocument:)) {
+    edit = Edit{Edit::Kind::move_end, {}, false, 0};
+  } else if (selector == @selector(selectAll:)) {
+    edit = Edit{Edit::Kind::select_all, {}, false, 0};
+  }
+  if (edit) {
+    [_renderDelegate metalView:self textEdit:*edit];
+  }
+  // Other selectors (insertNewline:, cancelOperation:, etc.) are intentionally
+  // ignored for this single-line field.
+}
+
+// Commit any in-progress IME composition into the field, so a following command
+// (select-all, copy, etc.) operates on the whole text including what was being
+// composed. The active input context is also told to finish.
+- (void)commitMarkedText {
+  if (_markedText == nil) {
     return;
   }
-  [super keyDown:event];
+  using Edit = phenotype::ui::TextEdit;
+  std::string committed([_markedText UTF8String]);
+  _markedText = nil;
+  [[self inputContext] discardMarkedText];
+  if (!committed.empty()) {
+    [_renderDelegate metalView:self textEdit:Edit{Edit::Kind::insert, committed, false, 0}];
+  } else {
+    [_renderDelegate metalView:self textEdit:Edit{Edit::Kind::unmark, "", false, 0}];
+  }
 }
 
 - (BOOL)performKeyEquivalent:(NSEvent *)event {
-  // Editing shortcuts for a focused field. Cmd+A selects all; others fall
-  // through so app/system equivalents still work.
-  if ([_renderDelegate metalViewHasTextInput:self] &&
-      ([event modifierFlags] & NSEventModifierFlagCommand) != 0) {
-    NSString *characters = [event charactersIgnoringModifiers];
-    if ([characters isEqualToString:@"a"]) {
-      using Edit = phenotype::ui::TextEdit;
-      if ([_renderDelegate metalView:self textEdit:Edit{Edit::Kind::select_all, {}, false}]) {
-        return YES;
+  // Clipboard + select-all shortcuts for a focused field. Match on the physical
+  // key code, NOT the typed character: under a non-Latin IME (e.g. Hangul) the
+  // character for the A key is "ㅁ", so a character compare would miss Cmd+A.
+  // Virtual key codes are layout-independent: A=0, X=7, C=8, V=9.
+  NSEventModifierFlags const flags = [event modifierFlags];
+  bool const command_only = (flags & NSEventModifierFlagCommand) != 0 &&
+                            (flags & (NSEventModifierFlagControl | NSEventModifierFlagOption)) == 0;
+  if ([_renderDelegate metalViewHasTextInput:self] && command_only) {
+    using Edit = phenotype::ui::TextEdit;
+    // Finish any composition first so the command sees the committed text.
+    [self commitMarkedText];
+    switch ([event keyCode]) {
+    case 0: // A — select all
+      return [_renderDelegate metalView:self textEdit:Edit{Edit::Kind::select_all, {}, false, 0}];
+    case 8: // C — copy
+    case 7: // X — cut
+    {
+      NSString *selected = [_renderDelegate metalViewSelectedText:self];
+      if (selected.length > 0) {
+        NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+        [pasteboard clearContents];
+        [pasteboard setString:selected forType:NSPasteboardTypeString];
+        if ([event keyCode] == 7) {
+          // Cut: replace the selection with empty text.
+          [_renderDelegate metalView:self textEdit:Edit{Edit::Kind::insert, "", false, 0}];
+        }
       }
+      return YES;
+    }
+    case 9: // V — paste
+    {
+      NSString *pasted = [[NSPasteboard generalPasteboard] stringForType:NSPasteboardTypeString];
+      if (pasted.length > 0) {
+        // Collapse newlines to spaces for the single-line field.
+        NSString *flat =
+            [[pasted componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]]
+                componentsJoinedByString:@" "];
+        [_renderDelegate
+            metalView:self
+             textEdit:Edit{Edit::Kind::insert, std::string([flat UTF8String]), false, 0}];
+      }
+      return YES;
+    }
+    default:
+      break;
     }
   }
   return [super performKeyEquivalent:event];
+}
+
+// --- NSTextInputClient: the bridge to the active input method (IME) ----------
+
+- (void)insertText:(id)string replacementRange:(NSRange)replacementRange {
+  (void)replacementRange;
+  NSString *text = [string isKindOfClass:[NSAttributedString class]] ? [string string] : string;
+  using Edit = phenotype::ui::TextEdit;
+  // Committed text ends any composition and inserts the final characters.
+  if (_markedText != nil) {
+    _markedText = nil;
+  }
+  if (text.length > 0) {
+    [_renderDelegate metalView:self
+                      textEdit:Edit{Edit::Kind::insert, std::string([text UTF8String]), false, 0}];
+  }
+}
+
+- (void)setMarkedText:(id)string
+        selectedRange:(NSRange)selectedRange
+     replacementRange:(NSRange)replacementRange {
+  (void)replacementRange;
+  NSString *text = [string isKindOfClass:[NSAttributedString class]] ? [string string] : string;
+  _markedText = text.length > 0 ? [text copy] : nil;
+  using Edit = phenotype::ui::TextEdit;
+  if (_markedText == nil) {
+    [_renderDelegate metalView:self textEdit:Edit{Edit::Kind::unmark, "", false, 0}];
+    return;
+  }
+  // The composition caret: selectedRange is in UTF-16 units within the marked
+  // string; convert to a byte offset for the component.
+  NSString *prefix =
+      selectedRange.location <= text.length ? [text substringToIndex:selectedRange.location] : text;
+  std::size_t marked_caret = std::string([prefix UTF8String]).size();
+  [_renderDelegate
+      metalView:self
+       textEdit:Edit{Edit::Kind::set_marked, std::string([text UTF8String]), false, marked_caret}];
+}
+
+- (void)unmarkText {
+  _markedText = nil;
+  using Edit = phenotype::ui::TextEdit;
+  [_renderDelegate metalView:self textEdit:Edit{Edit::Kind::unmark, "", false, 0}];
+}
+
+- (BOOL)hasMarkedText {
+  return _markedText != nil;
+}
+
+- (NSRange)markedRange {
+  if (_markedText == nil) {
+    return NSMakeRange(NSNotFound, 0);
+  }
+  return NSMakeRange(0, _markedText.length);
+}
+
+- (NSRange)selectedRange {
+  // The component owns the real selection; the IME only needs a coherent
+  // non-NSNotFound value. While composing the caret sits at the end of the
+  // marked text; otherwise report an empty range at the origin.
+  return NSMakeRange(_markedText != nil ? _markedText.length : 0, 0);
+}
+
+- (NSArray<NSAttributedStringKey> *)validAttributesForMarkedText {
+  return @[];
+}
+
+- (NSAttributedString *)attributedSubstringForProposedRange:(NSRange)range
+                                                actualRange:(NSRangePointer)actualRange {
+  (void)range;
+  // Return an empty (non-nil) attributed string and a zero-length actual range.
+  // Some input methods probe this before starting a composition and treat a nil
+  // result as "no text client", committing the first key instead of composing.
+  if (actualRange != nullptr) {
+    *actualRange = NSMakeRange(0, 0);
+  }
+  return [[NSAttributedString alloc] initWithString:@""];
+}
+
+- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange {
+  (void)range;
+  (void)actualRange;
+  // Place the IME candidate window at the caret: convert the field's caret rect
+  // (view space, top-left origin) to screen coordinates (bottom-left origin).
+  NSRect caret = [_renderDelegate metalViewCaretRect:self];
+  if (NSEqualRects(caret, NSZeroRect)) {
+    return NSZeroRect;
+  }
+  NSRect flipped =
+      NSMakeRect(caret.origin.x, [self bounds].size.height - caret.origin.y - caret.size.height,
+          caret.size.width, caret.size.height);
+  NSRect window_rect = [self convertRect:flipped toView:nil];
+  return [[self window] convertRectToScreen:window_rect];
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point {
+  (void)point;
+  return NSNotFound;
 }
 
 - (void)setFrameSize:(NSSize)newSize {
@@ -3110,6 +3286,33 @@ private:
     return YES;
   }
   return NO;
+}
+
+- (NSString *)metalViewSelectedText:(NSView *)view {
+  if (view != _metal_view || !_renderer) {
+    return @"";
+  }
+  std::string text;
+  size_t begin = 0;
+  size_t end = 0;
+  if (!_renderer->FocusedSelection(text, begin, end) || begin >= end || end > text.size()) {
+    return @"";
+  }
+  std::string selected = text.substr(begin, end - begin);
+  return [NSString stringWithUTF8String:selected.c_str()] ?: @"";
+}
+
+- (NSRect)metalViewCaretRect:(NSView *)view {
+  if (view != _metal_view || !_renderer) {
+    return NSZeroRect;
+  }
+  LayoutRect caret{};
+  if (!_renderer->FocusedCaretRect(caret)) {
+    return NSZeroRect;
+  }
+  // Layout space (top-left origin, points) — the metal view flips to AppKit's
+  // bottom-left origin when reporting to the IME.
+  return NSMakeRect(caret.x, caret.y, std::max(caret.width, 1.0f), caret.height);
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
