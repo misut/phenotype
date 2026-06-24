@@ -169,10 +169,14 @@ struct TextEdit {
     move_home,       // caret to the start
     move_end,        // caret to the end
     select_all,      // select the whole field
+    set_marked,      // IME composition in progress: `text` is the marked string,
+                     // marked_caret is the caret offset (bytes) within it
+    unmark,          // clear any marked composition without committing
   };
   Kind kind = Kind::insert;
-  std::string text;              // payload for insert
-  bool extend_selection = false; // shift held, for the move_* kinds
+  std::string text;                // payload for insert / set_marked
+  bool extend_selection = false;   // shift held, for the move_* kinds
+  std::size_t marked_caret = 0;    // caret within `text` for set_marked
 };
 
 class View {
@@ -204,6 +208,10 @@ public:
   // Whether the caret is drawn this frame. The field stays focused (and an
   // input target) regardless; the component toggles this for a blink.
   bool caret_visible = true;
+  // IME composition shown inline at the caret with an underline. Empty when not
+  // composing; marked_caret is the byte offset of the caret within it.
+  std::string marked_text;
+  std::size_t marked_caret = 0;
   float font_size_value = 17.0f;
   float font_weight_value = 400.0f;
   float corner_radius_value = 0.0f;
@@ -469,6 +477,14 @@ public:
   View &show_caret(bool value) & {
     caret_visible = value;
     return *this;
+  }
+
+  // Show an IME composition inline at the caret (with an underline). caret is
+  // the byte offset of the composition caret within `text`.
+  [[nodiscard]] View marked(std::string text, std::size_t caret) && {
+    marked_text = std::move(text);
+    marked_caret = caret;
+    return std::move(*this);
   }
 
   // Place the caret and selection from byte offsets, snapped to UTF-8

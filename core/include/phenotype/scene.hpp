@@ -106,6 +106,14 @@ struct HitTargetLayout {
 struct TextInputTargetLayout {
   LayoutRect frame;
   std::function<void(const ui::TextEdit &)> action;
+  // The field's current text + selection (byte offsets into text), so the shell
+  // can read them for clipboard copy/cut and report positions to the IME.
+  std::string text;
+  std::size_t selection_begin = 0;
+  std::size_t selection_end = 0;
+  // Pixel rect of the caret (or selection start) in absolute coordinates, for
+  // placing the IME candidate window.
+  LayoutRect caret_rect;
   std::optional<LayoutRect> clip_rect;
 };
 

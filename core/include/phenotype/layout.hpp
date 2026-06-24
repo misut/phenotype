@@ -294,13 +294,6 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
   }
   SceneDrawLayer &layer = ActiveDrawLayer(scene);
 
-  // A focused field with an edit callback becomes the input sink the shell
-  // routes key events to. Only the focused field is emitted, so at most one is
-  // active at a time.
-  if (view.is_focused && view.text_edit_action) {
-    scene.text_input_targets.push_back({rect, view.text_edit_action, context.clip_rect});
-  }
-
   // Track: a rounded panel filled with the field background. A caller may round
   // it further (e.g. a capsule) via the View's corner radius.
   float track_radius = view.corner_radius_value > 0.0f ? view.corner_radius_value : 7.0f;
@@ -312,31 +305,50 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
   float text_x = content.x + text_inset;
   float font_size = view.font_size_value;
   float font_weight = view.font_weight_value;
-  bool empty = view.text_content.empty();
 
-  // Lay the single line of text and the caret on a line-height band centred in
-  // the field, so a tall field still shows vertically-centred text rather than
-  // top-aligned text. The caret matches that band.
-  float line_height = measure(view.text_content, font_size, font_weight).height;
+  // The displayed string is the committed text with any IME composition
+  // (marked_text) spliced in at the caret. Selection/clipboard still operate on
+  // the committed text; only the display and the caret account for the marked
+  // span.
+  std::size_t caret = std::min(view.caret_position, view.text_content.size());
+  bool composing = !view.marked_text.empty();
+  std::string display = view.text_content;
+  if (composing) {
+    display.insert(caret, view.marked_text);
+  }
+  bool empty = display.empty();
+
+  // Centre the single line on a band, so a tall field shows vertically-centred
+  // text rather than top-aligned.
+  float line_height = measure(display, font_size, font_weight).height;
   if (line_height <= 0.0f) {
     line_height = font_size;
   }
   float band_y = content.y + std::max(0.0f, (content.height - line_height) * 0.5f);
 
-  auto prefix_width = [&](std::size_t byte_count) {
+  auto width_to = [&](const std::string &str, std::size_t byte_count) {
     if (byte_count == 0) {
       return 0.0f;
     }
-    std::string_view prefix(view.text_content.data(), byte_count);
-    return measure(prefix, font_size, font_weight).width;
+    return measure(std::string_view(str.data(), byte_count), font_size, font_weight).width;
   };
 
-  // Selection highlight (only meaningful while focused with a real range).
+  // The input sink: the committed text + selection + caret rect, so the shell
+  // can copy/cut and place the IME candidate window. Emitted only when focused.
+  if (view.is_focused && view.text_edit_action) {
+    std::size_t sel_begin = std::min(view.caret_position, view.selection_anchor);
+    std::size_t sel_end = std::max(view.caret_position, view.selection_anchor);
+    LayoutRect caret_rect{text_x + width_to(view.text_content, caret), band_y, 1.5f, line_height};
+    scene.text_input_targets.push_back({rect, view.text_edit_action, view.text_content, sel_begin,
+        sel_end, caret_rect, context.clip_rect});
+  }
+
+  // Selection highlight (committed selection, only with a real range).
   if (view.is_focused && view.caret_position != view.selection_anchor) {
     std::size_t begin = std::min(view.caret_position, view.selection_anchor);
     std::size_t end = std::max(view.caret_position, view.selection_anchor);
-    float begin_x = text_x + prefix_width(begin);
-    float end_x = text_x + prefix_width(end);
+    float begin_x = text_x + width_to(view.text_content, begin);
+    float end_x = text_x + width_to(view.text_content, end);
     layer.panels.push_back({{begin_x, band_y, std::max(0.0f, end_x - begin_x), line_height},
         ui::selection_highlight(), 2.0f, false, false, context.clip_rect});
   }
@@ -346,7 +358,7 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
       text_x, band_y, std::max(0.0f, content.width - text_inset * 2.0f), line_height};
   layer.texts.push_back({
       text_rect,
-      empty ? view.placeholder_text : view.text_content,
+      empty ? view.placeholder_text : display,
       empty ? ui::disabled_label() : view.foreground_color,
       font_size,
       font_weight,
@@ -357,10 +369,23 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
       context.clip_rect,
   });
 
-  // Caret: a thin panel at the caret x, on the same band as the text, when
-  // focused with a collapsed selection and visible this frame (blink).
-  if (view.is_focused && view.caret_visible && view.caret_position == view.selection_anchor) {
-    float caret_x = text_x + prefix_width(view.caret_position);
+  // Underline the marked (composing) span so the user sees what the IME holds.
+  if (composing) {
+    float marked_x = text_x + width_to(display, caret);
+    float marked_w = width_to(display, caret + view.marked_text.size()) - width_to(display, caret);
+    layer.panels.push_back(
+        {{marked_x, band_y + line_height - 2.0f, std::max(0.0f, marked_w), 1.5f},
+            view.foreground_color, 0.0f, false, false, context.clip_rect});
+  }
+
+  // Caret: a thin panel on the text band when focused, collapsed, visible this
+  // frame. While composing it sits inside the marked span at marked_caret.
+  bool show_caret = view.is_focused && view.caret_visible &&
+                    (composing || view.caret_position == view.selection_anchor);
+  if (show_caret) {
+    std::size_t caret_byte = composing ? caret + std::min(view.marked_caret, view.marked_text.size())
+                                       : caret;
+    float caret_x = text_x + width_to(display, caret_byte);
     layer.panels.push_back(
         {{caret_x, band_y, 1.5f, line_height}, ui::primary_label(), 0.0f, false, false,
             context.clip_rect});
