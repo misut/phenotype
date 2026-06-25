@@ -65,6 +65,9 @@ struct PanelLayout {
   float corner_radius = 0.0f;
   bool rounds_top_corners_only = false;
   bool rounds_bottom_corners_only = false;
+  // A transparent shadow color means no shadow; the backend skips the extra
+  // work in that case. See ui::Shadow.
+  ui::Shadow shadow;
   std::optional<LayoutRect> clip_rect;
 };
 

@@ -255,7 +255,7 @@ inline void LayoutToggle(const ui::View &view, LayoutRect rect, const LayoutCont
   SceneDrawLayer &layer = ActiveDrawLayer(scene);
 
   auto push_panel = [&](LayoutRect frame, ui::Color color, float corner_radius) {
-    layer.panels.push_back({frame, color, corner_radius, false, false, context.clip_rect});
+    layer.panels.push_back({frame, color, corner_radius, false, false, {}, context.clip_rect});
   };
 
   if (view.toggle_style == ui::ToggleStyle::switcher) {
@@ -298,7 +298,7 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
   // it further (e.g. a capsule) via the View's corner radius.
   float track_radius = view.corner_radius_value > 0.0f ? view.corner_radius_value : 7.0f;
   layer.panels.push_back(
-      {rect, ui::field_background(), track_radius, false, false, context.clip_rect});
+      {rect, ui::field_background(), track_radius, false, false, {}, context.clip_rect});
 
   LayoutRect content = ContentRect(view, rect);
   float text_inset = 8.0f;
@@ -350,7 +350,7 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
     float begin_x = text_x + width_to(view.text_content, begin);
     float end_x = text_x + width_to(view.text_content, end);
     layer.panels.push_back({{begin_x, band_y, std::max(0.0f, end_x - begin_x), line_height},
-        ui::selection_highlight(), 2.0f, false, false, context.clip_rect});
+        ui::selection_highlight(), 2.0f, false, false, {}, context.clip_rect});
   }
 
   // The text run, or the placeholder when empty.
@@ -375,7 +375,7 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
     float marked_w = width_to(display, caret + view.marked_text.size()) - width_to(display, caret);
     layer.panels.push_back(
         {{marked_x, band_y + line_height - 2.0f, std::max(0.0f, marked_w), 1.5f},
-            view.foreground_color, 0.0f, false, false, context.clip_rect});
+            view.foreground_color, 0.0f, false, false, {}, context.clip_rect});
   }
 
   // Caret: a thin panel on the text band when focused, collapsed, visible this
@@ -387,7 +387,7 @@ inline void LayoutTextField(const MeasureTextFn &measure, const ui::View &view, 
                                        : caret;
     float caret_x = text_x + width_to(display, caret_byte);
     layer.panels.push_back(
-        {{caret_x, band_y, 1.5f, line_height}, ui::primary_label(), 0.0f, false, false,
+        {{caret_x, band_y, 1.5f, line_height}, ui::primary_label(), 0.0f, false, false, {},
             context.clip_rect});
   }
 }
@@ -575,6 +575,7 @@ inline void LayoutView(const MeasureTextFn &measure, const ui::View &view, Layou
         view.corner_radius_value,
         view.rounds_top_corners_only,
         view.rounds_bottom_corners_only,
+        view.shadow_value,
         context.clip_rect,
     });
     return;

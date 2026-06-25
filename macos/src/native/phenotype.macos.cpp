@@ -65,6 +65,10 @@ struct Panel {
     frame : vec4f,
     color : vec4f,
     style : vec4f,
+    // shadow_color.rgb is the tint, .a the peak opacity. shadow_params is
+    // (offset_x, offset_y, blur_radius, _) in pixels. A zero alpha disables it.
+    shadow_color : vec4f,
+    shadow_params : vec4f,
     clip : vec4f,
 };
 
@@ -128,22 +132,40 @@ fn paddedClippedRect(min_px : vec2f, max_px : vec2f, clip : vec4f) -> array<vec2
     return array<vec2f, 2>(lo, hi);
 }
 
+// The drop shadow cast by a button's control fill, matching the surface card's
+// soft look at a smaller scale. Shared by buttonVertex (to size the quad) and
+// drawSymbolButton (to paint it) so the two never disagree on the extent.
+fn controlShadowOffset(ui_scale : f32) -> vec2f { return vec2f(0.0, 1.5 * ui_scale); }
+fn controlShadowBlur(ui_scale : f32) -> f32 { return 4.0 * ui_scale; }
+const kControlShadowAlpha : f32 = 0.18;
+
 @vertex
 fn panelVertex(@builtin(vertex_index) vi : u32, @builtin(instance_index) ii : u32) -> VertexOut {
     let panel = panels[ii];
     let half = panel.frame.zw * 0.5;
-    let bounds = paddedClippedRect(panel.frame.xy - half, panel.frame.xy + half, panel.clip);
+    let panel_lo = panel.frame.xy - half;
+    let panel_hi = panel.frame.xy + half;
+    // When a shadow is present, grow the quad to cover its offset+blur extent so
+    // the soft falloff outside the panel is not clipped away. Costs nothing when
+    // the shadow is disabled (offset and blur are then zero).
+    let shadow_lo = panel_lo + panel.shadow_params.xy - vec2f(panel.shadow_params.z);
+    let shadow_hi = panel_hi + panel.shadow_params.xy + vec2f(panel.shadow_params.z);
+    let bounds = paddedClippedRect(min(panel_lo, shadow_lo), max(panel_hi, shadow_hi), panel.clip);
     return quadVertex(vi, ii, bounds[0], bounds[1]);
 }
 
 @vertex
 fn buttonVertex(@builtin(vertex_index) vi : u32, @builtin(instance_index) ii : u32) -> VertexOut {
     let button = buttons[ii];
-    // Cover the union of the icon frame and the (possibly larger) control box.
+    // Cover the union of the icon frame and the (possibly larger) control box,
+    // grown by the control shadow's offset+blur reach so its soft falloff is not
+    // clipped away. The reach must match the shadow drawn in drawSymbolButton.
+    let ui_scale = max(scene.viewport.w, 1.0);
+    let shadow_reach = controlShadowOffset(ui_scale) + vec2f(controlShadowBlur(ui_scale));
     let frame_lo = button.frame.xy - button.frame.zw * 0.5;
     let frame_hi = button.frame.xy + button.frame.zw * 0.5;
-    let control_lo = button.control.xy - button.control.zw * 0.5;
-    let control_hi = button.control.xy + button.control.zw * 0.5;
+    let control_lo = button.control.xy - button.control.zw * 0.5 - shadow_reach;
+    let control_hi = button.control.xy + button.control.zw * 0.5 + shadow_reach;
     let bounds = paddedClippedRect(min(frame_lo, control_lo), max(frame_hi, control_hi), button.clip);
     return quadVertex(vi, ii, bounds[0], bounds[1]);
 }
@@ -232,15 +254,22 @@ fn drawSymbolButton(layer : vec4f, pixel_position : vec2f, button : SymbolButton
 
     let control_edge = roundedRectDistance(local_control_position, control_size * 0.5, radius);
     let control_coverage = 1.0 - smoothstep(-1.0, 1.0, control_edge);
-    let border_coverage = 1.0 - smoothstep(-1.0, 1.0, abs(control_edge) - (0.75 * ui_scale));
     let button_fill = vec3f(0.985, 0.988, 0.992);
     let button_border = vec3f(0.73, 0.76, 0.82);
 
     var out_layer = layer;
     if (button.appearance.y > 0.5) {
+        // Soft drop shadow in place of the old hairline border: paint it under
+        // the fill and only outside the control shape, so it lifts the control
+        // off a solid background the same way the surface card's shadow does.
+        let blur = controlShadowBlur(ui_scale);
+        let shadow_control_position = local_control_position - controlShadowOffset(ui_scale);
+        let shadow_edge = roundedRectDistance(shadow_control_position, control_size * 0.5, radius);
+        let shadow_shape = 1.0 - smoothstep(-blur, blur, shadow_edge);
+        out_layer = compositeOver(out_layer, vec3f(0.0),
+            kControlShadowAlpha * shadow_shape * (1.0 - control_coverage) * clip_coverage);
+
         out_layer = compositeOver(out_layer, button_fill, control_coverage * clip_coverage * 0.84);
-        out_layer =
-            compositeOver(out_layer, button_border, border_coverage * control_coverage * clip_coverage * 0.62);
 
         if (button.appearance.w > 0.5) {
             let divider_distance = abs(pixel_position.x - button.appearance.z) - (0.5 * ui_scale);
@@ -280,7 +309,25 @@ fn drawPanel(layer : vec4f, pixel_position : vec2f, panel : Panel) -> vec4f {
     let radius = min(panel.style.x * ui_scale, min(half_size.x, half_size.y));
     let edge_distance = panelDistance(local_position, half_size, radius, panel.style.y);
     let coverage = 1.0 - smoothstep(-1.0, 1.0, edge_distance);
-    return compositeOver(layer, panel.color.rgb, panel.color.a * coverage * clip_coverage);
+
+    var out_layer = layer;
+
+    // Soft drop shadow, painted under the panel and only where the panel itself
+    // does not cover, so a translucent fill never darkens its own interior. The
+    // blurred shape is approximated by smoothstepping the offset panel's SDF
+    // across the blur radius — cheap, and visually a close match to a gaussian
+    // for the small radii used by surface shadows.
+    let blur = panel.shadow_params.z;
+    if (panel.shadow_color.a > 0.0 && blur > 0.0) {
+        let shadow_local = local_position - panel.shadow_params.xy;
+        let shadow_distance = panelDistance(shadow_local, half_size, radius, panel.style.y);
+        let shadow_shape = 1.0 - smoothstep(-blur, blur, shadow_distance);
+        let shadow_alpha =
+            panel.shadow_color.a * shadow_shape * (1.0 - coverage) * clip_coverage;
+        out_layer = compositeOver(out_layer, panel.shadow_color.rgb, shadow_alpha);
+    }
+
+    return compositeOver(out_layer, panel.color.rgb, panel.color.a * coverage * clip_coverage);
 }
 
 fn drawText(layer : vec4f, pixel_position : vec2f, text : TextRun) -> vec4f {
@@ -574,6 +621,8 @@ struct PanelUniform {
   float frame[4];
   float color[4];
   float style[4];
+  float shadow_color[4];
+  float shadow_params[4];
   float clip[4];
 };
 
@@ -1515,6 +1564,18 @@ PanelUniform MakePanel(const PanelLayout &panel, float scale, LayoutRect fallbac
           panel.corner_radius,
           CornerMode(panel.rounds_top_corners_only, panel.rounds_bottom_corners_only),
           0.0f,
+          0.0f,
+      },
+      {
+          panel.shadow.color.red,
+          panel.shadow.color.green,
+          panel.shadow.color.blue,
+          panel.shadow.color.alpha,
+      },
+      {
+          panel.shadow.offset.width * safe_scale,
+          panel.shadow.offset.height * safe_scale,
+          panel.shadow.blur_radius * safe_scale,
           0.0f,
       },
   };
@@ -3028,11 +3089,26 @@ private:
   [_window setTitle:[NSString stringWithUTF8String:_spec.options.title.c_str()]];
   ApplyTitleBarStyle(_window, _spec.options.title_bar);
 
-  bool uses_blur =
-      _spec.options.background.kind == phenotype::macos::window::Background::Kind::blurred;
+  using BackgroundKind = phenotype::macos::window::Background::Kind;
+  BackgroundKind background_kind = _spec.options.background.kind;
+  bool uses_blur = background_kind == BackgroundKind::blurred;
+  bool uses_solid = background_kind == BackgroundKind::solid;
+
+  NSColor *solid_background_color = nil;
+  if (uses_solid) {
+    const phenotype::ui::Color &fill = _spec.options.background.color;
+    // Clamp alpha to opaque: a solid background backs an opaque window, so any
+    // requested translucency would only reveal the desktop, not blur it.
+    solid_background_color =
+        [NSColor colorWithSRGBRed:fill.red green:fill.green blue:fill.blue alpha:1.0];
+  }
+
   if (uses_blur) {
     [_window setOpaque:NO];
     [_window setBackgroundColor:[NSColor clearColor]];
+  } else if (uses_solid) {
+    [_window setOpaque:YES];
+    [_window setBackgroundColor:solid_background_color];
   } else {
     [_window setOpaque:YES];
     [_window setBackgroundColor:[NSColor windowBackgroundColor]];
@@ -3053,6 +3129,15 @@ private:
     [visual_effect_view setEmphasized:YES];
     [visual_effect_view setAlphaValue:_spec.options.background.blur.opacity];
     content_view = visual_effect_view;
+  } else if (uses_solid) {
+    // An opaque view whose layer carries the fill. The Metal layer above stays
+    // transparent and clears to nothing, so this solid layer is what shows
+    // through wherever the scene does not paint.
+    content_view = [[NSView alloc] initWithFrame:content_rect];
+    [content_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    [content_view setWantsLayer:YES];
+    [[content_view layer] setOpaque:YES];
+    [[content_view layer] setBackgroundColor:[solid_background_color CGColor]];
   } else {
     content_view = [[NSView alloc] initWithFrame:content_rect];
     [content_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
