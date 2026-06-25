@@ -33,17 +33,34 @@ struct Background {
   enum class Kind {
     system,
     blurred,
+    solid,
   };
 
   Kind kind = Kind::system;
   BlurBackground blur;
+  ui::Color color = ui::white();
 
   static constexpr Background system() noexcept { return {}; }
 
   static constexpr Background blurred(BlurBackground value = {}) noexcept {
     return {Kind::blurred, value};
   }
+
+  // An opaque window backed by a single fill color. Use this when the app
+  // wants a flat, non-vibrant surface (no behind-window blur) — the renderer
+  // clears the scene to `value` and the window is marked opaque.
+  static constexpr Background solid(ui::Color value = ui::white()) noexcept {
+    return {Kind::solid, {}, value};
+  }
 };
+
+// solid() must carry its fill through to the color field, defaulting to opaque
+// white — the native shell reads Background::color only for Kind::solid.
+static_assert(Background::solid().kind == Background::Kind::solid);
+static_assert(Background::solid().color.red == 1.0f &&
+              Background::solid().color.green == 1.0f &&
+              Background::solid().color.blue == 1.0f &&
+              Background::solid().color.alpha == 1.0f);
 
 struct WindowControls {
   float vertical_offset = 0.0f;

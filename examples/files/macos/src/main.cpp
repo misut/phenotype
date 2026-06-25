@@ -393,7 +393,7 @@ ui::View FileTile(const FileItem &item, bool is_focused) {
 
 ui::View ContentSurface(const std::shared_ptr<FilesState> &state,
     const std::vector<const FileItem *> &items, float content_scroll_offset,
-    float scroll_range_headroom, FileGridVisibleRange visible_range) {
+    float scroll_range_headroom, float content_below_viewport, FileGridVisibleRange visible_range) {
   ui::View content = ui::layout::grid([&](ui::Block &grid) {
     for (std::size_t index = visible_range.start; index < visible_range.end; ++index) {
       const FileItem &item = *items[index];
@@ -417,11 +417,16 @@ ui::View ContentSurface(const std::shared_ptr<FilesState> &state,
                                    ui::default_chrome_margin())
                              : 0.0f;
 
-  ui::View surface_panel =
-      ui::layout::vstack(
-          [&](ui::Block &background) { background << std::move(background_panel).expand(); })
-          .padding({-side_extension, -content_scroll_offset, -side_extension, 0.0f})
-          .expand();
+  // The card is the height of the content, not the viewport: while more rows
+  // remain below the fold it runs off the bottom of the window (clipped, so no
+  // bottom edge or shadow shows). A negative bottom inset stretches it past the
+  // slot by exactly the unscrolled remainder, which reaches 0 at the scroll end
+  // — only then does the bottom edge (and its shadow) come into view.
+  ui::View surface_panel = ui::layout::vstack(
+      [&](ui::Block &background) { background << std::move(background_panel).expand(); })
+                               .padding({-side_extension, -content_scroll_offset, -side_extension,
+                                   -content_below_viewport})
+                               .expand();
 
   return ui::layout::zstack([&](ui::Block &surface) {
     surface << std::move(surface_panel);
@@ -524,6 +529,19 @@ ui::View FilesView(ui::Context &context, const std::shared_ptr<FilesState> &stat
   float scroll_range_headroom = surface_collapse_distance + chrome_margin;
   float surface_height =
       std::max(0.0f, FilesWindowSize.height - chrome_margin - bottom_margin - toolbar_clearance);
+  // The ContentSurface's scroll viewport fills the body slot, whose vertical
+  // extent is the window minus the bottom margin and the toolbar clearance (the
+  // body vstack has no top padding). This is the height the scroll container
+  // virtualizes against — chrome_margin smaller surface_height is only the
+  // visible inset and must not enter the card-stretch math.
+  float surface_viewport_height =
+      std::max(0.0f, FilesWindowSize.height - bottom_margin - toolbar_clearance);
+  // How much content still sits below the visible viewport. The surface card is
+  // stretched past the bottom of its slot by this much, so it stays clipped by
+  // the window edge until the scroll reaches the end and this falls to zero —
+  // only then does the card's bottom edge (and its shadow) come into view.
+  float content_below_viewport =
+      std::max(0.0f, content_height - surface_viewport_height - content_scroll_offset);
   FileGridVisibleRange visible_range =
       VisibleFileRange(items.size(), surface_width, surface_height, content_scroll_offset);
   bool has_toolbar_backdrop = toolbar_clearance < toolbar_height;
@@ -561,8 +579,8 @@ ui::View FilesView(ui::Context &context, const std::shared_ptr<FilesState> &stat
       if (toolbar_clearance > 0.0f) {
         body << ui::empty().size({0.0f, toolbar_clearance});
       }
-      body << ContentSurface(
-          state, items, content_scroll_offset, scroll_range_headroom, visible_range);
+      body << ContentSurface(state, items, content_scroll_offset, scroll_range_headroom,
+          content_below_viewport, visible_range);
     })
                 .padding({chrome_margin, 0.0f, chrome_margin, bottom_margin})
                 .expand();
@@ -611,7 +629,7 @@ int main() {
                           .title = "Files",
                           .size = FilesWindowSize,
                           .title_bar = macos::window::TitleBarStyle::hidden,
-                          .background = macos::window::Background::blurred(),
+                          .background = macos::window::Background::solid(ui::white()),
                           .window_controls = {.vertical_offset = 8.0f},
                       });
 }

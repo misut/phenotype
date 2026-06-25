@@ -236,5 +236,35 @@ int main() {
     }
   }
 
+  // --- Test: panel shadow flows from View into the scene record -------------
+  {
+    ui::Shadow shadow{{0.0f, 0.0f, 0.0f, 0.5f}, 12.0f, {0.0f, 4.0f}};
+    ui::View root = ui::panel(ui::white()).expand().shadow(shadow);
+
+    pl::SceneLayout scene = pl::LayoutScene(measure, root, 100.0f, 100.0f, {});
+    if (scene.background.panels.size() != 1) {
+      return 26;
+    }
+    const pl::PanelLayout &panel = scene.background.panels.front();
+    if (!Approx(panel.shadow.color.alpha, 0.5f) || !Approx(panel.shadow.blur_radius, 12.0f) ||
+        !Approx(panel.shadow.offset.height, 4.0f)) {
+      return 27;
+    }
+  }
+
+  // --- Test: content_surface_panel carries a default (non-empty) shadow -----
+  {
+    ui::View surface = ui::content_surface_panel().expand();
+    pl::SceneLayout scene = pl::LayoutScene(measure, surface, 100.0f, 100.0f, {});
+    if (scene.background.panels.size() != 1) {
+      return 28;
+    }
+    // A visible shadow means a positive alpha and blur; a bare panel() has neither.
+    const pl::PanelLayout &panel = scene.background.panels.front();
+    if (panel.shadow.color.alpha <= 0.0f || panel.shadow.blur_radius <= 0.0f) {
+      return 29;
+    }
+  }
+
   return 0;
 }

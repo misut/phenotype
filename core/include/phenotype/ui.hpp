@@ -33,6 +33,17 @@ struct Color {
   float alpha = 1.0f;
 };
 
+// A soft drop shadow cast by a panel. The default is fully transparent, which
+// the renderer reads as "no shadow" — a panel pays no shadow cost until one is
+// asked for. blur_radius is the falloff half-width in points; offset shifts the
+// shadow from the panel (positive y is downward). The shadow is painted only
+// outside the panel's crisp shape, so a translucent fill never darkens itself.
+struct Shadow {
+  Color color = {0.0f, 0.0f, 0.0f, 0.0f};
+  float blur_radius = 0.0f;
+  Size offset = {0.0f, 0.0f};
+};
+
 struct LeadingWindowControlsPlacement {
   bool is_enabled = false;
   float spacing = 12.0f;
@@ -215,6 +226,7 @@ public:
   float font_size_value = 17.0f;
   float font_weight_value = 400.0f;
   float corner_radius_value = 0.0f;
+  Shadow shadow_value;
   float child_spacing = 0.0f;
   float grid_min_column_width = 112.0f;
   float grid_row_height = 104.0f;
@@ -513,6 +525,16 @@ public:
     return *this;
   }
 
+  [[nodiscard]] View shadow(Shadow value) && {
+    shadow_value = value;
+    return std::move(*this);
+  }
+
+  View &shadow(Shadow value) & {
+    shadow_value = value;
+    return *this;
+  }
+
   [[nodiscard]] View top_corners_only() && {
     rounds_top_corners_only = true;
     rounds_bottom_corners_only = false;
@@ -780,6 +802,13 @@ inline constexpr float default_toolbar_spacing() noexcept { return 24.0f; }
 
 inline constexpr float default_surface_corner_radius() noexcept { return 18.0f; }
 
+// The drop shadow a raised content surface casts over the window background. A
+// soft, low-alpha shadow with a small downward offset — enough to lift the
+// panel off a solid backdrop without reading as a hard edge.
+inline constexpr Shadow default_surface_shadow() noexcept {
+  return {{0.0f, 0.0f, 0.0f, 0.16f}, 18.0f, {0.0f, 4.0f}};
+}
+
 inline constexpr float default_toolbar_blur_height() noexcept {
   return default_toolbar_height() + (default_chrome_margin() * 2.0f);
 }
@@ -863,7 +892,9 @@ template <BlockContent Content> View button_group(Content &&content) {
 }
 
 inline View content_surface_panel(Color color = control_background()) {
-  return panel(color).corner_radius(default_surface_corner_radius());
+  return panel(color)
+      .corner_radius(default_surface_corner_radius())
+      .shadow(default_surface_shadow());
 }
 
 inline View toolbar_blur_panel(Color color = toolbar_material()) {
